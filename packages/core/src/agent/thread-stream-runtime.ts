@@ -325,6 +325,33 @@ type HandledIdleSignal = {
   replyPublished: boolean;
 };
 
+/**
+ * A claimed owner's record of a logical cross-agent message it has already
+ * accepted. `HandledIdleSignal` remembers the transport request id, but a sender
+ * whose acknowledgement never landed retries the *same* logical message with a
+ * fresh request id, so accepting has to be remembered against the message's own
+ * identity instead. Starting the wake is not idempotent — it re-runs the turn's
+ * tools — so the retry must resolve to whatever the first attempt reached.
+ */
+type AcceptedIdleMessage = {
+  /** The run that accepted the logical message, whether queued or started. */
+  runId: string;
+  /**
+   * Set once the accepted message can no longer run (for example it was
+   * cancelled while queued), so a retry is told the original outcome instead of
+   * waiting on a run that will never start.
+   */
+  terminalReason?: string;
+  /**
+   * Set while the first delivery attempt is still resolving its admission — the
+   * owner's stream options, the thread control subscription, the execution lease.
+   * A duplicate arriving in that window waits on this promise for the real
+   * outcome; answering it from the provisional reservation would report a
+   * delivery for a wake the first attempt may yet reject.
+   */
+  admission?: Promise<AcceptedIdleMessage>;
+};
+
 type AgentThreadRuntimeState = {
   threadRunsById: Map<string, AgentThreadRunRecord<any>>;
   threadRunsByStreamId: Map<string, AgentThreadRunRecord<any>>;
@@ -355,6 +382,12 @@ type AgentThreadRuntimeState = {
    * re-send a reply that never reached the caller.
    */
   handledIdleSignals: ReturnType<typeof createRecentRequests<HandledIdleSignal>>;
+  /**
+   * Logical cross-agent messages this process has already accepted, keyed by
+   * target agent, thread, source peer and message id — the identity a sender
+   * preserves when it retries a message whose acknowledgement never landed.
+   */
+  acceptedIdleMessagesByIdentity: ReturnType<typeof createRecentRequests<AcceptedIdleMessage>>;
   claimedThreadOwners: Map<string, ClaimedThreadOwner<any>>;
   advertisedThreadPeers: Map<string, AdvertisedThreadPeer>;
   watchedThreadStreamIds: Set<string>;
@@ -508,6 +541,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     pendingContinuationsByThread: new Map(),
     claimedThreadOwnerDiscoveries: new Map(),
     handledIdleSignals: createRecentRequests<HandledIdleSignal>(),
+    acceptedIdleMessagesByIdentity: createRecentRequests<AcceptedIdleMessage>(),
     claimedThreadOwners: new Map(),
     advertisedThreadPeers: new Map(),
     watchedThreadStreamIds: new Set(),
@@ -883,6 +917,37 @@ export class AgentThreadStreamRuntime {
 
   #threadTopic(key: string): string {
     return `${AGENT_THREAD_STREAM_TOPIC_PREFIX}.${encodeURIComponent(key)}`;
+  }
+
+  /**
+   * The identity of a logical cross-agent idle message: the target agent and
+   * thread plus the sender's peer id and message id. These are the
+   * `(targetAgentId, targetResourceId, targetThreadId, sourcePeerId, messageId)`
+   * tuple a retrying sender preserves. Returns undefined for signals that carry
+   * no message identity (for example a plain `sendSignal`), which are never
+   * deduplicated — unlike the transport `requestId`, which the sender regenerates.
+   */
+  #idleMessageIdentity(agentId: string, key: string, signal: CreatedAgentSignal): string | undefined {
+    const messageId = signal.attributes?.messageId;
+    const sourcePeerId = signal.attributes?.sourcePeerId;
+    if (typeof messageId !== 'string' || messageId === '') return undefined;
+    if (typeof sourcePeerId !== 'string' || sourcePeerId === '') return undefined;
+    return [agentId, key, sourcePeerId, messageId].map(part => encodeURIComponent(part)).join(':');
+  }
+
+  /**
+   * Marks an accepted logical message as cancelled so a sender retrying it is
+   * told the original outcome instead of waiting on a run that will never start.
+   */
+  #markIdleMessageCancelled(state: AgentThreadRuntimeState, key: string, pending: PendingIdleSignal<any>): void {
+    const identity = this.#idleMessageIdentity(pending.agent.id, key, pending.signal);
+    if (!identity) return;
+    const acceptedMessage = state.acceptedIdleMessagesByIdentity.get(identity);
+    if (!acceptedMessage || acceptedMessage.runId !== pending.runId) return;
+    state.acceptedIdleMessagesByIdentity.set(identity, {
+      runId: acceptedMessage.runId,
+      terminalReason: 'The accepted message was cancelled before it ran',
+    });
   }
 
   #isApprovalSuspendedRun(state: AgentThreadRuntimeState, runId: string) {
@@ -1458,14 +1523,85 @@ export class AgentThreadStreamRuntime {
     isOwnerActive: () => boolean,
     incomingStreamOptions?: AgentExecutionOptions<any>,
   ): Promise<{ runId: string; error?: string; output?: MastraModelOutput<OUTPUT> } | undefined> {
+    const messageIdentity = this.#idleMessageIdentity(owner.agent.id, key, signal);
+    let admissionSettled = false;
+    // Records this attempt's real admission outcome for the logical message and
+    // resolves a duplicate that raced in behind the reservation on it. `keep`
+    // retains the reservation (the message queued or ran); otherwise the
+    // reservation is released so a later retry can route.
+    let settleMessageIdentity: ((result: AcceptedIdleMessage, keep?: boolean) => void) | undefined;
+    // Releases the reservation for an admission that produced no result to report.
+    // A duplicate waiting on the reservation is rejected with the same failure
+    // instead of being told the message was delivered.
+    let failMessageIdentity: ((error: unknown) => void) | undefined;
+    if (messageIdentity) {
+      const acceptedMessage = state.acceptedIdleMessagesByIdentity.get(messageIdentity);
+      if (acceptedMessage) {
+        // This logical message was already accepted on an earlier delivery attempt.
+        // The sender regenerates the transport request id when it retries, so
+        // `handledIdleSignals` cannot catch this — and admitting it again would run
+        // the wake a second time and repeat the turn's tools' side effects. Resolve
+        // the retry to what the first attempt reached, waiting for an admission that
+        // is still in flight: answering now would report a delivery for a wake that
+        // may yet be rejected.
+        const settled = acceptedMessage.admission ? await acceptedMessage.admission : acceptedMessage;
+        return settled.terminalReason
+          ? { runId: settled.runId, error: settled.terminalReason }
+          : { runId: settled.runId };
+      }
+      // Reserve the identity before the first await, so two delivery attempts of the
+      // same logical message racing into this method cannot both admit a run. The
+      // reservation carries the pending admission so a duplicate that arrives in that
+      // window settles on this attempt's real outcome instead of a provisional one.
+      // It is released below if this attempt turns out not to admit a run.
+      const admission = new Promise<AcceptedIdleMessage>((resolve, reject) => {
+        settleMessageIdentity = (result, keep = true) => {
+          admissionSettled = true;
+          if (state.acceptedIdleMessagesByIdentity.get(messageIdentity)?.runId === runId) {
+            if (keep) state.acceptedIdleMessagesByIdentity.set(messageIdentity, result);
+            else state.acceptedIdleMessagesByIdentity.delete(messageIdentity);
+          }
+          resolve(result);
+        };
+        failMessageIdentity = error => {
+          admissionSettled = true;
+          if (state.acceptedIdleMessagesByIdentity.get(messageIdentity)?.runId === runId) {
+            state.acceptedIdleMessagesByIdentity.delete(messageIdentity);
+          }
+          reject(error);
+        };
+      });
+      // A reservation nobody is waiting on must not surface as an unhandled
+      // rejection when this attempt fails.
+      void admission.catch(() => {});
+      state.acceptedIdleMessagesByIdentity.set(messageIdentity, { runId, admission });
+    }
+    // Releases the reservation for an attempt that did not admit the message, so a
+    // later retry of the same logical message is still free to route. A duplicate
+    // already waiting on it observes the same failure.
+    const releaseMessageIdentity = (failure: string | Error) => {
+      if (typeof failure === 'string') settleMessageIdentity?.({ runId, terminalReason: failure }, false);
+      else failMessageIdentity?.(failure);
+    };
     if (!isOwnerActive()) {
+      releaseMessageIdentity(`Claimed thread owner was released for ${key}`);
       return { runId, error: `Claimed thread owner was released for ${key}` };
     }
     if (Date.now() >= expiresAt) {
+      releaseMessageIdentity(`Claimed thread owner acceptance expired for ${key}`);
       return { runId, error: `Claimed thread owner acceptance expired for ${key}` };
     }
-    const ownerStreamOptions =
-      typeof owner.streamOptions === 'function' ? await owner.streamOptions() : owner.streamOptions;
+    // Resolving the owner's stream options can reject. A later retry of the same
+    // logical message must be free to route instead of being told this message was
+    // already accepted, so release the reservation before propagating.
+    let ownerStreamOptions: AgentExecutionOptions<any> | undefined;
+    try {
+      ownerStreamOptions =
+        typeof owner.streamOptions === 'function' ? await owner.streamOptions() : owner.streamOptions;
+    } catch (error) {
+      releaseMessageIdentity(getErrorFromUnknown(error));
+      throw error;
+    }
     // The run executes inside the claiming owner's session, so the owner's
     // options stay authoritative for everything that shapes the run — memory,
     // toolsets, provider options. Only `requestContext` crosses over: it
@@ -1480,14 +1616,18 @@ export class AgentThreadStreamRuntime {
       incomingStreamOptions?.requestContext === undefined
         ? ownerStreamOptions
         : { ...ownerStreamOptions, requestContext: incomingStreamOptions.requestContext };
-    const control = this.#ensureThreadControlSubscription(state, pubsub, key);
-    control.references++;
+    let control: ThreadControlSubscription | undefined;
     try {
-      await control.ready;
+      const subscription = this.#ensureThreadControlSubscription(state, pubsub, key);
+      control = subscription;
+      subscription.references++;
+      await subscription.ready;
       if (!isOwnerActive()) {
+        releaseMessageIdentity(`Claimed thread owner was released for ${key}`);
         return { runId, error: `Claimed thread owner was released for ${key}` };
       }
       if (Date.now() >= expiresAt) {
+        releaseMessageIdentity(`Claimed thread owner acceptance expired for ${key}`);
         return { runId, error: `Claimed thread owner acceptance expired for ${key}` };
       }
 
@@ -1509,7 +1649,10 @@ export class AgentThreadStreamRuntime {
         }
         // No run starts here — the signal joins the in-flight run and is drained
         // later. Returning without `output` is what tells the caller this queued
-        // instead of running, so it reports `deliver` rather than `wake`.
+        // instead of running, so it reports `deliver` rather than `wake`. Queueing
+        // is an admission, so a duplicate waiting on this reservation is told the
+        // same thing rather than left to start a second run.
+        settleMessageIdentity?.({ runId });
         return { runId };
       }
       if (activeRunId) {
@@ -1517,21 +1660,38 @@ export class AgentThreadStreamRuntime {
       }
 
       if (!isOwnerActive()) {
+        releaseMessageIdentity(`Claimed thread owner was released for ${key}`);
         return { runId, error: `Claimed thread owner was released for ${key}` };
       }
       state.activeThreadRunIds.set(key, runId);
       state.threadKeysByRunId.set(runId, key);
-      const lease = await this.#acquireOrTransferThreadLease(pubsub, key, runId);
+      let lease: { acquired: boolean; owner?: string };
+      try {
+        lease = await this.#acquireOrTransferThreadLease(pubsub, key, runId);
+      } catch (error) {
+        // No run and no lease exist for this attempt yet, so unwind the run
+        // bookkeeping it just claimed and let a retry of the logical message route.
+        releaseMessageIdentity(getErrorFromUnknown(error));
+        state.activeThreadRunIds.delete(key);
+        state.threadKeysByRunId.delete(runId);
+        throw error;
+      }
       const ownerActive = isOwnerActive();
       const expired = Date.now() >= expiresAt;
       if (!lease.acquired || !ownerActive || expired) {
+        // This attempt admitted no run of its own — the owner went away, the
+        // deadline passed, or the wake was handed to another live lease owner — so
+        // a later retry of the same logical message must be free to route.
         state.activeThreadRunIds.delete(key);
         state.threadKeysByRunId.delete(runId);
         if (!ownerActive || expired) {
+          const error = !ownerActive
+            ? `Claimed thread owner was released for ${key}`
+            : `Claimed thread owner acceptance expired for ${key}`;
+          releaseMessageIdentity(error);
           const drained = await this.#drainPendingIdleSignals(state, pubsub, key, lease.acquired ? runId : undefined);
           if (lease.acquired && !drained) this.#releaseThreadLease(pubsub, key, runId);
-          if (!ownerActive) return { runId, error: `Claimed thread owner was released for ${key}` };
-          return { runId, error: `Claimed thread owner acceptance expired for ${key}` };
+          return { runId, error };
         }
         if (lease.owner) {
           this.#publish(pubsub, key, {
@@ -1540,8 +1700,13 @@ export class AgentThreadStreamRuntime {
             signal: this.#serializeSignal(signal),
             sourceId: this.#getSourceId(),
           });
+          // Another live lease owner took the wake, so this attempt delivered it
+          // without running it here. Report that to a duplicate instead of leaving
+          // it waiting, while still releasing the reservation so a later retry routes.
+          settleMessageIdentity?.({ runId: lease.owner }, false);
           return { runId: lease.owner };
         }
+        releaseMessageIdentity(new Error(`Claimed thread owner could not acquire the execution lease for ${key}`));
         await this.#drainPendingIdleSignals(state, pubsub, key);
         return undefined;
       }
@@ -1552,9 +1717,17 @@ export class AgentThreadStreamRuntime {
           runId,
           memory: withThreadMemory(streamOptions?.memory, owner.resourceId, owner.threadId),
         });
+        // The run started, so the admission a duplicate is waiting on succeeded.
+        settleMessageIdentity?.({ runId });
         return { runId, output };
       } catch (error) {
         const message = getErrorFromUnknown(error).message;
+        // The run did start, so keep the identity instead of releasing it: a sender
+        // retrying the same logical message must learn the original turn failed
+        // rather than run that turn's tools a second time. Only settle the identity
+        // this run reserved — a newer reservation for the same logical message must
+        // survive an older run's failure.
+        settleMessageIdentity?.({ runId, terminalReason: message });
         state.threadKeysByRunId.delete(runId);
         this.#cleanupPreparedRun(state, runId);
         if (state.activeThreadRunIds.get(key) === runId) {
@@ -1572,8 +1745,16 @@ export class AgentThreadStreamRuntime {
         return { runId, error: message };
       }
     } finally {
-      control.references--;
-      this.#releaseUnusedThreadControlSubscription(state, key);
+      // An unexpected failure before admission settled (a control subscription that
+      // never became ready, for example) must not leave a duplicate waiting on an
+      // outcome that will never arrive.
+      if (!admissionSettled) {
+        failMessageIdentity?.(new Error(`Claimed thread owner admission for ${key} did not complete`));
+      }
+      if (control) {
+        control.references--;
+        this.#releaseUnusedThreadControlSubscription(state, key);
+      }
     }
   }
 
@@ -2331,6 +2512,7 @@ export class AgentThreadStreamRuntime {
     state.pendingContinuationsByThread.clear();
     state.claimedThreadOwnerDiscoveries.clear();
     state.handledIdleSignals.clear();
+    state.acceptedIdleMessagesByIdentity.clear();
     for (const claim of [...state.claimedThreadOwners.values()]) {
       claim.unsubscribe();
     }
@@ -3299,6 +3481,22 @@ export class AgentThreadStreamRuntime {
     }
     state.drainingIdleSignalsByThread.set(key, pendingIdle);
 
+    // A retry can be admitted with a new run id after this copy was queued (for
+    // example the accepted record was evicted by newer messages before the retry
+    // arrived). The accepted record is authoritative, so drop the superseded copy
+    // rather than start a second run for the same logical message.
+    const drainedIdentity = this.#idleMessageIdentity(pendingIdle.agent.id, key, pendingIdle.signal);
+    if (drainedIdentity) {
+      const acceptedMessage = state.acceptedIdleMessagesByIdentity.get(drainedIdentity);
+      if (acceptedMessage && acceptedMessage.runId !== pendingIdle.runId) {
+        state.drainingIdleSignalsByThread.delete(key);
+        this.#notifyThreadEvents(state);
+        // Hand the finishing run's lease on to whatever drains next, and report
+        // whether work actually started — the caller only keeps the lease if so.
+        return await this.#drainPendingIdleSignals(state, pubsub, key, fromRunId);
+      }
+    }
+
     state.activeThreadRunIds.set(key, pendingIdle.runId);
     state.threadKeysByRunId.set(pendingIdle.runId, key);
 
@@ -3312,6 +3510,18 @@ export class AgentThreadStreamRuntime {
     try {
       owns = await this.#acquireOrTransferThreadLease(pubsub, key, pendingIdle.runId, fromRunId);
     } catch (err) {
+      // No run started for this message and it will not be retried from the queue,
+      // so the accepted identity must not keep claiming delivery — a sender retry
+      // has to be free to route it again. Unless the signal was cancelled while the
+      // lease was pending: that cancellation is the outcome a retry must observe, so
+      // the tombstone has to outlive this failure instead of being cleared.
+      if (
+        !pendingIdle.cancelled &&
+        drainedIdentity &&
+        state.acceptedIdleMessagesByIdentity.get(drainedIdentity)?.runId === pendingIdle.runId
+      ) {
+        state.acceptedIdleMessagesByIdentity.delete(drainedIdentity);
+      }
       state.drainingIdleSignalsByThread.delete(key);
       state.threadKeysByRunId.delete(pendingIdle.runId);
       if (state.activeThreadRunIds.get(key) === pendingIdle.runId) {
@@ -3395,6 +3605,17 @@ export class AgentThreadStreamRuntime {
         }
       }
     } catch (err) {
+      const message = getErrorFromUnknown(err).message;
+      // The queued run did start, so settle its identity on the failure the same
+      // way the immediate-start path does: a sender retrying this logical message
+      // must learn the turn failed rather than be told it was delivered. Only
+      // settle the identity this run reserved.
+      if (drainedIdentity && state.acceptedIdleMessagesByIdentity.get(drainedIdentity)?.runId === pendingIdle.runId) {
+        state.acceptedIdleMessagesByIdentity.set(drainedIdentity, {
+          runId: pendingIdle.runId,
+          terminalReason: message,
+        });
+      }
       state.threadKeysByRunId.delete(pendingIdle.runId);
       this.#cleanupPreparedRun(state, pendingIdle.runId);
       if (state.activeThreadRunIds.get(key) === pendingIdle.runId) {
@@ -3403,7 +3624,7 @@ export class AgentThreadStreamRuntime {
       this.#publish(pubsub, key, {
         type: 'run-failed',
         runId: pendingIdle.runId,
-        error: getErrorFromUnknown(err).message,
+        error: message,
       });
       this.#trimFailedRun(pubsub, key, { ...pendingIdle, streamOptions: pendingIdle.streamOptions ?? {} });
       // No completion watcher exists for a failed startup. Preserve pending-before-idle recovery here too.
@@ -4404,6 +4625,7 @@ export class AgentThreadStreamRuntime {
       const remaining = queue.filter(pending => {
         if (!matches(pending)) return true;
         cancelledSignalIds.push(pending.signal.id);
+        this.#markIdleMessageCancelled(state, key, pending);
         return false;
       });
       if (remaining.length === 0) state.pendingIdleSignalsByThread.delete(key);
@@ -4414,6 +4636,7 @@ export class AgentThreadStreamRuntime {
     if (draining && matches(draining) && !draining.cancelled) {
       draining.cancelled = true;
       cancelledSignalIds.push(draining.signal.id);
+      this.#markIdleMessageCancelled(state, key, draining);
     }
     return cancelledSignalIds;
   }
