@@ -1521,8 +1521,8 @@ export function parseMultiThreadObserverOutput(
 ): MultiThreadObserverResult {
   const threads = new Map<string, ObserverResult>();
 
-  // Check for degenerate repetition on the whole output
-  if (detectDegenerateRepetition(output)) {
+  // Long lines are truncated before storage, so check repetition on sanitized text.
+  if (detectDegenerateRepetition(sanitizeObservationLines(output))) {
     return { threads, rawOutput: output, degenerate: true };
   }
 
@@ -1712,8 +1712,8 @@ function getStringExtractedValue(values: Record<string, unknown>, slug: string):
 }
 
 export function parseObserverOutput(output: string, extractors: readonly Extractor<any>[] = []): ObserverResult {
-  // Check for degenerate repetition before parsing (operates on raw output)
-  if (detectDegenerateRepetition(output)) {
+  // Long lines are truncated before storage, so check repetition on sanitized text.
+  if (detectDegenerateRepetition(sanitizeObservationLines(output))) {
     return {
       observations: '',
       rawOutput: output,

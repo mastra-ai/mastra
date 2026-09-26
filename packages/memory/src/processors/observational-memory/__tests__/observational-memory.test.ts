@@ -50,6 +50,7 @@ import {
   buildObserverHistoryMessage,
   buildMultiThreadObserverHistoryMessage,
   parseObserverOutput,
+  parseMultiThreadObserverOutput,
   formatMessagesForObserver,
   formatMultiThreadMessagesForObserver,
   hasCurrentTaskSection,
@@ -3949,6 +3950,51 @@ User asked about </current-task> parsing and how it works
         expect(result.observations).not.toContain('User asked about </current-task> parsing');
       });
     });
+
+    it('should not treat a single very long line as degenerate output', () => {
+      const longLine = Array.from({ length: 8_000 }, (_, i) => `step-${i}`).join(' ');
+      const output = `<observations>
+- 🔴 Build ran for 40 minutes
+${longLine}
+- 🟡 User asked for the lint fix
+</observations>`;
+
+      const result = parseObserverOutput(output);
+
+      expect(result.degenerate).not.toBe(true);
+      expect(result.observations).toContain('Build ran for 40 minutes');
+      expect(result.observations).toContain('User asked for the lint fix');
+      expect(result.observations).toContain('[truncated]');
+    });
+
+    it('should still treat a repetitive long line as degenerate output', () => {
+      const line = '-:--:--:--'.repeat(9_000);
+      const output = `<observations>
+${line}
+</observations>`;
+
+      const result = parseObserverOutput(output);
+
+      expect(result.degenerate).toBe(true);
+      expect(result.observations).toBe('');
+    });
+  });
+
+  describe('parseMultiThreadObserverOutput', () => {
+    it('should not treat a single very long line as degenerate output', () => {
+      const longLine = Array.from({ length: 8_000 }, (_, i) => `step-${i}`).join(' ');
+      const output = `<observations>
+<thread id="t1">
+- 🔴 Build ran for 40 minutes
+${longLine}
+</thread>
+</observations>`;
+
+      const result = parseMultiThreadObserverOutput(output);
+
+      expect(result.degenerate).not.toBe(true);
+      expect(result.threads.get('t1')?.observations).toContain('Build ran for 40 minutes');
+    });
   });
 
   describe('sanitizeObservationLines', () => {
@@ -4572,6 +4618,19 @@ Start by implementing the chart component...
 
       const result = parseReflectorOutput(output);
       expect(result.suggestedContinuation).toContain('implementing the chart component');
+    });
+
+    it('should not treat a single very long line as degenerate output', () => {
+      const longLine = Array.from({ length: 8_000 }, (_, i) => `step-${i}`).join(' ');
+      const output = `<observations>
+- 🔴 Kept observation
+${longLine}
+</observations>`;
+
+      const result = parseReflectorOutput(output);
+
+      expect(result.degenerate).not.toBe(true);
+      expect(result.observations).toContain('Kept observation');
     });
 
     // Edge case tests for XML parsing robustness
