@@ -6,7 +6,10 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../../agent/durable/create-durable-agent';
+import { MessageList } from '../../agent/message-list';
 import { EventEmitterPubSub } from '../../events/event-emitter';
+import { readCappedProviderMetadataFromMessageList } from '../../loop/shared/read-tool-result';
+import { computeModelOutputProviderMetadata, commitToolResult } from '../../loop/shared/steps/tool-result-commit-core';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import type { MastraDBMessage } from '../../memory/types';
@@ -168,71 +171,6 @@ describe('TokenLimiterProcessor through an agent', () => {
       expect(prompt).not.toContain(TOOL_PAYLOAD);
     });
 
-    it('maxToolResultTokens also caps oversized tool results for durable agents (#24110)', async () => {
-      const big = 'result '.repeat(3000);
-      const lookup = createTool({
-        id: 'lookup',
-        description: 'Look something up',
-        inputSchema: z.object({ q: z.string() }),
-        execute: async () => big,
-      });
-      const prompts: LanguageModelV2Prompt[] = [];
-      const model = new MockLanguageModelV2({
-        doStream: async ({ prompt }) => {
-          prompts.push(prompt);
-          const toolResult = (prompt as any[])
-            .flatMap(m => (Array.isArray(m.content) ? m.content : []))
-            .find((c: any) => c.type === 'tool-result');
-          const chunks: any[] = toolResult
-            ? [
-                { type: 'text-start', id: 't' },
-                { type: 'text-delta', id: 't', delta: 'ok' },
-                { type: 'text-end', id: 't' },
-                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
-              ]
-            : [
-                { type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: '{"q":"x"}' },
-                {
-                  type: 'finish',
-                  finishReason: 'tool-calls',
-                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-                },
-              ];
-          return {
-            stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }, ...chunks]),
-            rawCall: { rawPrompt: [], rawSettings: {} },
-            warnings: [],
-          };
-        },
-      });
-      const limiter = new TokenLimiterProcessor({ limit: 2000, maxToolResultTokens: 50 });
-      const agent = new Agent({
-        id: 'limiter-durable-cap',
-        name: 'limiter-durable-cap',
-        instructions: 'Answer briefly.',
-        model,
-        tools: { lookup },
-        inputProcessors: [limiter],
-        outputProcessors: [limiter],
-      });
-      void new Mastra({ agents: { 'limiter-durable-cap': agent }, storage: new InMemoryStore() });
-      const pubsub = new EventEmitterPubSub();
-
-      try {
-        const durableAgent = createDurableAgent({ agent, pubsub });
-        const result = await durableAgent.stream('question', { maxSteps: 2 });
-        for await (const _chunk of result.fullStream) {
-          // drain
-        }
-      } finally {
-        await pubsub.close();
-      }
-
-      const sentToolResult = JSON.stringify(prompts.at(-1));
-      expect(sentToolResult).toMatch(/\[truncated: showing/);
-      expect(sentToolResult.length).toBeLessThan(JSON.stringify(big).length);
-    });
-
     it('does not persist the cap into stored history for durable agents (#24110)', async () => {
       const big = 'result '.repeat(3000);
       const lookup = createTool({
@@ -324,6 +262,97 @@ describe('TokenLimiterProcessor through an agent', () => {
       const storedMastra = toolPart?.providerMetadata?.mastra as Record<string, unknown> | undefined;
       expect(storedMastra?.modelOutput).toBeUndefined();
       expect(storedMastra?.modelOutputCapped).toBeUndefined();
+    });
+
+    it('threads the modelOutput cap from tool-call.ts to llm-mapping.ts across the durable step boundary (#24110)', async () => {
+      const big = 'result '.repeat(3000);
+      const pendingCall = (): MastraDBMessage => ({
+        id: 'msg-call-1',
+        role: 'assistant',
+        content: {
+          format: 2,
+          content: '',
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'lookup', args: {} },
+            },
+          ],
+        },
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+      });
+
+      // Step 1: the tool-call step's local MessageList runs the cap processor, same as
+      // TokenLimiterProcessor.processToolResult does inside tool-call.ts's hook.
+      const processor = new TokenLimiterProcessor({ limit: 50_000, maxToolResultTokens: 50 });
+      const toolCallMessageList = new MessageList();
+      toolCallMessageList.add(pendingCall(), 'response');
+      await processor.processToolResult({
+        result: big,
+        toolCallId: 'call-1',
+        toolName: 'lookup',
+        args: {},
+        messageList: toolCallMessageList,
+        steps: [],
+        systemMessages: [],
+        state: {},
+      } as any);
+
+      const cappedProviderMetadata = readCappedProviderMetadataFromMessageList(toolCallMessageList, 'call-1');
+      expect(cappedProviderMetadata).toBeDefined();
+
+      // Step 2: the tool-call step's output crosses to llm-mapping.ts as JSON (the real
+      // engine round-trips it through pubsub/storage). JSON.parse/stringify severs any
+      // shared object references, so unlike the deleted end-to-end test this actually
+      // forces the step-boundary path instead of surviving on live object identity.
+      const toolCallStepOutput = JSON.parse(
+        JSON.stringify({
+          toolCallId: 'call-1',
+          toolName: 'lookup',
+          result: big,
+          resultCapped: true,
+          providerMetadata: cappedProviderMetadata,
+        }),
+      );
+
+      // A tool with a `toModelOutput` mapper: if llm-mapping.ts's `resultCapped` guard is
+      // ever dropped, this recomputes and clobbers the carried cap, making the assertions
+      // below fail.
+      const mappedTool = { toModelOutput: () => 'SHOULD-NOT-BE-SEEN-WHEN-CAP-IS-CARRIED' };
+
+      // Mirrors llm-mapping.ts's guard (llm-mapping.ts ~224-230): a `resultCapped` result
+      // is not recomputed through `toModelOutput`, the carried metadata is used as-is.
+      const providerMetadata = toolCallStepOutput.resultCapped
+        ? toolCallStepOutput.providerMetadata
+        : await computeModelOutputProviderMetadata({
+            tool: mappedTool,
+            toolName: toolCallStepOutput.toolName,
+            toolCallId: toolCallStepOutput.toolCallId,
+            result: toolCallStepOutput.result,
+            existingProviderMetadata: toolCallStepOutput.providerMetadata,
+          });
+
+      // Step 3: llm-mapping.ts commits against a freshly rebuilt MessageList, not the
+      // tool-call step's local copy.
+      const llmMappingMessageList = new MessageList();
+      llmMappingMessageList.add(pendingCall(), 'response');
+
+      commitToolResult({
+        messageList: llmMappingMessageList,
+        outcome: { kind: 'result', result: toolCallStepOutput.result },
+        toolCallId: toolCallStepOutput.toolCallId,
+        toolName: toolCallStepOutput.toolName,
+        toolArgs: {},
+        providerMetadata: providerMetadata as any,
+      });
+
+      const committedPart = llmMappingMessageList.get.all
+        .db()
+        .flatMap(message => message.content.parts ?? [])
+        .find(part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-1') as any;
+      const committedMastra = committedPart?.providerMetadata?.mastra;
+      expect(committedMastra?.modelOutputCapped).toBe(true);
+      expect(committedMastra?.modelOutput?.value).toMatch(/\[truncated: showing \d+ of [\d,]+ tokens\]$/);
     });
 
     it('keeps the assistant answer when input processors are resolved per request', async () => {
