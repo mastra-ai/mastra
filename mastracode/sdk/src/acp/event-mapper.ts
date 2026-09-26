@@ -170,7 +170,7 @@ async function handleToolApproval(
 ): Promise<void> {
   // Auto-approve if --dangerous-auto-approve flag is set
   if (autoApprove) {
-    session.respondToToolApproval({ decision: 'approve' });
+    session.respondToToolApproval({ decision: 'approve', toolCallId: event.toolCallId });
     return;
   }
 
@@ -191,13 +191,13 @@ async function handleToolApproval(
     const resp = await connection.requestPermission(req);
     if (resp.outcome.outcome === 'selected') {
       const decision = resp.outcome.optionId === 'approve' ? 'approve' : 'decline';
-      session.respondToToolApproval({ decision });
+      session.respondToToolApproval({ decision, toolCallId: event.toolCallId });
     } else {
-      session.respondToToolApproval({ decision: 'decline' });
+      session.respondToToolApproval({ decision: 'decline', toolCallId: event.toolCallId });
     }
   } catch (err) {
     process.stderr.write(`[acp] requestPermission error: ${err}\n`);
-    session.respondToToolApproval({ decision: 'decline' });
+    session.respondToToolApproval({ decision: 'decline', toolCallId: event.toolCallId });
   }
 }
 

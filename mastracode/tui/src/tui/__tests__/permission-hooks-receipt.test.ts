@@ -45,7 +45,9 @@ function createDeferred<T>() {
 function createHarness(hookManager: unknown) {
   let listener: ((event: any) => Promise<void>) | undefined;
   const state = {
+    pendingNewThread: false,
     session: {
+      thread: { getId: vi.fn(() => 'thread-current') },
       state: { get: vi.fn(() => ({ notifications: 'off' })) },
       subscribe: vi.fn((handler: any) => {
         listener = handler;
@@ -120,6 +122,38 @@ describe('PermissionRequest hooks fire at event receipt (#20861)', () => {
       'start:tool_approval_required',
       'end:tool_approval_required',
     ]);
+  });
+
+  it('runs permission hooks for a current-thread approval but not for a detached one', async () => {
+    const manager = createRecordingManager();
+    const { listener, releaseBlocker } = createHarness(manager);
+
+    const blocked = listener({ type: 'blocking_prompt' });
+    await Promise.resolve();
+
+    // An approval parked on a background thread cannot be answered from this
+    // UI, so its hook must not fire against the current session's run.
+    void listener({
+      type: 'tool_approval_required',
+      toolCallId: 'call-background',
+      toolName: 'execute_command',
+      args: {},
+      threadId: 'thread-background',
+    });
+    expect(manager.runPermissionRequest).not.toHaveBeenCalled();
+
+    void listener({
+      type: 'tool_approval_required',
+      toolCallId: 'call-current',
+      toolName: 'execute_command',
+      args: {},
+      threadId: 'thread-current',
+    });
+    expect(manager.runPermissionRequest).toHaveBeenCalledTimes(1);
+    expect(manager.runPermissionRequest).toHaveBeenCalledWith('tool_approval', 'call-current', 'execute_command', {});
+
+    releaseBlocker.resolve();
+    await blocked;
   });
 
   it('dispatches sandbox_access for request_access while the queue is blocked', async () => {

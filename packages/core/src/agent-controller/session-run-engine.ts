@@ -781,24 +781,54 @@ export class SessionRunEngine {
           ? approvalTransform.transformed
           : getDisplayTransform(chunk.metadata, 'input-available', getPayload(chunk).args);
 
-        const policy = this.#session.resolveToolApproval(toolName);
-        const approvalIdentity = {
-          runId: chunk.runId ?? this.#session.run.getRunId() ?? undefined,
+        const policy = this.#session.resolveToolApproval(toolName, state.threadId);
+
+        // Resolve the call against the run that raised it, not the session's
+        // currently-bound thread/run/resource. The session can switch thread or
+        // be re-scoped to another resource while this run is still streaming,
+        // and the agent looks up the suspended run by `threadId`/`resourceId`
+        // — resolving with the newly-bound identity would fail to find this
+        // run, or resume it against the wrong thread. `chunk.runId` names the run
+        // that emitted the approval, so a newer run on the session cannot
+        // redirect the resume.
+        const binding = {
           threadId: state.threadId,
+          runId: chunk.runId ?? this.#session.run.getRunId() ?? undefined,
           resourceId: this.#session.identity.getResourceId(),
+          // Pinned for the same reason: a mode switch swaps `getAgent()` and a
+          // successor run replaces the session's abort controller, so both must
+          // be read now — while this run is the session's current run.
+          agent,
+          abortSignal: this.#session.run.getAbortSignal(),
         };
 
         if (policy === 'allow') {
-          await this.#session.approveToolCall({ toolCallId, requestContext, ...approvalIdentity });
+          await this.#session.approveToolCall({ toolCallId, requestContext, ...binding });
           break;
         }
 
         if (policy === 'deny') {
-          await this.#session.declineToolCall({ toolCallId, requestContext, ...approvalIdentity });
+          await this.#session.declineToolCall({ toolCallId, requestContext, ...binding });
           break;
         }
 
-        const approvalPromise = this.#session.approval.arm({ toolName, toolCallId });
+        // Record the owning agent under the same run-scope key the suspension
+        // path uses, so approval-gated calls (which never emit a
+        // `tool-call-suspended` chunk) are covered by the invariant that a run
+        // is only resumed by the agent that parked it.
+        if (binding.runId) {
+          const approvalRunScope = this.#machinery.getRunScope(binding.runId);
+          if (!approvalRunScope?.get(SUSPENDED_RUN_AGENT_KEY)) {
+            approvalRunScope?.set(SUSPENDED_RUN_AGENT_KEY, agent);
+          }
+        }
+
+        const approvalPromise = this.#session.approval.arm({
+          toolName,
+          toolCallId,
+          threadId: binding.threadId,
+          runId: binding.runId,
+        });
         this.#session.emit({
           type: 'tool_approval_required',
           threadId: state.threadId,
@@ -808,27 +838,29 @@ export class SessionRunEngine {
         });
 
         const approval = await approvalPromise;
-        this.#session.approval.clearToolName();
 
-        // `session.abort()` releases a parked gate as a decline and defers the
-        // stream/signal teardown to us, so the decline can still be driven
-        // through the (live) agent run and persist an `output-denied` result.
-        // Once it lands we finish the teardown, which stops the run rather than
-        // letting the model continue past the denied call.
-        const deferredAbort = this.#session.run.isAbortRequested();
-        const deferredAbortOrigin = deferredAbort ? this.#session.takeDeferredAbortOrigin() : undefined;
+        // A gated `session.abort()` releases a parked gate as a decline and
+        // defers the stream/signal teardown to us, so the decline can still be
+        // driven through the (live) agent run and persist an `output-denied`
+        // result. Claim that captured origin to detect it: the session's abort
+        // flag is not a usable proxy for "this run was aborted while parked",
+        // because it is shared across run generations and threads — a successor
+        // run's abort (or one scoped to another thread) would otherwise cancel
+        // this parked gate's continuation.
+        const deferredAbortOrigin = this.#session.takeDeferredAbortOrigin();
+        const deferredAbort = deferredAbortOrigin !== undefined;
 
         if (!deferredAbort && approval.decision === 'approve') {
           await this.#session.approveToolCall({
             toolCallId,
             requestContext: approval.requestContext ?? requestContext,
-            ...approvalIdentity,
+            ...binding,
           });
         } else {
           await this.#session.declineToolCall({
             toolCallId,
             requestContext: approval.requestContext ?? requestContext,
-            ...approvalIdentity,
+            ...binding,
             declineContext: deferredAbort
               ? { reason: ABORTED_BY_USER_REASON, message: ABORTED_BY_USER_REASON }
               : approval.declineContext,

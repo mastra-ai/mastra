@@ -27,7 +27,7 @@ describe('defaultDisplayState', () => {
     expect(ds.activeTools.size).toBe(0);
     expect(ds.toolInputBuffers).toBeInstanceOf(Map);
     expect(ds.toolInputBuffers.size).toBe(0);
-    expect(ds.pendingApproval).toBeNull();
+    expect(ds.pendingApprovals.size).toBe(0);
     expect(ds.activeSubagents).toBeInstanceOf(Map);
     expect(ds.activeSubagents.size).toBe(0);
     expect(ds.omProgress.status).toBe('idle');
@@ -63,7 +63,7 @@ describe('session.displayState.get()', () => {
     expect(ds.currentMessage).toBeNull();
     expect(ds.tokenUsage).toEqual(createEmptyTokenUsage());
     expect(ds.activeTools.size).toBe(0);
-    expect(ds.pendingApproval).toBeNull();
+    expect(ds.pendingApprovals.size).toBe(0);
     expect(ds.activeSubagents.size).toBe(0);
     expect(ds.modifiedFiles.size).toBe(0);
     expect(ds.tasks).toEqual([]);
@@ -110,12 +110,22 @@ describe('agent lifecycle', () => {
     expect(session.displayState.get().toolInputBuffers.size).toBe(0);
   });
 
-  it('clears pendingApproval on agent_start', () => {
+  it('keeps a parked approval across agent_start', () => {
     emit(session, { type: 'tool_approval_required', toolCallId: 't1', toolName: 'write_file', args: {} });
-    expect(session.displayState.get().pendingApproval).not.toBeNull();
+    expect(session.displayState.get().pendingApprovals.size).toBe(1);
 
+    // A fresh run (a resume, or another thread's run) must not wipe a gate that
+    // is still parked waiting for a decision.
     emit(session, { type: 'agent_start' });
-    expect(session.displayState.get().pendingApproval).toBeNull();
+    expect(session.displayState.get().pendingApprovals.size).toBe(1);
+  });
+
+  it('drops a parked approval when its tool call ends', () => {
+    emit(session, { type: 'tool_approval_required', toolCallId: 't1', toolName: 'write_file', args: {} });
+    expect(session.displayState.get().pendingApprovals.size).toBe(1);
+
+    emit(session, { type: 'tool_end', toolCallId: 't1', result: 'ok', isError: false });
+    expect(session.displayState.get().pendingApprovals.size).toBe(0);
   });
 
   it('sets isRunning to false on agent_end', () => {
@@ -603,18 +613,40 @@ describe('tool lifecycle', () => {
   });
 
   describe('tool_approval_required', () => {
-    it('sets pendingApproval', () => {
+    it('parks an approval keyed by toolCallId', () => {
       emit(session, {
         type: 'tool_approval_required',
         toolCallId: 't1',
         toolName: 'execute_command',
         args: { command: 'rm -rf /' },
       });
-      const approval = session.displayState.get().pendingApproval;
-      expect(approval).not.toBeNull();
+      const approval = session.displayState.get().pendingApprovals.get('t1');
+      expect(approval).toBeDefined();
       expect(approval!.toolCallId).toBe('t1');
       expect(approval!.toolName).toBe('execute_command');
       expect(approval!.args).toEqual({ command: 'rm -rf /' });
+    });
+
+    it('parks concurrent approvals without shadowing one another', () => {
+      emit(session, {
+        type: 'tool_approval_required',
+        toolCallId: 'a',
+        toolName: 'write_file',
+        args: {},
+        threadId: 'thread-a',
+      });
+      emit(session, {
+        type: 'tool_approval_required',
+        toolCallId: 'b',
+        toolName: 'execute_command',
+        args: {},
+        threadId: 'thread-b',
+      });
+
+      const pending = session.displayState.get().pendingApprovals;
+      expect(pending.size).toBe(2);
+      expect(pending.get('a')!.threadId).toBe('thread-a');
+      expect(pending.get('b')!.threadId).toBe('thread-b');
     });
   });
 
@@ -1502,7 +1534,7 @@ describe('resetThreadDisplayState', () => {
     const ds = session.displayState.get();
     expect(ds.activeTools.size).toBe(0);
     expect(ds.toolInputBuffers.size).toBe(0);
-    expect(ds.pendingApproval).toBeNull();
+    expect(ds.pendingApprovals.size).toBe(0);
     expect(ds.pendingSuspensions.size).toBe(0);
     expect(ds.activeSubagents.size).toBe(0);
     expect(ds.currentMessage).toBeNull();

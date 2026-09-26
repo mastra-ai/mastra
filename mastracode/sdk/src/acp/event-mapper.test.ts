@@ -325,6 +325,7 @@ describe('ACP Event Mapper', () => {
 
       expect(mockSession.respondToToolApproval).toHaveBeenCalledWith({
         decision: 'approve',
+        toolCallId: 'tool-123',
       });
     });
 
@@ -350,6 +351,7 @@ describe('ACP Event Mapper', () => {
 
       expect(mockSession.respondToToolApproval).toHaveBeenCalledWith({
         decision: 'decline',
+        toolCallId: 'tool-123',
       });
     });
 
@@ -373,6 +375,7 @@ describe('ACP Event Mapper', () => {
         expect(requestPermissionSpy).not.toHaveBeenCalled();
         expect(mockSession.respondToToolApproval).toHaveBeenCalledWith({
           decision: 'approve',
+          toolCallId: 'tool-123',
         });
       } finally {
         setAutoApprove(false);
