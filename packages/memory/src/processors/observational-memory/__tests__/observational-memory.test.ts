@@ -3966,6 +3966,18 @@ ${longLine}
       expect(result.observations).toContain('User asked for the lint fix');
       expect(result.observations).toContain('[truncated]');
     });
+
+    it('should still treat a repetitive long line as degenerate output', () => {
+      const line = '-:--:--:--'.repeat(9_000);
+      const output = `<observations>
+${line}
+</observations>`;
+
+      const result = parseObserverOutput(output);
+
+      expect(result.degenerate).toBe(true);
+      expect(result.observations).toBe('');
+    });
   });
 
   describe('parseMultiThreadObserverOutput', () => {
