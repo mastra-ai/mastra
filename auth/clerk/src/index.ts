@@ -91,6 +91,8 @@ interface StatePayload {
   r: string;
   /** Expiry timestamp */
   e: number;
+  /** Per-login nonce, including when callers reuse their state */
+  n: string;
 }
 
 /**
@@ -137,6 +139,7 @@ async function createStateToken(originalState: string, redirectUri: string, secr
     s: originalState,
     r: redirectUri,
     e: Date.now() + STATE_TOKEN_EXPIRY_MS,
+    n: crypto.randomUUID(),
   };
   const payloadB64 = btoa(JSON.stringify(payload));
   const signature = await hmacSign(payloadB64, secret);
@@ -610,6 +613,13 @@ export class MastraAuthClerk extends MastraAuthProvider<ClerkUser> implements IU
       }
 
       const signedState = await createStateToken(state, actualRedirectUri, self.cookiePassword);
+      // Derive a confidential verifier without shared mutable state or exposing it in the URL.
+      const verifier = await hmacSign(`clerk-pkce:${signedState}`, self.cookiePassword);
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+      const challenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
 
       const params = new URLSearchParams({
         client_id: self.oauthClientId!,
@@ -617,6 +627,8 @@ export class MastraAuthClerk extends MastraAuthProvider<ClerkUser> implements IU
         scope: self.scopes.join(' '),
         redirect_uri: actualRedirectUri,
         state: signedState,
+        code_challenge: challenge,
+        code_challenge_method: 'S256',
       });
 
       return `${self.fapiUrl}/oauth/authorize?${params.toString()}`;
@@ -640,6 +652,7 @@ export class MastraAuthClerk extends MastraAuthProvider<ClerkUser> implements IU
           grant_type: 'authorization_code',
           code,
           redirect_uri: redirectUri,
+          code_verifier: await hmacSign(`clerk-pkce:${stateToken}`, self.cookiePassword),
         }),
         signal: AbortSignal.timeout(10_000), // 10 second timeout
       });

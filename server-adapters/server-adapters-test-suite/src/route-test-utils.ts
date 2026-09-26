@@ -39,6 +39,10 @@ export function getRouteSpecificSchemaDefaults(route: ServerRoute): {
   query?: Record<string, unknown>;
   body?: Record<string, unknown>;
 } {
+  if (route.method === 'GET' && route.path === '/auth/sso/callback') {
+    return { query: { code: 'test-authorization-code', error: undefined } };
+  }
+
   if (route.path === '/observability/traces/query/values') {
     return { body: { predicateScope: 'trace', path: 'entityName' } };
   }
