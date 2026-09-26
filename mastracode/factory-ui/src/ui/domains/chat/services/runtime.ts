@@ -93,8 +93,17 @@ export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): 
     case 'tool_input_delta':
       if (typeof event.argsTextDelta === 'string' && event.argsTextDelta.length > 0) {
         const now = Date.now();
-        // Tool arguments belong to the step the window is already measuring; they only
-        // open it when the step's first output was streamed arguments.
+        // Arguments stream before this step's message_start, so the stamped id is what
+        // attributes them to a step. Unstamped (older server) keeps the existing window.
+        if (event.messageId !== undefined && state._decodeMessageId !== event.messageId) {
+          return {
+            ...state,
+            _decodeMessageId: event.messageId,
+            _decodeStartedAt: now,
+            _decodeLastDeltaAt: now,
+            _decodeHasReasoning: false,
+          };
+        }
         return { ...state, _decodeStartedAt: state._decodeStartedAt || now, _decodeLastDeltaAt: now };
       }
       return state;

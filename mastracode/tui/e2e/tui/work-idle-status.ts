@@ -84,6 +84,26 @@ export const workIdleStatusScenario: McE2eScenario = {
         type: 'step-finish',
         payload: { output: { usage: { outputTokens: 2440, reasoningTokens: 2400, inputTokens: 100 } } },
       };
+      // A step that streams and then reports no usage, followed by a step whose first
+      // streamed output is tool arguments. The arguments arrive before their own
+      // message_start, so they must rebind the window to their step. Otherwise this
+      // step's 40 tokens divide by the earlier step's whole interval.
+      clock.mockReturnValue(startedAt + 121_000);
+      yield { type: 'step-start', payload: { messageId: 'throughput-unmeasured', startedAt } };
+      yield { type: 'text-start', payload: { id: 'unmeasured' } };
+      yield { type: 'text-delta', payload: { id: 'unmeasured', text: 'Unmeasured step.' } };
+      yield { type: 'text-end', payload: { id: 'unmeasured' } };
+      clock.mockReturnValue(startedAt + 150_000);
+      yield { type: 'step-start', payload: { messageId: 'throughput-args', startedAt } };
+      yield { type: 'tool-call-input-streaming-start', payload: { toolCallId: 'args-1', toolName: 'view' } };
+      yield { type: 'tool-call-delta', payload: { toolCallId: 'args-1', argsTextDelta: '{"path"' } };
+      clock.mockReturnValue(startedAt + 151_000);
+      yield { type: 'tool-call-delta', payload: { toolCallId: 'args-1', argsTextDelta: ':"pkg.json"}' } };
+      yield { type: 'tool-call-input-streaming-end', payload: { toolCallId: 'args-1' } };
+      yield { type: 'tool-call', payload: { toolCallId: 'args-1', toolName: 'view', args: { path: 'pkg.json' } } };
+      yield { type: 'tool-result', payload: { toolCallId: 'args-1', toolName: 'view', result: 'ok' } };
+      clock.mockReturnValue(startedAt + 152_000);
+      yield { type: 'step-finish', payload: { output: { usage: { outputTokens: 40, inputTokens: 10 } } } };
       yield { type: 'finish', payload: { stepResult: { reason: 'stop' } } };
     }
     async function* deliveredStream() {
@@ -99,6 +119,10 @@ export const workIdleStatusScenario: McE2eScenario = {
       clock.mockRestore();
     }
     await runtime.waitForScreenText(/\b40 t\/s\b/, terminal);
+    const rate = tuiRef?.state?.tokensPerSec;
+    if (rate !== 40) {
+      throw new Error(`Expected the argument-only step to be measured over its own second, got ${rate} t/s`);
+    }
 
     state.lastAgentRunDurationMs = 61_000;
     state.lastAgentRunEndReason = 'done';

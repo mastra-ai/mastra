@@ -264,6 +264,33 @@ describe('tokens/sec (reducer-level)', () => {
     expect(state.tokensPerSec).toBe(40);
   });
 
+  it('does not leak a usage-less step into a step whose first output is tool arguments', () => {
+    // Step 1 streams then never reports usage. Step 2's first output is tool arguments,
+    // which arrive before its message_start: they must be timed over their own 1s, not
+    // the 29s window step 1 left open.
+    vi.setSystemTime(1000);
+    let state = runtimeReducer(initialChatRuntime, {
+      type: 'event',
+      event: { type: 'message_update', id: 'step-1', event: { type: 'text-delta', delta: 'One' } },
+    });
+    vi.setSystemTime(30_000);
+    state = runtimeReducer(state, {
+      type: 'event',
+      event: { type: 'tool_input_delta', toolCallId: 't', argsTextDelta: '{"path"', messageId: 'step-2' },
+    });
+    vi.setSystemTime(31_000);
+    state = runtimeReducer(state, {
+      type: 'event',
+      event: { type: 'tool_input_delta', toolCallId: 't', argsTextDelta: ':"a.ts"}', messageId: 'step-2' },
+    });
+    vi.setSystemTime(60_000);
+    state = runtimeReducer(state, {
+      type: 'event',
+      event: { type: 'usage_update', usage: { completionTokens: 40, promptTokens: 100, totalTokens: 140 } },
+    });
+    expect(state.tokensPerSec).toBe(40);
+  });
+
   it('still measures a step whose message closed before its usage arrived', () => {
     // The goal path closes the assistant message before the step's step-finish, so
     // message_end lands first. The pending usage must still measure that step.

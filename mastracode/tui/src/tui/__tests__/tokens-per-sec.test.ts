@@ -49,6 +49,7 @@ import type { TUIState } from '../state.js';
 function createMinimalState(overrides: Partial<TUIState> = {}): TUIState {
   return {
     tokensPerSec: 0,
+    decodeMessageId: undefined,
     decodeStartedAt: 0,
     decodeLastDeltaAt: 0,
     decodeHasReasoning: false,
@@ -267,6 +268,65 @@ describe('tokens/sec over streamed generation time', () => {
     await stream('step-1', 1000, 'One');
     await stream('step-2', 30_000, 'Two');
     await stream('step-2', 31_000, ' continues');
+    vi.setSystemTime(60_000);
+    await dispatchEvent(usageEvent(40), ectx, state);
+    expect(state.tokensPerSec).toBe(40);
+  });
+
+  it.each([
+    ['text', [{ type: 'text', text: '' }], { type: 'text-delta', delta: 'One' }],
+    [
+      'reasoning',
+      [{ type: 'reasoning', reasoning: '', details: [] }],
+      { type: 'reasoning-delta', index: 0, delta: 'Thinking' },
+    ],
+  ] as const)(
+    'does not leak a usage-less %s step into a step whose first output is tool arguments',
+    async (_label, parts, firstDelta) => {
+      const state = createMinimalState();
+      const ectx = createEctx();
+      state.streamingMessage = {
+        id: 'step-1',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: { format: 2, parts: [...parts] },
+      };
+      vi.setSystemTime(1000);
+      await dispatchEvent({ type: 'message_update', id: 'step-1', event: { ...firstDelta } }, ectx, state);
+      expect(state.decodeStartedAt).toBe(1000);
+
+      // Step 2 streams tool arguments before its message_start and never reports usage for
+      // step 1, so the args must rebind the window to step 2 rather than extend step 1's.
+      vi.setSystemTime(30_000);
+      await dispatchEvent(
+        { type: 'tool_input_delta', toolCallId: 't', argsTextDelta: '{"path"', messageId: 'step-2' },
+        ectx,
+        state,
+      );
+      vi.setSystemTime(31_000);
+      await dispatchEvent(
+        { type: 'tool_input_delta', toolCallId: 't', argsTextDelta: ':"a.ts"}', messageId: 'step-2' },
+        ectx,
+        state,
+      );
+      vi.setSystemTime(60_000);
+      await dispatchEvent(usageEvent(40), ectx, state);
+      expect(state.tokensPerSec).toBe(40);
+    },
+  );
+
+  it('rebinds the window between two argument-only steps', async () => {
+    const state = createMinimalState();
+    const ectx = createEctx();
+    for (const [at, messageId] of [
+      [1000, 'step-1'],
+      [2000, 'step-1'],
+      [30_000, 'step-2'],
+      [31_000, 'step-2'],
+    ] as const) {
+      vi.setSystemTime(at);
+      await dispatchEvent({ type: 'tool_input_delta', toolCallId: 't', argsTextDelta: '{', messageId }, ectx, state);
+    }
     vi.setSystemTime(60_000);
     await dispatchEvent(usageEvent(40), ectx, state);
     expect(state.tokensPerSec).toBe(40);

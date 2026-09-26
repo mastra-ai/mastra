@@ -273,9 +273,15 @@ export async function dispatchEvent(
       if (typeof event.argsTextDelta === 'string') {
         if (event.argsTextDelta.length > 0) {
           const now = Date.now();
-          // Tool arguments belong to the step the window is already measuring;
-          // they only open it when the step's first output was streamed arguments.
-          if (state.decodeStartedAt === 0) state.decodeStartedAt = now;
+          // Arguments stream before this step's message_start, so the stamped id is what
+          // attributes them to a step. Unstamped (older server) keeps the existing window.
+          if (event.messageId !== undefined && state.decodeMessageId !== event.messageId) {
+            state.decodeMessageId = event.messageId;
+            state.decodeStartedAt = now;
+            state.decodeHasReasoning = false;
+          } else if (state.decodeStartedAt === 0) {
+            state.decodeStartedAt = now;
+          }
           state.decodeLastDeltaAt = now;
         }
         handleToolInputDelta(ectx, event.toolCallId, event.argsTextDelta);
