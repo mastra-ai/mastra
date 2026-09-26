@@ -13,6 +13,7 @@ import type { BackgroundTaskManager } from '../../background-tasks/manager';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
 import type { ScoringFilter } from '../../evals/predicate';
 import type { SystemMessage } from '../../llm';
+import type { ProviderOptionsMode } from '../../llm/model/provider-options';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../llm/model/shared.types';
 import type { ToolCallConcurrency } from '../../loop/types';
 import type { Mastra } from '../../mastra';
@@ -80,6 +81,8 @@ export interface SerializableModelConfig {
   };
   /** Provider-specific options for the model call */
   providerOptions?: SharedProviderOptions;
+  /** How `providerOptions` combine with the call-level ones */
+  providerOptionsMode?: ProviderOptionsMode;
 }
 
 /**

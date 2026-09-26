@@ -31,7 +31,7 @@ import type {
   StreamObjectOnFinishCallback,
 } from '../llm/model/base.types';
 import type { ModelConfigModelSettings } from '../llm/model/model-settings';
-import type { ProviderOptions } from '../llm/model/provider-options';
+import type { ProviderOptions, ProviderOptionsMode } from '../llm/model/provider-options';
 import type { IMastraLogger } from '../logger';
 import type { ReasoningLevel } from '../loop/types';
 import type { Mastra } from '../mastra';
@@ -588,6 +588,13 @@ export type ModelWithRetries = {
   enabled?: boolean; // defaults to true
   modelSettings?: DynamicArgument<ModelFallbackSettings>;
   providerOptions?: DynamicArgument<ProviderOptions>;
+  /**
+   * How `providerOptions` combine with the call-level `providerOptions`.
+   * Use `'replace'` for an entry on another vendor, so options pinned for the
+   * primary model are not forwarded to it.
+   * @default 'merge'
+   */
+  providerOptionsMode?: ProviderOptionsMode;
   headers?: DynamicArgument<Record<string, string>>;
 };
 

@@ -19,6 +19,7 @@ import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
 import type { AgentSignalType } from '../agent/signals';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { ModelConfigModelSettings } from '../llm/model/model-settings';
+import type { ProviderOptionsMode } from '../llm/model/provider-options';
 import type { MastraLanguageModel, SharedProviderOptions } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import type { ScorerResult } from '../loop';
@@ -1113,6 +1114,7 @@ export type ModelManagerModelConfig = {
   headers?: Record<string, string>;
   modelSettings?: ModelConfigModelSettings;
   providerOptions?: SharedProviderOptions;
+  providerOptionsMode?: ProviderOptionsMode;
 };
 
 /**

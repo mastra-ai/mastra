@@ -129,6 +129,27 @@ export function mergeProviderOptions<
   return deepMerge(base, override) as T;
 }
 
+/**
+ * How a model-list entry's `providerOptions` combine with the call-level ones.
+ * - `'merge'` deep-merges the entry's options on top, keeping call-level keys it doesn't set.
+ * - `'replace'` sends only the entry's options; nothing from the call level reaches the model.
+ */
+export type ProviderOptionsMode = 'merge' | 'replace';
+
+/**
+ * Resolves the provider options a model-list entry runs with, given the
+ * call-level options and the entry's `providerOptionsMode` (default `'merge'`).
+ */
+export function resolveModelProviderOptions<
+  T extends ProviderOptions | SharedV2ProviderOptions | SharedV3ProviderOptions | SharedV4ProviderOptions,
+>(
+  callProviderOptions: T | undefined,
+  model: { providerOptions?: T; providerOptionsMode?: ProviderOptionsMode },
+): T | undefined {
+  if (model.providerOptionsMode === 'replace') return model.providerOptions;
+  return mergeProviderOptions(callProviderOptions, model.providerOptions);
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== 'object') return false;
   const proto = Object.getPrototypeOf(value);

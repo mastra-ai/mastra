@@ -328,6 +328,76 @@ describe('Per-fallback-entry settings', () => {
       const po = primary.doStreamCalls[0]?.providerOptions as Record<string, Record<string, unknown>>;
       expect(po?.openai?.reasoningEffort).toBe('high');
     });
+
+    it("should not forward call-time providerOptions to a fallback entry with providerOptionsMode 'replace'", async () => {
+      const primary = createThrowingStreamModel('replace-primary', 503);
+      const secondary = createRecordingStreamModel('replace-secondary', 'secondary response');
+
+      const agent = new Agent({
+        id: 'provider-options-replace',
+        name: 'ProviderOptions Replace Test',
+        instructions: 'You are a test agent',
+        model: [
+          { model: primary, maxRetries: 0 },
+          {
+            model: secondary,
+            maxRetries: 0,
+            providerOptionsMode: 'replace',
+            providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } } as any,
+          },
+        ],
+      });
+
+      await (
+        await agent.stream('Hello', {
+          providerOptions: { openrouter: { order: ['vendor-a'], reasoning_effort: 'high' } } as any,
+        })
+      ).text;
+
+      expect(primary.doStreamCalls[0]?.providerOptions).toEqual({
+        openrouter: { order: ['vendor-a'], reasoning_effort: 'high' },
+      });
+      expect(secondary.doStreamCalls[0]?.providerOptions).toEqual({
+        google: { thinkingConfig: { thinkingBudget: 0 } },
+      });
+    });
+
+    it("should pass only the first entry's providerOptions to processInputStep with providerOptionsMode 'replace'", async () => {
+      const primary = createRecordingStreamModel('replace-processor', 'ok');
+      let processorProviderOptions: unknown;
+
+      const captureProviderOptionsProcessor = {
+        id: 'capture-provider-options-processor',
+        processInputStep: async ({ providerOptions }) => {
+          processorProviderOptions = providerOptions;
+          return {};
+        },
+      } satisfies Processor;
+
+      const agent = new Agent({
+        id: 'provider-options-replace-processor',
+        name: 'ProviderOptions Replace Processor Test',
+        instructions: 'You are a test agent',
+        model: [
+          {
+            model: primary,
+            maxRetries: 0,
+            providerOptionsMode: 'replace',
+            providerOptions: { openai: { promptCacheRetention: '24h' } } as any,
+          },
+        ],
+        inputProcessors: [captureProviderOptionsProcessor],
+      });
+
+      await (
+        await agent.stream('Hello', {
+          providerOptions: { openai: { user: 'abc' } } as any,
+        })
+      ).text;
+
+      expect(processorProviderOptions).toEqual({ openai: { promptCacheRetention: '24h' } });
+      expect(primary.doStreamCalls[0]?.providerOptions).toEqual({ openai: { promptCacheRetention: '24h' } });
+    });
   });
 
   describe('headers', () => {

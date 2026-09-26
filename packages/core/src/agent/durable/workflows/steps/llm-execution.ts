@@ -3,7 +3,7 @@ import type { ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../../error';
 import type { PubSub } from '../../../../events/pubsub';
-import { mergeProviderOptions } from '../../../../llm/model/provider-options';
+import { resolveModelProviderOptions } from '../../../../llm/model/provider-options';
 import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
 import { ConsoleLogger } from '../../../../logger';
 import { applyAutoResumeSystemMessage } from '../../../../loop/shared/auto-resume-system-message';
@@ -57,7 +57,7 @@ import { endRunSpansWithError, globalRunRegistry, markRunActive } from '../../ru
 import { emitChunkEvent, emitStepStartEvent } from '../../stream-adapter';
 import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCallInput } from '../../types';
 import { resolveRuntimeDependencies, resolveModelFromListEntry } from '../../utils/resolve-runtime';
-import { durableOptionsSchema } from '../shared/schemas';
+import { durableOptionsSchema, modelListEntrySchema } from '../shared/schemas';
 
 /**
  * Detect a run-level budget expiry (`modelSettings.timeout.totalMs`, #21724
@@ -94,22 +94,7 @@ const durableLLMInputSchema = z.object({
     providerOptions: z.record(z.string(), z.any()).optional(),
   }),
   // Model list for fallback support (when agent configured with array of models)
-  modelList: z
-    .array(
-      z.object({
-        id: z.string(),
-        config: z.object({
-          provider: z.string(),
-          modelId: z.string(),
-          specificationVersion: z.string().optional(),
-          originalConfig: z.union([z.string(), z.record(z.string(), z.any())]).optional(),
-          providerOptions: z.record(z.string(), z.any()).optional(),
-        }),
-        maxRetries: z.number(),
-        enabled: z.boolean(),
-      }),
-    )
-    .optional(),
+  modelList: z.array(modelListEntrySchema).optional(),
   options: durableOptionsSchema,
   state: z.any(),
   messageId: z.string(),
@@ -495,9 +480,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             let currentToolChoice = execOptions.toolChoice as ToolChoice<ToolSet> | undefined;
             let currentActiveTools = execOptions.activeTools;
             let currentModelSettings: Record<string, unknown> = { ...(execOptions.modelSettings ?? {}) };
-            let currentProviderOptions: SharedProviderOptions | undefined = mergeProviderOptions(
+            let currentProviderOptions: SharedProviderOptions | undefined = resolveModelProviderOptions(
               execOptions.providerOptions,
-              modelEntry.config.providerOptions,
+              modelEntry.config,
             ) as SharedProviderOptions | undefined;
 
             // 6. Rebuild MODEL_GENERATION span from passed data

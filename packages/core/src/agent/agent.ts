@@ -37,8 +37,7 @@ import type {
   StreamTextResult,
 } from '../llm/model/base.types';
 import { MastraLLMVNext } from '../llm/model/model.loop';
-import { mergeProviderOptions } from '../llm/model/provider-options';
-import type { ProviderOptions } from '../llm/model/provider-options';
+import type { ProviderOptions, ProviderOptionsMode } from '../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
@@ -364,6 +363,7 @@ type ModelFallbacks = {
   enabled: boolean;
   modelSettings?: DynamicArgument<ModelFallbackSettings>;
   providerOptions?: DynamicArgument<ProviderOptions>;
+  providerOptionsMode?: ProviderOptionsMode;
   headers?: DynamicArgument<Record<string, string>>;
 }[];
 
@@ -3312,6 +3312,7 @@ export class Agent<
       enabled: mdl.enabled ?? true,
       modelSettings: mdl.modelSettings,
       providerOptions: mdl.providerOptions,
+      providerOptionsMode: mdl.providerOptionsMode,
       headers: mdl.headers,
     };
   }
@@ -4579,9 +4580,7 @@ export class Agent<
         const llm = await this.getLLM({ requestContext });
         const model = llm.getModel();
         const processInputProviderOptions =
-          llm instanceof MastraLLMVNext
-            ? mergeProviderOptions(providerOptions, llm.getProviderOptions())
-            : providerOptions;
+          llm instanceof MastraLLMVNext ? llm.getProviderOptions(providerOptions) : providerOptions;
         const memory = await this.getMemory({ requestContext });
         const result = await runner.runProcessInputStep({
           messageList,
@@ -7026,6 +7025,7 @@ export class Agent<
           headers: mergedHeaders,
           modelSettings: resolvedModelSettings,
           providerOptions: resolvedProviderOptions,
+          providerOptionsMode: modelConfig.providerOptionsMode,
         };
       }),
     );
