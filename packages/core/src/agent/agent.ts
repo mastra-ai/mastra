@@ -5672,11 +5672,17 @@ export class Agent<
                 const memory = await resolvedAgent.getMemory({ requestContext: subAgentRequestContext });
                 if (memory) {
                   try {
-                    await memory.createThread({
-                      resourceId: effectiveGenerateResourceId,
-                      threadId: effectiveGenerateThreadId,
-                      ...(subAgentThreadMetadata ? { metadata: subAgentThreadMetadata } : {}),
-                    });
+                    // On resume the thread already exists; re-creating it would overwrite its metadata.
+                    if (
+                      !shouldResumeSubAgent ||
+                      !(await memory.getThreadById({ threadId: effectiveGenerateThreadId }))
+                    ) {
+                      await memory.createThread({
+                        resourceId: effectiveGenerateResourceId,
+                        threadId: effectiveGenerateThreadId,
+                        ...(subAgentThreadMetadata ? { metadata: subAgentThreadMetadata } : {}),
+                      });
+                    }
 
                     await memory.saveMessages({
                       messages: fullSubAgentMessages,
@@ -5818,11 +5824,17 @@ export class Agent<
                 const streamMemory = await resolvedAgent.getMemory({ requestContext: subAgentRequestContext });
                 if (streamMemory) {
                   try {
-                    await streamMemory.createThread({
-                      resourceId: effectiveStreamResourceId,
-                      threadId: effectiveStreamThreadId,
-                      ...(subAgentThreadMetadata ? { metadata: subAgentThreadMetadata } : {}),
-                    });
+                    // On resume the thread already exists; re-creating it would overwrite its metadata.
+                    if (
+                      !shouldResumeSubAgent ||
+                      !(await streamMemory.getThreadById({ threadId: effectiveStreamThreadId }))
+                    ) {
+                      await streamMemory.createThread({
+                        resourceId: effectiveStreamResourceId,
+                        threadId: effectiveStreamThreadId,
+                        ...(subAgentThreadMetadata ? { metadata: subAgentThreadMetadata } : {}),
+                      });
+                    }
 
                     await streamMemory.saveMessages({
                       messages: fullSubAgentMessages,
