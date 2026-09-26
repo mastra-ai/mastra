@@ -49,8 +49,8 @@ export interface TokenLimiterOptions {
   onMemoryTrim?: (messages: MastraDBMessage[], requestContext?: ProcessInputArgs['requestContext']) => Promise<void>;
   /**
    * Cap eligible tool results to this many tokens before they reach the model, instead of letting
-   * them be trimmed away entirely by ordinary trimming. Media payloads and results that can't be
-   * serialized to JSON are left uncapped. The model receives a truncated copy ending in a
+   * them be trimmed away entirely by ordinary trimming. Media payloads and results the processor can't serialize
+   * (for example circular objects) are left uncapped. The model receives a truncated copy ending in a
    * `[truncated: showing N of M tokens]` marker, or an empty string if the cap can't fit even the
    * bare marker. The capped copy is metadata-only: for committed results the stored result is kept
    * intact. A tool's own `toModelOutput` mapping always takes precedence over this cap. Requires the
@@ -378,7 +378,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
   /**
    * Give an oversized tool result a truncated model-only copy
    * (`providerMetadata.mastra.modelOutput`). Media payloads and results that
-   * can't be serialized to JSON are left alone.
+   * the processor can't serialize (for example circular objects) are left alone.
    */
   private capToolResult(result: unknown, maxTokens: number): string | undefined {
     const isMediaArray = Array.isArray(result) && result.length > 0 && result.every(isMediaPayload);

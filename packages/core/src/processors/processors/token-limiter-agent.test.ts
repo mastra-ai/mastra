@@ -363,6 +363,48 @@ describe('TokenLimiterProcessor through an agent', () => {
       expect(committedMastra?.modelOutput?.value).toMatch(/\[truncated: showing \d+ of [\d,]+ tokens\]$/);
     });
 
+    it("carryCappedProviderMetadata keeps an existing toModelOutput mapping instead of the cap (#24110)", async () => {
+      const secret = 'SECRET '.repeat(3000);
+      const messageList = new MessageList();
+      messageList.add(
+        {
+          id: 'msg-call-1',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'lookup', args: {} },
+              },
+            ],
+          },
+          createdAt: new Date('2024-01-01T00:00:00Z'),
+        },
+        'response',
+      );
+      await new TokenLimiterProcessor({ limit: 50_000, maxToolResultTokens: 50 }).processToolResult({
+        result: secret,
+        toolCallId: 'call-1',
+        toolName: 'lookup',
+        args: {},
+        messageList,
+        steps: [],
+        systemMessages: [],
+        state: {},
+      } as any);
+
+      // The durable tool-call step runs toModelOutput before the processors, so the
+      // mapping (here a redaction) is already in providerMetadata when the cap is carried.
+      const redacted = { type: 'text', value: '[redacted]' };
+      const carried = carryCappedProviderMetadata(messageList, 'call-1', { mastra: { modelOutput: redacted } });
+
+      expect(carried.resultCapped).toBe(false);
+      expect((carried.providerMetadata as any).mastra.modelOutput).toEqual(redacted);
+      expect(JSON.stringify(carried.providerMetadata)).not.toContain('SECRET');
+    });
+
     it('keeps the assistant answer when input processors are resolved per request', async () => {
       const { model, prompts } = createV2Model();
       const agent = new Agent({

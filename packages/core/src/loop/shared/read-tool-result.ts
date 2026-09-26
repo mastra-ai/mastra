@@ -63,7 +63,9 @@ export function readCappedProviderMetadataFromMessageList(
  * `providerMetadata` that step returns, so the cap survives the durable
  * step boundary. Returns the (possibly merged) `providerMetadata` plus
  * whether a cap was actually found, which the caller carries as
- * `resultCapped` so `llm-mapping` knows not to recompute it.
+ * `resultCapped` so `llm-mapping` knows not to recompute it. If
+ * `modelOutput` is already set (in the durable step, by `toModelOutput`),
+ * the cap is dropped.
  *
  * Pulled out of the durable `tool-call` step so this exact carry logic can
  * be exercised directly in tests without re-implementing it — see the
@@ -79,6 +81,12 @@ export function carryCappedProviderMetadata(
     return { providerMetadata, resultCapped: false };
   }
   const existingMastra = (providerMetadata as { mastra?: Record<string, unknown> } | undefined)?.mastra;
+  // An existing model-facing output (the durable step runs `toModelOutput`
+  // before the processors) wins over the cap. It may be a redaction, so the
+  // cap, derived from the raw result, must never replace it.
+  if (existingMastra?.modelOutput != null) {
+    return { providerMetadata, resultCapped: false };
+  }
   const cappedMastra = (cappedProviderMetadata as { mastra?: Record<string, unknown> }).mastra;
   return {
     providerMetadata: {
