@@ -17,6 +17,19 @@ export function readMessageAuthor(requestContext?: RequestContext): MessageAutho
   };
 }
 
+// Written by @mastra/server auth (`MASTRA_USER_KEY` there) for authenticated requests.
+const AUTHENTICATED_USER_KEY = 'mastra__user';
+
+/**
+ * Identifies the caller a thread subscription is bound to: the authenticated
+ * user when the server set one, otherwise the host-stamped message author.
+ */
+export function readCallerId(requestContext?: RequestContext): string | undefined {
+  const user = requestContext?.get(AUTHENTICATED_USER_KEY) as { id?: unknown } | undefined;
+  if (user && typeof user === 'object' && typeof user.id === 'string' && user.id) return user.id;
+  return readMessageAuthor(requestContext)?.id;
+}
+
 export function withMessageAuthor(
   providerOptions: MastraProviderMetadata | undefined,
   author: MessageAuthor | undefined,

@@ -19,7 +19,10 @@ async function setup() {
   const stores: Record<string, InMemoryStore> = { alice: new InMemoryStore(), bob: new InMemoryStore() };
   const recalls: string[] = [];
   const memoryFactory = vi.fn().mockImplementation(({ requestContext }) => {
-    const caller = (requestContext.get(MASTRA_MESSAGE_AUTHOR_KEY) as { id: string } | undefined)?.id ?? 'none';
+    const caller =
+      (requestContext.get('mastra__user') as { id: string } | undefined)?.id ??
+      (requestContext.get(MASTRA_MESSAGE_AUTHOR_KEY) as { id: string } | undefined)?.id ??
+      'none';
     const memory = new MockMemory({ storage: stores[caller] ?? controllerStorage });
     const recall = memory.recall.bind(memory);
     return Object.assign(memory, {
@@ -81,6 +84,21 @@ describe('AgentController subscription caller binding', () => {
     await session.thread.ensureCurrentSubscription();
 
     expect(recalls).toEqual(['alice']);
+  });
+
+  it('binds on the server-authenticated user, which HTTP auth sets without a message author', async () => {
+    const { session, recalls } = await setup();
+    const authenticated = (id: string, claimedAuthor?: string) => {
+      const requestContext = new RequestContext();
+      requestContext.set('mastra__user', { id });
+      if (claimedAuthor) requestContext.set(MASTRA_MESSAGE_AUTHOR_KEY, { id: claimedAuthor });
+      return requestContext;
+    };
+
+    await session.thread.switch({ threadId: 't', requestContext: callerContext('alice') });
+    // bob is authenticated but claims to be alice: the authenticated user wins.
+    await session.thread.ensureCurrentSubscription(authenticated('bob', 'alice'));
+    expect(recalls).toEqual(['alice', 'bob']);
   });
 
   it('refuses a different caller while a run is in flight instead of tearing it down', async () => {

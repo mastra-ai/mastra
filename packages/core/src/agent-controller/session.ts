@@ -36,7 +36,7 @@ import { safeStringify } from '../utils';
 import { Workspace } from '../workspace';
 
 import { SessionStartupCancelledError } from './errors';
-import { readMessageAuthor, withMessageAuthor } from './message-author';
+import { readCallerId, readMessageAuthor, withMessageAuthor } from './message-author';
 import { SessionRunEngine } from './session-run-engine';
 import type { TaskItemSnapshot } from './tools';
 import { createEmptyTokenUsage, defaultDisplayState, defaultOMProgressState } from './types';
@@ -605,7 +605,7 @@ export class SessionThread {
     const session = this.#owner;
     const resourceId = this.#getResourceId();
     const key = SessionStream.keyFor({ agent, resourceId, threadId });
-    const callerId = readMessageAuthor(requestContext)?.id;
+    const callerId = readCallerId(requestContext);
     if (session.stream.matches({ key })) {
       const boundCallerId = session.stream.callerId();
       // The subscription resolved memory with the opening caller's context. A
