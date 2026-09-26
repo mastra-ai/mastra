@@ -55,6 +55,15 @@ describe('PageLayout', () => {
       );
       expect(screen.getByRole('main').className).not.toContain('p-4');
     });
+
+    it.each([undefined, <h1 key="title">Title</h1>])('constrains the "fit" column to the page width', header => {
+      render(
+        <PageLayout variant="fit" header={header}>
+          <p>Body</p>
+        </PageLayout>,
+      );
+      expect(screen.getByRole('main').className).toContain('grid-cols-1');
+    });
   });
 
   describe('when a header is provided', () => {
