@@ -328,11 +328,20 @@ function compileClickHouseTraceScope(
   const from = parameters.add(selection.timeRange.from, "DateTime64(3, 'UTC')");
   const to = parameters.add(selection.timeRange.to, "DateTime64(3, 'UTC')");
   const tenant = compileTenantScope(scope, parameters);
+  // ClickHouse cannot push the time range through `LIMIT 1 BY`, so narrow the dedupe to
+  // traces with a root in the range first. All roots of those traces stay in, so a
+  // non-current root inside the range cannot resurrect a trace whose current root is outside it.
   const ctes = [
     `current_roots AS (
     SELECT * FROM (
       SELECT *
       FROM ${TABLE_TRACE_ROOTS}
+      WHERE traceId IN (
+        SELECT traceId
+        FROM ${TABLE_TRACE_ROOTS}
+        WHERE startedAt >= ${from}
+          AND startedAt < ${to}
+      )
       ORDER BY dedupeKey
       LIMIT 1 BY dedupeKey
     )
