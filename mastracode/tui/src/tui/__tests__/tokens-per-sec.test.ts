@@ -218,6 +218,50 @@ describe('tokens/sec over streamed generation time', () => {
     expect(state.tokensPerSec).toBe(40);
   });
 
+  it('counts thinking that starts after text in the same step', async () => {
+    // Text opens the window before any thinking streams. The thinking that follows still
+    // happened inside it, so usage_update must not subtract those tokens as unmeasured.
+    const state = createMinimalState({
+      streamingMessage: {
+        id: 'm',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            { type: 'reasoning', reasoning: '', details: [] },
+            { type: 'text', text: '' },
+          ],
+        },
+      },
+    });
+    const ectx = createEctx();
+    vi.setSystemTime(1000);
+    await dispatchEvent(
+      { type: 'message_update', id: 'm', event: { type: 'text-delta', delta: 'Answer' } },
+      ectx,
+      state,
+    );
+    expect(state.decodeHasReasoning).toBe(false);
+    vi.setSystemTime(2000);
+    await dispatchEvent(
+      { type: 'message_update', id: 'm', event: { type: 'reasoning-delta', index: 0, delta: 'Thinking' } },
+      ectx,
+      state,
+    );
+    expect(state.decodeHasReasoning).toBe(true);
+    vi.setSystemTime(90_000);
+    await dispatchEvent(
+      {
+        type: 'usage_update',
+        usage: { completionTokens: 40, reasoningTokens: 40, promptTokens: 100, totalTokens: 140 },
+      },
+      ectx,
+      state,
+    );
+    expect(state.tokensPerSec).toBe(40);
+  });
+
   it('preserves the last rate for an unmeasurable single-batch response', async () => {
     const state = createMinimalState({ tokensPerSec: 40 });
     await decodeStep(state, createEctx(), 5000, 1000, 1000);

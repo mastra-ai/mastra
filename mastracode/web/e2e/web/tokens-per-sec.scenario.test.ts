@@ -126,6 +126,32 @@ describe('tokens/sec (reducer-level)', () => {
     expect(state.tokensPerSec).toBe(40);
   });
 
+  it('counts thinking that starts after text in the same step', () => {
+    // Text opens the window before any thinking streams. The thinking that follows still
+    // happened inside it, so usage_update must not subtract those tokens as unmeasured.
+    vi.setSystemTime(1000);
+    let state = runtimeReducer(initialChatRuntime, {
+      type: 'event',
+      event: { type: 'message_update', id: 'm', event: { type: 'text-delta', delta: 'Answer' } },
+    });
+    expect(state._decodeHasReasoning).toBe(false);
+    vi.setSystemTime(2000);
+    state = runtimeReducer(state, {
+      type: 'event',
+      event: { type: 'message_update', id: 'm', event: { type: 'reasoning-delta', index: 0, delta: 'Thinking' } },
+    });
+    expect(state._decodeHasReasoning).toBe(true);
+    vi.setSystemTime(90_000);
+    state = runtimeReducer(state, {
+      type: 'event',
+      event: {
+        type: 'usage_update',
+        usage: { promptTokens: 100, completionTokens: 40, reasoningTokens: 40, totalTokens: 140 },
+      },
+    });
+    expect(state.tokensPerSec).toBe(40);
+  });
+
   it('measures visible output when reasoning tokens never streamed', () => {
     // A model can report reasoning tokens without emitting reasoning deltas. Only
     // the visible output can be timed, so 2440 output − 2400 hidden thinking = 40

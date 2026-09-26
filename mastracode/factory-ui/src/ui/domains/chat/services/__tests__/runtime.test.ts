@@ -56,6 +56,33 @@ describe('chat runtime status', () => {
     expect(state.tokensPerSec).toBe(40);
   });
 
+  it('counts thinking that starts after text in the same step', () => {
+    // Text opens the window before any thinking streams. The thinking that follows still
+    // happened inside it, so usage_update must not subtract those tokens as unmeasured.
+    vi.useFakeTimers();
+    vi.setSystemTime(1000);
+    let state = runtimeReducer(initialChatRuntime, {
+      type: 'event',
+      event: { type: 'message_update', id: 'm', event: { type: 'text-delta', delta: 'Answer' } },
+    });
+    expect(state._decodeHasReasoning).toBe(false);
+    vi.setSystemTime(2000);
+    state = runtimeReducer(state, {
+      type: 'event',
+      event: { type: 'message_update', id: 'm', event: { type: 'reasoning-delta', index: 0, delta: 'Thinking' } },
+    });
+    expect(state._decodeHasReasoning).toBe(true);
+    vi.setSystemTime(90_000);
+    state = runtimeReducer(state, {
+      type: 'event',
+      event: {
+        type: 'usage_update',
+        usage: { promptTokens: 100, completionTokens: 40, reasoningTokens: 40, totalTokens: 140 },
+      },
+    });
+    expect(state.tokensPerSec).toBe(40);
+  });
+
   it('preserves the last rate when no generation interval was observed', () => {
     vi.useFakeTimers();
     let state = { ...initialChatRuntime, tokensPerSec: 40 };

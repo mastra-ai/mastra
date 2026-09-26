@@ -200,10 +200,15 @@ export async function dispatchEvent(
       ) {
         const now = Date.now();
         state.agentRunLastStreamPartAt = now;
+        const isReasoning = event.event.type === 'reasoning-delta';
         if (state.decodeMessageId !== event.id) {
           state.decodeMessageId = event.id;
           state.decodeStartedAt = now;
-          state.decodeHasReasoning = event.event.type === 'reasoning-delta';
+          state.decodeHasReasoning = isReasoning;
+        } else if (isReasoning) {
+          // Thinking can start after the window opened on text; the whole window measured
+          // it, so usage_update must not subtract it as if it had never streamed.
+          state.decodeHasReasoning = true;
         }
         state.decodeLastDeltaAt = now;
         ectx.updateStatusLine();
