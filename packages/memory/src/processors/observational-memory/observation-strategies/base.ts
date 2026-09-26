@@ -8,7 +8,6 @@ import { omDebug, omError } from '../debug';
 import { formatOmError, getOmFailureMetadata, isOmModelExecutionError } from '../error';
 import { getObservableMessages, stripThreadTags } from '../message-utils';
 import { parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
-import { DegenerateObserverOutputError } from '../observer-agent';
 import type { ObserverRunner } from '../observer-runner';
 import type { ReflectorRunner } from '../reflector-runner';
 import { withRetry } from '../retry';
@@ -133,15 +132,6 @@ export abstract class ObservationStrategy {
       return { observed: true, usage: output.usage, providerMetadata: output.providerMetadata };
     } catch (error) {
       await this.emitFailedMarkers(cycleId, error);
-
-      // Persistent degenerate observer output skips this cycle instead of failing
-      // the agent run. Nothing is persisted, so the messages stay unobserved and
-      // are picked up by the next observation cycle.
-      if (error instanceof DegenerateObserverOutputError && !abortSignal?.aborted) {
-        // Messages stay unobserved and are retried next cycle; warn so repeated skips are visible.
-        console.warn(`[OM] Skipping observation cycle: ${error.message}`);
-        return { observed: false, error };
-      }
 
       if (!this.rethrowOnFailure) {
         const failedMarkerForStorage = {

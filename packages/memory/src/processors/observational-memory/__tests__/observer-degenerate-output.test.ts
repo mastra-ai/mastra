@@ -164,14 +164,14 @@ describe('Observer degenerate detection (#24354)', () => {
     expect(result.degenerate).toBe(true);
   });
 
-  it('skips the observation cycle instead of throwing when output stays degenerate after retry', async () => {
+  it("skips the observation cycle under failurePolicy 'continue' when output stays degenerate after retry", async () => {
     const threadId = 'degenerate-thread';
     const observer = textModel([degenerateLoop]);
     const storage = new InMemoryMemory({ db: new InMemoryDB() });
     const om = new ObservationalMemory({
       storage,
       scope: 'thread',
-      observation: { model: observer.model, messageTokens: 100, bufferTokens: false },
+      observation: { model: observer.model, messageTokens: 100, bufferTokens: false, failurePolicy: 'continue' },
       reflection: { model: observer.model, observationTokens: 50_000 },
     });
     await seedMessages(storage, threadId);
@@ -191,7 +191,7 @@ describe('Observer degenerate detection (#24354)', () => {
     const om = new ObservationalMemory({
       storage,
       scope: 'thread',
-      observation: { model: observer.model, messageTokens: 100, bufferTokens: false },
+      observation: { model: observer.model, messageTokens: 100, bufferTokens: false, failurePolicy: 'continue' },
       reflection: { model: observer.model, observationTokens: 50_000 },
     });
     await seedMessages(storage, threadId);
@@ -212,7 +212,7 @@ describe('Observer degenerate detection (#24354)', () => {
     const om = new ObservationalMemory({
       storage,
       scope: 'thread',
-      observation: { model: observer.model, messageTokens: 100, bufferTokens: false },
+      observation: { model: observer.model, messageTokens: 100, bufferTokens: false, failurePolicy: 'continue' },
       reflection: { model: observer.model, observationTokens: 50_000 },
     });
     const ids = await seedMessages(storage, threadId);
@@ -228,8 +228,53 @@ describe('Observer degenerate detection (#24354)', () => {
     expect([...(second.record.observedMessageIds ?? [])].sort()).toEqual([...ids].sort());
   });
 
-  it('does not fail the run when every reflection attempt is degenerate', async () => {
+  it("does not fail the run under failurePolicy 'continue' when every reflection attempt is degenerate", async () => {
     const threadId = 'degenerate-reflection-thread';
+    const facts = Array.from({ length: 40 }, (_, i) => `- 🔴 Distinct fact number ${i} about the project setup`).join(
+      '\n',
+    );
+    const observer = textModel([`<observations>\n${facts}\n</observations>`]);
+    const reflector = textModel([degenerateLoop]);
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      observation: { model: observer.model, messageTokens: 100, bufferTokens: false, failurePolicy: 'continue' },
+      reflection: {
+        model: reflector.model,
+        observationTokens: 100,
+        bufferActivation: undefined,
+        failurePolicy: 'continue',
+      },
+    });
+    await seedMessages(storage, threadId);
+
+    const result = await om.observe({ threadId });
+
+    expect(reflector.calls).toBeGreaterThan(0);
+    expect(result.observed).toBe(true);
+    expect(result.record.activeObservations).toContain('Distinct fact number 39');
+  });
+
+  it("fails the turn under the default failurePolicy 'abort' when observer output stays degenerate", async () => {
+    const threadId = 'degenerate-abort-thread';
+    const observer = textModel([degenerateLoop]);
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      observation: { model: observer.model, messageTokens: 100, bufferTokens: false },
+      reflection: { model: observer.model, observationTokens: 50_000 },
+    });
+    await seedMessages(storage, threadId);
+
+    await expect(om.observe({ threadId })).rejects.toThrow(/degenerate output after retry/);
+    const record = await om.getRecord(threadId);
+    expect(record?.observedMessageIds ?? []).toHaveLength(0);
+  });
+
+  it("fails the turn under the default failurePolicy 'abort' when every reflection attempt is degenerate", async () => {
+    const threadId = 'degenerate-reflection-abort-thread';
     const facts = Array.from({ length: 40 }, (_, i) => `- 🔴 Distinct fact number ${i} about the project setup`).join(
       '\n',
     );
@@ -244,10 +289,6 @@ describe('Observer degenerate detection (#24354)', () => {
     });
     await seedMessages(storage, threadId);
 
-    const result = await om.observe({ threadId });
-
-    expect(reflector.calls).toBeGreaterThan(0);
-    expect(result.observed).toBe(true);
-    expect(result.record.activeObservations).toContain('Distinct fact number 39');
+    await expect(om.observe({ threadId })).rejects.toThrow(/degenerate repetition/);
   });
 });
