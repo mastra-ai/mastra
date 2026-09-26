@@ -7,6 +7,8 @@ import {
   categorizeFileData,
   createDataUri,
   imageContentToString,
+  isAbsoluteUrl,
+  isBase64Like,
   parseDataUri,
   resolveFilePartMediaTypeAndData,
 } from '../prompt/image-utils';
@@ -418,8 +420,14 @@ export class AIV5Adapter {
               : { type: 'raw' as const, mimeType: fileMimeType, data: fileData };
 
           // Provider file IDs (e.g. OpenAI "file-...") ride the url branch untouched so
-          // @ai-sdk/openai can forward them as { file_id: "file-..." } to the API.
-          if ((categorized.type === 'url' || categorized.type === 'providerFileId') && typeof fileData === 'string') {
+          // @ai-sdk/openai can forward them as { file_id: "file-..." } to the API. So do raw
+          // strings that aren't base64 (relative paths), instead of becoming undecodable data URLs.
+          if (
+            typeof fileData === 'string' &&
+            (categorized.type === 'url' ||
+              categorized.type === 'providerFileId' ||
+              (categorized.type === 'raw' && !isBase64Like(fileData)))
+          ) {
             const v5UIPart: AIV5Type.FileUIPart = {
               type: 'file' as const,
               url: fileData,
@@ -865,11 +873,15 @@ export class AIV5Adapter {
         const base64 = data.toString('base64');
         return `data:${mimeType};base64,${base64}`;
       } else if (typeof data === 'string') {
-        // OpenAI Files API file IDs (e.g. "file-abc123") must pass through as-is so
-        // @ai-sdk/openai can forward them as { file_id: "file-..." } to the API.
-        return data.startsWith('data:') || data.startsWith('http') || data.startsWith('file-')
-          ? data
-          : `data:${mimeType};base64,${data}`;
+        // Absolute URLs of any scheme (https:, gs:, s3:, ...) pass through. So do OpenAI
+        // Files API file IDs (e.g. "file-abc123"), which @ai-sdk/openai forwards as
+        // { file_id: "file-..." }. Only base64 is wrapped as a data URL; anything else
+        // (e.g. a relative path) is kept as-is, and the prompt build treats it as an
+        // attachment that can't be downloaded.
+        if (data.startsWith('data:') || data.startsWith('file-') || isAbsoluteUrl(data) || !isBase64Like(data)) {
+          return data;
+        }
+        return `data:${mimeType};base64,${data}`;
       } else if (data instanceof Uint8Array) {
         const base64 = Buffer.from(data).toString('base64');
         return `data:${mimeType};base64,${base64}`;

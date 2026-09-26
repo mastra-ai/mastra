@@ -986,6 +986,14 @@ export class ContextLengthHandler implements Processor {
 
 Mastra includes a built-in [`PrefillErrorHandler`](/reference/processors/prefill-error-handler) that automatically handles the Anthropic "assistant message prefill" error. This processor is auto-injected and requires no configuration.
 
+### Recover from attachment download failures
+
+When a model can't fetch an attachment URL itself, Mastra downloads the attachment before calling the model. If the download fails, `processAPIError()` receives a `MastraError` with the id `DOWNLOAD_ASSETS_FAILED` and the attachment URL in `error.details.url`. An error processor can use this to replace the attachment, for example with a fresh signed URL, and return `{ retry: true }`. Fallback models get a chance next.
+
+If nothing recovers the download, the agent doesn't fail the turn. It retries once with the attachment replaced by an `[Attachment unavailable: <name>]` text placeholder and logs a warning. Mastra records the URL on the stored user message under `metadata.mastra.unavailableAttachments`. Later turns show the same placeholder without downloading the attachment again. The attachment itself stays in the thread's history.
+
+A data URL that can't be decoded is replaced with the placeholder right away, because retrying can't fix it.
+
 ## Receive background work notifications
 
 Use `createBackgroundWorkSignalProcessor()` to retain the active caller's signal capability for eligible background tool calls:

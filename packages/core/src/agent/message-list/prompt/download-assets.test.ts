@@ -103,6 +103,24 @@ describe('downloadFromUrl', () => {
     expect(error.details).toEqual({ url: signedUrl });
   });
 
+  it('fails a malformed data URL once, without retries, and without logging its payload', async () => {
+    const delays = mockRetryDelays();
+    const url = 'data:image/svg+xml;base64,/api/images/foo.svg';
+    let caught: unknown;
+    try {
+      await downloadFromUrl({ url: new URL(url), downloadRetries: 3 });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(MastraError);
+    const error = caught as MastraError;
+    expect(error.id).toBe('DOWNLOAD_ASSETS_FAILED');
+    expect(error.message).toBe('Failed to download asset: data:image/svg+xml;base64,<19 chars>');
+    expect(error.details).toEqual({ url });
+    expect(delays).toEqual([]);
+  });
+
   it('should retry server error responses', async () => {
     const delays = mockRetryDelays();
     const response = new Response('image-data', {

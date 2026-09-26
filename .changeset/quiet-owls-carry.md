@@ -1,0 +1,9 @@
+---
+'@mastra/core': patch
+---
+
+Fixed a thread failing on every turn when an attachment in its history can no longer be downloaded (for example a deleted file that now returns 404, or a stored data URL that can't be decoded). For a failed download, error processors and fallback models still get the first chance to recover. If none of them do, the agent answers with the attachment replaced by an `[Attachment unavailable: <name>]` placeholder and logs a warning, instead of failing the turn. A data URL that can't be decoded gets the placeholder right away, since retrying can't fix it. This also covers the Observational Memory observer, which no longer holds a turn for about 5 minutes retrying such an attachment.
+
+The attachment is recorded as unavailable on its stored message (`metadata.mastra.unavailableAttachments`), so later turns show the same placeholder without trying to download it again. The record is per message: a new message that sends the same URL is downloaded again. The attachment itself stays in history.
+
+Attachments are also downloaded at most once per run, instead of once per step, when the model can't take their URLs directly. See #23705.

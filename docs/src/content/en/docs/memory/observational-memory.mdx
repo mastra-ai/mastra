@@ -438,6 +438,8 @@ new Agent({
 
 You can also pass an allowlist of mimeType globs (for example `['image/*']`) to forward only the kinds the Observer can handle. Alternatively, set `observeAttachments: 'auto'` so Mastra consults the provider capabilities registry. It forwards attachments when the Observer model supports multimodal input and drops them otherwise. If capability data is unavailable for the model, the setting falls back to `true`.
 
+Attachments that the agent recorded as unavailable, because they could no longer be downloaded, are never sent to the Observer. The Observer still sees their `[Image #1: ...]` or `[File #1: ...]` line. See [attachment download failures](/docs/agents/processors#recover-from-attachment-download-failures) for how Mastra records them.
+
 ```md
 Date: 2026-01-15
 

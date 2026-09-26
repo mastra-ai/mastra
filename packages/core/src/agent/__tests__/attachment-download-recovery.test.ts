@@ -3,20 +3,25 @@ import { createServer } from 'node:http';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { Memory } from '../../../../memory/src';
 import { MastraError } from '../../error';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, Processor } from '../../processors';
 import { InMemoryStore } from '../../storage';
+import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { createDurableAgent } from '../durable/create-durable-agent';
 
-function makeModel(supported = false) {
+function makeModel(supported: boolean | 'data-urls' = false) {
   const prompts: LanguageModelV2Prompt[] = [];
   const model = new MockLanguageModelV2({
-    supportedUrls: supported
-      ? { 'image/*': [/^http:\/\/127\.0\.0\.1:/], 'application/pdf': [/^http:\/\/127\.0\.0\.1:/] }
-      : {},
+    supportedUrls:
+      supported === 'data-urls'
+        ? { '*/*': [/^data:/] }
+        : supported
+          ? { 'image/*': [/^http:\/\/127\.0\.0\.1:/], 'application/pdf': [/^http:\/\/127\.0\.0\.1:/] }
+          : {},
     doGenerate: async ({ prompt }) => {
       prompts.push(prompt);
       return {
@@ -41,6 +46,42 @@ function makeModel(supported = false) {
   });
   return { model, prompts };
 }
+
+/** Calls a tool on its first step, then answers, so one run makes two model calls. */
+function makeToolCallingModel() {
+  const prompts: LanguageModelV2Prompt[] = [];
+  const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+  const model = new MockLanguageModelV2({
+    doStream: async ({ prompt }) => {
+      prompts.push(prompt);
+      return {
+        stream: convertArrayToReadableStream(
+          prompts.length === 1
+            ? [
+                { type: 'stream-start', warnings: [] },
+                { type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: '{}' },
+                { type: 'finish', finishReason: 'tool-calls', usage },
+              ]
+            : [
+                { type: 'stream-start', warnings: [] },
+                { type: 'text-start', id: 'text' },
+                { type: 'text-delta', id: 'text', delta: 'ok' },
+                { type: 'text-end', id: 'text' },
+                { type: 'finish', finishReason: 'stop', usage },
+              ],
+        ),
+      };
+    },
+  });
+  return { model, prompts };
+}
+
+const lookupTool = createTool({
+  id: 'lookup',
+  description: 'Look something up',
+  inputSchema: z.object({}),
+  execute: async () => ({ found: true }),
+});
 
 describe('attachment download recovery', () => {
   let server: ReturnType<typeof createServer>;
@@ -79,11 +120,13 @@ describe('attachment download recovery', () => {
     errorProcessor,
     inputProcessor,
     models,
+    tools,
   }: {
     durable?: boolean;
     errorProcessor?: ErrorProcessorOrWorkflow;
     inputProcessor?: InputProcessorOrWorkflow;
     models?: MockLanguageModelV2[];
+    tools?: Record<string, typeof lookupTool>;
   } = {}) {
     const { model, prompts } = makeModel();
     const memory = new Memory({ storage: new InMemoryStore(), options: { lastMessages: 100, generateTitle: false } });
@@ -95,6 +138,7 @@ describe('attachment download recovery', () => {
       memory,
       inputProcessors: inputProcessor ? [inputProcessor] : [],
       errorProcessors: errorProcessor ? [errorProcessor] : [],
+      tools,
     });
     const pubsub = new EventEmitterPubSub();
     pubsubs.push(pubsub);
@@ -187,38 +231,313 @@ describe('attachment download recovery', () => {
     }
   }
 
-  it.each([false, true])('fails closed with an error processor present: %s', async present => {
-    const processAPIError = vi.fn<NonNullable<Processor['processAPIError']>>(() => ({ retry: false }));
-    const { run, memory, prompts } = setup({
-      errorProcessor: present ? { id: 'decline', processAPIError } : undefined,
-    });
-    expect((await run(attachment())).text).toBe('ok');
-    await waitForHistory(memory);
-    failure = '404';
-    for (let turn = 0; turn < 2; turn++) {
-      const result = await run('Continue');
-      expect(result.text).toBe('');
-      expect(result.errors).toHaveLength(1);
-      expect(result.errors[0]).toMatchObject({ id: 'DOWNLOAD_ASSETS_FAILED', details: { url } });
-      if (present) expect(result.errors[0]).toBe(processAPIError.mock.calls[turn]![0].error);
-    }
-    expect(processAPIError).toHaveBeenCalledTimes(present ? 2 : 0);
-    expect(prompts).toHaveLength(1);
-    expect(requests).toBe(3);
+  function promptAttachments(prompt: LanguageModelV2Prompt) {
+    const parts = prompt.flatMap(message => (message.role === 'user' ? message.content : []));
+    return {
+      files: parts.filter(part => part.type === 'file'),
+      placeholders: parts.flatMap(part =>
+        part.type === 'text' && part.text.startsWith('[Attachment unavailable') ? [part.text] : [],
+      ),
+    };
+  }
+
+  describe.each([false, true])('durable: %s', durable => {
+    it.each([false, true])(
+      'skips an unavailable attachment that nothing recovers, with an error processor present: %s',
+      async present => {
+        const processAPIError = vi.fn<NonNullable<Processor['processAPIError']>>(() => ({ retry: false }));
+        const { run, memory, prompts } = setup({
+          durable,
+          errorProcessor: present ? { id: 'decline', processAPIError } : undefined,
+        });
+        expect((await run(attachment())).text).toBe('ok');
+        await waitForHistory(memory);
+        failure = '404';
+        for (let turn = 0; turn < 2; turn++) {
+          const result = await run('Continue');
+          expect(result.errors).toEqual([]);
+          expect(result.text).toBe('ok');
+        }
+        // Error processors still get the first chance to recover, on the turn it first fails.
+        expect(processAPIError).toHaveBeenCalledTimes(present ? 1 : 0);
+        expect(prompts).toHaveLength(3);
+        for (const prompt of prompts.slice(1)) {
+          expect(promptAttachments(prompt)).toEqual({
+            files: [],
+            placeholders: ['[Attachment unavailable: application/pdf]'],
+          });
+        }
+        // First turn, then the failed download and the check before skipping it. The
+        // attachment is then recorded as unavailable, so the last turn does not fetch it.
+        expect(requests).toBe(3);
+        await waitForHistory(memory); // The attachment itself stays in stored history.
+        const { messages } = await memory.recall({ threadId: 'thread', resourceId: 'resource' });
+        const stored = messages.find(message => JSON.stringify(message.content.parts).includes(url));
+        expect(stored?.content.metadata?.mastra).toMatchObject({ unavailableAttachments: [url] });
+      },
+    );
   });
 
-  it.each([0, 2])('bounds unsuccessful processor retries to %i', async budget => {
+  describe.each([false, true])('durable: %s', durable => {
+    it('downloads an attachment once per run, not once per step', async () => {
+      const toolCalling = makeToolCallingModel();
+      const { run } = setup({ durable, models: [toolCalling.model], tools: { lookup: lookupTool } });
+      const result = await run(attachment());
+      expect(result.errors).toEqual([]);
+      expect(result.text).toBe('ok');
+      expect(toolCalling.prompts).toHaveLength(2);
+      for (const prompt of toolCalling.prompts) {
+        expect(promptAttachments(prompt).files).toHaveLength(1);
+      }
+      expect(requests).toBe(1);
+    });
+
+    it('records an unavailable attachment on its own message and fetches a later message again', async () => {
+      const { run, memory, prompts } = setup({ durable });
+      expect((await run(attachment())).text).toBe('ok');
+      await waitForHistory(memory);
+      failure = '404';
+      expect((await run('Continue')).text).toBe('ok');
+      const fetched = requests;
+
+      // The recorded message is not fetched again.
+      failure = undefined;
+      expect((await run('Continue')).text).toBe('ok');
+      expect(requests).toBe(fetched);
+
+      // A new message sending the same URL is its own attempt, so it is fetched.
+      failure = '404';
+      const resent = await run(attachment());
+      expect(resent.errors).toEqual([]);
+      expect(resent.text).toBe('ok');
+      expect(requests).toBeGreaterThan(fetched);
+      expect(promptAttachments(prompts.at(-1)!).placeholders).toEqual([
+        '[Attachment unavailable: application/pdf]',
+        '[Attachment unavailable: application/pdf]',
+      ]);
+      await vi.waitFor(async () => {
+        const { messages } = await memory.recall({ threadId: 'thread', resourceId: 'resource' });
+        const carrying = messages.filter(message => JSON.stringify(message.content.parts).includes(url));
+        expect(carrying).toHaveLength(2);
+        for (const message of carrying) {
+          expect(message.content.metadata?.mastra).toMatchObject({ unavailableAttachments: [url] });
+        }
+      });
+    });
+
+    // The first is a permanent 404, the second a transient network drop like the reviewer's probe.
+    it.each(['404', 'network'] as const)(
+      'sends an attachment again when a later message re-sends a URL recorded after a %s',
+      async outage => {
+        const { run, prompts } = setup({ durable });
+        failure = outage;
+        expect((await run(attachment())).text).toBe('ok');
+        expect(promptAttachments(prompts.at(-1)!).placeholders).toEqual(['[Attachment unavailable: application/pdf]']);
+
+        // The server is back, so re-sending the same URL downloads it again.
+        failure = undefined;
+        const recovered = await run(attachment());
+        expect(recovered.errors).toEqual([]);
+        expect(recovered.text).toBe('ok');
+        // The recorded message keeps its placeholder; the new message carries the attachment.
+        const latest = promptAttachments(prompts.at(-1)!);
+        expect(latest.files).toHaveLength(1);
+        expect(latest.placeholders).toEqual(['[Attachment unavailable: application/pdf]']);
+      },
+    );
+
+    it('replaces an undecodable data URL in history with a placeholder right away', async () => {
+      const processAPIError = vi.fn<NonNullable<Processor['processAPIError']>>(() => ({ retry: true }));
+      const { run, memory, prompts } = setup({ durable, errorProcessor: { id: 'unused', processAPIError } });
+      // A relative path persisted as a base64 data URL by older versions (#23705).
+      await memory.saveThread({
+        thread: { id: 'thread', resourceId: 'resource', createdAt: new Date(), updatedAt: new Date() },
+      });
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'poisoned',
+            role: 'user',
+            threadId: 'thread',
+            resourceId: 'resource',
+            createdAt: new Date(),
+            content: {
+              format: 2,
+              parts: [
+                { type: 'text', text: 'Look at this' },
+                { type: 'file', mimeType: 'image/svg+xml', data: 'data:image/svg+xml;base64,/api/images/foo.svg' },
+              ],
+            },
+          },
+        ],
+      });
+      const result = await run('Continue');
+      expect(result.errors).toEqual([]);
+      expect(result.text).toBe('ok');
+      expect(processAPIError).not.toHaveBeenCalled();
+      expect(prompts).toHaveLength(1);
+      expect(promptAttachments(prompts[0]!).placeholders).toEqual(['[Attachment unavailable: image/svg+xml]']);
+    });
+
+    it.each([
+      [
+        'model file part',
+        { role: 'user', content: [{ type: 'file', data: '/api/images/foo.svg', mediaType: 'image/svg+xml' }] },
+      ],
+      [
+        'model image part',
+        { role: 'user', content: [{ type: 'image', image: '/api/images/foo.svg', mediaType: 'image/svg+xml' }] },
+      ],
+      [
+        'UI message file part',
+        { id: 'ui-1', role: 'user', parts: [{ type: 'file', url: '/api/images/foo.svg', mediaType: 'image/svg+xml' }] },
+      ],
+      [
+        'protocol-relative URL',
+        { role: 'user', content: [{ type: 'file', data: '//cdn.example.com/foo.svg', mediaType: 'image/svg+xml' }] },
+      ],
+    ])(
+      'answers a new %s with a relative path using a placeholder, on this turn and later ones',
+      async (_label, message) => {
+        const processAPIError = vi.fn<NonNullable<Processor['processAPIError']>>(() => ({ retry: false }));
+        const { run, prompts } = setup({ durable, errorProcessor: { id: 'decline', processAPIError } });
+
+        for (const input of [[message], 'Continue'] as Parameters<Agent['stream']>[0][]) {
+          const result = await run(input);
+          expect(result.errors).toEqual([]);
+          expect(result.text).toBe('ok');
+        }
+        expect(prompts.length).toBeGreaterThanOrEqual(2);
+        for (const prompt of prompts) {
+          expect(promptAttachments(prompt)).toEqual({
+            files: [],
+            placeholders: ['[Attachment unavailable: image/svg+xml]'],
+          });
+        }
+      },
+    );
+
+    // Models that accept data URLs get them as-is, so invalid content would reach the provider
+    // (and be rejected on every turn) without being caught by a download failure.
+    it.each([
+      ['a new file part with an extensionless relative path', 'input', '/api/attachments/123', 'image/png'],
+      [
+        'a stored data URL wrapping a relative path',
+        'stored',
+        'data:image/png;base64,/api/images/foo.png',
+        'image/png',
+      ],
+      ['image data that is not an image', 'input', 'data:image/png;base64,aGVsbG8=', 'image/png'],
+      ['PDF data that is not a PDF', 'input', 'data:application/pdf;base64,aGVsbG8=', 'application/pdf'],
+      ['a percent-encoded data URL that is not an image', 'input', 'data:image/png,hello', 'image/png'],
+    ] as const)(
+      'gives %s the placeholder when the model accepts data URLs',
+      async (_label, source, data, mediaType) => {
+        const dataUrlModel = makeModel('data-urls');
+        const { run, memory } = setup({ durable, models: [dataUrlModel.model] });
+        const filePart = { type: 'file' as const, data, mediaType };
+        if (source === 'stored') {
+          await memory.saveThread({
+            thread: { id: 'thread', resourceId: 'resource', createdAt: new Date(), updatedAt: new Date() },
+          });
+          await memory.saveMessages({
+            messages: [
+              {
+                id: 'poisoned',
+                role: 'user',
+                threadId: 'thread',
+                resourceId: 'resource',
+                createdAt: new Date(),
+                content: { format: 2, parts: [{ type: 'file', mimeType: mediaType, data }] },
+              },
+            ],
+          });
+        } else {
+          const result = await run([{ role: 'user', content: [filePart] }]);
+          expect(result.errors).toEqual([]);
+        }
+        const result = await run('Continue');
+        expect(result.errors).toEqual([]);
+        expect(result.text).toBe('ok');
+        for (const prompt of dataUrlModel.prompts) {
+          expect(promptAttachments(prompt)).toEqual({
+            files: [],
+            placeholders: [`[Attachment unavailable: ${mediaType}]`],
+          });
+        }
+      },
+    );
+
+    it.each([
+      [
+        'PNG',
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        'image/png',
+      ],
+      ['JPEG labelled as PNG', '/9j/4AAQSkZJRgABAQ==', 'image/png'],
+      ['SVG', 'PHN2Zz48L3N2Zz4=', 'image/svg+xml'],
+      ['WebP', 'UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==', 'image/webp'],
+      ['PDF', 'JVBERi0xLjQK', 'application/pdf'],
+    ] as const)('still sends real %s content to a model that accepts data URLs', async (_label, data, mediaType) => {
+      const dataUrlModel = makeModel('data-urls');
+      const { run } = setup({ durable, models: [dataUrlModel.model] });
+      const result = await run([{ role: 'user', content: [{ type: 'file', data, mediaType }] }]);
+      expect(result.errors).toEqual([]);
+      expect(dataUrlModel.prompts).toHaveLength(1);
+      const { files, placeholders } = promptAttachments(dataUrlModel.prompts[0]!);
+      expect(placeholders).toEqual([]);
+      expect(files).toHaveLength(1);
+    });
+
+    it('keeps a stored message downloadable when another message recorded the same URL', async () => {
+      const { run, memory, prompts } = setup({ durable });
+      await memory.saveThread({
+        thread: { id: 'thread', resourceId: 'resource', createdAt: new Date(), updatedAt: new Date() },
+      });
+      const stored = (id: string, createdAt: Date, metadata?: Record<string, unknown>) => ({
+        id,
+        role: 'user' as const,
+        threadId: 'thread',
+        resourceId: 'resource',
+        createdAt,
+        content: {
+          format: 2 as const,
+          parts: [{ type: 'file' as const, mimeType: 'application/pdf', data: url }],
+          ...(metadata ? { metadata } : {}),
+        },
+      });
+      await memory.saveMessages({
+        messages: [
+          stored('recorded', new Date(1_000), { mastra: { sealed: true, unavailableAttachments: [url] } }),
+          stored('unrecorded', new Date(2_000), { mastra: { sealed: true } }),
+        ],
+      });
+      const result = await run('Continue');
+      expect(result.errors).toEqual([]);
+      expect(result.text).toBe('ok');
+      // Only the message that recorded the URL skips the download.
+      expect(requests).toBe(1);
+      const { files, placeholders } = promptAttachments(prompts[0]!);
+      expect(files).toHaveLength(1);
+      expect(placeholders).toEqual(['[Attachment unavailable: application/pdf]']);
+      const { messages } = await memory.recall({ threadId: 'thread', resourceId: 'resource' });
+      expect(messages.find(message => message.id === 'unrecorded')?.content.metadata?.mastra).toEqual({ sealed: true });
+    });
+  });
+
+  it.each([0, 2])('bounds unsuccessful processor retries to %i before skipping the attachment', async budget => {
     const processAPIError = vi.fn<NonNullable<Processor['processAPIError']>>(() => ({ retry: true }));
     const { run, prompts } = setup({ errorProcessor: { id: 'retry-without-repair', processAPIError } });
     failure = '404';
     const result = await run(attachment(), budget);
-    expect(result.errors).toHaveLength(1);
-    expect(result.errors[0]).toBe(processAPIError.mock.calls[budget]![0].error);
+    expect(result.errors).toEqual([]);
+    expect(result.text).toBe('ok');
     expect(processAPIError.mock.calls.map(([args]) => args.retryCount)).toEqual(
       Array.from({ length: budget + 1 }, (_, i) => i),
     );
-    expect(prompts).toHaveLength(0);
-    expect(requests).toBe(budget + 1);
+    expect(prompts).toHaveLength(1);
+    expect(promptAttachments(prompts[0]!).placeholders).toEqual(['[Attachment unavailable: application/pdf]']);
+    expect(requests).toBe(budget + 2);
   });
 
   it('retries the same model before advancing to a fallback', async () => {
