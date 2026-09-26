@@ -1395,6 +1395,51 @@ export type TrajectoryEfficiencyResult = {
 };
 
 /**
+ * Find redundant calls (same tool name + same args in consecutive steps) within a single
+ * list of siblings. Does not look at `children` - callers that need to check nested steps
+ * should recurse explicitly, since "consecutive" is only meaningful within one execution
+ * context.
+ */
+function findRedundantCallsAtLevel(steps: TrajectoryStep[]): Array<{ name: string; index: number }> {
+  const redundantCalls: Array<{ name: string; index: number }> = [];
+  for (let i = 1; i < steps.length; i++) {
+    const prev = steps[i - 1]!;
+    const curr = steps[i]!;
+    if (
+      prev.name === curr.name &&
+      prev.stepType === curr.stepType &&
+      (prev.stepType === 'tool_call' || prev.stepType === 'mcp_tool_call')
+    ) {
+      const prevArgs = (prev as TrajectoryStep & { toolArgs?: Record<string, unknown> }).toolArgs;
+      const currArgs = (curr as TrajectoryStep & { toolArgs?: Record<string, unknown> }).toolArgs;
+      try {
+        if (JSON.stringify(prevArgs) === JSON.stringify(currArgs)) {
+          redundantCalls.push({ name: curr.name, index: i });
+        }
+      } catch {
+        // If serialization fails, don't flag as redundant
+      }
+    }
+  }
+  return redundantCalls;
+}
+
+/**
+ * Find redundant calls anywhere in the trajectory, checking each parent's children as their
+ * own sibling group (e.g. tool calls nested inside an `agent_run` or `workflow_step`), not
+ * just the top-level steps.
+ */
+function findRedundantCallsRecursive(steps: TrajectoryStep[]): Array<{ name: string; index: number }> {
+  let redundantCalls = findRedundantCallsAtLevel(steps);
+  for (const step of steps) {
+    if (step.children) {
+      redundantCalls = redundantCalls.concat(findRedundantCallsRecursive(step.children));
+    }
+  }
+  return redundantCalls;
+}
+
+/**
  * Evaluate trajectory efficiency against budgets and redundancy checks.
  * Throws when a configured budget is invalid or its required measurements are incomplete or invalid.
  */
@@ -1458,29 +1503,13 @@ export function checkTrajectoryEfficiency(
     }
   }
 
-  // Detect redundant calls (same tool name + same args in consecutive calls)
-  const redundantCalls: Array<{ name: string; index: number }> = [];
-  if (noRedundantCalls) {
-    for (let i = 1; i < trajectory.steps.length; i++) {
-      const prev = trajectory.steps[i - 1]!;
-      const curr = trajectory.steps[i]!;
-      if (
-        prev.name === curr.name &&
-        prev.stepType === curr.stepType &&
-        (prev.stepType === 'tool_call' || prev.stepType === 'mcp_tool_call')
-      ) {
-        const prevArgs = (prev as TrajectoryStep & { toolArgs?: Record<string, unknown> }).toolArgs;
-        const currArgs = (curr as TrajectoryStep & { toolArgs?: Record<string, unknown> }).toolArgs;
-        try {
-          if (JSON.stringify(prevArgs) === JSON.stringify(currArgs)) {
-            redundantCalls.push({ name: curr.name, index: i });
-          }
-        } catch {
-          // If serialization fails, don't flag as redundant
-        }
-      }
-    }
-  }
+  // Detect redundant calls (same tool name + same args in consecutive calls). Scoped per
+  // parent: two calls are only "consecutive" if they're siblings in the same execution
+  // context (top-level steps, or the children of the same nested agent/workflow step) -
+  // flattening the whole tree first would create false adjacency between unrelated branches.
+  const redundantCalls: Array<{ name: string; index: number }> = noRedundantCalls
+    ? findRedundantCallsRecursive(trajectory.steps)
+    : [];
 
   const overStepBudget = maxSteps !== undefined && totalSteps > maxSteps;
   const overTokenBudget = maxTotalTokens !== undefined && totalTokens > maxTotalTokens;
@@ -1533,6 +1562,57 @@ export type TrajectoryBlacklistResult = {
 };
 
 /**
+ * Collect the `name` of every step in the trajectory, descending into `children` (e.g. tool
+ * calls nested inside an `agent_run` or `workflow_step`). Order/nesting is not preserved -
+ * this is only for "does this name appear anywhere" checks.
+ */
+function collectStepNamesRecursive(steps: TrajectoryStep[]): string[] {
+  const names: string[] = [];
+  for (const step of steps) {
+    names.push(step.name);
+    if (step.children) {
+      names.push(...collectStepNamesRecursive(step.children));
+    }
+  }
+  return names;
+}
+
+/**
+ * Check whether a contiguous sequence appears in a single list of sibling step names.
+ */
+function containsSequenceAtLevel(stepNames: string[], sequence: string[]): boolean {
+  for (let i = 0; i <= stepNames.length - sequence.length; i++) {
+    let match = true;
+    for (let j = 0; j < sequence.length; j++) {
+      if (stepNames[i + j] !== sequence[j]) {
+        match = false;
+        break;
+      }
+    }
+    if (match) return true;
+  }
+  return false;
+}
+
+/**
+ * Check whether a contiguous sequence appears anywhere in the trajectory, scoped per parent:
+ * a sequence only matches steps that ran one after another in the same execution context (the
+ * top-level steps, or the children of the same nested agent/workflow step) - flattening the
+ * whole tree first would match sequences that never actually happened consecutively.
+ */
+function sequenceViolatedAnywhere(steps: TrajectoryStep[], sequence: string[]): boolean {
+  if (
+    containsSequenceAtLevel(
+      steps.map(s => s.name),
+      sequence,
+    )
+  ) {
+    return true;
+  }
+  return steps.some(step => step.children && sequenceViolatedAnywhere(step.children, sequence));
+}
+
+/**
  * Check if a trajectory violates any blacklist rules.
  * Returns score 0.0 if any violation is found (hard fail).
  */
@@ -1547,7 +1627,7 @@ export function checkTrajectoryBlacklist(
   const violatedTools: string[] = [];
   const violatedSequences: string[][] = [];
 
-  const stepNames = trajectory.steps.map(s => s.name);
+  const stepNames = collectStepNamesRecursive(trajectory.steps);
 
   // Check blacklisted tools
   for (const forbidden of blacklistedTools) {
@@ -1556,21 +1636,12 @@ export function checkTrajectoryBlacklist(
     }
   }
 
-  // Check blacklisted sequences (contiguous subsequences)
+  // Check blacklisted sequences (contiguous subsequences, checked within each parent's own
+  // children as well as the top level)
   for (const sequence of blacklistedSequences) {
     if (sequence.length === 0) continue;
-    for (let i = 0; i <= stepNames.length - sequence.length; i++) {
-      let match = true;
-      for (let j = 0; j < sequence.length; j++) {
-        if (stepNames[i + j] !== sequence[j]) {
-          match = false;
-          break;
-        }
-      }
-      if (match) {
-        violatedSequences.push(sequence);
-        break; // Only report each sequence once
-      }
+    if (sequenceViolatedAnywhere(trajectory.steps, sequence)) {
+      violatedSequences.push(sequence);
     }
   }
 
