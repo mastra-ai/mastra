@@ -25,6 +25,7 @@ describe('ACP Event Mapper', () => {
     } as unknown as AgentSideConnection;
 
     mockSession = {
+      abort: vi.fn(),
       respondToToolApproval: vi.fn(),
       respondToToolSuspension: vi.fn(),
     } as unknown as Session;
@@ -33,7 +34,6 @@ describe('ACP Event Mapper', () => {
   function createPromptState(sessionId: string): PromptState {
     return {
       sessionId,
-      lastTextLength: 0,
       usage: {
         promptTokens: 0,
         completionTokens: 0,
@@ -44,9 +44,10 @@ describe('ACP Event Mapper', () => {
   }
 
   describe('standalone signal messages', () => {
-    it('emits system reminders and notification summaries from message_start', () => {
+    it('does not present user input or internal signals as assistant output', () => {
       const state = createPromptState('session-1');
       const messages = [
+        createSignal({ type: 'user', tagName: 'user', contents: 'ACP_ECHO_PROBE_123' }).toDBMessage(),
         createSignal({
           id: 'reminder-1',
           type: 'system-reminder',
@@ -70,21 +71,7 @@ describe('ACP Event Mapper', () => {
         handleAgentControllerEvent({ type: 'message_end', id: message.id }, state, mockConnection, mockSession);
       }
 
-      expect(sessionUpdateSpy).toHaveBeenNthCalledWith(1, {
-        sessionId: 'session-1',
-        update: {
-          sessionUpdate: 'agent_message_chunk',
-          content: { type: 'text', text: 'Follow the package instructions.' },
-        },
-      });
-      expect(sessionUpdateSpy).toHaveBeenNthCalledWith(2, {
-        sessionId: 'session-1',
-        update: {
-          sessionUpdate: 'agent_message_chunk',
-          content: { type: 'text', text: 'github: 2 pending notifications' },
-        },
-      });
-      expect(sessionUpdateSpy).toHaveBeenCalledTimes(2);
+      expect(sessionUpdateSpy).not.toHaveBeenCalled();
     });
 
     it('forwards compact assistant deltas across interleaved signals', () => {
@@ -120,10 +107,8 @@ describe('ACP Event Mapper', () => {
       handleAgentControllerEvent({ type: 'message_end', id: assistant.id }, state, mockConnection, mockSession);
       expect(sessionUpdateSpy.mock.calls.map(([notification]) => notification.update.content.text)).toEqual([
         'Before signal',
-        'Remember this.',
         ' after',
       ]);
-      expect(state.lastTextLength).toBe(0);
     });
   });
 
@@ -154,7 +139,6 @@ describe('ACP Event Mapper', () => {
         update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Hello' } },
       });
       expect(sessionUpdateSpy).toHaveBeenCalledTimes(1);
-      expect(state.lastTextLength).toBe(5);
     });
 
     it('does not emit ACP text chunks for reasoning or part updates', () => {
@@ -184,7 +168,6 @@ describe('ACP Event Mapper', () => {
       );
 
       expect(sessionUpdateSpy).not.toHaveBeenCalled();
-      expect(state.lastTextLength).toBe(0);
     });
   });
 
@@ -325,6 +308,7 @@ describe('ACP Event Mapper', () => {
 
       expect(mockSession.respondToToolApproval).toHaveBeenCalledWith({
         decision: 'approve',
+        toolCallId: 'tool-123',
       });
     });
 
@@ -350,6 +334,7 @@ describe('ACP Event Mapper', () => {
 
       expect(mockSession.respondToToolApproval).toHaveBeenCalledWith({
         decision: 'decline',
+        toolCallId: 'tool-123',
       });
     });
 
@@ -373,6 +358,7 @@ describe('ACP Event Mapper', () => {
         expect(requestPermissionSpy).not.toHaveBeenCalled();
         expect(mockSession.respondToToolApproval).toHaveBeenCalledWith({
           decision: 'approve',
+          toolCallId: 'tool-123',
         });
       } finally {
         setAutoApprove(false);
@@ -381,7 +367,7 @@ describe('ACP Event Mapper', () => {
   });
 
   describe('tool_suspended - auto-resolve and plan approval', () => {
-    it('auto-resolves request_access suspension', () => {
+    it('requests permission before granting sandbox access', async () => {
       const state = createPromptState('session-1');
 
       const event: Extract<AgentControllerEvent, { type: 'tool_suspended' }> = {
@@ -394,13 +380,17 @@ describe('ACP Event Mapper', () => {
 
       handleAgentControllerEvent(event, state, mockConnection, mockSession);
 
-      expect(mockSession.respondToToolSuspension).toHaveBeenCalledWith({
-        toolCallId: 'tool-123',
-        resumeData: 'Yes',
-      });
+      expect(mockSession.respondToToolSuspension).not.toHaveBeenCalled();
+      await vi.waitFor(() =>
+        expect(mockSession.respondToToolSuspension).toHaveBeenCalledWith({
+          toolCallId: 'tool-123',
+          resumeData: 'Yes',
+        }),
+      );
+      expect(requestPermissionSpy).toHaveBeenCalledTimes(1);
     });
 
-    it('auto-resolves sandbox_access_request suspension', () => {
+    it('requests permission for sandbox access identified by payload kind', async () => {
       const state = createPromptState('session-1');
 
       const event: Extract<AgentControllerEvent, { type: 'tool_suspended' }> = {
@@ -413,10 +403,14 @@ describe('ACP Event Mapper', () => {
 
       handleAgentControllerEvent(event, state, mockConnection, mockSession);
 
-      expect(mockSession.respondToToolSuspension).toHaveBeenCalledWith({
-        toolCallId: 'tool-123',
-        resumeData: 'Yes',
-      });
+      expect(mockSession.respondToToolSuspension).not.toHaveBeenCalled();
+      await vi.waitFor(() =>
+        expect(mockSession.respondToToolSuspension).toHaveBeenCalledWith({
+          toolCallId: 'tool-123',
+          resumeData: 'Yes',
+        }),
+      );
+      expect(requestPermissionSpy).toHaveBeenCalledTimes(1);
     });
 
     it('requests permission for submit_plan and approves', async () => {
@@ -453,7 +447,7 @@ describe('ACP Event Mapper', () => {
       });
     });
 
-    it('auto-resolves ask_user with default message', () => {
+    it('fails unsupported interactive tools without inventing a user answer', async () => {
       const state = createPromptState('session-1');
 
       const event: Extract<AgentControllerEvent, { type: 'tool_suspended' }> = {
@@ -466,10 +460,78 @@ describe('ACP Event Mapper', () => {
 
       handleAgentControllerEvent(event, state, mockConnection, mockSession);
 
-      expect(mockSession.respondToToolSuspension).toHaveBeenCalledWith({
-        toolCallId: 'tool-123',
-        resumeData: 'Proceed with your best judgment. Do not ask further questions.',
-      });
+      await vi.waitFor(() => expect(state.resolve).toHaveBeenCalledWith('error'));
+      expect(mockSession.respondToToolSuspension).not.toHaveBeenCalled();
+      expect(mockSession.abort).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('does not retry an approved suspension as a rejection when resume fails', async () => {
+    const state = createPromptState('session-1');
+    vi.mocked(mockSession.respondToToolSuspension).mockRejectedValueOnce(new Error('Resume failed'));
+    handleAgentControllerEvent(
+      { type: 'tool_suspended', toolCallId: 'tool-123', toolName: 'submit_plan', args: {}, suspendPayload: {} },
+      state,
+      mockConnection,
+      mockSession,
+    );
+    await vi.waitFor(() => expect(state.resolve).toHaveBeenCalledWith('error'));
+    expect(mockSession.respondToToolSuspension).toHaveBeenCalledTimes(1);
+    expect(state.error?.message).toBe('Resume failed');
+  });
+
+  describe('permission lifecycle', () => {
+    it('keeps a suspended turn open until the resumed run completes', () => {
+      const state = createPromptState('session-1');
+      handleAgentControllerEvent({ type: 'agent_end', reason: 'suspended' }, state, mockConnection, mockSession);
+      expect(state.resolve).not.toHaveBeenCalled();
+      handleAgentControllerEvent({ type: 'agent_end', reason: 'complete' }, state, mockConnection, mockSession);
+      expect(state.resolve).toHaveBeenCalledWith('complete');
+    });
+
+    it('ignores a permission reply after the turn was cancelled', async () => {
+      const state = createPromptState('session-1');
+      const permission = Promise.withResolvers<{ outcome: { outcome: 'selected'; optionId: string } }>();
+      requestPermissionSpy.mockReturnValueOnce(permission.promise);
+      handleAgentControllerEvent(
+        { type: 'tool_approval_required', toolCallId: 'tool-123', toolName: 'write_file', args: {} },
+        state,
+        mockConnection,
+        mockSession,
+      );
+      handleAgentControllerEvent({ type: 'agent_end', reason: 'aborted' }, state, mockConnection, mockSession);
+      permission.resolve({ outcome: { outcome: 'selected', optionId: 'approve' } });
+      await permission.promise;
+      await Promise.resolve();
+      expect(mockSession.respondToToolApproval).not.toHaveBeenCalled();
+    });
+
+    it.each(['reject', 'unknown'])('denies sandbox access on %s', async optionId => {
+      const state = createPromptState('session-1');
+      requestPermissionSpy.mockResolvedValueOnce({ outcome: { outcome: 'selected', optionId } });
+      handleAgentControllerEvent(
+        { type: 'tool_suspended', toolCallId: 'tool-123', toolName: 'request_access', args: {}, suspendPayload: {} },
+        state,
+        mockConnection,
+        mockSession,
+      );
+      await vi.waitFor(() =>
+        expect(mockSession.respondToToolSuspension).toHaveBeenCalledWith({ toolCallId: 'tool-123', resumeData: 'No' }),
+      );
+    });
+
+    it('denies sandbox access when the permission request fails', async () => {
+      const state = createPromptState('session-1');
+      requestPermissionSpy.mockRejectedValueOnce(new Error('Client disconnected'));
+      handleAgentControllerEvent(
+        { type: 'tool_suspended', toolCallId: 'tool-123', toolName: 'request_access', args: {}, suspendPayload: {} },
+        state,
+        mockConnection,
+        mockSession,
+      );
+      await vi.waitFor(() =>
+        expect(mockSession.respondToToolSuspension).toHaveBeenCalledWith({ toolCallId: 'tool-123', resumeData: 'No' }),
+      );
     });
   });
 
@@ -587,5 +649,43 @@ describe('ACP Event Mapper', () => {
 
       expect(sessionUpdateSpy).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('cancellation while a turn starts', () => {
+  it('reapplies cancellation once the controller starts the run', () => {
+    const completeDeferredAbort = vi.fn();
+    const state: PromptState = {
+      sessionId: 'cancelled-start',
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      resolve: vi.fn(),
+    };
+    state.cancelled = true;
+    handleAgentControllerEvent(
+      { type: 'agent_start' },
+      state,
+      {} as AgentSideConnection,
+      { completeDeferredAbort } as unknown as Session,
+    );
+    expect(completeDeferredAbort).toHaveBeenCalledOnce();
+  });
+
+  it('denies an approval encountered after cancellation without asking the client', () => {
+    const respondToToolApproval = vi.fn();
+    const requestPermission = vi.fn();
+    const state: PromptState = {
+      sessionId: 'cancelled-approval',
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      resolve: vi.fn(),
+    };
+    state.cancelled = true;
+    handleAgentControllerEvent(
+      { type: 'tool_approval_required', toolCallId: 'late', toolName: 'write_file', args: {} },
+      state,
+      { requestPermission } as unknown as AgentSideConnection,
+      { respondToToolApproval } as unknown as Session,
+    );
+    expect(requestPermission).not.toHaveBeenCalled();
+    expect(respondToToolApproval).toHaveBeenCalledWith({ toolCallId: 'late', decision: 'decline' });
   });
 });

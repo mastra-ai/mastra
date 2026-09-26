@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["src/acp/agent.ts", "src/acp/event-mapper.ts", "src/acp/server.ts", "src/acp/skills.ts"]
+}

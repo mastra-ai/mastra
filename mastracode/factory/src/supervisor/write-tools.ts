@@ -9,6 +9,7 @@ import type { AuditAction } from '../storage/domains/audit/actions.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { SupervisorScope } from './read-tools.js';
+import type { WorkerMessageResult } from './session-messaging.js';
 
 interface SupervisorWriteDependencies {
   scope: SupervisorScope;
@@ -22,7 +23,7 @@ interface SupervisorWriteDependencies {
     message: string;
     userId: string;
     delivery: 'send' | 'queue';
-  }) => Promise<unknown>;
+  }) => Promise<WorkerMessageResult>;
   now?: () => Date;
 }
 
@@ -206,7 +207,17 @@ export function createFactorySupervisorWriteTools(deps: SupervisorWriteDependenc
         const bindings = await deps.workItems.listRunBindings(deps.scope.orgId, deps.scope.factoryProjectId);
         const binding = bindings.find(row => row.sessionId === sessionId);
         if (!binding) throw new Error('The session does not belong to this factory.');
-        await deps.messageSession({ sessionId, message, userId: deps.userId, delivery });
+        const result = await deps.messageSession({ sessionId, message, userId: deps.userId, delivery });
+        if (result?.status === 'interrupted') {
+          return {
+            sessionId,
+            delivered: false,
+            status: 'interrupted',
+            delivery,
+            workItemId: binding.workItemId,
+            role: binding.role,
+          };
+        }
         await audit(
           'factory.agent.signaled',
           { type: 'factory_session', id: sessionId },

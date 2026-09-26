@@ -12,6 +12,8 @@ export interface McpStdioServerConfig {
   command: string;
   /** Arguments for the command */
   args?: string[];
+  /** Working directory for the server process. Defaults to the parent process directory. */
+  cwd?: string;
   /** Environment variables to set for the server process */
   env?: Record<string, string>;
 }

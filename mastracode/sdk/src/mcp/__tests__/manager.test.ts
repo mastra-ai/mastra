@@ -90,7 +90,12 @@ describe('createMcpManager', () => {
 
   describe('init with server defs', () => {
     it('builds stdio server def correctly with stderr piped', async () => {
-      const stdioConfig: McpStdioServerConfig = { command: 'npx', args: ['-y', 'mcp-fs'], env: { HOME: '/tmp' } };
+      const stdioConfig: McpStdioServerConfig = {
+        command: 'npx',
+        args: ['-y', 'mcp-fs'],
+        env: { HOME: '/tmp' },
+        cwd: '/session/directory',
+      };
       setupConfig({ mcpServers: { fs: stdioConfig } });
 
       MockedMCPClient.mockImplementation(function (this: any) {
@@ -104,7 +109,13 @@ describe('createMcpManager', () => {
       expect(MockedMCPClient).toHaveBeenCalledWith({
         id: 'mastra-code-mcp',
         servers: {
-          fs: { command: 'npx', args: ['-y', 'mcp-fs'], env: { HOME: '/tmp' }, stderr: 'pipe' },
+          fs: {
+            command: 'npx',
+            args: ['-y', 'mcp-fs'],
+            env: { HOME: '/tmp' },
+            cwd: '/session/directory',
+            stderr: 'pipe',
+          },
         },
         timeout: 7 * 24 * 60 * 60 * 1000,
       });
