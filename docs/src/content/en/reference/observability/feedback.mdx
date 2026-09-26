@@ -68,7 +68,7 @@ await mastra.observability.addFeedback?.({
 ]}
 />
 
-Without `correlationContext`, the method looks up `traceId` in configured observability storage. If the trace or requested span isn't found, Mastra logs a warning and drops the feedback event. Configure `MastraStorageExporter` when adding feedback by ID after execution, including when `MastraPlatformExporter` handles remote export.
+Without `correlationContext`, the method looks up `traceId` in configured observability storage. If the trace or requested span isn't found, Mastra logs a warning and emits the feedback event with only the provided `traceId` and `spanId`. Configure `MastraStorageExporter` when adding feedback by ID after execution so the event also carries entity context, including when `MastraPlatformExporter` handles remote export.
 
 ### `createFeedback(args)`
 
@@ -479,6 +479,18 @@ Use `FeedbackInput` with `mastra.observability.addFeedback()`, `recordedTrace.ad
 <PropertiesTable
   content={[
   {
+    name: 'feedbackId',
+    type: 'string',
+    description: 'Id for the feedback record. Generated when omitted.',
+    isOptional: true,
+  },
+  {
+    name: 'reviewStatus',
+    type: "'needs-review' | 'reviewed'",
+    description: 'Initial review workflow status. Defaults to `needs-review`.',
+    isOptional: true,
+  },
+  {
     name: 'feedbackSource',
     type: 'string',
     description: 'Optional source metadata for the feedback.',
@@ -581,7 +593,7 @@ Use `FeedbackFilter` in `listFeedback()` and OLAP query `filters`.
 
 ## HTTP routes
 
-These routes belong to a Mastra runtime and use its configured observability storage. They're separate from the [unversioned Mastra Platform Feedback API](/docs/mastra-platform/api#feedback-api), which doesn't provide a feedback creation route.
+These routes belong to a Mastra runtime. `POST` routes publish through `addFeedback()`, so every exporter on the default observability instance receives the record. The other routes use the configured observability storage. They're separate from the [unversioned Mastra Platform Feedback API](/docs/mastra-platform/api#feedback-api), which doesn't provide a feedback creation route.
 
 | Method | Path | Purpose | Permission |
 | - | - | - | - |

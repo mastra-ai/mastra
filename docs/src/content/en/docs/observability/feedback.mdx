@@ -39,7 +39,7 @@ await mastra.observability.addFeedback({
 })
 ```
 
-When you pass only `traceId` and `spanId`, `addFeedback()` rehydrates the target from configured observability storage before emitting the feedback event. Configure [`MastraStorageExporter`](/docs/observability/integrations/exporters/mastra-storage) when feedback is added after the traced execution has finished. If the trace isn't available in storage, Mastra logs a warning and drops the feedback event.
+When you pass only `traceId` and `spanId`, `addFeedback()` rehydrates the target from configured observability storage before emitting the feedback event. Configure [`MastraStorageExporter`](/docs/observability/integrations/exporters/mastra-storage) when feedback is added after the traced execution has finished. If the trace isn't available in storage, Mastra logs a warning and emits the feedback event with only the `traceId` and `spanId` you passed, so exporters still receive it without entity context.
 
 During a live traced execution, you can pass its `correlationContext` to emit feedback without rehydrating the trace from storage. This path is useful when the active request collects feedback before its tracing context ends.
 
@@ -171,7 +171,9 @@ The local runtime exposes the list route at `/api/observability/feedback` and an
 
 [`MastraPlatformExporter`](/reference/observability/tracing/exporters/mastra-platform-exporter) forwards emitted feedback events to Mastra Platform automatically because the hosted query API doesn't provide a creation route.
 
-If your application adds feedback after an agent or workflow response using only its `traceId`, configure `MastraStorageExporter` alongside `MastraPlatformExporter`. The storage exporter keeps the trace available for `addFeedback()` to rehydrate, while the Platform exporter forwards the resulting feedback event without adding the trace to the application's local storage.
+If your application adds feedback after an agent or workflow response using only its `traceId`, configure `MastraStorageExporter` alongside `MastraPlatformExporter`. The storage exporter keeps the trace available for `addFeedback()` to rehydrate, so the forwarded feedback carries entity context. Without it, the Platform exporter still receives the feedback anchored by `traceId` only.
+
+Feedback created through the `POST /api/observability/feedback` route takes the same path: the server calls `addFeedback()`, so every exporter on the default observability instance receives it.
 
 See [Observability on Mastra Platform](/docs/mastra-platform/observability#store-data-locally) for the combined exporter configuration.
 

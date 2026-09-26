@@ -735,7 +735,7 @@ describe('RecordedTrace', () => {
       }
     });
 
-    it('warns instead of silently dropping a score whose target span never reaches storage', async () => {
+    it('emits a score without trace context when its target span never reaches storage', async () => {
       vi.useFakeTimers();
       try {
         const storage = new MockStore();
@@ -758,12 +758,44 @@ describe('RecordedTrace', () => {
         await vi.advanceTimersByTimeAsync(6000);
         await addScorePromise;
 
-        expect(scoringMirror.onScoreEvent).not.toHaveBeenCalled();
         expect(warn).toHaveBeenCalledTimes(1);
-        expect(warn).toHaveBeenCalledWith(expect.stringContaining('Score event was dropped'));
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('emitted without trace context'));
+        expect(scoringMirror.onScoreEvent).toHaveBeenCalledTimes(1);
+        const event = scoringMirror.onScoreEvent.mock.calls[0]![0];
+        expect(event.score.traceId).toBe('missing-trace');
+        expect(event.score.spanId).toBe('missing-span');
+        expect(event.score.correlationContext).toBeUndefined();
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    it('emits an unanchored score immediately when no traceId is given', async () => {
+      const scoringMirror = createScoringMirror();
+      const { mastra } = createMastraWithStorageExporter(new MockStore(), scoringMirror);
+
+      await mastra.observability.addScore({ score: { scoreId: 'score-1', scorerId: 'manual-review', score: 1 } });
+
+      expect(scoringMirror.onScoreEvent).toHaveBeenCalledTimes(1);
+      const event = scoringMirror.onScoreEvent.mock.calls[0]![0];
+      expect(event.score.scoreId).toBe('score-1');
+      expect(event.score.traceId).toBeUndefined();
+      expect(event.score.correlationContext).toBeUndefined();
+    });
+
+    it('skips the storage retry schedule when no observability storage is configured', async () => {
+      const scoringMirror = createScoringMirror();
+      // No Mastra context means no storage to look the trace up in.
+      const observability = new Observability({
+        configs: { default: { serviceName: 'test-service', exporters: [scoringMirror as any] } },
+      });
+
+      const started = Date.now();
+      await observability.addScore({ traceId: 'remote-trace', score: { scorerId: 'manual-review', score: 1 } });
+
+      expect(Date.now() - started).toBeLessThan(1000);
+      expect(scoringMirror.onScoreEvent).toHaveBeenCalledTimes(1);
+      expect(scoringMirror.onScoreEvent.mock.calls[0]![0].score.traceId).toBe('remote-trace');
     });
   });
 });

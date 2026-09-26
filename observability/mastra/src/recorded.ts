@@ -100,7 +100,7 @@ export function buildScoreEvent(args: {
   return {
     type: 'score',
     score: {
-      scoreId: generateSignalId(),
+      scoreId: score.scoreId ?? generateSignalId(),
       timestamp: new Date(),
       traceId,
       spanId,
@@ -132,7 +132,7 @@ export function buildFeedbackEvent(args: {
   return {
     type: 'feedback',
     feedback: {
-      feedbackId: generateSignalId(),
+      feedbackId: feedback.feedbackId ?? generateSignalId(),
       timestamp: new Date(),
       traceId,
       spanId,
@@ -145,6 +145,7 @@ export function buildFeedbackEvent(args: {
       comment: feedback.comment,
       sourceId: feedback.sourceId,
       experimentId: feedback.experimentId,
+      reviewStatus: feedback.reviewStatus,
       correlationContext,
       metadata: mergeMetadata(inheritedMetadata, feedback.metadata),
     },

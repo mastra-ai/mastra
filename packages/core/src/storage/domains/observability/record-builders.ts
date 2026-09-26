@@ -343,6 +343,6 @@ export function buildFeedbackRecord(event: FeedbackEvent): CreateFeedbackRecord 
     scope: null,
     sourceId: fb.sourceId ?? null,
     metadata: fb.metadata ?? null,
-    reviewStatus: 'needs-review',
+    reviewStatus: fb.reviewStatus ?? 'needs-review',
   };
 }

@@ -11,6 +11,9 @@ import type { EntityType } from './tracing';
  * Used by evaluator/scorer flows to attach score data to a recorded span or trace.
  */
 export interface ScoreInput {
+  /** Caller-supplied id for this score record; generated when omitted */
+  scoreId?: string;
+
   /** Identifier of the scorer (e.g., "relevance", "accuracy", "toxicity") */
   scorerId: string;
 

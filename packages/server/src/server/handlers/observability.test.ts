@@ -101,11 +101,18 @@ const createMockStorage = (
 });
 
 // Mock Mastra instance
-const createMockMastra = (storage?: Partial<MastraCompositeStore>): Mastra =>
+const createMockMastra = (storage?: Partial<MastraCompositeStore>, observabilityInstances = 0): Mastra =>
   ({
     getStorage: vi.fn(() => storage as MastraCompositeStore),
     getScorerById: vi.fn(),
     getLogger: vi.fn(() => ({ warn: vi.fn(), error: vi.fn() })),
+    observability: {
+      addFeedback: vi.fn(async () => {}),
+      addScore: vi.fn(async () => {}),
+      listInstances: vi.fn(
+        () => new Map(Array.from({ length: observabilityInstances }, (_, i) => [`instance-${i}`, {}])),
+      ),
+    },
   }) as unknown as Mastra;
 
 // Sample span for testing
@@ -1626,6 +1633,29 @@ describe('Observability Handlers', () => {
       expect(handleErrorSpy).not.toHaveBeenCalled();
     });
 
+    it('given a registered observability instance, when creating a score, then publishes it through the event bus instead of the store', async () => {
+      const mastra = createMockMastra(createMockStorage(mockObservabilityStore, mockScoresStore), 1);
+
+      const result = await NEW_ROUTES.CREATE_SCORE.handler({
+        ...createTestServerContext({ mastra }),
+        score: {
+          scoreId: 'score-from-client',
+          traceId: 'trace-123',
+          spanId: 'span-456',
+          scorerId: 'accuracy',
+          score: 0.95,
+        },
+      });
+
+      expect(result).toEqual({ success: true });
+      expect(mastra.observability.addScore).toHaveBeenCalledWith({
+        traceId: 'trace-123',
+        spanId: 'span-456',
+        score: expect.objectContaining({ scoreId: 'score-from-client', scorerId: 'accuracy', score: 0.95 }),
+      });
+      expect(mockObservabilityStore.createScore).not.toHaveBeenCalled();
+    });
+
     it('should preserve a caller-supplied scoreId', async () => {
       (mockObservabilityStore.createScore as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
 
@@ -2031,6 +2061,53 @@ describe('Observability Handlers', () => {
         }),
       });
       expect(handleErrorSpy).not.toHaveBeenCalled();
+    });
+
+    it('given a registered observability instance, when creating feedback, then publishes it through the event bus instead of the store', async () => {
+      const mastra = createMockMastra(createMockStorage(mockObservabilityStore, mockScoresStore), 1);
+      const context = createTestServerContext({ mastra });
+      context.requestContext.set(MASTRA_USER_KEY, { id: 'authenticated-user' });
+
+      const result = await NEW_ROUTES.CREATE_FEEDBACK.handler({
+        ...context,
+        feedback: {
+          feedbackId: 'feedback-from-client',
+          traceId: 'trace-123',
+          spanId: 'span-456',
+          feedbackType: 'thumbs',
+          value: 1,
+          feedbackUserId: 'submitted-user',
+          reviewStatus: 'reviewed',
+        },
+      });
+
+      expect(result).toEqual({ success: true });
+      expect(mastra.observability.addFeedback).toHaveBeenCalledWith({
+        traceId: 'trace-123',
+        spanId: 'span-456',
+        feedback: expect.objectContaining({
+          feedbackId: 'feedback-from-client',
+          feedbackType: 'thumbs',
+          value: 1,
+          feedbackUserId: 'authenticated-user',
+          reviewStatus: 'reviewed',
+        }),
+      });
+      expect(mockObservabilityStore.createFeedback).not.toHaveBeenCalled();
+    });
+
+    it('given a registered observability instance and no trace, when creating feedback, then publishes it unanchored', async () => {
+      const mastra = createMockMastra(createMockStorage(mockObservabilityStore, mockScoresStore), 1);
+
+      await NEW_ROUTES.CREATE_FEEDBACK.handler({
+        ...createTestServerContext({ mastra }),
+        feedback: { feedbackType: 'comment', value: 'no trace' },
+      });
+
+      expect(mastra.observability.addFeedback).toHaveBeenCalledWith({
+        feedback: expect.objectContaining({ feedbackType: 'comment', value: 'no trace' }),
+      });
+      expect(mockObservabilityStore.createFeedback).not.toHaveBeenCalled();
     });
 
     it('should preserve a caller-supplied feedbackId', async () => {
