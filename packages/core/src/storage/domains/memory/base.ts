@@ -420,6 +420,12 @@ export abstract class MemoryStorage extends StorageDomain {
     );
   }
 
+  /** Atomically read and change resource working memory. The updater must be synchronous and side-effect free. */
+  mutateResourceWorkingMemory?: (args: {
+    resourceId: string;
+    update: (current: string | null) => string;
+  }) => Promise<void>;
+
   protected parseOrderBy(
     orderBy?: StorageOrderBy,
     defaultDirection: ThreadSortDirection = 'DESC',

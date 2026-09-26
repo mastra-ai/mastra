@@ -965,21 +965,24 @@ export class MastraClient extends BaseResource {
     agentId,
     threadId,
     workingMemory,
+    mode,
     resourceId,
     requestContext,
   }: {
     agentId: string;
     threadId: string;
     workingMemory: string;
+    mode?: 'replace' | 'merge';
     resourceId?: string;
     requestContext?: RequestContext | Record<string, any>;
   }) {
     return this.request(
       `/memory/threads/${threadId}/working-memory?agentId=${agentId}${requestContextQueryString(requestContext, '&')}`,
       {
-        method: 'POST',
+        method: mode === 'merge' ? 'PATCH' : 'POST',
         body: {
           workingMemory,
+          ...(mode ? { mode } : {}),
           resourceId,
         },
       },

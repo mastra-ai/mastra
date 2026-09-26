@@ -8956,6 +8956,7 @@ export type PostMemoryThreadsThreadIdWorkingMemory_QueryParams = GetMemoryConfig
 
 export type PostMemoryThreadsThreadIdWorkingMemory_Body = {
   workingMemory: string;
+  mode?: ('replace' | 'merge') | undefined;
   resourceId?: string | undefined;
   memoryConfig?:
     | {
@@ -8988,6 +8989,42 @@ export interface PostMemoryThreadsThreadIdWorkingMemory_RouteContract {
   body: PostMemoryThreadsThreadIdWorkingMemory_Body;
   request: PostMemoryThreadsThreadIdWorkingMemory_Request;
   response: PostMemoryThreadsThreadIdWorkingMemory_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PATCH /memory/threads/:threadId/working-memory
+// ============================================================================
+export type PatchMemoryThreadsThreadIdWorkingMemory_PathParams = GetMemoryThreadsThreadId_PathParams;
+
+export type PatchMemoryThreadsThreadIdWorkingMemory_QueryParams = GetMemoryConfig_QueryParams;
+
+export type PatchMemoryThreadsThreadIdWorkingMemory_Body = PostMemoryThreadsThreadIdWorkingMemory_Body;
+
+export type PatchMemoryThreadsThreadIdWorkingMemory_Response = PostAuthRefresh_Response;
+
+export type PatchMemoryThreadsThreadIdWorkingMemory_Request = Simplify<
+  (PatchMemoryThreadsThreadIdWorkingMemory_PathParams extends never
+    ? {}
+    : { params: PatchMemoryThreadsThreadIdWorkingMemory_PathParams }) &
+    (PatchMemoryThreadsThreadIdWorkingMemory_QueryParams extends never
+      ? {}
+      : {} extends PatchMemoryThreadsThreadIdWorkingMemory_QueryParams
+        ? { query?: PatchMemoryThreadsThreadIdWorkingMemory_QueryParams }
+        : { query: PatchMemoryThreadsThreadIdWorkingMemory_QueryParams }) &
+    (PatchMemoryThreadsThreadIdWorkingMemory_Body extends never
+      ? {}
+      : {} extends PatchMemoryThreadsThreadIdWorkingMemory_Body
+        ? { body?: PatchMemoryThreadsThreadIdWorkingMemory_Body }
+        : { body: PatchMemoryThreadsThreadIdWorkingMemory_Body })
+>;
+
+export interface PatchMemoryThreadsThreadIdWorkingMemory_RouteContract {
+  pathParams: PatchMemoryThreadsThreadIdWorkingMemory_PathParams;
+  queryParams: PatchMemoryThreadsThreadIdWorkingMemory_QueryParams;
+  body: PatchMemoryThreadsThreadIdWorkingMemory_Body;
+  request: PatchMemoryThreadsThreadIdWorkingMemory_Request;
+  response: PatchMemoryThreadsThreadIdWorkingMemory_Response;
   responseType: 'json';
 }
 
@@ -23710,6 +23747,7 @@ export interface RouteTypes {
   'POST /memory/threads/:threadId/clone': PostMemoryThreadsThreadIdClone_RouteContract;
   'POST /memory/threads/:threadId/transfer': PostMemoryThreadsThreadIdTransfer_RouteContract;
   'POST /memory/threads/:threadId/working-memory': PostMemoryThreadsThreadIdWorkingMemory_RouteContract;
+  'PATCH /memory/threads/:threadId/working-memory': PatchMemoryThreadsThreadIdWorkingMemory_RouteContract;
   'POST /memory/messages/delete': PostMemoryMessagesDelete_RouteContract;
   'GET /memory/search': GetMemorySearch_RouteContract;
   'GET /memory/network/status': GetMemoryNetworkStatus_RouteContract;
@@ -24587,6 +24625,7 @@ export interface Client {
   };
   '/memory/threads/:threadId/working-memory': {
     GET: GetMemoryThreadsThreadIdWorkingMemory_RouteContract;
+    PATCH: PatchMemoryThreadsThreadIdWorkingMemory_RouteContract;
     POST: PostMemoryThreadsThreadIdWorkingMemory_RouteContract;
   };
   '/observability/branches': {
