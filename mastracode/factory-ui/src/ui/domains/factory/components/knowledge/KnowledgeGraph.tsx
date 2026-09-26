@@ -136,14 +136,14 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
           // A selected record (open in the flyout) lights its edge up.
           data?.focused
             ? {
-                stroke: pinned ? 'var(--yellow-400)' : 'rgba(255,255,255,0.95)',
+                stroke: pinned ? 'var(--yellow-400)' : 'color-mix(in oklab, var(--color-white) 95%, transparent)',
                 strokeWidth: 2.5,
-                filter: `drop-shadow(0 0 4px ${pinned ? 'color-mix(in oklab, var(--yellow-400) 80%, transparent)' : 'rgba(255,255,255,0.7)'})`,
+                filter: `drop-shadow(0 0 4px ${pinned ? 'color-mix(in oklab, var(--yellow-400) 80%, transparent)' : 'color-mix(in oklab, var(--color-white) 70%, transparent)'})`,
               }
             : pinned
               ? { stroke: 'color-mix(in oklab, var(--yellow-400) 75%, transparent)', strokeWidth: 2 }
               : source.startsWith('record:') || target.startsWith('record:')
-                ? { stroke: 'rgba(255,255,255,0.45)', strokeWidth: 1.2 }
+                ? { stroke: 'color-mix(in oklab, var(--color-white) 45%, transparent)', strokeWidth: 1.2 }
                 : { stroke: 'color-mix(in oklab, var(--purple-500) 40%, transparent)', strokeWidth: 1.4 }
         }
       />
@@ -187,12 +187,12 @@ function RecordNodeComponent({ data }: NodeProps<RecordFlowNode>) {
         // (amber).
         record.pinned
           ? 'border-yellow-300/80 bg-yellow-400 text-yellow-950 shadow-md shadow-yellow-500/40'
-          : 'border-white/70 bg-white/90 shadow-[0_0_6px_rgba(255,255,255,0.45)]',
+          : 'border-white/70 bg-white/90 glow-sm/45 glow-white',
         // The selected record (open in the flyout) glows hard.
         focused
           ? record.pinned
-            ? 'ring-2 ring-yellow-300 shadow-[0_0_14px_color-mix(in_oklab,var(--yellow-400)_90%,transparent)]'
-            : 'ring-2 ring-white shadow-[0_0_14px_rgba(255,255,255,0.9)]'
+            ? 'ring-2 ring-yellow-300 glow-md/90 glow-yellow-400'
+            : 'ring-2 ring-white glow-md/90 glow-white'
           : '',
       ].join(' ')}
       style={{ width: size, height: size }}
@@ -271,8 +271,8 @@ function FilterChip({
         'flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors',
         active
           ? accent
-            ? 'border-yellow-400/70 bg-yellow-400/15 text-yellow-300 shadow-[0_0_12px_color-mix(in_oklab,var(--yellow-400)_15%,transparent)]'
-            : 'border-purple-400/70 bg-purple-500/20 text-purple-200 shadow-[0_0_12px_color-mix(in_oklab,var(--purple-500)_20%,transparent)]'
+            ? 'border-yellow-400/70 bg-yellow-400/15 text-yellow-300 glow-md/15 glow-yellow-400'
+            : 'border-purple-400/70 bg-purple-500/20 text-purple-200 glow-md/20 glow-purple-500'
           : 'border-border bg-card/60 text-muted-foreground hover:text-foreground',
       ].join(' ')}
     >
