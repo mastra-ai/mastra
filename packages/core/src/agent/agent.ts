@@ -1236,6 +1236,11 @@ export class Agent<
    * Partially update the options of the active objective. Only provided fields
    * are persisted into the record (so the precedence over agent config is
    * remembered in thread state). No-ops when no objective is set.
+   *
+   * One field departs from that rule: `pausedReason` describes a single pause.
+   * Any non-paused resulting status retires it, even when one is supplied, and
+   * an explicit `status: 'paused'` is authoritative about its own cause — it
+   * clears a stored one when no replacement is supplied.
    */
   async updateObjectiveOptions(options: {
     threadId: string;
@@ -1243,6 +1248,7 @@ export class Agent<
     maxRuns?: number;
     prompt?: string;
     status?: GoalObjectiveRecord['status'];
+    pausedReason?: string;
   }): Promise<GoalObjectiveRecord | undefined> {
     const store = await resolveGoalStore(this.#mastra as MastraUnion | undefined);
     const existing = await readObjective(store, options.threadId);
@@ -1255,7 +1261,15 @@ export class Agent<
       ...(options.maxRuns !== undefined && options.maxRuns > 0 ? { maxRuns: options.maxRuns } : {}),
       ...(options.prompt !== undefined ? { prompt: options.prompt } : {}),
       ...(options.status !== undefined ? { status: options.status } : {}),
+      ...(options.pausedReason !== undefined ? { pausedReason: options.pausedReason } : {}),
     };
+    // A pause cause only describes a paused goal; any other resulting status
+    // retires it so a later pause can't inherit a stale reason. An explicit
+    // pause is authoritative about its own cause for the same reason: pausing
+    // again without one replaces the earlier cause rather than inheriting it.
+    if (updated.status !== 'paused' || (options.status === 'paused' && options.pausedReason === undefined)) {
+      delete updated.pausedReason;
+    }
     await writeObjective(store, options.threadId, updated);
     return updated;
   }

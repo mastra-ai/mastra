@@ -237,6 +237,78 @@ describe('Agent objective methods', () => {
     expect(preserved).toMatchObject({ activeDurationMs: 2_500, prompt: 'Keep going.' });
   });
 
+  it('updateObjectiveOptions persists the pause cause and clears it when the goal leaves paused', async () => {
+    const agent = makeAgent();
+    await agent.setObjective('Goal', { threadId: THREAD, resourceId: RESOURCE });
+
+    const paused = await agent.updateObjectiveOptions({
+      threadId: THREAD,
+      status: 'paused',
+      pausedReason: 'The goal judge failed to evaluate the objective.',
+    });
+    expect(paused).toMatchObject({
+      status: 'paused',
+      pausedReason: 'The goal judge failed to evaluate the objective.',
+    });
+    expect(await agent.getObjective({ threadId: THREAD })).toMatchObject({
+      pausedReason: 'The goal judge failed to evaluate the objective.',
+    });
+
+    const resumed = await agent.updateObjectiveOptions({ threadId: THREAD, status: 'active' });
+    expect(resumed?.pausedReason).toBeUndefined();
+    expect((await agent.getObjective({ threadId: THREAD }))?.pausedReason).toBeUndefined();
+
+    // A reason supplied alongside a non-paused status is retired too: the
+    // resulting status decides, not the caller's arguments.
+    const done = await agent.updateObjectiveOptions({
+      threadId: THREAD,
+      status: 'done',
+      pausedReason: 'stale reason',
+    });
+    expect(done).toMatchObject({ status: 'done' });
+    expect(done?.pausedReason).toBeUndefined();
+  });
+
+  it('updateObjectiveOptions does not let a reasonless pause inherit the previous pause cause', async () => {
+    const agent = makeAgent();
+    await agent.setObjective('Goal', { threadId: THREAD, resourceId: RESOURCE });
+
+    await agent.updateObjectiveOptions({
+      threadId: THREAD,
+      status: 'paused',
+      pausedReason: 'The goal judge failed to evaluate the objective.',
+    });
+
+    // Pausing again without a cause — what the agent goal route does, since it
+    // forwards a status and never a reason — must replace the earlier cause
+    // rather than inherit it. Otherwise the next reload explains this pause
+    // with the reason for the last one.
+    const repaused = await agent.updateObjectiveOptions({ threadId: THREAD, status: 'paused' });
+    expect(repaused?.status).toBe('paused');
+    expect(repaused?.pausedReason).toBeUndefined();
+    expect((await agent.getObjective({ threadId: THREAD }))?.pausedReason).toBeUndefined();
+  });
+
+  it('updateObjectiveOptions keeps the pause cause when an update carries no status', async () => {
+    const agent = makeAgent();
+    await agent.setObjective('Goal', { threadId: THREAD, resourceId: RESOURCE });
+    await agent.updateObjectiveOptions({
+      threadId: THREAD,
+      status: 'paused',
+      pausedReason: 'The goal judge failed to evaluate the objective.',
+    });
+
+    // Only an explicit pause is authoritative about its own cause. A settings
+    // update that says nothing about status must not silently retire it.
+    const updated = await agent.updateObjectiveOptions({ threadId: THREAD, maxRuns: 9 });
+    expect(updated?.maxRuns).toBe(9);
+    expect(updated?.status).toBe('paused');
+    expect(updated?.pausedReason).toBe('The goal judge failed to evaluate the objective.');
+
+    const reloaded = await agent.getObjective({ threadId: THREAD });
+    expect(reloaded?.pausedReason).toBe('The goal judge failed to evaluate the objective.');
+  });
+
   it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
     'normalizes invalid initial active duration %s to zero',
     async invalidDuration => {

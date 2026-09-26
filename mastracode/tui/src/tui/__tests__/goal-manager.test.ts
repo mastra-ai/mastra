@@ -329,4 +329,287 @@ describe('GoalManager adapter', () => {
       }),
     );
   });
+
+  // --- #22447 defect 1: the pause cause must outlive the moment it happens ---
+
+  it('applyEvaluation carries the pause cause into the in-memory view', async () => {
+    const manager = new GoalManager();
+    await manager.setGoal(createState(createAgent()), 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+
+    manager.applyEvaluation({
+      runsUsed: 4,
+      status: 'paused',
+      pausedReason: 'Scorer threw an error: Scorer Run Failed: Bad Request',
+    });
+
+    expect(manager.getGoal()).toMatchObject({
+      status: 'paused',
+      turnsUsed: 4,
+      pausedReason: 'Scorer threw an error: Scorer Run Failed: Bad Request',
+    });
+  });
+
+  it('applyEvaluation drops a stale pause cause once the goal is no longer paused', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+
+    manager.pause('judge exploded');
+    manager.applyEvaluation({ runsUsed: 5, status: 'active' });
+    agent.updateObjectiveOptions.mockClear();
+    await manager.saveToThread(state);
+
+    expect(manager.getGoal()).toMatchObject({ status: 'active' });
+    expect(manager.getGoal()?.pausedReason).toBeUndefined();
+    // A running goal must not keep a cause a later pause could inherit.
+    expect(agent.updateObjectiveOptions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ threadId: 'parent-thread', status: 'active' }),
+    );
+    expect(agent.updateObjectiveOptions).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ pausedReason: expect.anything() }),
+    );
+  });
+
+  // --- #22447 defect 2: only an explicit clear may delete ---
+
+  it('deletes the durable objective and the legacy key on an explicit clear', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+
+    manager.clear();
+    await manager.deleteFromThread(state);
+
+    expect(agent.clearObjective).toHaveBeenCalledWith({ threadId: 'parent-thread' });
+    expect(state.session.thread.setSetting).toHaveBeenCalledWith({ key: 'goal', value: undefined });
+  });
+
+  it('deletes on an explicit clear even when the mirror is already empty', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+
+    // Deletion is driven by the caller's intent, never by the mirror's state.
+    await manager.deleteFromThread(state);
+
+    expect(agent.clearObjective).toHaveBeenCalledWith({ threadId: 'parent-thread' });
+    expect(state.session.thread.setSetting).toHaveBeenCalledWith({ key: 'goal', value: undefined });
+  });
+
+  it('still upserts on a normal save, and never deletes', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+    agent.updateObjectiveOptions.mockClear();
+
+    await manager.saveToThread(state);
+
+    expect(agent.updateObjectiveOptions).toHaveBeenCalled();
+    expect(state.session.thread.setSetting).toHaveBeenCalledWith({ key: 'goal', value: undefined });
+    expect(agent.clearObjective).not.toHaveBeenCalled();
+  });
+
+  // With no agent a save writes nothing at all (it used to wipe the legacy
+  // key): the wipe only happens on the path that actually wrote. Not expected
+  // in normal TUI/headless operation, where an agent exists before a save fires.
+  it('writes nothing on a save with no agent, even with a goal in the mirror', async () => {
+    const state = createState(undefined);
+    const manager = new GoalManager();
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+
+    await manager.saveToThread(state);
+
+    expect(state.session.thread.setSetting).not.toHaveBeenCalled();
+  });
+
+  // The deliberate asymmetry with `saveToThread`: the legacy key is reachable
+  // without an agent, so an explicit clear still wipes it.
+  it('wipes the legacy key on an explicit clear even with no agent', async () => {
+    const state = createState(undefined);
+    const manager = new GoalManager();
+
+    await manager.deleteFromThread(state);
+
+    expect(state.session.thread.setSetting).toHaveBeenCalledWith({ key: 'goal', value: undefined });
+  });
+
+  // A pre-migration thread's only goal may live in the legacy key, so a save
+  // that has nothing to write must not wipe it.
+  it('leaves the legacy key alone when a save finds an empty mirror', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+
+    await manager.saveToThread(state);
+
+    // The whole no-op contract: neither storage location is touched, and the
+    // upsert path is not entered either.
+    expect(agent.clearObjective).not.toHaveBeenCalled();
+    expect(state.session.thread.setSetting).not.toHaveBeenCalled();
+    expect(agent.setObjective).not.toHaveBeenCalled();
+    expect(agent.updateObjectiveOptions).not.toHaveBeenCalled();
+  });
+
+  // The legacy wipe exists to stop a stale key shadowing the record we just
+  // wrote. With no goal store, `updateObjectiveOptions` and `setObjective` both
+  // return undefined and nothing durable is written — so there is no record to
+  // shadow, and wiping would destroy a pre-migration thread's only copy.
+  it('leaves the legacy key alone when the durable write never lands', async () => {
+    const agent = createAgent();
+    agent.updateObjectiveOptions.mockResolvedValue(undefined);
+    agent.setObjective.mockResolvedValue(undefined);
+    const state = createState(agent);
+    const manager = new GoalManager();
+
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+
+    await manager.saveToThread(state);
+
+    // Pins "attempted the write, then declined the wipe" rather than the weaker
+    // "no wipe", which would also hold if the save never reached the upsert.
+    expect(agent.setObjective).toHaveBeenCalled();
+    expect(state.session.thread.setSetting).not.toHaveBeenCalled();
+  });
+
+  // The rejected half of the same review suggestion: once `setObjective` has
+  // written a record, a status reapply that comes back empty does not undo it,
+  // so a stale legacy key can still shadow it and the wipe must go ahead.
+  it('still wipes the legacy key when only the status reapply comes back empty', async () => {
+    const agent = createAgent();
+    agent.updateObjectiveOptions.mockResolvedValue(undefined);
+    const state = createState(agent);
+    const manager = new GoalManager();
+
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+    manager.pause();
+
+    await manager.saveToThread(state);
+
+    expect(agent.setObjective).toHaveBeenCalled();
+    expect(state.session.thread.setSetting).toHaveBeenCalledWith({ key: 'goal', value: undefined });
+  });
+
+  it('does not delete the durable objective when a failed read left the mirror empty', async () => {
+    const agent = createAgent();
+    agent.getObjective.mockRejectedValue(new Error('storage unavailable'));
+    const state = createState(agent);
+    const manager = new GoalManager();
+
+    // The read failure is swallowed and leaves the mirror null. That is "I know
+    // nothing", not "the user cleared the goal" — a save must not act on it.
+    await manager.loadFromThread(state);
+    await manager.saveToThread(state);
+
+    expect(agent.clearObjective).not.toHaveBeenCalled();
+    expect(state.session.thread.setSetting).not.toHaveBeenCalled();
+  });
+
+  it('does not delete the objective when a save races the setGoal await window', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+
+    let resolveSetObjective: (record: unknown) => void = () => {};
+    agent.setObjective.mockImplementation(
+      () =>
+        new Promise(resolve => {
+          resolveSetObjective = resolve;
+        }),
+    );
+
+    const setting = manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+    // The mirror is not assigned until `setObjective` resolves. This is the save
+    // the armed `thread_created` branch performs inside that window.
+    await manager.saveToThread(state);
+
+    expect(agent.clearObjective).not.toHaveBeenCalled();
+
+    resolveSetObjective(makeRecord({ objective: 'finish the task' }));
+    await setting;
+    expect(manager.getGoal()).toMatchObject({ objective: 'finish the task' });
+  });
+
+  it('retires the pause cause when the goal completes', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+
+    manager.pause('judge exploded');
+    manager.markDone();
+    agent.updateObjectiveOptions.mockClear();
+    await manager.saveToThread(state);
+
+    expect(manager.getGoal()).toMatchObject({ status: 'done' });
+    expect(manager.getGoal()?.pausedReason).toBeUndefined();
+    // A finished goal must not persist a cause a later pause could inherit.
+    expect(agent.updateObjectiveOptions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ threadId: 'parent-thread', status: 'done' }),
+    );
+    expect(agent.updateObjectiveOptions).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ pausedReason: expect.anything() }),
+    );
+  });
+
+  it('carries the pause cause through the saveToThread create fallback', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+    manager.pause('Ran out of evaluation budget (50 runs).');
+
+    agent.updateObjectiveOptions.mockClear();
+    agent.updateObjectiveOptions.mockResolvedValueOnce(undefined);
+
+    await manager.saveToThread(state);
+
+    // First call misses (no persisted record yet), so the save creates one and
+    // re-applies the paused status — the cause has to survive that second hop.
+    expect(agent.updateObjectiveOptions).toHaveBeenCalledTimes(2);
+    expect(agent.updateObjectiveOptions).toHaveBeenLastCalledWith({
+      threadId: 'parent-thread',
+      status: 'paused',
+      pausedReason: 'Ran out of evaluation budget (50 runs).',
+    });
+  });
+
+  it('exposes the pause cause loaded from the durable objective record', async () => {
+    const agent = createAgent();
+    agent.getObjective.mockResolvedValue(
+      makeRecord({ status: 'paused', pausedReason: 'Ran out of evaluation budget (50 runs).' }),
+    );
+    const manager = new GoalManager();
+
+    await manager.loadFromThread(createState(agent));
+
+    expect(manager.getGoal()).toMatchObject({
+      status: 'paused',
+      pausedReason: 'Ran out of evaluation budget (50 runs).',
+    });
+  });
+
+  it('loadFromThreadMetadata keeps the pause cause from legacy metadata', () => {
+    const manager = new GoalManager();
+
+    manager.loadFromThreadMetadata({
+      goal: {
+        id: 'goal-1',
+        objective: 'finish the task',
+        status: 'paused',
+        turnsUsed: 4,
+        maxTurns: 20,
+        judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+        startedAt: '2026-05-15T10:00:00.000Z',
+        pausedReason: 'The goal judge failed to evaluate the objective.',
+      },
+    });
+
+    expect(manager.getGoal()).toMatchObject({
+      status: 'paused',
+      pausedReason: 'The goal judge failed to evaluate the objective.',
+    });
+  });
 });

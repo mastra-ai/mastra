@@ -80,6 +80,7 @@ export type ScenarioName =
   | 'goal-judge-single-render'
   | 'goal-max-runs-ends-goal'
   | 'goal-resume-single-render'
+  | 'goal-survives-new-thread'
   | 'controller-api-config'
   | 'headless-mcp-tool-availability'
   | 'initial-prompt'

@@ -191,6 +191,64 @@ describe('handleGoalCommand', () => {
     void result;
   });
 
+  // #22447: a paused goal that cannot say why it paused is unactionable.
+  it('reports the pause cause in /goal status', async () => {
+    const ctx = {
+      state: {
+        goalManager: {
+          getGoal: vi.fn(() => ({
+            id: 'goal-1',
+            objective: 'finish the task',
+            status: 'paused',
+            turnsUsed: 3,
+            maxTurns: DEFAULT_MAX_TURNS,
+            judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+            startedAt: '2026-05-15T10:00:00.000Z',
+            pausedReason: 'The goal judge failed to evaluate the objective.',
+          })),
+        },
+        ui: { hideOverlay: vi.fn() },
+      },
+      showInfo: vi.fn(),
+      updateStatusLine: vi.fn(),
+    } as any;
+
+    await handleGoalCommand(ctx, ['status']);
+
+    expect(ctx.showInfo).toHaveBeenCalledWith(
+      expect.stringContaining('The goal judge failed to evaluate the objective.'),
+    );
+  });
+
+  it('does not report a cause for a goal that is no longer paused', async () => {
+    const ctx = {
+      state: {
+        goalManager: {
+          getGoal: vi.fn(() => ({
+            id: 'goal-1',
+            objective: 'finish the task',
+            status: 'done',
+            turnsUsed: 3,
+            maxTurns: DEFAULT_MAX_TURNS,
+            judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+            startedAt: '2026-05-15T10:00:00.000Z',
+            pausedReason: 'The goal judge failed to evaluate the objective.',
+          })),
+        },
+        ui: { hideOverlay: vi.fn() },
+      },
+      showInfo: vi.fn(),
+      updateStatusLine: vi.fn(),
+    } as any;
+
+    await handleGoalCommand(ctx, ['status']);
+
+    expect(ctx.showInfo).toHaveBeenCalledTimes(1);
+    expect(ctx.showInfo).toHaveBeenCalledWith(
+      expect.not.stringContaining('The goal judge failed to evaluate the objective.'),
+    );
+  });
+
   it('resumes a paused goal via a goal-reminder signal without resetting the turn counter', async () => {
     const goal = {
       id: 'goal-1',
@@ -734,6 +792,7 @@ describe('handleGoalCommand', () => {
     const goalManager = {
       clear: vi.fn(),
       saveToThread: vi.fn(),
+      deleteFromThread: vi.fn(),
     };
     const abort = vi.fn();
     const state = createMockState({
@@ -755,7 +814,10 @@ describe('handleGoalCommand', () => {
     await handleGoalCommand(ctx, ['clear']);
 
     expect(goalManager.clear).toHaveBeenCalled();
-    expect(goalManager.saveToThread).toHaveBeenCalledWith(state);
+    // Deletion is a verb of its own: an explicit clear must ask for it, and a
+    // save must never be what removes the goal.
+    expect(goalManager.deleteFromThread).toHaveBeenCalledWith(state);
+    expect(goalManager.saveToThread).not.toHaveBeenCalled();
     expect(state.planStartedGoalId).toBeUndefined();
     expect(showInfo).toHaveBeenCalledWith('Goal cleared.');
     // Not running → must not abort.
@@ -766,6 +828,7 @@ describe('handleGoalCommand', () => {
     const goalManager = {
       clear: vi.fn(),
       saveToThread: vi.fn(),
+      deleteFromThread: vi.fn(),
     };
     const abort = vi.fn();
     const state = createMockState({
@@ -787,6 +850,8 @@ describe('handleGoalCommand', () => {
     await handleGoalCommand(ctx, ['clear']);
 
     expect(goalManager.clear).toHaveBeenCalled();
+    expect(goalManager.deleteFromThread).toHaveBeenCalledWith(state);
+    expect(goalManager.saveToThread).not.toHaveBeenCalled();
     expect(abort).toHaveBeenCalledTimes(1);
     expect((state as any).userInitiatedAbort).toBe(true);
     expect(state.activeInlineQuestion).toBeUndefined();

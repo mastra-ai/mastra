@@ -44,6 +44,8 @@ export interface GoalState {
   startedAt: string;
   activeStartedAt?: string;
   activeDurationMs?: number;
+  /** Why the goal paused (judge failure, budget exhaustion, ...). Only set while paused. */
+  pausedReason?: string;
 }
 
 // =============================================================================
@@ -83,6 +85,7 @@ export class GoalManager {
       maxTurns,
       judgeModelId,
       startedAt: new Date(this.record.startedAt).toISOString(),
+      ...(this.record.pausedReason ? { pausedReason: this.record.pausedReason } : {}),
       activeDurationMs:
         this.agentId && this.threadId
           ? getGoalActivityDurationMs({
@@ -195,7 +198,7 @@ export class GoalManager {
 
   markDone(): void {
     if (this.record) {
-      this.record = { ...this.record, status: 'done', updatedAt: Date.now() };
+      this.record = { ...this.record, status: 'done', pausedReason: undefined, updatedAt: Date.now() };
     }
   }
 
@@ -210,9 +213,16 @@ export class GoalManager {
    * Sync the latest objective record from ThreadState into the in-memory view.
    * Called from the `goal` stream-chunk handler after each evaluation.
    */
-  applyEvaluation(update: { runsUsed: number; status: GoalStatus }): GoalState | null {
+  applyEvaluation(update: { runsUsed: number; status: GoalStatus; pausedReason?: string }): GoalState | null {
     if (!this.record) return null;
-    this.record = { ...this.record, runsUsed: update.runsUsed, status: update.status, updatedAt: Date.now() };
+    this.record = {
+      ...this.record,
+      runsUsed: update.runsUsed,
+      status: update.status,
+      // The cause only describes a paused goal; any other status retires it.
+      pausedReason: update.status === 'paused' ? update.pausedReason : undefined,
+      updatedAt: Date.now(),
+    };
     return this.getGoal();
   }
 
@@ -222,8 +232,16 @@ export class GoalManager {
 
   /**
    * Persist the active objective to ThreadState via the agent. The objective
-   * record is the source of truth; the legacy thread-metadata key is cleared so
-   * stale state from older sessions does not resurface.
+   * record is the source of truth; the legacy thread-metadata key is cleared on
+   * a save that actually wrote, so stale state from older sessions cannot
+   * shadow the record — and a save that wrote nothing leaves it alone.
+   *
+   * This method only ever upserts. An empty in-memory mirror means "I have
+   * nothing *loaded*", which is not the same statement as "there is nothing" —
+   * the mirror is emptied by storage failures and thread switches as well as by
+   * the user. Only an explicit clear makes the second statement, so deletion
+   * lives in {@link deleteFromThread} and a save with an empty mirror is a
+   * complete no-op, legacy metadata included.
    */
   async saveToThread(state: GoalManagerState): Promise<void> {
     const threadId = state.session.thread.getId();
@@ -246,7 +264,7 @@ export class GoalManager {
             // the local goal was already paused/done — otherwise the resumed
             // thread state would no longer match the in-memory state.
             const desiredStatus = this.record.status;
-            await agent.setObjective(this.record.objective, {
+            const created = await agent.setObjective(this.record.objective, {
               id: this.record.id,
               threadId,
               resourceId: state.session.identity.getResourceId(),
@@ -254,6 +272,10 @@ export class GoalManager {
               ...(this.record.judgeModelId ? { judgeModelId: this.record.judgeModelId } : {}),
               ...(this.record.maxRuns !== undefined ? { maxRuns: this.record.maxRuns } : {}),
             });
+            // Nothing durable was written (no goal store, or no thread), so
+            // there is no record for a legacy key to shadow — and wiping it
+            // would take a pre-migration thread's only copy with it.
+            if (!created) return;
             if (desiredStatus !== 'active') {
               await agent.updateObjectiveOptions({
                 threadId,
@@ -262,11 +284,36 @@ export class GoalManager {
               });
             }
           }
-        } else {
-          await agent.clearObjective({ threadId });
+          // Clear any legacy thread-metadata goal so it can't shadow the
+          // record we just wrote. Only on the path that actually wrote: on the
+          // no-op path a pre-migration thread's only goal may live in that key.
+          await state.session.thread.setSetting({ key: THREAD_GOAL_KEY, value: undefined });
         }
       }
-      // Clear any legacy thread-metadata goal so it can't shadow the record.
+    } catch {
+      // Persistence is not critical.
+    }
+  }
+
+  /**
+   * Remove the objective from the thread. This is the only method that deletes.
+   * The caller expresses that intent, not the in-memory mirror, so it works the
+   * same when the mirror is already empty.
+   *
+   * The durable record needs an agent and a thread; the legacy thread-metadata
+   * key does not, so it is wiped either way — unlike {@link saveToThread}, which
+   * writes nothing with an empty mirror. That asymmetry is deliberate: a
+   * pre-migration goal must not resurface from the legacy key after a clear.
+   * Like the save, this is best-effort: a failed durable delete also skips the
+   * legacy wipe.
+   */
+  async deleteFromThread(state: GoalManagerState): Promise<void> {
+    const threadId = state.session.thread.getId();
+    const agent = this.getAgent(state);
+    try {
+      if (agent && threadId) {
+        await agent.clearObjective({ threadId });
+      }
       await state.session.thread.setSetting({ key: THREAD_GOAL_KEY, value: undefined });
     } catch {
       // Persistence is not critical.
@@ -319,6 +366,7 @@ export class GoalManager {
         activeDurationMs: normalizeActiveDurationMs(saved.activeDurationMs),
         maxRuns: saved.maxTurns ?? DEFAULT_MAX_TURNS,
         judgeModelId: saved.judgeModelId ?? '',
+        ...(saved.pausedReason ? { pausedReason: saved.pausedReason } : {}),
         startedAt: saved.startedAt ? Date.parse(saved.startedAt) || Date.now() : Date.now(),
         updatedAt: Date.now(),
         id: saved.id ?? randomUUID(),

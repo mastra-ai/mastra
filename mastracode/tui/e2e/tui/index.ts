@@ -79,6 +79,7 @@ import { goalJudgeOmModelIsolationScenario } from './goal-judge-om-model-isolati
 import { goalJudgeSingleRenderScenario } from './goal-judge-single-render.js';
 import { goalMaxRunsEndsGoalScenario } from './goal-max-runs-ends-goal.js';
 import { goalResumeSingleRenderScenario } from './goal-resume-single-render.js';
+import { goalSurvivesNewThreadScenario } from './goal-survives-new-thread.js';
 import { headlessMcpToolAvailabilityScenario } from './headless-mcp-tool-availability.js';
 import { hiddenReasoningSingleLabelScenario } from './hidden-reasoning-single-label.js';
 import {
@@ -299,6 +300,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'goal-judge-single-render': goalJudgeSingleRenderScenario,
   'goal-max-runs-ends-goal': goalMaxRunsEndsGoalScenario,
   'goal-resume-single-render': goalResumeSingleRenderScenario,
+  'goal-survives-new-thread': goalSurvivesNewThreadScenario,
   'controller-api-config': controllerApiConfigScenario,
   'headless-mcp-tool-availability': headlessMcpToolAvailabilityScenario,
   'initial-prompt': initialPromptScenario,

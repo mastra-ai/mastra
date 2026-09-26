@@ -283,7 +283,11 @@ export function handleGoalEvaluation(ctx: EventHandlerContext, payload: GoalEval
 
   // Mirror the loop's progress into the synchronous adapter view so the status
   // line and modal reflect the latest run count and lifecycle status.
-  state.goalManager.applyEvaluation({ runsUsed: payload.iteration, status: payload.status });
+  state.goalManager.applyEvaluation({
+    runsUsed: payload.iteration,
+    status: payload.status,
+    ...(payload.pausedReason ? { pausedReason: payload.pausedReason } : {}),
+  });
 
   ctx.updateStatusLine();
   flushRender(state);
