@@ -33,6 +33,8 @@ export function PageLayout({
     </div>
   ) : null;
 
+  const bodyPadding = actionRow ? 'px-4 pb-4' : 'p-4';
+
   return (
     <div data-slot="page-layout" className="flex h-full min-h-0 flex-col">
       {(breadcrumbs || headerActions) && (
@@ -44,14 +46,14 @@ export function PageLayout({
         </Header>
       )}
       {actionRow && (
-        <div data-slot="page-layout-action-row" className="flex shrink-0 flex-col gap-2 px-4 pt-4">
+        <div data-slot="page-layout-action-row" className="flex shrink-0 flex-col gap-2 p-4">
           {actionRow}
         </div>
       )}
       <main
         className={cn(
           'min-h-0 flex-1 overflow-y-auto',
-          variant === 'container' && 'p-4',
+          variant === 'container' && bodyPadding,
           // `fit` hands the remaining body height to its child (panels, graphs, tables that own their scroll).
           variant === 'fit' && (header ? 'grid grid-rows-[auto_minmax(0,1fr)]' : 'grid grid-rows-[minmax(0,1fr)]'),
         )}
@@ -62,7 +64,8 @@ export function PageLayout({
           <div
             data-slot="page-layout-container"
             className={cn(
-              'mx-auto grid min-h-full w-full max-w-5xl grid-cols-[minmax(0,1fr)] p-4',
+              'mx-auto grid min-h-full w-full max-w-5xl grid-cols-[minmax(0,1fr)]',
+              bodyPadding,
               header ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr]',
             )}
           >
