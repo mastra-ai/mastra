@@ -147,10 +147,16 @@ function getPgCombiningMarkRanges(): string {
   if (pgCombiningMarkRanges !== undefined) return pgCombiningMarkRanges;
   const escape = (cp: number) =>
     cp > 0xffff ? `\\U${cp.toString(16).padStart(8, '0')}` : `\\u${cp.toString(16).padStart(4, '0')}`;
-  let text = '';
-  for (let cp = 0; cp <= 0x10ffff; cp++) {
-    if (cp < 0xd800 || cp > 0xdfff) text += String.fromCodePoint(cp);
+  // Every code point except surrogates, built in chunks to keep the peak allocation small.
+  const chunks: string[] = [];
+  for (let start = 0; start <= 0x10ffff; start += 0x2000) {
+    const codePoints: number[] = [];
+    for (let cp = start; cp < start + 0x2000 && cp <= 0x10ffff; cp++) {
+      if (cp < 0xd800 || cp > 0xdfff) codePoints.push(cp);
+    }
+    chunks.push(String.fromCodePoint(...codePoints));
   }
+  const text = chunks.join('');
   const ranges: string[] = [];
   for (const match of text.matchAll(/[\p{L}\p{M}\p{N}\p{Cn}\p{Co}]+/gu)) {
     if (!/\p{M}/u.test(match[0])) continue;
