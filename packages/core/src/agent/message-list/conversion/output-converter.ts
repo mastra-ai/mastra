@@ -658,6 +658,33 @@ function restoreAssistantFileProviderMetadata(
 export type ToolCallConversionMode = 'response' | 'prompt' | 'prompt-with-suspended';
 
 /**
+ * A step that dies after the model starts thinking but before the reasoning
+ * signature arrives leaves a step block holding only unsigned reasoning.
+ * Providers that require signed thinking (Anthropic, Bedrock) drop such parts,
+ * sending `content: []` and failing every later turn with a 400 (#24558).
+ */
+const REPLAYABLE_REASONING_KEYS = [
+  'signature',
+  'redactedData',
+  'itemId',
+  'reasoningEncryptedContent',
+  'thoughtSignature',
+];
+
+function hasReplayableReasoningMetadata(providerOptions: AIV5Type.ProviderMetadata | undefined): boolean {
+  return Object.values(providerOptions ?? {}).some(
+    value => !!value && typeof value === 'object' && REPLAYABLE_REASONING_KEYS.some(key => key in value),
+  );
+}
+
+function isUnforwardableReasoningOnlyMessage(message: AIV5Type.ModelMessage): boolean {
+  if (message.role !== 'assistant' || !Array.isArray(message.content) || message.content.length === 0) return false;
+  return message.content.every(
+    part => part.type === 'reasoning' && !hasReplayableReasoningMetadata(part.providerOptions),
+  );
+}
+
+/**
  * Converts AIV5 UI messages to AIV5 Model messages.
  * Handles sanitization, step-start insertion, provider options restoration, and Anthropic compatibility.
  *
@@ -699,7 +726,10 @@ export function aiV5UIMessagesToAIV5ModelMessages(
       }
     }
 
-    converted.push(...produced);
+    for (const message of produced) {
+      if (mode !== 'response' && isUnforwardableReasoningOnlyMessage(message)) continue;
+      converted.push(message);
+    }
   }
 
   const withSplitItemReferences = splitResponsesToolItemReferences(converted);
