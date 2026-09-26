@@ -149,8 +149,7 @@ function writeSerializedFrame(socket: net.Socket, serializedFrame: string): Prom
       }
     };
     const onError = (error: Error) => settle(error);
-    // NOTE: keep this exact message in sync with the transient-error classifier
-    // in #sendToBroker (search for 'socket closed before write completed').
+    // NOTE: keep this exact message in sync with isBrokerConnectionError.
     const onClose = () => settle(new Error('UnixSocketPubSub socket closed before write completed'));
     const onDrain = () => {
       drainCompleted = true;
@@ -182,6 +181,32 @@ function writeSerializedFrame(socket: net.Socket, serializedFrame: string): Prom
 
 function writeFrame(socket: net.Socket, frame: ClientFrame | ServerFrame): Promise<void> {
   return writeSerializedFrame(socket, serializeFrame(frame));
+}
+
+/**
+ * Errors that mean the client's broker connection is gone. The string checks
+ * cover internal errors thrown from this file without an errno `code` — keep
+ * them in lockstep with those throw sites:
+ *   - "socket closed before write completed" (writeSerializedFrame)
+ *   - "broker connection closed" (#connectClient close handler)
+ *   - "not connected to a broker" (#sendToActiveBroker)
+ */
+function isBrokerConnectionError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException)?.code;
+  if (code === 'EPIPE' || code === 'ECONNRESET' || code === 'ENOTCONN' || code === 'ERR_STREAM_DESTROYED') {
+    return true;
+  }
+  const message = (error as Error)?.message;
+  return (
+    typeof message === 'string' &&
+    (message.includes('socket closed before write completed') ||
+      message.includes('broker connection closed') ||
+      message.includes('not connected to a broker'))
+  );
+}
+
+function closedError(cause?: unknown): Error {
+  return new Error('UnixSocketPubSub is closed', cause === undefined ? undefined : { cause });
 }
 
 function membershipKey(topic: string, group?: string): string {
@@ -268,6 +293,9 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   #closed = false;
   #starting?: Promise<void>;
   #subscriptions = new Map<string, Map<EventCallback, LocalSubscription>>();
+  // Subscriptions whose unsubscribe is in flight. A reconnect must not
+  // re-register them with the broker, or the membership outlives local cleanup.
+  #leavingSubscriptions = new Set<LocalSubscription>();
   #localGroupCursors = new Map<string, number>();
   #brokerGroupCursors = new Map<string, number>();
   #subscribeWaiters = new Map<string, MembershipWaiter[]>();
@@ -482,12 +510,23 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
       candidate => candidate.callback !== cb && candidate.group === subscription.group,
     );
     if (membershipWillEnd && !this.#isBroker && this.#clientSocket && !this.#clientSocket.destroyed) {
-      await this.#sendUnsubscribeToBroker(topic, subscription.group);
-      const membershipReplaced = [...subscriptions.values()].some(
-        candidate => candidate.callback !== cb && candidate.group === subscription.group,
-      );
-      if (membershipReplaced) {
-        await this.#sendSubscribeToBroker(topic, subscription.group);
+      this.#leavingSubscriptions.add(subscription);
+      try {
+        await this.#sendUnsubscribeToBroker(topic, subscription.group);
+        const membershipReplaced = [...subscriptions.values()].some(
+          candidate => candidate.callback !== cb && candidate.group === subscription.group,
+        );
+        if (membershipReplaced) {
+          await this.#sendSubscribeToBroker(topic, subscription.group);
+        }
+      } catch (error) {
+        // A broker that is gone (or a pubsub that is closing) holds no
+        // membership to remove, and reconnecting re-sends only the
+        // subscriptions still registered locally. Finish the local cleanup
+        // instead of failing teardown.
+        if (!this.#closed && !isBrokerConnectionError(error)) throw error;
+      } finally {
+        this.#leavingSubscriptions.delete(subscription);
       }
     }
 
@@ -1032,9 +1071,8 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
         socket.off('error', onError);
         this.#clientSocket = socket;
         this.#isBroker = false;
-        readFrames(socket, frame => this.#handleServerFrame(frame), this.#maxInboundFrameBytes);
-        // NOTE: keep this exact message in sync with the transient-error
-        // classifier in #sendToBroker (search for 'broker connection closed').
+        readFrames(socket, frame => this.#handleServerFrame(socket, frame), this.#maxInboundFrameBytes);
+        // NOTE: keep this exact message in sync with isBrokerConnectionError.
         socket.on('close', () =>
           this.#handleClientDisconnect(socket, new Error('UnixSocketPubSub broker connection closed')),
         );
@@ -1049,7 +1087,11 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
 
   async #resubscribeClient() {
     for (const [topic, subscriptions] of this.#subscriptions) {
-      const groups = new Set([...subscriptions.values()].map(subscription => subscription.group));
+      const groups = new Set(
+        [...subscriptions.values()]
+          .filter(subscription => !this.#leavingSubscriptions.has(subscription))
+          .map(subscription => subscription.group),
+      );
       for (const group of groups) {
         await this.#sendSubscribeToBroker(topic, group);
       }
@@ -1156,13 +1198,31 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     waiterMap: Map<string, MembershipWaiter[]>,
   ): Promise<void> {
     const key = membershipKey(frame.topic, frame.group);
-    const acknowledged = new Promise<void>((resolve, reject) => {
-      const waiters = waiterMap.get(key) ?? [];
-      waiters.push({ resolve, reject });
-      waiterMap.set(key, waiters);
-    });
+    let waiter: MembershipWaiter | undefined;
+    let acknowledged!: Promise<void>;
+    // Register a fresh waiter before every send attempt. A failed write tears
+    // down the connection, which rejects all waiters with that write error; a
+    // retry against a re-elected broker must not inherit the stale rejection.
+    const registerWaiter = () => {
+      if (waiter) {
+        const waiters = waiterMap.get(key);
+        const index = waiters?.indexOf(waiter) ?? -1;
+        if (index !== -1) waiters!.splice(index, 1);
+        if (waiters?.length === 0) waiterMap.delete(key);
+      }
+      acknowledged = new Promise<void>((resolve, reject) => {
+        waiter = { resolve, reject };
+        const waiters = waiterMap.get(key) ?? [];
+        waiters.push(waiter);
+        waiterMap.set(key, waiters);
+      });
+      // The waiter can be rejected by a disconnect while the send is still in
+      // flight, before `await acknowledged` below attaches a handler. Observe
+      // it now so that rejection is never reported as unhandled.
+      acknowledged.catch(() => {});
+    };
     try {
-      await this.#sendToBroker(frame);
+      await this.#sendToBroker(frame, registerWaiter);
     } catch (error) {
       this.#settleMembershipWaiters(waiterMap, key, error instanceof Error ? error : new Error(String(error)));
     }
@@ -1301,7 +1361,10 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     }
   }
 
-  #handleServerFrame(frame: ServerFrame) {
+  #handleServerFrame(socket: net.Socket, frame: ServerFrame) {
+    // Membership acks are only meaningful from the current connection. A late
+    // ack from a replaced socket must not settle a waiter for a retried frame.
+    if ((frame.type === 'subscribed' || frame.type === 'unsubscribed') && socket !== this.#clientSocket) return;
     if (frame.type === 'subscribed') {
       this.#settleMembershipWaiters(this.#subscribeWaiters, membershipKey(frame.topic, frame.group));
       return;
@@ -1446,48 +1509,39 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     }
   }
 
-  async #sendToBroker(frame: ClientFrame) {
+  async #sendToBroker(frame: ClientFrame, beforeAttempt?: () => void) {
     // If the broker died mid-write (EPIPE) or while election is rotating, we
     // reconnect and retry. The first attempt is the normal path. Each retry
     // forces a fresh broker resolution. Retry budget is bounded so a truly
-    // unreachable broker still errors instead of looping forever.
+    // unreachable broker still errors instead of looping forever. Once the
+    // pubsub is closed, failures surface as a closed-transport error rather
+    // than the raw socket error.
     const maxRetries = 3;
     let lastError: unknown;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         if (attempt === 0) {
+          beforeAttempt?.();
           await this.#sendToActiveBroker(frame);
         } else {
-          if (this.#closed) throw lastError;
+          if (this.#closed) throw closedError(lastError);
           const failedSocket = this.#clientSocket;
           this.#clientSocket = undefined;
           failedSocket?.destroy();
+          beforeAttempt?.();
           await this.#ensureStarted(true);
           await this.#sendToActiveBroker(frame);
         }
         return;
       } catch (error) {
         lastError = error;
-        if (this.#closed) throw error;
-        const code = (error as NodeJS.ErrnoException)?.code;
-        // EPIPE/ECONNRESET/ENOTCONN: broker died mid-write — retry against a
-        // fresh broker. Anything else (e.g. closed pubsub, validation error)
-        // is not safe to retry blindly. The string-message checks cover three
-        // internal errors thrown from within this file that don't carry an
-        // ErrnoException-style `code` — keep them in lockstep with those
-        // throw sites:
-        //   - "socket closed before write completed" (writeSerializedFrame,
-        //     when the broker dies mid-write before the drain settles)
-        //   - "broker connection closed" (#handleClientDisconnect)
-        //   - "not connected to a broker" (#sendToActiveBroker)
-        const transient =
-          code === 'EPIPE' ||
-          code === 'ECONNRESET' ||
-          code === 'ENOTCONN' ||
-          (error as Error)?.message?.includes('socket closed before write completed') ||
-          (error as Error)?.message?.includes('broker connection closed') ||
-          (error as Error)?.message?.includes('not connected to a broker');
-        if (!transient || attempt === maxRetries) throw error;
+        if (this.#closed) {
+          if (error instanceof Error && error.message === 'UnixSocketPubSub is closed') throw error;
+          throw closedError(error);
+        }
+        // The broker died mid-write — retry against a fresh broker. Anything
+        // else (e.g. validation error) is not safe to retry blindly.
+        if (!isBrokerConnectionError(error) || attempt === maxRetries) throw error;
         // Tiny backoff so concurrent senders don't dogpile re-election.
         await new Promise(resolve => setTimeout(resolve, 10 * (attempt + 1)));
       }
@@ -1505,8 +1559,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     }
     const activeSocket = this.#clientSocket;
     if (!activeSocket || activeSocket.destroyed) {
-      // NOTE: keep this exact message in sync with the transient-error
-      // classifier in #sendToBroker (search for 'not connected to a broker').
+      // NOTE: keep this exact message in sync with isBrokerConnectionError.
       throw new Error('UnixSocketPubSub is not connected to a broker');
     }
     await writeFrame(activeSocket, frame);
