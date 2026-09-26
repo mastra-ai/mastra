@@ -327,6 +327,15 @@ describe('detectDegenerateRepetition short-line loops', () => {
     expect(describeDegenerateOutput(loop)).toContain('shortLineLoop');
   });
 
+  it('names no strategy for output below the detector minimum length', () => {
+    // Two runs, so the bounded-run collapse leaves every occurrence in place.
+    const run = Array.from({ length: 10 }, () => 'a substantial repeated observation line');
+    const short = [...run, 'a different substantial observation line', ...run].join('\n');
+    expect(short.length).toBeLessThan(2000);
+    expect(detectDegenerateRepetition(short)).toBe(false);
+    expect(describeDegenerateOutput(short)).toContain('strategy=none');
+  });
+
   it('still accepts a bounded run of the same short line', () => {
     const bounded = ['* Ran the build', ...Array.from({ length: 200 }, () => '  * -> pnpm build → ok')].join('\n');
     expect(detectDegenerateRepetition(bounded)).toBe(false);
