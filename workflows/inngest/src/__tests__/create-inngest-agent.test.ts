@@ -1640,6 +1640,52 @@ describe('InngestAgent fork and resume overrides (#24736)', () => {
     await expect(durableAgent.resumeStream({ approved: true })).rejects.toThrow(/requires a runId/);
   });
 
+  // #25159: the /stream-until-idle routes call these deprecated shims; they must
+  // not fall through the Proxy to the wrapped Agent's in-process idle loop.
+  it('streamUntilIdle routes through durable stream() with untilIdle', async () => {
+    const durableAgent = makeDurable('stream-until-idle-route');
+    const result = { marker: 'result' };
+    const streamSpy = vi.spyOn(durableAgent, 'stream').mockResolvedValue(result as any);
+    const wrappedSpy = vi.spyOn(durableAgent.agent, 'streamUntilIdle');
+
+    expect(durableAgent.streamUntilIdle).not.toBe(durableAgent.agent.streamUntilIdle);
+
+    await expect(durableAgent.streamUntilIdle('hi', { maxSteps: 2 })).resolves.toBe(result);
+    await durableAgent.streamUntilIdle('hi', { maxSteps: 2, maxIdleMs: 1234 });
+
+    expect(streamSpy).toHaveBeenNthCalledWith(1, 'hi', { maxSteps: 2, untilIdle: true });
+    expect(streamSpy).toHaveBeenNthCalledWith(2, 'hi', { maxSteps: 2, untilIdle: { maxIdleMs: 1234 } });
+    expect(wrappedSpy).not.toHaveBeenCalled();
+  });
+
+  it('resumeStreamUntilIdle routes through durable resume() with untilIdle', async () => {
+    const durableAgent = makeDurable('resume-stream-until-idle-route');
+    const { output, resumeSpy } = spyResume(durableAgent);
+    const wrappedSpy = vi.spyOn(durableAgent.agent, 'resumeStreamUntilIdle');
+
+    const result = await durableAgent.resumeStreamUntilIdle(
+      { approved: true },
+      { runId: 'r1', toolCallId: 't1', maxIdleMs: 50 },
+    );
+
+    expect(result).toBe(output);
+    const [runId, data, opts] = resumeSpy.mock.calls[0]!;
+    expect(runId).toBe('r1');
+    expect(data).toEqual({ approved: true });
+    expect(opts).toMatchObject({ toolCallId: 't1', untilIdle: { maxIdleMs: 50 } });
+    expect(opts).not.toHaveProperty('runId');
+    expect(opts).not.toHaveProperty('maxIdleMs');
+    expect(wrappedSpy).not.toHaveBeenCalled();
+
+    await durableAgent.resumeStreamUntilIdle({ approved: true }, { runId: 'r2' });
+    expect(resumeSpy.mock.calls[1]![2]).toMatchObject({ untilIdle: true });
+  });
+
+  it('resumeStreamUntilIdle throws without a runId', async () => {
+    const durableAgent = makeDurable('resume-stream-until-idle-no-run');
+    await expect(durableAgent.resumeStreamUntilIdle({ approved: true })).rejects.toThrow(/requires a runId/);
+  });
+
   it('approveToolCall / declineToolCall resume the durable run', async () => {
     const durableAgent = makeDurable('approve-decline-route');
     const { resumeSpy } = spyResume(durableAgent);
