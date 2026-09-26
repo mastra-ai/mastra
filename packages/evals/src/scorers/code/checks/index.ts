@@ -1,10 +1,11 @@
 import { createScorer } from '@mastra/core/evals';
 import stringSimilarity from 'string-similarity';
+import type { ScorerIdentityOptions } from '../../utils';
 import { extractToolCalls, getTextContentFromMastraDBMessage, mergeToolInvocations } from '../../utils';
 
 // ─── Output Text Checks ───────────────────────────────────────────────────────
 
-export interface IncludesOptions {
+export interface IncludesOptions extends ScorerIdentityOptions {
   /** Case-insensitive match (default: true) */
   ignoreCase?: boolean;
 }
@@ -21,8 +22,8 @@ export interface IncludesOptions {
 export function includes(expected: string, options: IncludesOptions = {}) {
   const { ignoreCase = true } = options;
   return createScorer({
-    id: 'check-includes',
-    name: 'Includes Check',
+    id: options.id ?? 'check-includes',
+    name: options.name ?? 'Includes Check',
     description: `Checks if output includes "${expected}"`,
     type: 'agent',
   })
@@ -55,8 +56,8 @@ export function includes(expected: string, options: IncludesOptions = {}) {
 export function excludes(unwanted: string, options: IncludesOptions = {}) {
   const { ignoreCase = true } = options;
   return createScorer({
-    id: 'check-excludes',
-    name: 'Excludes Check',
+    id: options.id ?? 'check-excludes',
+    name: options.name ?? 'Excludes Check',
     description: `Checks that output does not include "${unwanted}"`,
     type: 'agent',
   })
@@ -89,8 +90,8 @@ export function excludes(unwanted: string, options: IncludesOptions = {}) {
 export function equals(expected: string, options: IncludesOptions = {}) {
   const { ignoreCase = true } = options;
   return createScorer({
-    id: 'check-equals',
-    name: 'Equals Check',
+    id: options.id ?? 'check-equals',
+    name: options.name ?? 'Equals Check',
     description: `Checks if output equals "${expected}"`,
     type: 'agent',
   })
@@ -111,7 +112,7 @@ export function equals(expected: string, options: IncludesOptions = {}) {
     });
 }
 
-export interface MatchesOptions {
+export interface MatchesOptions extends ScorerIdentityOptions {
   /** If true, the output must match the pattern exactly (anchored). Default: false (substring match). */
   exact?: boolean;
 }
@@ -128,8 +129,8 @@ export interface MatchesOptions {
 export function matches(pattern: RegExp, options: MatchesOptions = {}) {
   const { exact = false } = options;
   return createScorer({
-    id: 'check-matches',
-    name: 'Matches Check',
+    id: options.id ?? 'check-matches',
+    name: options.name ?? 'Matches Check',
     description: `Checks if output matches pattern ${pattern}`,
     type: 'agent',
   })
@@ -147,7 +148,7 @@ export function matches(pattern: RegExp, options: MatchesOptions = {}) {
     });
 }
 
-export interface SimilarityOptions {
+export interface SimilarityOptions extends ScorerIdentityOptions {
   /** Minimum similarity threshold (0-1) to score 1. Default: 0.7 */
   threshold?: number;
   /** Case-insensitive comparison (default: true) */
@@ -167,8 +168,8 @@ export interface SimilarityOptions {
 export function similarity(expected: string, options: SimilarityOptions = {}) {
   const { ignoreCase = true, threshold } = options;
   return createScorer({
-    id: 'check-similarity',
-    name: 'Similarity Check',
+    id: options.id ?? 'check-similarity',
+    name: options.name ?? 'Similarity Check',
     description: `Checks string similarity to "${expected}"`,
     type: 'agent',
   })
@@ -194,7 +195,7 @@ export function similarity(expected: string, options: SimilarityOptions = {}) {
 
 // ─── Tool Call Checks ─────────────────────────────────────────────────────────
 
-export interface CalledToolOptions {
+export interface CalledToolOptions extends ScorerIdentityOptions {
   /** Minimum number of times the tool must be called. Default: 1 */
   times?: number;
 }
@@ -212,8 +213,8 @@ export interface CalledToolOptions {
 export function calledTool(toolName: string, options: CalledToolOptions = {}) {
   const { times = 1 } = options;
   return createScorer({
-    id: 'check-called-tool',
-    name: 'Called Tool Check',
+    id: options.id ?? 'check-called-tool',
+    name: options.name ?? 'Called Tool Check',
     description: `Checks that "${toolName}" was called${times > 1 ? ` at least ${times} times` : ''}`,
     type: 'agent',
   })
@@ -236,10 +237,10 @@ export function calledTool(toolName: string, options: CalledToolOptions = {}) {
  * const scorer = checks.didNotCall('delete_user');
  * ```
  */
-export function didNotCall(toolName: string) {
+export function didNotCall(toolName: string, options: ScorerIdentityOptions = {}) {
   return createScorer({
-    id: 'check-did-not-call',
-    name: 'Did Not Call Check',
+    id: options.id ?? 'check-did-not-call',
+    name: options.name ?? 'Did Not Call Check',
     description: `Checks that "${toolName}" was NOT called`,
     type: 'agent',
   })
@@ -262,10 +263,10 @@ export function didNotCall(toolName: string) {
  * const scorer = checks.toolOrder(['search', 'summarize', 'respond']);
  * ```
  */
-export function toolOrder(expectedOrder: string[]) {
+export function toolOrder(expectedOrder: string[], options: ScorerIdentityOptions = {}) {
   return createScorer({
-    id: 'check-tool-order',
-    name: 'Tool Order Check',
+    id: options.id ?? 'check-tool-order',
+    name: options.name ?? 'Tool Order Check',
     description: `Checks tool call order: [${expectedOrder.join(' → ')}]`,
     type: 'agent',
   })
@@ -295,10 +296,10 @@ export function toolOrder(expectedOrder: string[]) {
  * const scorer = checks.maxToolCalls(5);
  * ```
  */
-export function maxToolCalls(max: number) {
+export function maxToolCalls(max: number, options: ScorerIdentityOptions = {}) {
   return createScorer({
-    id: 'check-max-tool-calls',
-    name: 'Max Tool Calls Check',
+    id: options.id ?? 'check-max-tool-calls',
+    name: options.name ?? 'Max Tool Calls Check',
     description: `Checks that no more than ${max} tool calls were made`,
     type: 'agent',
   })
@@ -320,10 +321,10 @@ export function maxToolCalls(max: number) {
  * const scorer = checks.usedNoTools();
  * ```
  */
-export function usedNoTools() {
+export function usedNoTools(options: ScorerIdentityOptions = {}) {
   return createScorer({
-    id: 'check-used-no-tools',
-    name: 'Used No Tools Check',
+    id: options.id ?? 'check-used-no-tools',
+    name: options.name ?? 'Used No Tools Check',
     description: 'Checks that no tools were called',
     type: 'agent',
   })
@@ -349,10 +350,10 @@ export function usedNoTools() {
  * const scorer = checks.noToolErrors();
  * ```
  */
-export function noToolErrors() {
+export function noToolErrors(options: ScorerIdentityOptions = {}) {
   return createScorer({
-    id: 'check-no-tool-errors',
-    name: 'No Tool Errors Check',
+    id: options.id ?? 'check-no-tool-errors',
+    name: options.name ?? 'No Tool Errors Check',
     description: 'Checks that no tool calls resulted in errors',
     type: 'agent',
   })
