@@ -35,7 +35,7 @@ describe('TokenLimiterProcessor', () => {
     const limiter = new TokenLimiterProcessor(200);
     const messageList = new MessageList({ threadId: '1', resourceId: 'test-resource' });
     for (const msg of messagesV2) {
-      messageList.add(msg, 'input');
+      messageList.add(msg, 'memory');
     }
 
     const prompt = await messageList.get.all.aiV5.llmPrompt();

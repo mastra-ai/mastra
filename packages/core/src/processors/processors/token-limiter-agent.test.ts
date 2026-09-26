@@ -3,12 +3,22 @@ import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 
+import { z } from 'zod/v4';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../../agent/durable/create-durable-agent';
+import { MessageList } from '../../agent/message-list';
 import { EventEmitterPubSub } from '../../events/event-emitter';
+import { carryCappedProviderMetadata } from '../../loop/shared/read-tool-result';
+import {
+  commitToolResult,
+  computeModelOutputProviderMetadata,
+  shouldComputeModelOutputProviderMetadata,
+} from '../../loop/shared/steps/tool-result-commit-core';
 import { Mastra } from '../../mastra';
+import { MockMemory } from '../../memory/mock';
 import type { MastraDBMessage } from '../../memory/types';
 import { InMemoryStore } from '../../storage';
+import { createTool } from '../../tools';
 import { createStep, createWorkflow } from '../../workflows';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema } from '../step-schema';
 
@@ -163,6 +173,236 @@ describe('TokenLimiterProcessor through an agent', () => {
       const prompt = JSON.stringify(prompts.at(-1));
       expect(prompt).toContain(ANSWER);
       expect(prompt).not.toContain(TOOL_PAYLOAD);
+    });
+
+    it('does not persist the cap into stored history for durable agents (#24110)', async () => {
+      const big = 'result '.repeat(3000);
+      const lookup = createTool({
+        id: 'lookup',
+        description: 'Look something up',
+        inputSchema: z.object({ q: z.string() }),
+        execute: async () => big,
+      });
+      const prompts: LanguageModelV2Prompt[] = [];
+      const hasToolResult = (prompt: LanguageModelV2Prompt) =>
+        (prompt as any[])
+          .flatMap(m => (Array.isArray(m.content) ? m.content : []))
+          .some((c: any) => c.type === 'tool-result');
+      const model = new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          prompts.push(prompt);
+          const chunks: any[] = hasToolResult(prompt)
+            ? [
+                { type: 'text-start', id: 't' },
+                { type: 'text-delta', id: 't', delta: 'ok' },
+                { type: 'text-end', id: 't' },
+                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+              ]
+            : [
+                { type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: '{"q":"x"}' },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                },
+              ];
+          return {
+            stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }, ...chunks]),
+            rawCall: { rawPrompt: [], rawSettings: {} },
+            warnings: [],
+          };
+        },
+      });
+      const limiter = new TokenLimiterProcessor({ limit: 50000, maxToolResultTokens: 50 });
+      const mockMemory = new MockMemory();
+      const agent = new Agent({
+        id: 'limiter-durable-persist',
+        name: 'limiter-durable-persist',
+        instructions: 'Answer briefly.',
+        model,
+        tools: { lookup },
+        memory: mockMemory,
+        inputProcessors: [limiter],
+        outputProcessors: [limiter],
+      });
+      void new Mastra({ agents: { 'limiter-durable-persist': agent }, storage: new InMemoryStore() });
+      const pubsub = new EventEmitterPubSub();
+      const threadId = 'thread-cap-persist';
+      const resourceId = 'resource-cap-persist';
+
+      try {
+        const durableAgent = createDurableAgent({ agent, pubsub });
+
+        const turn1 = await durableAgent.stream('question', {
+          maxSteps: 2,
+          memory: { thread: threadId, resource: resourceId },
+        });
+        for await (const _chunk of turn1.fullStream) {
+          // drain
+        }
+
+        const turn1Prompt = JSON.stringify(prompts.at(-1));
+        expect(turn1Prompt).toMatch(/\[truncated: showing/);
+
+        const turn2 = await durableAgent.stream('second question', {
+          maxSteps: 1,
+          memory: { thread: threadId, resource: resourceId },
+        });
+        for await (const _chunk of turn2.fullStream) {
+          // drain
+        }
+
+        const turn2Prompt = JSON.stringify(prompts.at(-1));
+        expect(turn2Prompt).not.toMatch(/\[truncated: showing/);
+        expect(turn2Prompt.length).toBeGreaterThan(JSON.stringify(big).length);
+      } finally {
+        await pubsub.close();
+      }
+
+      const { messages } = await mockMemory.recall({ threadId, resourceId });
+      const toolPart = messages
+        .flatMap(message => message.content.parts ?? [])
+        .find(part => part.type === 'tool-invocation');
+      const storedMastra = toolPart?.providerMetadata?.mastra as Record<string, unknown> | undefined;
+      expect(storedMastra?.modelOutput).toBeUndefined();
+      expect(storedMastra?.modelOutputCapped).toBeUndefined();
+    });
+
+    it('threads the modelOutput cap from tool-call.ts to llm-mapping.ts across the durable step boundary (#24110)', async () => {
+      const big = 'result '.repeat(3000);
+      const pendingCall = (): MastraDBMessage => ({
+        id: 'msg-call-1',
+        role: 'assistant',
+        content: {
+          format: 2,
+          content: '',
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'lookup', args: {} },
+            },
+          ],
+        },
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+      });
+
+      // Step 1: the tool-call step's local MessageList runs the cap processor, same as
+      // TokenLimiterProcessor.processToolResult does inside tool-call.ts's hook.
+      const processor = new TokenLimiterProcessor({ limit: 50_000, maxToolResultTokens: 50 });
+      const toolCallMessageList = new MessageList();
+      toolCallMessageList.add(pendingCall(), 'response');
+      await processor.processToolResult({
+        result: big,
+        toolCallId: 'call-1',
+        toolName: 'lookup',
+        args: {},
+        messageList: toolCallMessageList,
+        steps: [],
+        systemMessages: [],
+        state: {},
+      } as any);
+
+      // Drives the exact function tool-call.ts calls to carry the cap onto its step
+      // output (see tool-call.ts's `carried = carryCappedProviderMetadata(...)` call).
+      const carried = carryCappedProviderMetadata(toolCallMessageList, 'call-1', undefined);
+      expect(carried.resultCapped).toBe(true);
+
+      // Step 2: the tool-call step's output crosses to llm-mapping.ts as JSON (the real
+      // engine round-trips it through pubsub/storage). JSON.parse/stringify severs any
+      // shared object references, so unlike the deleted end-to-end test this actually
+      // forces the step-boundary path instead of surviving on live object identity.
+      const toolCallStepOutput = JSON.parse(
+        JSON.stringify({
+          toolCallId: 'call-1',
+          toolName: 'lookup',
+          result: big,
+          resultCapped: carried.resultCapped,
+          providerMetadata: carried.providerMetadata,
+        }),
+      );
+
+      // A tool with a `toModelOutput` mapper: if llm-mapping.ts's `resultCapped` guard is
+      // ever dropped, this recomputes and clobbers the carried cap, making the assertions
+      // below fail.
+      const mappedTool = { toModelOutput: () => 'SHOULD-NOT-BE-SEEN-WHEN-CAP-IS-CARRIED' };
+
+      // Drives the exact guard llm-mapping.ts calls (see llm-mapping.ts's
+      // `if (shouldComputeModelOutputProviderMetadata(toolResult))` check): a
+      // `resultCapped` result is not recomputed through `toModelOutput`, the carried
+      // metadata is used as-is.
+      const providerMetadata = shouldComputeModelOutputProviderMetadata(toolCallStepOutput)
+        ? await computeModelOutputProviderMetadata({
+            tool: mappedTool,
+            toolName: toolCallStepOutput.toolName,
+            toolCallId: toolCallStepOutput.toolCallId,
+            result: toolCallStepOutput.result,
+            existingProviderMetadata: toolCallStepOutput.providerMetadata,
+          })
+        : toolCallStepOutput.providerMetadata;
+
+      // Step 3: llm-mapping.ts commits against a freshly rebuilt MessageList, not the
+      // tool-call step's local copy.
+      const llmMappingMessageList = new MessageList();
+      llmMappingMessageList.add(pendingCall(), 'response');
+
+      commitToolResult({
+        messageList: llmMappingMessageList,
+        outcome: { kind: 'result', result: toolCallStepOutput.result },
+        toolCallId: toolCallStepOutput.toolCallId,
+        toolName: toolCallStepOutput.toolName,
+        toolArgs: {},
+        providerMetadata: providerMetadata as any,
+      });
+
+      const committedPart = llmMappingMessageList.get.all
+        .db()
+        .flatMap(message => message.content.parts ?? [])
+        .find(part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-1') as any;
+      const committedMastra = committedPart?.providerMetadata?.mastra;
+      expect(committedMastra?.modelOutputCapped).toBe(true);
+      expect(committedMastra?.modelOutput?.value).toMatch(/\[truncated: showing \d+ of [\d,]+ tokens\]$/);
+    });
+
+    it("carryCappedProviderMetadata keeps an existing toModelOutput mapping instead of the cap (#24110)", async () => {
+      const secret = 'SECRET '.repeat(3000);
+      const messageList = new MessageList();
+      messageList.add(
+        {
+          id: 'msg-call-1',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'lookup', args: {} },
+              },
+            ],
+          },
+          createdAt: new Date('2024-01-01T00:00:00Z'),
+        },
+        'response',
+      );
+      await new TokenLimiterProcessor({ limit: 50_000, maxToolResultTokens: 50 }).processToolResult({
+        result: secret,
+        toolCallId: 'call-1',
+        toolName: 'lookup',
+        args: {},
+        messageList,
+        steps: [],
+        systemMessages: [],
+        state: {},
+      } as any);
+
+      // The durable tool-call step runs toModelOutput before the processors, so the
+      // mapping (here a redaction) is already in providerMetadata when the cap is carried.
+      const redacted = { type: 'text', value: '[redacted]' };
+      const carried = carryCappedProviderMetadata(messageList, 'call-1', { mastra: { modelOutput: redacted } });
+
+      expect(carried.resultCapped).toBe(false);
+      expect((carried.providerMetadata as any).mastra.modelOutput).toEqual(redacted);
+      expect(JSON.stringify(carried.providerMetadata)).not.toContain('SECRET');
     });
 
     it('keeps the assistant answer when input processors are resolved per request', async () => {

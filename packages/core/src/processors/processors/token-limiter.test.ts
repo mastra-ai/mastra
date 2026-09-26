@@ -1146,6 +1146,86 @@ describe('TokenLimiterProcessor', () => {
         expect(double).toBeLessThan(2000);
       });
 
+      it('should estimate media parts inside a mapped modelOutput content array', async () => {
+        const processor = new TokenLimiterProcessor({ limit: 100_000 });
+
+        const textOnlyList = new MessageList();
+        textOnlyList.add(
+          {
+            id: 'text-only',
+            role: 'assistant',
+            content: {
+              format: 2,
+              content: '',
+              parts: [
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    state: 'result',
+                    toolCallId: 'call_1',
+                    toolName: 'screenshotTool',
+                    args: {},
+                    result: 'placeholder',
+                  },
+                  providerMetadata: {
+                    mastra: {
+                      modelOutput: { type: 'content', value: [{ type: 'text', text: 'a screenshot was taken' }] },
+                    },
+                  },
+                },
+              ],
+            },
+            createdAt: new Date('2023-01-01T00:00:00Z'),
+          } as any,
+          'response',
+        );
+
+        const withMediaList = new MessageList();
+        withMediaList.add(
+          {
+            id: 'with-media',
+            role: 'assistant',
+            content: {
+              format: 2,
+              content: '',
+              parts: [
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    state: 'result',
+                    toolCallId: 'call_1',
+                    toolName: 'screenshotTool',
+                    args: {},
+                    result: 'placeholder',
+                  },
+                  providerMetadata: {
+                    mastra: {
+                      modelOutput: {
+                        type: 'content',
+                        value: [
+                          { type: 'text', text: 'a screenshot was taken' },
+                          { type: 'media', data: BASE64_IMAGE, mediaType: 'image/png' },
+                        ],
+                      },
+                    },
+                  },
+                },
+              ],
+            },
+            createdAt: new Date('2023-01-01T00:00:00Z'),
+          } as any,
+          'response',
+        );
+
+        const textOnlyTokens = await countTokens(processor, textOnlyList);
+        const withMediaTokens = await countTokens(processor, withMediaList);
+
+        // The media entry must be estimated via the flat per-image cost, not
+        // tokenized as a giant base64 string.
+        expect(withMediaTokens - textOnlyTokens).toBeGreaterThan(100);
+        expect(withMediaTokens - textOnlyTokens).toBeLessThan(2000);
+      });
+
       it('should leave non-media object tool results on the existing counting path', async () => {
         const processor = new TokenLimiterProcessor({ limit: 100_000 });
         const messageList = new MessageList();
@@ -1178,7 +1258,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:00:00Z'),
         },
-        'input',
+        'memory',
       );
       messageList.add(
         {
@@ -1191,7 +1271,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:01:00Z'),
         },
-        'response',
+        'memory',
       );
       messageList.add(
         {
@@ -1204,7 +1284,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:02:00Z'),
         },
-        'input',
+        'memory',
       );
       messageList.add(
         {
@@ -1217,7 +1297,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:03:00Z'),
         },
-        'response',
+        'memory',
       );
       messageList.add(
         {
@@ -1277,7 +1357,7 @@ describe('TokenLimiterProcessor', () => {
           content: { format: 2, content: 'Hi there', parts: [{ type: 'text', text: 'Hi there' }] },
           createdAt: new Date('2023-01-01T00:01:00Z'),
         },
-        'response',
+        'memory',
       );
       messageList.add(
         {
@@ -1307,7 +1387,7 @@ describe('TokenLimiterProcessor', () => {
           content: { format: 2, content: 'Hello there', parts: [{ type: 'text', text: 'Hello there' }] },
           createdAt: new Date('2023-01-01T00:00:00Z'),
         },
-        'input',
+        'memory',
       );
       messageList.add(
         {
@@ -1316,7 +1396,7 @@ describe('TokenLimiterProcessor', () => {
           content: { format: 2, content: 'Hi how can I help', parts: [{ type: 'text', text: 'Hi how can I help' }] },
           createdAt: new Date('2023-01-01T00:01:00Z'),
         },
-        'response',
+        'memory',
       );
       messageList.add(
         {
@@ -1428,7 +1508,7 @@ describe('TokenLimiterProcessor', () => {
           content: { format: 2, content: 'Hello', parts: [{ type: 'text', text: 'Hello' }] },
           createdAt: new Date('2023-01-01T00:00:00Z'),
         },
-        'input',
+        'memory',
       );
 
       try {
@@ -1737,7 +1817,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:00:00Z'),
         },
-        'input',
+        'memory',
       );
       messageList.add(
         {
@@ -1750,7 +1830,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:01:00Z'),
         },
-        'response',
+        'memory',
       );
       messageList.add(
         {
@@ -1790,7 +1870,7 @@ describe('TokenLimiterProcessor', () => {
           content: { format: 2, content: 'First message', parts: [{ type: 'text', text: 'First message' }] },
           createdAt: new Date('2023-01-01T00:00:00Z'),
         },
-        'input',
+        'memory',
       );
       messageList.add(
         {
@@ -1808,7 +1888,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:01:00Z'),
         },
-        'input',
+        'memory',
       );
       messageList.add(
         {
@@ -1840,6 +1920,350 @@ describe('TokenLimiterProcessor', () => {
 
       // Newest message should survive
       expect(remaining).toContain('user-3');
+    });
+  });
+
+  describe('capping oversized tool results via processToolResult (#24110)', () => {
+    const at = (n: number) => new Date(Date.UTC(2024, 0, 1, 0, 0, n));
+    const toolResult = (id: string, result: unknown, n: number): MastraDBMessage => ({
+      id,
+      role: 'assistant',
+      content: {
+        format: 2,
+        content: '',
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId: `call-${id}`, toolName: 'lookup', args: {}, result },
+          },
+        ],
+      },
+      createdAt: at(n),
+    });
+
+    const pendingToolCall = (id: string, n: number): MastraDBMessage => ({
+      id,
+      role: 'assistant',
+      content: {
+        format: 2,
+        content: '',
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'call', toolCallId: `call-${id}`, toolName: 'lookup', args: {} },
+          },
+        ],
+      },
+      createdAt: at(n),
+    });
+
+    const runProcessToolResult = (
+      processor: TokenLimiterProcessor,
+      messageList: MessageList,
+      id: string,
+      result: unknown,
+    ) =>
+      processor.processToolResult({
+        result,
+        toolCallId: `call-${id}`,
+        toolName: 'lookup',
+        args: {},
+        messageList,
+        steps: [],
+        systemMessages: [],
+        state: {},
+      } as any);
+
+    it('caps an oversized tool result for the model and keeps the stored result intact', async () => {
+      const big = 'word '.repeat(2000);
+      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 50 });
+      const messageList = new MessageList();
+      messageList.add(toolResult('tool-now', big, 1), 'response');
+
+      await runProcessToolResult(processor, messageList, 'tool-now', big);
+
+      const stored = messageList.get.all.db().find(m => m.id === 'tool-now')!;
+      const part = stored.content.parts[0] as any;
+      expect(part.toolInvocation.result).toBe(big);
+      const modelOutput = part.providerMetadata?.mastra?.modelOutput;
+      expect(modelOutput.type).toBe('text');
+      expect(modelOutput.value).toMatch(/\[truncated: showing \d+ of [\d,]+ tokens\]$/);
+      expect(modelOutput.value.length).toBeLessThan(big.length);
+    });
+
+    it('does not promote toolInvocation state or write the result field (only providerMetadata)', async () => {
+      // Regression: promoting state to 'result' here (before the rest of the output-processor
+      // chain, including its TripWire checkpoint, has run) would leave an unvetted part behind
+      // with no rollback if a later processor throws TripWire. The cap must only ever touch
+      // `providerMetadata`, leaving state/result for whichever step is actually responsible for
+      // committing the tool result.
+      const big = 'word '.repeat(2000);
+      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 50 });
+      const messageList = new MessageList();
+      messageList.add(pendingToolCall('tool-now', 1), 'response');
+
+      await runProcessToolResult(processor, messageList, 'tool-now', big);
+
+      const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+      expect(part.toolInvocation.state).toBe('call');
+      expect(part.toolInvocation.result).toBeUndefined();
+      expect(part.providerMetadata?.mastra?.modelOutput?.type).toBe('text');
+    });
+
+    it('drops a stale cap when a later processor rewrites the result without refreshing modelOutput (#24110)', async () => {
+      // Order: [tokenLimiter, redactor]. The cap runs first and caps the
+      // original oversized result; a later processor then redacts the
+      // *stored* result (e.g. scrubbing secrets) without touching
+      // providerMetadata. The stale cap — built from the pre-redaction text —
+      // must not survive, or the model would see leaked pre-redaction content
+      // via the cap's `modelOutput` while storage shows the redacted value.
+      const big = `secret-token-xyz ${'word '.repeat(2000)}`;
+      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 50 });
+      const messageList = new MessageList();
+      messageList.add(toolResult('tool-now', big, 1), 'response');
+
+      await runProcessToolResult(processor, messageList, 'tool-now', big);
+
+      const cappedPart = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+      expect(cappedPart.providerMetadata?.mastra?.modelOutput?.value).toContain('secret-token-xyz');
+
+      // A later redactor rewrites the result, dropping the secret, without
+      // touching providerMetadata at all.
+      const redacted = 'REDACTED';
+      messageList.updateToolInvocation({
+        type: 'tool-invocation',
+        toolInvocation: { ...cappedPart.toolInvocation, result: redacted },
+      });
+
+      const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+      expect(part.toolInvocation.result).toBe(redacted);
+      expect(part.providerMetadata?.mastra?.modelOutput).toBeUndefined();
+      expect(part.providerMetadata?.mastra?.modelOutputCapped).toBeUndefined();
+    });
+
+    it('caps whatever the current messageList result is, not the stale args.result, when a redactor runs first (#24110)', async () => {
+      // Order: [redactor, tokenLimiter]. By the time the cap hook runs, the
+      // messageList already holds the redacted value even though the
+      // processor's `args.result` still carries the tool's original raw
+      // return value (ProcessorRunner passes the same raw `result` to every
+      // processor regardless of order). The cap must key off the messageList's
+      // current value so it never re-surfaces pre-redaction content.
+      const secretResult = `secret-token-xyz ${'word '.repeat(2000)}`;
+      const redactedResult = `REDACTED ${'word '.repeat(2000)}`;
+      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 50 });
+      const messageList = new MessageList();
+      messageList.add(toolResult('tool-now', redactedResult, 1), 'response');
+
+      // args.result carries the stale pre-redaction value; the messageList
+      // already has the redacted one.
+      await runProcessToolResult(processor, messageList, 'tool-now', secretResult);
+
+      const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+      expect(part.providerMetadata?.mastra?.modelOutput?.value).not.toContain('secret-token-xyz');
+      expect(part.providerMetadata?.mastra?.modelOutput?.value).toContain('REDACTED');
+    });
+
+    it('leaves results under maxToolResultTokens untouched', async () => {
+      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 50 });
+      const messageList = new MessageList();
+      messageList.add(toolResult('tool-now', { ok: true }, 1), 'response');
+
+      await runProcessToolResult(processor, messageList, 'tool-now', { ok: true });
+
+      const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+      expect(part.providerMetadata?.mastra?.modelOutput).toBeUndefined();
+    });
+
+    it('does not attach a processToolResult hook when maxToolResultTokens is unset', () => {
+      // The agentic loop checks `'processToolResult' in processor` to decide whether
+      // to hold eager tool dispatch back for the output-processor pipeline. An
+      // always-present hook here would force that slower path even when this
+      // processor has nothing to cap, so the hook must not exist at all in this case.
+      const processor = new TokenLimiterProcessor({ limit: 400 });
+      expect(processor.processToolResult).toBeUndefined();
+      expect('processToolResult' in processor).toBe(false);
+    });
+
+    it('a real toModelOutput mapping always wins over this cap (via computeModelOutputProviderMetadata)', async () => {
+      // This processor's own hook has no visibility into a tool's `toModelOutput`
+      // mapping -- that mapping is computed and committed by the engine *after*
+      // this hook runs (see computeModelOutputProviderMetadata in
+      // tool-result-commit-core.ts), and its write always wins on the
+      // `modelOutput` key. Reproduce that ordering directly here.
+      const { computeModelOutputProviderMetadata } = await import('../../loop/shared/steps/tool-result-commit-core');
+      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 5 });
+      const messageList = new MessageList();
+      const big = 'word '.repeat(2000);
+      messageList.add(toolResult('tool-now', big, 1), 'response');
+
+      // This processor's hook runs first and caps the result.
+      await runProcessToolResult(processor, messageList, 'tool-now', big);
+      const cappedPart = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+      expect(cappedPart.providerMetadata?.mastra?.modelOutputCapped).toBe(true);
+
+      // The engine's own commit then runs with a real toModelOutput mapping,
+      // using the cap's own output as `existingProviderMetadata` (the same
+      // shape it would read off the in-flight commit).
+      const providerMetadata = await computeModelOutputProviderMetadata({
+        tool: { toModelOutput: () => 'already mapped' },
+        toolName: 'lookup',
+        toolCallId: 'call-tool-now',
+        result: big,
+        existingProviderMetadata: cappedPart.providerMetadata,
+      });
+
+      expect((providerMetadata?.mastra as any)?.modelOutput).toBe('already mapped');
+      // The stale cap flag must be cleared, not left behind -- otherwise persistence
+      // filtering would mistake this permanent mapping for a transient cap and strip it.
+      expect((providerMetadata?.mastra as any)?.modelOutputCapped).toBeUndefined();
+    });
+
+    it('when a later output processor throws TripWire, no raw oversized result was ever stored', async () => {
+      // Drives the real ProcessorRunner.runProcessToolResult (not the processor's hook
+      // directly), with a second output processor registered after this one that always
+      // aborts via TripWire. If capOversizedToolResult ever promoted the part's state/result
+      // itself (instead of writing only providerMetadata), that promotion would already be
+      // sitting in messageList by the time the TripWire fires -- with no rollback path. This
+      // asserts on the actual stored history, not just on control flow, so it discriminates:
+      // it fails against a token-limiter.ts that promotes state on cap, and passes here.
+      const big = 'word '.repeat(2000);
+      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 50 });
+      const tripwireProcessor = {
+        id: 'tripwire-after-cap',
+        name: 'tripwire-after-cap',
+        processToolResult: async () => {
+          throw new TripWire('blocked after cap');
+        },
+      };
+      const messageList = new MessageList();
+      messageList.add(pendingToolCall('tool-now', 1), 'response');
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors: [processor, tripwireProcessor as any],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      await expect(
+        runner.runProcessToolResult({
+          steps: [],
+          messages: messageList.get.all.db(),
+          messageList,
+          stepNumber: 1,
+          toolName: 'lookup',
+          toolCallId: 'call-tool-now',
+          toolArgs: {},
+          result: big,
+        }),
+      ).rejects.toThrow(TripWire);
+
+      const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+      // The part must not have been promoted to 'result' with the raw oversized value --
+      // that would mean the cap's mutation landed in stored history before the TripWire
+      // checkpoint could veto it, with nothing to roll it back.
+      expect(part.toolInvocation.state).toBe('call');
+      expect(part.toolInvocation.result).toBeUndefined();
+      expect(JSON.stringify(messageList.get.all.db())).not.toContain(big);
+    });
+
+    it('rejects a non-positive maxToolResultTokens', () => {
+      expect(() => new TokenLimiterProcessor({ limit: 100, maxToolResultTokens: 0 })).toThrow(/maxToolResultTokens/);
+    });
+
+    it('falls back to an empty string when the cap is too small for even the bare marker (cap=5)', async () => {
+      // Policy: a cap smaller than the marker text itself cannot produce a truncation
+      // notice that fits its own budget, so capText returns '' rather than emitting a
+      // marker that overflows the configured cap. This is asserted explicitly (not a
+      // silent early-return in the parametrized test below) so the policy stays covered.
+      const big = 'word '.repeat(20000);
+      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 5 });
+      const messageList = new MessageList();
+      messageList.add(toolResult('tool-now', big, 1), 'response');
+
+      await runProcessToolResult(processor, messageList, 'tool-now', big);
+
+      const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+      expect(part.providerMetadata.mastra.modelOutput.value).toBe('');
+    });
+
+    it.each([20, 50, 1234])(
+      'always emits a truncation marker whose reported count matches the actual tokens shown (cap=%i)',
+      async cap => {
+        // 20,000 tokens of content so even the cap=1234 case leaves a "shown" count
+        // >= 1000 -- large enough to hit the toLocaleString comma-formatting path
+        // (e.g. "1,220") in both the shown-count and total-count parts of the marker.
+        const big = 'word '.repeat(20000);
+        const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: cap });
+        const messageList = new MessageList();
+        messageList.add(toolResult('tool-now', big, 1), 'response');
+
+        await runProcessToolResult(processor, messageList, 'tool-now', big);
+
+        const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+        const value: string = part.providerMetadata.mastra.modelOutput.value;
+
+        // Both the shown-count and the total-count are formatted with toLocaleString,
+        // so either can carry thousands separators (e.g. "1,220") once >= 1000.
+        const match = value.match(/\[truncated: showing ([\d,]+) of ([\d,]+) tokens\]$/);
+        expect(match).not.toBeNull();
+        const reportedShown = Number(match![1].replace(/,/g, ''));
+        const slice = value.slice(0, value.length - match![0].length);
+        // The marker's reported count must match the actual token count of the slice it
+        // describes (not the requested cap) -- Tyler's review found cases where the two diverged.
+        expect(estimateTokenCount(slice)).toBe(reportedShown);
+        // The whole capped payload (slice + marker) must always fit inside the requested cap,
+        // for every cap size tested, including caps >= 1000.
+        expect(estimateTokenCount(value)).toBeLessThanOrEqual(cap);
+        // cap=1234 must actually exercise the comma-formatting path -- the marker's
+        // total-count part reports M >= 1000 with a thousands separator.
+        if (cap === 1234) {
+          expect(match![2]).toContain(',');
+        }
+      },
+    );
+
+    it('does not crash on a circular result, and leaves it uncapped', async () => {
+      const circular: Record<string, unknown> = { data: 'x'.repeat(10_000) };
+      circular.self = circular;
+      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 50 });
+      const messageList = new MessageList();
+      messageList.add(toolResult('tool-now', circular, 1), 'response');
+
+      // JSON.stringify throws on circular references; the hook must catch that
+      // and leave the result uncapped rather than crashing the run.
+      await expect(runProcessToolResult(processor, messageList, 'tool-now', circular)).resolves.not.toThrow();
+
+      const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+      expect(part.providerMetadata?.mastra?.modelOutput).toBeUndefined();
+    });
+
+    it('does not crash on a result containing a bigint, and caps it', async () => {
+      const withBigint = { count: 123n, data: 'word '.repeat(2000) };
+      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 50 });
+      const messageList = new MessageList();
+      messageList.add(toolResult('tool-now', withBigint, 1), 'response');
+
+      // JSON.stringify throws on bigint without a replacer; the hook must serialize
+      // bigints safely (e.g. via a replacer) instead of crashing the run.
+      await expect(runProcessToolResult(processor, messageList, 'tool-now', withBigint)).resolves.not.toThrow();
+
+      const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+      const modelOutput = part.providerMetadata?.mastra?.modelOutput;
+      expect(modelOutput?.value).toMatch(/\[truncated: showing \d+ of [\d,]+ tokens\]$/);
+    });
+
+    it('caps regardless of trimMode, including memory-only', async () => {
+      const big = 'word '.repeat(2000);
+      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 50, trimMode: 'memory-only' });
+      const messageList = new MessageList();
+      messageList.add(toolResult('tool-now', big, 1), 'response');
+
+      await runProcessToolResult(processor, messageList, 'tool-now', big);
+
+      const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+      const modelOutput = part.providerMetadata?.mastra?.modelOutput;
+      expect(modelOutput?.value).toMatch(/\[truncated: showing \d+ of [\d,]+ tokens\]$/);
     });
   });
 });

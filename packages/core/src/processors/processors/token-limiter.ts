@@ -1,7 +1,7 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import { estimateTokenCount } from 'tokenx';
-import type { MastraDBMessage } from '../../agent/message-list';
+import type { MastraDBMessage, MastraMessagePart, MessageList } from '../../agent/message-list';
 import { parseDataUri, resolveFilePartMediaTypeAndData } from '../../agent/message-list/prompt/image-utils';
 import { TripWire } from '../../agent/trip-wire';
 import { groupLinkedToolMessages } from '../../memory/load-message-history';
@@ -13,6 +13,7 @@ import type {
   ProcessLLMRequestArgs,
   ProcessLLMRequestResult,
   ProcessOutputStreamArgs,
+  ProcessToolResultArgs,
   Processor,
 } from '../index';
 
@@ -46,6 +47,22 @@ export interface TokenLimiterOptions {
   tokenCounter?: { countMessage(message: MastraDBMessage): number | Promise<number> };
   /** Persist a memory cursor after trimming. */
   onMemoryTrim?: (messages: MastraDBMessage[], requestContext?: ProcessInputArgs['requestContext']) => Promise<void>;
+  /**
+   * Cap eligible tool results to this many tokens before they reach the model, instead of letting
+   * them be trimmed away entirely by ordinary trimming. Media payloads and results the processor can't serialize
+   * (for example circular objects) are left uncapped. The model receives a truncated copy ending in a
+   * `[truncated: showing N of M tokens]` marker, or an empty string if the cap can't fit even the
+   * bare marker. The capped copy is metadata-only: for committed results the stored result is kept
+   * intact. A tool's own `toModelOutput` mapping always takes precedence over this cap. Requires the
+   * processor to also be registered in `outputProcessors`, which is what runs `processToolResult`.
+   * Unset by default (no capping). Works for both durable and non-durable agents.
+   *
+   * This cap only applies to the run where the tool executes. The capped copy is stripped before
+   * persistence, so on later turns the full stored result reloads into the prompt; `processToolResult`
+   * does not re-run against history. Use `trimMode` and the `processLLMRequest` token budget if you
+   * need every turn's prompt bounded, including replayed tool results.
+   */
+  maxToolResultTokens?: number;
 }
 
 /**
@@ -124,6 +141,16 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
   private atMaxRemoveTokens = 0;
   private tokenCounter?: TokenLimiterOptions['tokenCounter'];
   private onMemoryTrim?: TokenLimiterOptions['onMemoryTrim'];
+  private maxToolResultTokens?: number;
+
+  /**
+   * Only present when `maxToolResultTokens` is set. The agentic loop checks
+   * `'processToolResult' in processor` to decide whether a provider-executed
+   * tool result must be routed through the output-processor pipeline before
+   * eager dispatch of the next tool call; an always-present method here would
+   * force that slower path even when this processor has nothing to cap.
+   */
+  declare public processToolResult?: (args: ProcessToolResultArgs) => Promise<void>;
 
   // Token counting constants for input processing
   private static readonly TOKENS_PER_MESSAGE = 3.8;
@@ -153,6 +180,16 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
       this.atMaxRemoveTokens = options.atMaxRemoveTokens ?? this.maxTokens * 0.25;
       this.tokenCounter = options.tokenCounter;
       this.onMemoryTrim = options.onMemoryTrim;
+      this.maxToolResultTokens = options.maxToolResultTokens;
+      if (
+        this.maxToolResultTokens !== undefined &&
+        (!Number.isFinite(this.maxToolResultTokens) || this.maxToolResultTokens <= 0)
+      ) {
+        throw new Error('maxToolResultTokens must be a finite, positive number');
+      }
+      if (this.maxToolResultTokens !== undefined) {
+        this.processToolResult = this.capOversizedToolResult.bind(this);
+      }
       if (
         this.trimMode === 'memory-only' &&
         (!Number.isFinite(this.maxTokens) ||
@@ -273,7 +310,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     // Calculate remaining budget for non-system messages (accounting for conversation overhead)
     const remainingBudget = limit - systemTokens - TokenLimiterProcessor.TOKENS_PER_CONVERSATION;
 
-    // Process non-system messages in reverse order (newest first)
+    // Process messages newest first within budget
     const messagesToKeep: MastraDBMessage[] = [];
     let currentTokens = 0;
 
@@ -284,13 +321,10 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
       const messageTokens = await this.countInputMessageTokens(message);
 
       if (currentTokens + messageTokens <= remainingBudget) {
-        messagesToKeep.unshift(message);
+        messagesToKeep.push(message);
         currentTokens += messageTokens;
-      } else {
-        if (this.trimMode === 'contiguous') {
-          break;
-        }
-        // best-fit → continue (existing behavior)
+      } else if (this.trimMode === 'contiguous') {
+        break;
       }
     }
 
@@ -304,12 +338,115 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
       );
     }
 
-    // Remove messages that don't fit within the token budget
+    // Remove older messages that don't fit within the token budget
     const keepIds = new Set(messagesToKeep.map(m => m.id));
     const idsToRemove = messages.filter(m => !keepIds.has(m.id)).map(m => m.id);
     if (idsToRemove.length > 0) {
       messageList.removeByIds(idsToRemove);
     }
+  }
+
+  /**
+   * Truncate text to a token budget, appending a truncation marker that
+   * reports the exact number of tokens actually shown. Shrinks the visible
+   * slice as needed to keep the marker itself inside `maxTokens`; if `maxTokens`
+   * is too small to fit any content, the result is the marker alone (reporting
+   * 0 tokens shown). If `maxTokens` is too small even for the bare marker, the
+   * result is an empty string; the cap is honored strictly rather than
+   * emitting a marker whose own size exceeds the configured budget.
+   */
+  private capText(text: string, maxTokens: number): string | undefined {
+    const total = this.countTokens(text);
+    if (total <= maxTokens) return undefined;
+
+    let shown = Math.max(0, maxTokens);
+    while (shown > 0) {
+      const slice = sliceByTokensSafe(text, 0, shown);
+      const marker = `\n[truncated: showing ${shown.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} tokens]`;
+      if (this.countTokens(slice) + this.countTokens(marker) <= maxTokens) {
+        return `${slice}${marker}`;
+      }
+      shown -= 1;
+    }
+    const bareMarker = `[truncated: showing 0 of ${total.toLocaleString('en-US')} tokens]`;
+    if (this.countTokens(bareMarker) <= maxTokens) return bareMarker;
+    // maxTokens is too small to fit even the marker alone: honor the cap
+    // strictly rather than emit a marker whose own size exceeds the budget.
+    return '';
+  }
+
+  /**
+   * Give an oversized tool result a truncated model-only copy
+   * (`providerMetadata.mastra.modelOutput`). Media payloads and results that
+   * the processor can't serialize (for example circular objects) are left alone.
+   */
+  private capToolResult(result: unknown, maxTokens: number): string | undefined {
+    const isMediaArray = Array.isArray(result) && result.length > 0 && result.every(isMediaPayload);
+    if (result === undefined || isMediaPayload(result) || isMediaArray) return undefined;
+    let text: string;
+    if (typeof result === 'string') {
+      text = result;
+    } else {
+      try {
+        text = JSON.stringify(result, (_key, value) => (typeof value === 'bigint' ? value.toString() : value));
+      } catch {
+        // Circular references (or other values JSON.stringify can't handle)
+        // shouldn't crash the run; leave the result uncapped.
+        return undefined;
+      }
+      if (text === undefined) return undefined;
+    }
+    return this.capText(text, maxTokens);
+  }
+
+  /**
+   * Cap an oversized tool result before the engine commits the final tool
+   * result (the tool-invocation part already exists in the message list in
+   * an earlier state; this hook returns early via `findToolInvocationPart` if
+   * it doesn't). Runs unconditionally (regardless of `trimMode`) for every
+   * output processor invocation, so register this processor in `outputProcessors`
+   * for capping to take effect (`inputProcessors` alone only trims history).
+   *
+   * This writes `providerMetadata` only — it never sets `toolInvocation.state`
+   * or `.result`. Committing `state: 'result'` here would promote the part to
+   * "done" before the rest of the output-processor chain (and its TripWire
+   * safety checkpoint) has run; a later processor that aborts via TripWire
+   * would then leave this uncapped-but-promoted part behind with no rollback.
+   * Leaving state/result untouched means whichever later step is responsible
+   * for the real commit (redaction hooks, `commitToolResult`, etc.) still owns
+   * that transition, and this hook only ever adds the model-facing cap.
+   *
+   * If the tool has its own `toModelOutput` mapping, that mapping is computed
+   * and committed to the message list *after* this hook runs, and its write
+   * always wins on the `modelOutput` key — this cap never overrides a genuine
+   * tool-level mapping. (See `computeModelOutputProviderMetadata`, which also
+   * clears a stale `modelOutputCapped` flag left behind by this hook in that
+   * case, so the mapper's permanent output doesn't get mistaken for our
+   * transient truncation and stripped before persistence.)
+   */
+  private async capOversizedToolResult(args: ProcessToolResultArgs): Promise<void> {
+    if (this.maxToolResultTokens === undefined) return;
+    const { result, toolCallId, toolName, args: toolArgs, messageList } = args;
+    if (!messageList) return;
+
+    const existing = findToolInvocationPart(messageList, toolCallId);
+    if (!existing) return;
+
+    // Prefer the messageList's current result over `args.result`: `args.result`
+    // is the tool's original raw return value, unchanged for every processor
+    // in the outputProcessors chain regardless of order. If an earlier
+    // processor already rewrote the result (e.g. a redaction hook), reading
+    // from the messageList caps that rewritten value instead of leaking the
+    // pre-redaction content into `modelOutput`.
+    const currentResult = existing.result !== undefined ? existing.result : result;
+    const value = this.capToolResult(currentResult, this.maxToolResultTokens);
+    if (value === undefined) return;
+
+    messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: { ...existing, toolCallId, toolName, args: toolArgs },
+      providerMetadata: { mastra: { modelOutput: { type: 'text', value }, modelOutputCapped: true } },
+    });
   }
 
   /**
@@ -322,6 +459,12 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
    * prompt, so this limiter counts and trims exactly what the model receives.
    * Mutations are transient for the same reason the filtering is — stored
    * messages, memory and UI history keep everything.
+   *
+   * Oversized tool results are capped separately in `processToolResult`
+   * (before the engine commits the final tool result), so trimming here
+   * never needs to special-case the current run: every group is an equal
+   * candidate for removal, newest-first for `contiguous`, best-effort for
+   * `best-fit` (#24110).
    */
   async processLLMRequest({ prompt }: ProcessLLMRequestArgs): Promise<ProcessLLMRequestResult> {
     if (this.trimMode === 'memory-only') return undefined;
@@ -359,7 +502,14 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     // Calculate remaining budget for non-system messages (accounting for conversation overhead)
     const remainingBudget = limit - systemTokens - TokenLimiterProcessor.TOKENS_PER_CONVERSATION;
 
-    // Process non-system message groups in reverse order (newest first)
+    // Trim non-system message groups in reverse order (newest first), so the
+    // current run is tried first. No group is exempt from the fit check: in
+    // 'best-fit' mode (the default) a group that doesn't fit is skipped and
+    // older groups that do fit are still kept, so an oversized current-run
+    // group can still be silently dropped if maxToolResultTokens wasn't set
+    // to cap it in `processToolResult`. In 'contiguous' mode, once a group
+    // doesn't fit the loop stops entirely, so if the current run doesn't fit
+    // nothing does and the TripWire below fires instead of dropping it.
     const keptGroups = new Set<PromptMessage[]>();
     let currentTokens = 0;
 
@@ -562,7 +712,30 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
             } else if (invocation.state === 'result') {
               // Tool result - this will become a separate CoreMessage
               toolResultCount++;
-              if (invocation.result !== undefined) {
+              const modelOutput = (part.providerMetadata?.mastra as Record<string, unknown> | undefined)?.modelOutput;
+              if (modelOutput != null) {
+                // The model receives the mapped/capped copy, not the stored result
+                const mapped = modelOutput as { type?: string; value?: unknown };
+                if (typeof mapped.value === 'string') {
+                  tokenString += mapped.value;
+                } else if (mapped.type === 'content' && Array.isArray(mapped.value)) {
+                  for (const item of mapped.value) {
+                    if (item && typeof item === 'object' && (item as { type?: string }).type === 'text') {
+                      const text = (item as { text?: unknown }).text;
+                      tokenString += typeof text === 'string' ? text : JSON.stringify(item);
+                    } else if (isMediaPayload(item)) {
+                      const { data, ...rest } = item;
+                      mediaTokens += estimateMediaTokens(data, item.mediaType ?? item.mimeType);
+                      tokenString += JSON.stringify(rest);
+                      overhead -= 12;
+                    } else {
+                      tokenString += JSON.stringify(item);
+                    }
+                  }
+                } else {
+                  tokenString += JSON.stringify(modelOutput);
+                }
+              } else if (invocation.result !== undefined) {
                 if (typeof invocation.result === 'string') {
                   tokenString += invocation.result;
                 } else if (isMediaPayload(invocation.result)) {
@@ -751,4 +924,28 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
   getMaxTokens(): number {
     return this.maxTokens;
   }
+}
+
+/**
+ * Walk messageList backwards looking for a tool-invocation part with the given
+ * toolCallId, in *any* state (unlike `readToolResultFromMessageList`, which
+ * only matches `state: 'result'`). Used by `capOversizedToolResult` to carry
+ * the part's current state/result through unchanged so the cap's
+ * `updateToolInvocation` call only ever adds `providerMetadata`.
+ */
+function findToolInvocationPart(
+  messageList: MessageList,
+  toolCallId: string,
+): Extract<MastraMessagePart, { type: 'tool-invocation' }>['toolInvocation'] | undefined {
+  const messages: MastraDBMessage[] = messageList.get.all.db();
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (!msg || msg.role !== 'assistant' || !msg.content?.parts) continue;
+    for (const part of msg.content.parts) {
+      if (part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId) {
+        return part.toolInvocation;
+      }
+    }
+  }
+  return undefined;
 }
