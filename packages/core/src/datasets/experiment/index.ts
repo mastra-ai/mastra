@@ -10,6 +10,8 @@ import { resolveTarget } from './resolve-target';
 import {
   createItemScorerResolver,
   EXPERIMENT_ITEM_SCORER_NOT_FOUND,
+  experimentScoreKey,
+  normalizeExperimentScorers,
   resolveScorers,
   resolveStepScorers,
   runScorersForItem,
@@ -370,33 +372,12 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       );
   }
 
-  // Preserve whether the caller supplied run-level scorers before normalizing.
-  // Empty arrays and empty categorized configs intentionally override lower-precedence sources.
-  const hasRunLevelScorers = scorerInput !== undefined;
-  let stepsConfigInput: Record<string, (MastraScorer<any, any, any, any> | string)[]> | undefined;
-  let flatScorerInput: (MastraScorer<any, any, any, any> | string)[] | undefined;
-  if (scorerInput !== undefined) {
-    if (Array.isArray(scorerInput)) {
-      flatScorerInput = scorerInput;
-    } else {
-      flatScorerInput = [];
-      if ('agent' in scorerInput && scorerInput.agent) flatScorerInput.push(...scorerInput.agent);
-      if ('workflow' in scorerInput && scorerInput.workflow) flatScorerInput.push(...scorerInput.workflow);
-      if ('trajectory' in scorerInput && scorerInput.trajectory) flatScorerInput.push(...scorerInput.trajectory);
-      if ('steps' in scorerInput && scorerInput.steps) stepsConfigInput = scorerInput.steps;
-    }
-  }
-
-  if (flatScorerInput?.length) {
-    const seen = new Set<string>();
-    flatScorerInput = flatScorerInput.filter(entry => {
-      if (typeof entry !== 'string') return true;
-      if (seen.has(entry)) return false;
-      seen.add(entry);
-      return true;
-    });
-  }
-
+  const {
+    hasRunLevelScorers,
+    flatScorers: flatScorerInput,
+    stepScorers: stepsConfigInput,
+    persistedScorerIds,
+  } = normalizeExperimentScorers(scorerInput);
   const runLevelScorers = hasRunLevelScorers ? resolveScorers(mastra, flatScorerInput) : [];
   const runLevelStepScorers = hasRunLevelScorers ? resolveStepScorers(mastra, stepsConfigInput) : {};
   const resolveItemScorers = createItemScorerResolver(mastra);
@@ -423,6 +404,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         datasetVersion,
         targetType: targetType ?? 'agent',
         targetId: targetId ?? 'inline',
+        scorerIds: persistedScorerIds,
         totalItems: items.length,
         agentVersion,
         organizationId: datasetRecord?.organizationId ?? null,
@@ -639,6 +621,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
               execResult.traceId ?? undefined,
               workflowData,
               persistScores,
+              experimentScoreKey(experimentId, item.id, 0),
             );
 
             const stepScores = await runStepScorersForItem(
@@ -652,6 +635,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
               item.id,
               execResult.traceId ?? undefined,
               persistScores,
+              experimentScoreKey(experimentId, item.id, 0),
             );
 
             itemScores = [...flatScores, ...stepScores];

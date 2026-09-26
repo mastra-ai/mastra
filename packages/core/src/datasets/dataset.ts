@@ -31,7 +31,7 @@ import type {
   UpdateExperimentResultInput,
 } from '../storage/types.js';
 import { runExperiment, resolveTarget, executeExperimentItem } from './experiment/index.js';
-import { experimentScoreId } from './experiment/scorer.js';
+import { experimentScoreId, normalizeExperimentScorers } from './experiment/scorer.js';
 import type { ExperimentConfig, StartExperimentConfig, ExperimentSummary } from './experiment/types.js';
 import { deleteExperimentTraces } from './experiment-traces.js';
 
@@ -416,6 +416,7 @@ export class Dataset {
     }
 
     const experimentId = crypto.randomUUID();
+    const { persistedScorerIds } = normalizeExperimentScorers(config.scorers);
 
     if (experimentsStore) {
       await experimentsStore.createExperiment({
@@ -424,6 +425,7 @@ export class Dataset {
         datasetVersion: targetVersion,
         targetType: config.targetType ?? 'agent',
         targetId: config.targetId ?? 'inline',
+        scorerIds: persistedScorerIds,
         totalItems: items.length,
         name: config.name,
         description: config.description,
