@@ -1522,7 +1522,7 @@ export function parseMultiThreadObserverOutput(
   const threads = new Map<string, ObserverResult>();
 
   // Check for degenerate repetition on the whole output
-  if (detectDegenerateRepetition(prepareForDegenerateCheck(output))) {
+  if (detectDegenerateRepetition(sanitizeObservationLines(output))) {
     return { threads, rawOutput: output, degenerate: true };
   }
 
@@ -1712,7 +1712,7 @@ function getStringExtractedValue(values: Record<string, unknown>, slug: string):
 }
 
 export function parseObserverOutput(output: string, extractors: readonly Extractor<any>[] = []): ObserverResult {
-  if (detectDegenerateRepetition(prepareForDegenerateCheck(output))) {
+  if (detectDegenerateRepetition(sanitizeObservationLines(output))) {
     return {
       observations: '',
       rawOutput: output,
@@ -1854,23 +1854,6 @@ export function sanitizeObservationLines(observations: string): string {
 }
 
 /**
- * Normalize observer output before degenerate detection: truncate giant lines
- * (so a single long-but-legitimate line is trimmed rather than rejected) and
- * collapse runs of consecutive identical SHORT lines, which is how faithful
- * summaries of repetitive tool output look (e.g. many "→ ok"). Long lines
- * repeated back to back are left intact so the classic loop is still caught.
- */
-function prepareForDegenerateCheck(output: string): string {
-  const lines = sanitizeObservationLines(output).split('\n');
-  return lines
-    .filter((line, i) => {
-      if (i === 0 || line !== lines[i - 1]) return true;
-      return line.trim().length >= MIN_DUPLICATE_LINE_CHARS;
-    })
-    .join('\n');
-}
-
-/**
  * Error thrown when the Observer keeps producing degenerate output after a retry.
  * Observation strategies treat it as a skipped cycle rather than a fatal failure.
  */
@@ -1892,16 +1875,22 @@ export class DegenerateObserverOutputError extends Error {
 export function detectDegenerateRepetition(text: string): boolean {
   if (!text || text.length < 2000) return false;
 
+  const lines = text.split('\n');
+
   // Strategy 1: Check for repeated long substrings by sampling fixed-size windows.
   // If the same ~200-char window appears many times, it's degenerate.
+  // Short lines are ignored: faithful summaries of repetitive tool output
+  // (e.g. many "→ ok" lines) are legitimately repetitive and would otherwise
+  // produce colliding windows. Loops of substantial lines are still sampled.
+  const windowText = lines.filter(line => line.trim().length >= MIN_DUPLICATE_LINE_CHARS).join('\n');
   const windowSize = 200;
-  const step = Math.max(1, Math.floor(text.length / 50)); // sample ~50 windows
+  const step = Math.max(1, Math.floor(windowText.length / 50)); // sample ~50 windows
   const seen = new Map<string, number>();
   let duplicateWindows = 0;
   let totalWindows = 0;
 
-  for (let i = 0; i + windowSize <= text.length; i += step) {
-    const window = text.slice(i, i + windowSize);
+  for (let i = 0; i + windowSize <= windowText.length; i += step) {
+    const window = windowText.slice(i, i + windowSize);
     totalWindows++;
     const count = (seen.get(window) ?? 0) + 1;
     seen.set(window, count);
@@ -1909,11 +1898,9 @@ export function detectDegenerateRepetition(text: string): boolean {
   }
 
   // If more than 40% of sampled windows are duplicates, it's degenerate
-  if (totalWindows > 5 && duplicateWindows / totalWindows > 0.4) {
+  if (windowText.length >= 2000 && totalWindows > 5 && duplicateWindows / totalWindows > 0.4) {
     return true;
   }
-
-  const lines = text.split('\n');
 
   // Strategy 2: Exact-duplicate line ratio. The window sampling above has an
   // aliasing blind spot: for a repeating block with period P chars, sampled

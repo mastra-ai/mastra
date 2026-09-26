@@ -305,10 +305,14 @@ export function parseReflectorOutput(
   sourceObservations?: string,
   extractors: readonly Extractor<any>[] = [],
 ): ReflectorResult {
-  // Check for degenerate repetition before parsing. The reflector checks raw
-  // output, so it still rejects a 50k+ char line (degenerate enumeration)
-  // rather than persisting a truncated reflection.
-  if (detectDegenerateRepetition(output) || output.split('\n').some(line => line.length > 50_000)) {
+  // Check for degenerate repetition before parsing. Repetition is judged on
+  // line-length-sanitized output (same as the observer), but the reflector
+  // still rejects a raw 50k+ char line (degenerate enumeration) rather than
+  // persisting a truncated reflection.
+  if (
+    output.split('\n').some(line => line.length > 50_000) ||
+    detectDegenerateRepetition(sanitizeObservationLines(output))
+  ) {
     return {
       observations: '',
       degenerate: true,
