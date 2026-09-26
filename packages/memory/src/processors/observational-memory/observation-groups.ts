@@ -58,6 +58,8 @@ function scanObservationGroupTags(observations: string): ObservationGroupScan {
   // Known closing tag at or after the cursor. Reusing it for successive openings stops malformed
   // input from re-walking the tail of the string once per opening.
   let closeFloor = 0;
+  // Next line-started opening at or after the cursor, cached for the same reason.
+  let nestedFloor = -1;
 
   while (cursor < observations.length) {
     const start = observations.indexOf(OBSERVATION_GROUP_OPEN, cursor);
@@ -87,8 +89,13 @@ function scanObservationGroupTags(observations: string): ObservationGroupScan {
 
     // Only a line-started opening can be a nested group: the producer always writes tags on their
     // own lines, so anything else is observation content that happens to mention the tag name.
-    const nestedStart = observations.indexOf(OBSERVATION_GROUP_OPEN, openEnd + 1);
-    if (nestedStart !== -1 && nestedStart < closeStart && isLineStart(observations, nestedStart)) {
+    // Skip inline mentions so a quoted tag cannot hide a later line-started group.
+    if (nestedFloor <= openEnd) {
+      const lineOpen = observations.indexOf(`\n${OBSERVATION_GROUP_OPEN}`, openEnd);
+      nestedFloor = lineOpen === -1 ? observations.length : lineOpen + 1;
+    }
+    const nestedStart = nestedFloor;
+    if (nestedStart < closeStart) {
       incompleteOpenings.push({ start, end: openEnd + 1 });
       closeFloor = closeStart;
       cursor = nestedStart;

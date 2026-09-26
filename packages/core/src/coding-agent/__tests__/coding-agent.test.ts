@@ -1,3 +1,5 @@
+import { APICallError } from '@internal/ai-sdk-v5';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { Agent } from '../../agent/agent';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '../../agent/goal/objective';
@@ -146,6 +148,116 @@ describe('createCodingAgent', () => {
           signal?.tagName === 'system-reminder' && signal.attributes?.type === 'anthropic-prefill-processor-retry',
       ),
     ).toBe(true);
+  });
+
+  it('recovers a cyber refusal instead of blindly replaying the refused request', async () => {
+    const agent = createCodingAgent(baseConfig());
+    const messageList = new MessageList({ threadId: 'test-thread' });
+
+    // @ai-sdk/openai maps a `cyber_policy` stream failure before any output to a
+    // retryable 500, which the blind retry would otherwise claim first.
+    const frame = {
+      type: 'response.failed',
+      sequence_number: 2,
+      response: {
+        error: { code: 'cyber_policy', message: 'This content was flagged for possible cybersecurity risk.' },
+      },
+    };
+    const error = new APICallError({
+      message: frame.response.error.message,
+      url: 'https://api.openai.com/v1/responses',
+      requestBodyValues: {},
+      statusCode: 500,
+      responseBody: JSON.stringify(frame),
+      data: frame,
+    });
+    expect(error.isRetryable).toBe(true);
+
+    const runner = new ProcessorRunner({
+      inputProcessors: [],
+      outputProcessors: [],
+      errorProcessors: await agent.listErrorProcessors(),
+      logger: new ConsoleLogger({ level: 'error' }),
+      agentName: 'test-coding-agent',
+    });
+
+    const result = await runner.runProcessAPIError({
+      error,
+      messages: messageList.get.all.db(),
+      messageList,
+      stepNumber: 0,
+      steps: [],
+      retryCount: 0,
+    });
+
+    const reminders = messageList.get.all
+      .db()
+      .filter(message => message.role === 'signal')
+      .map(message => message.content.parts);
+
+    expect(result).toEqual({ retry: true });
+    expect(reminders).toEqual([[expect.objectContaining({ type: 'text', text: 'continue' })]]);
+  });
+
+  it('retries an Anthropic cyber stop with factory defaults', async () => {
+    const prompts: any[] = [];
+    const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+    const mockModel = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        prompts.push(prompt);
+        const content =
+          prompts.length === 1
+            ? [
+                {
+                  type: 'finish' as const,
+                  finishReason: 'content-filter' as const,
+                  usage,
+                  providerMetadata: {
+                    anthropic: { stopDetails: { type: 'refusal', category: 'cyber' } },
+                  },
+                },
+              ]
+            : [
+                { type: 'text-start' as const, id: 't' },
+                { type: 'text-delta' as const, id: 't', delta: 'Recovered.' },
+                { type: 'text-end' as const, id: 't' },
+                { type: 'finish' as const, finishReason: 'stop' as const, usage },
+              ];
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start' as const, warnings: [] },
+            { type: 'response-metadata' as const, id: `id-${prompts.length}`, modelId: 'mock', timestamp: new Date(0) },
+            ...content,
+          ]),
+        };
+      },
+    });
+
+    const result = await createCodingAgent(baseConfig({ model: [{ model: mockModel, maxRetries: 0 }] })).stream(
+      'Do it',
+      {
+        maxSteps: 5,
+      },
+    );
+    for await (const _chunk of result.fullStream) {
+      // Drain so the run completes.
+    }
+
+    expect(prompts).toHaveLength(2);
+    expect(await result.finishReason).toBe('stop');
+  });
+
+  it('adds the cyber refusal handler to the output lane for Anthropic stops unless output processors are provided', async () => {
+    const defaults = await createCodingAgent(baseConfig()).listConfiguredOutputProcessors();
+    expect(defaults.map(processor => processor.id)).toEqual(['cyber-refusal-handler']);
+
+    const custom = { id: 'custom-output', processOutputStep: ({ messages }: any) => messages };
+    const provided = await createCodingAgent({
+      ...baseConfig(),
+      outputProcessors: [custom],
+    }).listConfiguredOutputProcessors();
+    expect(provided).toEqual([custom]);
   });
 
   it('builds a default local workspace when none is provided', async () => {

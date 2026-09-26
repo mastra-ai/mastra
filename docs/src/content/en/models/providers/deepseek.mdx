@@ -121,20 +121,38 @@ const response = await agent.generate("Hello!", {
 <PropertiesTable
   content={[
     {
-        "name": "thinking",
-        "type": "{ type?: \"adaptive\" | \"enabled\" | \"disabled\" | undefined; } | undefined",
-        "description": "",
+        "name": "logprobs",
+        "type": "boolean | undefined",
+        "description": "Whether to return log probabilities for generated tokens.",
         "isOptional": true
     },
     {
-        "name": "reasoningEffort",
-        "type": "\"low\" | \"medium\" | \"high\" | \"xhigh\" | \"max\" | undefined",
-        "description": "",
+        "name": "topLogprobs",
+        "type": "number | undefined",
+        "description": "Number of most likely tokens to return at each token position.\n\nSetting this option automatically enables `logprobs`.",
+        "isOptional": true
+    },
+    {
+        "name": "userId",
+        "type": "string | undefined",
+        "description": "An opaque identifier for the end user. DeepSeek uses this identifier for\ncontent-safety tracing and request isolation.\n\nMust contain only ASCII letters, numbers, underscores, and hyphens, and\nmust be at most 512 characters long.",
         "isOptional": true
     },
     {
         "name": "strictJsonSchema",
         "type": "boolean | undefined",
+        "description": "Whether to use strict JSON schema validation for structured outputs.\nOnly applies when the serving endpoint supports JSON schema response\nformats (e.g. Azure). Defaults to `true`.",
+        "isOptional": true
+    },
+    {
+        "name": "thinking",
+        "type": "{ type?: \"enabled\" | \"disabled\" | \"adaptive\" | undefined; } | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "reasoningEffort",
+        "type": "\"low\" | \"high\" | \"max\" | \"medium\" | \"xhigh\" | undefined",
         "description": "",
         "isOptional": true
     }

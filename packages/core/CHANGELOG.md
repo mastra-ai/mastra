@@ -1,5 +1,92 @@
 # @mastra/core
 
+## 1.72.0-alpha.3
+
+### Minor Changes
+
+- Added `maxRetries` and `failurePolicy` options to the observational memory `observation` and `reflection` settings. When `failurePolicy` is `'continue'`, an Observer or Reflector model failure no longer ends the agent turn. ([#24863](https://github.com/mastra-ai/mastra/pull/24863))
+
+  ```ts
+  import { Memory } from '@mastra/memory';
+
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        observation: { maxRetries: 2, failurePolicy: 'continue' },
+        reflection: { maxRetries: 2, failurePolicy: 'continue' },
+      },
+    },
+  });
+  ```
+
+- Fence background task execution with a persisted, expiring ownership lease. ([#24841](https://github.com/mastra-ai/mastra/pull/24841))
+
+  Several managers can now share one storage without running the same task twice. A running task records which worker owns it and when that ownership lapses, recovery only reclaims a task whose lease has expired, and a worker that lost ownership can no longer save a result — so a stale run cannot overwrite the current owner's outcome.
+
+  Configure the lease length with `leaseDurationMs`:
+
+  ```ts
+  const mastra = new Mastra({
+    backgroundTasks: { enabled: true, leaseDurationMs: 30_000 },
+  });
+  ```
+
+  `recoverStaleTasksOnStart` keeps its default of `true`, which is now safe because recovery is lease-fenced.
+
+  Storage writes can additionally be made conditional on the current owner and lease:
+
+  ```ts
+  await storage.updateTask(
+    taskId,
+    { status: 'completed', result },
+    { expectedStatus: 'running', expectedOwnerId: 'worker-1' },
+  );
+  ```
+
+  The new write conditions are only enforced by storage adapters that understand them. On an older storage package the manager still runs, but the conditions are ignored and writes fall back to unfenced behaviour — so upgrade the storage package alongside `@mastra/core` to get the guarantee.
+
+- Added `CyberRefusalHandler`, a processor that retries once when an OpenAI or Anthropic cybersecurity safeguard refuses ordinary work partway through an agent run. These refusals are often false positives, and nudging the model to continue usually gets past them. A second refusal on the same step is treated as genuine. ([#25172](https://github.com/mastra-ai/mastra/pull/25172))
+
+  - **OpenAI** refusals (`cyber_policy`, "This content was flagged for possible cybersecurity risk") fail the model call. Register the handler in `errorProcessors`, before `StreamErrorRetryProcessor`.
+  - **Anthropic** refusals stop the response with a `cyber` classifier refusal (`content-filter` finish reason). Register the handler in `outputProcessors`; the refused step is rolled back before the retry.
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { CyberRefusalHandler } from '@mastra/core/processors';
+
+  const agent = new Agent({
+    id: 'coder',
+    name: 'Coder',
+    instructions: 'You are a coding agent',
+    model: 'openai/gpt-5.6-sol',
+    errorProcessors: [new CyberRefusalHandler()],
+    outputProcessors: [new CyberRefusalHandler()],
+    maxProcessorRetries: 3,
+  });
+  ```
+
+  Coding agents created with `createCodingAgent` include it in both lanes by default, along with a `maxProcessorRetries` budget of 3 — output-step retries have no implicit default, so without a budget the Anthropic retry would be treated as an abort.
+
+### Patch Changes
+
+- Fixed Channels tool approval cards so only the user who triggered the tool call can approve or decline it. In shared channels, clicks from other users are now ignored and logged instead of resuming the run. ([#25165](https://github.com/mastra-ai/mastra/pull/25165))
+
+- Fixed Gemini 3 rejecting the next request with "Corrupted tool call context" when native Google Search (`webSearchTool`) and another tool (such as a skill) were called in the same step. The provider-executed flag from the tool call is now kept when its result arrives without one, so the search call and its result stay together in the conversation history. ([#24888](https://github.com/mastra-ai/mastra/pull/24888))
+
+- Fixed follow-up DeepSeek requests failing in thinking mode after switching providers or using tools. ([#25189](https://github.com/mastra-ai/mastra/pull/25189))
+
+- Fixed tool approvals for Inngest durable agents ([#25154](https://github.com/mastra-ai/mastra/issues/25154)). ([#25167](https://github.com/mastra-ai/mastra/pull/25167))
+
+  - Runs created with `createInngestAgent()` that wait on tool approval now appear in `GET /api/agents/:agentId/suspended-runs` and `agent.listSuspendedRuns()`.
+  - `approve-tool-call` and `decline-tool-call` now accept these runs. They no longer return "Access denied: durable run belongs to a different resource".
+  - Durable runs waiting on an approval-gated tool now report `requiresApproval: true` and the tool's `args`.
+
+- Processor retry feedback no longer invalidates the provider prompt cache. When a processor calls `abort(reason, { retry: true })`, the reason used to be added as a system message ahead of the conversation, so the retry and later steps missed the cache for the whole history. The reason is now added as a system reminder after the conversation, so each retry only adds to the previous request. ([#25171](https://github.com/mastra-ai/mastra/pull/25171))
+
+  The reason is sent verbatim as `<system-reminder>{reason}</system-reminder>`. It is no longer wrapped in the `[Processor Feedback] Your previous response was not accepted: … Please try again with the feedback in mind.` template, so write the reason as the instruction you want the model to follow. The reminder is kept in thread history as a system-reminder signal, which default memory recall hides, like other processor reminders.
+
+- Added the assistant message id to tool-input events so consumers can attribute streamed tool arguments to the model step that produced them. ([#25196](https://github.com/mastra-ai/mastra/pull/25196))
+
 ## 1.72.0-alpha.2
 
 ### Minor Changes

@@ -4,7 +4,7 @@ import type { CoreMessage } from '@mastra/core/llm';
 
 import { isSystemReminderMessage } from '../../system-reminders';
 import { stripEphemeralAnchorIds } from './anchor-ids';
-import { isTemporalGapMarker } from './date-utils';
+import { isTemporalGapMarker, resolveTimeZone } from './date-utils';
 import type { Extractor } from './extractor';
 import {
   buildExtractorOutputSections,
@@ -37,6 +37,8 @@ type ObserverFormatOptions = {
   maxPartLength?: number;
   maxToolResultTokens?: number;
   attachmentFilter?: ObserverAttachmentFilter;
+  /** Zone message dates and times are written in: the record's `observedTimezone`. Defaults to the process zone. */
+  timeZone?: string;
 };
 
 /**
@@ -659,17 +661,22 @@ const OBSERVER_IMAGE_FILE_EXTENSIONS = new Set([
   'avif',
 ]);
 
-function formatObserverDate(createdAt?: Date): string {
-  return createdAt
-    ? `${createdAt.toLocaleDateString('en-US', {
-        month: 'short',
-      })} ${createdAt.getDate()} ${createdAt.getFullYear()}`
-    : '';
+function formatObserverDate(createdAt: Date | undefined, timeZone: string | undefined): string {
+  if (!createdAt) return '';
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }).formatToParts(createdAt);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find(p => p.type === type)?.value;
+  return `${part('month')} ${part('day')} ${part('year')}`;
 }
 
-function formatObserverTime(createdAt?: Date): string {
+function formatObserverTime(createdAt: Date | undefined, timeZone: string | undefined): string {
   return createdAt
     ? createdAt.toLocaleTimeString('en-US', {
+        timeZone,
         hour: 'numeric',
         minute: '2-digit',
         hour12: true,
@@ -1092,6 +1099,7 @@ function formatObserverMessage(
   const maxLen = options?.maxPartLength;
   const maxToolResultTokens = options?.maxToolResultTokens ?? DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS;
   const attachmentFilter = options?.attachmentFilter;
+  const timeZone = resolveTimeZone(options?.timeZone);
   const role = getObserverMessageLabel(msg);
   const attachments: ObserverInputAttachmentPart[] = [];
   const messageCreatedAt = normalizeObserverCreatedAt(msg.createdAt);
@@ -1107,8 +1115,8 @@ function formatObserverMessage(
 
     const normalizedCreatedAt = normalizeObserverCreatedAt(createdAt) ?? messageCreatedAt;
     lines.push({
-      date: formatObserverDate(normalizedCreatedAt),
-      time: formatObserverTime(normalizedCreatedAt),
+      date: formatObserverDate(normalizedCreatedAt, timeZone),
+      time: formatObserverTime(normalizedCreatedAt, timeZone),
       title,
       body,
     });
