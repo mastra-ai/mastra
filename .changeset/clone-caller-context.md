@@ -11,4 +11,7 @@ Pass the caller's context when cloning, switching, or creating a thread:
 await session.thread.clone({ sourceThreadId, requestContext });
 await session.thread.switch({ threadId, requestContext });
 await session.thread.create({ title, requestContext });
+await session.thread.delete({ threadId, requestContext });
 ```
+
+A session's thread subscription now remembers which caller opened it (by the message author set on the request context). If a different caller uses the same thread, the session resubscribes with that caller's memory when idle and throws while a run is in flight. Deleting a thread also removes it from the caller's resolved memory, so a cloned thread's messages are not left behind.

@@ -249,8 +249,11 @@ export interface ThreadDataStore {
   hasStorage(): boolean;
   /** Persist a new or updated thread row. No-op when storage is unavailable. */
   saveThread(input: { thread: AgentControllerThread }): Promise<void>;
-  /** Delete a thread row by id. No-op when storage is unavailable. */
-  deleteThread(input: { threadId: string }): Promise<void>;
+  /**
+   * Delete a thread by id from controller storage and, when memory is resolved
+   * per caller, from that caller's memory too. No-op when storage is unavailable.
+   */
+  deleteThread(input: { threadId: string; requestContext?: RequestContext }): Promise<void>;
   /** Clone a thread (and its messages) via the host's memory, returning the new thread. */
   cloneThread(input: {
     sourceThreadId: string;
@@ -594,14 +597,24 @@ export class SessionThread {
     const session = this.#owner;
     const resourceId = this.#getResourceId();
     const key = SessionStream.keyFor({ agent, resourceId, threadId });
+    const callerId = readMessageAuthor(requestContext)?.id;
     if (session.stream.matches({ key })) {
-      session.ensureFollowUpBinding(agent, resourceId, threadId);
-      return;
+      const boundCallerId = session.stream.callerId();
+      // The subscription resolved memory with the opening caller's context. A
+      // different identified caller must not read or write through it: rebind
+      // when idle, refuse while a run is in flight (rebinding tears it down).
+      if (callerId === undefined || callerId === boundCallerId) {
+        session.ensureFollowUpBinding(agent, resourceId, threadId);
+        return;
+      }
+      if (session.stream.isActive() || session.run.isRunning()) {
+        throw new Error(`Thread ${threadId} is running for another caller; retry once the current run has finished`);
+      }
     }
 
     this.cleanupSubscription();
     const subscription = await session.machinery.subscribeToThread({ agent, resourceId, threadId, requestContext });
-    session.stream.attach({ subscription, agent, key });
+    session.stream.attach({ subscription, agent, key, callerId });
     session.ensureFollowUpBinding(agent, resourceId, threadId);
     void session.processSubscribedThreadStream(subscription);
   }
@@ -886,7 +899,7 @@ export class SessionThread {
   }
 
   /** Delete a thread; when it's the active thread, clear the binding and tear down the run. */
-  async delete({ threadId }: { threadId: string }): Promise<void> {
+  async delete({ threadId, requestContext }: { threadId: string; requestContext?: RequestContext }): Promise<void> {
     const session = this.#owner;
     const store = this.#store;
     if (!store?.hasStorage()) return;
@@ -896,7 +909,7 @@ export class SessionThread {
 
     const isDeletingCurrentThread = this.#threadId === threadId;
 
-    await store.deleteThread({ threadId });
+    await store.deleteThread({ threadId, requestContext });
 
     if (isDeletingCurrentThread) {
       try {
@@ -1064,6 +1077,8 @@ export class SessionStream {
   #agent: Agent | null = null;
   /** Dedup key (`agentId:resourceId:threadId`) for the open subscription, or null. */
   #key: string | null = null;
+  /** Message-author id of the caller whose context opened the subscription, if any. */
+  #callerId: string | undefined = undefined;
   readonly #teardownWaiters = new Set<() => void>();
 
   #notifyTeardown(): void {
@@ -1103,14 +1118,22 @@ export class SessionStream {
     subscription,
     agent,
     key,
+    callerId,
   }: {
     subscription: AgentThreadSubscription<any, true>;
     agent?: Agent;
     key: string;
+    callerId?: string;
   }): void {
     this.#subscription = subscription;
     this.#agent = agent ?? null;
     this.#key = key;
+    this.#callerId = callerId;
+  }
+
+  /** Message-author id bound to the open subscription, if its opener was identified. */
+  callerId(): string | undefined {
+    return this.#callerId;
   }
 
   /** Agent that owns `subscription`, when it is the live subscription. */
@@ -1155,6 +1178,7 @@ export class SessionStream {
     this.#subscription = null;
     this.#agent = null;
     this.#key = null;
+    this.#callerId = undefined;
     this.#notifyTeardown();
   }
 
@@ -1169,6 +1193,7 @@ export class SessionStream {
     this.#subscription = null;
     this.#agent = null;
     this.#key = null;
+    this.#callerId = undefined;
     this.#notifyTeardown();
   }
 }

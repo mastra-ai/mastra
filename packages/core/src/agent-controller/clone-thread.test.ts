@@ -174,6 +174,13 @@ describe('AgentController cloneThread', () => {
     expect(await session.thread.getById({ threadId: 'c' })).toMatchObject({ id: 'c' });
     await session.thread.create({ requestContext });
     await expect(session.thread.switch({ threadId: 'c', requestContext })).resolves.not.toThrow();
+
+    // Deleting the clone removes it from the caller's store too, so its
+    // messages are not orphaned there.
+    await session.thread.delete({ threadId: 'c', requestContext });
+    expect(await memoryStore!.getThreadById({ threadId: 'c' })).toBeNull();
+    expect(await callerStore!.getThreadById({ threadId: 'c' })).toBeNull();
+    expect((await callerStore!.listMessages({ threadId: 'c' })).messages).toEqual([]);
   });
 
   it('uses the raw memory storage clone when configured memory is absent', async () => {

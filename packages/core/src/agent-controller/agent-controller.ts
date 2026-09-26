@@ -1026,7 +1026,7 @@ export class AgentController<TState = {}> {
       deleteMetadata: ({ threadId, key }) => this.removeThreadMetadataValue({ threadId, key }),
       hasStorage: () => !!this.#resolveStorage(),
       saveThread: ({ thread }) => this.persistThreadRow(thread),
-      deleteThread: ({ threadId }) => this.deleteThreadRow(threadId),
+      deleteThread: ({ threadId, requestContext }) => this.deleteThreadRow({ session, threadId, requestContext }),
       cloneThread: ({ sourceThreadId, resourceId, title, metadata, requestContext }) =>
         this.cloneThreadRow({ session, sourceThreadId, resourceId, title, metadata, requestContext }),
       acquireLock: threadId => this.config.threadLock?.acquire(threadId) ?? Promise.resolve(),
@@ -1051,9 +1051,28 @@ export class AgentController<TState = {}> {
     });
   }
 
-  /** Delete a thread row from memory storage (gateway primitive for the Session thread domain). */
-  private async deleteThreadRow(threadId: string): Promise<void> {
+  /**
+   * Delete a thread from controller storage and, when memory is resolved per
+   * caller, from the caller's memory as well so a clone's messages are not
+   * left behind there (gateway primitive for the Session thread domain).
+   */
+  private async deleteThreadRow({
+    session,
+    threadId,
+    requestContext,
+  }: {
+    session: Session<TState>;
+    threadId: string;
+    requestContext?: RequestContext;
+  }): Promise<void> {
     if (!this.#resolveStorage()) return;
+    // Delete through memory first: Memory.deleteThread reads the row to find
+    // the resourceId it needs for observational-memory cleanup, and if the
+    // controller row goes first a failure here leaves nothing to retry against.
+    if (this.config.memory) {
+      const memory = await this.resolveMemory(session, requestContext);
+      await memory.deleteThread(threadId);
+    }
     const memoryStorage = await this.getMemoryStorage();
     await memoryStorage.deleteThread({ threadId });
   }
