@@ -1,5 +1,184 @@
 # @mastra/core
 
+## 1.72.0-alpha.3
+
+### Minor Changes
+
+- Added `maxRetries` and `failurePolicy` options to the observational memory `observation` and `reflection` settings. When `failurePolicy` is `'continue'`, an Observer or Reflector model failure no longer ends the agent turn. ([#24863](https://github.com/mastra-ai/mastra/pull/24863))
+
+  ```ts
+  import { Memory } from '@mastra/memory';
+
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        observation: { maxRetries: 2, failurePolicy: 'continue' },
+        reflection: { maxRetries: 2, failurePolicy: 'continue' },
+      },
+    },
+  });
+  ```
+
+- Fence background task execution with a persisted, expiring ownership lease. ([#24841](https://github.com/mastra-ai/mastra/pull/24841))
+
+  Several managers can now share one storage without running the same task twice. A running task records which worker owns it and when that ownership lapses, recovery only reclaims a task whose lease has expired, and a worker that lost ownership can no longer save a result — so a stale run cannot overwrite the current owner's outcome.
+
+  Configure the lease length with `leaseDurationMs`:
+
+  ```ts
+  const mastra = new Mastra({
+    backgroundTasks: { enabled: true, leaseDurationMs: 30_000 },
+  });
+  ```
+
+  `recoverStaleTasksOnStart` keeps its default of `true`, which is now safe because recovery is lease-fenced.
+
+  Storage writes can additionally be made conditional on the current owner and lease:
+
+  ```ts
+  await storage.updateTask(
+    taskId,
+    { status: 'completed', result },
+    { expectedStatus: 'running', expectedOwnerId: 'worker-1' },
+  );
+  ```
+
+  The new write conditions are only enforced by storage adapters that understand them. On an older storage package the manager still runs, but the conditions are ignored and writes fall back to unfenced behaviour — so upgrade the storage package alongside `@mastra/core` to get the guarantee.
+
+- Added `CyberRefusalHandler`, a processor that retries once when an OpenAI or Anthropic cybersecurity safeguard refuses ordinary work partway through an agent run. These refusals are often false positives, and nudging the model to continue usually gets past them. A second refusal on the same step is treated as genuine. ([#25172](https://github.com/mastra-ai/mastra/pull/25172))
+
+  - **OpenAI** refusals (`cyber_policy`, "This content was flagged for possible cybersecurity risk") fail the model call. Register the handler in `errorProcessors`, before `StreamErrorRetryProcessor`.
+  - **Anthropic** refusals stop the response with a `cyber` classifier refusal (`content-filter` finish reason). Register the handler in `outputProcessors`; the refused step is rolled back before the retry.
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { CyberRefusalHandler } from '@mastra/core/processors';
+
+  const agent = new Agent({
+    id: 'coder',
+    name: 'Coder',
+    instructions: 'You are a coding agent',
+    model: 'openai/gpt-5.6-sol',
+    errorProcessors: [new CyberRefusalHandler()],
+    outputProcessors: [new CyberRefusalHandler()],
+    maxProcessorRetries: 3,
+  });
+  ```
+
+  Coding agents created with `createCodingAgent` include it in both lanes by default, along with a `maxProcessorRetries` budget of 3 — output-step retries have no implicit default, so without a budget the Anthropic retry would be treated as an abort.
+
+### Patch Changes
+
+- Fixed Channels tool approval cards so only the user who triggered the tool call can approve or decline it. In shared channels, clicks from other users are now ignored and logged instead of resuming the run. ([#25165](https://github.com/mastra-ai/mastra/pull/25165))
+
+- Fixed Gemini 3 rejecting the next request with "Corrupted tool call context" when native Google Search (`webSearchTool`) and another tool (such as a skill) were called in the same step. The provider-executed flag from the tool call is now kept when its result arrives without one, so the search call and its result stay together in the conversation history. ([#24888](https://github.com/mastra-ai/mastra/pull/24888))
+
+- Fixed follow-up DeepSeek requests failing in thinking mode after switching providers or using tools. ([#25189](https://github.com/mastra-ai/mastra/pull/25189))
+
+- Fixed tool approvals for Inngest durable agents ([#25154](https://github.com/mastra-ai/mastra/issues/25154)). ([#25167](https://github.com/mastra-ai/mastra/pull/25167))
+
+  - Runs created with `createInngestAgent()` that wait on tool approval now appear in `GET /api/agents/:agentId/suspended-runs` and `agent.listSuspendedRuns()`.
+  - `approve-tool-call` and `decline-tool-call` now accept these runs. They no longer return "Access denied: durable run belongs to a different resource".
+  - Durable runs waiting on an approval-gated tool now report `requiresApproval: true` and the tool's `args`.
+
+- Processor retry feedback no longer invalidates the provider prompt cache. When a processor calls `abort(reason, { retry: true })`, the reason used to be added as a system message ahead of the conversation, so the retry and later steps missed the cache for the whole history. The reason is now added as a system reminder after the conversation, so each retry only adds to the previous request. ([#25171](https://github.com/mastra-ai/mastra/pull/25171))
+
+  The reason is sent verbatim as `<system-reminder>{reason}</system-reminder>`. It is no longer wrapped in the `[Processor Feedback] Your previous response was not accepted: … Please try again with the feedback in mind.` template, so write the reason as the instruction you want the model to follow. The reminder is kept in thread history as a system-reminder signal, which default memory recall hides, like other processor reminders.
+
+- Added the assistant message id to tool-input events so consumers can attribute streamed tool arguments to the model step that produced them. ([#25196](https://github.com/mastra-ai/mastra/pull/25196))
+
+## 1.72.0-alpha.2
+
+### Minor Changes
+
+- Added support for resolving channel providers dynamically. The `channels` option on the `Mastra` constructor now also accepts a resolver function, so channel connections added on the Mastra platform show up on a running server without a redeploy. ([#25149](https://github.com/mastra-ai/mastra/pull/25149))
+
+  ```typescript
+  import { Mastra } from '@mastra/core/mastra';
+  import { channels } from '@mastra/connect';
+
+  export const mastra = new Mastra({
+    channels: await channels({ projectId: 'my-project' }),
+  });
+  ```
+
+  A resolver exposes its webhook and OAuth routes up front through `getRoutes()`, and the providers themselves are resolved at runtime. Use the new `mastra.resolveChannels()` method to get the current provider map; `getChannelProviders()` keeps returning the latest resolved snapshot. Static `channels` records keep working unchanged.
+
+- Added an opt-in `summary` flag to `listWorkflowRuns`. When set, storage adapters may return only `{ status, timestamp }` for each run snapshot instead of the full snapshot. ([#25135](https://github.com/mastra-ai/mastra/pull/25135))
+
+  ```ts
+  const { runs } = await workflow.listWorkflowRuns({ perPage: 20, page: 0, summary: true });
+  ```
+
+- Storage adapters that support the new `trace-aggregate` capability can return aggregated trace results through `ObservabilityStorage.aggregateTraces()`, which executes a `TrustedTraceAggregatePlan` and returns a `TraceAggregateResponse`. The capability is declared alongside `trace-query`. Adapters that do not support it reject the call with a `MastraError` whose id is `OBSERVABILITY_STORAGE_AGGREGATE_TRACES_NOT_IMPLEMENTED`. ([#25124](https://github.com/mastra-ai/mastra/pull/25124))
+
+  ```ts
+  import { parseTraceAggregateRequest, planTraceAggregate } from '@mastra/core/storage';
+
+  const plan = planTraceAggregate(
+    parseTraceAggregateRequest({
+      timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+      measures: ['count'],
+    }),
+  );
+
+  const response = await storage.aggregateTraces(plan);
+  ```
+
+### Patch Changes
+
+- Fixed saved dynamic workflows losing `.map()` entries that use `initData: true`. These mappings now keep reading from the workflow's initial input after the workflow is saved and loaded again, the same as they do in memory. Workflows saved before this fix need to be saved again. ([#25152](https://github.com/mastra-ai/mastra/pull/25152))
+
+- Stored agents backed by FilesystemStore now retain durable execution settings. ([#25123](https://github.com/mastra-ai/mastra/pull/25123))
+
+- Documented two `aggregateTraces()` result rules: null dimension values sort last in both sort directions, and a time range with no matching traces returns `rows: []` rather than a single zero-valued row. ([#25016](https://github.com/mastra-ai/mastra/pull/25016))
+
+- Fixed suspended tool calls losing their suspension details when stored messages are converted to AI SDK v6 or v7 UI messages. `toAISdkMessages(messages, { version: 'v6' })` and `{ version: 'v7' }` now include the `data-tool-call-suspended` part (with the suspend payload and resume schema), matching the v5 output, so suspended tools stay resumable after a page reload. ([#25134](https://github.com/mastra-ai/mastra/pull/25134))
+
+## 1.72.0-alpha.1
+
+### Minor Changes
+
+- Added a `requireDescription` option to the workspace `execute_command` tool. When enabled, the tool asks the model for a short plain-language `description` of each command, listed before `command` in the tool schema, so UIs can show it instead of the raw command. The option is off by default and the tool schema is unchanged when it is off. ([#25032](https://github.com/mastra-ai/mastra/pull/25032))
+
+  ```ts
+  const workspace = new Workspace({
+    sandbox,
+    tools: {
+      [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: { requireDescription: true },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed cost estimates for Anthropic 1-hour prompt-cache writes. The 5-minute and 1-hour cache-write token counts are now read from the provider's raw usage, so 1-hour writes are priced at their real rate instead of the cheaper 5-minute rate. ([#25011](https://github.com/mastra-ai/mastra/issues/25011)) ([#25089](https://github.com/mastra-ai/mastra/pull/25089))
+
+- Fixed `DurableAgent.recover()` failing with `Cannot read properties of undefined (reading 'messages')` or `(reading 'length')` when a default-engine run was killed while a tool was running or between steps. Running checkpoints now keep the conversation state a restart reads back, while still trimming older history to keep storage small. ([#25107](https://github.com/mastra-ai/mastra/pull/25107))
+
+- Fixed `restart()` and automatic recovery re-running a workflow step that had already finished. If the process stopped right after a step completed but before the next one started, restarting the run executed that step again, and for loops, foreach, parallel blocks, and branches that meant repeating every item, arm, or iteration. Restart now continues from the next step, and a run whose last step had already finished completes with that step's saved output instead of crashing. Agent-loop checkpoints now keep the just-finished step's conversation so the next step still receives it after a restart. Fixes [#24615](https://github.com/mastra-ai/mastra/issues/24615). ([#25114](https://github.com/mastra-ai/mastra/pull/25114))
+
+  `DurableAgent.recover()` no longer hangs when the run stopped after the agent had already sent its final answer. The recovered stream now finishes with that saved answer, and `onFinish` runs once.
+
+- Fixed structured output on durable agents using the evented engine. Schemas passed as `structuredOutput.schema` now stay available on later model calls and after a run is recovered. Workflow options that cannot be saved now fail with an error naming the field. ([#25075](https://github.com/mastra-ai/mastra/pull/25075))
+
+- Fixed tool search loading every `search_tools` hit when `autoLoad` is `false`. Only `load_tool` now activates tools, so the tool list stays stable and the prompt cache is preserved across steps. ([#25076](https://github.com/mastra-ai/mastra/pull/25076))
+
+- Fixed durable and evented agents to reject invalid model timeout settings before starting a run. ([#25079](https://github.com/mastra-ai/mastra/pull/25079))
+
+- Added a `getBasePath` option to `AgentsMDInjector`. When set, relative tool paths resolve against that directory instead of `process.cwd()`, and `AGENTS.md`/`CLAUDE.md` files outside it are never injected. ([#25071](https://github.com/mastra-ai/mastra/pull/25071))
+
+  ```ts
+  new AgentsMDInjector({
+    getBasePath: () => '/path/to/checkout',
+  });
+  ```
+
+- Fixed DurableAgent streams to hide response metadata chunks and attribute finish chunks to the agent. ([#25078](https://github.com/mastra-ai/mastra/pull/25078))
+
+- Updated dependencies [[`3913a33`](https://github.com/mastra-ai/mastra/commit/3913a33fd5b13dc226b1ed6253c9357cb392dd04), [`08a0aea`](https://github.com/mastra-ai/mastra/commit/08a0aea2f2af12276e333c62aaf368a9240ff68f)]:
+  - @mastra/schema-compat@1.3.12-alpha.0
+
 ## 1.72.0-alpha.0
 
 ### Minor Changes

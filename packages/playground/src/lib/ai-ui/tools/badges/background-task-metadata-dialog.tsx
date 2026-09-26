@@ -9,10 +9,10 @@ import {
   DialogBody,
 } from '@mastra/playground-ui/components/Dialog';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useTimeDiff } from '@mastra/playground-ui/hooks/use-time-diff';
 import { toSigFigs } from '@mastra/playground-ui/utils/number';
 import { Loader2Icon, Share2 } from 'lucide-react';
 import { useState } from 'react';
-import { useTimeDiff } from '../../hooks/use-time-diff';
 import { useGetBackgroundTaskById, useBackgroundTaskStream } from '@/hooks';
 
 interface BackgroundTaskMetadataProps {

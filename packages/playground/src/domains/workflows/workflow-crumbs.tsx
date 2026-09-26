@@ -1,12 +1,13 @@
 import { CrumbSkeleton } from '@mastra/playground-ui/components/Breadcrumb';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { WorkflowCombobox } from '@mastra/playground-ui/domains/workflows/components/workflow-combobox';
+import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
 import { useParams } from 'react-router';
-import { WorkflowCombobox } from './components/workflow-combobox';
-import { useWorkflows } from './hooks/use-workflows';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 export function WorkflowCrumb() {
   const { workflowId } = useParams<{ workflowId: string }>();
-  const { data: workflows, isLoading } = useWorkflows();
+  const { data: workflows, isLoading } = useWorkflows({ requestContext: usePlaygroundStore().requestContext });
   if (!workflowId) return null;
   if (isLoading) return <CrumbSkeleton />;
 
@@ -15,10 +16,18 @@ export function WorkflowCrumb() {
 
 export function WorkflowSwitcherAction() {
   const { workflowId } = useParams<{ workflowId: string }>();
+  const { requestContext } = usePlaygroundStore();
   if (!workflowId) return null;
 
   return (
-    <WorkflowCombobox value={workflowId} variant="ghost" size="icon-sm" align="end" aria-label="Switch workflow" />
+    <WorkflowCombobox
+      value={workflowId}
+      variant="ghost"
+      size="icon-sm"
+      align="end"
+      aria-label="Switch workflow"
+      requestContext={requestContext}
+    />
   );
 }
 

@@ -632,6 +632,44 @@ export const createRestartExecutionParams = ({
 };
 
 /**
+ * Top-level index the default engine should restart from.
+ *
+ * The engine checkpoints an entry when it finishes but only moves the pointer
+ * when the next entry starts. A checkpoint with nothing running whose
+ * pointed-at entry saved only successful results was written in that gap, so
+ * restart resumes at the next entry instead of replaying a finished one (#24615).
+ * Any other checkpoint resumes at the entry it points to.
+ *
+ * Skips at most one entry, so a step id reused later in the graph is never
+ * mistaken for finished.
+ */
+export function getRestartStartIndex(steps: StepFlowEntry[], restart: RestartExecutionParams): number {
+  const startIdx = restart.activePaths[0]!;
+  const entry = steps[startIdx];
+  if (!entry || restart.activePaths.length !== 1 || Object.keys(restart.activeStepsPath ?? {}).length > 0) {
+    return startIdx;
+  }
+
+  const results = getStepIds(entry).map(id => restart.stepResults[id]);
+  return isEntryFinished(entry.type, results) ? startIdx + 1 : startIdx;
+}
+
+/**
+ * Whether a top-level entry saved only successful results, given its results
+ * in `getStepIds` order. Agent-loop snapshot pruning makes the same decision to
+ * keep the output a restart that skips the entry reads.
+ */
+export function isEntryFinished(
+  entryType: string,
+  results: ReadonlyArray<{ status: string } | null | undefined>,
+): boolean {
+  return entryType === 'conditional'
+    ? // Arms that were not selected have no result.
+      results.every(result => !result || result.status === 'success')
+    : results.length > 0 && results.every(result => result?.status === 'success');
+}
+
+/**
  * Re-hydrates serialized errors in step results back into proper Error instances.
  * This is useful when errors have been serialized through an event system (e.g., evented engine, Inngest)
  * and need to be converted back to Error instances with their custom properties preserved.

@@ -827,9 +827,28 @@ export type AgentControllerEvent =
           denied?: boolean;
           providerMetadata?: Record<string, unknown>;
         }
-      | { type: 'tool_input_start'; toolCallId: string; toolName: string; title?: string }
-      | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: unknown; toolName?: string }
-      | { type: 'tool_input_end'; toolCallId: string }
+      | {
+          type: 'tool_input_start';
+          toolCallId: string;
+          toolName: string;
+          title?: string;
+          /**
+           * Assistant message the tool call belongs to, so consumers can attribute
+           * streamed arguments to the model step that produced them. Tool-call chunks
+           * can precede this step's `message_start`, so the id is the only way to tell
+           * one step's arguments from the next step's.
+           */
+          messageId?: string;
+        }
+      | {
+          type: 'tool_input_delta';
+          toolCallId: string;
+          argsTextDelta: unknown;
+          toolName?: string;
+          /** Assistant message the tool call belongs to; see `tool_input_start.messageId`. */
+          messageId?: string;
+        }
+      | { type: 'tool_input_end'; toolCallId: string; messageId?: string }
       | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
       | { type: 'command_exit'; toolCallId: string; exitCode: number; success: boolean }
     ))

@@ -1007,6 +1007,7 @@ export type ErrorProcessorOrWorkflow<TTripwireMetadata = unknown> = ErrorProcess
 export { isProcessorWorkflow } from './is-processor-workflow';
 
 export * from './processors';
+export { CyberRefusalHandler } from './cyber-refusal-handler';
 export { PrefillErrorHandler } from './prefill-error-handler';
 export {
   ProviderHistoryCompat,

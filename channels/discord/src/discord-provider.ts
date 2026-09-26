@@ -22,6 +22,7 @@ import {
   registerGuildCommands,
   validateApp,
 } from './discord-client';
+import type { DiscordApplication } from './discord-client';
 import { DEFAULT_COMMANDS, hashCommands, normalizeCommands } from './commands';
 import { DiscordInstallStore, PLATFORM, toInstallationInfo } from './install-store';
 import { DEFAULT_INVITE_PERMISSIONS, DEFAULT_INVITE_SCOPES, DISCORD_API_BASE_URL } from './types';
@@ -115,8 +116,9 @@ export class DiscordProvider implements ChannelProvider {
   constructor(config: DiscordProviderConfig = {}) {
     this.#config = config;
     // The app is "configured" as soon as credentials are resolvable (config/env),
-    // even before the first connect persists them.
-    this.#configured = this.#suppliedAppConfig() != null;
+    // even before the first connect persists them. A bot token alone counts —
+    // the rest is backfilled from `GET /applications/@me`.
+    this.#configured = this.#hasSuppliedCredentials();
   }
 
   /**
@@ -150,7 +152,7 @@ export class DiscordProvider implements ChannelProvider {
       // The store-derived half of #configured belongs to the old instance; only
       // credentials supplied via config/env survive a re-attach. Without this,
       // getInfo() can report a stale isConfigured before initialize() re-runs.
-      this.#configured = this.#suppliedAppConfig() != null;
+      this.#configured = this.#hasSuppliedCredentials();
     }
     this.#mastra = mastra;
   }
@@ -229,7 +231,7 @@ export class DiscordProvider implements ChannelProvider {
   async #doInitialize(): Promise<void> {
     const store = await this.#getStore();
     const active = (await store.list()).filter(i => i.status === 'active');
-    const hasApp = (await store.getAppConfig()) != null || this.#suppliedAppConfig() != null;
+    const hasApp = (await store.getAppConfig()) != null || this.#hasSuppliedCredentials();
     this.#configured = hasApp || active.length > 0;
     for (const installation of active) {
       try {
@@ -243,7 +245,10 @@ export class DiscordProvider implements ChannelProvider {
   /**
    * Provide or clear the app credentials at runtime. An object merges/overrides
    * `botToken` / `publicKey` / `applicationId` (persisted on the next `connect`);
-   * `null` clears the stored app config.
+   * `null` clears the stored app config. Supplying a **different bot token**
+   * replaces the app config instead of merging: the token identifies the
+   * Discord application, so any `publicKey`/`applicationId` from the previous
+   * application must not survive the switch.
    */
   async configure(credentials: Partial<DiscordAppConfig> | null): Promise<void> {
     if (credentials === null) {
@@ -258,7 +263,7 @@ export class DiscordProvider implements ChannelProvider {
     }
     const previous = this.#config.app;
     this.#config = { ...this.#config, app: { ...previous, ...credentials } };
-    this.#configured = this.#suppliedAppConfig() != null || this.#configured;
+    this.#configured = this.#hasSuppliedCredentials() || this.#configured;
 
     // An adapter captures botToken / publicKey / applicationId at construction,
     // so cached ones keep verifying Ed25519 against the *old* public key and
@@ -268,13 +273,25 @@ export class DiscordProvider implements ChannelProvider {
     );
     if (!changed) return;
 
-    // Persist the rotation. Every credential consumer — #resolveAppConfig,
-    // #activateInstallation, #handleWebhook — reads the *stored* app config, so
-    // updating only #config.app would leave adapters rebuilding from the old
-    // credentials and Ed25519 still verifying against the superseded key.
     const store = await this.#getStore();
     const stored = await store.getAppConfig();
-    if (stored) {
+
+    // A different bot token means a *different Discord application*. Merging
+    // would carry the previous application's publicKey/applicationId into the
+    // new config, and its Ed25519 key would keep verifying inbound webhooks —
+    // letting the old application's owner forge interactions against the new
+    // one. Replace: keep only what this call supplied and drop the stored
+    // config so #resolveAppConfig re-derives identity from the new token.
+    const tokenSupersedes = (base: Partial<DiscordAppConfig> | null | undefined) =>
+      credentials.botToken !== undefined && base?.botToken !== undefined && base.botToken !== credentials.botToken;
+    if (tokenSupersedes(previous) || tokenSupersedes(stored)) {
+      this.#config = { ...this.#config, app: { ...credentials } };
+      await store.deleteAppConfig();
+    } else if (stored) {
+      // Persist the rotation. Every credential consumer — #resolveAppConfig,
+      // #activateInstallation, #handleWebhook — reads the *stored* app config,
+      // so updating only #config.app would leave adapters rebuilding from the
+      // old credentials and Ed25519 still verifying against the superseded key.
       const merged = { ...stored, ...credentials };
       if (merged.botToken && merged.publicKey && merged.applicationId) {
         await store.saveAppConfig(merged);
@@ -310,10 +327,11 @@ export class DiscordProvider implements ChannelProvider {
       );
     }
 
-    const { app, persisted } = await this.#resolveAppConfig(store);
+    const { app, persisted, identity: resolvedIdentity } = await this.#resolveAppConfig(store);
     // Validate the token before persisting supplied credentials — an invalid
-    // token must leave no app config and no install behind.
-    const identity = await validateApp(app.botToken, this.#apiBaseUrl());
+    // token must leave no app config and no install behind. Skip the second
+    // call when #resolveAppConfig already validated it while backfilling.
+    const identity = resolvedIdentity ?? (await validateApp(app.botToken, this.#apiBaseUrl()));
     if (!persisted) await store.saveAppConfig(app);
 
     const installationId = existing?.id ?? randomUUID();
@@ -655,31 +673,79 @@ export class DiscordProvider implements ChannelProvider {
     }
   }
 
+  /**
+   * App credentials from provider config or `DISCORD_*` env.
+   *
+   * A config-supplied bot token defines the application identity, so
+   * `publicKey` / `applicationId` never fall back to the environment in that
+   * case — stale `DISCORD_PUBLIC_KEY` / `DISCORD_APPLICATION_ID` from a
+   * *different* application would otherwise complete the config and keep that
+   * application's Ed25519 key trusted for webhook verification (bypassing the
+   * `GET /applications/@me` backfill). Env fallback for those fields applies
+   * only when the bot token itself comes from the environment.
+   */
+  #suppliedPartialAppConfig(): Partial<DiscordAppConfig> {
+    const a = this.#config.app ?? {};
+    if (a.botToken != null) {
+      return { botToken: a.botToken, publicKey: a.publicKey, applicationId: a.applicationId };
+    }
+    return {
+      botToken: process.env.DISCORD_BOT_TOKEN,
+      publicKey: a.publicKey ?? process.env.DISCORD_PUBLIC_KEY,
+      applicationId: a.applicationId ?? process.env.DISCORD_APPLICATION_ID,
+    };
+  }
+
   /** App credentials from provider config or `DISCORD_*` env, or `null` if incomplete. */
   #suppliedAppConfig(): DiscordAppConfig | null {
-    const a = this.#config.app ?? {};
-    const botToken = a.botToken ?? process.env.DISCORD_BOT_TOKEN;
-    const publicKey = a.publicKey ?? process.env.DISCORD_PUBLIC_KEY;
-    const applicationId = a.applicationId ?? process.env.DISCORD_APPLICATION_ID;
+    const { botToken, publicKey, applicationId } = this.#suppliedPartialAppConfig();
     if (botToken && publicKey && applicationId) return { botToken, publicKey, applicationId };
     return null;
   }
 
   /**
-   * Resolve the app config: prefer the stored one, else the supplied credentials
-   * (config / `DISCORD_*` env). `persisted` says whether it's already in storage,
-   * so the caller can persist supplied credentials **once**, after validation.
-   * Throws if neither is available.
+   * Whether credentials are resolvable without storage. A bot token alone is
+   * enough: `applicationId` and `publicKey` are backfilled from
+   * `GET /applications/@me` by {@link #resolveAppConfig}.
    */
-  async #resolveAppConfig(store: DiscordInstallStore): Promise<{ app: DiscordAppConfig; persisted: boolean }> {
+  #hasSuppliedCredentials(): boolean {
+    return this.#suppliedPartialAppConfig().botToken != null;
+  }
+
+  /**
+   * Resolve the app config: prefer the stored one, else the supplied credentials
+   * (config / `DISCORD_*` env). A supplied `botToken` without `publicKey` /
+   * `applicationId` is completed from `GET /applications/@me` — the application
+   * object carries both the id and the Ed25519 `verify_key`. `persisted` says
+   * whether it's already in storage, so the caller can persist supplied
+   * credentials **once**, after validation. `identity` is set when the token was
+   * already validated against `/applications/@me` here, so callers can skip a
+   * second validation call. Throws if no credentials are available.
+   */
+  async #resolveAppConfig(
+    store: DiscordInstallStore,
+  ): Promise<{ app: DiscordAppConfig; persisted: boolean; identity?: DiscordApplication }> {
     const stored = await store.getAppConfig();
     if (stored) return { app: stored, persisted: true };
     const supplied = this.#suppliedAppConfig();
     if (supplied) return { app: supplied, persisted: false };
+    const partial = this.#suppliedPartialAppConfig();
+    if (partial.botToken) {
+      const identity = await validateApp(partial.botToken, this.#apiBaseUrl());
+      const publicKey = partial.publicKey ?? identity.verify_key;
+      if (!publicKey) {
+        throw new Error('Discord /applications/@me returned no verify_key; provide publicKey explicitly.');
+      }
+      return {
+        app: { botToken: partial.botToken, publicKey, applicationId: partial.applicationId ?? identity.id },
+        persisted: false,
+        identity,
+      };
+    }
     throw new Error(
-      'Discord app is not configured. Provide botToken, publicKey, and applicationId via the provider `app` option, ' +
-        'the DISCORD_BOT_TOKEN / DISCORD_PUBLIC_KEY / DISCORD_APPLICATION_ID env vars, or configure() — ' +
-        'Discord applications are created in the Developer Portal, not programmatically.',
+      'Discord app is not configured. Provide at least a botToken via the provider `app` option, ' +
+        'the DISCORD_BOT_TOKEN env var, or configure() — publicKey and applicationId are resolved from Discord ' +
+        'automatically when omitted. Discord applications are created in the Developer Portal, not programmatically.',
     );
   }
 

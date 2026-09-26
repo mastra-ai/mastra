@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
+import { ObservabilityStorage } from './base';
 import { parseTraceAggregateRequest, TRACE_AGGREGATE_DEFAULT_LIMIT } from './trace-aggregate';
 import {
   countTraceAggregateBuckets,
@@ -448,5 +450,18 @@ describe('planTraceAggregate', () => {
       ['groupBy', 0],
       ['orderBy', 'field'],
     ]);
+  });
+});
+
+describe('trace-aggregate storage capability', () => {
+  it('fails closed for stores that do not implement trace aggregation', async () => {
+    const storage = new ObservabilityStorage();
+    const rejection = storage.aggregateTraces(plan());
+    await expect(rejection).rejects.toBeInstanceOf(MastraError);
+    await expect(rejection).rejects.toMatchObject({
+      id: 'OBSERVABILITY_STORAGE_AGGREGATE_TRACES_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+    });
   });
 });

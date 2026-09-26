@@ -40,6 +40,12 @@ export interface DiscordApplication {
   id: string;
   /** The application's name. */
   name: string;
+  /**
+   * The Ed25519 public key used to verify interaction signatures. Discord
+   * includes it on every application object, so a bot token alone is enough to
+   * resolve the interaction-verification key.
+   */
+  verify_key: string;
 }
 
 /** Minimal Discord REST error envelope. */

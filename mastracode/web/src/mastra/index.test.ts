@@ -61,6 +61,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
       'MASTRA_GITLAB_CONNECTION_ID',
       'LINEAR_CLIENT_ID',
       'LINEAR_CLIENT_SECRET',
+      'INCIDENT_IO_API_KEY',
       'SLACK_APP_SIGNING_SECRET',
       'MASTRACODE_DISPATCH_MAX_IN_FLIGHT',
     ]) {
@@ -427,6 +428,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
         'JIRA_BASE_URL',
         'JIRA_EMAIL',
         'JIRA_API_TOKEN',
+        'INCIDENT_IO_API_KEY',
         'SLACK_APP_SIGNING_SECRET',
       ]) {
         vi.stubEnv(name, '');
@@ -586,6 +588,35 @@ describe('platform entry (src/mastra/index.ts)', () => {
         'JiraIntegration',
       );
     });
+
+    it('registers the direct incident.io integration when the API key is configured', { timeout: 60_000 }, async () => {
+      vi.resetModules();
+      vi.stubEnv('INCIDENT_IO_API_KEY', 'incidentio-key');
+      await import('./index.js');
+      expect(
+        factoryConfigs[0]?.integrations?.find(integration => integration.id === 'incidentio')?.constructor.name,
+      ).toBe('IncidentioIntegration');
+    });
+
+    it('does not register incident.io without an API key or Platform credentials', { timeout: 60_000 }, async () => {
+      vi.resetModules();
+      await import('./index.js');
+      expect(factoryConfigs[0]?.integrations?.find(integration => integration.id === 'incidentio')).toBeUndefined();
+    });
+
+    it(
+      'prefers the direct incident.io key when Platform credentials are also configured',
+      { timeout: 60_000 },
+      async () => {
+        vi.resetModules();
+        vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+        vi.stubEnv('INCIDENT_IO_API_KEY', 'incidentio-key');
+        await import('./index.js');
+        expect(
+          factoryConfigs[0]?.integrations?.find(integration => integration.id === 'incidentio')?.constructor.name,
+        ).toBe('IncidentioIntegration');
+      },
+    );
 
     it('skips Slack channel wiring when the Slack app env is unset', { timeout: 60_000 }, async () => {
       vi.resetModules();

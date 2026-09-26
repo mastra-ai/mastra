@@ -374,7 +374,16 @@ export class MongoDBSkillsStorage extends SkillsStorage {
 
   async list(args?: StorageListSkillsInput): Promise<StorageListSkillsOutput> {
     try {
-      const { page = 0, perPage: perPageInput, orderBy, authorId, visibility, metadata } = args || {};
+      const {
+        page = 0,
+        perPage: perPageInput,
+        orderBy,
+        authorId,
+        visibility,
+        metadata,
+        status,
+        entityIds,
+      } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
 
       if (page < 0) {
@@ -392,10 +401,20 @@ export class MongoDBSkillsStorage extends SkillsStorage {
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
+      if (entityIds && entityIds.length === 0) {
+        return { skills: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
       const collection = await this.getCollection(TABLE_SKILLS);
 
       // Build filter
       const filter: Record<string, any> = {};
+      if (entityIds && entityIds.length > 0) {
+        filter.id = { $in: entityIds };
+      }
+      if (status) {
+        filter.status = status;
+      }
       if (authorId) {
         filter.authorId = authorId;
       }

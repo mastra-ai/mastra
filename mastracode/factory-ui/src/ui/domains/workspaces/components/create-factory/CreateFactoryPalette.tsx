@@ -4,7 +4,7 @@ import { CommandPaletteInput } from '@mastra/playground-ui/components/CommandPal
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { CREATE_FACTORY_STEPS, type CreateFactoryFlowStep } from '../../hooks/useCreateFactoryFlow';
@@ -17,6 +17,8 @@ export interface CreateFactoryPaletteProps {
   searchable?: boolean;
   value: string;
   onValueChange: (value: string) => void;
+  /** Back navigation to the previous step. Omitted on the first step. */
+  onBack?: () => void;
   /** Steps that can be left out show it as chrome, so it never scrolls away with the rows. */
   onSkip?: () => void;
   children: ReactNode;
@@ -35,6 +37,7 @@ export function CreateFactoryPalette({
   searchable = true,
   value,
   onValueChange,
+  onBack,
   onSkip,
   children,
 }: CreateFactoryPaletteProps) {
@@ -48,6 +51,18 @@ export function CreateFactoryPalette({
       className="flex max-h-[34rem] w-full flex-col gap-2 overflow-visible bg-transparent"
     >
       <div className="flex shrink-0 items-center gap-3">
+        {onBack && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onMouseDown={event => event.preventDefault()}
+            onClick={onBack}
+            aria-label="Go back to previous step"
+          >
+            <ArrowLeft aria-hidden="true" />
+            Back
+          </Button>
+        )}
         <Txt
           key={step}
           as="p"

@@ -147,6 +147,8 @@ First, compose the **re-review handoff** — don't send it to the conversation y
 
 End the handoff with `Review runtime: <model>, reasoning setting: <reasoning>.`, copying both values verbatim from the current `factory-phase` signal.
 
+**The head must not have moved.** Immediately before publishing, run `gh pr view <number> --json headRefOid --jq .headRefOid` and compare it with the SHA your verification ran on (`git rev-parse HEAD`). A push can land while you verify or wait on bots, and a verdict on a superseded head misleads the author. If the head moved, do not publish: refresh the checkout to the new head, review the new commits and re-run the verification they affect, revise the handoff, then check again. Name the reviewed head SHA in the handoff.
+
 Next, publish the re-review on the PR itself — this is part of every pass, not something to wait to be asked for. Write the handoff body to `.artifacts/factory-rereview/pr-<number>.md` and submit a PR review matching the verdict:
 
 - approve → `gh pr review <number> --approve --body-file <file>`
