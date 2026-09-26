@@ -11,7 +11,12 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import { BufferingCoordinator } from '../buffering-coordinator';
 import { ObservationalMemory } from '../observational-memory';
-import { detectDegenerateRepetition, parseMultiThreadObserverOutput, parseObserverOutput } from '../observer-agent';
+import {
+  describeDegenerateOutput,
+  detectDegenerateRepetition,
+  parseMultiThreadObserverOutput,
+  parseObserverOutput,
+} from '../observer-agent';
 import { parseReflectorOutput } from '../reflector-agent';
 
 beforeEach(() => {
@@ -319,6 +324,7 @@ describe('detectDegenerateRepetition short-line loops', () => {
   it('flags a short line repeated past one maximum-size observation line', () => {
     const loop = Array.from({ length: 1000 }, () => '  * -> pnpm build → ok').join('\n');
     expect(detectDegenerateRepetition(loop)).toBe(true);
+    expect(describeDegenerateOutput(loop)).toContain('shortLineLoop');
   });
 
   it('still accepts a bounded run of the same short line', () => {

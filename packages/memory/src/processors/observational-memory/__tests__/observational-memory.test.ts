@@ -4135,6 +4135,21 @@ User asked about </current-task> parsing and how it works
       expect(description).not.toContain('\n');
     });
 
+    it('names the strategy that fired, matching the detector', () => {
+      const windowLoop =
+        'getLanguageModel().doGenerate(options: LanguageModelV2CallOptions): PromiseLike<LanguageModelV2GenerateResult>, '.repeat(
+          100,
+        );
+      expect(detectDegenerateRepetition(windowLoop)).toBe(true);
+      expect(describeDegenerateOutput(windowLoop)).toMatch(/strategy=window/);
+
+      const shortToolLog = Array.from({ length: 200 }, (_, i) =>
+        i % 2 ? '  * -> pnpm test → ok' : '  * -> pnpm build → ok',
+      ).join('\n');
+      expect(detectDegenerateRepetition(shortToolLog)).toBe(false);
+      expect(describeDegenerateOutput(shortToolLog)).toContain('strategy=none');
+    });
+
     it('bounds snippets to the requested size', () => {
       const text = 'x'.repeat(10_000);
       const description = describeDegenerateOutput(text, 100);
