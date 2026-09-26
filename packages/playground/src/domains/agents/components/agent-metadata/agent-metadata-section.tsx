@@ -5,20 +5,20 @@ import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { InfoIcon } from 'lucide-react';
 
-const sectionAccentClasses = {
-  amber: '[--section-accent:var(--warning-fg)]',
-  blue: '[--section-accent:var(--info-fg)]',
-  cyan: '[--section-accent:var(--badge-cyan-fg)]',
-  green: '[--section-accent:var(--success-fg)]',
-  orange: '[--section-accent:var(--badge-orange-fg)]',
-  pink: '[--section-accent:var(--badge-pink-fg)]',
-  purple: '[--section-accent:var(--badge-purple-fg)]',
+const sectionAccentText = {
+  amber: 'text-warning-fg',
+  blue: 'text-info-fg',
+  cyan: 'text-badge-cyan-fg',
+  green: 'text-success-fg',
+  orange: 'text-badge-orange-fg',
+  pink: 'text-badge-pink-fg',
+  purple: 'text-badge-purple-fg',
 };
 
 export interface AgentMetadataSectionProps {
   title: string;
   count?: number;
-  accent: keyof typeof sectionAccentClasses;
+  accent: keyof typeof sectionAccentText;
   icon?: React.ReactNode;
   actions?: React.ReactNode;
   children: React.ReactNode;
@@ -40,22 +40,17 @@ export const AgentMetadataSection = ({
 }: AgentMetadataSectionProps) => {
   const { Link } = useLinkComponent();
   return (
-    <section
-      className={cn(
-        'group/metadata grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3 p-4',
-        sectionAccentClasses[accent],
-      )}
-    >
+    <section className="group/metadata grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3 p-4">
       <header className="col-span-2 flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 group-has-[[data-slot=metadata-empty]]/metadata:col-span-1">
         <div className="flex min-w-0 items-center gap-2">
           <Txt as="h3" variant="label" tone="ink" className="flex min-w-0 items-center gap-2">
             {icon && (
-              <Icon aria-hidden="true" className="shrink-0 text-(--section-accent)">
+              <Icon aria-hidden="true" className={cn('shrink-0', sectionAccentText[accent])}>
                 {icon}
               </Icon>
             )}
             <span className="flex min-w-0 items-center gap-1.5">
-              <span className="text-(--section-accent)">{title}</span>
+              <span className={sectionAccentText[accent]}>{title}</span>
               {count !== undefined && count > 0 && (
                 <Txt as="span" variant="caption" tone="muted" className="tabular-nums">
                   {count}
