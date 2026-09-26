@@ -48,19 +48,19 @@ export interface TokenLimiterOptions {
   /** Persist a memory cursor after trimming. */
   onMemoryTrim?: (messages: MastraDBMessage[], requestContext?: ProcessInputArgs['requestContext']) => Promise<void>;
   /**
-   * Cap every tool result to this many tokens before it reaches the model, instead of letting
-   * it be trimmed away entirely by ordinary trimming. The stored result is kept intact; the model
-   * receives a truncated copy ending in a `[truncated: showing N of M tokens]` marker. A tool's own
-   * `toModelOutput` mapping always takes precedence over this cap. Requires the processor to also be
-   * registered in `outputProcessors` — that's what runs `processToolResult`. Unset by default (no capping).
-   * Works for both durable and non-durable agents.
+   * Cap eligible tool results to this many tokens before they reach the model, instead of letting
+   * them be trimmed away entirely by ordinary trimming. Media payloads and results that can't be
+   * serialized to JSON are left uncapped. The model receives a truncated copy ending in a
+   * `[truncated: showing N of M tokens]` marker, or an empty string if the cap can't fit even the
+   * bare marker. The capped copy is metadata-only: for committed results the stored result is kept
+   * intact. A tool's own `toModelOutput` mapping always takes precedence over this cap. Requires the
+   * processor to also be registered in `outputProcessors`, which is what runs `processToolResult`.
+   * Unset by default (no capping). Works for both durable and non-durable agents.
    *
-   * This cap only applies to the run where the tool executes. `processToolResult` runs once, at
-   * execution time; MessageHistory strips the truncated `modelOutput` before persisting so it never
-   * freezes a stale cap setting into stored history. On later turns the full, uncapped stored result
-   * reloads into the prompt — `processToolResult` does not re-run against history. Use `trimMode` /
-   * the `processLLMRequest` token budget if you need every turn's prompt bounded, including replayed
-   * tool results.
+   * This cap only applies to the run where the tool executes. The capped copy is stripped before
+   * persistence, so on later turns the full stored result reloads into the prompt; `processToolResult`
+   * does not re-run against history. Use `trimMode` and the `processLLMRequest` token budget if you
+   * need every turn's prompt bounded, including replayed tool results.
    */
   maxToolResultTokens?: number;
 }
@@ -352,7 +352,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
    * slice as needed to keep the marker itself inside `maxTokens`; if `maxTokens`
    * is too small to fit any content, the result is the marker alone (reporting
    * 0 tokens shown). If `maxTokens` is too small even for the bare marker, the
-   * result is an empty string -- the cap is honored strictly rather than
+   * result is an empty string; the cap is honored strictly rather than
    * emitting a marker whose own size exceeds the configured budget.
    */
   private capText(text: string, maxTokens: number): string | undefined {
