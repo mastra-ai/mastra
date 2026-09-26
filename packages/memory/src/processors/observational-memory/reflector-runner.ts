@@ -39,7 +39,7 @@ import {
 import { getObservableMessages } from './message-utils';
 import type { ModelByInputTokens } from './model-by-input-tokens';
 import { didProviderChange } from './model-context';
-import { describeDegenerateOutput } from './observer-agent';
+import { DegenerateReflectorOutputError, describeDegenerateOutput } from './observer-agent';
 import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-registry';
 import {
   buildReflectorSystemPrompt,
@@ -597,9 +597,8 @@ export class ReflectorRunner {
     // when every ladder attempt was degenerate (parseReflectorOutput discards
     // degenerate text) or the model returned nothing — both are failures.
     if (observations.trim().length > 0 && parsed.observations.trim().length === 0) {
-      throw new Error(
-        `Reflector produced empty output after ${attemptNumber} attempt(s)${parsed.degenerate ? ' (degenerate repetition)' : ''} — refusing to commit an empty reflection over ${originalTokens} observation tokens`,
-      );
+      const message = `Reflector produced empty output after ${attemptNumber} attempt(s)${parsed.degenerate ? ' (degenerate repetition)' : ''} — refusing to commit an empty reflection over ${originalTokens} observation tokens`;
+      throw parsed.degenerate ? new DegenerateReflectorOutputError(message) : new Error(message);
     }
 
     const structuredExtraction = await extractStructuredValues({

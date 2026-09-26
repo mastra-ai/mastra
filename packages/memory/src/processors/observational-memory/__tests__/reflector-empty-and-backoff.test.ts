@@ -174,7 +174,24 @@ describe('reflector empty-output guard', () => {
     await expect(runner.call(SOURCE_OBSERVATIONS)).rejects.toThrow(/empty/i);
   });
 
-  it('keeps degenerate sync reflection failures fatal without committing a generation', async () => {
+  it("keeps degenerate sync reflection failures fatal under failurePolicy 'abort' without committing a generation", async () => {
+    const scripted = createScriptedModel([DEGENERATE_OUTPUT]);
+    const { runner, createReflectionGeneration } = createReflectorRunner(scripted.model, {
+      reflectionConfig: { failurePolicy: 'abort' },
+    });
+
+    await expect(
+      runner.maybeReflect({
+        record: makeRecord(),
+        observationTokens: SOURCE_OBSERVATIONS.length,
+        threadId: 'thread-1',
+      }),
+    ).rejects.toThrow(/empty|degenerate/i);
+
+    expect(createReflectionGeneration).not.toHaveBeenCalled();
+  });
+
+  it("skips degenerate sync reflection under failurePolicy 'continue' without committing a generation", async () => {
     const scripted = createScriptedModel([DEGENERATE_OUTPUT]);
     const { runner, createReflectionGeneration } = createReflectorRunner(scripted.model, {
       reflectionConfig: { failurePolicy: 'continue' },
@@ -186,7 +203,7 @@ describe('reflector empty-output guard', () => {
         observationTokens: SOURCE_OBSERVATIONS.length,
         threadId: 'thread-1',
       }),
-    ).rejects.toThrow(/empty|degenerate/i);
+    ).resolves.not.toThrow();
 
     expect(createReflectionGeneration).not.toHaveBeenCalled();
   });
