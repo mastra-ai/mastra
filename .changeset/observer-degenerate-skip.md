@@ -2,7 +2,7 @@
 '@mastra/memory': patch
 ---
 
-Fixed Observational Memory flagging faithful summaries of long or repetitive tool output as degenerate. Giant single lines are now truncated instead of rejected, and short repeated tool-result lines (e.g. many successful `pnpm build → ok` calls) no longer trip the repetition check.
+Fixed Observational Memory flagging faithful summaries of long or repetitive tool output as degenerate. Giant single lines are now truncated instead of rejected in both Observer and Reflector output, and a back-to-back run of one repeated tool-result line (e.g. many successful `pnpm --filter ./packages/memory build → ok` calls) no longer trips the repetition check, whatever the line length, as long as the run fits in one maximum-size observation line (10,000 chars).
 
 Genuinely degenerate output is handled by mode:
 

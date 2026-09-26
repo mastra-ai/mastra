@@ -146,6 +146,28 @@ describe('Observer degenerate detection (#24354)', () => {
     expect(flagged).toEqual([]);
   });
 
+  it('does not flag a faithfully-summarized run of long repeated tool lines as degenerate', () => {
+    const toolLine = '  * -> pnpm --filter ./packages/memory build → ok';
+    expect(toolLine.trim().length).toBeGreaterThanOrEqual(40);
+    const flagged = [30, 60, 100, 150].filter(
+      n =>
+        parseObserverOutput(
+          `<observations>\n- 🔴 User asked to rebuild memory until it passes\n${Array(n).fill(toolLine).join('\n')}\n- 🟡 Every build succeeded\n</observations>`,
+        ).degenerate === true,
+    );
+
+    expect(flagged).toEqual([]);
+  });
+
+  it('truncates a giant single line in reflector output instead of flagging it as degenerate', () => {
+    const result = parseReflectorOutput(`<observations>\n${giantLine}\n</observations>`);
+
+    expect(result.degenerate).not.toBe(true);
+    expect(result.observations).toContain('Build output');
+    expect(result.observations).toContain('[truncated]');
+    expect(result.observations.length).toBeLessThan(11_000);
+  });
+
   it('still flags a non-consecutive multi-line repetition loop', () => {
     const block = Array.from(
       { length: 5 },

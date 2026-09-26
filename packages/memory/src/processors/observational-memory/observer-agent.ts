@@ -1839,6 +1839,33 @@ const MAX_OBSERVATION_LINE_CHARS = 10_000;
 const MIN_DUPLICATE_LINE_CHARS = 24;
 
 /**
+ * Collapse a run of back-to-back identical lines to a single line when that
+ * run is the line's only occurrence and is no bigger than one maximum-length
+ * observation line. A faithful summary of a repetitive tool loop (e.g. 30×
+ * "pnpm --filter … build → ok") produces exactly that shape at any line
+ * length. Loops are left intact: a model stuck on one line runs far past the
+ * size bound, and a line that keeps recurring between other lines has more
+ * than one run.
+ */
+function collapseBoundedLineRuns(lines: string[]): string[] {
+  const runs: Array<{ line: string; count: number }> = [];
+  for (const line of lines) {
+    const last = runs[runs.length - 1];
+    if (last && last.line === line) last.count++;
+    else runs.push({ line, count: 1 });
+  }
+  const runsPerLine = new Map<string, number>();
+  for (const run of runs) runsPerLine.set(run.line, (runsPerLine.get(run.line) ?? 0) + 1);
+
+  const result: string[] = [];
+  for (const run of runs) {
+    const collapse = runsPerLine.get(run.line) === 1 && run.count * (run.line.length + 1) <= MAX_OBSERVATION_LINE_CHARS;
+    for (let j = 0; j < (collapse ? 1 : run.count); j++) result.push(run.line);
+  }
+  return result;
+}
+
+/**
  * Truncate individual observation lines that exceed the maximum length.
  */
 export function sanitizeObservationLines(observations: string): string {
@@ -1889,7 +1916,7 @@ export class DegenerateReflectorOutputError extends OmModelExecutionError {
 export function detectDegenerateRepetition(text: string): boolean {
   if (!text || text.length < 2000) return false;
 
-  const lines = text.split('\n');
+  const lines = collapseBoundedLineRuns(text.split('\n'));
 
   // Strategy 1: Check for repeated long substrings by sampling fixed-size windows.
   // If the same ~200-char window appears many times, it's degenerate.
