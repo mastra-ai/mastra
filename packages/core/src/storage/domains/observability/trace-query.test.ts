@@ -1654,6 +1654,37 @@ describe('trace-query cursors', () => {
 describe('trace-query discovery contract', () => {
   const discoveryArgs = { ...baseRequest, predicateScope: 'trace' as const };
 
+  it('keeps released predicate paths string-based', () => {
+    expect(
+      traceQueryPredicateSchema.safeParse({
+        op: 'eq',
+        left: { path: 'metadata.region' },
+        right: { literal: 'us-east' },
+      }).success,
+    ).toBe(true);
+    expect(
+      traceQueryPredicateSchema.safeParse({
+        op: 'eq',
+        left: { path: ['metadata', 'region'] },
+        right: { literal: 'us-east' },
+      }).success,
+    ).toBe(false);
+    expect(
+      traceQueryPredicateSchema.safeParse({ op: 'in', value: { path: ['metadata', 'region'] }, set: ['us-east'] })
+        .success,
+    ).toBe(false);
+    expect(traceQueryPredicateSchema.safeParse({ op: 'exists', path: ['metadata', 'region'] }).success).toBe(false);
+
+    expect(
+      planTraceQuery(
+        parsed({
+          ...baseRequest,
+          where: { op: 'eq', left: { path: 'metadata.region' }, right: { literal: 'us-east' } },
+        }),
+      ).where,
+    ).toEqual({ type: 'comparison', field: 'metadata.region', operator: 'eq', value: 'us-east' });
+  });
+
   it('normalizes bounded requests and permits empty substring searches', () => {
     expect(parseGetTraceQueryFieldsArgs({ ...discoveryArgs, search: '  ' })).toEqual({
       ...discoveryArgs,
@@ -1716,6 +1747,37 @@ describe('trace-query discovery contract', () => {
         valuesTruncated: false,
       }).success,
     ).toBe(false);
+  });
+
+  it('keeps released discovery paths, kinds, and values string-only', () => {
+    const response = {
+      canonicalFields: [],
+      observedFields: [createTraceQueryObservedFieldDescriptor('metadata.region', 1)],
+      observedFieldsTruncated: false,
+    };
+
+    expect(getTraceQueryFieldsResponseSchema.safeParse(response).success).toBe(true);
+    expect(
+      getTraceQueryFieldsResponseSchema.safeParse({
+        ...response,
+        observedFields: [{ ...response.observedFields[0], path: ['metadata', 'region'] }],
+      }).success,
+    ).toBe(false);
+    expect(
+      getTraceQueryFieldsResponseSchema.safeParse({
+        ...response,
+        observedFields: [{ ...response.observedFields[0], valueKind: 'number' }],
+      }).success,
+    ).toBe(false);
+    expect(
+      getTraceQueryValuesResponseSchema.safeParse({ values: [{ value: 'us-east', count: 1 }], valuesTruncated: false })
+        .success,
+    ).toBe(true);
+    for (const value of [42, true]) {
+      expect(
+        getTraceQueryValuesResponseSchema.safeParse({ values: [{ value, count: 1 }], valuesTruncated: false }).success,
+      ).toBe(false);
+    }
   });
 
   it('derives ordered canonical descriptors and value eligibility from one registry', () => {
