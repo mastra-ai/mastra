@@ -1,6 +1,6 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { MockMemory } from '../../../memory/mock';
 import { Agent } from '../../agent';
@@ -375,5 +375,41 @@ describe('DurableAgent Model Fallback', () => {
       // Should fall back after exhausting retries on flaky model
       expect(text).toBe('Fallback used');
     }, 15000); // Longer timeout for retry delays
+
+    it("should send a fallback entry with providerOptionsMode 'replace' only its own providerOptions", async () => {
+      const failingModel = createFailingModel();
+      const fallbackModel = createSuccessModel('Fallback response');
+
+      const baseAgent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test instructions',
+        model: [
+          { id: 'primary', model: failingModel as LanguageModelV2, maxRetries: 0 },
+          {
+            id: 'fallback',
+            model: fallbackModel as LanguageModelV2,
+            maxRetries: 0,
+            providerOptionsMode: 'replace',
+            providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } },
+          },
+        ],
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const { cleanup } = await durableAgent.stream('Hello', {
+        providerOptions: { openrouter: { order: ['vendor-a'], reasoning_effort: 'high' } },
+      });
+
+      await vi.waitFor(() => expect(fallbackModel.doStreamCalls).toHaveLength(1), { timeout: 5000 });
+      cleanup();
+
+      expect(failingModel.doStreamCalls[0]?.providerOptions).toEqual({
+        openrouter: { order: ['vendor-a'], reasoning_effort: 'high' },
+      });
+      expect(fallbackModel.doStreamCalls[0]?.providerOptions).toEqual({
+        google: { thinkingConfig: { thinkingBudget: 0 } },
+      });
+    }, 10000);
   });
 });

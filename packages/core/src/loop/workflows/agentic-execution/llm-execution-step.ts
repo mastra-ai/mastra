@@ -12,7 +12,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { getErrorFromUnknown } from '../../../error/utils.js';
 import type { MastraModelSettings } from '../../../llm/model/model-settings';
 import { validateModelTimeoutSettings } from '../../../llm/model/model-settings';
-import { mergeProviderOptions } from '../../../llm/model/provider-options';
+import { resolveModelProviderOptions } from '../../../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../../../llm/model/router';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import type { IMastraLogger } from '../../../logger';
@@ -1564,7 +1564,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           tools,
           toolChoice,
           activeTools,
-          providerOptions: mergeProviderOptions(providerOptions, modelConfig.providerOptions),
+          providerOptions: resolveModelProviderOptions(providerOptions, modelConfig),
           modelSettings: resolvedModelSettings,
           structuredOutput,
           workspace,

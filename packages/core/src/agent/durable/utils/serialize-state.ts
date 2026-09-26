@@ -87,6 +87,7 @@ export function serializeModelListEntry(entry: AgentModelManagerConfig): Seriali
       specificationVersion: model.specificationVersion,
       originalConfig: `${model.provider}/${model.modelId}`,
       providerOptions: entry.providerOptions,
+      providerOptionsMode: entry.providerOptionsMode,
     },
     maxRetries: entry.maxRetries,
     enabled: entry.enabled,
