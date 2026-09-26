@@ -509,6 +509,315 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     expect(result).toEqual(callToolResult);
   });
 
+  it('should preserve a valid input property named required', async () => {
+    const sdkClient = (client as any).client as Client;
+    const inputSchema = {
+      type: 'object' as const,
+      properties: { required: { type: 'string' as const } },
+      required: ['required'],
+    };
+    const original = structuredClone(inputSchema);
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'required_field', inputSchema }],
+    });
+
+    const tools = await client.tools();
+    const storedSchema = tools.required_field.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-07' });
+
+    expect(storedSchema).toMatchObject(original);
+    expect(inputSchema).toEqual(original);
+  });
+
+  // topLevel=undefined: server sent no top-level required list. topLevel=['other']: server also
+  // declared a valid top-level list, which must win over the hoisted one.
+  it.each([undefined, ['other']])('should normalize misplaced required without mutating input (%j)', async topLevel => {
+    const sdkClient = (client as any).client as Client;
+    const inputSchema = {
+      type: 'object' as const,
+      properties: { coin: { type: 'string' as const }, other: { type: 'string' as const }, required: ['coin'] },
+      ...(topLevel ? { required: topLevel } : {}),
+    };
+    const original = structuredClone(inputSchema);
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      // Deliberately malformed server data: required is not a property schema.
+      tools: [{ name: 'malformed_tool', inputSchema: inputSchema as any }],
+    });
+
+    const tools = await client.tools();
+    const storedSchema = tools.malformed_tool.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-07' });
+    expect(storedSchema).toMatchObject({
+      properties: { coin: { type: 'string' }, other: { type: 'string' } },
+      required: topLevel ?? ['coin'],
+    });
+    expect(storedSchema).not.toHaveProperty('properties.required');
+    expect(inputSchema).toEqual(original);
+  });
+
+  it('should normalize cached input schemas without changing the cached definition', () => {
+    const inputSchema = {
+      type: 'object' as const,
+      properties: { coin: { type: 'string' as const }, required: ['coin'] },
+    };
+    const original = structuredClone(inputSchema);
+    const definition = {
+      name: 'cached_tool',
+      inputSchema: inputSchema as any,
+      server: { name: 'cached-server' },
+    };
+    const tool = client.toolFromDefinition({ definition });
+    const storedSchema = tool.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-07' });
+    expect(storedSchema).toMatchObject({ properties: { coin: { type: 'string' } }, required: ['coin'] });
+    expect(storedSchema).not.toHaveProperty('properties.required');
+    expect(definition.inputSchema).toEqual(original);
+  });
+
+  it('should leave mixed-type required arrays untouched', async () => {
+    const sdkClient = (client as any).client as Client;
+    const inputSchema = {
+      type: 'object' as const,
+      properties: { coin: { type: 'string' as const }, required: ['coin', 42] },
+    };
+    const original = structuredClone(inputSchema);
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'mixed_tool', inputSchema: inputSchema as any }],
+    });
+    const warnSpy = vi.spyOn((client as any).logger, 'warn');
+
+    const tools = await client.tools();
+    // Only string arrays are hoisted, so a mixed-type `properties.required`
+    // stays a schema-shape violation. Under the #23731 contract the malformed
+    // tool is skipped instead of being handed to providers that reject the
+    // whole request.
+    expect(tools.mixed_tool).toBeUndefined();
+    expect(warnSpy.mock.calls.map(call => call[0]).join('\n')).toContain('mixed_tool');
+    expect(inputSchema).toEqual(original);
+  });
+
+  it('should normalize misplaced required behind a jsonSchema wrapper', async () => {
+    const sdkClient = (client as any).client as Client;
+    const wrapped = {
+      jsonSchema: { type: 'object' as const, properties: { coin: { type: 'string' as const }, required: ['coin'] } },
+    };
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'wrapped_tool', inputSchema: wrapped as any }],
+    });
+
+    const tools = await client.tools();
+    const storedSchema = tools.wrapped_tool.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-07' });
+    expect(storedSchema).toMatchObject({ properties: { coin: { type: 'string' } }, required: ['coin'] });
+    expect(storedSchema).not.toHaveProperty('properties.required');
+    expect(wrapped.jsonSchema).toEqual({
+      type: 'object',
+      properties: { coin: { type: 'string' }, required: ['coin'] },
+    });
+  });
+
+  it('should skip a tool with an unrepairable input schema and keep valid siblings usable', async () => {
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'get_candles',
+          inputSchema: { type: 'object' as const, properties: { coin: { type: 'string' as const } } } as any,
+        },
+        {
+          // Unrepairable: a property value is an array where a schema object is
+          // required — the exact shape strict providers reject the whole
+          // request for.
+          name: 'get_l2_book',
+          inputSchema: { type: 'object' as const, properties: { coin: ['not-a-schema'] } } as any,
+        },
+      ],
+    });
+    const warnSpy = vi.spyOn((client as any).logger, 'warn');
+
+    const tools = await client.tools();
+
+    expect(Object.keys(tools)).toEqual(['get_candles']);
+    const warnMessages = warnSpy.mock.calls.map(call => call[0]).join('\n');
+    expect(warnMessages).toContain('get_l2_book');
+    expect(warnMessages).toContain('invalid input schema');
+    expect(warnMessages).toContain('output-schema-test-client');
+  });
+
+  it('should skip a hydrated tool with an invalid input schema instead of building it', () => {
+    const definition = {
+      name: 'broken_tool',
+      inputSchema: { type: 'object' as const, properties: { coin: ['not-a-schema'] } } as any,
+      server: { name: 'hydration-isolation-server' },
+    };
+    const warnSpy = vi.spyOn((client as any).logger, 'warn');
+
+    expect(() => client.toolFromDefinition({ definition })).toThrow(/broken_tool/);
+    const warnMessages = warnSpy.mock.calls.map(call => call[0]).join('\n');
+    expect(warnMessages).toContain('broken_tool');
+    expect(warnMessages).toContain('invalid input schema');
+  });
+
+  it('should accept an input schema with a property named required and no type', async () => {
+    // Exotic but structurally sound schemas must not be dropped: the validator
+    // only rejects shapes strict providers would reject.
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'exotic_tool', inputSchema: { properties: {}, anyOf: [{ type: 'object' as const }] } as any }],
+    });
+
+    const tools = await client.tools();
+    expect(tools.exotic_tool).toBeDefined();
+  });
+
+  it('should skip a tool whose schema is malformed deep below the surface', async () => {
+    const sdkClient = (client as any).client as Client;
+    // A malformed property nested ten levels down must still be caught: the
+    // structural check walks the whole tree, not just the first few levels.
+    let deep: Record<string, unknown> = { type: 'object', properties: { leaf: [] } };
+    for (let i = 0; i < 10; i++) {
+      deep = { type: 'object', properties: { nested: deep } };
+    }
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'deep_tool', inputSchema: deep as any }],
+    });
+
+    const tools = await client.tools();
+    expect(tools.deep_tool).toBeUndefined();
+  });
+
+  it('should reject invalid type arrays before conversion', async () => {
+    const sdkClient = (client as any).client as Client;
+    const warnSpy = vi.spyOn((client as any).logger, 'warn');
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        { name: 'bad_type_entry', inputSchema: { type: 'object', properties: { a: { type: [42] } } } as any },
+        { name: 'bad_type_name', inputSchema: { type: 'object', properties: { a: { type: 'stringy' } } } as any },
+        { name: 'bad_type_name_in_array', inputSchema: { type: 'object', properties: { a: { type: ['string', 'stringy'] } } } as any },
+        { name: 'empty_type', inputSchema: { type: [] } as any },
+        { name: 'dup_type', inputSchema: { type: ['string', 'string'] } as any },
+        { name: 'good_tool', inputSchema: { type: 'object', properties: { a: { type: 'string' } } } as any },
+      ],
+    });
+
+    const tools = await client.tools();
+
+    expect(Object.keys(tools)).toEqual(['good_tool']);
+    const warnMessages = warnSpy.mock.calls.map(call => call[0]).join('\n');
+    expect(warnMessages).toContain('bad_type_entry');
+    expect(warnMessages).toContain('bad_type_name');
+    expect(warnMessages).toContain('bad_type_name_in_array');
+    expect(warnMessages).toContain('empty_type');
+    expect(warnMessages).toContain('dup_type');
+  });
+
+  it('should traverse schema-bearing keywords when validating shapes', async () => {
+    const sdkClient = (client as any).client as Client;
+    const warnSpy = vi.spyOn((client as any).logger, 'warn');
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        { name: 'bad_pattern_property', inputSchema: { type: 'object', patternProperties: { '^a': ['not-a-schema'] } } as any },
+        { name: 'bad_additional', inputSchema: { type: 'object', additionalProperties: { required: 'nope' } } as any },
+        { name: 'bad_prefix_item', inputSchema: { type: 'array', prefixItems: [{ type: 1 }] } as any },
+        { name: 'bad_contains', inputSchema: { type: 'array', contains: { enum: 'nope' } } as any },
+        { name: 'bad_if', inputSchema: { type: 'object', if: { properties: [] } } as any },
+        { name: 'bad_def', inputSchema: { type: 'object', $defs: { x: { type: ['object', 7] } } } as any },
+        {
+          name: 'bad_tuple_item',
+          inputSchema: { type: 'array', items: [{ type: 'string' }, { type: 7 }] } as any,
+        },
+        {
+          name: 'bad_additional_items',
+          inputSchema: { type: 'array', items: [{ type: 'string' }], additionalItems: { required: 'nope' } } as any,
+        },
+        {
+          name: 'good_tuple',
+          inputSchema: {
+            type: 'array',
+            items: [{ type: 'string' }, { type: 'integer' }],
+            additionalItems: false,
+          } as any,
+        },
+        { name: 'good_tool', inputSchema: { type: 'object', properties: { a: { type: 'string' } } } as any },
+      ],
+    });
+
+    const tools = await client.tools();
+
+    expect(Object.keys(tools)).toEqual(['good_tuple', 'good_tool']);
+    const warnMessages = warnSpy.mock.calls.map(call => call[0]).join('\n');
+    for (const name of [
+      'bad_pattern_property',
+      'bad_additional',
+      'bad_prefix_item',
+      'bad_contains',
+      'bad_if',
+      'bad_def',
+      'bad_tuple_item',
+      'bad_additional_items',
+    ]) {
+      expect(warnMessages).toContain(name);
+    }
+    // draft-07 tuple-form items are valid: each entry is a schema, and a boolean
+    // additionalItems closes the tuple. The tool must be kept, not skipped.
+    expect(Object.keys(tools)).toEqual(['good_tuple', 'good_tool']);
+    expect(tools.good_tuple).toBeDefined();
+  });
+
+  it.each([
+    ['not', { not: [] }],
+    ['propertyNames', { propertyNames: [] }],
+    ['contentSchema', { contentSchema: [] }],
+    ['dependentSchemas', { dependentSchemas: { value: [] } }],
+    ['unevaluatedProperties', { unevaluatedProperties: [] }],
+    ['unevaluatedItems', { unevaluatedItems: [] }],
+  ])('should skip a tool with malformed %s schema-bearing keyword', async (keyword, malformedSchema) => {
+    const sdkClient = (client as any).client as Client;
+    const toolName = `bad_${keyword}`;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: toolName, inputSchema: malformedSchema as any }],
+    });
+
+    const tools = await client.tools();
+
+    expect(tools[toolName]).toBeUndefined();
+  });
+
+  it('should preserve boolean unevaluatedProperties and unevaluatedItems', async () => {
+    const sdkClient = (client as any).client as Client;
+    const inputSchema = {
+      type: 'object' as const,
+      properties: { value: { type: 'string' as const } },
+      unevaluatedProperties: false,
+      unevaluatedItems: false,
+    };
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'boolean_evaluation_schema', inputSchema }],
+    });
+
+    const tool = (await client.tools()).boolean_evaluation_schema;
+
+    expect(tool).toBeDefined();
+    expect(tool.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-2020-12' })).toMatchObject({
+      unevaluatedProperties: false,
+      unevaluatedItems: false,
+    });
+  });
+
+  it('should accept boolean input schemas without throwing and preserve false', async () => {
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        { name: 'always_valid', inputSchema: true as any },
+        { name: 'always_invalid', inputSchema: false as any },
+      ],
+    });
+
+    const tools = await client.tools();
+
+    expect(tools.always_valid).toBeDefined();
+    expect(tools.always_invalid).toBeDefined();
+    const storedSchema = tools.always_invalid.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-07' });
+    expect(storedSchema).toEqual({ not: {} });
+  });
+
   it('should preserve recursive $ref input schemas when creating tools', async () => {
     const sdkClient = (client as any).client as Client;
     const recursiveInputSchema = {

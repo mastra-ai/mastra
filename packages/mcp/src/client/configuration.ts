@@ -1214,7 +1214,17 @@ To fix this you have three different options:
       }
 
       for (const [toolName, definition] of Object.entries(definitions)) {
-        tools[`${serverName}_${toolName}`] = await this.toolFromDefinition({ serverName, definition });
+        try {
+          tools[`${serverName}_${toolName}`] = await this.toolFromDefinition({ serverName, definition });
+        } catch (error) {
+          // One malformed cached definition must not abort the whole catalog
+          // hydration: skip it and keep the valid siblings usable.
+          this.logger.warn(`Skipping cached MCP tool "${toolName}" from server "${serverName}": hydration failed`, {
+            serverName,
+            toolName,
+            error,
+          });
+        }
       }
     }
 
