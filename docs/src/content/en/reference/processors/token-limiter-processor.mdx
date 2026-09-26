@@ -117,21 +117,21 @@ const processor = new TokenLimiterProcessor({
     name: 'processInputStep',
     type: '(args: ProcessInputStepArgs) => Promise<void>',
     description:
-      "In 'memory-only' trim mode, applies stored-history trimming at each step, preserving system messages and trimming the rest newest-first to fit the budget. In the 'best-fit' and 'contiguous' trim modes, it leaves trimming to processLLMRequest when the agent runs that method for this processor. Otherwise it trims stored history, for example in generateLegacy() and streamLegacy() or when the limiter is inside a processor workflow.",
+      "In 'memory-only' trim mode, applies stored-history trimming at each step, preserving system messages and trimming the rest newest-first to fit the budget. In the 'best-fit' and 'contiguous' trim modes, it leaves trimming to processLLMRequest when the agent runs that method for this processor. Otherwise (legacy paths such as generateLegacy(), streamLegacy(), or the limiter running inside a processor workflow, where processLLMRequest never runs) it applies the same newest-first, group-aware best-fit/contiguous logic directly to stored history.",
     isOptional: true,
   },
   {
     name: 'processLLMRequest',
     type: '(args: ProcessLLMRequestArgs) => Promise<ProcessLLMRequestResult>',
     description:
-      "Enforces the input budget on the provider prompt in the 'best-fit' and 'contiguous' trim modes. Runs after earlier prompt processors have transformed the prompt, counts that exact prompt, and returns a trimmed copy for the model call only. System messages are always preserved; other tool call and tool result messages are grouped so they are kept or removed together, and groups are trimmed newest-first to fit the budget. Set `maxToolResultTokens` to cap oversized tool results before they reach this stage.",
+      "Enforces the input budget on the provider prompt in the 'best-fit' and 'contiguous' trim modes. Runs after earlier prompt processors have transformed the prompt, counts that exact prompt, and returns a trimmed copy for the model call only. System messages are always preserved; other tool call and tool result messages are grouped so they are kept or removed together, and the newest non-system group is tried first, working backwards to the oldest. In 'best-fit', a group that doesn't fit is skipped so older groups that do fit are still kept; in 'contiguous', trimming stops at the first group that doesn't fit. Set `maxToolResultTokens` to cap oversized tool results before they reach this stage; the cap bounds only the tool-result payload, so keep it below this processor's token budget rather than treating it as a guarantee that the group will fit.",
     isOptional: true,
   },
   {
     name: 'processToolResult',
     type: '(args: ProcessToolResultArgs) => Promise<void>',
     description:
-      "Only present on the processor instance when `maxToolResultTokens` is set (an agentic-loop optimization checks for the method's presence). When present, and the processor is registered in `outputProcessors`, it caps each tool result to that many tokens right after the tool runs, before the result is added to the message list. The full result stays in storage; the model-facing copy is capped via the tool-invocation part's `providerMetadata`, the same mechanism a tool's `toModelOutput` uses. A tool's own `toModelOutput` mapping is computed later and always wins over this cap. This cap only applies to the run where the tool executes — memory persistence strips the truncated `providerMetadata` before saving, and `processToolResult` does not re-run against reloaded history, so later turns see the full, uncapped stored result again.",
+      "Only present on the processor instance when `maxToolResultTokens` is set (an agentic-loop optimization checks for the method's presence). When present, and the processor is registered in `outputProcessors`, it caps each tool result to that many tokens right after the tool runs, before the engine commits the final tool result. The full result stays in storage; the model-facing copy is capped via the tool-invocation part's `providerMetadata`, the same mechanism a tool's `toModelOutput` uses. A tool's own `toModelOutput` mapping is computed later and always wins over this cap. This cap bounds only the tool-result payload, not the whole prompt group it belongs to — set it below `processLLMRequest`'s token budget so a capped result plus the rest of its group still fits. This cap only applies to the run where the tool executes — memory persistence strips the truncated `providerMetadata` before saving, and `processToolResult` does not re-run against reloaded history, so later turns see the full, uncapped stored result again.",
     isOptional: true,
   },
   {

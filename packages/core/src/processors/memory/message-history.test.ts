@@ -1356,5 +1356,53 @@ describe('MessageHistory', () => {
       expect(savedPart.providerMetadata?.mastra?.modelOutput).toBeUndefined();
       expect(savedPart.providerMetadata?.mastra?.modelOutputCapped).toBeUndefined();
     });
+
+    it('should strip a run-local capped modelOutput when persistMessages is called directly, bypassing transformMessagesForTranscript', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({ id: 'thread-1', title: 'Test Thread', metadata: {} }),
+      } as unknown as MemoryStorage;
+
+      const processor = new MessageHistory({ storage: mockStorage });
+
+      const messages: MastraDBMessage[] = [
+        {
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call-1',
+                  toolName: 'testTool',
+                  args: {},
+                  result: 'the full, untruncated tool result',
+                },
+                providerMetadata: {
+                  mastra: {
+                    modelOutput: { type: 'text', value: 'the full, [truncated: showing 2 of 6 tokens]' },
+                    modelOutputCapped: true,
+                  },
+                },
+              },
+            ],
+          },
+          id: 'msg-1',
+          createdAt: new Date('2024-01-01T00:00:01Z'),
+        },
+      ];
+
+      // Calling persistMessages directly, the way ObservationalMemory does, never
+      // routes through MessageList.transformMessagesForTranscript.
+      await processor.persistMessages({ messages, threadId: 'thread-1' });
+
+      const savedMessages = (mockStorage.saveMessages as any).mock.calls[0][0].messages;
+      const savedPart = savedMessages[0].content.parts[0];
+      expect(savedPart.toolInvocation.result).toBe('the full, untruncated tool result');
+      expect(savedPart.providerMetadata?.mastra?.modelOutput).toBeUndefined();
+      expect(savedPart.providerMetadata?.mastra?.modelOutputCapped).toBeUndefined();
+    });
   });
 });

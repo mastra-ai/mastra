@@ -247,7 +247,11 @@ export class MessageHistory implements Processor {
               }
               // Strip a run-local truncated modelOutput (e.g. TokenLimiterProcessor's
               // maxToolResultTokens cap) so future turns see the full tool result again,
-              // not a truncation snapshot frozen at this run's cap setting.
+              // not a truncation snapshot frozen at this run's cap setting. This mirrors
+              // MessageList.transformMessagesForTranscript's strip, but persistMessages()
+              // can be called directly (e.g. by ObservationalMemory) with messages that
+              // never went through that path, so this filter needs its own copy of the
+              // strip rather than delegating to it.
               const mastraMeta = p.providerMetadata?.mastra as Record<string, unknown> | undefined;
               if (mastraMeta?.modelOutputCapped) {
                 const restMastra = { ...mastraMeta };

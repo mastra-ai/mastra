@@ -400,8 +400,10 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
   }
 
   /**
-   * Cap an oversized tool result before it is persisted to the message list or
-   * sent to the model. Runs unconditionally (regardless of `trimMode`) for every
+   * Cap an oversized tool result before the engine commits the final tool
+   * result (the tool-invocation part already exists in the message list in
+   * an earlier state; this hook returns early via `findToolInvocationPart` if
+   * it doesn't). Runs unconditionally (regardless of `trimMode`) for every
    * output processor invocation, so register this processor in `outputProcessors`
    * for capping to take effect (`inputProcessors` alone only trims history).
    *
@@ -460,7 +462,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
    * messages, memory and UI history keep everything.
    *
    * Oversized tool results are capped separately in `processToolResult`
-   * (before the result is even added to the message list), so trimming here
+   * (before the engine commits the final tool result), so trimming here
    * never needs to special-case the current run: every group is an equal
    * candidate for removal, newest-first for `contiguous`, best-effort for
    * `best-fit` (#24110).
