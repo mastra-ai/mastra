@@ -931,7 +931,8 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       timestamp: '2026-07-15T10:00:00.000Z',
       feedbackUserId: 'patient-1',
       sourceId: 'survey-result-1',
-      comment: 'Needs improvement: incorrectly formatted dosage table, see café notes',
+      // The accent is stored as a separate combining mark (NFD).
+      comment: 'Needs improvement: incorrectly formatted dosage table, see cafe\u0301 notes',
       entityVersionId: 'entity-v2',
       parentEntityVersionId: 'parent-v2',
       rootEntityVersionId: 'root-v1',
@@ -947,7 +948,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
     }),
     feedbackRecord(6, 'feedback-b-text-three', 'trace-b', 'rating', 'patient', '3'),
     feedbackRecord(7, 'feedback-c-review', 'trace-c', 'clinical-review', 'clinician', 'approved', {
-      comment: 'Reviewed: incorrect dosage, 20 mg was correct.',
+      comment: 'Reviewed: incorrect dosage, 20 mg was correct. İstanbul clinic, greeted with नमस्ते.',
     }),
     feedbackRecord(8, 'feedback-uncorrelated', null, 'rating', 'patient', -5),
     feedbackRecord(9, 'feedback-nonmatching-trace', 'trace-without-root', 'rating', 'patient', -5),
@@ -2427,6 +2428,26 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     name: 'matches treats Unicode letters as part of a word',
     request: { timeRange: fullRange, where: { feedback: { some: commentMatches('café') } } },
     expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'matches keeps accents, so an unaccented literal misses',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('cafe') } } },
+    expected: [],
+  },
+  {
+    name: 'matches keeps combining marks inside a word',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('नमस्ते') } } },
+    expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'matches does not split a word at its combining marks',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('नमस') } } },
+    expected: [],
+  },
+  {
+    name: 'matches folds the Turkish dotted capital I like the stores do',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('İSTANBUL clinic') } } },
+    expected: [{ traceId: 'trace-c' }],
   },
   {
     name: 'matches ignores superseded feedback comments',

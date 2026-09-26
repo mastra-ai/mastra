@@ -184,8 +184,9 @@ function compileScalarPredicate<TField extends string>(
   }
 
   if (predicate.type === 'text') {
-    // Same normalization as `normalizeTraceQueryText`: lowercase, words = runs of letters/digits.
-    const words = `' ' || lower(regexp_replace(${field.sql}, '[^\\p{L}\\p{N}]+', ' ', 'g')) || ' '`;
+    // Same normalization as `normalizeTraceQueryText`: NFC, lowercase, words = runs of
+    // letters, marks, and digits. DuckDB's `lower()` already folds `İ` to `i`.
+    const words = `' ' || lower(regexp_replace(nfc_normalize(${field.sql}), '[^\\p{L}\\p{M}\\p{N}]+', ' ', 'g')) || ' '`;
     const found = `contains(${words}, ?)`;
     return {
       sql: `coalesce(${predicate.operator === 'matches' ? found : `NOT ${found}`}, false)`,

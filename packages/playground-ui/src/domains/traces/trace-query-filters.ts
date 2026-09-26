@@ -168,7 +168,7 @@ function tokenToTraceQueryPredicate(token: TraceFilterToken): TokenPredicate | u
   }
   if (operatorId === 'matches' || operatorId === 'notMatches') {
     // The query rejects a text literal with no letters or digits; drop it like non-numeric input.
-    values = values.filter(value => /[\p{L}\p{N}]/u.test(String(value)));
+    values = values.filter(value => /[\p{L}\p{M}\p{N}]/u.test(String(value)));
     if (!values.length) return undefined;
   }
 

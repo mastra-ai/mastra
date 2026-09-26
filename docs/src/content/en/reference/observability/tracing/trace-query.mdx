@@ -524,7 +524,7 @@ const incorrectDosage = {
 }
 ```
 
-Both the literal and the stored value are lowercased and split into words. A word is a run of letters and digits, so any other character, such as punctuation, spaces, or `_`, separates words. `incorrect` matches `This answer is incorrect.` but not `This was incorrectly formatted.`, and `gpt 5` matches `llm: 'gpt-5'`. A literal with several words must appear as a contiguous phrase in that order. Letters keep their accents: `café` doesn't match `cafe`. PostgreSQL classifies and lowercases letters according to the database locale, so a database created with the `C` locale treats letters outside ASCII as separators and doesn't fold their case. Use a UTF-8 locale such as `en_US.UTF-8` for consistent results.
+Both the literal and the stored value are lowercased and split into words. A word is a run of letters, digits, and combining marks, so any other character, such as punctuation, spaces, or `_`, separates words. `incorrect` matches `This answer is incorrect.` but not `This was incorrectly formatted.`, and `gpt 5` matches `llm: 'gpt-5'`. A literal with several words must appear as a contiguous phrase in that order. Letters keep their accents: `café` doesn't match `cafe`. Text is composed to Unicode NFC first, so `café` matches whether the accent is stored as part of the letter or as a separate mark, and marks stay inside their word, so `नमस` doesn't match `नमस्ते`. The Turkish `İ` folds to `i`. PostgreSQL classifies and lowercases letters according to the database locale, so a database created with the `C` locale treats letters outside ASCII as separators and doesn't fold their case. Use a UTF-8 locale such as `en_US.UTF-8` for consistent results.
 
 | Operator | Matches when |
 | - | - |

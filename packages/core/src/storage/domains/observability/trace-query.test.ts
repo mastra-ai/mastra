@@ -1142,6 +1142,9 @@ describe('planTraceQuery', () => {
     expect(normalizeTraceQueryText(' Incorrect, DOSAGE! ')).toBe('incorrect dosage');
     expect(normalizeTraceQueryText("llm: 'gpt-5'")).toBe('llm gpt 5');
     expect(normalizeTraceQueryText('see café notes')).toBe('see café notes');
+    expect(normalizeTraceQueryText('see cafe\u0301 notes')).toBe('see café notes');
+    expect(normalizeTraceQueryText('नमस्ते, दुनिया!')).toBe('नमस्ते दुनिया');
+    expect(normalizeTraceQueryText('İstanbul')).toBe('istanbul');
     expect(normalizeTraceQueryText('!!! ---')).toBe('');
   });
 
