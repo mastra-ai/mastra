@@ -6,6 +6,8 @@
 
 Added an opt-in `maxToolResultTokens` setting that caps individual tool results instead of letting them be trimmed away entirely: it sends the model a truncated copy while keeping the full stored result intact. Capping runs through the `processToolResult` hook, so the processor must be registered in `outputProcessors` (in addition to `inputProcessors`, if used there) for `maxToolResultTokens` to take effect. Without this option set, oversized tool results remain ordinary trimmable content.
 
+The cap only applies to the run where the tool executes: `processToolResult` runs once, at execution time, and memory persistence strips the truncated copy before saving so it never freezes a stale cap into stored history. On later turns the full, uncapped stored result reloads into the prompt as ordinary content, subject to `trimMode` / the `processLLMRequest` budget like everything else.
+
 ```typescript
 const processor = new TokenLimiterProcessor({ limit: 8000, maxToolResultTokens: 2000 });
 

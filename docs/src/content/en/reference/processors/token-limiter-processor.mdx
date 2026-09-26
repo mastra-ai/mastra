@@ -131,7 +131,7 @@ const processor = new TokenLimiterProcessor({
     name: 'processToolResult',
     type: '(args: ProcessToolResultArgs) => Promise<void>',
     description:
-      "Only present on the processor instance when `maxToolResultTokens` is set (an agentic-loop optimization checks for the method's presence). When present, and the processor is registered in `outputProcessors`, it caps each tool result to that many tokens right after the tool runs, before the result is added to the message list. The full result stays in storage; the model-facing copy is capped via the tool-invocation part's `providerMetadata`, the same mechanism a tool's `toModelOutput` uses. A tool's own `toModelOutput` mapping is computed later and always wins over this cap.",
+      "Only present on the processor instance when `maxToolResultTokens` is set (an agentic-loop optimization checks for the method's presence). When present, and the processor is registered in `outputProcessors`, it caps each tool result to that many tokens right after the tool runs, before the result is added to the message list. The full result stays in storage; the model-facing copy is capped via the tool-invocation part's `providerMetadata`, the same mechanism a tool's `toModelOutput` uses. A tool's own `toModelOutput` mapping is computed later and always wins over this cap. This cap only applies to the run where the tool executes — memory persistence strips the truncated `providerMetadata` before saving, and `processToolResult` does not re-run against reloaded history, so later turns see the full, uncapped stored result again.",
     isOptional: true,
   },
   {
@@ -190,6 +190,8 @@ export const agent = new Agent({
   outputProcessors: [processor], // required for maxToolResultTokens to take effect
 })
 ```
+
+The cap only applies to the run where the tool executes. The full result is always kept in storage; on later turns the stored history reloads with the full, uncapped result, since `processToolResult` runs once at execution time and doesn't re-run against replayed history. If you need every turn's prompt bounded — including tool results replayed from earlier in the conversation — rely on `trimMode` and the `processLLMRequest` token budget instead.
 
 ## Error behavior
 

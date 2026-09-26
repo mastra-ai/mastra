@@ -54,6 +54,13 @@ export interface TokenLimiterOptions {
    * `toModelOutput` mapping always takes precedence over this cap. Requires the processor to also be
    * registered in `outputProcessors` — that's what runs `processToolResult`. Unset by default (no capping).
    * Works for both durable and non-durable agents.
+   *
+   * This cap only applies to the run where the tool executes. `processToolResult` runs once, at
+   * execution time; MessageHistory strips the truncated `modelOutput` before persisting so it never
+   * freezes a stale cap setting into stored history. On later turns the full, uncapped stored result
+   * reloads into the prompt — `processToolResult` does not re-run against history. Use `trimMode` /
+   * the `processLLMRequest` token budget if you need every turn's prompt bounded, including replayed
+   * tool results.
    */
   maxToolResultTokens?: number;
 }

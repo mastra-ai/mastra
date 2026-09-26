@@ -1,7 +1,9 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
+import { Memory } from '../../../../memory/src';
 import { Agent } from '../../agent';
+import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { TokenLimiterProcessor } from './token-limiter';
 
@@ -118,5 +120,82 @@ describe('TokenLimiterProcessor in the agent loop (#24110)', () => {
     expect(executions()).toBe(5);
     expect(prompts).toHaveLength(5);
     expect(result.text).toBe('');
+  });
+
+  it('caps the tool result in the run it executes, but the next turn recalls the full stored result uncapped', async () => {
+    const big = 'result '.repeat(3000);
+    let executions = 0;
+    const prompts: any[][] = [];
+    const lookup = createTool({
+      id: 'lookup',
+      description: 'Look something up',
+      inputSchema: z.object({ q: z.string() }),
+      execute: async () => {
+        executions++;
+        return big;
+      },
+    });
+
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        prompts.push(prompt as any[]);
+        const toolResult = (prompt as any[])
+          .flatMap(m => (Array.isArray(m.content) ? m.content : []))
+          .find((c: any) => c.type === 'tool-result');
+        const chunks: any[] = toolResult
+          ? [
+              { type: 'text-start', id: 't' },
+              { type: 'text-delta', id: 't', delta: 'answer from tool' },
+              { type: 'text-end', id: 't' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ]
+          : [
+              { type: 'tool-call', toolCallId: `call-${prompts.length}`, toolName: 'lookup', input: '{"q":"x"}' },
+              { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ];
+        return {
+          stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }, ...chunks]),
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+
+    const limiter = new TokenLimiterProcessor({ limit: 8000, maxToolResultTokens: 100 });
+    const memory = new Memory({ storage: new InMemoryStore(), options: { lastMessages: 100, generateTitle: false } });
+    const agent = new Agent({
+      id: 'limited-memory',
+      name: 'limited-memory',
+      instructions: 'You are helpful.',
+      model: model as any,
+      tools: { lookup },
+      memory,
+      inputProcessors: [limiter],
+      outputProcessors: [limiter],
+    });
+
+    // Turn 1: the tool runs and its oversized result is capped for this run's prompt.
+    await (
+      await agent.stream('question', { memory: { thread: 'thread', resource: 'resource' }, maxSteps: 5 })
+    ).getFullOutput();
+    expect(executions).toBe(1);
+    const turn1ToolResult = JSON.stringify(
+      prompts[1]!.flatMap(m => (Array.isArray(m.content) ? m.content : [])).find((c: any) => c.type === 'tool-result'),
+    );
+    expect(turn1ToolResult).toMatch(/\[truncated: showing \d+ of [\d,]+ tokens\]/);
+
+    // Turn 2: the tool result is recalled from memory instead of re-executed. maxToolResultTokens
+    // only caps at execution time via processToolResult, and MessageHistory strips the truncated
+    // copy before persisting, so the recalled prompt carries the full, uncapped result again.
+    await (
+      await agent.stream('second question', { memory: { thread: 'thread', resource: 'resource' }, maxSteps: 5 })
+    ).getFullOutput();
+    expect(executions).toBe(1); // tool was not called again; result came from memory
+    const turn2Prompt = prompts[prompts.length - 1]!;
+    const turn2ToolResult = JSON.stringify(
+      turn2Prompt.flatMap(m => (Array.isArray(m.content) ? m.content : [])).find((c: any) => c.type === 'tool-result'),
+    );
+    expect(turn2ToolResult).not.toMatch(/\[truncated: showing/);
+    expect(turn2ToolResult).toContain(big.slice(0, 50));
   });
 });
