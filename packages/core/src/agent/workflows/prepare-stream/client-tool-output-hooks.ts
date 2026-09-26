@@ -1,6 +1,6 @@
 import type { IMastraLogger } from '../../../logger';
+import { normalizeModelOutput } from '../../../loop/shared/normalize-model-output';
 import type { CoreTool } from '../../../tools/types';
-import { normalizeModelOutput } from '../../durable/workflows/steps/normalize-model-output';
 import type { MessageList, MessageListInput } from '../../message-list';
 
 type ToolCall = { toolCallId: string; toolName: string };

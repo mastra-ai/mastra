@@ -1,19 +1,10 @@
-import { json } from '@codemirror/lang-json';
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { Chunk } from '@codemirror/merge';
-import { SearchCursor } from '@codemirror/search';
-import type { Extension } from '@codemirror/state';
-import { StateEffect, StateField, RangeSetBuilder, Text } from '@codemirror/state';
-import type { DecorationSet } from '@codemirror/view';
-import { Decoration, EditorView } from '@codemirror/view';
-import { tags as t } from '@lezer/highlight';
-import { draculaInit } from '@uiw/codemirror-theme-dracula';
-import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
-import ReactCodeMirror from '@uiw/react-codemirror';
+import { Text } from '@codemirror/state';
 import { AlignJustifyIcon, AlignLeftIcon, ExpandIcon, XIcon } from 'lucide-react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { Code } from '@/ds/components/Code/code';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { DataPanelSectionHeading } from '@/ds/components/DataPanel/data-panel-section-heading';
 import {
@@ -25,50 +16,8 @@ import {
   DialogDescription,
 } from '@/ds/components/Dialog';
 import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
-import { useTheme } from '@/ds/components/ThemeProvider';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
-
-// -- Search highlight extension -----------------------------------------------
-
-const setSearchQuery = StateEffect.define<string>();
-
-const searchHighlightMark = Decoration.mark({ class: 'cm-search-match' });
-
-const searchHighlightField = StateField.define<DecorationSet>({
-  create() {
-    return Decoration.none;
-  },
-  update(decorations, tr) {
-    for (const effect of tr.effects) {
-      if (effect.is(setSearchQuery)) {
-        const query = effect.value;
-        if (!query) return Decoration.none;
-        const builder = new RangeSetBuilder<Decoration>();
-        const cursor = new SearchCursor(tr.state.doc, query, 0, tr.state.doc.length, (a: string) => a.toLowerCase());
-        while (!cursor.next().done) {
-          builder.add(cursor.value.from, cursor.value.to, searchHighlightMark);
-        }
-        return builder.finish();
-      }
-    }
-    return decorations;
-  },
-  provide: f => EditorView.decorations.from(f),
-});
-
-const searchHighlightTheme = EditorView.baseTheme({
-  '.cm-search-match': {
-    backgroundColor: 'color-mix(in srgb, var(--success-indicator) 60%, transparent)',
-    borderRadius: 'var(--radius-sm)',
-  },
-});
-
-function searchHighlightExtension(): Extension {
-  return [searchHighlightField, searchHighlightTheme];
-}
-
-// -- Diff highlight extension -------------------------------------------------
 
 export interface DataCodeSectionDiff {
   /** The other document to compare against. */
@@ -77,102 +26,68 @@ export interface DataCodeSectionDiff {
   side: 'a' | 'b';
 }
 
-// `EditorView.theme` (not baseTheme) so these win over the app theme's `.cm-activeLine { background: transparent }`.
-const diffLineTheme = EditorView.theme({
-  '.cm-line.cm-diff-removed, .cm-line.cm-diff-removed.cm-activeLine': {
-    backgroundColor: 'color-mix(in srgb, var(--destructive-indicator) 18%, transparent)',
-  },
-  '.cm-line.cm-diff-added, .cm-line.cm-diff-added.cm-activeLine': {
-    backgroundColor: 'color-mix(in srgb, var(--success-indicator) 18%, transparent)',
-  },
-});
-
-function diffHighlightExtension(doc: string, { against, side }: DataCodeSectionDiff): Extension {
+/** Zero-based indexes of the lines of `doc` that differ from `diff.against`. */
+function changedLines(doc: string, { against, side }: DataCodeSectionDiff): Set<number> {
   const [a, b] = side === 'a' ? [doc, against] : [against, doc];
   const text = Text.of(doc.split('\n'));
-  const line = Decoration.line({ class: side === 'a' ? 'cm-diff-removed' : 'cm-diff-added' });
-  const builder = new RangeSetBuilder<Decoration>();
+  const lines = new Set<number>();
   for (const chunk of Chunk.build(Text.of(a.split('\n')), Text.of(b.split('\n')))) {
     const from = side === 'a' ? chunk.fromA : chunk.fromB;
     const to = side === 'a' ? chunk.endA : chunk.endB;
     if (from >= to) continue;
     for (let pos = from; pos <= Math.min(to, text.length);) {
-      const l = text.lineAt(pos);
-      builder.add(l.from, l.from, line);
-      if (l.to >= to) break;
-      pos = l.to + 1;
+      const line = text.lineAt(pos);
+      lines.add(line.number - 1);
+      if (line.to >= to) break;
+      pos = line.to + 1;
     }
   }
-  return [EditorView.decorations.of(builder.finish()), diffLineTheme];
+  return lines;
 }
 
-// -- Themes -------------------------------------------------------------------
-
-function buildDarkTheme(): Extension {
-  return draculaInit({
-    settings: {
-      fontFamily: 'var(--font-mono)',
-      fontSize: 'var(--text-caption)',
-      lineHighlight: 'transparent',
-      gutterBackground: 'transparent',
-      gutterForeground: '#939393',
-      background: 'transparent',
-    },
-    styles: [{ tag: [t.className, t.propertyName] }],
-  });
-}
-
-function buildLightTheme(): Extension {
-  const editorTheme = EditorView.theme({
-    '&': {
-      backgroundColor: 'transparent',
-      color: 'var(--foreground)',
-      fontSize: 'var(--text-caption)',
-    },
-    '&.cm-editor .cm-scroller': {
-      fontFamily: 'var(--font-mono)',
-    },
-    '.cm-gutters': {
-      backgroundColor: 'transparent',
-      color: 'var(--placeholder)',
-      borderRight: 'none',
-    },
-    '.cm-content': {
-      color: 'var(--foreground)',
-      caretColor: 'var(--foreground)',
-    },
-    '.cm-activeLine': {
-      backgroundColor: 'transparent',
-    },
-    '.cm-activeLineGutter': {
-      backgroundColor: 'transparent',
-    },
-    '.cm-cursor, .cm-dropCursor': {
-      borderLeftColor: 'var(--foreground)',
-    },
-  });
-
-  const highlightStyle = HighlightStyle.define([
-    { tag: [t.comment, t.bracket], color: 'var(--placeholder)' },
-    { tag: [t.string, t.meta, t.regexp], color: 'var(--syntax-string)' },
-    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--syntax-literal)' },
-    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--syntax-keyword)' },
-    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--syntax-name)' },
-    {
-      tag: [t.definition(t.variableName), t.function(t.variableName), t.className, t.attributeName],
-      color: 'var(--syntax-link)',
-    },
-    { tag: [t.variableName, t.number], color: 'var(--syntax-name)' },
-    { tag: [t.name, t.quote], color: 'var(--syntax-string)' },
-  ]);
-
-  return [editorTheme, syntaxHighlighting(highlightStyle)];
-}
-
-const useCodemirrorTheme = (): Extension => {
-  const isDark = useTheme().resolvedTheme === 'dark';
-  return useMemo(() => (isDark ? buildDarkTheme() : buildLightTheme()), [isDark]);
+const diffLineStyles = {
+  removed: 'code-diff-removed bg-[color-mix(in_srgb,var(--destructive-indicator)_18%,transparent)]',
+  added: 'code-diff-added bg-[color-mix(in_srgb,var(--success-indicator)_18%,transparent)]',
 };
+const searchMatchStyle =
+  'code-search-match rounded-sm bg-[color-mix(in_srgb,var(--warning-indicator)_30%,transparent)]';
+
+interface CodeViewProps {
+  code: string;
+  changed?: Set<number>;
+  diffSide?: DataCodeSectionDiff['side'];
+  searchQuery: string;
+}
+
+function CodeView({ code, changed, diffSide, searchQuery }: CodeViewProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  const query = searchQuery.toLowerCase();
+
+  useEffect(() => {
+    if (query) ref.current?.querySelector('.code-search-match')?.scrollIntoView({ block: 'nearest' });
+  }, [query]);
+
+  const lineClassName = useCallback(
+    (index: number, text: string) => {
+      const classes: string[] = [];
+      if (diffSide && changed?.has(index)) classes.push(diffLineStyles[diffSide === 'a' ? 'removed' : 'added']);
+      if (query && text.toLowerCase().includes(query)) classes.push(searchMatchStyle);
+      return classes.length ? classes.join(' ') : undefined;
+    },
+    [changed, diffSide, query],
+  );
+
+  return (
+    <div ref={ref}>
+      <Code
+        code={code}
+        lang="json"
+        lineClassName={lineClassName}
+        className="font-mono text-caption break-all whitespace-pre-wrap"
+      />
+    </div>
+  );
+}
 
 // -- Component ----------------------------------------------------------------
 
@@ -199,16 +114,13 @@ export function DataCodeSection({
   diff,
   actions,
 }: DataCodeSectionProps) {
-  const theme = useCodemirrorTheme();
-  const diffExtension = useMemo(() => (diff ? diffHighlightExtension(codeStr, diff) : []), [codeStr, diff]);
+  const changed = useMemo(() => (diff ? changedLines(codeStr, diff) : undefined), [codeStr, diff]);
   const [showAsMultilineText, setShowAsMultilineText] = useState(false);
   const [searchMinimized, setSearchMinimized] = useState(true);
-  const [searchQuery, setSearchQueryState] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [expandedOpen, setExpandedOpen] = useState(false);
   const [expandedSearchQuery, setExpandedSearchQuery] = useState('');
   const [expandedMultiline, setExpandedMultiline] = useState(false);
-  const editorRef = useRef<ReactCodeMirrorRef>(null);
-  const expandedEditorRef = useRef<ReactCodeMirrorRef>(null);
 
   const hasMultilineText = useMemo(() => {
     try {
@@ -218,70 +130,6 @@ export function DataCodeSection({
       return false;
     }
   }, [codeStr]);
-
-  const dispatchSearch = useCallback((query: string) => {
-    const view = editorRef.current?.view;
-    if (view) {
-      view.dispatch({ effects: setSearchQuery.of(query) });
-      if (query) {
-        const cursor = new SearchCursor(view.state.doc, query, 0, view.state.doc.length, (a: string) =>
-          a.toLowerCase(),
-        );
-        if (!cursor.next().done) {
-          view.dispatch({
-            selection: { anchor: cursor.value.from },
-            scrollIntoView: true,
-          });
-        }
-      }
-    }
-  }, []);
-
-  const handleSearchChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const val = e.target.value;
-      setSearchQueryState(val);
-      dispatchSearch(val);
-    },
-    [dispatchSearch],
-  );
-
-  const handleSearchReset = useCallback(() => {
-    setSearchQueryState('');
-    dispatchSearch('');
-  }, [dispatchSearch]);
-
-  const dispatchExpandedSearch = useCallback((query: string) => {
-    const view = expandedEditorRef.current?.view;
-    if (view) {
-      view.dispatch({ effects: setSearchQuery.of(query) });
-      if (query) {
-        const cursor = new SearchCursor(view.state.doc, query, 0, view.state.doc.length, (a: string) =>
-          a.toLowerCase(),
-        );
-        if (!cursor.next().done) {
-          view.dispatch({
-            selection: { anchor: cursor.value.from },
-            scrollIntoView: true,
-          });
-        }
-      }
-    }
-  }, []);
-
-  const handleExpandedSearchChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const val = e.target.value;
-      setExpandedSearchQuery(val);
-      dispatchExpandedSearch(val);
-    },
-    [dispatchExpandedSearch],
-  );
-
-  const handleExpandedSearchReset = useCallback(() => {
-    setExpandedSearchQuery('');
-    dispatchExpandedSearch('');
-  }, [dispatchExpandedSearch]);
 
   const finalCodeStr = showAsMultilineText ? codeStr?.replace(/\\n/g, '\n') : codeStr;
   const expandedFinalCodeStr = expandedMultiline ? codeStr?.replace(/\\n/g, '\n') : codeStr;
@@ -302,8 +150,8 @@ export function DataCodeSection({
               labelIsHidden
               placeholder="Search..."
               value={searchQuery}
-              onChange={handleSearchChange}
-              onReset={handleSearchReset}
+              onChange={e => setSearchQuery(e.target.value)}
+              onReset={() => setSearchQuery('')}
               size="sm"
               isMinimized={searchMinimized}
               onMinimizedChange={setSearchMinimized}
@@ -338,13 +186,7 @@ export function DataCodeSection({
             <pre className="text-wrap">{finalCodeStr}</pre>
           </div>
         ) : (
-          <ReactCodeMirror
-            ref={editorRef}
-            extensions={[json(), EditorView.lineWrapping, searchHighlightExtension(), diffExtension]}
-            theme={theme}
-            value={codeStr}
-            editable={false}
-          />
+          <CodeView code={codeStr} changed={changed} diffSide={diff?.side} searchQuery={searchQuery} />
         )}
       </div>
 
@@ -368,8 +210,8 @@ export function DataCodeSection({
                   labelIsHidden
                   placeholder="Search..."
                   value={expandedSearchQuery}
-                  onChange={handleExpandedSearchChange}
-                  onReset={handleExpandedSearchReset}
+                  onChange={e => setExpandedSearchQuery(e.target.value)}
+                  onReset={() => setExpandedSearchQuery('')}
                   size="sm"
                 />
               )}
@@ -405,13 +247,7 @@ export function DataCodeSection({
                 </div>
               </div>
             ) : (
-              <ReactCodeMirror
-                ref={expandedEditorRef}
-                extensions={[json(), EditorView.lineWrapping, searchHighlightExtension(), diffExtension]}
-                theme={theme}
-                value={codeStr}
-                editable={false}
-              />
+              <CodeView code={codeStr} changed={changed} diffSide={diff?.side} searchQuery={expandedSearchQuery} />
             )}
           </div>
         </DialogContent>

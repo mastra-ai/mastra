@@ -595,7 +595,7 @@ export class ProcessorRunner {
    */
   private async executeWorkflowAsProcessor(
     workflow: ProcessorWorkflow,
-    input: ProcessorStepOutput,
+    input: ProcessorStepOutput & { llmRequestProcessorIds?: ReadonlySet<string> },
     observabilityContext?: ObservabilityContext,
     requestContext?: RequestContext,
     writer?: ProcessorStreamWriter,
@@ -1546,6 +1546,7 @@ export class ProcessorRunner {
                   return nextMessageId;
                 }
               : undefined,
+            llmRequestProcessorIds: args.llmRequestProcessorIds,
             ...stepInput,
           },
           observabilityContext,
@@ -1672,6 +1673,7 @@ export class ProcessorRunner {
           messageList,
           ...inputData,
           state: processorState.customState,
+          llmRequestStage: args.llmRequestProcessorIds?.has(processor.id) || undefined,
           abort,
           ...(rotateResponseMessageId ? { rotateResponseMessageId } : {}),
           ...createObservabilityContext({ currentSpan: processorSpan }),
@@ -1797,6 +1799,18 @@ export class ProcessorRunner {
     }
 
     return stepInput;
+  }
+
+  /**
+   * IDs of the processors that `runProcessLLMRequest` will call for these input processors.
+   * Pass the result to `runProcessInputStep` as `llmRequestProcessorIds`.
+   */
+  static getLLMRequestProcessorIds(processors: readonly ProcessorOrWorkflow[]): Set<string> {
+    const ids = new Set<string>();
+    for (const processor of processors) {
+      if (!isProcessorWorkflow(processor) && processor.processLLMRequest) ids.add(processor.id);
+    }
+    return ids;
   }
 
   /**

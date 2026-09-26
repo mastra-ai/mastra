@@ -4,6 +4,7 @@ import type {
   TaskFilter,
   TaskListResult,
   UpdateBackgroundTask,
+  UpdateBackgroundTaskOptions,
 } from '@mastra/core/background-tasks';
 import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { PruneOptions, PruneResult, RetentionTablesDescriptor, TableRetentionPolicy } from '@mastra/core/storage';
@@ -61,6 +62,8 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
     startedAt: row.startedAt ? new Date(String(row.startedAt)) : undefined,
     suspendedAt: row.suspendedAt ? new Date(String(row.suspendedAt)) : undefined,
     completedAt: row.completedAt ? new Date(String(row.completedAt)) : undefined,
+    ownerId: row.ownerId != null ? String(row.ownerId) : undefined,
+    leaseExpiresAt: row.leaseExpiresAt ? new Date(String(row.leaseExpiresAt)) : undefined,
   };
 }
 
@@ -93,7 +96,7 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
     await this.#db.alterTable({
       tableName: TABLE_BACKGROUND_TASKS,
       schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
-      ifNotExists: ['suspend_payload', 'suspendedAt'],
+      ifNotExists: ['suspend_payload', 'suspendedAt', 'ownerId', 'leaseExpiresAt'],
     });
   }
 
@@ -135,6 +138,8 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
         startedAt: task.startedAt?.toISOString() ?? null,
         suspendedAt: task.suspendedAt?.toISOString() ?? null,
         completedAt: task.completedAt?.toISOString() ?? null,
+        ownerId: task.ownerId ?? null,
+        leaseExpiresAt: task.leaseExpiresAt?.toISOString() ?? null,
       },
     });
   }
@@ -142,7 +147,7 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
   async updateTask(
     taskId: string,
     update: UpdateBackgroundTask,
-    options?: { expectedStatus?: BackgroundTask['status'] },
+    options?: UpdateBackgroundTaskOptions,
   ): Promise<boolean> {
     const setClauses: string[] = [];
     const params: InValue[] = [];
@@ -179,6 +184,14 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
       setClauses.push('completedAt = ?');
       params.push(update.completedAt?.toISOString() ?? null);
     }
+    if ('ownerId' in update) {
+      setClauses.push('ownerId = ?');
+      params.push(update.ownerId ?? null);
+    }
+    if ('leaseExpiresAt' in update) {
+      setClauses.push('leaseExpiresAt = ?');
+      params.push(update.leaseExpiresAt?.toISOString() ?? null);
+    }
 
     if (setClauses.length === 0) return false;
 
@@ -187,6 +200,22 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
     if (options?.expectedStatus) {
       where += ' AND status = ?';
       params.push(options.expectedStatus);
+    }
+    if (options?.expectedOwnerId !== undefined) {
+      if (options.expectedOwnerId === null) {
+        where += ' AND ownerId IS NULL';
+      } else {
+        where += ' AND ownerId = ?';
+        params.push(options.expectedOwnerId);
+      }
+    }
+    if (options?.expectedLeaseExpiresAt !== undefined) {
+      if (options.expectedLeaseExpiresAt === null) {
+        where += ' AND leaseExpiresAt IS NULL';
+      } else {
+        where += ' AND leaseExpiresAt = ?';
+        params.push(options.expectedLeaseExpiresAt.toISOString());
+      }
     }
     const result = await this.#client.execute({
       sql: `UPDATE ${TABLE_BACKGROUND_TASKS} SET ${setClauses.join(', ')} WHERE ${where}`,

@@ -35,7 +35,6 @@ import {
   AgentIcon,
   DatasetsIcon,
   ExperimentsIcon,
-  HomeIcon,
   LogsIcon,
   McpServerIcon,
   MetricsIcon,
@@ -200,7 +199,6 @@ const studioSections: NavSection[] = [
     key: 'evaluation',
     title: 'Evaluation',
     links: [
-      { name: 'Overview', url: '/evaluation', icon: <HomeIcon /> },
       { name: 'Scorers', url: '/scorers', icon: <ScorersIcon /> },
       { name: 'Datasets', url: '/datasets', icon: <DatasetsIcon /> },
       { name: 'Experiments', url: '/experiments', icon: <ExperimentsIcon /> },

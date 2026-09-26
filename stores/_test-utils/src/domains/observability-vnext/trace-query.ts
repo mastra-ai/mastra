@@ -4,6 +4,7 @@ import {
   encodeTraceQueryCursor,
   encodeTraceQueryDeltaCursor,
   getTraceQueryDeltaWatermark,
+  isTraceAggregateCanonicalDimension,
   TraceQueryCursorError,
   parseQueryThreadsInput,
   parseTraceQueryRequest,
@@ -11,6 +12,7 @@ import {
   planTraceQuery,
   type NormalizedQueryThreadsInput,
   type NormalizedTraceQueryRequest,
+  type TraceAggregateDimension,
   type QueryThreadsInput,
   type QueryThreadsResult,
   type TraceQueryGroupResponse,
@@ -52,6 +54,12 @@ export interface RawTraceQuerySpan {
   rootEntityVersionId: string | null;
   environment: string | null;
   organizationId: string | null;
+  tags: string[] | null;
+  serviceName?: string | null;
+  executionSource?: string | null;
+  userId?: string | null;
+  sessionId?: string | null;
+  experimentId?: string | null;
 }
 
 export interface RawTraceQueryScore {
@@ -123,8 +131,16 @@ const span = (
   rootEntityVersionId: null,
   environment: 'production',
   organizationId: null,
+  tags: null,
+  serviceName: null,
+  executionSource: null,
+  userId: null,
+  sessionId: null,
+  experimentId: null,
   ...overrides,
 });
+
+export { span as makeTraceQuerySpan };
 
 const scoreRecord = (
   cursorId: number,
@@ -656,6 +672,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       resourceId: 'resource-old',
       startedAt: '2026-08-01T10:00:00.000Z',
       endedAt: '2026-08-01T10:00:01.000Z',
+      tags: ['superseded'],
     }),
     span(10, 'trace-a', 'root-a', {
       threadId: 'thread-1',
@@ -663,6 +680,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       startedAt: '2026-08-05T10:00:00.000Z',
       endedAt: '2026-08-05T10:00:02.000Z',
       entityName: 'support-agent',
+      tags: ['manual-review', 'production'],
       metadata: {
         messageId: 'message-a',
         parentMessageId: 'message-parent',
@@ -718,8 +736,9 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       threadId: 'thread-1',
       resourceId: 'resource-2',
       startedAt: '2026-08-05T10:00:00.000Z',
-      endedAt: '2026-08-05T10:00:03.000Z',
+      endedAt: '2026-08-05T10:00:06.000Z',
       environment: 'staging',
+      tags: [],
     }),
     span(21, 'trace-b', 'span-b-tool', {
       parentSpanId: 'root-b',
@@ -766,6 +785,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       resourceId: null,
       startedAt: '2026-08-08T10:00:00.000Z',
       endedAt: '2026-08-08T10:00:02.000Z',
+      tags: ['production'],
     }),
     span(50, 'trace-running', 'root-running-old', {
       threadId: 'thread-3',
@@ -1494,6 +1514,30 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     name: 'returns one current completed root per trace in default order',
     request: { timeRange: fullRange },
     expected: [{ traceId: 'trace-d' }, { traceId: 'trace-c' }, { traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'filters by the current root duration without matching long child spans',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+    },
+    expected: [{ traceId: 'trace-b' }],
+  },
+  {
+    name: 'uses exact millisecond boundaries for root duration',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'gte', left: { path: 'durationMs' }, right: { literal: 6000 } },
+    },
+    expected: [{ traceId: 'trace-b' }],
+  },
+  {
+    name: 'does not expose incomplete roots through missing duration predicates',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'notExists', path: 'durationMs' },
+    },
+    expected: [],
   },
   {
     name: 'evaluates recursive trace predicates',
@@ -2276,6 +2320,81 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     scope: orgA,
     expected: [{ traceId: 'trace-org-a' }],
   },
+  {
+    name: 'includes matches traces whose current root carries the tag',
+    request: { timeRange: fullRange, where: { op: 'includes', path: 'tags', value: 'production' } },
+    expected: [{ traceId: 'trace-d' }, { traceId: 'trace-a' }],
+  },
+  {
+    name: 'includes ignores tags on superseded roots',
+    request: { timeRange: fullRange, where: { op: 'includes', path: 'tags', value: 'superseded' } },
+    expected: [],
+  },
+  {
+    name: 'includes compares whole tags exactly and case-sensitively',
+    request: {
+      timeRange: fullRange,
+      where: {
+        op: 'or',
+        args: [
+          { op: 'includes', path: 'tags', value: 'manual' },
+          { op: 'includes', path: 'tags', value: 'Manual-Review' },
+        ],
+      },
+    },
+    expected: [],
+  },
+  {
+    name: 'notIncludes requires at least one other tag',
+    request: { timeRange: fullRange, where: { op: 'notIncludes', path: 'tags', value: 'manual-review' } },
+    expected: [{ traceId: 'trace-d' }],
+  },
+  {
+    name: 'negated includes also matches traces without tags',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'not', arg: { op: 'includes', path: 'tags', value: 'manual-review' } },
+    },
+    expected: [{ traceId: 'trace-d' }, { traceId: 'trace-c' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'exists on tags requires at least one tag',
+    request: { timeRange: fullRange, where: { op: 'exists', path: 'tags' } },
+    expected: [{ traceId: 'trace-d' }, { traceId: 'trace-a' }],
+  },
+  {
+    name: 'notExists on tags treats missing and empty tag lists alike',
+    request: { timeRange: fullRange, where: { op: 'notExists', path: 'tags' } },
+    expected: [{ traceId: 'trace-c' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'composes tag predicates with other trace predicates',
+    request: {
+      timeRange: fullRange,
+      where: {
+        op: 'and',
+        args: [
+          { op: 'includes', path: 'tags', value: 'production' },
+          { op: 'exists', path: 'threadId' },
+        ],
+      },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'composes tag predicates with or',
+    request: {
+      timeRange: fullRange,
+      where: {
+        op: 'or',
+        args: [
+          { op: 'includes', path: 'tags', value: 'manual-review' },
+          { op: 'notExists', path: 'tags' },
+        ],
+      },
+    },
+    expected: [{ traceId: 'trace-c' }, { traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
 ];
 
 /** Trusted scope: the tenant is ANDed onto roots and every related record; NULL never matches. */
@@ -2288,15 +2407,32 @@ function matchesScope(
   return scope.resourceId === undefined || record.resourceId === scope.resourceId;
 }
 
-export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTraceQueryPlan): TraceQueryResponse {
-  const spans = currentSpans(data.spans).filter(span => matchesScope(span, plan.scope));
-  const scores = currentScores(data.scores).filter(score => matchesScope(score, plan.scope));
-  const feedback = currentFeedback(data.feedback).filter(record => matchesScope(record, plan.scope));
-  const roots = currentRoots(data.spans)
-    .filter(root => matchesScope(root, plan.scope))
+export interface TraceQueryRootSelection {
+  timeRange: { from: string; to: string };
+  where?: TrustedTraceQueryPredicate;
+  scope?: TraceQueryTenantScope;
+}
+
+/**
+ * The candidate population shared by every trace-scoped read (Decision 2): current, completed,
+ * non-pending roots inside the half-open `[from, to)` window that satisfy `where` and `scope`.
+ */
+export function selectTraceQueryRoots(
+  data: TraceQueryFixtureData,
+  selection: TraceQueryRootSelection,
+): RawTraceQuerySpan[] {
+  const spans = currentSpans(data.spans).filter(span => matchesScope(span, selection.scope));
+  const scores = currentScores(data.scores).filter(score => matchesScope(score, selection.scope));
+  const feedback = currentFeedback(data.feedback).filter(record => matchesScope(record, selection.scope));
+  return currentRoots(data.spans)
+    .filter(root => matchesScope(root, selection.scope))
     .filter(root => !root.isPending && root.endedAt !== null)
-    .filter(root => root.startedAt >= plan.timeRange.from && root.startedAt < plan.timeRange.to)
-    .filter(root => !plan.where || evaluateTracePredicate(plan.where, root, spans, scores, feedback));
+    .filter(root => root.startedAt >= selection.timeRange.from && root.startedAt < selection.timeRange.to)
+    .filter(root => !selection.where || evaluateTracePredicate(selection.where, root, spans, scores, feedback));
+}
+
+export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTraceQueryPlan): TraceQueryResponse {
+  const roots = selectTraceQueryRoots(data, plan);
 
   if (plan.result === 'groups') {
     let groups = [...new Set(roots.map(root => root.threadId).filter((value): value is string => value !== null))].sort(
@@ -2367,11 +2503,11 @@ export function evaluateThreadQuery(data: TraceQueryFixtureData, plan: TrustedTh
   const spans = currentSpans(data.spans).filter(span => matchesScope(span, plan.scope));
   const scores = currentScores(data.scores).filter(score => matchesScope(score, plan.scope));
   const feedback = currentFeedback(data.feedback).filter(record => matchesScope(record, plan.scope));
-  const eligibleRoots = currentRoots(data.spans)
-    .filter(root => matchesScope(root, plan.scope))
-    .filter(root => !root.isPending && root.endedAt !== null)
-    .filter(root => root.startedAt >= plan.traces.timeRange.from && root.startedAt < plan.traces.timeRange.to)
-    .filter(root => !plan.traces.where || evaluateTracePredicate(plan.traces.where, root, spans, scores, feedback));
+  const eligibleRoots = selectTraceQueryRoots(data, {
+    timeRange: plan.traces.timeRange,
+    where: plan.traces.where,
+    scope: plan.scope,
+  });
 
   const rootsByThread = new Map<string, RawTraceQuerySpan[]>();
   for (const root of eligibleRoots) {
@@ -2582,6 +2718,13 @@ function evaluateScalarPredicate(
   }
   if (predicate.type === 'not') return !evaluateScalarPredicate(predicate.arg, record);
   const value = record[predicate.field as keyof typeof record] as unknown;
+  if (predicate.type === 'collection') {
+    // Missing and empty collections are indistinguishable: both mean "no members".
+    const members = Array.isArray(value) ? value : [];
+    if (!('value' in predicate)) return predicate.operator === 'empty' ? members.length === 0 : members.length > 0;
+    const included = members.includes(predicate.value);
+    return predicate.operator === 'includes' ? included : members.length > 0 && !included;
+  }
   const missing = value === null || value === undefined;
   if (predicate.type === 'presence') return predicate.operator === 'exists' ? !missing : missing;
   if (predicate.type === 'membership') {
@@ -2607,6 +2750,10 @@ function evaluateScalarPredicate(
   }
 }
 
+function durationMsBetween(startedAt: string, endedAt: string | null): number | null {
+  return endedAt === null ? null : new Date(endedAt).getTime() - new Date(startedAt).getTime();
+}
+
 function spanValues(span: RawTraceQuerySpan): Record<string, unknown> {
   const model = typeof span.attributes?.model === 'string' ? span.attributes.model : null;
   const provider = typeof span.attributes?.provider === 'string' ? span.attributes.provider : null;
@@ -2617,7 +2764,7 @@ function spanValues(span: RawTraceQuerySpan): Record<string, unknown> {
     provider,
     startedAt: span.startedAt,
     endedAt: span.endedAt,
-    durationMs: span.endedAt === null ? null : new Date(span.endedAt).getTime() - new Date(span.startedAt).getTime(),
+    durationMs: durationMsBetween(span.startedAt, span.endedAt),
     status: span.error === null ? 'success' : 'error',
     error: span.error,
     entityType: span.entityType,
@@ -2629,23 +2776,66 @@ function spanValues(span: RawTraceQuerySpan): Record<string, unknown> {
   };
 }
 
+/**
+ * The value a trace root exposes for one groupable dimension. Shared by `where` evaluation
+ * (`traceValues`) and the aggregate evaluator so filtering and grouping on the same field can
+ * never disagree: `status` derives from the root error, and `metadata.<key>` is the trimmed
+ * string value or `null` when missing, blank, or not a string.
+ */
+export function traceQueryDimensionValue(root: RawTraceQuerySpan, dimension: TraceAggregateDimension): string | null {
+  if (!isTraceAggregateCanonicalDimension(dimension)) {
+    const value = root.metadata?.[dimension.slice('metadata.'.length)];
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  switch (dimension) {
+    case 'status':
+      return root.error === null ? 'success' : 'error';
+    case 'entityType':
+      return root.entityType;
+    case 'entityName':
+      return root.entityName;
+    case 'environment':
+      return root.environment;
+    case 'threadId':
+      return root.threadId;
+    case 'resourceId':
+      return root.resourceId;
+    case 'organizationId':
+      return root.organizationId;
+    case 'serviceName':
+      return root.serviceName ?? null;
+    case 'executionSource':
+      return root.executionSource ?? null;
+    case 'userId':
+      return root.userId ?? null;
+    case 'sessionId':
+      return root.sessionId ?? null;
+    case 'experimentId':
+      return root.experimentId ?? null;
+  }
+}
+
 function traceValues(root: RawTraceQuerySpan): Record<string, unknown> {
   const metadata = Object.fromEntries(
-    Object.entries(root.metadata ?? {}).flatMap(([key, value]) => {
-      if (typeof value !== 'string' || value.trim() === '') return [];
-      return [[`metadata.${key}`, value.trim()]];
+    Object.keys(root.metadata ?? {}).flatMap(key => {
+      const value = traceQueryDimensionValue(root, `metadata.${key}`);
+      return value === null ? [] : [[`metadata.${key}`, value]];
     }),
   );
   return {
     traceId: root.traceId,
-    threadId: root.threadId,
-    resourceId: root.resourceId,
+    threadId: traceQueryDimensionValue(root, 'threadId'),
+    resourceId: traceQueryDimensionValue(root, 'resourceId'),
     startedAt: root.startedAt,
     endedAt: root.endedAt,
-    entityName: root.entityName,
-    entityType: root.entityType,
-    environment: root.environment,
-    status: root.error === null ? 'success' : 'error',
+    durationMs: durationMsBetween(root.startedAt, root.endedAt),
+    entityName: traceQueryDimensionValue(root, 'entityName'),
+    entityType: traceQueryDimensionValue(root, 'entityType'),
+    environment: traceQueryDimensionValue(root, 'environment'),
+    status: traceQueryDimensionValue(root, 'status'),
+    tags: root.tags,
     ...metadata,
   };
 }

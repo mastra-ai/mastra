@@ -291,6 +291,13 @@ interface RawPayload {
   [key: string]: unknown;
 }
 
+export interface ThreadHistoryPayload {
+  /** Stored thread messages, oldest first. */
+  messages: MastraDBMessage[];
+  /** Whether older messages exist beyond this page. */
+  hasMore: boolean;
+}
+
 interface StartPayload {
   [key: string]: unknown;
 }
@@ -814,6 +821,8 @@ interface ToolCallApprovalPayload {
   toolName: string;
   args: Record<string, any>;
   resumeSchema: string;
+  /** Epoch ms when approval was requested; matches the tool part's `updatedAt`. */
+  updatedAt?: number;
 }
 
 interface ToolCallSuspendedPayload {
@@ -862,6 +871,9 @@ export type NetworkChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'network-object-result'; payload: { object: OUTPUT } });
 
 // Strongly typed chunk type (currently only OUTPUT is strongly typed, tools use dynamic types)
+/** Emitted only by `subscribeToThread({ withInitialHistory })`, before any other chunk. */
+export type ThreadHistoryChunk = BaseChunkType & { type: 'thread-history'; payload: ThreadHistoryPayload };
+
 export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'response-metadata'; payload: ResponseMetadataPayload })
   | (BaseChunkType & { type: 'text-start'; payload: TextStartPayload })

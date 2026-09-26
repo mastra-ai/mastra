@@ -166,7 +166,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
               <BlockCopyButton block={block} />
             </div>
           )}
-          <Txt variant="caption" tone="muted" className="font-mono whitespace-pre-wrap">
+          <Txt variant="caption" tone="muted" font="mono" className="whitespace-pre-wrap">
             {oldStr || '(empty)'}
           </Txt>
         </div>
@@ -175,7 +175,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
     const diffLines = computeLineDiff(oldStr, newStr);
     return (
-      <div className="relative overflow-hidden rounded-md border border-border font-mono text-body">
+      <div className="relative overflow-hidden rounded-md border border-border text-body">
         {block && (
           <div className="absolute top-2 right-2 z-10">
             <BlockCopyButton block={block} />
@@ -213,7 +213,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
         if (!prevBlock && currBlock) {
           return (
-            <div key={idx} className="rounded-md border border-success-border bg-success-bg p-3 font-mono text-body">
+            <div key={idx} className="rounded-md border border-success-border bg-success-bg p-3 text-body">
               <Txt variant="meta" className="mb-1 text-success-fg">
                 + Added block
               </Txt>
@@ -228,7 +228,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
           return (
             <div
               key={idx}
-              className="relative rounded-md border border-destructive-border bg-destructive-bg p-3 font-mono text-body"
+              className="relative rounded-md border border-destructive-border bg-destructive-bg p-3 text-body"
             >
               <div className="absolute top-2 right-2">
                 <BlockCopyButton block={prevBlock} />
@@ -251,7 +251,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
                   <BlockCopyButton block={prevBlock} />
                 </div>
               )}
-              <Txt variant="caption" tone="muted" className="font-mono whitespace-pre-wrap">
+              <Txt variant="caption" tone="muted" font="mono" className="whitespace-pre-wrap">
                 {oldStr || '(empty)'}
               </Txt>
             </div>
@@ -260,7 +260,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
         const diffLines = computeLineDiff(oldStr, newStr);
         return (
-          <div key={idx} className="relative overflow-hidden rounded-md border border-border font-mono text-body">
+          <div key={idx} className="relative overflow-hidden rounded-md border border-border text-body">
             {prevBlock && (
               <div className="absolute top-2 right-2 z-10">
                 <BlockCopyButton block={prevBlock} />
@@ -313,7 +313,7 @@ function RefBlockPreview({ promptBlockId }: { promptBlockId: string }) {
           {promptBlock.name}
         </Txt>
       )}
-      <Txt variant="caption" tone="muted" className="font-mono whitespace-pre-wrap">
+      <Txt variant="caption" tone="muted" font="mono" className="whitespace-pre-wrap">
         {content || '(empty)'}
       </Txt>
     </div>
@@ -347,7 +347,7 @@ function ReadOnlyInstructions({ blocks }: { blocks: unknown }) {
                 <CopyButton content={content} tooltip="Copy prompt text" size="sm" />
               </div>
             )}
-            <Txt variant="caption" tone="muted" className="font-mono whitespace-pre-wrap">
+            <Txt variant="caption" tone="muted" font="mono" className="whitespace-pre-wrap">
               {content || '(empty)'}
             </Txt>
           </div>
@@ -392,8 +392,8 @@ function ToolsDiffView({
           >
             <Txt
               variant="caption"
+              font="mono"
               className={cn(
-                'font-mono',
                 status === 'removed' && 'text-destructive-fg line-through',
                 status === 'added' && 'text-success-fg',
               )}
@@ -432,7 +432,7 @@ function ReadOnlyTools({ tools }: { tools: Record<string, unknown> | undefined }
     <div className="flex flex-col gap-1.5">
       {entries.map(([id, config]) => (
         <div key={id} className="rounded-md border border-border bg-background px-3 py-1.5">
-          <Txt variant="caption" tone="ink" className="font-mono">
+          <Txt variant="caption" tone="ink" font="mono">
             {id}
           </Txt>
           {(config as Record<string, unknown>)?.description ? (
@@ -491,8 +491,8 @@ function VariablesDiffView({
           >
             <Txt
               variant="caption"
+              font="mono"
               className={cn(
-                'font-mono',
                 status === 'removed' && 'text-destructive-fg line-through',
                 status === 'added' && 'text-success-fg',
               )}
@@ -532,7 +532,7 @@ function ReadOnlyVariables({ variables }: { variables: Record<string, unknown> |
     <div className="flex flex-col gap-1.5">
       {entries.map(([name, schema]) => (
         <div key={name} className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5">
-          <Txt variant="caption" tone="ink" className="font-mono">
+          <Txt variant="caption" tone="ink" font="mono">
             {`{{${name}}}`}
           </Txt>
           {(schema as Record<string, unknown>)?.type ? (

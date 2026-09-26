@@ -305,6 +305,31 @@ describe('observeSessionFilesystem', () => {
     expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1);
   });
 
+  it('persists a queued capture after the session thread is cleared by deleteSession', async () => {
+    // Regression for #24893: deleteSession clears the thread before the
+    // queued capture runs; the capture must use the thread read at schedule time.
+    const { session, listeners, touchWorkspace } = createSession(undefined, 'resource-deleted-thread');
+    let threadId: string | null = 'thread-1';
+    session.thread.requireId = () => {
+      if (!threadId) throw new Error('No active thread on this session');
+      return threadId;
+    };
+    const dependencies = createDependencies();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    observeSessionFilesystem(session, dependencies);
+
+    touchWorkspace();
+    listeners[0]!({ type: 'agent_end', reason: 'complete' });
+    threadId = null;
+    await waitForPendingFilesystemCapture('resource-deleted-thread');
+
+    expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledWith(
+      expect.objectContaining({ resourceId: 'resource-deleted-thread', threadId: 'thread-1' }),
+    );
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   it('does not gate the agent-end listener on slow capture execs', async () => {
     // The sandbox exec never resolves: the listener must still settle
     // immediately, because agent_end must not wait on the capture I/O.
@@ -480,6 +505,50 @@ describe('waitForPendingFilesystemCapture', () => {
     await wait;
     // The persist happened before the reader's wait resolved.
     expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps waiting for a capture chained by a turn that ends during the wait', async () => {
+    const { session, listeners, touchWorkspace } = createSession(undefined, 'resource-wait-successor');
+    let releaseFirst: (() => void) | undefined;
+    const firstGate = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    let releaseSecond: (() => void) | undefined;
+    const secondGate = new Promise<void>(resolve => {
+      releaseSecond = resolve;
+    });
+    const dependencies = createDependencies();
+    // Execs of the first capture wait on firstGate; once it has persisted,
+    // the successor capture's execs wait on secondGate.
+    const executeCommand = vi.fn(async () => {
+      const firstPersisted = vi.mocked(dependencies.filesystem.replaceFiles).mock.calls.length > 0;
+      await (firstPersisted ? secondGate : firstGate);
+      return commandResult();
+    });
+    session.getWorkspace = () => ({ sandbox: { executeCommand } as any });
+    observeSessionFilesystem(session, dependencies);
+
+    touchWorkspace();
+    listeners[0]!({ type: 'agent_end', reason: 'complete' });
+    await vi.waitFor(() => expect(executeCommand).toHaveBeenCalledTimes(1));
+
+    let waitSettled = false;
+    const wait = waitForPendingFilesystemCapture('resource-wait-successor').then(() => {
+      waitSettled = true;
+    });
+
+    // Another turn ends while the first capture is still running.
+    touchWorkspace();
+    listeners[0]!({ type: 'agent_end', reason: 'complete' });
+
+    releaseFirst?.();
+    await vi.waitFor(() => expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1));
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(waitSettled).toBe(false);
+
+    releaseSecond?.();
+    await wait;
+    expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(2);
   });
 
   it('bounds the wait so a stuck capture cannot block readers', async () => {

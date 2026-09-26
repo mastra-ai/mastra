@@ -3,7 +3,7 @@
 import type { DatasetItem } from '@mastra/client-js';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
-import { format } from 'date-fns/format';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 
 import { datasetItemSections } from './dataset-item-sections';
 
@@ -28,11 +28,11 @@ export function DatasetItemDetails({ item, diff }: DatasetItemDetailsProps) {
         <DataKeysAndValues.Key>Version</DataKeysAndValues.Key>
         <DataKeysAndValues.Value>v{item.datasetVersion}</DataKeysAndValues.Value>
         <DataKeysAndValues.Key>Created</DataKeysAndValues.Key>
-        <DataKeysAndValues.Value>{format(new Date(item.createdAt), 'MMM d, yyyy h:mm aaa')}</DataKeysAndValues.Value>
+        <DataKeysAndValues.Value>{formatDate(item.createdAt, 'date-time')}</DataKeysAndValues.Value>
         <DataKeysAndValues.Key>Updated</DataKeysAndValues.Key>
         <DataKeysAndValues.Value>
           {item.updatedAt && new Date(item.updatedAt).getTime() !== new Date(item.createdAt).getTime()
-            ? format(new Date(item.updatedAt), 'MMM d, yyyy h:mm aaa')
+            ? formatDate(item.updatedAt, 'date-time')
             : 'n/a'}
         </DataKeysAndValues.Value>
       </DataKeysAndValues>

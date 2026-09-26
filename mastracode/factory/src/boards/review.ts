@@ -87,12 +87,6 @@ function reviewPullRequest(context: FactoryStageRuleContext) {
   } as const;
 }
 
-function reviewPullRequestOnArrival(context: FactoryStageRuleContext) {
-  if (context.cause !== 'linked_item_materialized') return;
-  if (context.item.metadata?.autoStartCandidate !== true) return;
-  return reviewPullRequest(context);
-}
-
 export const reviewBoard = defineBoard({
   id: 'review',
   title: 'Review',
@@ -106,7 +100,6 @@ export const reviewBoard = defineBoard({
         merged: 'done',
         closed: 'canceled',
       },
-      onEnter: { pullRequest: reviewPullRequestOnArrival, gitlabPullRequest: reviewPullRequestOnArrival },
     },
     review: {
       title: 'Reviewing',

@@ -2,6 +2,7 @@ import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Card } from '@mastra/playground-ui/components/Card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -85,7 +86,7 @@ const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; tool
   return (
     <ToolCard testId="agent-builder-chat-tool-approval" className="border-transparent bg-muted">
       <Txt variant="caption" tone="ink" className="pb-2" as="div">
-        Approval required for <span className="font-mono text-foreground">{toolName}</span>
+        Approval required for <InlineCode>{toolName}</InlineCode>
       </Txt>
       <div className="flex items-center gap-2">
         <Button
@@ -410,7 +411,7 @@ const GenericTool = ({ toolName, input, output }: { toolName: string; input?: un
           <span className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-sidebar px-2 py-0.5">
             <Wrench className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
             <Txt variant="caption" tone="ink" as="span">
-              Executing <span className="font-mono text-foreground">{toolName}</span>
+              Executing <InlineCode>{toolName}</InlineCode>
             </Txt>
           </span>
           <ChevronRight

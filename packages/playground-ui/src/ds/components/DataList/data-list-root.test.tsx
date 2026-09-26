@@ -278,6 +278,20 @@ describe('DataListRoot', () => {
       expect(defaultRow.dataset.variant).toBe('default');
     });
 
+    describe('when the error row is pressed', () => {
+      it('keeps a red tint instead of the grey active fill', () => {
+        const { container } = render(
+          <DataList columns="1fr">
+            <DataList.RowButton variant="error">
+              <DataList.Cell>boom</DataList.Cell>
+            </DataList.RowButton>
+          </DataList>,
+        );
+        const row = container.querySelector<HTMLButtonElement>('.data-list-row');
+        expect(row?.className).toContain('data-[variant=error]:active:bg-destructive-indicator/20');
+      });
+    });
+
     it('exposes featured rows as data-featured', () => {
       const { container } = render(
         <DataList columns="1fr">

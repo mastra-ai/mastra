@@ -272,8 +272,49 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
     expect(result).toBe('done');
     expect(onError).toHaveBeenCalledTimes(1);
     expect(String(onError.mock.calls[0][0].error.message)).toContain(`idle for ${IDLE}ms`);
+    expect(onError.mock.calls[0][0].runDead).toBe(true);
 
     cleanup();
+  });
+
+  it('reports runDead: false and unsubscribes once on a bare idle timeout', async () => {
+    // Without isAlive, silence only means this observer stopped hearing from the
+    // run; observe() uses runDead: false to skip tearing down the run's state.
+    const runId = 'idle-bare';
+    const onError = vi.fn();
+    const unsubscribe = vi.spyOn(pubsub, 'unsubscribe');
+    const { output, cleanup, ready } = makeStream(runId, { idleTimeoutMs: IDLE, onError });
+    await ready;
+
+    const reader = readFullStream(output.fullStream as ReadableStream<any>);
+    await emitChunkEvent(pubsub, runId, textChunk('a'));
+
+    expect(await settleWithin(reader.done, IDLE * 20)).toBe('done');
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0][0].runDead).toBe(false);
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+
+    cleanup();
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('detach() resolves a pending read as done and unsubscribes once', async () => {
+    const runId = 'detach-pending';
+    const unsubscribe = vi.spyOn(pubsub, 'unsubscribe');
+    const { output, detach, ready } = makeStream(runId, {});
+    await ready;
+
+    const reader = readFullStream(output.fullStream as ReadableStream<any>);
+    await emitChunkEvent(pubsub, runId, textChunk('a'));
+    await delay(10);
+
+    detach();
+    expect(await settleWithin(reader.done, 1000)).toBe('done');
+    expect(reader.getThrown()).toBeUndefined();
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+
+    detach();
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
 
   it('never arms the watchdog when observing an already-finished run', async () => {

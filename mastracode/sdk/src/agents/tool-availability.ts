@@ -93,6 +93,11 @@ export function createMastraCodeWorkspaceTools(backgroundToolsEnabled = false): 
   const background = backgroundToolsEnabled ? BACKGROUND_TOOL_CONFIG : undefined;
   return {
     ...TOOL_NAME_OVERRIDES,
+    // Quiet mode shows this description in place of the raw command.
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+      ...TOOL_NAME_OVERRIDES[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND],
+      requireDescription: true,
+    },
     [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: {
       ...TOOL_NAME_OVERRIDES[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE],
       ...(background ? { background } : {}),

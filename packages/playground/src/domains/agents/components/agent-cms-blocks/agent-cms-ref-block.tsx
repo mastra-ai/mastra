@@ -7,6 +7,7 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -18,7 +19,6 @@ import { useDebouncedCallback } from 'use-debounce';
 import type { RefInstructionBlock } from '../agent-edit-page/utils/form-validation';
 import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredPromptBlock, useStoredPromptBlockMutations } from '@/domains/prompt-blocks';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface AgentCMSRefBlockProps {
   index: number;

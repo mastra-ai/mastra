@@ -797,7 +797,7 @@ Added when a sandbox is configured:
 
 With a static sandbox, capability checks (`executeCommand`, `processes`) decide which tool variants are exposed. With a [runtime-defined sandbox](/docs/sandbox/overview#sandboxes-per-user-or-thread), all sandbox tools are registered and the runtime throws a clear error if the resolved sandbox doesn't implement a requested capability.
 
-The `execute_command` tool accepts a `backgroundProcesses` option for lifecycle callbacks on background processes:
+The `execute_command` tool accepts these options:
 
 <PropertiesTable
   content={[
@@ -840,8 +840,27 @@ The `execute_command` tool accepts a `backgroundProcesses` option for lifecycle 
       },
     ],
   },
+  {
+    name: 'requireDescription',
+    type: 'boolean',
+    description:
+      'Adds a required `description` argument, listed before `command`, where the model says in a few words what the command does. Use it to show a readable label in place of the raw command. When `false`, the tool schema has no `description` argument.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
 ]}
 />
+
+```typescript
+const workspace = new Workspace({
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  tools: {
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+      requireDescription: true,
+    },
+  },
+})
+```
 
 See [Background processes](/docs/sandbox/overview#background-processes) for callback examples.
 

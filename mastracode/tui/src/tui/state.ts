@@ -50,7 +50,7 @@ import type { OnboardingInlineComponent } from './onboarding-inline.js';
 import { pruneChatContainer } from './prune-chat.js';
 import { installRenderScheduler } from './render-scheduler.js';
 import type { RenderScheduler } from './render-scheduler.js';
-import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
+import { getEditorTheme, getTermWidth, mastra } from './theme.js';
 import { VoiceController } from './voice/voice-controller.js';
 
 export interface PendingSignalMessage {
@@ -386,11 +386,8 @@ export interface TUIState {
  */
 export function createTUIState(options: MastraTUIOptions): TUIState {
   const terminal = options.terminal ?? new ProcessTerminal();
-  // Override columns getter to prevent line wrapping in nested terminal emulators
   if (!options.terminal) {
-    Object.defineProperty(terminal, 'columns', {
-      get: () => (process.stdout.columns || 80) - TERM_WIDTH_BUFFER,
-    });
+    Object.defineProperty(terminal, 'columns', { get: getTermWidth });
   }
   const ui = new TUI(terminal);
   const assistantRenderRegistry = new AssistantRenderRegistry();

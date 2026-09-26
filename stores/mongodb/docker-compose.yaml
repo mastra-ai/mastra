@@ -17,13 +17,42 @@ services:
       timeout: 2s
       retries: 15
       start_period: 3s
+  mongodb-fidelity:
+    image: mongo:7.0.37
+    profiles: ['fidelity']
+    command: ['mongod', '--replSet', 'rs0', '--bind_ip_all', '--port', '27019']
+    ports:
+      - '127.0.0.1:27019:27019'
+    healthcheck:
+      test:
+        - CMD
+        - mongosh
+        - --port
+        - '27019'
+        - --quiet
+        - --eval
+        - 'try { rs.status() } catch { rs.initiate({_id: "rs0", members: [{_id: 0, host: "localhost:27019"}]}) }; if (!db.hello().isWritablePrimary) quit(1)'
+      interval: 2s
+      timeout: 5s
+      retries: 30
   mongodb-vector:
     # Pinned to 8.2: $rankFusion (used by hybridQuery) requires MongoDB >= 8.1.
-    image: mongodb/mongodb-atlas-local:8.2
+    #
+    # Automated Embedding needs the `preview` image, which bundles the Community mongot
+    # build, and a Voyage API key. To run those tests, set both in stores/mongodb/.env and
+    # opt in with TEST_MONGODB_AUTOEMBEDDING=1:
+    #   ATLAS_LOCAL_TAG=preview
+    #   VOYAGE_API_KEY=<key>
+    # https://hub.docker.com/r/mongodb/mongodb-atlas-local#current-experimental-features
+    image: mongodb/mongodb-atlas-local:${ATLAS_LOCAL_TAG:-8.2}
     container_name: 'mongodb-vector-test-db'
     environment:
       MONGODB_INITDB_ROOT_USERNAME: mongodb
       MONGODB_INITDB_ROOT_PASSWORD: mongodb
+      # Consumed by mongot in the preview image; ignored by the pinned tag. The key must be
+      # provisioned through the Atlas UI — a key issued by Voyage AI directly is rejected by
+      # the default https://ai.mongodb.com/v1/embeddings endpoint.
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
     ports:
       - 27018:27017
     healthcheck:

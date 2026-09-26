@@ -10,6 +10,7 @@ import {
 } from './index';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
+import { fieldErrorId } from '@/ds/components/FormFieldBlocks/block/field-error-id';
 import { Input } from '@/ds/components/Input';
 import { Switch } from '@/ds/components/Switch';
 import { ThemeProvider } from '@/ds/components/ThemeProvider';
@@ -88,6 +89,30 @@ export const Permissions: Story = {
           tone="destructive"
         >
           <Button variant="destructive-ghost">Leave</Button>
+        </SettingsRow>
+      </SettingsContainer>
+    </SettingsGroup>
+  ),
+};
+
+export const Validation: Story = {
+  render: () => (
+    <SettingsGroup>
+      <SettingsHeader>
+        <SettingsTitle>Agent</SettingsTitle>
+      </SettingsHeader>
+      <SettingsContainer>
+        <SettingsRow label="Model" htmlFor="model" required errorMsg="Choose the model this agent runs on.">
+          <Input
+            id="model"
+            className="w-56"
+            placeholder="openai/gpt-5.2"
+            error
+            aria-describedby={fieldErrorId('model')}
+          />
+        </SettingsRow>
+        <SettingsRow label="Max steps" htmlFor="max-steps" required>
+          <Input id="max-steps" className="w-56" defaultValue="5" />
         </SettingsRow>
       </SettingsContainer>
     </SettingsGroup>

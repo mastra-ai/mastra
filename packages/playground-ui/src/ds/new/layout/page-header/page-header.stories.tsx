@@ -134,6 +134,18 @@ export const MetaBoth: Story = {
   ),
 };
 
+export const MetaText: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader>
+        <PageHeader.Title>production</PageHeader.Title>
+        <PageHeader.Meta beside>Updated 2 hours ago</PageHeader.Meta>
+        <PageHeader.Description>Runtime configuration for the production environment.</PageHeader.Description>
+      </PageHeader>
+    </StoryFrame>
+  ),
+};
+
 export const IconOnly: Story = {
   render: () => (
     <StoryFrame>

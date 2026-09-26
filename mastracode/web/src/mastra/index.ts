@@ -33,12 +33,12 @@ import { createFactorySecretEncryption, MastraFactory } from '@mastra/factory';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { GitLabIntegration } from '@mastra/factory/integrations/gitlab/integration';
 import { parseAuthorizedBotsEnv } from '@mastra/factory/integrations/github/webhook';
+import { IncidentioIntegration } from '@mastra/factory/integrations/incidentio/integration';
 import { JiraIntegration } from '@mastra/factory/integrations/jira/integration';
 import { PlatformJiraIntegration } from '@mastra/factory/integrations/platform/jira/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
-import { githubRules } from './github-rules.js';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -98,7 +98,14 @@ function credentialEncryption() {
 // in favor of pubsub-coordinated leases. Without `REDIS_URL` (bare local dev)
 // the in-process default applies.
 const redisUrl = process.env.REDIS_URL;
-const pubsub = redisUrl ? new RedisStreamsPubSub({ url: redisUrl }) : undefined;
+// Backstop TTL for idle streams: every write (publish, group creation, nack
+// retry) refreshes it — reads do not — so actively written topics never
+// expire. Open-ended topics (per-thread streams, feed
+// topics) are never clearTopic'd, and topics whose eager cleanup was missed
+// (e.g. a crashed run, or a reply landing after the requester's clearTopic)
+// would otherwise stay in Redis forever.
+const STREAM_IDLE_TTL_MS = 24 * 60 * 60 * 1000;
+const pubsub = redisUrl ? new RedisStreamsPubSub({ url: redisUrl, streamIdleTtlMs: STREAM_IDLE_TTL_MS }) : undefined;
 if (redisUrl) {
   // Redact credentials before logging (REDIS_URL may embed a password).
   let redisTarget = 'redis';
@@ -180,15 +187,8 @@ const github =
         // Extra reviewer bot logins this deployment trusts to trigger
         // review/comment notifications, on top of the built-in defaults.
         authorizedBots: parseAuthorizedBotsEnv(process.env.MASTRACODE_GITHUB_AUTHORIZED_BOTS),
-        rules: githubRules,
       })
     : undefined;
-
-// What the factory installs on its own is the only thing `platform.github`
-// reaches: Platform credentials present and no direct `GITHUB_APP_*`
-// integration holding the slot. Set otherwise, the key would be a
-// warn-and-ignore no-op on every boot.
-const platformGithub = !github && platformCredentialsConfigured ? { rules: githubRules } : undefined;
 
 // Direct GitLab fallback for self-hosted / local deploys. GitLab Personal
 // and Group Access Tokens use the same API/Git authentication; the explicit
@@ -244,6 +244,14 @@ const jira =
     : platformCredentialsConfigured
       ? new PlatformJiraIntegration()
       : undefined;
+
+// Direct incident.io follow-up intake for self-hosted / local deploys. A
+// single deployment-global API key wires the integration; the constructor
+// throws without one, so construction is gated on the env var. When the key
+// is absent, the factory installs the Platform-backed integration itself if
+// Platform credentials are configured.
+const incidentioApiKey = process.env.INCIDENT_IO_API_KEY?.trim();
+const incidentio = incidentioApiKey ? new IncidentioIntegration({ apiKey: incidentioApiKey }) : undefined;
 
 // Host env exposed to local sandboxes: an allow-list only, so app secrets
 // (GITHUB_APP_PRIVATE_KEY, WORKOS_API_KEY, DATABASE_URL, …) never leak into
@@ -345,6 +353,7 @@ const integrations = [
   ...(gitlab ? [gitlab] : []),
   ...(linear ? [linear] : []),
   ...(jira ? [jira] : []),
+  ...(incidentio ? [incidentio] : []),
   ...(slack ? [slack] : []),
 ];
 
@@ -401,9 +410,6 @@ export const factory = new MastraFactory({
     // comparing against `undefined[bot]` on every Platform deployment, where
     // this is legitimately unset.
     githubAppSlug,
-    // Event-rule overrides for the GitHub integration the factory installs
-    // itself — defined only when it does install one (see `platformGithub`).
-    ...(platformGithub ? { github: platformGithub } : {}),
   },
   // Browser-facing origin. On the platform the SPA is hosted separately, so
   // this MUST be set to the public API origin.

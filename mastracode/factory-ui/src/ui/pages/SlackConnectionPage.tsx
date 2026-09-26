@@ -1,11 +1,13 @@
+import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 import { ChevronRight } from 'lucide-react';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 
 import { useApiConfig } from '../../api/config';
 import {
@@ -15,7 +17,6 @@ import {
 } from '../../hooks/useChannelAccounts';
 import { useSetFactorySlackWorkItemsMutation } from '../../hooks/useFactorySlackWorkItems';
 import { useFactoriesQuery } from '../../hooks/useFactories';
-import { ConnectionSettingsShell } from '../domains/settings/components/ConnectionSettingsShell';
 import { IdentityWithTooltip } from '../domains/settings/components/IdentityWithTooltip';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 
@@ -30,8 +31,29 @@ const linkedDateFormatter = new Intl.DateTimeFormat(undefined, {
 });
 
 export function SlackConnectionPage() {
+  const { factoryId } = useParams();
   return (
-    <SettingsPageLayout>
+    <SettingsPageLayout
+      breadcrumbs={
+        <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden">
+          <Crumb as={Link} to={factoryId ? `/factories/${factoryId}/settings/connections` : '/'}>
+            Connections
+          </Crumb>
+          <Crumb as="span" isCurrent>
+            Slack
+          </Crumb>
+        </Breadcrumb>
+      }
+      header={
+        <PageHeader>
+          <PageHeader.Icon>
+            <SlackIcon />
+          </PageHeader.Icon>
+          <PageHeader.Title>Slack</PageHeader.Title>
+          <PageHeader.Description>Start and continue Factory sessions from Slack.</PageHeader.Description>
+        </PageHeader>
+      }
+    >
       <SlackConnectionSettings />
     </SettingsPageLayout>
   );
@@ -91,17 +113,7 @@ export function SlackConnectionSettings() {
   };
 
   return (
-    <ConnectionSettingsShell
-      backLabel="Back to connections"
-      backTo={factoryId ? `/factories/${factoryId}/settings/connections` : '/'}
-      title={
-        <span className="flex items-center gap-3">
-          <SlackIcon className="size-6" />
-          Slack
-        </span>
-      }
-      description="Start and continue Factory sessions from Slack."
-    >
+    <div className="mt-6 flex flex-col gap-8 pb-5">
       {accountsQuery.isPending ? (
         <Txt as="p" variant="caption" role="status" className="text-muted-foreground">
           Loading Slack connection…
@@ -264,6 +276,6 @@ export function SlackConnectionSettings() {
           </SettingsSubsection>
         </div>
       )}
-    </ConnectionSettingsShell>
+    </div>
   );
 }

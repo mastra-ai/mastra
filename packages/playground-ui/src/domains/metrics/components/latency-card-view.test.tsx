@@ -89,33 +89,16 @@ describe('LatencyCardView', () => {
     });
   });
 
-  describe('the headline number', () => {
-    it('averages p50 across every entity type, not just the visible tab', () => {
-      render(
-        <LatencyCardView
-          data={{
-            agentData: [{ ...agentPoint, p50: 100 }],
-            workflowData: [{ ...agentPoint, p50: 200 }],
-            toolData: [{ ...agentPoint, p50: 300 }],
-          }}
-          isLoading={false}
-          isError={false}
-        />,
-      );
-
-      expect(screen.getByText('200ms')).toBeTruthy();
-      expect(screen.getByText('Avg p50')).toBeTruthy();
-    });
-
-    it('rounds to whole milliseconds', () => {
+  describe('the legend next to the tabs', () => {
+    it('averages the visible tab only and follows tab changes', () => {
       render(
         <LatencyCardView
           data={{
             agentData: [
-              { ...agentPoint, p50: 100 },
-              { ...agentPoint, p50: 101 },
+              { ...agentPoint, p50: 100, p95: 400 },
+              { ...agentPoint, p50: 101, p95: 400 },
             ],
-            workflowData: [],
+            workflowData: [{ ...agentPoint, p50: 300, p95: 900 }],
             toolData: [],
           }}
           isLoading={false}
@@ -123,23 +106,15 @@ describe('LatencyCardView', () => {
         />,
       );
 
-      expect(screen.getByText('101ms')).toBeTruthy();
-    });
+      expect(screen.getByText('101')).toBeTruthy();
+      expect(screen.getByText('400')).toBeTruthy();
+      expect(screen.queryByText('Avg p50')).toBeNull();
 
-    it('falls back to a dash when the points carry no p50 at all', () => {
-      render(
-        <LatencyCardView
-          data={{
-            agentData: [{ time: '15:00', tsMs: agentPoint.tsMs, p95: 500 } as LatencyPoint],
-            workflowData: [],
-            toolData: [],
-          }}
-          isLoading={false}
-          isError={false}
-        />,
-      );
+      fireEvent.click(screen.getByRole('tab', { name: 'Workflows' }));
 
-      expect(screen.getByText('—')).toBeTruthy();
+      expect(screen.getByText('300')).toBeTruthy();
+      expect(screen.getByText('900')).toBeTruthy();
+      expect(screen.queryByText('101')).toBeNull();
     });
   });
 

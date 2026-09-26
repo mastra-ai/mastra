@@ -15,7 +15,7 @@ import { EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
 import { MockStore } from '@mastra/core/storage';
 
-// Shared pubsub instance for all tests
+// Shared pubsub instance for all tests.
 let sharedPubSub: EventEmitterPubSub;
 
 // Test ID counter for unique agent IDs
@@ -37,29 +37,52 @@ createDurableAgentTestSuite({
   createAgent: async (config: CreateAgentConfig): Promise<DurableAgentLike> => {
     const testId = generateTestId();
 
+    // Recovery tests re-create the "same" agent on a fresh host, so the id
+    // must survive verbatim for run discovery to match the persisted
+    // snapshot; other tests get a unique suffix for isolation.
+    const agentId = config.exactId ? config.id : `${config.id}-${testId}`;
+
+    // A recovered host gets its own bus (agent + Mastra host), mirroring a
+    // real process restart where the crashed host's bus is gone.
+    const pubsub = config.isolatedPubsub ? new EventEmitterPubSub() : sharedPubSub;
+
     // Create a regular Mastra Agent
     const agent = new Agent({
-      id: `${config.id}-${testId}`,
+      id: agentId,
       name: config.name || config.id,
       instructions: config.instructions,
       model: config.model,
       tools: config.tools,
+      ...(config.agents ? { agents: config.agents } : {}),
+      ...(config.memory ? { memory: config.memory } : {}),
+      ...(config.outputProcessors ? { outputProcessors: config.outputProcessors } : {}),
+      ...(config.requestContextSchema ? { requestContextSchema: config.requestContextSchema } : {}),
     });
 
     // Wrap with evented durable execution
     const eventedAgent = createEventedAgent({
       agent,
-      pubsub: sharedPubSub,
+      pubsub,
     });
 
-    // Wire up Mastra with storage for snapshot persistence (needed for resume)
-    if (config.needsStorage) {
-      new Mastra({
-        logger: false,
-        storage: new MockStore(),
-        agents: { [`${config.id}-${testId}`]: eventedAgent as any },
-      });
-    }
+    // Always wire up Mastra so the evented engine has a host instance, and
+    // share the suite's pubsub so engine-published events reach the agent's
+    // stream listeners (the engine publishes on mastra.pubsub, not the
+    // pubsub passed to the agent). A caller-supplied store is shared across
+    // hosts (crash-recovery tests build a second host over the crashed
+    // host's storage).
+    new Mastra({
+      logger: false,
+      storage: config.storage ?? new MockStore(),
+      pubsub,
+      agents: { [agentId]: eventedAgent as any },
+      // Crash-recovery hosts opt into `running` checkpoints (#23915). The
+      // EventedAgent pins its own persistence policy, but the host config
+      // stays symmetric with the DurableAgent leg.
+      ...(config.recovery ? { recovery: { durableAgents: 'auto' as const } } : {}),
+      // FGA-domain tests activate the agents:execute gate on the host.
+      ...(config.fga ? { server: { fga: config.fga as any } } : {}),
+    });
 
     return eventedAgent as unknown as DurableAgentLike;
   },

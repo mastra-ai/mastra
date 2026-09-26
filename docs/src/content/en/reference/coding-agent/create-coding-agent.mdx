@@ -89,7 +89,13 @@ For the behavioral prompt Mastra Code uses, covering repository exploration, edi
     name: 'errorProcessors',
     type: 'Processor[]',
     description:
-      'Error processors for the agent. When omitted, defaults to unknown stream-error retries with specialized ECONNRESET and bad-request policies, plus PrefillErrorHandler and ProviderHistoryCompat.',
+      'Error processors for the agent. When omitted, defaults to unknown stream-error retries with specialized ECONNRESET and bad-request policies, plus PrefillErrorHandler, ProviderHistoryCompat, and CyberRefusalHandler.',
+    isOptional: true,
+  },
+  {
+    name: 'outputProcessors',
+    type: 'Processor[]',
+    description: 'Output processors for the agent. When omitted, defaults to CyberRefusalHandler.',
     isOptional: true,
   },
   {
@@ -122,10 +128,12 @@ A default is only filled in when you don't provide the corresponding field. `sig
 | - | - |
 | `workspace` | A [`Workspace`](/reference/workspace/workspace-class) backed by `LocalFilesystem` and `LocalSandbox` rooted at the base path. |
 | `signals` | A [`TaskSignalProvider`](/reference/signals/task-signal-provider), added only when `memory` is configured. |
-| `errorProcessors` | Unknown stream-error retries with specialized ECONNRESET and bad-request policies, plus `PrefillErrorHandler` and `ProviderHistoryCompat`. |
+| `errorProcessors` | Unknown stream-error retries with specialized ECONNRESET and bad-request policies, plus `PrefillErrorHandler`, `ProviderHistoryCompat`, and `CyberRefusalHandler`. |
+| `outputProcessors` | [`CyberRefusalHandler`](/reference/processors/cyber-refusal-handler). |
+| `maxProcessorRetries` | `DEFAULT_MAX_PROCESSOR_RETRIES` (3), so the output-lane cyber-refusal retry has a budget. |
 | `goal.prompt` | `DEFAULT_GOAL_JUDGE_PROMPT` (only when a `goal` is configured). |
 
-Nothing else is filled in. There's no default `model`, `instructions`, `tools`, `memory`, storage, or input and output processors.
+Nothing else is filled in. There's no default `model`, `instructions`, `tools`, `memory`, storage, or input processors.
 
 Each default has an explicit opt-out:
 
@@ -134,6 +142,8 @@ Each default has an explicit opt-out:
 | Workspace | `workspace: undefined` |
 | Task tracking | Don't configure `memory` on the agent |
 | Error processors | `errorProcessors: []` |
+| Output processors | `outputProcessors: []` |
+| Processor retry budget | `maxProcessorRetries: 0` |
 | Goal judge prompt | Omit `goal`, or pass your own `goal.prompt` |
 
 ### Workspace
@@ -246,6 +256,8 @@ The default [`StreamErrorRetryProcessor`](/reference/processors/stream-error-ret
 - Bad-request errors retry once after `2000ms`.
 
 Specific network-reset and bad-request policies take precedence over the unknown-error policy. Passing `errorProcessors` replaces the default processor stack. `PrefillErrorHandler` and `ProviderHistoryCompat` are also included for provider compatibility: both repair errors caused by the shape of the message history, such as a provider rejecting a conversation that ends with an assistant message.
+
+[`CyberRefusalHandler`](/reference/processors/cyber-refusal-handler) retries once when an OpenAI or Anthropic cybersecurity safeguard refuses a step, which often happens to ordinary coding work. It runs in both `errorProcessors` (OpenAI refusals are API errors) and `outputProcessors` (Anthropic refusals finish the step). Passing either list replaces that half of the handler.
 
 Retries happen inside the `generate()` or `stream()` call that hit the error, so a recovered failure is invisible to your code. When the retries run out, the error surfaces the way any model error does: `generate()` rejects and `stream()` emits an `error` chunk. `generate()` and `stream()` also accept `errorProcessors` per call, which replaces the agent's stack for that request. See [Processors](/docs/agents/processors#error-processor-retry-limits) for `maxProcessorRetries`, the retry budget these processors share.
 

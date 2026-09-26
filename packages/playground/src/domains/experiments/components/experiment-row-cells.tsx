@@ -1,7 +1,8 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataList as EntityList } from '@mastra/playground-ui/components/DataList';
-import { formatExperimentDate, STATUS_LABEL, STATUS_VARIANT } from './experiment-columns';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import { STATUS_LABEL, STATUS_VARIANT } from './experiment-columns';
 import { ExperimentDescriptionLabel, ExperimentNameLabel } from './experiment-name-label';
 import { useTargetRegistries } from '@/domains/experiments/hooks/use-target-registries';
 import { resolveTargetName, TARGET_ICON, TARGET_LABEL } from '@/domains/experiments/utils/target-name';
@@ -49,7 +50,7 @@ export function ExperimentRowCells({ experiment: exp, datasetName, review }: Exp
       <EntityList.Cell className="text-center">
         <ExperimentReviewCell review={review} />
       </EntityList.Cell>
-      <EntityList.TextCell>{formatExperimentDate(exp.createdAt)}</EntityList.TextCell>
+      <EntityList.TextCell>{formatDate(exp.createdAt, 'date') ?? '—'}</EntityList.TextCell>
     </>
   );
 }

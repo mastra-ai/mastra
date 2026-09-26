@@ -4,6 +4,9 @@ import {
   formatRelativeTime,
   formatGapBetweenDates,
   parseDateFromContent,
+  parseDateSpan,
+  formatRelativeSpan,
+  annotateObservationTextDates,
   isFutureIntentObservation,
   expandInlineEstimatedDates,
   addRelativeTimeToObservations,
@@ -176,11 +179,10 @@ describe('parseDateFromContent', () => {
     expect(result!.getMonth()).toBe(4);
   });
 
-  it('parses cross-month range "April to May 2023"', () => {
+  it('parses cross-month range "April to May 2023" as the start of the range', () => {
     const result = parseDateFromContent('April to May 2023');
     expect(result).toBeInstanceOf(Date);
-    // Uses second month (May) day 1
-    expect(result!.getMonth()).toBe(4);
+    expect(result!.getMonth()).toBe(3);
     expect(result!.getDate()).toBe(1);
   });
 
@@ -188,6 +190,128 @@ describe('parseDateFromContent', () => {
     expect(parseDateFromContent('sometime soon')).toBeNull();
     expect(parseDateFromContent('next week')).toBeNull();
     expect(parseDateFromContent('')).toBeNull();
+  });
+});
+
+describe('parseDateSpan', () => {
+  const day = (d: Date | undefined) =>
+    d
+      ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      : null;
+  const span = (text: string) => {
+    const result = parseDateSpan(text);
+    return result ? [day(result.start), day(result.end)] : null;
+  };
+
+  it.each([
+    ['May 30, 2023', '2023-05-30', '2023-05-30'],
+    ['Mar 22, 2025 at 18:08', '2025-03-22', '2025-03-22'],
+    ['February 26, 2023 at 3:00 PM', '2023-02-26', '2023-02-26'],
+    ['May 27-28, 2023', '2023-05-27', '2023-05-28'],
+    ['August 13–27, 2024', '2024-08-13', '2024-08-27'],
+    ['approx. Dec 27–31, 2021', '2021-12-27', '2021-12-31'],
+    ['Mar 1 - Mar 18, 2025', '2025-03-01', '2025-03-18'],
+    ['Aug 1, 2024 - Feb 28, 2025', '2024-08-01', '2025-02-28'],
+    ['Jul - Dec 2024', '2024-07-01', '2024-12-31'],
+    ['August 2024', '2024-08-01', '2024-08-31'],
+    ['June–July 2022', '2022-06-01', '2022-07-31'],
+    ['approx. Dec 2021 – June 2023', '2021-12-01', '2023-06-30'],
+    ['late 2023', '2023-11-15', '2023-11-15'],
+    ['2035', '2035-01-01', '2035-12-31'],
+    ['approx. 2021–2026', '2021-01-01', '2026-12-31'],
+    ['approx. 2022–2023 or 2023–2024', '2022-01-01', '2024-12-31'],
+    ['mid-to-late May 2023', '2023-05-15', '2023-05-23'],
+    ['2024-01-10', '2024-01-10', '2024-01-10'],
+    ['Dec 27 – Jan 3, 2025', '2024-12-27', '2025-01-03'],
+    ['Dec – Jan 2025', '2024-12-01', '2025-01-31'],
+    ['Dec 27, 2024 – Jan 3', '2024-12-27', '2025-01-03'],
+  ])('parses "%s" as %s to %s', (text, start, end) => {
+    expect(span(text)).toEqual([start, end]);
+  });
+
+  it.each([
+    'Oct 19',
+    'Nov 2 20:36',
+    'Jan 22 - Jan 31',
+    'late May',
+    'Feb 30, 2023',
+    'Mar 5 - Mar 1, 2025',
+    'next week',
+    '',
+  ])('returns null for "%s", which has no known year or is not a real date', text => {
+    expect(parseDateSpan(text)).toBeNull();
+  });
+});
+
+describe('formatRelativeSpan', () => {
+  const now = new Date(2025, 2, 26, 12);
+
+  it('collapses a span whose ends read the same', () => {
+    expect(formatRelativeSpan({ start: new Date(2020, 3, 1), end: new Date(2020, 3, 30) }, now)).toBe('4 years ago');
+  });
+
+  it('joins past ends with "to"', () => {
+    expect(formatRelativeSpan({ start: new Date(2024, 7, 1), end: new Date(2025, 1, 28) }, now)).toBe(
+      '7 months ago to 3 weeks ago',
+    );
+  });
+
+  it('reads a span running into the future as "from now"', () => {
+    expect(formatRelativeSpan({ start: new Date(2021, 0, 1), end: new Date(2026, 11, 31) }, now)).toBe(
+      '4 years ago to 1 year from now',
+    );
+  });
+
+  it('does not repeat "in" for a wholly future span', () => {
+    expect(formatRelativeSpan({ start: new Date(2025, 5, 1), end: new Date(2025, 6, 31) }, now)).toBe(
+      'in 2 months to 4 months',
+    );
+  });
+});
+
+describe('annotateObservationTextDates', () => {
+  const now = new Date(2025, 2, 26, 12);
+
+  it('annotates a dated event in observation text', () => {
+    expect(annotateObservationTextDates('* User had an exam on January 10, 2024 at 3:00 PM.', now)).toBe(
+      '* User had an exam on January 10, 2024 at 3:00 PM (1 year ago).',
+    );
+  });
+
+  it('annotates month-year dates and ranges that state their year', () => {
+    expect(annotateObservationTextDates('EduCon Apr 2020; Phase 1 (Mar 1–15, 2025)', now)).toBe(
+      'EduCon Apr 2020 (4 years ago); Phase 1 (Mar 1–15, 2025 - 3 weeks ago to 1 week ago)',
+    );
+  });
+
+  it('annotates a range that crosses New Year with one stated year', () => {
+    expect(annotateObservationTextDates('* Trip Dec 27 – Jan 3, 2025.', now)).toBe(
+      '* Trip Dec 27 – Jan 3, 2025 (2 months ago).',
+    );
+  });
+
+  it('skips dates without a year', () => {
+    const input = '* Daughter Brittany (5; bday Oct 19). Timeline: Feb 24 50%, Feb 27 75% (Nov 2 20:36).';
+    expect(annotateObservationTextDates(input, now)).toBe(input);
+  });
+
+  it('skips bare years, which are too ambiguous in free text', () => {
+    const input = '* Target of 2035 users by 2030.';
+    expect(annotateObservationTextDates(input, now)).toBe(input);
+  });
+
+  it('leaves ISO dates inside identifiers, versions and paths unchanged', () => {
+    const input = [
+      '* Switched to `gpt-4o-2024-08-06` with api-version=2024-02-15-preview.',
+      '* Added migrations/2024-01-10-add-users.sql on release/2025-09-01; see https://example.com/blog/2024-05-01-launch.',
+      '* Ran `date -d 2024-01-10`.',
+    ].join('\n');
+    expect(annotateObservationTextDates(input, now)).toBe(input);
+  });
+
+  it('leaves Date: headers and meaning/estimated notes to their own passes', () => {
+    const input = 'Date: Mar 20, 2025\n* Launch (meaning Mar 22, 2025) and (estimated June 2025).';
+    expect(annotateObservationTextDates(input, now)).toBe(input);
   });
 });
 
@@ -299,6 +423,48 @@ describe('expandInlineEstimatedDates', () => {
     expect(lines[1]).toContain('likely already happened');
   });
 
+  it.each([
+    ['(meaning Mar 22, 2025 at 18:08)', '(meaning Mar 22, 2025 at 18:08 - 2 months ago)'],
+    ['(meaning August 13–27, 2024)', '(meaning August 13–27, 2024 - 10 months ago to 9 months ago)'],
+    ['(meaning approx. late 2023)', '(meaning approx. late 2023 - 1 year ago)'],
+    ['(meaning August 2024)', '(meaning August 2024 - 10 months ago to 9 months ago)'],
+    ['(meaning 2035)', '(meaning 2035 - in 9 years to 10 years)'],
+    ['(meaning end of 2023)', '(meaning end of 2023 - 1 year ago)'],
+    ['(meaning by late 2027)', '(meaning by late 2027 - in 2 years)'],
+    [
+      '(meaning $500 in 2024; automated $41.67/mo)',
+      '(meaning $500 in 2024; automated $41.67/mo - 1 year ago to 5 months ago)',
+    ],
+  ])('expands %s', (note, expected) => {
+    expect(expandInlineEstimatedDates(`User noted it ${note}`, now)).toBe(`User noted it ${expected}`);
+  });
+
+  it.each([
+    'User listed costs (estimated 50,000+ TRY, like kitchen updates)',
+    'User scoped the refactor (estimated 2000 lines of change)',
+    'User asked for more (meaning raise to $2100 per month)',
+  ])('leaves notes without a year unchanged: %s', input => {
+    expect(expandInlineEstimatedDates(input, now)).toBe(input);
+  });
+
+  it.each([`(meaning ${' '.repeat(50_000)}`, `(meaning ${'(meaning ('.repeat(10_000)}`])(
+    'stays fast on long unclosed notes',
+    input => {
+      const started = performance.now();
+      expect(expandInlineEstimatedDates(input, now)).toBe(input);
+      expect(annotateObservationTextDates(input, now)).toBe(input);
+      expect(performance.now() - started).toBeLessThan(100);
+    },
+  );
+
+  it('stays fast on a long run of spaces inside a closed note or a header', () => {
+    const spaces = ' '.repeat(20_000);
+    const started = performance.now();
+    expandInlineEstimatedDates(`(meaning a${spaces}b 2024)`, now);
+    addRelativeTimeToObservations(`Date: a${spaces}b`, now);
+    expect(performance.now() - started).toBeLessThan(100);
+  });
+
   it('uses forward-looking strings for future dates', () => {
     const input = `Event scheduled (estimated July 15, 2025)`;
     const result = expandInlineEstimatedDates(input, now);
@@ -350,6 +516,25 @@ describe('addRelativeTimeToObservations', () => {
     expect(result).toContain('June 10, 2025 (5 days ago)');
     // Inline date should be expanded
     expect(result).toContain('May 30, 2025 -');
+  });
+
+  it('annotates range headers and measures gaps from the end of the previous range', () => {
+    const input = [
+      'Date: Apr 1, 2025 - May 20, 2025',
+      '- Consolidated facts',
+      'Date: Jun 1, 2025',
+      '- Later observation',
+    ].join('\n');
+    const result = addRelativeTimeToObservations(input, now);
+    expect(result).toContain('Date: Apr 1, 2025 - May 20, 2025 (2 months ago to 3 weeks ago)');
+    // May 20 → Jun 1 is 12 days; measuring from Apr 1 would say "1 month later"
+    expect(result).toContain('[1 week later]');
+  });
+
+  it('annotates dates written into observation lines', () => {
+    const input = ['Date: June 10, 2025', '- User had an exam on January 10, 2025'].join('\n');
+    const result = addRelativeTimeToObservations(input, now);
+    expect(result).toContain('exam on January 10, 2025 (5 months ago)');
   });
 
   it('handles "today" for current date', () => {

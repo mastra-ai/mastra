@@ -1,6 +1,5 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
-import { usePlaygroundStore } from '@mastra/playground-ui/store/playground-store';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
@@ -10,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import AgentBuilderSkillsView from '../view';
 import type { CurrentUser } from '@/domains/auth/types';
+import { usePlaygroundStore } from '@/store/playground-store';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';

@@ -73,6 +73,7 @@ vi.mock('@mastra/core/agent', () => ({
 }));
 
 vi.mock('@mastra/core/processors', () => ({
+  CyberRefusalHandler: class {},
   isBadRequestError: (error: unknown) =>
     typeof error === 'object' &&
     error !== null &&

@@ -93,6 +93,7 @@ const controllerSetStateMock = vi.fn();
 const controllerSetThreadSettingMock = vi.fn();
 const controllerSetThreadSettingOnMock = vi.fn();
 const controllerEmitMock = vi.fn();
+const controllerGetSessionByResourceMock = vi.fn();
 let createdSessionMock: any;
 const createMcpManagerMock = vi.fn();
 const hookManagerConstructorMock = vi.fn();
@@ -233,8 +234,8 @@ vi.mock('@mastra/core/agent-controller', () => ({
       };
       return createdSessionMock;
     }
-    async getSessionByResource() {
-      return createdSessionMock;
+    async getSessionByResource(resourceId: string) {
+      return controllerGetSessionByResourceMock(resourceId);
     }
     getState() {
       return controllerStateMock;
@@ -254,12 +255,19 @@ vi.mock('@mastra/core/agent-controller', () => ({
 }));
 
 const streamErrorRetryProcessorConstructorMock = vi.fn();
+const agentsMdInjectorConstructorMock = vi.fn();
 
 vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {
     readonly id = 'agents-md-injector';
+    constructor(options?: unknown) {
+      agentsMdInjectorConstructorMock(options);
+    }
   },
   createBackgroundWorkSignalProcessor: () => ({ id: 'background-work-signals' }),
+  CyberRefusalHandler: class {
+    readonly id = 'cyber-refusal-handler';
+  },
   isBadRequestError: (error: unknown) =>
     typeof error === 'object' &&
     error !== null &&
@@ -495,6 +503,8 @@ describe('createMastraCode', () => {
     controllerSetThreadSettingOnMock.mockReset();
     controllerSetThreadSettingOnMock.mockResolvedValue(undefined);
     controllerEmitMock.mockReset();
+    controllerGetSessionByResourceMock.mockReset();
+    controllerGetSessionByResourceMock.mockImplementation(async () => createdSessionMock);
     createdSessionMock = undefined;
     createMcpManagerMock.mockReset();
     hookManagerConstructorMock.mockReset();
@@ -527,6 +537,7 @@ describe('createMastraCode', () => {
     updateThreadPeerAdvertisementMock.mockReset();
     updateThreadPeerAdvertisementMock.mockReturnValue(true);
     streamErrorRetryProcessorConstructorMock.mockReset();
+    agentsMdInjectorConstructorMock.mockReset();
     getAvailableModePacksMock.mockClear();
     getAvailableOmPacksMock.mockClear();
     for (const key of Object.keys(providerRegistryMock)) {
@@ -1296,10 +1307,25 @@ describe('createMastraCode', () => {
     expect(agentConfig?.maxProcessorRetries).toBe(64);
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toEqual([
       'provider-history-compat',
+      'cyber-refusal-handler',
       'stream-error-retry-processor',
       'prefill-error-handler',
       'mastracode-account-rotation',
     ]);
+  });
+
+  it('scopes AGENTS.md reminder lookup to the session project path', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    const options = agentsMdInjectorConstructorMock.mock.calls[0]?.[0] as
+      | { getBasePath?: (args: { requestContext?: { get: (key: string) => unknown } }) => string | undefined }
+      | undefined;
+    expect(options?.getBasePath).toBeTypeOf('function');
+    const withProjectPath = { get: () => ({ getState: () => ({ projectPath: '/work/target' }) }) };
+    expect(options?.getBasePath?.({ requestContext: withProjectPath })).toBe('/work/target');
+    expect(options?.getBasePath?.({ requestContext: undefined })).toBe(process.cwd());
   });
 
   it('configures a single StreamErrorRetryProcessor with per-matcher policies', async () => {
@@ -1437,7 +1463,7 @@ describe('createMastraCode', () => {
       'provider-history-compat',
       'mastracode-account-start-notice',
     ]);
-    expect(resolveOutputProcessors()).toEqual([]);
+    expect(resolveOutputProcessors().map(processor => processor.id)).toEqual(['cyber-refusal-handler']);
   });
 
   it('hands Mastra to configured input processors, which the function lane takes out of the Agent path', async () => {
@@ -1496,7 +1522,7 @@ describe('createMastraCode', () => {
       'mastracode-account-start-notice',
       'acme-input',
     ]);
-    expect(resolveOutputProcessors()).toEqual([pluginOutput]);
+    expect(resolveOutputProcessors()).toEqual([expect.objectContaining({ id: 'cyber-refusal-handler' }), pluginOutput]);
 
     // A plugin disabled or updated mid-session changes what the manager reports;
     // the next request picks it up through the same agent.
@@ -1508,7 +1534,7 @@ describe('createMastraCode', () => {
       'provider-history-compat',
       'mastracode-account-start-notice',
     ]);
-    expect(resolveOutputProcessors()).toEqual([]);
+    expect(resolveOutputProcessors().map(processor => processor.id)).toEqual(['cyber-refusal-handler']);
   });
 
   it('runs plugin signal providers through the lane, never the agent signals array', async () => {
@@ -1553,7 +1579,10 @@ describe('createMastraCode', () => {
       'mastracode-account-start-notice',
       'acme-provider-input',
     ]);
-    expect(resolveOutputProcessors()).toEqual([outputProcessor]);
+    expect(resolveOutputProcessors()).toEqual([
+      expect.objectContaining({ id: 'cyber-refusal-handler' }),
+      outputProcessor,
+    ]);
     expect(built.controller).toBeDefined();
   });
 
@@ -1618,7 +1647,7 @@ describe('createMastraCode', () => {
       'provider-history-compat',
       'mastracode-account-start-notice',
     ]);
-    expect(resolveOutputProcessors()).toEqual([]);
+    expect(resolveOutputProcessors().map(processor => processor.id)).toEqual(['cyber-refusal-handler']);
     // Warned once, not once per request: this is the hot path.
     expect(warn).toHaveBeenCalledTimes(1);
     warn.mockRestore();
@@ -1707,6 +1736,52 @@ describe('createMastraCode', () => {
     expect(controllerContext.getState()).toMatchObject({ mastracodePendingPackFallback: { toPackId: 'openai' } });
     expect(controllerSetStateMock).not.toHaveBeenCalled();
     expect(controllerEmitMock).not.toHaveBeenCalled();
+  });
+
+  it('lets the host prepare the request context of a wake', async () => {
+    const prepareWakeRequestContext = vi.fn(({ requestContext, resourceId }) => {
+      requestContext.set('user', { workosId: `owner-of-${resourceId}`, organizationId: 'org-1' });
+    });
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ prepareWakeRequestContext });
+    const decide = agentConstructorMock.mock.calls
+      .map(call => call[0] as Record<string, any>)
+      .find(config => config.notifications)?.notifications?.deliveryPolicy?.decide;
+
+    const decision = await decide({
+      record: { priority: 'medium', source: 'github', resourceId: 'project-resource', threadId: 'notification-thread' },
+      threadState: 'idle',
+      now: new Date('2026-09-15T00:00:00.000Z'),
+    });
+
+    expect(prepareWakeRequestContext).toHaveBeenCalledTimes(1);
+    const [args] = prepareWakeRequestContext.mock.calls[0]!;
+    expect(Object.keys(args).sort()).toEqual(['requestContext', 'resourceId', 'threadId']);
+    expect(args).toMatchObject({ resourceId: 'project-resource', threadId: 'notification-thread' });
+    expect(args.requestContext).toBe(decision.streamOptions.requestContext);
+    expect(decision.streamOptions.requestContext.get('user')).toEqual({
+      workosId: 'owner-of-project-resource',
+      organizationId: 'org-1',
+    });
+    expect(decision.streamOptions.requestContext.get('controller')).toBeDefined();
+  });
+
+  it('does not prepare a wake request context when no session owns the resource', async () => {
+    const prepareWakeRequestContext = vi.fn();
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ prepareWakeRequestContext });
+    controllerGetSessionByResourceMock.mockResolvedValue(undefined);
+    const decide = agentConstructorMock.mock.calls
+      .map(call => call[0] as Record<string, any>)
+      .find(config => config.notifications)?.notifications?.deliveryPolicy?.decide;
+
+    await decide({
+      record: { priority: 'medium', source: 'github', resourceId: 'other-resource', threadId: 'notification-thread' },
+      threadState: 'idle',
+      now: new Date('2026-09-15T00:00:00.000Z'),
+    });
+
+    expect(prepareWakeRequestContext).not.toHaveBeenCalled();
   });
 
   it('configures GitHubSignals as a signal provider for local PR subscriptions', async () => {

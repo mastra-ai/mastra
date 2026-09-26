@@ -33,6 +33,7 @@
  */
 
 import { parseSqlIdentifier } from '@mastra/core/utils';
+import { parseSchemaName } from '../../../../shared/schema-name';
 import {
   buildColumnDefinitions,
   FEEDBACK_EVENT_COLUMNS,
@@ -78,21 +79,21 @@ export const SIGNAL_TIME_COLUMN: Record<(typeof ALL_SIGNAL_TABLES)[number], stri
 
 /** Returns a fully-qualified, double-quoted table name. */
 export function qualifiedTable(schema: string, table: string): string {
-  const s = parseSqlIdentifier(schema, 'schema name');
+  const s = parseSchemaName(schema);
   const t = parseSqlIdentifier(table, 'table name');
   return `"${s}"."${t}"`;
 }
 
 /** Returns a parsed, quoted, schema-prefixed object name (constraint, index, etc.). */
 export function qualifiedName(schema: string, name: string): string {
-  const s = parseSqlIdentifier(schema, 'schema name');
+  const s = parseSchemaName(schema);
   const n = parseSqlIdentifier(name, 'object name');
   return `"${s}"."${n}"`;
 }
 
 /** Schema CREATE. Safe to run repeatedly before table DDL. */
 export function schemaDDL(schema: string): string {
-  const s = parseSqlIdentifier(schema, 'schema name');
+  const s = parseSchemaName(schema);
   return `CREATE SCHEMA IF NOT EXISTS "${s}"`;
 }
 

@@ -40,6 +40,17 @@
     var(--elevation-raised);
 }
 
+@utility shadow-input {
+  --surface-tint: transparent;
+  --surface-rim: var(--field-rim);
+
+  box-shadow:
+    var(--elevation-lip),
+    inset 0 0 0 1px var(--surface-rim),
+    inset 0 0 0 9999px var(--surface-tint),
+    var(--elevation-raised);
+}
+
 @utility shadow-rim {
   box-shadow: inset 0 0 0 1px var(--surface-rim);
 }
@@ -136,6 +147,14 @@
 @layer base {
   * {
     border-color: var(--border);
+  }
+
+  :where(code, samp, pre, .font-mono) {
+    font-size-adjust: var(--font-mono-size-adjust, none);
+  }
+
+  kbd {
+    font-size-adjust: none;
   }
   body {
     background-color: var(--sidebar);

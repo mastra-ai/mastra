@@ -2069,4 +2069,19 @@ describe('Observability Methods', () => {
       await expect(client.getTags()).rejects.toThrow();
     });
   });
+
+  describe('getObservabilityCapabilities()', () => {
+    it('should fetch the observability capabilities endpoint', async () => {
+      mockSuccessfulResponse();
+
+      await client.getObservabilityCapabilities();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/capabilities`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+  });
 });

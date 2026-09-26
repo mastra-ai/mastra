@@ -1,5 +1,6 @@
 import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen } from '@testing-library/react';
@@ -23,7 +24,6 @@ if (typeof Element !== 'undefined' && typeof Element.prototype.getAnimations !==
 }
 import { AgentBuilderSidebar } from '../agent-builder-sidebar';
 import { authDisabledCapabilities, builderSettings } from './fixtures/builder';
-import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';

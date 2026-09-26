@@ -46,6 +46,23 @@ function countRequestEchoes(value: unknown): number {
   return n;
 }
 
+const executionGraph = [
+  { type: 'step', step: { id: 'durable-llm-execution' } },
+  { type: 'foreach', step: { type: 'step', step: { id: 'durable-tool-call' } } },
+  { type: 'mapping', id: 'collect-tool-results' },
+  { type: 'step', step: { id: 'durable-llm-mapping' } },
+];
+
+const stepResultReads = { 'collect-tool-results': ['durable-llm-execution'] };
+
+function history(tag: string) {
+  return { messageListState: { messages: [{ role: 'user', content: tag }] }, accumulatedSteps: [tag] };
+}
+
+function contextOf(snapshot: WorkflowRunState): Record<string, any> {
+  return snapshot.context as Record<string, any>;
+}
+
 describe('pruneAgentLoopSnapshot running history', () => {
   it('keeps the active terminal step conversation for restart after an end-phase write', () => {
     const conversation = { messages: [{ role: 'user', content: 'earlier turn' }] };
@@ -73,6 +90,279 @@ describe('pruneAgentLoopSnapshot running history', () => {
     expect(context.previous.payload).not.toHaveProperty('accumulatedSteps');
     expect(context.current.payload.messageListState).toEqual(conversation);
     expect(context.current.payload.accumulatedSteps).toEqual(['old', 'current']);
+  });
+
+  it('retainRunningHistory keeps terminal outputs that a restart would not read back', () => {
+    // The evented engine replaces in-flight stepResults with the storage-merged
+    // context at every step boundary, so it reads completed outputs back during
+    // live execution, not only on restart.
+    const snapshot = {
+      status: 'running',
+      serializedStepGraph: executionGraph,
+      activePaths: [3],
+      activeStepsPath: { 'durable-llm-mapping': [3] },
+      context: {
+        input: { initial: true },
+        'durable-llm-execution': { status: 'success', output: history('s1') },
+        'durable-llm-mapping': { status: 'running', payload: history('s2') },
+      },
+    } as unknown as WorkflowRunState;
+
+    const stripped = pruneAgentLoopSnapshot({ snapshot, stepResultReads });
+    const retained = pruneAgentLoopSnapshot({ snapshot, stepResultReads, retainRunningHistory: true });
+
+    expect(contextOf(stripped)['durable-llm-execution'].output).not.toHaveProperty('messageListState');
+    expect(contextOf(retained)['durable-llm-execution'].output).toEqual(history('s1'));
+  });
+});
+
+/**
+ * Recovery re-drives a running snapshot from `activePaths[0]`, or from the next
+ * entry when that one already finished, and reads a few persisted copies back
+ * to do it. Those copies must survive the running-history
+ * strip; every other completed step's conversation is still removed.
+ */
+describe('pruneAgentLoopSnapshot restart reads', () => {
+  it('keeps the finished step output on a save made between steps', () => {
+    // Between steps nothing is active and the entry at activePaths[0] has
+    // finished, so restart skips it and reads its saved output.
+    const snapshot = {
+      status: 'running',
+      serializedStepGraph: executionGraph,
+      activePaths: [3],
+      activeStepsPath: {},
+      context: {
+        input: { initial: true },
+        'durable-llm-execution': { status: 'success', payload: history('p1'), output: history('o1') },
+        'durable-tool-call': { status: 'success', payload: history('p2'), output: [{ result: 'ok' }] },
+        'collect-tool-results': { status: 'success', payload: history('p3'), output: history('o3') },
+        'durable-llm-mapping': { status: 'success', payload: history('p4'), output: history('o4') },
+      },
+    } as unknown as WorkflowRunState;
+
+    const context = contextOf(pruneAgentLoopSnapshot({ snapshot, stepResultReads }));
+
+    expect(context['durable-llm-mapping'].output).toEqual(history('o4'));
+    // Older history is still trimmed, including the declared read whose
+    // reader has already run.
+    expect(context['durable-llm-execution'].output).toEqual({});
+    expect(context['collect-tool-results'].output).toEqual({});
+    for (const id of ['durable-llm-execution', 'collect-tool-results', 'durable-llm-mapping']) {
+      expect(context[id].payload).toEqual({});
+    }
+  });
+
+  it('keeps a declared direct read until its reader has run', () => {
+    // Mid-tool: collect-tool-results reads the model call result directly,
+    // not from its input, so the previous-output rule alone would not keep it.
+    const snapshot = {
+      status: 'running',
+      serializedStepGraph: executionGraph,
+      activePaths: [2],
+      activeStepsPath: { 'collect-tool-results': [2] },
+      context: {
+        input: { initial: true },
+        'durable-llm-execution': { status: 'success', output: history('o1') },
+        'durable-tool-call': { status: 'success', output: [{ result: 'ok' }] },
+        'collect-tool-results': { status: 'running', payload: history('p3') },
+      },
+    } as unknown as WorkflowRunState;
+
+    const undeclared = contextOf(pruneAgentLoopSnapshot({ snapshot }));
+    const declared = contextOf(pruneAgentLoopSnapshot({ snapshot, stepResultReads }));
+
+    expect(undeclared['durable-llm-execution'].output).toEqual({});
+    expect(declared['durable-llm-execution'].output).toEqual(history('o1'));
+    expect(declared['collect-tool-results'].payload).toEqual(history('p3'));
+  });
+
+  it('keeps the model call result while its tools run', () => {
+    const snapshot = {
+      status: 'running',
+      serializedStepGraph: executionGraph,
+      activePaths: [1],
+      activeStepsPath: { 'durable-tool-call': [1] },
+      context: {
+        input: { initial: true },
+        'durable-llm-execution': { status: 'success', payload: history('p1'), output: history('o1') },
+      },
+    } as unknown as WorkflowRunState;
+
+    const context = contextOf(pruneAgentLoopSnapshot({ snapshot, stepResultReads }));
+
+    expect(context['durable-llm-execution'].output).toEqual(history('o1'));
+    expect(context['durable-llm-execution'].payload).toEqual({});
+  });
+
+  it("keeps the loop body's last input when the restart point is a loop", () => {
+    // Mid-loop the body is only saved when an iteration starts, so the
+    // checkpoint shows it running. A saved success means the loop finished.
+    const loopGraph = [
+      { type: 'step', step: { id: 'prepare' } },
+      { type: 'loop', loopType: 'dountil', step: { type: 'step', step: { id: 'durable-agentic-execution' } } },
+      { type: 'step', step: { id: 'map-final-output' } },
+    ];
+    const bodyInput = { ...history('p2'), lastStepResult: { reason: 'tool-calls' } };
+    const snapshot = {
+      status: 'running',
+      serializedStepGraph: loopGraph,
+      activePaths: [1],
+      activeStepsPath: { 'durable-agentic-execution': [1] },
+      context: {
+        input: { initial: true },
+        prepare: { status: 'success', output: history('o1') },
+        'durable-agentic-execution': { status: 'running', payload: bodyInput },
+      },
+    } as unknown as WorkflowRunState;
+
+    const context = contextOf(pruneAgentLoopSnapshot({ snapshot }));
+
+    expect(context['durable-agentic-execution'].payload).toEqual(bodyInput);
+    // The loop re-enters from its body's payload, not the previous entry.
+    expect(context.prepare.output).toEqual({});
+  });
+
+  it('keeps every branch output when the previous entry is parallel', () => {
+    const graph = [
+      {
+        type: 'parallel',
+        steps: [
+          { type: 'step', step: { id: 'branch-a' } },
+          { type: 'step', step: { id: 'branch-b' } },
+        ],
+      },
+      { type: 'step', step: { id: 'after' } },
+    ];
+    const snapshot = {
+      status: 'running',
+      serializedStepGraph: graph,
+      activePaths: [1],
+      activeStepsPath: {},
+      context: {
+        input: { initial: true },
+        'branch-a': { status: 'success', output: history('a') },
+        'branch-b': { status: 'success', output: history('b') },
+      },
+    } as unknown as WorkflowRunState;
+
+    const context = contextOf(pruneAgentLoopSnapshot({ snapshot }));
+
+    expect(context['branch-a'].output).toEqual(history('a'));
+    expect(context['branch-b'].output).toEqual(history('b'));
+  });
+
+  it('leaves non-running snapshots unchanged', () => {
+    const build = (status: string) =>
+      ({
+        status,
+        serializedStepGraph: executionGraph,
+        activePaths: [2],
+        activeStepsPath: {},
+        context: {
+          input: { initial: true },
+          'durable-llm-execution': { status: 'success', payload: history('p1'), output: history('o1') },
+          'durable-tool-call': { status: 'success', payload: history('p2'), output: history('o2') },
+        },
+      }) as unknown as WorkflowRunState;
+
+    for (const status of ['suspended', 'paused', 'success', 'failed']) {
+      const withReads = pruneAgentLoopSnapshot({ snapshot: build(status), stepResultReads });
+      const withoutGraph = { ...build(status), serializedStepGraph: undefined } as unknown as WorkflowRunState;
+      expect(withReads.context).toEqual(pruneAgentLoopSnapshot({ snapshot: withoutGraph }).context);
+    }
+  });
+
+  describe('checkpoint written after an entry finished (issue #24615)', () => {
+    // `restart()` skips the finished entry and hands its saved output to the
+    // next entry, so that output has to keep the conversation.
+    const conversation = { messages: [{ role: 'user', content: 'earlier turn' }] };
+    const heavy = () => ({ messageListState: conversation, accumulatedSteps: ['s1'] });
+    const stepEntry = (id: string) => ({ type: 'step', step: { id } });
+
+    function finishedCheckpoint(
+      serializedStepGraph: unknown[] | undefined,
+      context: Record<string, unknown>,
+      activePaths = [1],
+    ): WorkflowRunState {
+      return {
+        status: 'running',
+        activePaths,
+        activeStepsPath: {},
+        serializedStepGraph,
+        context: { input: { initial: true }, ...context },
+      } as unknown as WorkflowRunState;
+    }
+
+    it("keeps the finished step's output and still prunes older steps", () => {
+      const snapshot = finishedCheckpoint([stepEntry('older'), { type: 'mapping', id: 'map-to-llm-input' }], {
+        older: { status: 'success', payload: heavy(), output: heavy() },
+        'map-to-llm-input': { status: 'success', payload: heavy(), output: { ...heavy(), llmOutput: heavy() } },
+      });
+
+      const context = pruneAgentLoopSnapshot({ snapshot }).context as Record<string, any>;
+
+      expect(context['map-to-llm-input'].output.messageListState).toEqual(conversation);
+      expect(context['map-to-llm-input'].output.accumulatedSteps).toEqual(['s1']);
+      expect(context['map-to-llm-input'].output.llmOutput.messageListState).toEqual(conversation);
+      // The payload is never read once the step is skipped.
+      expect(context['map-to-llm-input'].payload).not.toHaveProperty('messageListState');
+      expect(context.older.output).not.toHaveProperty('messageListState');
+      expect(context.older.payload).not.toHaveProperty('messageListState');
+    });
+
+    it('keeps every branch output of a finished parallel block', () => {
+      const snapshot = finishedCheckpoint(
+        [stepEntry('older'), { type: 'parallel', steps: [stepEntry('left'), stepEntry('right')] }],
+        {
+          older: { status: 'success', output: heavy() },
+          left: { status: 'success', output: heavy() },
+          right: { status: 'success', output: heavy() },
+        },
+      );
+
+      const context = pruneAgentLoopSnapshot({ snapshot }).context as Record<string, any>;
+
+      expect(context.left.output.messageListState).toEqual(conversation);
+      expect(context.right.output.messageListState).toEqual(conversation);
+      expect(context.older.output).not.toHaveProperty('messageListState');
+    });
+
+    it('keeps the body output of a finished loop', () => {
+      const snapshot = finishedCheckpoint(
+        [
+          stepEntry('older'),
+          { type: 'loop', step: stepEntry('body'), serializedCondition: { id: 'c', fn: '' }, loopType: 'dountil' },
+        ],
+        { older: { status: 'success', output: heavy() }, body: { status: 'success', output: heavy() } },
+      );
+
+      const context = pruneAgentLoopSnapshot({ snapshot }).context as Record<string, any>;
+
+      expect(context.body.output.messageListState).toEqual(conversation);
+      expect(context.older.output).not.toHaveProperty('messageListState');
+    });
+
+    it('prunes as before when the checkpoint has no step graph', () => {
+      const snapshot = finishedCheckpoint(undefined, {
+        'map-to-llm-input': { status: 'success', output: heavy() },
+      });
+
+      const context = pruneAgentLoopSnapshot({ snapshot }).context as Record<string, any>;
+
+      expect(context['map-to-llm-input'].output).not.toHaveProperty('messageListState');
+    });
+
+    it('prunes as before when the checkpoint points inside a composite entry', () => {
+      const snapshot = finishedCheckpoint(
+        [stepEntry('older'), { type: 'parallel', steps: [stepEntry('left'), stepEntry('right')] }],
+        { left: { status: 'success', output: heavy() } },
+        [1, 0],
+      );
+
+      const context = pruneAgentLoopSnapshot({ snapshot }).context as Record<string, any>;
+
+      expect(context.left.output).not.toHaveProperty('messageListState');
+    });
   });
 });
 

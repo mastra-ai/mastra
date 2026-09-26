@@ -1,13 +1,13 @@
 'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { X } from 'lucide-react';
 import { useState } from 'react';
-import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 import { DEFAULT_SCORERS_HELPER_TEXT, DEFAULT_SCORERS_LABEL } from './default-scorers-copy';
 import { ScorerSelector } from './experiment-trigger/scorer-selector';
 import { SchemaConfigSection } from './schema-config-section';

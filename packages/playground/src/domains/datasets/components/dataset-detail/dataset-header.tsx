@@ -4,7 +4,7 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@mastra/playground-ui/components/Tooltip';
-import { format } from 'date-fns/format';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { MoreVertical, Pencil, Copy, Trash2, Play, DatabaseIcon, Calendar1Icon, HistoryIcon } from 'lucide-react';
 
 export type DatasetHeaderProps = {
@@ -44,7 +44,7 @@ export function DatasetHeader({
         <MainHeader.Description isLoading={isLoading}>{dataset?.description}</MainHeader.Description>
         <MainHeader.Description isLoading={isLoading}>
           <TextAndIcon>
-            <Calendar1Icon /> Created at {dataset?.createdAt ? format(new Date(dataset.createdAt), 'MMM d, yyyy') : ''}
+            <Calendar1Icon /> Created at {formatDate(dataset?.createdAt, 'date-time')}
           </TextAndIcon>
           <TextAndIcon>
             <HistoryIcon /> Latest version v{dataset?.version ?? ''}

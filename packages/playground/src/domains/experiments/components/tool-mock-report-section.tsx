@@ -1,6 +1,8 @@
 import type { ToolMockReport } from '@mastra/client-js';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { WrenchIcon } from 'lucide-react';
 
 export interface ToolMockReportSectionProps {
@@ -45,10 +47,12 @@ export function ToolMockReportSection({ report }: ToolMockReportSectionProps) {
             <span className="block">
               {`Tool "${failure.toolName}" was called with arguments that did not match an available mock (${failure.code}).`}
             </span>
-            <span className="mt-1 block font-mono text-caption">Called with: {formatArgs(failure.args)}</span>
+            <span className="mt-1 block text-caption">
+              Called with: <InlineCode>{formatArgs(failure.args)}</InlineCode>
+            </span>
             {unconsumed.length > 0 && (
-              <span className="mt-1 block font-mono text-caption">
-                Unconsumed mocks: {unconsumed.map(u => formatArgs(u.args)).join(', ')}
+              <span className="mt-1 block text-caption">
+                Unconsumed mocks: <InlineCode>{unconsumed.map(u => formatArgs(u.args)).join(', ')}</InlineCode>
               </span>
             )}
           </Notice.Message>
@@ -62,8 +66,12 @@ export function ToolMockReportSection({ report }: ToolMockReportSectionProps) {
             className="flex items-center justify-between gap-2 px-3 py-1.5"
           >
             <span className="min-w-0 truncate">
-              <span className="font-mono text-muted-foreground">{row.toolName}</span>
-              <span className="ml-2 font-mono text-caption text-muted-foreground">{formatArgs(row.args)}</span>
+              <Txt as="span" variant="body-sm" tone="muted" font="mono">
+                {row.toolName}
+              </Txt>
+              <Txt as="span" variant="caption" tone="muted" font="mono" className="ml-2">
+                {formatArgs(row.args)}
+              </Txt>
             </span>
             <span className={`shrink-0 rounded px-2 py-0.5 text-caption ${outcomeClass(row.outcome)}`}>
               {row.outcome}

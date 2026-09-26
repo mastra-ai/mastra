@@ -7,11 +7,12 @@ import {
   DataListSkeleton as EntityListSkeleton,
   useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { useMemo, useRef } from 'react';
 import type { ReactNode, SyntheticEvent } from 'react';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface DatasetsListProps {
   datasets: DatasetRecord[];
@@ -50,12 +51,6 @@ function getExperimentsBadgeVariant(successPct: number | null): BadgeVariant {
   if (successPct !== null && successPct >= 70) return 'success';
   if (successPct !== null && successPct >= 40) return 'warning';
   return 'destructive';
-}
-
-function formatDate(dateStr: string | Date | undefined | null): string {
-  if (!dateStr) return '—';
-  const d = typeof dateStr === 'string' ? new Date(dateStr) : dateStr;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 const stopPropagation = (event: SyntheticEvent) => event.stopPropagation();
@@ -114,7 +109,7 @@ function SelectableDatasetRow({
       <EntityList.DescriptionCell>{ds.description}</EntityList.DescriptionCell>
       <TagsCell tags={ds.tags} />
       <EntityList.TextCell>v{ds.version ?? 1}</EntityList.TextCell>
-      <EntityList.TextCell>{formatDate(ds.updatedAt)}</EntityList.TextCell>
+      <EntityList.TextCell>{formatDate(ds.updatedAt, 'date-time') ?? '—'}</EntityList.TextCell>
       <EntityList.Cell>
         {trailingCell ??
           (ds.experimentCount > 0 ? <ExperimentsBadge dataset={ds} /> : <span className="text-placeholder">—</span>)}
@@ -147,7 +142,7 @@ function DatasetRow({ dataset: ds, rowProps }: { dataset: EnrichedDataset; rowPr
         <EntityList.DescriptionCell>{ds.description}</EntityList.DescriptionCell>
         <TagsCell tags={ds.tags} />
         <EntityList.TextCell>v{ds.version ?? 1}</EntityList.TextCell>
-        <EntityList.TextCell>{formatDate(ds.updatedAt)}</EntityList.TextCell>
+        <EntityList.TextCell>{formatDate(ds.updatedAt, 'date-time') ?? '—'}</EntityList.TextCell>
         {hasExperimentsAction ? null : <EntityList.Cell className="justify-center" />}
       </EntityList.RowLink>
 

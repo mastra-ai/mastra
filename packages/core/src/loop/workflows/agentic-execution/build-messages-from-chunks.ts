@@ -121,7 +121,7 @@ export function buildMessagesFromChunks({
 
         if (result) {
           // Merge call + result into a single 'result' state part
-          const resultProviderExecuted = inferProviderExecuted(result.providerExecuted, toolDef);
+          const resultProviderExecuted = inferProviderExecuted(result.providerExecuted ?? p.providerExecuted, toolDef);
           parts.push({
             type: 'tool-invocation' as const,
             toolInvocation: {

@@ -31,7 +31,7 @@ export const dataListRowStateStyles = [
   'active:bg-fill',
   'focus-visible:bg-surface-panel has-focus-visible:bg-surface-panel',
   'data-featured:before:bg-surface-panel has-data-featured:before:bg-surface-panel has-data-selected:before:bg-surface-panel',
-  'data-[variant=error]:bg-destructive-bg has-data-[variant=error]:bg-destructive-bg',
+  'data-[variant=error]:bg-destructive-bg has-data-[variant=error]:bg-destructive-bg data-[variant=error]:active:bg-destructive-indicator/20 has-data-[variant=error]:active:bg-destructive-indicator/20',
 ] as const;
 
 /**

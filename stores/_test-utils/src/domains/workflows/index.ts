@@ -93,6 +93,20 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
       expect(snapshot.context?.[stepId1]?.status).toBe('completed');
     });
 
+    it('returns status and timestamp in summary mode', async () => {
+      const { snapshot, runId } = createSampleWorkflowSnapshot('success');
+      await workflowsStorage.persistWorkflowSnapshot({ workflowName: 'summary_test', runId, snapshot });
+
+      const { runs, total } = await workflowsStorage.listWorkflowRuns({ workflowName: 'summary_test', summary: true });
+      expect(total).toBe(1);
+      expect(runs[0]!.runId).toBe(runId);
+      const parsed = (
+        typeof runs[0]!.snapshot === 'string' ? JSON.parse(runs[0]!.snapshot) : runs[0]!.snapshot
+      ) as WorkflowRunState;
+      expect(parsed.status).toBe('success');
+      expect(parsed.timestamp).toBe(snapshot.timestamp);
+    });
+
     it('filters by status', async () => {
       const workflowName1 = 'filter_test_1';
       const workflowName2 = 'filter_test_2';
