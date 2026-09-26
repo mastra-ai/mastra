@@ -13,6 +13,7 @@ import { getInputPreview, getSpanDurationMs } from '../utils/span-utils';
 import { DataList, DataListSkeleton, TracesDataList, useDataListKeyboard } from '@/ds/components/DataList';
 import type { DataListSort } from '@/ds/components/DataList';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { RelativeTimestamp } from '@/ds/components/RelativeTimestamp';
 import { Txt } from '@/ds/components/Txt/Txt';
 import { formatCompactNumber, formatCost } from '@/lib/cost';
 import { cn } from '@/lib/utils';
@@ -171,10 +172,10 @@ export function TracesListView({
       <TracesDataList.Top>
         {onSortChange ? (
           <TracesDataList.SortableTopCell sortKey="startedAt" sort={createdSort} onSortChange={onSortChange}>
-            Start
+            Time
           </TracesDataList.SortableTopCell>
         ) : (
-          <TracesDataList.TopCell>Start</TracesDataList.TopCell>
+          <TracesDataList.TopCell>Time</TracesDataList.TopCell>
         )}
         {hasTraceColumn(columnPreferences, 'type') && <TracesDataList.TopCell>Type</TracesDataList.TopCell>}
         <TracesDataList.TopCell>Name</TracesDataList.TopCell>
@@ -183,7 +184,6 @@ export function TracesListView({
         {hasTraceColumn(columnPreferences, 'duration') && (
           <TracesDataList.TopCell className="justify-end text-right">Duration</TracesDataList.TopCell>
         )}
-        {hasTraceColumn(columnPreferences, 'endTime') && <TracesDataList.TopCell>End</TracesDataList.TopCell>}
         {hasTraceColumn(columnPreferences, 'environment') && (
           <TracesDataList.TopCell>Environment</TracesDataList.TopCell>
         )}
@@ -268,7 +268,9 @@ export function TracesListView({
                 featured={isFeatured}
                 className={cn(isRecentlyAdded && 'animate-row-highlight')}
               >
-                <TracesDataList.CreatedCell timestamp={displayDate} />
+                <DataList.Cell>
+                  <RelativeTimestamp value={displayDate} end={trace.endedAt} />
+                </DataList.Cell>
                 {hasTraceColumn(columnPreferences, 'type') && <TracesDataList.TypeCell entityType={trace.entityType} />}
                 <TracesDataList.NameCell
                   name={trace.name}
@@ -283,9 +285,6 @@ export function TracesListView({
                   <DataList.NumberCell font="mono">
                     {formatDuration(getSpanDurationMs(trace.startedAt, trace.endedAt))}
                   </DataList.NumberCell>
-                )}
-                {hasTraceColumn(columnPreferences, 'endTime') && (
-                  <TracesDataList.CreatedCell timestamp={trace.endedAt ?? ''} />
                 )}
                 {hasTraceColumn(columnPreferences, 'environment') && (
                   <DataList.TextCell>{trace.environment || '—'}</DataList.TextCell>

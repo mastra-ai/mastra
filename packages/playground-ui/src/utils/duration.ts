@@ -14,7 +14,7 @@ function formatUnsigned(durationMs: number) {
   if (durationMs < 1_000) return `${toSigFigs(durationMs, 3)}ms`;
 
   const seconds = durationMs / 1_000;
-  if (seconds < 60) return `${toSigFigs(seconds, 3)}s`;
+  if (seconds < 60) return `${toSigFigs(seconds, 2)}s`;
 
   const [minutes, hours, days] = [Math.floor(seconds / 60), Math.floor(seconds / 3_600), Math.floor(seconds / 86_400)];
   if (minutes < 60) return withRemainder(`${minutes}m`, Math.floor(seconds % 60), 's');

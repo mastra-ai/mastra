@@ -204,7 +204,7 @@ describe('ExperimentRunMeta', () => {
         });
 
         expect(await screen.findByText('Latency (avg)')).toBeDefined();
-        expect(screen.getByText('1.85s')).toBeDefined();
+        expect(screen.getByText('1.9s')).toBeDefined();
         expect(screen.queryByText(/avg over/)).toBeNull();
 
         await waitForMutationsIdle(queryClient);
