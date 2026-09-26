@@ -1240,7 +1240,7 @@ Mastra also injects scope-aware usage instructions into the agent's context. For
     isOptional: true,
     defaultValue: "'low'",
     description:
-      "Controls how much content is shown per message part. `'low'` shows truncated text and tool names with positional indices (`[p0]`, `[p1]`). `'high'` shows full content including tool arguments and results, clamped to one part per call with continuation hints. Image and file parts show their filename, media type, and stored URL or provider file ID so the agent can reuse the attachment. Inline file data such as base64 or data URIs is omitted.",
+      "Controls how much content is shown per message part. `'low'` shows truncated text and tool names with positional indices (`[p0]`, `[p1]`). `'high'` shows full content including tool arguments and results, clamped to one part per call with continuation hints. Image and file parts show their filename, media type, and stored URL or provider file ID so the agent can reuse the attachment. Inline file data such as base64 or data URIs is omitted. Pass `viewAttachment` with `cursor` and `partIndex` to send the attachment itself to the model.",
   },
   {
     name: 'partType',
@@ -1269,6 +1269,14 @@ Mastra also injects scope-aware usage instructions into the agent's context. For
     defaultValue: '0',
     description:
       'Character position to continue reading a truncated single part. Only applies with `cursor` and `partIndex`. When a part is larger than the token budget, the result includes `nextCharOffset` — pass that exact value here in the next call to read the following chunk. The chunks concatenate to the original part text.',
+  },
+  {
+    name: 'viewAttachment',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'Show the attachment itself rather than only describing it. Requires `cursor` and `partIndex`, and applies when that part is an `image` or `file`. Inline data is sent as a native media part; an `http(s)` URL is passed through for the model provider to fetch. Media types outside `image/*` and `application/pdf`, provider file IDs, and oversized payloads come back as an explanation instead.',
   },
   {
     name: 'before',
