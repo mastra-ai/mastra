@@ -432,15 +432,30 @@ describe('MastraFactory.prepare', () => {
       baseBranch: 'main',
     });
 
-    const as = (organizationId: string) => {
+    await sourceControl.sessions.create({
+      sessionId: 'session-private',
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-private',
+      baseBranch: 'main',
+      visibility: 'private',
+    });
+
+    const as = (organizationId: string, workosId = 'user-1') => {
       const requestContext = new RequestContext();
-      requestContext.set('user', { workosId: 'user-1', organizationId });
+      requestContext.set('user', { workosId, organizationId });
       return requestContext;
     };
-    const check = (resourceId: string, organizationId: string) =>
-      authorize({ resourceId, mappedResourceId: 'shared-workspace', requestContext: as(organizationId) });
+    const check = (resourceId: string, organizationId: string, workosId?: string) =>
+      authorize({ resourceId, mappedResourceId: 'shared-workspace', requestContext: as(organizationId, workosId) });
 
     await expect(check('session-1', 'org-1')).resolves.toBe(true);
+    // Rows created without a visibility read as org-visible, so an org peer
+    // may act as them; a private session stays owner-only.
+    await expect(check('session-1', 'org-1', 'peer')).resolves.toBe(true);
+    await expect(check('session-private', 'org-1')).resolves.toBe(true);
+    await expect(check('session-private', 'org-1', 'peer')).resolves.toBe(false);
     await expect(check('session-1', 'org-2')).resolves.toBe(false);
     await expect(check(`factory-supervisor:${project.id}`, 'org-1')).resolves.toBe(true);
     await expect(check(`factory-supervisor:${project.id}`, 'org-2')).resolves.toBe(false);
