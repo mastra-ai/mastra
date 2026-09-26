@@ -342,3 +342,32 @@ describe('createInngestDurableAgenticWorkflow snapshot policy (#24796)', () => {
     }
   });
 });
+
+describe('Inngest per-step processor history (#25193)', () => {
+  it('forwards accumulated steps to the LLM execution step on later iterations', async () => {
+    const inngest = new Inngest({ id: 'inngest-processor-history-tests' });
+    const workflow = createInngestDurableAgenticWorkflow({ inngest });
+    const entry = findEntry(
+      (workflow as any).executionGraph.steps,
+      candidate => candidate.type === 'mapping' && candidate.id === 'map-to-llm-input',
+    );
+    expect(entry).toBeDefined();
+
+    const priorStep = { text: 'read_context completed', toolCalls: [{ toolName: 'read_context' }] };
+    const inputData = {
+      runId: 'run-1',
+      agentId: 'agent-1',
+      messageId: 'msg-1',
+      messageListState: emptyMessageListState(),
+      toolsMetadata: [],
+      modelConfig: {},
+      options: {},
+      state: {},
+      stepIndex: 1,
+      accumulatedSteps: [priorStep],
+    };
+    const mapped = await entry.mapConfig({ inputData });
+    expect(mapped.stepIndex).toBe(1);
+    expect(mapped.accumulatedSteps).toEqual([priorStep]);
+  });
+});
