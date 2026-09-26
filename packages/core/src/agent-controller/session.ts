@@ -1259,7 +1259,7 @@ export class SessionSuspensions {
    * suspension (or undefined when there are zero or several).
    */
   resolveToolCallId(toolCallId?: string): string | undefined {
-    if (toolCallId) {
+    if (toolCallId !== undefined) {
       return this.#pending.has(toolCallId) ? toolCallId : undefined;
     }
     if (this.#pending.size === 1) {
@@ -1331,6 +1331,15 @@ export interface ApprovalDecision {
 }
 
 /**
+ * Whether a tool approval/suspension response was claimed by a pending target.
+ * `accepted: true` only means the command was taken, not that the resumed tool
+ * later succeeded.
+ */
+export type SessionCommandResult =
+  | { accepted: true }
+  | { accepted: false; reason: 'not_pending' | 'stale_tool_call' | 'aborting' | 'no_pending_suspension' };
+
+/**
  * A user's response to a parked approval. `always_allow_category` approves the
  * tool and additionally grants its category for the rest of the session.
  */
@@ -1395,9 +1404,11 @@ export class SessionApproval {
     requestContext,
     declineContext,
     onAlwaysAllow,
-  }: ApprovalResponse & { toolCallId?: string; onAlwaysAllow?: (toolName: string) => void }): void {
-    if (!this.isArmed()) return;
-    if (toolCallId !== undefined && this.#toolCallId !== null && toolCallId !== this.#toolCallId) return;
+  }: ApprovalResponse & { toolCallId?: string; onAlwaysAllow?: (toolName: string) => void }): SessionCommandResult {
+    if (!this.isArmed()) return { accepted: false, reason: 'not_pending' };
+    if (toolCallId !== undefined && this.#toolCallId !== null && toolCallId !== this.#toolCallId) {
+      return { accepted: false, reason: 'stale_tool_call' };
+    }
 
     if (decision === 'always_allow_category' && this.#toolName) {
       onAlwaysAllow?.(this.#toolName);
@@ -1412,6 +1423,7 @@ export class SessionApproval {
     this.#resolve = null;
     this.#toolName = null;
     this.#toolCallId = null;
+    return { accepted: true };
   }
 
   /**
@@ -3486,9 +3498,9 @@ export class Session<TState = unknown> {
     toolCallId?: string;
     requestContext?: RequestContext;
     declineContext?: { reason?: string; message?: string };
-  }): void {
-    if (this.run.isAbortRequested()) return;
-    this.approval.respond({
+  }): SessionCommandResult {
+    if (this.run.isAbortRequested()) return { accepted: false, reason: 'aborting' };
+    return this.approval.respond({
       decision,
       toolCallId,
       requestContext,
@@ -3506,6 +3518,18 @@ export class Session<TState = unknown> {
    * Resolves the run that owns `toolCallId` and resumes it by run id. Throws when
    * no suspended run on the current thread is waiting on that tool call.
    */
+  /**
+   * Whether a suspended run on the current thread is waiting on an approval for
+   * `toolCallId`. Lets callers reject stale answers before scheduling the resume.
+   */
+  async hasPersistedToolApproval(toolCallId: string): Promise<boolean> {
+    const threadId = this.thread.getId();
+    if (!threadId) return false;
+    const resourceId = this.identity.getResourceId();
+    const { runs } = await this.machinery.getAgent().listSuspendedRuns({ threadId, resourceId });
+    return runs.some(run => run.toolCalls.some(call => call.requiresApproval && call.toolCallId === toolCallId));
+  }
+
   async respondToPersistedToolApproval({
     toolCallId,
     approved,
@@ -4182,6 +4206,40 @@ export class Session<TState = unknown> {
       role,
       metadata,
     });
+  }
+
+  /** Tool call ids whose response has been claimed and is still being applied. */
+  #claimedToolResponses = new Set<string>();
+
+  /**
+   * Claim the right to answer `toolCallId` so concurrent requests cannot both be
+   * acknowledged for the same pending target. Synchronous, so a caller that
+   * claims and then starts the response without awaiting in between is atomic.
+   * Pair with {@link releaseToolResponse} once the response settles.
+   */
+  claimToolResponse(toolCallId: string): boolean {
+    if (this.#claimedToolResponses.has(toolCallId)) return false;
+    this.#claimedToolResponses.add(toolCallId);
+    return true;
+  }
+
+  /** Release a claim taken with {@link claimToolResponse}. */
+  releaseToolResponse(toolCallId: string): void {
+    this.#claimedToolResponses.delete(toolCallId);
+  }
+
+  /**
+   * Claim the parked suspension a {@link respondToToolSuspension} call would
+   * resume. Returns the resolved tool call id, or a rejection when nothing is
+   * pending or another response already claimed it.
+   */
+  claimToolSuspension(
+    toolCallId?: string,
+  ): { accepted: true; toolCallId: string } | Extract<SessionCommandResult, { accepted: false }> {
+    const resolved = this.suspensions.resolveToolCallId(toolCallId);
+    if (!resolved) return { accepted: false, reason: 'no_pending_suspension' };
+    if (!this.claimToolResponse(resolved)) return { accepted: false, reason: 'not_pending' };
+    return { accepted: true, toolCallId: resolved };
   }
 
   /**
