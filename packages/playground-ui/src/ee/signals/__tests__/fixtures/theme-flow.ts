@@ -275,6 +275,65 @@ export const themeFlowResponse: ThemeFlowResponse = {
   ],
 };
 
+/** Outcome stage splits between a real theme and the absent passthrough bucket. */
+export const absentStageThemeFlowResponse: ThemeFlowResponse = {
+  snapshot: themeFlowResponse.snapshot,
+  stages: [
+    {
+      signalName: 'goal',
+      traceCount: 40,
+      nodes: [
+        {
+          nodeId: 'goal-support',
+          kind: 'theme',
+          // Numeric: drillable theme ids are numeric server ids.
+          themeId: '901',
+          label: 'Resolve support request',
+          traceCount: 40,
+          stageShare: 1,
+        },
+      ],
+    },
+    {
+      signalName: 'outcome',
+      traceCount: 40,
+      nodes: [
+        {
+          nodeId: 'outcome-resolved',
+          kind: 'theme',
+          themeId: '902',
+          label: 'Request resolved',
+          traceCount: 25,
+          stageShare: 0.625,
+        },
+        {
+          nodeId: 'outcome-absent',
+          kind: 'absent',
+          label: 'None observed',
+          traceCount: 15,
+          stageShare: 0.375,
+        },
+      ],
+    },
+  ],
+  links: [
+    {
+      sourceNodeId: 'goal-support',
+      targetNodeId: 'outcome-resolved',
+      traceCount: 25,
+      sourceShare: 0.625,
+      targetShare: 1,
+    },
+    {
+      sourceNodeId: 'goal-support',
+      targetNodeId: 'outcome-absent',
+      traceCount: 15,
+      sourceShare: 0.375,
+      targetShare: 1,
+    },
+  ],
+};
+
 export const fourStageThemeFlowResponse: ThemeFlowResponse = {
   snapshot: {
     snapshotId: 'snapshot-4',
