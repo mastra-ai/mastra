@@ -347,7 +347,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
   }
 
   /**
-   * Truncate text to a token budget, always appending a truncation marker that
+   * Truncate text to a token budget, appending a truncation marker that
    * reports the exact number of tokens actually shown. Shrinks the visible
    * slice as needed to keep the marker itself inside `maxTokens`; if `maxTokens`
    * is too small to fit any content, the result is the marker alone (reporting
@@ -377,8 +377,8 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
 
   /**
    * Give an oversized tool result a truncated model-only copy
-   * (`providerMetadata.mastra.modelOutput`). The stored result stays intact;
-   * results already mapped by `toModelOutput` and media payloads are left alone.
+   * (`providerMetadata.mastra.modelOutput`). Media payloads and results that
+   * can't be serialized to JSON are left alone.
    */
   private capToolResult(result: unknown, maxTokens: number): string | undefined {
     const isMediaArray = Array.isArray(result) && result.length > 0 && result.every(isMediaPayload);
@@ -423,7 +423,6 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
    * clears a stale `modelOutputCapped` flag left behind by this hook in that
    * case, so the mapper's permanent output doesn't get mistaken for our
    * transient truncation and stripped before persistence.)
-   *
    */
   private async capOversizedToolResult(args: ProcessToolResultArgs): Promise<void> {
     if (this.maxToolResultTokens === undefined) return;
