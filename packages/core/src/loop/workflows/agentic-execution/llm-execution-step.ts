@@ -35,6 +35,7 @@ import type {
 } from '../../../processors/index';
 import { isProcessorWorkflow } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
+import { ensureUserFirstTurn } from '../../../processors/provider-history-compat';
 import { resolveMaxProcessorRetries } from '../../../processors/retry-budget';
 import type { ProcessorState } from '../../../processors/runner';
 import { ProcessorRunner } from '../../../processors/runner';
@@ -1900,6 +1901,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             }
             logger?.error('Error in processLLMRequest processors:', error);
             throw error;
+          }
+
+          const userFirstPrompt = ensureUserFirstTurn.applyToPrompt({
+            prompt: inputMessages,
+            model: currentStep.model,
+          });
+          if (userFirstPrompt) {
+            logger?.debug('Inserted a placeholder user turn before the leading assistant turn', {
+              provider: currentStep.model.provider,
+            });
+            inputMessages = userFirstPrompt;
           }
 
           const omContinuation = messageList.get.all.db().find(message => message.id === 'om-continuation');

@@ -34,6 +34,7 @@ import { EntityType } from '../../../../observability';
 import { getRootExportSpan, getStepAvailableToolNames } from '../../../../observability/utils';
 import type { CachedLLMStepResponse } from '../../../../processors';
 import { PrepareStepProcessor } from '../../../../processors/processors/prepare-step';
+import { ensureUserFirstTurn } from '../../../../processors/provider-history-compat';
 import { resolveMaxProcessorRetries } from '../../../../processors/retry-budget';
 import { ProcessorRunner } from '../../../../processors/runner';
 import { needsTrailingAssistantGuard } from '../../../../processors/trailing-assistant-guard';
@@ -879,6 +880,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 logger?.error?.('Error in processLLMRequest processors:', error);
                 throw error;
               }
+            }
+
+            const userFirstPrompt = ensureUserFirstTurn.applyToPrompt({ prompt: inputMessages, model: currentModel });
+            if (userFirstPrompt) {
+              logger?.debug?.('Inserted a placeholder user turn before the leading assistant turn', {
+                provider: currentModel.provider,
+              });
+              inputMessages = userFirstPrompt;
             }
 
             // Enable defer mode - step-finish won't auto-close the step span

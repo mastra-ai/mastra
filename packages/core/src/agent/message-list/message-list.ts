@@ -46,7 +46,7 @@ import type {
 } from './state';
 import type { MastraToolInvocation, MastraToolInvocationPart } from './state/types';
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
-import { dropCrossProviderExecutedParts, ensureGeminiCompatibleMessages } from './utils/provider-compat';
+import { dropCrossProviderExecutedParts } from './utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
 import { stampPart, stampToolPartUpdate } from './utils/stamp-part';
 import { advancesToolInvocationState, isClientToolInvocationUpdate } from './utils/tool-invocation-state';
@@ -896,9 +896,7 @@ export class MessageList {
           this.promptConversionMode,
         );
 
-        const messages = [...systemMessages, ...modelMessages];
-
-        return ensureGeminiCompatibleMessages(messages, this.logger);
+        return [...systemMessages, ...modelMessages];
       },
 
       // Used for creating LLM prompt messages without AI SDK streamText/generateText
@@ -1038,8 +1036,6 @@ export class MessageList {
 
         messages = dropCrossProviderExecutedParts(messages, this.messages, options.targetProvider, this.logger);
 
-        messages = ensureGeminiCompatibleMessages(messages, this.logger);
-
         return messages
           .filter(message => message != null)
           .map(aiV5ModelMessageToV2PromptMessage)
@@ -1090,9 +1086,7 @@ export class MessageList {
       // Used when calling AI SDK streamText/generateText
       prompt: () => {
         const coreMessages = this.all.aiV4.core();
-        const messages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat(), ...coreMessages];
-
-        return ensureGeminiCompatibleMessages(messages, this.logger);
+        return [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat(), ...coreMessages];
       },
 
       // Used for creating LLM prompt messages without AI SDK streamText/generateText
@@ -1100,11 +1094,7 @@ export class MessageList {
         const coreMessages = this.all.aiV4.core();
 
         const systemMessages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()];
-        let messages = [...systemMessages, ...coreMessages];
-
-        messages = ensureGeminiCompatibleMessages(messages, this.logger);
-
-        return messages.map(aiV4CoreMessageToV1PromptMessage);
+        return [...systemMessages, ...coreMessages].map(aiV4CoreMessageToV1PromptMessage);
       },
     },
   };

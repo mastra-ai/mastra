@@ -426,6 +426,58 @@ export function isMaybeAzure(
 }
 
 /**
+ * Detects providers that reject a conversation whose first non-system turn is
+ * the assistant's: Amazon Bedrock ("A conversation must start with a user
+ * message") and Google/Vertex Gemini. OpenAI, Anthropic, Groq, Mistral,
+ * DeepSeek and Cerebras accept that shape, so they are left alone.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/5465
+ * @see https://github.com/mastra-ai/mastra/issues/8053
+ */
+export function isMaybeRequiringUserFirstTurn(model: unknown): boolean {
+  return (
+    getModelProviderFamily(model) === 'google' ||
+    matchesProviderPrefix(model, 'amazon') ||
+    matchesProviderPrefix(model, 'amazon-bedrock') ||
+    matchesProviderPrefix(model, 'bedrock')
+  );
+}
+
+/**
+ * Inserts a minimal user turn ahead of a leading assistant turn for providers
+ * that require conversations to start with the user (see
+ * {@link isMaybeRequiringUserFirstTurn}). History windows commonly start on an
+ * assistant turn — agents that greet first, or `lastMessages` cutting into a
+ * thread — and those providers reject the whole request otherwise.
+ *
+ * Not part of {@link DEFAULT_COMPAT_RULES}: the agent loops apply this rule to
+ * every request after `processLLMRequest`, so it runs whether or not
+ * `ProviderHistoryCompat` is configured and user processors never see the
+ * synthetic turn.
+ */
+export const ensureUserFirstTurn = {
+  name: 'ensure-user-first-turn',
+  applyToPrompt({
+    prompt,
+    model,
+  }: {
+    prompt: LanguageModelV2Prompt;
+    model: unknown;
+  }): LanguageModelV2Prompt | undefined {
+    if (!isMaybeRequiringUserFirstTurn(model)) return undefined;
+
+    const firstTurnIndex = prompt.findIndex(message => message.role !== 'system');
+    if (firstTurnIndex === -1 || prompt[firstTurnIndex]!.role !== 'assistant') return undefined;
+
+    return [
+      ...prompt.slice(0, firstTurnIndex),
+      { role: 'user', content: [{ type: 'text', text: '.' }] },
+      ...prompt.slice(firstTurnIndex),
+    ];
+  },
+} satisfies CompatRule;
+
+/**
  * Returns the index of the trailing assistant message whose thinking blocks
  * Anthropic verifies byte-for-byte: the last message when it is an assistant
  * message, or the assistant message that only has tool messages after it (an
