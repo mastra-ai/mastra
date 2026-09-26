@@ -22,6 +22,7 @@ import type {
   ExperimentResult,
 } from '../types';
 import type { AgentVersion } from './agents';
+import type { DatasetSnapshotIdentityRecord, DatasetSnapshotImportReceipt } from './datasets/snapshot';
 import type {
   KnowledgeActivityEvent,
   KnowledgeCurationCursor,
@@ -97,6 +98,8 @@ export class InMemoryDB {
   readonly datasets = new Map<string, DatasetRecord>();
   readonly datasetItems = new Map<string, DatasetItemRow[]>();
   readonly datasetVersions = new Map<string, DatasetVersion>();
+  readonly datasetSnapshotIdentities = new Map<string, DatasetSnapshotIdentityRecord>();
+  readonly datasetSnapshotImports = new Map<string, DatasetSnapshotImportReceipt>();
 
   // Experiment domain maps
   readonly experiments = new Map<string, Experiment>();
@@ -166,6 +169,8 @@ export class InMemoryDB {
     this.datasets.clear();
     this.datasetItems.clear();
     this.datasetVersions.clear();
+    this.datasetSnapshotIdentities.clear();
+    this.datasetSnapshotImports.clear();
     this.experiments.clear();
     this.experimentResults.clear();
     this.backgroundTasks.clear();

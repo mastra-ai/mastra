@@ -25,7 +25,7 @@
     "pretest": "docker compose up -d --wait || (echo '--- docker compose up failed; dumping diagnostics ---' && docker compose ps -a && docker compose logs && df -h && exit 1)",
     "test": "vitest run && pnpm test:fidelity",
     "pretest:fidelity": "docker compose --profile fidelity up -d --wait mongodb-fidelity",
-    "test:fidelity": "MONGODB_REPLICA_SET_URL='mongodb://localhost:27019/?directConnection=true' vitest run src/storage/dataset-fidelity.test.ts",
+    "test:fidelity": "MONGODB_REPLICA_SET_URL='mongodb://localhost:27019/?directConnection=true' vitest run src/storage/dataset-fidelity.test.ts src/storage/dataset-snapshot-transfer.test.ts",
     "posttest:fidelity": "docker compose --profile fidelity stop mongodb-fidelity",
     "posttest": "docker compose down -v",
     "pretest:watch": "docker compose up -d",
@@ -54,7 +54,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.68.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.71.0-0 <2.0.0-0"
   },
   "files": [
     "dist"

@@ -1,0 +1,5 @@
+---
+'@mastra/cloudflare': patch
+---
+
+Updated Cloudflare KV record types for compatibility with the new core dataset snapshot table names. This does not enable dataset snapshot transfer in Cloudflare KV. Requires `@mastra/core` 1.71.0 or later.

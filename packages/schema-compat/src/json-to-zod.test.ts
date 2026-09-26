@@ -36,6 +36,21 @@ describe('jsonSchemaToZod', () => {
       expect(result).toContain('dog');
     });
 
+    it('should emit the discriminator as a string literal, not executable code', () => {
+      const key = '"),globalThis.__jsonToZodDiscriminator=1,("';
+      const branch = (value: string): JsonSchema => ({
+        type: 'object',
+        properties: { [key]: { const: value } },
+        required: [key],
+      });
+      const result = jsonSchemaToZod({ anyOf: [branch('a'), branch('b')] });
+      expect(result).toContain(`z.discriminatedUnion(${JSON.stringify(key)}, [`);
+
+      const schema = Function('z', `"use strict";return (${result});`)(z);
+      expect((globalThis as Record<string, unknown>).__jsonToZodDiscriminator).toBeUndefined();
+      expect(schema.parse({ [key]: 'b' })).toEqual({ [key]: 'b' });
+    });
+
     it('should detect discriminatedUnion with three anyOf entries sharing const property', () => {
       const schema: JsonSchema = {
         anyOf: [
@@ -444,6 +459,27 @@ describe('jsonSchemaToZod', () => {
     });
 
     describe('PatternProperties', () => {
+      it('should treat patternProperties keys and matching item keys as data, not executable code', () => {
+        const hostileKeys = [
+          '`+(globalThis.__jsonToZodPatternKey=1)+`',
+          '${globalThis.__jsonToZodPatternKey=1}',
+          '"));globalThis.__jsonToZodPatternKey=1;(("',
+        ];
+        for (const key of hostileKeys) {
+          const result = jsonSchemaToZod({ type: 'object', patternProperties: { [key]: { type: 'string' } } });
+          expect(result).toContain(`new RegExp(${JSON.stringify(key)})`);
+
+          const schema = Function('z', `"use strict";return (${result});`)(z);
+          // Keys that are not valid regular expressions fail as data when matched.
+          try {
+            schema.safeParse({ [key]: 'value', globalThis: 'value' });
+          } catch (error) {
+            expect(error).toBeInstanceOf(SyntaxError);
+          }
+          expect((globalThis as Record<string, unknown>).__jsonToZodPatternKey).toBeUndefined();
+        }
+      });
+
       it('should handle patternProperties with single pattern', () => {
         const schema: JsonSchema = {
           type: 'object',

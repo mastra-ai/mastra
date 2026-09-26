@@ -31,6 +31,8 @@ export const TABLE_FAVORITES = 'mastra_favorites';
 export const TABLE_DATASETS = 'mastra_datasets';
 export const TABLE_DATASET_ITEMS = 'mastra_dataset_items';
 export const TABLE_DATASET_VERSIONS = 'mastra_dataset_versions';
+export const TABLE_DATASET_SNAPSHOT_IDENTITIES = 'mastra_dataset_snapshot_identities';
+export const TABLE_DATASET_SNAPSHOT_IMPORTS = 'mastra_dataset_snapshot_imports';
 
 // Experiment tables
 export const TABLE_EXPERIMENTS = 'mastra_experiments';
@@ -95,6 +97,8 @@ export type TABLE_NAMES =
   | typeof TABLE_DATASETS
   | typeof TABLE_DATASET_ITEMS
   | typeof TABLE_DATASET_VERSIONS
+  | typeof TABLE_DATASET_SNAPSHOT_IDENTITIES
+  | typeof TABLE_DATASET_SNAPSHOT_IMPORTS
   | typeof TABLE_EXPERIMENTS
   | typeof TABLE_EXPERIMENT_RESULTS
   | typeof TABLE_BACKGROUND_TASKS
@@ -605,6 +609,19 @@ export const DATASET_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   createdAt: { type: 'timestamp', nullable: false },
 };
 
+export const DATASET_SNAPSHOT_IDENTITIES_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  datasetId: { type: 'text', nullable: false },
+  itemId: { type: 'text', nullable: true },
+  portableId: { type: 'text', nullable: false },
+};
+
+// No dataset foreign key: completed receipts survive destination deletion.
+export const DATASET_SNAPSHOT_IMPORTS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  receipt: { type: 'jsonb', nullable: false },
+};
+
 // Experiment schemas
 export const EXPERIMENTS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -817,6 +834,8 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_DATASETS]: DATASETS_SCHEMA,
   [TABLE_DATASET_ITEMS]: DATASET_ITEMS_SCHEMA,
   [TABLE_DATASET_VERSIONS]: DATASET_VERSIONS_SCHEMA,
+  [TABLE_DATASET_SNAPSHOT_IDENTITIES]: DATASET_SNAPSHOT_IDENTITIES_SCHEMA,
+  [TABLE_DATASET_SNAPSHOT_IMPORTS]: DATASET_SNAPSHOT_IMPORTS_SCHEMA,
   [TABLE_EXPERIMENTS]: EXPERIMENTS_SCHEMA,
   [TABLE_EXPERIMENT_RESULTS]: EXPERIMENT_RESULTS_SCHEMA,
   [TABLE_FAVORITES]: FAVORITES_SCHEMA,
