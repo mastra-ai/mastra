@@ -830,33 +830,47 @@ export class Memory extends MastraMemory {
       let usage: { tokens: number } | undefined;
 
       if (config?.semanticRecall && vectorSearchString && this.vector) {
-        const result = await this.embedMessageContent(vectorSearchString!);
-        usage = result.usage;
-        const { embeddings, dimension } = result;
-        const { indexName } = await this.createEmbeddingIndex(dimension, config);
+        const scopeFilter = resourceScope ? { resource_id: resourceId } : { thread_id: threadId };
+        const userFilter = typeof config.semanticRecall === 'object' ? config.semanticRecall.filter : undefined;
+        const combinedFilter = userFilter ? { $and: [scopeFilter, userFilter] } : scopeFilter;
 
-        await Promise.all(
-          embeddings.map(async embedding => {
-            if (typeof this.vector === `undefined`) {
-              throw new Error(
-                `Tried to query vector index ${indexName} but this Memory instance doesn't have an attached vector db.`,
+        if (this.isSelfEmbedding) {
+          const { indexName } = await this.createEmbeddingIndex(undefined, config);
+          // `queryText` is accepted only by self-embedding stores, which is the only kind
+          // reached here, so it is not on the shared QueryVectorParams.
+          vectorResults.push(
+            ...(await this.vector.query({
+              indexName,
+              queryText: vectorSearchString,
+              topK: vectorConfig.topK,
+              filter: combinedFilter,
+            } as never)),
+          );
+        } else {
+          const result = await this.embedMessageContent(vectorSearchString!);
+          usage = result.usage;
+          const { embeddings, dimension } = result;
+          const { indexName } = await this.createEmbeddingIndex(dimension, config);
+
+          await Promise.all(
+            embeddings.map(async embedding => {
+              if (typeof this.vector === `undefined`) {
+                throw new Error(
+                  `Tried to query vector index ${indexName} but this Memory instance doesn't have an attached vector db.`,
+                );
+              }
+
+              vectorResults.push(
+                ...(await this.vector.query({
+                  indexName,
+                  queryVector: embedding,
+                  topK: vectorConfig.topK,
+                  filter: combinedFilter,
+                })),
               );
-            }
-
-            const scopeFilter = resourceScope ? { resource_id: resourceId } : { thread_id: threadId };
-            const userFilter = typeof config.semanticRecall === 'object' ? config.semanticRecall.filter : undefined;
-            const combinedFilter = userFilter ? { $and: [scopeFilter, userFilter] } : scopeFilter;
-
-            vectorResults.push(
-              ...(await this.vector.query({
-                indexName,
-                queryVector: embedding,
-                topK: vectorConfig.topK,
-                filter: combinedFilter,
-              })),
-            );
-          }),
-        );
+            }),
+          );
+        }
       }
 
       const semanticConfig = typeof config.semanticRecall === 'object' ? config.semanticRecall : undefined;
@@ -1100,11 +1114,14 @@ export class Memory extends MastraMemory {
   }
 
   /**
-   * Prefix shared by every message index. The index for the default embedding
-   * dimension is named with the bare prefix; other dimensions add a suffix.
+   * Prefix shared by every message index. The index for the default embedding dimension is named
+   * with the bare prefix; other dimensions add a dimension suffix, and a store that embeds the
+   * text itself adds its own. Built here rather than read from `getEmbeddingIndexName()`, which
+   * answers for one configuration and so would not match indexes written under another.
    */
   private get messageIndexPrefix(): string {
-    return this.getEmbeddingIndexName();
+    const separator = this.vector?.indexSeparator ?? '_';
+    return `memory${separator}messages`;
   }
 
   /**
@@ -1579,6 +1596,8 @@ ${workingMemory}`;
         // Collect all embeddings first (embedding is CPU-bound, doesn't use pool connections)
         const embeddingData: Array<{
           embeddings: number[][];
+          /** Chunk texts, populated only when the store embeds server-side. */
+          documents?: string[];
           metadata: Array<
             Record<string, unknown> & {
               message_id: string;
@@ -1612,17 +1631,30 @@ ${workingMemory}`;
 
             if (!textForEmbedding) return;
 
-            const result = await this.embedMessageContent(textForEmbedding);
-            dimension = result.dimension;
-            if (result.usage?.tokens) {
-              totalTokens += result.usage.tokens;
+            // The store embeds these itself, so it receives the chunk texts. Chunking matches the
+            // client-side path so one metadata entry lines up with one stored row.
+            let embeddings: number[][] = [];
+            let documents: string[] | undefined;
+            let chunks: string[];
+            if (this.isSelfEmbedding) {
+              chunks = this.chunkText(textForEmbedding);
+              documents = chunks;
+            } else {
+              const result = await this.embedMessageContent(textForEmbedding);
+              dimension = result.dimension;
+              if (result.usage?.tokens) {
+                totalTokens += result.usage.tokens;
+              }
+              embeddings = result.embeddings;
+              chunks = result.chunks;
             }
 
             const threadMetadata = message.threadId ? threadMetadataMap.get(message.threadId) || {} : {};
 
             embeddingData.push({
-              embeddings: result.embeddings,
-              metadata: result.chunks.map(() => ({
+              embeddings,
+              documents,
+              metadata: chunks.map(() => ({
                 ...threadMetadata,
                 message_id: message.id,
                 thread_id: message.threadId,
@@ -1637,7 +1669,7 @@ ${workingMemory}`;
         );
 
         // Batch all vectors into a single upsert call to avoid pool exhaustion
-        if (embeddingData.length > 0 && dimension !== undefined) {
+        if (embeddingData.length > 0 && (this.isSelfEmbedding || dimension !== undefined)) {
           if (typeof this.vector === `undefined`) {
             throw new Error(`Tried to upsert embeddings but this Memory instance doesn't have an attached vector db.`);
           }
@@ -1654,16 +1686,24 @@ ${workingMemory}`;
             }
           > = [];
 
+          const allDocuments: string[] = [];
           for (const data of embeddingData) {
             allVectors.push(...data.embeddings);
+            if (data.documents) allDocuments.push(...data.documents);
             allMetadata.push(...data.metadata);
           }
 
-          await this.vector.upsert({
-            indexName,
-            vectors: allVectors,
-            metadata: allMetadata,
-          });
+          if (this.isSelfEmbedding) {
+            // `documents` is accepted only by self-embedding stores, so it is not on the shared
+            // UpsertVectorParams.
+            await this.vector.upsert({ indexName, documents: allDocuments, metadata: allMetadata } as never);
+          } else {
+            await this.vector.upsert({
+              indexName,
+              vectors: allVectors,
+              metadata: allMetadata,
+            });
+          }
         }
       }
 
@@ -2882,6 +2922,8 @@ Notes:
         // Collect embeddings for messages with new text content
         const embeddingData: Array<{
           embeddings: number[][];
+          /** Chunk texts, populated only when the store embeds the text itself. */
+          documents?: string[];
           metadata: Array<
             Record<string, unknown> & {
               message_id: string;
@@ -2932,12 +2974,24 @@ Notes:
 
             // If there's new text content, embed it
             if (textForEmbedding) {
-              const result = await this.embedMessageContent(textForEmbedding);
-              dimension = result.dimension;
+              // A self-embedding store receives the chunk texts and embeds them itself.
+              let embeddings: number[][] = [];
+              let documents: string[] | undefined;
+              let chunks: string[];
+              if (this.isSelfEmbedding) {
+                chunks = this.chunkText(textForEmbedding);
+                documents = chunks;
+              } else {
+                const result = await this.embedMessageContent(textForEmbedding);
+                dimension = result.dimension;
+                embeddings = result.embeddings;
+                chunks = result.chunks;
+              }
 
               embeddingData.push({
-                embeddings: result.embeddings,
-                metadata: result.chunks.map(() => ({
+                embeddings,
+                documents,
+                metadata: chunks.map(() => ({
                   message_id: message.id,
                   thread_id: existingMessage.threadId,
                   resource_id: existingMessage.resourceId,
@@ -2988,7 +3042,7 @@ Notes:
         }
 
         // Upsert new embeddings if any
-        if (embeddingData.length > 0 && dimension !== undefined) {
+        if (embeddingData.length > 0 && (this.isSelfEmbedding || dimension !== undefined)) {
           const { indexName } = await this.createEmbeddingIndex(dimension, config);
 
           // Flatten all embeddings and metadata into single arrays
@@ -3001,16 +3055,24 @@ Notes:
             }
           > = [];
 
+          const allDocuments: string[] = [];
           for (const data of embeddingData) {
             allVectors.push(...data.embeddings);
+            if (data.documents) allDocuments.push(...data.documents);
             allMetadata.push(...data.metadata);
           }
 
-          await this.vector.upsert({
-            indexName,
-            vectors: allVectors,
-            metadata: allMetadata,
-          });
+          if (this.isSelfEmbedding) {
+            // `documents` is accepted only by self-embedding stores, so it is not on the shared
+            // UpsertVectorParams.
+            await this.vector.upsert({ indexName, documents: allDocuments, metadata: allMetadata } as never);
+          } else {
+            await this.vector.upsert({
+              indexName,
+              vectors: allVectors,
+              metadata: allMetadata,
+            });
+          }
         }
       }
     }
@@ -3249,7 +3311,7 @@ Notes:
     }
 
     // Batches through the new thread so large threads are embedded without loading every payload at once.
-    if (this.vector && this.embedder && config.semanticRecall) {
+    if (this.vector && (this.embedder || this.isSelfEmbedding) && config.semanticRecall) {
       try {
         await this.embedCopiedMessagesInBatches(memoryStore, result, config);
       } catch (error) {
@@ -3361,7 +3423,7 @@ Notes:
     const memoryStore = await this.getMemoryStore();
 
     const config = this.getMergedThreadConfig(memoryConfig);
-    const migratesVectors = Boolean(this.vector && this.embedder && config.semanticRecall);
+    const migratesVectors = Boolean(this.vector && (this.embedder || this.isSelfEmbedding) && config.semanticRecall);
 
     // Preserve the storage no-op contract when there is no vector migration to worry about:
     // if the thread already belongs to the target resource there is nothing to move, so return
@@ -3552,12 +3614,15 @@ Notes:
    * This is similar to the embedding logic in saveMessages but operates on already-saved messages.
    */
   private async embedClonedMessages(messages: MastraDBMessage[], config: MemoryConfigInternal): Promise<void> {
-    if (!this.vector || !this.embedder) {
+    // A self-embedding store needs no embedder: it receives the text and embeds it itself.
+    if (!this.vector || (!this.embedder && !this.isSelfEmbedding)) {
       return;
     }
 
     const embeddingData: Array<{
       embeddings: number[][];
+      /** Chunk texts, populated only when the store embeds the text itself. */
+      documents?: string[];
       metadata: Array<
         Record<string, unknown> & {
           message_id: string;
@@ -3591,12 +3656,23 @@ Notes:
 
         if (!textForEmbedding) return;
 
-        const result = await this.embedMessageContent(textForEmbedding);
-        dimension = result.dimension;
+        let embeddings: number[][] = [];
+        let documents: string[] | undefined;
+        let chunks: string[];
+        if (this.isSelfEmbedding) {
+          chunks = this.chunkText(textForEmbedding);
+          documents = chunks;
+        } else {
+          const result = await this.embedMessageContent(textForEmbedding);
+          dimension = result.dimension;
+          embeddings = result.embeddings;
+          chunks = result.chunks;
+        }
 
         embeddingData.push({
-          embeddings: result.embeddings,
-          metadata: result.chunks.map(() => ({
+          embeddings,
+          documents,
+          metadata: chunks.map(() => ({
             message_id: message.id,
             thread_id: message.threadId,
             resource_id: message.resourceId,
@@ -3609,7 +3685,7 @@ Notes:
     );
 
     // Batch all vectors into a single upsert call
-    if (embeddingData.length > 0 && dimension !== undefined) {
+    if (embeddingData.length > 0 && (this.isSelfEmbedding || dimension !== undefined)) {
       const { indexName } = await this.createEmbeddingIndex(dimension, config);
 
       // Flatten all embeddings and metadata into single arrays
@@ -3622,16 +3698,24 @@ Notes:
         }
       > = [];
 
+      const allDocuments: string[] = [];
       for (const data of embeddingData) {
         allVectors.push(...data.embeddings);
+        if (data.documents) allDocuments.push(...data.documents);
         allMetadata.push(...data.metadata);
       }
 
-      await this.vector.upsert({
-        indexName,
-        vectors: allVectors,
-        metadata: allMetadata,
-      });
+      if (this.isSelfEmbedding) {
+        // `documents` is accepted only by self-embedding stores, so it is not on the shared
+        // UpsertVectorParams.
+        await this.vector.upsert({ indexName, documents: allDocuments, metadata: allMetadata } as never);
+      } else {
+        await this.vector.upsert({
+          indexName,
+          vectors: allVectors,
+          metadata: allMetadata,
+        });
+      }
     }
   }
 

@@ -7878,6 +7878,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/memory':
+        specifier: workspace:*
+        version: link:../../packages/memory
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15

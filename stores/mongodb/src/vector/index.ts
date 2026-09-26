@@ -158,6 +158,13 @@ export interface MongoDBVectorConfig {
    * @default 'embedding'
    */
   embeddingFieldPath?: string;
+  /**
+   * Automated Embedding defaults for indexes this store creates. Setting it marks the store as
+   * one that embeds server-side, so callers such as `Memory`'s semantic recall send text and
+   * MongoDB produces the vectors. A `createIndex` call that names its own `autoEmbed` or its
+   * own `dimension` takes precedence.
+   */
+  autoEmbed?: MongoDBAutoEmbedConfig;
 }
 
 export interface MongoDBIndexReadyParams {
@@ -221,6 +228,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   private db: Db;
   private collections: Map<string, Collection<MongoDBDocument>>;
   private readonly embeddingFieldName: string;
+  /** Automated Embedding defaults applied to indexes created without their own config. */
+  private readonly defaultAutoEmbed?: MongoDBAutoEmbedConfig;
   private readonly metadataFieldName = 'metadata';
   private readonly documentFieldName = 'document';
   /**
@@ -279,7 +288,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     dotproduct: 'dotProduct',
   };
 
-  constructor({ id, uri, dbName, options, embeddingFieldPath }: MongoDBVectorConfig) {
+  constructor({ id, uri, dbName, options, embeddingFieldPath, autoEmbed }: MongoDBVectorConfig) {
     super({ id });
 
     if (!uri) {
@@ -297,6 +306,12 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     this.db = this.client.db(dbName);
     this.collections = new Map();
     this.embeddingFieldName = embeddingFieldPath ?? 'embedding';
+    this.defaultAutoEmbed = autoEmbed;
+  }
+
+  /** True once the store is configured with Automated Embedding defaults. */
+  override get isSelfEmbedding(): boolean {
+    return this.defaultAutoEmbed !== undefined;
   }
 
   /**
@@ -651,8 +666,11 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       collectionName,
       searchIndexName,
       allowWrites,
-      autoEmbed,
+      autoEmbed: autoEmbedParam,
     } = params;
+    // The store's Automated Embedding defaults apply to a call that names neither its own
+    // autoEmbed config nor a dimension.
+    const autoEmbed = autoEmbedParam ?? (dimension === undefined ? this.defaultAutoEmbed : undefined);
     let mongoMetric;
     try {
       if (autoEmbed) {

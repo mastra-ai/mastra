@@ -298,9 +298,16 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const target = targetMap.get(id);
       if (!target) continue;
 
-      // Fetch the target message + previous messages (createdAt <= target, ordered DESC, limited)
+      // Fetch the target message + previous messages, ordered DESC and limited.
+      // Messages are ordered by (createdAt, id), so the range has to compare on both. Comparing
+      // on createdAt alone resolves a pinned message to whichever id sorts highest among rows
+      // sharing its timestamp, which a batched save produces routinely.
       const prevMessages = await collection
-        .find({ thread_id: target.threadId, createdAt: { $lte: target.createdAt }, ...resourceFilter })
+        .find({
+          thread_id: target.threadId,
+          ...resourceFilter,
+          $or: [{ createdAt: { $lt: target.createdAt } }, { createdAt: target.createdAt, id: { $lte: id } }],
+        })
         .sort({ createdAt: -1, id: -1 })
         .limit(withPreviousMessages + 1)
         .toArray();
@@ -309,7 +316,11 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // Fetch messages after the target (only if requested)
       if (withNextMessages > 0) {
         const nextMessages = await collection
-          .find({ thread_id: target.threadId, createdAt: { $gt: target.createdAt }, ...resourceFilter })
+          .find({
+            thread_id: target.threadId,
+            ...resourceFilter,
+            $or: [{ createdAt: { $gt: target.createdAt } }, { createdAt: target.createdAt, id: { $gt: id } }],
+          })
           .sort({ createdAt: 1, id: 1 })
           .limit(withNextMessages)
           .toArray();
