@@ -8,10 +8,7 @@ export function PageHeaderIcon({ className, ...props }: PageHeaderIconProps) {
   return (
     <div
       data-slot="page-header-icon"
-      className={cn(
-        'col-start-[icon] row-start-1 flex items-center self-center text-muted-foreground [&>svg]:size-5',
-        className,
-      )}
+      className={cn('-my-1 flex min-h-control-lg items-center self-start text-muted-foreground', className)}
       {...props}
     />
   );

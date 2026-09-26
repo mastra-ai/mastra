@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { BotIcon } from 'lucide-react';
+import { ArrowLeftIcon, BotIcon } from 'lucide-react';
 
 import { PageHeader } from './page-header';
 import { Badge } from '@/ds/components/Badge';
@@ -115,6 +115,45 @@ export const MetaBeside: Story = {
   ),
 };
 
+export const MetaBesideLargeIcon: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader>
+        <PageHeader.Icon>
+          <span className="grid size-8 place-items-center">
+            <BotIcon />
+          </span>
+        </PageHeader.Icon>
+        <PageHeader.Title>Frontend Notion</PageHeader.Title>
+        <PageHeader.Meta beside>
+          <Badge variant="green" emphasis="muted" size="sm">
+            Active
+          </Badge>
+        </PageHeader.Meta>
+      </PageHeader>
+    </StoryFrame>
+  ),
+};
+
+export const EyebrowBackLink: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader>
+        <PageHeader.Eyebrow>
+          <a href="#alerts">
+            <ArrowLeftIcon aria-hidden />
+            Back to alerts
+          </a>
+        </PageHeader.Eyebrow>
+        <PageHeader.Title>Create alert</PageHeader.Title>
+        <PageHeader.Action>
+          <Button size="sm">Save draft</Button>
+        </PageHeader.Action>
+      </PageHeader>
+    </StoryFrame>
+  ),
+};
+
 export const MetaBoth: Story = {
   render: () => (
     <StoryFrame>
@@ -196,6 +235,21 @@ export const ActionOnly: Story = {
       <PageHeader>
         <PageHeader.Action>
           <Button size="sm">Action only</Button>
+        </PageHeader.Action>
+      </PageHeader>
+    </StoryFrame>
+  ),
+};
+
+export const LargeAction: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader>
+        <PageHeader.Title>API Keys</PageHeader.Title>
+        <PageHeader.Action>
+          <Button variant="primary" size="lg">
+            Create API key
+          </Button>
         </PageHeader.Action>
       </PageHeader>
     </StoryFrame>

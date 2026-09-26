@@ -59,7 +59,7 @@ describe('PageHeader', () => {
     expect(renderToStaticMarkup(<PageHeader />)).toContain('<header');
   });
 
-  it('renders the action outside the title grid, aligned to the top', () => {
+  it('renders the action outside the title column, aligned to the top', () => {
     const markup = renderToStaticMarkup(
       <PageHeader>
         <PageHeader.Title>Environment</PageHeader.Title>
@@ -67,9 +67,8 @@ describe('PageHeader', () => {
       </PageHeader>,
     );
 
-    // Action is a direct child of <header>, right after the closed title grid.
     expect(markup).toMatch(
-      /<\/h1><\/div><div data-slot="page-header-action" class="[^"]*self-start[^"]*">Edit<\/div><\/header>$/,
+      /<\/h1><\/div><\/div><div data-slot="page-header-action" class="[^"]*self-start[^"]*">Edit<\/div><\/div><\/header>$/,
     );
   });
 
@@ -95,6 +94,21 @@ describe('PageHeader', () => {
 
     expect(tallActionTitleClass).toBeDefined();
     expect(tallActionTitleClass).toEqual(noActionTitleClass);
-    expect(tallActionTitleClass).toContain('self-start');
+  });
+
+  it('renders the eyebrow above the title row, outside the title column', () => {
+    const markup = renderToStaticMarkup(
+      <PageHeader>
+        <PageHeader.Title>Create alert</PageHeader.Title>
+        <PageHeader.Eyebrow>
+          <a href="/alerts">Back to alerts</a>
+        </PageHeader.Eyebrow>
+        <PageHeader.Action>Save</PageHeader.Action>
+      </PageHeader>,
+    );
+
+    expect(markup).toMatch(
+      /^<header[^>]*><div [^>]*data-slot="page-header-eyebrow"[^>]*><a href="\/alerts">Back to alerts<\/a><\/div>/,
+    );
   });
 });
