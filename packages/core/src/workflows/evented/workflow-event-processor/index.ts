@@ -2502,8 +2502,12 @@ export class WorkflowEventProcessor extends EventProcessor {
         const existingSuspendPayload = existingStepResult?.suspendPayload as any;
         const iterationSuspendPayload = prevResult.suspendPayload as any;
         const foreachOutput = [...(existingSuspendPayload?.__workflow_meta?.foreachOutput ?? [])];
+        // An iteration's `payload` is the whole foreach input, already stored once as the
+        // step payload. Readers of these records use only status, output and suspendPayload,
+        // so keeping it per iteration only grew the saved run with the square of the items.
+        const { payload: _foreachInput, ...iterationRecord } = prevResult as any;
         foreachOutput[currentIdx] =
-          prevResult.status === 'suspended' ? prevResult : { ...prevResult, suspendPayload: {} };
+          prevResult.status === 'suspended' ? iterationRecord : { ...iterationRecord, suspendPayload: {} };
         const suspendPayload = {
           ...(existingSuspendPayload ?? iterationSuspendPayload),
           __workflow_meta: {
