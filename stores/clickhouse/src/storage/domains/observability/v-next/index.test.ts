@@ -384,6 +384,114 @@ LIMIT 1`,
     }
   });
 
+  it('reads root payloads only for traces in the requested time range', async () => {
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    const startedAt = new Date('2026-08-26T10:00:00.000Z');
+    const outsideRoots = 5_000;
+    const payload = 'x'.repeat(2_000);
+
+    try {
+      await storage.batchCreateSpans({
+        records: [
+          {
+            traceId: 'in-range-trace',
+            spanId: 'in-range-root',
+            parentSpanId: null,
+            name: 'in-range root',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            startedAt,
+            endedAt: new Date(startedAt.getTime() + 1_000),
+          },
+          ...Array.from({ length: outsideRoots }, (_, index) => ({
+            traceId: `outside-${index}`,
+            spanId: `outside-root-${index}`,
+            parentSpanId: null,
+            name: 'outside root',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            input: payload,
+            output: payload,
+            startedAt: new Date(startedAt.getTime() - (index + 1) * 60_000),
+            endedAt: new Date(startedAt.getTime() - (index + 1) * 60_000 + 1_000),
+          })),
+        ],
+      });
+
+      const plan = planTraceQuery(
+        parseTraceQueryRequest({
+          timeRange: {
+            from: new Date(startedAt.getTime() - 1_000).toISOString(),
+            to: new Date(startedAt.getTime() + 2_000).toISOString(),
+          },
+        }),
+      );
+      const queryId = `trace-query-range-${randomUUID()}`;
+      const rows = await runWithClickHouseTraceQueryTimeout(
+        client,
+        { timeoutMs: 15_000 },
+        compileClickHouseTraceQuery(plan),
+        queryId,
+      );
+      expect(rows.map(row => row.traceId)).toEqual(['in-range-trace']);
+
+      await client.command({ query: 'SYSTEM FLUSH LOGS' });
+      const logResult = await client.query({
+        query: `SELECT read_bytes AS readBytes
+FROM system.query_log
+WHERE query_id = {queryId:String} AND type = 'QueryFinish'
+ORDER BY event_time_microseconds DESC
+LIMIT 1`,
+        query_params: { queryId },
+        format: 'JSONEachRow',
+      });
+      const [log] = await logResult.json<{ readBytes: number }>();
+      // Deduping the whole table would read every outside root's input and output.
+      expect(Number(log?.readBytes)).toBeLessThan(outsideRoots * payload.length);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('does not resurrect a trace through a non-current root in the requested time range', async () => {
+    const root = {
+      traceId: 'multi-root-trace',
+      parentSpanId: null,
+      name: 'agent run',
+      spanType: SpanType.AGENT_RUN,
+      isEvent: false,
+    };
+    await storage.batchCreateSpans({
+      records: [
+        {
+          ...root,
+          spanId: 'root-a',
+          startedAt: new Date('2026-08-05T10:00:00.000Z'),
+          endedAt: new Date('2026-08-05T10:00:02.000Z'),
+        },
+        {
+          ...root,
+          spanId: 'root-a-old',
+          startedAt: new Date('2026-08-01T10:00:00.000Z'),
+          endedAt: new Date('2026-08-01T10:00:01.000Z'),
+        },
+      ],
+    });
+
+    const query = async (from: string, to: string) => {
+      const response = await storage.queryTraces(planTraceQuery(parseTraceQueryRequest({ timeRange: { from, to } })));
+      if (!('traces' in response)) throw new Error('Expected trace results');
+      return response.traces.map(trace => trace.traceId);
+    };
+
+    expect(await query('2026-08-01T00:00:00Z', '2026-08-02T00:00:00Z')).toEqual([]);
+    expect(await query('2026-08-05T00:00:00Z', '2026-08-06T00:00:00Z')).toEqual(['multi-root-trace']);
+  });
+
   it('keeps ordinary current-score reads proportional to logical rows after merges', async () => {
     const client = createClient({
       url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
