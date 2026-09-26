@@ -572,6 +572,13 @@ export interface InngestAgent<TOutput = undefined> {
   /** Get the active run id for a thread. Forwarded to the underlying Agent. */
   getActiveThreadRunId: Agent<any, any, TOutput>['getActiveThreadRunId'];
   /**
+   * Abort the thread's active run, including on the Inngest worker executing it.
+   * Returns `false` when there is no matching active run.
+   */
+  abortThreadStream: Agent<any, any, TOutput>['abortThreadStream'];
+  /** Abort a run by id, including on the Inngest worker executing it. */
+  abortRunStream: Agent<any, any, TOutput>['abortRunStream'];
+  /**
    * Resume a suspended durable run and return its streaming output. Routes
    * through {@link InngestAgent.resume}; requires `runId` in `streamOptions`.
    */
@@ -807,6 +814,19 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     }
   }
 
+  /**
+   * Stop `runId` wherever it is executing: the controller this process holds
+   * for it, if any, plus the abort request that reaches the Inngest step
+   * worker. Mirrors the `abort()` handed out with a stream result.
+   */
+  function abortDurableRun(runId: string): void {
+    const controller = globalRunRegistry.get(runId)?.abortController;
+    if (controller && !controller.signal.aborted) {
+      controller.abort(new Error('Aborted'));
+    }
+    void requestRemoteAbort(runId);
+  }
+
   // Return the InngestAgent object (Agent methods are added by the Proxy below)
   const inngestAgent: Pick<
     InngestAgent<TOutput>,
@@ -827,6 +847,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     | 'declineToolCall'
     | 'approveToolCallGenerate'
     | 'declineToolCallGenerate'
+    | 'abortThreadStream'
+    | 'abortRunStream'
     | '__fork'
     | 'getDurableWorkflows'
     | 'durableLoopWorkflowName'
@@ -1508,6 +1530,27 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         { approved: false, ...(reason !== undefined ? { reason } : {}) },
         resumeOptions as InngestAgentResumeOptions<TOutput>,
       );
+    },
+
+    // The wrapped Agent's thread/run abort only reaches in-process state; an
+    // Inngest run executes on the step worker, which must be told to stop.
+    abortThreadStream(abortOptions) {
+      // Resolve the run before the base call: aborting releases the thread
+      // lease, after which the thread no longer has an active run to look up.
+      const runId = agent.getActiveThreadRunId(abortOptions);
+      const aborted = agent.abortThreadStream(abortOptions);
+      if (!aborted || !runId) return aborted;
+
+      abortDurableRun(runId);
+      return true;
+    },
+
+    abortRunStream(runId) {
+      const aborted = agent.abortRunStream(runId);
+      // Publish regardless of local knowledge: the run is normally executing
+      // on an Inngest worker this process cannot see.
+      abortDurableRun(runId);
+      return aborted || globalRunRegistry.get(runId) !== undefined;
     },
 
     __fork() {

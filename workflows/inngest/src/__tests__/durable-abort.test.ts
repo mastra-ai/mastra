@@ -176,6 +176,61 @@ describe('durable agent abort on a connect worker', () => {
     await expect(result.output.finishReason).resolves.toBe('abort');
   });
 
+  // #25156: aborting through the agent (as `POST /agents/:id/threads/abort` and
+  // Studio do) must reach the worker too, not only the stream result's abort().
+  async function streamAndAbortThroughAgent(
+    abort: (
+      durableAgent: ReturnType<typeof import('./fixtures/abort-agent').buildAbortAgent>['durableAgent'],
+      runId: string,
+      scope: { threadId: string; resourceId: string },
+    ) => boolean,
+  ) {
+    const { buildAbortAgent } = await import('./fixtures/abort-agent');
+    const { durableAgent } = buildAbortAgent({ dbUrl, agentId, inngestPort: INNGEST_PORT });
+    const scope = { threadId: `abort-thread-${Date.now()}`, resourceId: 'abort-resource' };
+
+    let abortPayload: unknown;
+    let finishReason: string | undefined;
+    const result = await durableAgent.stream('Count slowly.', {
+      memory: { thread: scope.threadId, resource: scope.resourceId },
+      onAbort: data => {
+        abortPayload = data;
+      },
+      onFinish: data => {
+        finishReason = data.finishReason;
+      },
+    });
+
+    let acknowledged: boolean | undefined;
+    const consume = async () => {
+      try {
+        for await (const chunk of result.output.fullStream as AsyncIterable<{ type: string }>) {
+          if (acknowledged === undefined && chunk.type === 'text-delta') {
+            acknowledged = abort(durableAgent, result.runId, scope);
+          }
+        }
+      } catch {
+        // The ABORT bridge path may error the stream after firing onAbort.
+      } finally {
+        result.cleanup();
+      }
+    };
+    await Promise.race([consume(), workerHandle!.exited]);
+
+    expect(acknowledged).toBe(true);
+    expect(abortPayload).toBeDefined();
+    expect(finishReason).toBe('abort');
+    await expect(result.output.finishReason).resolves.toBe('abort');
+  }
+
+  it('abortThreadStream stops the run on the worker', async () => {
+    await streamAndAbortThroughAgent((durableAgent, _runId, scope) => durableAgent.abortThreadStream(scope));
+  });
+
+  it('abortRunStream stops the run on the worker', async () => {
+    await streamAndAbortThroughAgent((durableAgent, runId) => durableAgent.abortRunStream(runId));
+  });
+
   it('fails fast when the worker dies after readiness', async () => {
     const handle = await startWorker();
     // No disarm — any post-readiness exit must reject `exited`. SIGTERM (unlike
