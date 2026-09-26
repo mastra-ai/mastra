@@ -997,17 +997,31 @@ interface AgentConfigBase<
   /**
    * Maximum number of times processors can trigger a retry per generation.
    * When a processor calls abort({ retry: true }), the agent retries with feedback.
-   * Input and output processor retries require this value to be set. When
-   * errorProcessors are configured and it is omitted, their runtime cap is 10.
-   * Set it explicitly to bound every retry path.
+   * Unset by default. Input and output processor retries require this value to be
+   * set. When error processors resolve to a non-empty list and this is omitted,
+   * their runtime cap is 3.
    */
   maxProcessorRetries?: number;
   /**
    * Error processors that handle LLM API rejections.
    * These implement `processAPIError` and can inspect the error, modify messages, and signal a retry.
+   * Defaults to the shared stability processors — `ProviderHistoryCompat`,
+   * `PrefillErrorHandler`, and `StreamErrorRetryProcessor`, in that order. Each default is added only
+   * when no processor in your list carries its `id`. An added default is placed at the position its
+   * `id` gives it, so naming a later default does not invert the order; your processors are never
+   * reordered relative to each other. An empty list is merged the same way, so it
+   * resolves to the defaults; use `errorProcessorDefaults: false` to opt out.
    * Error processors can also be placed in `inputProcessors` or `outputProcessors`.
    */
   errorProcessors?: DynamicArgument<ErrorProcessorOrWorkflow[], TRequestContext>;
+  /**
+   * Set to `false` to run only the error processors you configure, with no shared
+   * stability defaults added. This is the only way to opt out of the defaults:
+   * `errorProcessors` is always a base that the three defaults are merged into,
+   * including when it is empty. With `false` and no `errorProcessors`, the agent
+   * runs no error processors. Defaults to `true` (defaults on).
+   */
+  errorProcessorDefaults?: boolean;
   /**
    * Options to pass to the agent upon creation.
    */
@@ -1176,11 +1190,11 @@ export type AgentGenerateOptions<
   /**
    * Maximum number of times processors can trigger a retry for this generation.
    * Overrides the agent's default maxProcessorRetries. Input and output processor
-   * retries require an explicit cap; errorProcessors default to a cap of 10 when
-   * configured without one. Set this explicitly to bound every retry path.
+   * retries require an explicit cap; error processors default to a cap of 3 when
+   * they resolve to a non-empty list and no cap is set.
    */
   maxProcessorRetries?: number;
-  /** Error processors to use for this generation call (overrides agent's default) */
+  /** Error processors to use for this generation call. Replaces the agent's resolved list, including its defaults. */
   errorProcessors?: ErrorProcessorOrWorkflow[];
   /** tracing options for starting new traces */
   tracingOptions?: TracingOptions;

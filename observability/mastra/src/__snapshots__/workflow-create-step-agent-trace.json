@@ -6,6 +6,7 @@
     "│   └── agent_run: \"agent run: 'workflow-agent'\"",
     "│       └── model_generation: \"llm: 'mock-model-id'\"",
     "│           └── model_step: \"step: 0\"",
+    "│               ├── processor_run: \"llm request processor: provider-history-compat\"",
     "│               └── model_inference: \"inference: 0\"",
     "│                   └── model_chunk: \"chunk: 'text'\"",
     "└── workflow_step: \"workflow step: 'mapping_testWorkflow_1'\""
@@ -236,6 +237,51 @@
                           "span": {
                             "id": "<span-7>",
                             "traceId": "<trace-1>",
+                            "name": "llm request processor: provider-history-compat",
+                            "type": "processor_run",
+                            "completed": true,
+                            "isEvent": false,
+                            "isRootSpan": false,
+                            "parentId": "<span-6>",
+                            "entityType": "input_processor",
+                            "entityId": "provider-history-compat",
+                            "attributes": {
+                              "processorPhase": "llmRequest",
+                              "processorExecutor": "legacy",
+                              "processorIndex": 0
+                            },
+                            "metadata": {
+                              "runId": "<runId-2>",
+                              "environment": "test"
+                            },
+                            "input": {
+                              "prompt": [
+                                {
+                                  "role": "system",
+                                  "content": "You are an agent in a workflow"
+                                },
+                                {
+                                  "role": "user",
+                                  "content": [
+                                    {
+                                      "type": "text",
+                                      "text": "test query"
+                                    }
+                                  ]
+                                }
+                              ],
+                              "stepNumber": 0,
+                              "retryCount": 0
+                            },
+                            "output": {
+                              "shortCircuited": false
+                            }
+                          }
+                        },
+                        {
+                          "span": {
+                            "id": "<span-8>",
+                            "traceId": "<trace-1>",
                             "name": "inference: 0",
                             "type": "model_inference",
                             "completed": true,
@@ -279,14 +325,14 @@
                           "children": [
                             {
                               "span": {
-                                "id": "<span-8>",
+                                "id": "<span-9>",
                                 "traceId": "<trace-1>",
                                 "name": "chunk: 'text'",
                                 "type": "model_chunk",
                                 "completed": true,
                                 "isEvent": false,
                                 "isRootSpan": false,
-                                "parentId": "<span-7>",
+                                "parentId": "<span-8>",
                                 "entityType": "agent",
                                 "entityId": "workflow-agent",
                                 "attributes": {
@@ -314,7 +360,7 @@
         },
         {
           "span": {
-            "id": "<span-9>",
+            "id": "<span-10>",
             "traceId": "<trace-1>",
             "name": "workflow step: 'mapping_testWorkflow_1'",
             "type": "workflow_step",

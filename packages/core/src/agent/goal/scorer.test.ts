@@ -5,6 +5,7 @@ import { createScorer } from '../../evals/base';
 import { ProviderHistoryCompat } from '../../processors/provider-history-compat';
 import { createMockModel } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
+import { Agent } from '../agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../message-list';
 import { DEFAULT_GOAL_JUDGE_PROMPT, GOAL_SCORE_WAITING } from './objective';
 import { createGoalScorer } from './scorer';
@@ -173,23 +174,38 @@ describe('createGoalScorer tool support', () => {
 });
 
 describe('createGoalScorer provider history compatibility', () => {
-  it('gives the judge agent ProviderHistoryCompat by default (input + error lanes)', () => {
+  it('leaves the judge processor lanes unset so the Agent default applies', () => {
     const scorer = createGoalScorer({ judgeModel });
-    const input = scorer.config.judge?.inputProcessors ?? [];
-    const error = scorer.config.judge?.errorProcessors ?? [];
-    expect(input.some(p => p instanceof ProviderHistoryCompat)).toBe(true);
-    expect(error.some(p => p instanceof ProviderHistoryCompat)).toBe(true);
+    expect(scorer.config.judge?.inputProcessors).toBeUndefined();
+    expect(scorer.config.judge?.errorProcessors).toBeUndefined();
   });
 
-  it('lets a caller override the judge processor lanes', () => {
+  it('keeps caller-supplied judge processors and the defaults opt-out', () => {
     const custom = new ProviderHistoryCompat();
     const scorer = createGoalScorer({
       judgeModel,
       inputProcessors: [custom],
       errorProcessors: [],
+      errorProcessorDefaults: false,
     });
     expect(scorer.config.judge?.inputProcessors).toEqual([custom]);
     expect(scorer.config.judge?.errorProcessors).toEqual([]);
+    expect(scorer.config.judge?.errorProcessorDefaults).toBe(false);
+  });
+
+  it('gets ProviderHistoryCompat from the Agent when the judge is built the way the runtime builds it', async () => {
+    // Mirrors the judge construction in `evals/base.ts`: a bare `new Agent` with
+    // only the scorer's configured processor lanes spread in when set. The judge
+    // therefore inherits the Agent's default error processors, which is where
+    // provider-history repair now comes from.
+    const agent = new Agent({
+      id: 'judge',
+      name: 'judge',
+      model: judgeModel,
+      instructions: DEFAULT_GOAL_JUDGE_PROMPT,
+    });
+
+    expect((await agent.listErrorProcessors()).map(processor => processor.id)).toContain('provider-history-compat');
   });
 });
 
@@ -286,12 +302,15 @@ describe('goal-only JSON fallback placement', () => {
     });
     const stream = vi.spyOn(model, 'doStream');
     const tools = withTools ? { view: viewTool } : undefined;
+    // These cases assert where the fallback prompt is placed. The judge is an Agent, so it picks up
+    // the shared stability error processors; their retry would recover inside the first stream
+    // instead of letting the fallback run. Opt the judge out to keep the fallback path under test.
     const scorer = goal
-      ? createGoalScorer({ judgeModel: model, prompt: 'Custom judge prompt.', tools })
+      ? createGoalScorer({ judgeModel: model, prompt: 'Custom judge prompt.', tools, errorProcessorDefaults: false })
       : createScorer({
           id: 'ordinary-scorer',
           description: 'Review documentation',
-          judge: { model, instructions: 'Custom judge prompt.', tools },
+          judge: { model, instructions: 'Custom judge prompt.', tools, errorProcessorDefaults: false },
         })
           .analyze({
             description: 'Review the work',
@@ -348,7 +367,9 @@ describe('goal-only JSON fallback placement', () => {
         }),
       });
       const stream = vi.spyOn(model, 'doStream');
-      const scorer = createGoalScorer({ judgeModel: model });
+      // The default error processors would retry the invalid output before the JSON fallback runs,
+      // so opt out to keep the native-then-fallback flow under test.
+      const scorer = createGoalScorer({ judgeModel: model, errorProcessorDefaults: false });
       await expect(scorer.run({ input: 'Update docs', output: 'Done' })).rejects.toThrow(
         'Structured output validation failed',
       );

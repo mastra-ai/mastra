@@ -5,6 +5,7 @@ import type { Mastra } from '../../../mastra';
 import type {
   ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
+  LLMRequestProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
 } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
@@ -36,11 +37,12 @@ export type AgentCapabilities = {
         overrides?: InputProcessorOrWorkflow[];
       }) => Promise<InputProcessorOrWorkflow[]> | InputProcessorOrWorkflow[]);
   llmRequestInputProcessors?:
-    | InputProcessorOrWorkflow[]
+    | LLMRequestProcessorOrWorkflow[]
     | ((args: {
         requestContext: RequestContext;
         overrides?: InputProcessorOrWorkflow[];
-      }) => Promise<InputProcessorOrWorkflow[]> | InputProcessorOrWorkflow[]);
+        errorOverrides?: ErrorProcessorOrWorkflow[];
+      }) => Promise<LLMRequestProcessorOrWorkflow[]> | LLMRequestProcessorOrWorkflow[]);
   errorProcessors?:
     | ErrorProcessorOrWorkflow[]
     | ((args: {

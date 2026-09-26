@@ -3,10 +3,12 @@
     "agent_run: \"agent run: 'test-agent'\"",
     "├── model_generation: \"llm: 'mock-model-id'\"",
     "│   └── model_step: \"step: 0\"",
+    "│       ├── processor_run: \"llm request processor: provider-history-compat\"",
     "│       └── model_inference: \"inference: 0\"",
     "│           ├── model_chunk: \"chunk: 'text'\"",
     "│           └── model_chunk: \"chunk: 'object'\"",
     "├── processor_run: \"output stream processor: Structured Output\"",
+    "│   └── processor_run: \"llm request processor: provider-history-compat\"",
     "└── processor_run: \"output step processor: structured-output\""
   ],
   "spans": [
@@ -163,6 +165,51 @@
                   "span": {
                     "id": "<span-4>",
                     "traceId": "<trace-1>",
+                    "name": "llm request processor: provider-history-compat",
+                    "type": "processor_run",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-3>",
+                    "entityType": "input_processor",
+                    "entityId": "provider-history-compat",
+                    "attributes": {
+                      "processorPhase": "llmRequest",
+                      "processorExecutor": "legacy",
+                      "processorIndex": 0
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "environment": "test"
+                    },
+                    "input": {
+                      "prompt": [
+                        {
+                          "role": "system",
+                          "content": "Return a simple response"
+                        },
+                        {
+                          "role": "user",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Return a list of items separated by commas"
+                            }
+                          ]
+                        }
+                      ],
+                      "stepNumber": 0,
+                      "retryCount": 0
+                    },
+                    "output": {
+                      "shortCircuited": false
+                    }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-5>",
+                    "traceId": "<trace-1>",
                     "name": "inference: 0",
                     "type": "model_inference",
                     "completed": true,
@@ -211,14 +258,14 @@
                   "children": [
                     {
                       "span": {
-                        "id": "<span-5>",
+                        "id": "<span-6>",
                         "traceId": "<trace-1>",
                         "name": "chunk: 'text'",
                         "type": "model_chunk",
                         "completed": true,
                         "isEvent": false,
                         "isRootSpan": false,
-                        "parentId": "<span-4>",
+                        "parentId": "<span-5>",
                         "entityType": "agent",
                         "entityId": "test-agent",
                         "attributes": {
@@ -236,14 +283,14 @@
                     },
                     {
                       "span": {
-                        "id": "<span-6>",
+                        "id": "<span-7>",
                         "traceId": "<trace-1>",
                         "name": "chunk: 'object'",
                         "type": "model_chunk",
                         "completed": true,
                         "isEvent": false,
                         "isRootSpan": false,
-                        "parentId": "<span-4>",
+                        "parentId": "<span-5>",
                         "entityType": "agent",
                         "entityId": "test-agent",
                         "attributes": {
@@ -267,7 +314,7 @@
         },
         {
           "span": {
-            "id": "<span-7>",
+            "id": "<span-8>",
             "traceId": "<trace-1>",
             "name": "output stream processor: Structured Output",
             "type": "processor_run",
@@ -278,6 +325,7 @@
             "entityType": "output_processor",
             "entityId": "structured-output",
             "attributes": {
+              "processorPhase": "outputStream",
               "processorExecutor": "legacy",
               "processorIndex": 0,
               "internalUsage": {
@@ -292,8 +340,7 @@
               },
               "hookDurationMs": {
                 "__any__": "number"
-              },
-              "processorPhase": "outputStream"
+              }
             },
             "metadata": {
               "runId": "<runId-1>",
@@ -307,11 +354,58 @@
               "totalChunks": 4,
               "accumulatedText": "Mock V2 stream response"
             }
-          }
+          },
+          "children": [
+            {
+              "span": {
+                "id": "<span-9>",
+                "traceId": "<trace-1>",
+                "name": "llm request processor: provider-history-compat",
+                "type": "processor_run",
+                "completed": true,
+                "isEvent": false,
+                "isRootSpan": false,
+                "parentId": "<span-8>",
+                "entityType": "input_processor",
+                "entityId": "provider-history-compat",
+                "attributes": {
+                  "processorPhase": "llmRequest",
+                  "processorExecutor": "legacy",
+                  "processorIndex": 0
+                },
+                "metadata": {
+                  "runId": "<runId-2>",
+                  "environment": "test"
+                },
+                "input": {
+                  "prompt": [
+                    {
+                      "role": "system",
+                      "content": "You are a data structuring specialist. Your job is to convert unstructured text into a specific JSON format.\n\nTASK: Convert the provided unstructured text into valid JSON that matches the following schema:\n{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"type\": \"object\",\n  \"properties\": {\n    \"items\": {\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"items\"\n  ],\n  \"additionalProperties\": false\n}\n\nREQUIREMENTS:\n- Return ONLY valid JSON, no additional text or explanation\n- Extract relevant information from the input text\n- If information is missing, use reasonable defaults or null values\n- Maintain data types as specified in the schema\n- Be consistent and accurate in your conversions\n\nThe input text may be in any format (sentences, bullet points, paragraphs, etc.). Extract the relevant data and structure it according to the schema."
+                    },
+                    {
+                      "role": "user",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details. Rely on the provided text and conversation history.\n\n# Assistant Response\nMock V2 stream response"
+                        }
+                      ]
+                    }
+                  ],
+                  "stepNumber": 0,
+                  "retryCount": 0
+                },
+                "output": {
+                  "shortCircuited": false
+                }
+              }
+            }
+          ]
         },
         {
           "span": {
-            "id": "<span-8>",
+            "id": "<span-10>",
             "traceId": "<trace-1>",
             "name": "output step processor: structured-output",
             "type": "processor_run",
@@ -322,9 +416,9 @@
             "entityType": "output_step_processor",
             "entityId": "structured-output",
             "attributes": {
+              "processorPhase": "outputStep",
               "processorExecutor": "legacy",
-              "processorIndex": 0,
-              "processorPhase": "outputStep"
+              "processorIndex": 0
             },
             "metadata": {
               "runId": "<runId-1>",

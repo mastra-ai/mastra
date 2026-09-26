@@ -91,6 +91,46 @@ describe('durable agent API-error retry', () => {
     const { messages } = await memory.recall({ threadId, resourceId });
     expect(messages.flatMap(message => message.content.parts ?? []).some(part => part.type === 'error')).toBe(false);
   });
+  it('honors a call-time errorProcessors override in place of the resolved list', async () => {
+    // Parity with the agentic engine: a call-time list replaces the resolved list,
+    // including the shared stability defaults. The default stack never retries an
+    // unmatched 500, so only the caller's processor can recover the call.
+    const overrideRuns: string[] = [];
+    const agent = new Agent({
+      id: 'durable-api-error-override',
+      name: 'durable-api-error-override',
+      instructions: 'You are helpful.',
+      model: [{ model: makeFailThenAnswerModel() as LanguageModelV2, maxRetries: 0 }],
+      maxProcessorRetries: 1,
+    });
+
+    const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+    const { fullStream, cleanup } = await durableAgent.stream('hello', {
+      maxProcessorRetries: 1,
+      errorProcessors: [
+        {
+          id: 'call-time-retry',
+          processAPIError: async () => {
+            overrideRuns.push('call-time-retry');
+            return { retry: true };
+          },
+        },
+      ],
+    });
+
+    const chunks: any[] = [];
+    for await (const chunk of fullStream) {
+      chunks.push(chunk);
+    }
+    await cleanup?.();
+
+    const text = chunks
+      .filter(chunk => chunk.type === 'text-delta')
+      .map(chunk => chunk.payload?.text ?? '')
+      .join('');
+    expect(text).toBe('the retried answer');
+    expect(overrideRuns).toEqual(['call-time-retry']);
+  });
   it('carries a rotated id into the next retry instead of falling back', async () => {
     const rotations: Array<{ before: string | undefined; after: string | undefined }> = [];
     const agent = new Agent({
@@ -216,5 +256,56 @@ describe('durable agent API-error retry', () => {
     expect(prompts).toHaveLength(2);
     expect(JSON.stringify(prompts[0])).not.toContain('keep the answer short this time');
     expect(JSON.stringify(prompts[1])).toContain('keep the answer short this time');
+  });
+});
+
+describe('durable serialized hasErrorProcessors flag', () => {
+  it('is true when the caller configured error processors', async () => {
+    const agent = new Agent({
+      id: 'durable-flag-configured',
+      name: 'durable-flag-configured',
+      instructions: 'You are helpful.',
+      model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV2, maxRetries: 0 }],
+      errorProcessors: [{ id: 'custom', processAPIError: async () => ({ retry: false }) }],
+    });
+
+    const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+    const { workflowInput } = await durableAgent.prepare('hello');
+
+    expect((workflowInput.options as any).hasErrorProcessors).toBe(true);
+  });
+
+  it('is true for a call-time errorProcessors override', async () => {
+    const agent = new Agent({
+      id: 'durable-flag-override',
+      name: 'durable-flag-override',
+      instructions: 'You are helpful.',
+      model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV2, maxRetries: 0 }],
+    });
+
+    const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+    const { workflowInput } = await durableAgent.prepare('hello', {
+      errorProcessors: [{ id: 'call-time', processAPIError: async () => ({ retry: false }) }],
+    } as any);
+
+    expect((workflowInput.options as any).hasErrorProcessors).toBe(true);
+  });
+
+  it('is false when only the framework default processors resolve', async () => {
+    const agent = new Agent({
+      id: 'durable-flag-defaults-only',
+      name: 'durable-flag-defaults-only',
+      instructions: 'You are helpful.',
+      model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV2, maxRetries: 0 }],
+    });
+
+    const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+    const { workflowInput, registryEntry } = await durableAgent.prepare('hello');
+
+    // The resolved list still carries the framework defaults…
+    expect(registryEntry.errorProcessors!.length).toBeGreaterThan(0);
+    // …but the serialized flag says the caller configured none, so the
+    // implicit retry-cap warning stays quiet for bare agents.
+    expect((workflowInput.options as any).hasErrorProcessors).toBe(false);
   });
 });

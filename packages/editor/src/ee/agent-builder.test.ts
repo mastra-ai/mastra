@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { ProviderHistoryCompat, StreamErrorRetryProcessor } from '@mastra/core/processors';
+import { createBuilderAgent, DEFAULT_BUILDER_ERROR_PROCESSORS } from './agent-builder-agent';
 import { EditorAgentBuilder } from './agent-builder';
 
 describe('EditorAgentBuilder', () => {
@@ -329,5 +331,87 @@ describe('EditorAgentBuilder', () => {
       new EditorAgentBuilder(input);
       expect(input.features.agent.browser).toBe(true);
     });
+  });
+});
+
+describe('createBuilderAgent stability processors', () => {
+  it('resolves the shared stability defaults on a plain Agent', async () => {
+    const agent = createBuilderAgent();
+
+    expect(await agent.listErrorProcessors()).toEqual(expect.arrayContaining(DEFAULT_BUILDER_ERROR_PROCESSORS));
+    expect((await agent.listErrorProcessors()).map(processor => processor.id)).toEqual([
+      'provider-history-compat',
+      'prefill-error-handler',
+      'stream-error-retry-processor',
+    ]);
+  });
+
+  it('keeps a caller-supplied processor with a default id instead of duplicating it', async () => {
+    const callerRetry = new StreamErrorRetryProcessor({ maxRetries: 5 });
+    const agent = createBuilderAgent({ errorProcessors: [callerRetry] });
+
+    const resolved = await agent.listErrorProcessors();
+    // The caller's instance is the one that runs. Both added repairs are inserted ahead of it,
+    // because this processor's bad-request matcher claims any 400 and ahead of the repairs it
+    // would resend a request they could have fixed.
+    expect(resolved[2]).toBe(callerRetry);
+    expect(resolved.map(processor => processor.id)).toEqual([
+      'provider-history-compat',
+      'prefill-error-handler',
+      'stream-error-retry-processor',
+    ]);
+  });
+
+  it('places a caller instance at its default slot instead of appending it', async () => {
+    const callerHistoryCompat = new ProviderHistoryCompat();
+    const agent = createBuilderAgent({ errorProcessors: [callerHistoryCompat] });
+
+    const resolved = await agent.listErrorProcessors();
+    // The repair must stay ahead of the retry processor: replacing a default by id
+    // takes that default's position, so the caller's ProviderHistoryCompat runs first
+    // instead of being appended after stream-error-retry-processor.
+    expect(resolved[0]).toBe(callerHistoryCompat);
+    expect(resolved.map(processor => processor.id)).toEqual([
+      'provider-history-compat',
+      'prefill-error-handler',
+      'stream-error-retry-processor',
+    ]);
+  });
+
+  it('keeps the builder defaults when a caller adds its own error processor', async () => {
+    const callerProcessor = { id: 'caller-retry', processAPIError: async () => undefined };
+    const agent = createBuilderAgent({ errorProcessors: [callerProcessor] });
+
+    const resolved = await agent.listErrorProcessors();
+    expect(resolved.map(processor => processor.id)).toEqual([
+      'provider-history-compat',
+      'prefill-error-handler',
+      'stream-error-retry-processor',
+      'caller-retry',
+    ]);
+    expect(resolved[3]).toBe(callerProcessor);
+  });
+
+  it('keeps the builder defaults when the caller list is empty', async () => {
+    const agent = createBuilderAgent({ errorProcessors: [] });
+
+    expect(await agent.listErrorProcessors()).toEqual(DEFAULT_BUILDER_ERROR_PROCESSORS);
+  });
+
+  it('runs only the caller list when errorProcessorDefaults is false', async () => {
+    const callerProcessor = { id: 'caller-retry', processAPIError: async () => undefined };
+    const withoutRetry = DEFAULT_BUILDER_ERROR_PROCESSORS.filter(p => p.id !== 'stream-error-retry-processor');
+    const agent = createBuilderAgent({
+      errorProcessors: [...withoutRetry, callerProcessor],
+      errorProcessorDefaults: false,
+    });
+
+    expect(await agent.listErrorProcessors()).toEqual([...withoutRetry, callerProcessor]);
+  });
+
+  it('runs no error processors when errorProcessorDefaults is false without a list', async () => {
+    const agent = createBuilderAgent({ errorProcessorDefaults: false });
+
+    expect(await agent.listErrorProcessors()).toEqual([]);
   });
 });

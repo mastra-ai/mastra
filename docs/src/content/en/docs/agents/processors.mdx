@@ -117,6 +117,52 @@ const agent = new Agent({
 - `outputProcessors` run during and after the LLM response.
 - `errorProcessors` run when the LLM API call throws, so they can recover from provider errors.
 
+### Error processors are enabled by default
+
+Every agent adds whichever of these three your `errorProcessors` list doesn't already contain:
+
+1. `ProviderHistoryCompat`: repairs provider-specific history incompatibilities in the outbound prompt
+1. `PrefillErrorHandler`: recovers from assistant-response prefill rejections
+1. `StreamErrorRetryProcessor`: retries transient API and stream failures within its own `maxRetries` budget
+
+A default is only added when nothing in your list carries its `id`, so your own instance always wins and is never duplicated. An added default is placed at the position its `id` gives it among the defaults, so naming only a later one doesn't invert the pair. Supplying only your own `StreamErrorRetryProcessor` still resolves with `ProviderHistoryCompat` and `PrefillErrorHandler` ahead of it.
+
+Error processors stop at the first one that returns `{ retry: true }`, so that relative order decides which repair runs. The default order puts the repairs ahead of the retrying processor. Placed earlier, an instance with broad matchers (the bad-request matcher matches any `400`, for example) would claim a request the repairs could have fixed and resend it unchanged. The default instance carries only its connection-reset matcher, but your own instance can be configured with broader matchers, so the order keeps repairs first for it too.
+
+Your processors are never reordered relative to each other. A processor with an `id` that matches a default takes part in that ordering. One with an `id` of your own keeps its position in your list.
+
+To customize one without losing the rest, pass a processor with the same `id`:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { StreamErrorRetryProcessor } from '@mastra/core/processors'
+
+const agent = new Agent({
+  id: 'tuned-agent',
+  name: 'tuned-agent',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
+  instructions: '...',
+  errorProcessors: [new StreamErrorRetryProcessor({ maxRetries: 5 })],
+})
+```
+
+The `StreamErrorRetryProcessor` above is the only stream-retry processor on the agent, and it resolves in its usual position: last, behind the `ProviderHistoryCompat` and `PrefillErrorHandler` defaults your list never names. Pass all three ids to run a completely custom set.
+
+An empty `errorProcessors` list merges like any other, so it still gets the three defaults. To turn the defaults off, set `errorProcessorDefaults: false`. The agent then runs only the processors you configure, or none when you configure none:
+
+```typescript
+new Agent({
+  id: 'custom-error-recovery-agent',
+  name: 'custom-error-recovery-agent',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
+  instructions: '...',
+  errorProcessorDefaults: false,
+  errorProcessors: [new StreamErrorRetryProcessor({ maxRetries: 5 })],
+})
+```
+
+An `errorProcessors` list passed to a single `generate()` or `stream()` call works differently: it replaces the agent's resolved list for that call, defaults included.
+
 Each array also accepts a function that returns an array, so processors can be built per-request from `RequestContext`:
 
 ```typescript
@@ -233,6 +279,8 @@ Use the message-based hooks for conversation changes:
 Changes returned from `processLLMRequest()` are transient. They don't persist back to `MessageList`, memory, UI history, or future provider calls. This makes the hook a good fit for provider compatibility rewrites, role/content normalization, or other model-specific prompt changes that shouldn't alter stored conversation history.
 
 The method receives `prompt`, `model`, `stepNumber`, `steps`, `state`, and the shared processor context. Calling `abort()` from `processLLMRequest()` emits the normal tripwire response and stops the call.
+
+Error processors run in this lane too. A processor placed in `errorProcessors` that implements `processLLMRequest()` gets the hook, which is what lets the default `ProviderHistoryCompat` repair the outbound prompt rather than waiting for the provider to reject it. Processors whose only hook is `processAPIError()` (`StreamErrorRetryProcessor` and `PrefillErrorHandler`) don't implement this method and are inert here. A processor listed in both `inputProcessors` and `errorProcessors` runs once, in its `inputProcessors` position.
 
 See the [`Processor` reference](/reference/processors/processor-interface#processllmrequest) for all available arguments and return types.
 
@@ -882,7 +930,7 @@ const agent = new Agent({
   name: 'Quality Agent',
   model: '__GATEWAY_OPENAI_MODEL__',
   outputProcessors: [new QualityChecker()],
-  maxProcessorRetries: 3, // Maximum retry attempts. If unset, retries are disabled (unless errorProcessors are configured, in which case it defaults to 10).
+  maxProcessorRetries: 3, // Step retry limit for processInputStep/processOutputStep. Unset by default, which disables those retries.
 })
 ```
 
@@ -895,9 +943,9 @@ The retry mechanism:
 
 ### Error processor retry limits
 
-`processAPIError()` has a separate default: when `errorProcessors` are configured and `maxProcessorRetries` is omitted, the runtime allows up to `10` retries. Set the limit explicitly when you need a bounded retry budget.
+`processAPIError()` has a separate retry budget. When `errorProcessors` resolve to a non-empty list and `maxProcessorRetries` is omitted, the runtime allows up to `3` error-processor retries. Error processors are enabled by default on every agent (see [Error processors are enabled by default](#error-processors-are-enabled-by-default)), but `maxProcessorRetries` itself stays unset, so `processInputStep()` and `processOutputStep()` retries still need an explicit limit.
 
-For `StreamErrorRetryProcessor`, also set its `maxRetries` to the same value. Its own default is `1`, which can otherwise be lower than the agent cap. Keep model retries at `0` when the processor is the only retry mechanism for a request.
+For `StreamErrorRetryProcessor`, its own `maxRetries` (default `1`) bounds retries independently of the agent cap. Keep model retries at `0` when the processor is the only retry mechanism for a request.
 
 ### Violation callbacks
 

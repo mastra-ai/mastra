@@ -13,7 +13,7 @@ Use it when an agent may switch between model providers or reuse message history
 
 ## Usage example
 
-Add `ProviderHistoryCompat` to both lists when you want all built-in compatibility rules available for an agent. `inputProcessors` drives the preemptive rewrites, `errorProcessors` drives the reactive recovery:
+Mastra adds this processor to every agent's `errorProcessors` by default when your list doesn't already contain that `id`. Among the added defaults it comes first, so its outbound prompt rules run before the other defaults, including the retry processor's blind resend. Supply your own instance to add custom rules or position it yourself:
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -24,19 +24,18 @@ export const agent = new Agent({
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
   model: 'anthropic/claude-sonnet-4-5',
-  inputProcessors: [new ProviderHistoryCompat()],
-  errorProcessors: [new ProviderHistoryCompat()],
+  errorProcessors: [new ProviderHistoryCompat({ additionalRules: [/* ... */] })],
 })
 ```
 
-Mastra agents don't add this processor automatically. Add it explicitly when you need provider history compatibility rules, reactive API error recovery, custom rules, or predictable processor ordering.
+A supplied `ProviderHistoryCompat` is used instead of the default. The default is only added when no processor in your list carries that `id`. Place an instance in `inputProcessors` when you want the prompt-rewriting rules to run in the input lane instead.
 
 The placement decides which half of the processor works:
 
-- **Reactive rules need `errorProcessors`.** On the standard loop, `processAPIError` runs from any of the three lists, so an input-processor registration does repair the message list, but the retry it asks for is only honored when the agent has a retry budget, and that budget is left `undefined` unless the agent configures `errorProcessors` or sets `maxProcessorRetries` explicitly. Registered only as an input processor and without an explicit `maxProcessorRetries`, a reactive rule repairs the history and the request still fails. On the durable path the API-error pass additionally requires a non-empty `errorProcessors` list. If that list is empty, an input-processor registration can't trigger reactive recovery there at all, even with `maxProcessorRetries` set.
-- **Preemptive rules need `inputProcessors`.** `processLLMRequest` runs over the input processors only, so prompt rewrites don't happen from the error list.
+- **Reactive rules need `errorProcessors`.** On the standard loop, `processAPIError` runs from any of the three lists, so an input-processor registration does repair the message list, but the retry it asks for is only honored when the agent has a retry budget. With the default error processors in place the resolved list is non-empty, so a safety cap of `3` applies. The budget is left `undefined` only when the caller runs with no error processors at all (`errorProcessorDefaults: false` with none configured) and doesn't set `maxProcessorRetries` explicitly. Registered only as an input processor in that no-budget state, a reactive rule repairs the history and the request still fails. On the durable path the API-error pass additionally requires a non-empty `errorProcessors` list. If that list is empty, an input-processor registration can't trigger reactive recovery there at all, even with `maxProcessorRetries` set.
+- **Preemptive rules run from either list.** `processLLMRequest` runs over the input processors and over the resolved error processors, so a `ProviderHistoryCompat` in `errorProcessors` gets its prompt rewrites as well as its reactive recovery. An instance registered in `inputProcessors` runs once, in its input position.
 
-An agent that wants both registers the processor in both lists, as the example above does. Double registration can't cause a double retry: the runner stops at the first processor that asks for one, and each reactive rule bails once `retryCount` is above zero, so a repaired turn is attempted exactly once more.
+Registering in `errorProcessors` alone, as the example above does, covers both halves. Double registration can't cause a double retry: the runner stops at the first processor that asks for one, and each reactive rule bails once `retryCount` is above zero, so a repaired turn is attempted exactly once more.
 
 ## Constructor parameters
 

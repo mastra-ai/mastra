@@ -375,6 +375,9 @@ class ProcessorWithAgent implements Processor {
       name: `${id} Internal Agent`,
       instructions: 'Internal processor agent',
       model,
+      // The internal agent's span tree is the subject here, so the framework's
+      // default error processors stay out of its request lane.
+      errorProcessorDefaults: false,
     });
   }
 
@@ -523,6 +526,9 @@ describe('Processor Tracing Tests', () => {
         name: 'Test Agent',
         instructions: 'Test',
         model,
+        // These cases assert the span tree of the processors they configure, so the
+        // framework's default error processors stay out of the request lane.
+        errorProcessorDefaults: false,
         inputProcessors: [new SimpleInputProcessor('validator')],
       });
 
@@ -582,6 +588,48 @@ describe('Processor Tracing Tests', () => {
      *     - MODEL_STEP
      *   - output processor: formatter PROCESSOR_RUN
      */
+    it('should trace the default error processors that join the request lane', async () => {
+      const model = createMockModel();
+      // No processor list at all: the agent resolves the framework's stability
+      // defaults, and `ProviderHistoryCompat` is the one that implements
+      // `processLLMRequest`, so it runs — and is traced — in the request lane.
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model,
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      const registeredAgent = mastra.getAgent('agent');
+      await registeredAgent.generate('Hello');
+
+      const processorSpans = testExporter.getProcessorSpans();
+      const modelSpan = testExporter.getModelSpans()[0];
+      const modelStepSpan = testExporter.getModelStepSpans()[0];
+
+      const requestLaneSpans = processorSpans.filter(
+        span => span.name === 'llm request processor: provider-history-compat',
+      );
+
+      // One per model step, parented under the step it rewrites.
+      expect(requestLaneSpans.length).toBe(testExporter.getModelStepSpans().length);
+      expect(requestLaneSpans.length).toBeGreaterThan(0);
+      expect(requestLaneSpans[0]?.parentSpanId).toBe(modelStepSpan?.id);
+      expect(requestLaneSpans[0]?.entityType).toBe(EntityType.INPUT_PROCESSOR);
+      expect(requestLaneSpans[0]?.attributes?.processorExecutor).toBe('legacy');
+
+      // The two retry processors implement no `processLLMRequest`, so they are
+      // inert in this lane and produce no span here.
+      expect(processorSpans.some(span => span.name?.includes('stream-error-retry-processor'))).toBe(false);
+      expect(processorSpans.some(span => span.name?.includes('prefill-error-handler'))).toBe(false);
+      expect(modelSpan).toBeDefined();
+    });
+
     it('should trace a single output processor with processor ID in span name', async () => {
       const model = createMockModel();
       const agent = new Agent({
@@ -589,6 +637,9 @@ describe('Processor Tracing Tests', () => {
         name: 'Test Agent',
         instructions: 'Test',
         model,
+        // These cases assert the span tree of the processors they configure, so the
+        // framework's default error processors stay out of the request lane.
+        errorProcessorDefaults: false,
         outputProcessors: [new SimpleOutputProcessor('formatter')],
       });
 
@@ -1028,6 +1079,9 @@ describe('Processor Tracing Tests', () => {
         name: 'Test Agent',
         instructions: 'Test',
         model,
+        // These cases assert the span tree of the processors they configure, so the
+        // framework's default error processors stay out of the request lane.
+        errorProcessorDefaults: false,
         inputProcessors: [new FullProcessor('full-input')],
         outputProcessors: [new FullProcessor('full-output')],
       });
@@ -1115,6 +1169,9 @@ describe('Processor Tracing Tests', () => {
         name: 'Test Agent',
         instructions: 'Test',
         model,
+        // These cases assert the span tree of the processors they configure, so the
+        // framework's default error processors stay out of the request lane.
+        errorProcessorDefaults: false,
         outputProcessors: [new OutputStreamProcessor('stream-first'), new OutputStreamProcessor('stream-second')],
       });
 
@@ -1230,6 +1287,9 @@ describe('Processor Tracing Tests', () => {
         name: 'Test Agent',
         instructions: 'Test',
         model,
+        // These cases assert the span tree of the processors they configure, so the
+        // framework's default error processors stay out of the request lane.
+        errorProcessorDefaults: false,
         inputProcessors: [new ProcessorWithAgent('validator', model)],
       });
 
@@ -1327,6 +1387,9 @@ describe('Processor Tracing Tests', () => {
         name: 'Test Agent',
         instructions: 'Test',
         model,
+        // These cases assert the span tree of the processors they configure, so the
+        // framework's default error processors stay out of the request lane.
+        errorProcessorDefaults: false,
         inputProcessors: [new ModerationProcessor({ model, strategy: 'warn' })],
       });
 
@@ -1661,6 +1724,9 @@ describe('Processor Tracing Tests', () => {
         name: 'Test Agent',
         instructions: 'Test',
         model,
+        // These cases assert the span tree of the processors they configure, so the
+        // framework's default error processors stay out of the request lane.
+        errorProcessorDefaults: false,
         inputProcessors: [
           new SimpleInputProcessor('simple'), // processInput only
           new InputStepProcessor('step'), // processInputStep only
@@ -1904,6 +1970,9 @@ describe('Processor Tracing Tests', () => {
         name: 'Test Agent',
         instructions: 'Test',
         model,
+        // These cases assert the span tree of the processors they configure, so the
+        // framework's default error processors stay out of the request lane.
+        errorProcessorDefaults: false,
         memory: mockMemory,
         inputProcessors: [new SimpleInputProcessor('custom-input')],
         outputProcessors: [new SimpleOutputProcessor('custom-output')],
@@ -1979,6 +2048,9 @@ describe('Processor Tracing Tests', () => {
         name: 'Test Agent',
         instructions: 'Test',
         model,
+        // These cases assert the span tree of the processors they configure, so the
+        // framework's default error processors stay out of the request lane.
+        errorProcessorDefaults: false,
         memory: mockMemory,
         inputProcessors: [new SimpleInputProcessor('guardrail')],
         outputProcessors: [new SimpleOutputProcessor('filter')],
