@@ -11,7 +11,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import { BufferingCoordinator } from '../buffering-coordinator';
 import { ObservationalMemory } from '../observational-memory';
-import { detectDegenerateRepetition, parseMultiThreadObserverOutput, parseObserverOutput } from '../observer-agent';
+import { parseMultiThreadObserverOutput, parseObserverOutput } from '../observer-agent';
+import { parseReflectorOutput } from '../reflector-agent';
 
 beforeEach(() => {
   BufferingCoordinator.asyncBufferingOps.clear();
@@ -29,6 +30,63 @@ const repetitiveToolLines = [
   ...Array.from({ length: 200 }, () => '  * -> pnpm build → ok'),
   '- 🟡 All build steps succeeded',
 ].join('\n');
+
+function textModel(texts: string[] | ((call: number) => string)) {
+  let calls = 0;
+  const usage = { inputTokens: 100, outputTokens: 50, totalTokens: 150 };
+  const next = () => {
+    const text = typeof texts === 'function' ? texts(calls) : texts[Math.min(calls, texts.length - 1)]!;
+    calls++;
+    return text;
+  };
+  const model = new MockLanguageModelV2({
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage,
+      warnings: [],
+      content: [{ type: 'text', text: next() }],
+    }),
+    doStream: async () => {
+      const text = next();
+      return {
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: text },
+          { type: 'text-end', id: 'text-1' },
+          { type: 'finish', finishReason: 'stop', usage },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      };
+    },
+  });
+  return {
+    model,
+    get calls() {
+      return calls;
+    },
+  };
+}
+
+async function seedMessages(storage: InMemoryMemory, threadId: string, count = 8) {
+  const messages: MastraDBMessage[] = Array.from({ length: count }, (_, i) => ({
+    id: `${threadId}-msg-${i}`,
+    role: i % 2 === 0 ? 'user' : 'assistant',
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text: `Message ${i}: `.padEnd(200, 'x') }],
+    } as MastraMessageContentV2,
+    type: 'text',
+    createdAt: new Date(Date.now() - (count - i) * 1000),
+    threadId,
+  }));
+  await storage.saveMessages({ messages });
+  return messages.map(m => m.id);
+}
+
+const degenerateLoop = `<observations>\n${'StreamTextResult.getLanguageModel().doGenerate(options): PromiseLike<Result>, '.repeat(100)}\n</observations>`;
 
 describe('Observer degenerate detection (#24354)', () => {
   it('truncates a giant single line instead of flagging it as degenerate', () => {
@@ -52,15 +110,40 @@ describe('Observer degenerate detection (#24354)', () => {
 
   it('does not flag faithfully-summarized repetitive short tool output as degenerate', () => {
     const output = `<observations>\n${repetitiveToolLines}\n</observations>`;
-    // The raw text trips the 200-char window check (the lines are too short
-    // for the duplicate-line check); collapsing the short run avoids it.
-    expect(detectDegenerateRepetition(output)).toBe(true);
-
+    // On main the raw text trips the 200-char window check (the lines are too
+    // short for the duplicate-line check), rejecting a faithful summary.
     const result = parseObserverOutput(output);
 
     expect(result.degenerate).not.toBe(true);
     expect(result.observations).toContain('pnpm build → ok');
     expect(result.observations).toContain('All build steps succeeded');
+  });
+
+  // Whether the 200-char window sampler aliases onto the 45-char period of
+  // these lines depends on the total length, so sweep a range of run lengths.
+  const alternatingRuns = Array.from({ length: 201 }, (_, i) => 100 + i);
+  const alternating = (n: number) =>
+    Array.from({ length: n }, (_, i) => (i % 2 === 0 ? '  * -> pnpm build → ok' : '  * -> pnpm test → ok')).join('\n');
+
+  it('does not flag alternating short tool-result lines as degenerate', () => {
+    const flagged = alternatingRuns.filter(
+      n =>
+        parseObserverOutput(
+          `<observations>\n- 🔴 User asked to build and test repeatedly\n${alternating(n)}\n- 🟡 Every run passed\n</observations>`,
+        ).degenerate === true,
+    );
+
+    expect(flagged).toEqual([]);
+  });
+
+  it('does not flag short repetitive tool lines in reflector output as degenerate', () => {
+    const flagged = alternatingRuns.filter(
+      n =>
+        parseReflectorOutput(`<observations>\n- 🔴 Build and test log\n${alternating(n)}\n</observations>`)
+          .degenerate === true,
+    );
+
+    expect(flagged).toEqual([]);
   });
 
   it('still flags a non-consecutive multi-line repetition loop', () => {
@@ -83,61 +166,88 @@ describe('Observer degenerate detection (#24354)', () => {
 
   it('skips the observation cycle instead of throwing when output stays degenerate after retry', async () => {
     const threadId = 'degenerate-thread';
-    const loop = 'StreamTextResult.getLanguageModel().doGenerate(options): PromiseLike<Result>, '.repeat(100);
-    const text = `<observations>\n${loop}\n</observations>`;
-    const usage = { inputTokens: 100, outputTokens: 50, totalTokens: 150 };
-    let calls = 0;
-    const model = new MockLanguageModelV2({
-      doGenerate: async () => {
-        calls++;
-        return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage,
-          warnings: [],
-          content: [{ type: 'text', text }],
-        };
-      },
-      doStream: async () => {
-        calls++;
-        return {
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: text },
-            { type: 'text-end', id: 'text-1' },
-            { type: 'finish', finishReason: 'stop', usage },
-          ]),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-        };
-      },
-    });
+    const observer = textModel([degenerateLoop]);
     const storage = new InMemoryMemory({ db: new InMemoryDB() });
     const om = new ObservationalMemory({
       storage,
       scope: 'thread',
-      observation: { model, messageTokens: 100, bufferTokens: false },
-      reflection: { model, observationTokens: 50_000 },
+      observation: { model: observer.model, messageTokens: 100, bufferTokens: false },
+      reflection: { model: observer.model, observationTokens: 50_000 },
     });
-    const messages: MastraDBMessage[] = Array.from({ length: 8 }, (_, i) => ({
-      id: `${threadId}-msg-${i}`,
-      role: i % 2 === 0 ? 'user' : 'assistant',
-      content: {
-        format: 2,
-        parts: [{ type: 'text', text: `Message ${i}: `.padEnd(200, 'x') }],
-      } as MastraMessageContentV2,
-      type: 'text',
-      createdAt: new Date(Date.now() - (8 - i) * 1000),
-      threadId,
-    }));
-    await storage.saveMessages({ messages });
+    await seedMessages(storage, threadId);
 
     const result = await om.observe({ threadId });
 
-    expect(calls).toBe(2);
+    expect(observer.calls).toBe(2);
     expect(result.observed).toBe(false);
     expect(result.record.activeObservations ?? '').toBe('');
     expect(result.record.observedMessageIds ?? []).toHaveLength(0);
+  });
+
+  it('reports the skipped degenerate cycle to onObservationEnd as an error', async () => {
+    const threadId = 'degenerate-hook-thread';
+    const observer = textModel([degenerateLoop]);
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      observation: { model: observer.model, messageTokens: 100, bufferTokens: false },
+      reflection: { model: observer.model, observationTokens: 50_000 },
+    });
+    await seedMessages(storage, threadId);
+    const ends: Array<{ error?: Error }> = [];
+
+    const result = await om.observe({ threadId, hooks: { onObservationEnd: r => void ends.push(r) } });
+
+    expect(result.observed).toBe(false);
+    expect(ends).toHaveLength(1);
+    expect(ends[0]!.error?.name).toBe('DegenerateObserverOutputError');
+  });
+
+  it('observes the same messages on the next cycle after a degenerate skip', async () => {
+    const threadId = 'degenerate-then-ok-thread';
+    const good = '<observations>\n- 🔴 User sent eight padded test messages\n</observations>';
+    const observer = textModel([degenerateLoop, degenerateLoop, good]);
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      observation: { model: observer.model, messageTokens: 100, bufferTokens: false },
+      reflection: { model: observer.model, observationTokens: 50_000 },
+    });
+    const ids = await seedMessages(storage, threadId);
+
+    const first = await om.observe({ threadId });
+    expect(first.observed).toBe(false);
+    expect(first.record.observedMessageIds ?? []).toHaveLength(0);
+
+    const second = await om.observe({ threadId });
+    expect(observer.calls).toBe(3);
+    expect(second.observed).toBe(true);
+    expect(second.record.activeObservations).toContain('eight padded test messages');
+    expect([...(second.record.observedMessageIds ?? [])].sort()).toEqual([...ids].sort());
+  });
+
+  it('does not fail the run when every reflection attempt is degenerate', async () => {
+    const threadId = 'degenerate-reflection-thread';
+    const facts = Array.from({ length: 40 }, (_, i) => `- 🔴 Distinct fact number ${i} about the project setup`).join(
+      '\n',
+    );
+    const observer = textModel([`<observations>\n${facts}\n</observations>`]);
+    const reflector = textModel([degenerateLoop]);
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      observation: { model: observer.model, messageTokens: 100, bufferTokens: false },
+      reflection: { model: reflector.model, observationTokens: 100, bufferActivation: undefined },
+    });
+    await seedMessages(storage, threadId);
+
+    const result = await om.observe({ threadId });
+
+    expect(reflector.calls).toBeGreaterThan(0);
+    expect(result.observed).toBe(true);
+    expect(result.record.activeObservations).toContain('Distinct fact number 39');
   });
 });

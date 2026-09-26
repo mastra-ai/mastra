@@ -138,8 +138,9 @@ export abstract class ObservationStrategy {
       // the agent run. Nothing is persisted, so the messages stay unobserved and
       // are picked up by the next observation cycle.
       if (error instanceof DegenerateObserverOutputError && !abortSignal?.aborted) {
-        omDebug(`[OM] Skipping observation cycle: ${error.message}`);
-        return { observed: false };
+        // Messages stay unobserved and are retried next cycle; warn so repeated skips are visible.
+        console.warn(`[OM] Skipping observation cycle: ${error.message}`);
+        return { observed: false, error };
       }
 
       if (!this.rethrowOnFailure) {
