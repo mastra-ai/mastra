@@ -132,6 +132,11 @@ export interface DelegationStartResult {
   modifiedInstructions?: string;
   /** Modified maxSteps for the sub-agent (optional) */
   modifiedMaxSteps?: number;
+  /**
+   * Metadata to attach to the sub-agent thread when it is created for this delegation (optional).
+   * Not applied when resuming an existing sub-agent thread.
+   */
+  threadMetadata?: Record<string, unknown>;
 }
 
 /**
