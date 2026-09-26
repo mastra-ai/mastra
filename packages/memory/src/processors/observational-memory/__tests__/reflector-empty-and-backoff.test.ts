@@ -220,6 +220,24 @@ describe('reflector empty-output guard', () => {
     expect(scripted.callCount).toBe(2);
   });
 
+  it('falls back to the smallest earlier candidate when the final ladder attempt is degenerate', async () => {
+    const larger = `larger over-threshold candidate ${'y'.repeat(300)}`;
+    const smaller = `smaller over-threshold candidate ${'z'.repeat(150)}`;
+    const scripted = createScriptedModel([
+      observationsPayload(larger),
+      observationsPayload(smaller),
+      DEGENERATE_OUTPUT,
+      DEGENERATE_OUTPUT,
+    ]);
+    const { runner } = createReflectorRunner(scripted.model);
+
+    const result = await runner.call(SOURCE_OBSERVATIONS);
+
+    expect(scripted.callCount).toBe(4);
+    expect(result.observations).toContain('smaller over-threshold candidate');
+    expect(result.observations).not.toContain('larger over-threshold candidate');
+  });
+
   it('refuses to write an empty buffered reflection', async () => {
     const scripted = createScriptedModel([DEGENERATE_OUTPUT]);
     const updateBufferedReflection = vi.fn(async () => {});

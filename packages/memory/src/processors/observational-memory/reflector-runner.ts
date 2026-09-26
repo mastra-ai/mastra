@@ -407,6 +407,8 @@ export class ReflectorRunner {
     let attemptNumber = 0;
     /** True when the latest attempt returned an empty block for non-empty input. */
     let emptyOutput = false;
+    /** Smallest usable (non-degenerate, non-empty) reflection seen on the ladder. */
+    let bestCandidate: { parsed: typeof parsed; reflectedTokens: number } | undefined;
 
     while (currentLevel <= maxLevel) {
       attemptNumber++;
@@ -534,6 +536,9 @@ export class ReflectorRunner {
         reflectedTokens = originalTokens;
       } else {
         reflectedTokens = this.tokenCounter.countObservations(parsed.observations);
+        if (!bestCandidate || reflectedTokens < bestCandidate.reflectedTokens) {
+          bestCandidate = { parsed, reflectedTokens };
+        }
       }
       omDebug(
         `[OM:callReflector] attempt #${attemptNumber} parsed: reflectedTokens=${reflectedTokens}, targetThreshold=${targetThreshold}, compressionValid=${validateCompression(reflectedTokens, targetThreshold)}, parsedObsLen=${parsed.observations?.length}, degenerate=${parsed.degenerate ?? false}`,
@@ -588,6 +593,15 @@ export class ReflectorRunner {
       }
 
       currentLevel = Math.min(currentLevel + 1, maxLevel) as CompressionLevel;
+    }
+
+    // A later attempt that failed (degenerate or empty) must not discard a usable
+    // candidate from an earlier level: fall back to the smallest one instead.
+    if ((parsed.degenerate || emptyOutput) && bestCandidate) {
+      omDebug(
+        `[OM:callReflector] final attempt unusable, falling back to smallest earlier candidate (${bestCandidate.reflectedTokens} tokens)`,
+      );
+      parsed = bestCandidate.parsed;
     }
 
     // A reflection of non-empty observations must never come back empty: the

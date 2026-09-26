@@ -1913,9 +1913,20 @@ export class DegenerateReflectorOutputError extends OmModelExecutionError {
  * Strategy: sample sequential chunks of the text and check if a high
  * proportion are near-identical to previous chunks.
  */
-export function detectDegenerateRepetition(text: string): boolean {
-  if (!text || text.length < 2000) return false;
+interface DegenerateAnalysis {
+  windowText: string;
+  totalWindows: number;
+  duplicateWindows: number;
+  topWindow: string;
+  topWindowCount: number;
+  totalCountedLines: number;
+  duplicateLines: number;
+  windowFired: boolean;
+  lineFired: boolean;
+  shortLineFired: boolean;
+}
 
+function analyzeDegenerateRepetition(text: string): DegenerateAnalysis {
   const lines = collapseBoundedLineRuns(text.split('\n'));
 
   // Strategy 1: Check for repeated long substrings by sampling fixed-size windows.
@@ -1929,19 +1940,21 @@ export function detectDegenerateRepetition(text: string): boolean {
   const seen = new Map<string, number>();
   let duplicateWindows = 0;
   let totalWindows = 0;
-
+  let topWindow = '';
+  let topWindowCount = 0;
   for (let i = 0; i + windowSize <= windowText.length; i += step) {
     const window = windowText.slice(i, i + windowSize);
     totalWindows++;
     const count = (seen.get(window) ?? 0) + 1;
     seen.set(window, count);
     if (count > 1) duplicateWindows++;
+    if (count > topWindowCount) {
+      topWindowCount = count;
+      topWindow = window;
+    }
   }
-
   // If more than 40% of sampled windows are duplicates, it's degenerate
-  if (windowText.length >= 2000 && totalWindows > 5 && duplicateWindows / totalWindows > 0.4) {
-    return true;
-  }
+  const windowFired = windowText.length >= 2000 && totalWindows > 5 && duplicateWindows / totalWindows > 0.4;
 
   // Strategy 2: Exact-duplicate line ratio. The window sampling above has an
   // aliasing blind spot: for a repeating block with period P chars, sampled
@@ -1962,27 +1975,46 @@ export function detectDegenerateRepetition(text: string): boolean {
     seenLines.set(trimmed, count);
     if (count > 1) duplicateLines++;
   }
-  if (totalCountedLines >= 20 && duplicateLines / totalCountedLines > 0.5) {
-    return true;
-  }
+  const lineFired = totalCountedLines >= 20 && duplicateLines / totalCountedLines > 0.5;
 
   // Strategy 3: short lines are exempt above only while their repetition is
   // bounded. A short line whose occurrences add up to more than one maximum-size
-  // observation line is a loop, not a faithful summary.
-  // Grouping ignores indentation but the budget counts it. Newlines are
-  // counted only between occurrences, so a run that serializes to
-  // exactly one maximum-size line is not flagged.
+  // observation line is a loop, not a faithful summary. Grouping ignores
+  // indentation but the budget counts it. Newlines are counted only between
+  // occurrences, so a run that serializes to exactly one maximum-size line is
+  // not flagged.
   const shortLineChars = new Map<string, number>();
+  let shortLineFired = false;
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.length >= MIN_DUPLICATE_LINE_CHARS) continue;
     const prev = shortLineChars.get(trimmed);
     const total = prev === undefined ? line.length : prev + 1 + line.length;
-    if (total > MAX_OBSERVATION_LINE_CHARS) return true;
+    if (total > MAX_OBSERVATION_LINE_CHARS) {
+      shortLineFired = true;
+      break;
+    }
     shortLineChars.set(trimmed, total);
   }
 
-  return false;
+  return {
+    windowText,
+    totalWindows,
+    duplicateWindows,
+    topWindow,
+    topWindowCount,
+    totalCountedLines,
+    duplicateLines,
+    windowFired,
+    lineFired,
+    shortLineFired,
+  };
+}
+
+export function detectDegenerateRepetition(text: string): boolean {
+  if (!text || text.length < 2000) return false;
+  const analysis = analyzeDegenerateRepetition(text);
+  return analysis.windowFired || analysis.lineFired || analysis.shortLineFired;
 }
 
 /**
@@ -1992,63 +2024,35 @@ export function detectDegenerateRepetition(text: string): boolean {
  * without it there is no way to tell a real repetition loop apart from a
  * detector false-positive on legitimately repetitive content.
  *
- * Uses the detector's window size and sample count, but samples the raw text:
- * the detector computes its window and duplicate-line ratios after collapsing
- * bounded runs and excluding short lines (which a separate check judges), so
- * these ratios can differ from what triggered the rejection. A
- * short-line loop, for example, reports duplicateLineRatio=n/a (short lines are
- * not counted) and may report a high window ratio. Snippets are JSON-escaped so
- * the result stays on one line.
+ * Shares the detector's analysis (same run collapsing, short-line filter,
+ * window sampling and short-line budget), so the reported ratios, most-repeated
+ * window and fired strategy match what triggered the detection. Snippets are
+ * JSON-escaped so the result stays on one line.
  */
 export function describeDegenerateOutput(text: string, snippetChars = 400): string {
-  const windowSize = 200;
-  const step = Math.max(1, Math.floor(text.length / 50));
-  const seen = new Map<string, number>();
-  let duplicateWindows = 0;
-  let totalWindows = 0;
-  for (let i = 0; i + windowSize <= text.length; i += step) {
-    const window = text.slice(i, i + windowSize);
-    totalWindows++;
-    const count = (seen.get(window) ?? 0) + 1;
-    seen.set(window, count);
-    if (count > 1) duplicateWindows++;
-  }
-
-  let topWindow = '';
-  let topCount = 0;
-  for (const [window, count] of seen) {
-    if (count > topCount) {
-      topCount = count;
-      topWindow = window;
-    }
-  }
-
+  const a = analyzeDegenerateRepetition(text ?? '');
   let longestLine = 0;
-  const seenLines = new Map<string, number>();
-  let duplicateLines = 0;
-  let totalCountedLines = 0;
-  for (const line of text.split('\n')) {
+  for (const line of (text ?? '').split('\n')) {
     if (line.length > longestLine) longestLine = line.length;
-    const trimmed = line.trim();
-    if (trimmed.length < MIN_DUPLICATE_LINE_CHARS) continue;
-    totalCountedLines++;
-    const count = (seenLines.get(trimmed) ?? 0) + 1;
-    seenLines.set(trimmed, count);
-    if (count > 1) duplicateLines++;
   }
-
-  const duplicateRatio = totalWindows > 0 ? (duplicateWindows / totalWindows).toFixed(2) : 'n/a';
-  const duplicateLineRatio = totalCountedLines > 0 ? (duplicateLines / totalCountedLines).toFixed(2) : 'n/a';
+  const fired =
+    [a.windowFired && 'window', a.lineFired && 'duplicateLines', a.shortLineFired && 'shortLineLoop']
+      .filter(Boolean)
+      .join('+') || 'none';
+  const duplicateRatio = a.totalWindows > 0 ? (a.duplicateWindows / a.totalWindows).toFixed(2) : 'n/a';
+  const duplicateLineRatio = a.totalCountedLines > 0 ? (a.duplicateLines / a.totalCountedLines).toFixed(2) : 'n/a';
   const parts = [
+    `strategy=${fired}`,
     `length=${text.length}`,
-    `sampledWindows=${totalWindows}`,
+    `windowTextLength=${a.windowText.length}`,
+    `sampledWindows=${a.totalWindows}`,
     `duplicateRatio=${duplicateRatio}`,
     `duplicateLineRatio=${duplicateLineRatio}`,
-    `countedLines=${totalCountedLines}`,
+    `countedLines=${a.totalCountedLines}`,
     `longestLine=${longestLine}`,
-    `topWindowCount=${topCount}`,
+    `topWindowCount=${a.topWindowCount}`,
   ];
-  if (topCount > 1) parts.push(`topWindow=${JSON.stringify(topWindow)}`);
+  if (a.topWindowCount > 1) parts.push(`topWindow=${JSON.stringify(a.topWindow)}`);
   parts.push(`head=${JSON.stringify(text.slice(0, snippetChars))}`);
   if (text.length > snippetChars * 2) parts.push(`tail=${JSON.stringify(text.slice(-snippetChars))}`);
   return parts.join(' ');
