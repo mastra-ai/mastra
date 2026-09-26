@@ -37,6 +37,23 @@ describe('PageLayout', () => {
       expect(screen.getByRole('banner').compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(row.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
+
+    it.each(['container', 'narrow'] as const)(
+      'keeps the gap below the row outside the scroll area so content never scrolls flush against it (%s)',
+      variant => {
+        render(
+          <PageLayout variant={variant} actionRow={<input aria-label="Filter" />}>
+            <p>Body</p>
+          </PageLayout>,
+        );
+
+        const row = screen.getByLabelText('Filter').closest('[data-slot="page-layout-action-row"]');
+        const padded = variant === 'narrow' ? screen.getByText('Body').parentElement : screen.getByRole('main');
+        expect(row?.className).toMatch(/\bp-4\b/);
+        expect(padded?.className).toMatch(/\bpx-4 pb-4\b/);
+        expect(padded?.className).not.toMatch(/\bp-4\b/);
+      },
+    );
   });
 
   describe('variant', () => {
