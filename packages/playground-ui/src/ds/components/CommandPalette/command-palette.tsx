@@ -3,6 +3,7 @@ import type { ComponentPropsWithoutRef, HTMLAttributes, ReactNode } from 'react'
 import { CommandDialog, CommandInput, CommandItem, CommandList, CommandShortcut } from '@/ds/components/Command';
 import { Kbd } from '@/ds/components/Kbd';
 import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Txt } from '@/ds/components/Txt';
 import { inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
@@ -128,7 +129,7 @@ function CommandPaletteScope({
     >
       <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">{icon}</span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      <span className="rounded-md border border-border bg-muted/70 px-1.5 py-0.5 text-meta leading-none text-muted-foreground">
+      <span className="rounded-md border border-border bg-muted/70 px-1.5 py-0.5 text-meta text-muted-foreground">
         {count}
       </span>
     </button>
@@ -204,7 +205,7 @@ function CommandPaletteItem({
         <span className="flex min-w-0 items-center gap-2">
           <span className="truncate text-label text-foreground">{title}</span>
           {badge && (
-            <span className="shrink-0 rounded-md border border-border bg-muted/60 px-1.5 py-0.5 text-meta leading-none text-muted-foreground uppercase">
+            <span className="shrink-0 rounded-md border border-border bg-muted/60 px-1.5 py-0.5 text-meta text-muted-foreground uppercase">
               {badge}
             </span>
           )}
@@ -213,9 +214,15 @@ function CommandPaletteItem({
           <span className="flex min-w-0 items-center gap-2 text-meta text-muted-foreground">
             {subtitle && <span className="truncate">{subtitle}</span>}
             {path && (
-              <span className="max-w-52 truncate rounded-md border border-border bg-muted/70 px-1.5 py-0.5 font-mono text-meta leading-none text-muted-foreground">
+              <Txt
+                as="span"
+                variant="meta"
+                tone="muted"
+                font="mono"
+                className="max-w-52 truncate rounded-md border border-border bg-muted/70 px-1.5 py-0.5"
+              >
                 {path}
-              </span>
+              </Txt>
             )}
           </span>
         )}

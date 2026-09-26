@@ -43,6 +43,7 @@ import { ViewModeTab } from './view-mode-tab';
 import type { SignalsViewMode } from './view-mode-tab';
 import type { SankeyChartNodeSelection } from '@/ds/components/SankeyChart';
 import { TabList, Tabs } from '@/ds/components/Tabs';
+import { Txt } from '@/ds/components/Txt';
 
 export interface SankeySignalsProps {
   entityId: string;
@@ -387,7 +388,9 @@ export function SankeySignals({
           </div>
           {dateRangePicker}
         </div>
-        <p className="text-caption text-muted-foreground">{viewDescription}</p>
+        <Txt variant="caption" tone="muted">
+          {viewDescription}
+        </Txt>
         <PendingSignalProgress progress={progressQuery.data} signalCatalog={effectiveSignalCatalog} />
         {viewMode === 'compare' ? (
           <ThemeCompare
@@ -466,14 +469,14 @@ export function SankeySignals({
               />
             )}
             {perspectiveMutation.isPending ? (
-              <p className="font-mono text-caption text-muted-foreground" role="status">
+              <Txt variant="caption" tone="muted" role="status">
                 Reloading snapshots for new trace signal perspective…
-              </p>
+              </Txt>
             ) : null}
             {perspectiveMutation.isError ? (
-              <p className="text-caption text-red-500" role="alert">
+              <Txt variant="caption" className="text-error" role="alert">
                 Unable to load that trace signal perspective. Try reordering the columns again.
-              </p>
+              </Txt>
             ) : null}
           </>
         )}

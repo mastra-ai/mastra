@@ -6,6 +6,7 @@ import { EnvironmentVariablesEditorReadOnlyListContext } from './environment-var
 import type { EnvironmentVariablesEditorReadOnlyItemProps } from './environment-variables-editor.types';
 import { Button } from '@/ds/components/Button';
 import { DataList } from '@/ds/components/DataList/data-list';
+import { Txt } from '@/ds/components/Txt';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { cn } from '@/lib/utils';
 
@@ -75,14 +76,15 @@ export function EnvironmentVariablesEditorReadOnlyItem({
               {isRevealed ? <EyeOffIcon aria-hidden /> : <EyeIcon aria-hidden />}
             </Button>
             <span className="group relative flex min-w-0 flex-1 items-center">
-              <span
-                className={cn(
-                  'block min-w-0 flex-1 truncate font-mono text-meta text-muted-foreground',
-                  canCopyValue && 'pr-7',
-                )}
+              <Txt
+                as="span"
+                variant="meta"
+                tone="muted"
+                font="mono"
+                className={cn('block min-w-0 flex-1 truncate', canCopyValue && 'pr-7')}
               >
                 {displayedValue}
-              </span>
+              </Txt>
               {canCopyValue && (
                 <Button
                   type="button"

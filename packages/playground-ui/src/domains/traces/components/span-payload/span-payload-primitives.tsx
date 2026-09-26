@@ -3,10 +3,15 @@ import type { ReactNode } from 'react';
 import { SpanPayloadTool } from './span-payload-tool';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
+import { Txt } from '@/ds/components/Txt';
 
 /** Small-caps label above a field of a rich payload. */
 export function SpanPayloadLabel({ children }: { children: ReactNode }) {
-  return <div className="text-meta tracking-widest text-placeholder uppercase">{children}</div>;
+  return (
+    <Txt as="div" variant="meta" tone="faint" className="uppercase">
+      {children}
+    </Txt>
+  );
 }
 
 export function SpanPayloadField({ label, children }: { label: ReactNode; children: ReactNode }) {
@@ -20,9 +25,9 @@ export function SpanPayloadField({ label, children }: { label: ReactNode; childr
 
 export function SpanPayloadMarkdown({ children }: { children: string }) {
   return (
-    <div data-slot="span-payload-markdown" className="text-body text-foreground">
+    <Txt data-slot="span-payload-markdown" as="div" variant="body" tone="ink">
       <MarkdownRenderer>{children}</MarkdownRenderer>
-    </div>
+    </Txt>
   );
 }
 
@@ -38,7 +43,7 @@ export function SpanPayloadCollapsible({
 }) {
   return (
     <Collapsible defaultOpen={defaultOpen}>
-      <CollapsibleTrigger className="flex items-center gap-1 text-meta tracking-widest text-placeholder uppercase [&>svg]:size-3">
+      <CollapsibleTrigger className="flex items-center gap-1 text-meta text-placeholder uppercase [&>svg]:size-3">
         <ChevronRightIcon />
         {label}
       </CollapsibleTrigger>

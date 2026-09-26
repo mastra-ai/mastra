@@ -74,7 +74,7 @@ export function NoticeRoot({ variant, title, icon, action, children, className }
       <div className="flex h-4 min-w-0 items-center gap-2 [&>svg]:size-4">
         {resolvedIcon}
         {/* truncate, not wrap — the row is 1rem tall, a wrapped title would spill out of it */}
-        <span className="truncate text-column leading-none tracking-wide uppercase">{title}</span>
+        <span className="truncate text-column uppercase">{title}</span>
       </div>
       {action && <div className="absolute top-2 right-2 hidden @md:block">{action}</div>}
       {(children || action) && (

@@ -1,6 +1,7 @@
 import { Check, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Button } from '@/ds/components/Button';
+import { InlineCode } from '@/ds/components/InlineCode';
 
 export interface ToolApprovalActionsProps {
   onApprove: () => void;
@@ -64,7 +65,7 @@ export function ToolApproval({ toolName, children, ...actions }: ToolApprovalPro
       aria-label={`Tool approval for ${toolName}`}
     >
       <div className="mb-1.5 text-subheading text-foreground">
-        Approve <code className="rounded bg-fill-hover px-1.5 py-px font-mono text-caption break-all">{toolName}</code>?
+        Approve <InlineCode>{toolName}</InlineCode>?
       </div>
       {children}
       <div className="mt-2">
