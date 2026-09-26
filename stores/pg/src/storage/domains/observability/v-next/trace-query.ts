@@ -136,13 +136,34 @@ function placeholders(values: readonly unknown[], offset: number): string {
 }
 
 /**
- * Unicode combining marks (`\p{M}`) as PostgreSQL ARE bracket ranges. Gaps that hold only
- * letters, digits, or unassigned code points are merged in, since those are word characters
- * or never stored, so the list is shorter than the raw category. Regenerate from
- * `/\p{M}/u` when the runtime's Unicode version changes.
+ * Unicode combining marks as PostgreSQL bracket ranges, so `[^[:alnum:]<ranges>]` splits words
+ * like the planner's `[^\p{L}\p{M}\p{N}]`. PostgreSQL regexes have no `\p{M}`, and glibc files
+ * some marks, such as the Devanagari virama, under punct. Derived once from the runtime's own
+ * Unicode tables. A run may also absorb neighbouring letters, digits, and unassigned code
+ * points, which are word characters already or never stored.
  */
-const PG_COMBINING_MARK_RANGES =
-  '\\u0300-\\u036F\\u0483-\\u0489\\u0591-\\u05BD\\u05BF\\u05C1-\\u05C2\\u05C4-\\u05C5\\u05C7\\u0610-\\u061A\\u064B-\\u065F\\u0670\\u06D6-\\u06DC\\u06DF-\\u06E8\\u06EA-\\u06ED\\u0711-\\u07F3\\u07FD\\u0816-\\u082D\\u0859-\\u085B\\u0897-\\u08E1\\u08E3-\\u0963\\u0981-\\u09E3\\u09FE-\\u0A75\\u0A81-\\u0AE3\\u0AFA-\\u0B63\\u0B82-\\u0BD7\\u0C00-\\u0C63\\u0C81-\\u0C83\\u0CBC-\\u0D4D\\u0D57-\\u0D63\\u0D81-\\u0DF3\\u0E31-\\u0E3A\\u0E47-\\u0E4E\\u0EB1-\\u0ECE\\u0F18-\\u0F19\\u0F35\\u0F37\\u0F39\\u0F3E-\\u0F84\\u0F86-\\u0FBC\\u0FC6\\u102B-\\u103E\\u1056-\\u109D\\u135D-\\u135F\\u1712-\\u1734\\u1752-\\u17D3\\u17DD\\u180B-\\u180D\\u180F-\\u193B\\u1A17-\\u1A1B\\u1A55-\\u1A7F\\u1AB0-\\u1B44\\u1B6B-\\u1B73\\u1B80-\\u1BF3\\u1C24-\\u1C37\\u1CD0-\\u1CD2\\u1CD4-\\u1DFF\\u20D0-\\u20F0\\u2CEF-\\u2CF1\\u2D7F-\\u2DFF\\u302A-\\u302F\\u3099-\\u309A\\uA66F-\\uA672\\uA674-\\uA67D\\uA69E-\\uA6F1\\uA802-\\uA827\\uA82C\\uA880-\\uA8C5\\uA8E0-\\uA8F1\\uA8FF-\\uA92D\\uA947-\\uA953\\uA980-\\uA9C0\\uA9E5-\\uAA4D\\uAA7B-\\uAAC1\\uAAEB-\\uAAEF\\uAAF5-\\uAAF6\\uABE3-\\uABEA\\uABEC-\\uABED\\uFB1E\\uFE00-\\uFE0F\\uFE20-\\uFE2F\\U000101FD-\\U0001037A\\U00010A01-\\U00010A3F\\U00010AE5-\\U00010AE6\\U00010D24-\\U00010D6D\\U00010EAB-\\U00010EAC\\U00010EFC-\\U00010F50\\U00010F82-\\U00010F85\\U00011000-\\U00011046\\U00011070-\\U000110BA\\U000110C2\\U00011100-\\U00011134\\U00011145-\\U00011173\\U00011180-\\U000111C0\\U000111C9-\\U000111CC\\U000111CE-\\U000111CF\\U0001122C-\\U00011237\\U0001123E-\\U00011241\\U000112DF-\\U000113D2\\U000113E1-\\U00011446\\U0001145E-\\U000114C3\\U000115AF-\\U000115C0\\U000115DC-\\U00011640\\U000116AB-\\U000116B7\\U0001171D-\\U0001172B\\U0001182C-\\U0001183A\\U00011930-\\U00011943\\U000119D1-\\U000119E0\\U000119E4-\\U00011A3E\\U00011A47-\\U00011A99\\U00011C2F-\\U00011C3F\\U00011C92-\\U00011EF6\\U00011F00-\\U00011F42\\U00011F5A\\U00013440-\\U0001612F\\U00016AF0-\\U00016AF4\\U00016B30-\\U00016B36\\U00016F4F-\\U00016F92\\U00016FE4-\\U00016FF1\\U0001BC9D-\\U0001BC9E\\U0001CF00-\\U0001CF46\\U0001D165-\\U0001D169\\U0001D16D-\\U0001D172\\U0001D17B-\\U0001D182\\U0001D185-\\U0001D18B\\U0001D1AA-\\U0001D1AD\\U0001D242-\\U0001D244\\U0001DA00-\\U0001DA36\\U0001DA3B-\\U0001DA6C\\U0001DA75\\U0001DA84\\U0001DA9B-\\U0001E136\\U0001E2AE-\\U0001E2EF\\U0001E4EC-\\U0001E5EF\\U0001E8D0-\\U0001E94A\\U000E0100-\\U000E01EF';
+let pgCombiningMarkRanges: string | undefined;
+function getPgCombiningMarkRanges(): string {
+  if (pgCombiningMarkRanges !== undefined) return pgCombiningMarkRanges;
+  const escape = (cp: number) =>
+    cp > 0xffff ? `\\U${cp.toString(16).padStart(8, '0')}` : `\\u${cp.toString(16).padStart(4, '0')}`;
+  let text = '';
+  for (let cp = 0; cp <= 0x10ffff; cp++) {
+    if (cp < 0xd800 || cp > 0xdfff) text += String.fromCodePoint(cp);
+  }
+  const ranges: string[] = [];
+  for (const match of text.matchAll(/[\p{L}\p{M}\p{N}\p{Cn}\p{Co}]+/gu)) {
+    if (!/\p{M}/u.test(match[0])) continue;
+    const first = match[0].codePointAt(0)!;
+    const lastUnit = match.index + match[0].length - 1;
+    const last = text.codePointAt(
+      text.charCodeAt(lastUnit) >= 0xdc00 && text.charCodeAt(lastUnit) <= 0xdfff ? lastUnit - 1 : lastUnit,
+    )!;
+    ranges.push(first === last ? escape(first) : `${escape(first)}-${escape(last)}`);
+  }
+  pgCombiningMarkRanges = ranges.join('');
+  return pgCombiningMarkRanges;
+}
 
 function compileScalarPredicate<TField extends string>(
   predicate: TrustedTraceQueryScalarPredicate,
@@ -204,7 +225,7 @@ function compileScalarPredicate<TField extends string>(
     // database locale (a C-locale database treats non-ASCII letters as separators) and glibc files
     // some marks such as the Devanagari virama under punct, so the mark ranges are listed explicitly.
     // `lower()` already folds `İ` to `i`.
-    const words = `' ' || lower(regexp_replace(normalize(${field}), '[^[:alnum:]${PG_COMBINING_MARK_RANGES}]+', ' ', 'g')) || ' '`;
+    const words = `' ' || lower(regexp_replace(normalize(${field}), '[^[:alnum:]${getPgCombiningMarkRanges()}]+', ' ', 'g')) || ' '`;
     const found = `strpos(${words}, $${parameterOffset}) > 0`;
     return {
       sql: `COALESCE(${predicate.operator === 'matches' ? found : `NOT (${found})`}, false)`,
