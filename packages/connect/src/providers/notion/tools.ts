@@ -1,7 +1,7 @@
 // AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
-import { applyAllowTools } from '../../toolset.js';
+import { applyToolFilter } from '../../toolset.js';
 import { appendBlockChildrenTool } from './tools/append-block-children.js';
 import { appendBulletedListTool } from './tools/append-bulleted-list.js';
 import { appendCalloutBlockTool } from './tools/append-callout-block.js';
@@ -95,5 +95,5 @@ export function createNotionTools(options?: ProviderToolsOptions) {
     notion_update_page_markdown: updatePageMarkdownTool(platformProxy),
     notion_update_page: updatePageTool(platformProxy),
   };
-  return applyAllowTools(tools, options?.allowTools);
+  return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
 }

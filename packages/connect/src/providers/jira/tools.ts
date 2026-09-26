@@ -1,7 +1,7 @@
 // AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
-import { applyAllowTools } from '../../toolset.js';
+import { applyToolFilter } from '../../toolset.js';
 import { addCommentTool } from './tools/add-comment.js';
 import { addWorklogTool } from './tools/add-worklog.js';
 import { createIssueLinkTool } from './tools/create-issue-link.js';
@@ -83,5 +83,5 @@ export function createJiraTools(options?: ProviderToolsOptions) {
     jira_update_issue: updateIssueTool(platformProxy),
     jira_update_worklog: updateWorklogTool(platformProxy),
   };
-  return applyAllowTools(tools, options?.allowTools);
+  return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
 }

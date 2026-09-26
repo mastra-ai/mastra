@@ -1,7 +1,7 @@
 // AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
-import { applyAllowTools } from '../../toolset.js';
+import { applyToolFilter } from '../../toolset.js';
 import { addVectorStoreFileTool } from './tools/add-vector-store-file.js';
 import { cancelFineTuningJobTool } from './tools/cancel-fine-tuning-job.js';
 import { createBatchTool } from './tools/create-batch.js';
@@ -59,5 +59,5 @@ export function createOpenaiTools(options?: ProviderToolsOptions) {
     openai_search_vector_store: searchVectorStoreTool(platformProxy),
     openai_update_vector_store: updateVectorStoreTool(platformProxy),
   };
-  return applyAllowTools(tools, options?.allowTools);
+  return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
 }

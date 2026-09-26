@@ -4,21 +4,20 @@ import { MCPClient } from '@mastra/mcp';
 import type { ConnectClientOptions, IntegrationCatalogEntry, ProjectConnection, ResolvedClient } from './client.js';
 import { listIntegrations, listProjectConnections, platformMcpTransport, resolveClient } from './client.js';
 import { MastraConnectError } from './errors.js';
-import type { McpProviderRegistration, ProviderRegistration } from './registry.js';
+import { buildMcpMultiConnectionTools, buildProxyMultiConnectionTools } from './multi-connection.js';
+import type { McpProviderRegistration, ProviderRegistration, ProxyProviderRegistration } from './registry.js';
 import { TOOLS } from './registry.js';
 import {
   connectionIdEnvVar,
   groupByIntegrationId,
-  resolveConnection,
+  resolveProviderConnection,
   validateIntegrationOverrides,
 } from './resolution.js';
-import { applyAllowTools } from './toolset.js';
+import { applyToolFilter } from './toolset.js';
 
-export interface ToolsIntegrationOptions {
+interface ToolsIntegrationOptionsBase {
   /** Pin a specific connection id (bypasses env-var fallback and single-active-connection resolution). */
   connectionId?: string;
-  /** Restrict the returned toolset to these tool keys. Unknown names throw at build time. */
-  allowTools?: string[];
   /**
    * MCP tool keys that may run without tool approval. Every other discovered
    * MCP tool requires approval, whatever the server's annotations claim, since
@@ -30,11 +29,41 @@ export interface ToolsIntegrationOptions {
   disabled?: boolean;
 }
 
+/**
+ * Per-provider overrides. `allowTools` and `disallowTools` are mutually
+ * exclusive: pick one filter direction per provider. The XOR type catches
+ * accidental co-occurrence in typed object literals; `tools()` also
+ * validates at build time so loosely typed callers get a clear error.
+ */
+export type ToolsIntegrationOptions = ToolsIntegrationOptionsBase &
+  (
+    | {
+        /** Restrict the returned toolset to these tool keys. Unknown names throw at build time. */
+        allowTools?: string[];
+        disallowTools?: never;
+      }
+    | {
+        allowTools?: never;
+        /** Remove these tool keys from the returned toolset. Unknown names throw at build time. */
+        disallowTools?: string[];
+      }
+  );
+
 export interface ToolsOptions {
   /** Platform project whose connections to discover. Falls back to MASTRA_PROJECT_ID. */
   projectId?: string;
-  /** Optional per-provider overrides keyed by integrationId. */
-  integrations?: Record<string, ToolsIntegrationOptions>;
+  /**
+   * Providers to enable, in one of two shapes:
+   * - `["linear", "github"]` — string array shorthand for enabling providers
+   *   with no per-provider options.
+   * - `{ linear: { allowTools: [...] }, github: { disallowTools: [...] } }` —
+   *   object form for per-provider overrides. Each provider may set at most
+   *   one of `allowTools` and `disallowTools`; supplying both throws.
+   *
+   * Both forms may be combined by passing the object form; use the array
+   * shorthand only when no overrides are needed.
+   */
+  integrations?: string[] | Record<string, ToolsIntegrationOptions>;
   client?: ConnectClientOptions;
   /** How long a resolved snapshot stays fresh, in milliseconds. Default 30_000. `0` revalidates every resolution. */
   ttlMs?: number;
@@ -102,8 +131,12 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
 
   const client = resolveClient(options.client);
   const resolverId = ++nextResolverId;
-  const mcpClients = new Map<string, { connectionId: string; client: MCPClient }>();
-  validateIntegrationOverrides(options.integrations);
+  // Keyed by `${integrationId}::${connectionId}` so multiple active
+  // connections for the same provider each get their own MCP client.
+  const mcpClients = new Map<string, { integrationId: string; connectionId: string; client: MCPClient }>();
+  const integrationOverrides = normalizeIntegrationOverrides(options.integrations);
+  validateIntegrationOverrides(integrationOverrides);
+  validateIntegrationXor(integrationOverrides);
 
   let cache: { snapshot: ResolvedToolsRecord; fetchedAt: number } | undefined;
   let inflight: Promise<ResolvedToolsRecord> | undefined;
@@ -132,7 +165,7 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
       connection =>
         connection.status === 'active' &&
         !checkedIn.has(connection.integrationId) &&
-        !options.integrations?.[connection.integrationId]?.disabled,
+        !integrationOverrides[connection.integrationId]?.disabled,
     );
     if (needsCatalog) throw catalogResult.reason;
     const reason = catalogResult.reason;
@@ -152,7 +185,7 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
       inflight = (async () => {
         try {
           const { connections, catalog } = await loadSnapshotInputs();
-          const requests = buildRequests(options.integrations, catalog);
+          const requests = buildRequests(integrationOverrides, catalog);
           const snapshot = await mapTools(connections, requests, options, client, mcpClients, resolverId);
           cache = { snapshot, fetchedAt: Date.now() };
           lastFailureAt = undefined;
@@ -219,11 +252,59 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
   });
 }
 
-function buildRequests(
+/**
+ * Turns the two accepted `integrations` shapes into the internal Record form.
+ * The string-array shorthand (`["linear", "github"]`) becomes
+ * `{ linear: {}, github: {} }`; the object form passes through unchanged.
+ * Also rejects malformed inputs early (non-string array entries, duplicates)
+ * so a bad option throws at tools() time rather than at first refresh.
+ */
+function normalizeIntegrationOverrides(
   integrations: ToolsOptions['integrations'],
+): Record<string, ToolsIntegrationOptions> {
+  if (integrations === undefined) return {};
+  if (Array.isArray(integrations)) {
+    const record: Record<string, ToolsIntegrationOptions> = {};
+    for (const entry of integrations) {
+      if (typeof entry !== 'string') {
+        throw new MastraConnectError(
+          'invalid_options',
+          `Invalid integrations entry: expected a string integration id, got ${typeof entry}.`,
+        );
+      }
+      if (record[entry] !== undefined) {
+        throw new MastraConnectError('invalid_options', `Duplicate integration '${entry}' in integrations array.`);
+      }
+      record[entry] = {};
+    }
+    return record;
+  }
+  return integrations;
+}
+
+/**
+ * Rejects any provider that sets both `allowTools` and `disallowTools`.
+ * The types make this a compile-time error for typed literals, but this
+ * runtime guard catches loosely typed inputs (e.g. built from JSON or a
+ * `Record<string, unknown>` upstream).
+ */
+function validateIntegrationXor(integrations: Record<string, ToolsIntegrationOptions>): void {
+  for (const [integrationId, providerOptions] of Object.entries(integrations)) {
+    const filters = providerOptions as { allowTools?: unknown; disallowTools?: unknown };
+    if (filters.allowTools !== undefined && filters.disallowTools !== undefined) {
+      throw new MastraConnectError(
+        'invalid_options',
+        `Invalid options for '${integrationId}': allowTools and disallowTools are mutually exclusive; set at most one.`,
+      );
+    }
+  }
+}
+
+function buildRequests(
+  integrations: Record<string, ToolsIntegrationOptions>,
   catalog: IntegrationCatalogEntry[],
 ): NormalizedRequest[] {
-  const overrides = integrations ?? {};
+  const overrides = integrations;
   const registrations = new Map(TOOLS.map(registration => [registration.integrationId, registration]));
   const catalogIds = new Set(catalog.map(integration => integration.id));
   for (const integration of catalog) {
@@ -254,11 +335,12 @@ async function mapTools(
   requests: NormalizedRequest[],
   options: ToolsOptions,
   client: ResolvedClient,
-  mcpClients: Map<string, { connectionId: string; client: MCPClient }>,
+  mcpClients: Map<string, { integrationId: string; connectionId: string; client: MCPClient }>,
   resolverId: number,
 ): Promise<ResolvedToolsRecord> {
   const byIntegrationId = groupByIntegrationId(connections);
-  const activeMcpIntegrations = new Set<string>();
+  // Set of ${integrationId}::${connectionId} keys still in use this snapshot.
+  const activeMcpKeys = new Set<string>();
   const result: ResolvedToolsRecord = {};
   const toolOwners = new Map<string, string>();
   for (const request of requests) {
@@ -267,7 +349,7 @@ async function mapTools(
     try {
       const candidates = byIntegrationId.get(integrationId) ?? [];
       if (candidates.length === 0) continue;
-      const connectionId = resolveConnection(
+      const resolution = resolveProviderConnection(
         {
           integrationId,
           envVar: request.registration.envVar,
@@ -275,24 +357,52 @@ async function mapTools(
         },
         candidates,
       );
-      if (!connectionId) continue; // warned + skipped
-      if (request.registration.transport === 'mcp') {
-        activeMcpIntegrations.add(integrationId);
-        providerTools = await discoverMcpTools({
-          registration: request.registration,
-          connectionId,
-          allowTools: request.options.allowTools,
-          autoApproveTools: request.options.autoApproveTools,
-          client,
-          mcpClients,
-          resolverId,
-        });
+      if (resolution.kind === 'skip') continue;
+      if (resolution.kind === 'single') {
+        if (request.registration.transport === 'mcp') {
+          activeMcpKeys.add(`${integrationId}::${resolution.connectionId}`);
+          providerTools = await discoverMcpTools({
+            registration: request.registration,
+            connectionId: resolution.connectionId,
+            allowTools: request.options.allowTools,
+            disallowTools: request.options.disallowTools,
+            autoApproveTools: request.options.autoApproveTools,
+            client,
+            mcpClients,
+            resolverId,
+          });
+        } else {
+          providerTools = request.registration.createTools({
+            connectionId: resolution.connectionId,
+            client: options.client,
+            ...providerFilterOptions(request.options),
+          } as Parameters<typeof request.registration.createTools>[0]);
+        }
       } else {
-        providerTools = request.registration.createTools({
-          connectionId,
-          allowTools: request.options.allowTools,
-          client: options.client,
-        });
+        // kind === 'multi'
+        if (request.registration.transport === 'mcp') {
+          for (const connection of resolution.connections) {
+            activeMcpKeys.add(`${integrationId}::${connection.id}`);
+          }
+          providerTools = await buildMcpMultiConnectionTools({
+            registration: request.registration,
+            connections: resolution.connections,
+            allowTools: request.options.allowTools,
+            disallowTools: request.options.disallowTools,
+            autoApproveTools: request.options.autoApproveTools,
+            client,
+            mcpClients,
+            resolverId,
+          });
+        } else {
+          providerTools = buildProxyMultiConnectionTools({
+            registration: request.registration as ProxyProviderRegistration,
+            connections: resolution.connections,
+            allowTools: request.options.allowTools,
+            disallowTools: request.options.disallowTools,
+            client: options.client,
+          });
+        }
       }
     } catch (error) {
       console.warn(
@@ -314,30 +424,47 @@ async function mapTools(
     Object.assign(result, providerTools);
   }
 
-  const staleClients = Array.from(mcpClients.entries()).filter(
-    ([integrationId]) => !activeMcpIntegrations.has(integrationId),
-  );
-  for (const [integrationId] of staleClients) mcpClients.delete(integrationId);
+  const staleClients = Array.from(mcpClients.entries()).filter(([key]) => !activeMcpKeys.has(key));
+  for (const [key] of staleClients) mcpClients.delete(key);
   await Promise.allSettled(staleClients.map(([, entry]) => entry.client.disconnect()));
   return result;
+}
+
+/**
+ * Extracts whichever provider tool filter is set. Since `ToolsIntegrationOptions`
+ * is an XOR union and tools() validates co-occurrence up front, at most one
+ * of the two will ever be defined here.
+ */
+function providerFilterOptions(options: ToolsIntegrationOptions): {
+  allowTools?: string[];
+  disallowTools?: string[];
+} {
+  return options.allowTools !== undefined
+    ? { allowTools: options.allowTools }
+    : options.disallowTools !== undefined
+      ? { disallowTools: options.disallowTools }
+      : {};
 }
 
 async function discoverMcpTools(input: {
   registration: McpProviderRegistration;
   connectionId: string;
   allowTools?: string[];
+  disallowTools?: string[];
   autoApproveTools?: string[];
   client: ResolvedClient;
-  mcpClients: Map<string, { connectionId: string; client: MCPClient }>;
+  mcpClients: Map<string, { integrationId: string; connectionId: string; client: MCPClient }>;
   resolverId: number;
 }): Promise<ResolvedToolsRecord> {
-  const { registration, connectionId, allowTools, autoApproveTools, client, mcpClients, resolverId } = input;
+  const { registration, connectionId, allowTools, disallowTools, autoApproveTools, client, mcpClients, resolverId } =
+    input;
   const autoApproved = new Set(autoApproveTools ?? []);
-  let entry = mcpClients.get(registration.integrationId);
-  if (entry?.connectionId !== connectionId) {
-    if (entry) await entry.client.disconnect();
+  const cacheKey = `${registration.integrationId}::${connectionId}`;
+  let entry = mcpClients.get(cacheKey);
+  if (!entry) {
     const transport = platformMcpTransport(client, connectionId);
     entry = {
+      integrationId: registration.integrationId,
       connectionId,
       client: new MCPClient({
         id: `mastra-connect-${resolverId}-${registration.integrationId}-${connectionId}`,
@@ -353,7 +480,7 @@ async function discoverMcpTools(input: {
         },
       }),
     };
-    mcpClients.set(registration.integrationId, entry);
+    mcpClients.set(cacheKey, entry);
   }
 
   const discovery = await entry.client.listToolsWithErrors();
@@ -366,5 +493,5 @@ async function discoverMcpTools(input: {
       `Unknown tool name(s) in autoApproveTools for '${registration.integrationId}': ${unknown.join(', ')}. Known tools: ${Object.keys(discovery.tools).join(', ')}.`,
     );
   }
-  return applyAllowTools(discovery.tools, allowTools) as ResolvedToolsRecord;
+  return applyToolFilter(discovery.tools, { allowTools, disallowTools }) as ResolvedToolsRecord;
 }
