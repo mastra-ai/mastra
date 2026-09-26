@@ -1966,6 +1966,22 @@ export function detectDegenerateRepetition(text: string): boolean {
     return true;
   }
 
+  // Strategy 3: short lines are exempt above only while their repetition is
+  // bounded. A short line whose occurrences add up to more than one maximum-size
+  // observation line is a loop, not a faithful summary.
+  // Grouping ignores indentation but the budget counts it. Newlines are
+  // counted only between occurrences, so a run that serializes to
+  // exactly one maximum-size line is not flagged.
+  const shortLineChars = new Map<string, number>();
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.length >= MIN_DUPLICATE_LINE_CHARS) continue;
+    const prev = shortLineChars.get(trimmed);
+    const total = prev === undefined ? line.length : prev + 1 + line.length;
+    if (total > MAX_OBSERVATION_LINE_CHARS) return true;
+    shortLineChars.set(trimmed, total);
+  }
+
   return false;
 }
 
@@ -1976,10 +1992,13 @@ export function detectDegenerateRepetition(text: string): boolean {
  * without it there is no way to tell a real repetition loop apart from a
  * detector false-positive on legitimately repetitive content.
  *
- * Reuses the detector's sampling parameters (200-char windows, ~50 samples)
- * so the reported duplicate ratio and most-repeated window match what
- * triggered the detection. Snippets are JSON-escaped so the result stays on
- * one line.
+ * Uses the detector's window size and sample count, but samples the raw text:
+ * the detector computes its window and duplicate-line ratios after collapsing
+ * bounded runs and excluding short lines (which a separate check judges), so
+ * these ratios can differ from what triggered the rejection. A
+ * short-line loop, for example, reports duplicateLineRatio=n/a (short lines are
+ * not counted) and may report a high window ratio. Snippets are JSON-escaped so
+ * the result stays on one line.
  */
 export function describeDegenerateOutput(text: string, snippetChars = 400): string {
   const windowSize = 200;
