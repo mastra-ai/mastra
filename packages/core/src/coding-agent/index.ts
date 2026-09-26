@@ -191,7 +191,10 @@ export function createCodingAgent(config: CreateCodingAgentConfig): Agent {
       // (OpenAI refusals throw); the output-lane handler above covers Anthropic stops.
       (rest.errorProcessorDefaults === false
         ? undefined
-        : [new CyberRefusalHandler(), ...defaultStabilityErrorProcessors({ retryUnknownErrors: true, retryBadRequests: true })]),
+        : [
+            new CyberRefusalHandler(),
+            ...defaultStabilityErrorProcessors({ retryUnknownErrors: true, retryBadRequests: true }),
+          ]),
     // Output-step retries only read the raw option; the implicit error-lane cap
     // from `resolveMaxProcessorRetries` never reaches them. Default it here so
     // the default output-lane handler can retry instead of ending as a tripwire.
