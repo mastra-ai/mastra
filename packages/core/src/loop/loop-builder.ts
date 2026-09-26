@@ -24,6 +24,7 @@ import {
 } from './run-scope-keys';
 import { decideContinuation } from './shared/continuation-core';
 import { drainSignalsToTranscript } from './shared/steps/signal-drain-core';
+import { takeUnreportedStepContent } from './shared/unreported-step-content';
 import type { LoopRun } from './types';
 import { createBackgroundTaskCheckStep } from './workflows/agentic-execution/background-task-check-step';
 import { EagerToolExecutionCoordinator } from './workflows/agentic-execution/eager-tool-execution';
@@ -406,8 +407,8 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
     const state: MainLoopIterationState<StepResult<Tools>> = {
       // Steps accumulated across iterations, passed to stopWhen
       accumulatedSteps: [],
-      // Content length seen so far — determines what's new in each step
-      previousContentLength: 0,
+      // Content-part keys already reported, per response message id (see takeUnreportedStepContent).
+      reportedPartKeys: new Map(),
       // When continue:false + feedback, allow one more LLM turn then stop
       pendingFeedbackStop: false,
       // When this loop is a resume (e.g. after tool approval), the suspended run
@@ -468,13 +469,11 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         };
       }
 
-      const allContent: StepResult<Tools>['content'] = typedInputData.messages.nonUser.flatMap(
-        message => message.content as unknown as StepResult<Tools>['content'],
-      );
-
-      // Only include new content in this step (content added since the previous iteration)
-      const currentContent = allContent.slice(state.previousContentLength);
-      state.previousContentLength = allContent.length;
+      // Only include new content in this step (parts added since the previous iteration)
+      const currentContent = takeUnreportedStepContent(
+        messageList,
+        state.reportedPartKeys,
+      ) as StepResult<Tools>['content'];
 
       const toolResultParts = currentContent.filter(part => part.type === 'tool-result');
 

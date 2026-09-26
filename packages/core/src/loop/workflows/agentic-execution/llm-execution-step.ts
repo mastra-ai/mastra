@@ -92,6 +92,7 @@ import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-
 import { recordTerminalErrorMessage } from '../../shared/record-terminal-error-message';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../shared/step-content-chunk-types';
 import { TERMINAL_FINISH_REASONS } from '../../shared/terminal-finish-reasons';
+import { takeUnreportedStepContent } from '../../shared/unreported-step-content';
 import { isMastraTimeoutError } from '../../timeout';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
@@ -1242,6 +1243,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   let currentIteration = 0;
   let eagerAbortListenerRegistered = false;
   const pendingProviderToolCallsByToolCallId = new Map<string, PendingProviderToolCall>();
+  // Response parts already attributed to a previous step when refreshing it for input-step processors.
+  const refreshedPartKeys = new Map<string, Set<string>>();
 
   const cleanupProviderToolSpans = (terminal: boolean) => {
     if (!terminal) {
@@ -1583,8 +1586,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         const previousSteps = inputData.output?.steps || [];
         const lastPreviousStep = previousSteps[previousSteps.length - 1];
         if (lastPreviousStep) {
-          // modelContent is 1-indexed, so the last completed step is `length`.
-          const refreshedContent = messageList.get.response.aiV5.modelContent(previousSteps.length);
+          // Everything not yet reported to an earlier step belongs to the last one. Tracked per
+          // response message rather than by step-start markers, which memory processors can remove.
+          const refreshedContent = takeUnreportedStepContent(messageList, refreshedPartKeys);
           // Durable agents deserialize a fresh MessageList per workflow step, so
           // the re-extraction can legitimately come back empty there. Never let
           // that wipe content we already have.

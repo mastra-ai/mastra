@@ -291,6 +291,156 @@ describe('Mock OM Agent Integration', () => {
     expect(lastStep?.text).toContain('I understand your request');
   });
 
+  it('preserves current step content and tool results after OM relocates earlier responses', async () => {
+    let callCount = 0;
+    const multiToolModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        callCount++;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'tool-calls' as const,
+          usage: { inputTokens: 50, outputTokens: 20, totalTokens: 70 },
+          text: '',
+          content: [
+            {
+              type: 'tool-call' as const,
+              toolCallId: `send-${callCount}`,
+              toolName: 'sendMessage',
+              input: JSON.stringify({ message: `message-${callCount}` }),
+            },
+            {
+              type: 'tool-call' as const,
+              toolCallId: `end-${callCount}`,
+              toolName: 'endTurn',
+              input: JSON.stringify({}),
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+    const sendMessage = createTool({
+      id: 'sendMessage',
+      description: 'Send a message',
+      inputSchema: z.object({ message: z.string() }),
+      execute: async ({ message }) => ({ message }),
+    });
+    const endTurn = createTool({
+      id: 'endTurn',
+      description: 'End the current turn',
+      inputSchema: z.object({}),
+      execute: async () => ({ status: 'stopped' }),
+    });
+    const multiToolAgent = new Agent({
+      id: 'test-om-multi-tool-agent',
+      name: 'Multi-tool OM Agent',
+      instructions: 'Call both tools in order.',
+      model: multiToolModel as any,
+      tools: { sendMessage, endTurn },
+      memory,
+    });
+
+    const seen: Array<{ content: string[]; toolCalls: string[]; toolResults: string[] }> = [];
+    const ids = (parts: any[]) => parts.map(p => p.toolCallId ?? p.payload?.toolCallId);
+    const stopWhen = vi.fn(({ steps }) => {
+      const last = steps[steps.length - 1];
+      seen.push({ content: ids(last.content), toolCalls: ids(last.toolCalls), toolResults: ids(last.toolResults) });
+      return steps.length === 3;
+    });
+    await multiToolAgent.generate('Run three tool steps.', {
+      memory: { thread: 'test-thread-step-results', resource: 'test-resource' },
+      stopWhen,
+    });
+
+    expect(stopWhen).toHaveBeenCalledTimes(3);
+    seen.forEach((s, index) => {
+      const expected = [`send-${index + 1}`, `end-${index + 1}`];
+      expect(s.toolCalls).toEqual(expected);
+      expect(s.toolResults).toEqual(expected);
+      expect(s.content).toEqual([...expected, ...expected]);
+    });
+  });
+
+  it("gives prepareStep and processInputStep every previous step's tool results after OM relocates earlier responses", async () => {
+    let callCount = 0;
+    const multiToolModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        callCount++;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'tool-calls' as const,
+          usage: { inputTokens: 50, outputTokens: 20, totalTokens: 70 },
+          text: '',
+          content: [
+            {
+              type: 'tool-call' as const,
+              toolCallId: `send-${callCount}`,
+              toolName: 'sendMessage',
+              input: JSON.stringify({ message: `message-${callCount}` }),
+            },
+            {
+              type: 'tool-call' as const,
+              toolCallId: `end-${callCount}`,
+              toolName: 'endTurn',
+              input: JSON.stringify({}),
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+    const sendMessage = createTool({
+      id: 'sendMessage',
+      description: 'Send a message',
+      inputSchema: z.object({ message: z.string() }),
+      execute: async ({ message }) => ({ message }),
+    });
+    const endTurn = createTool({
+      id: 'endTurn',
+      description: 'End the current turn',
+      inputSchema: z.object({}),
+      execute: async () => ({ status: 'stopped' }),
+    });
+    const ids = (parts: any[]) => parts.map(p => p.toolCallId ?? p.payload?.toolCallId);
+    let atStepThree: string[][] | undefined;
+    let processInputAtStepThree: string[][] | undefined;
+    const multiToolAgent = new Agent({
+      id: 'test-om-prepare-step-agent',
+      name: 'Prepare-step OM Agent',
+      instructions: 'Call both tools in order.',
+      model: multiToolModel as any,
+      tools: { sendMessage, endTurn },
+      memory,
+      inputProcessors: [
+        {
+          id: 'capture-previous-steps',
+          processInputStep: async ({ stepNumber, steps }) => {
+            if (stepNumber === 2) processInputAtStepThree = steps.map(step => ids(step.toolResults));
+            return undefined;
+          },
+        },
+      ],
+    });
+
+    await multiToolAgent.generate('Run three tool steps.', {
+      memory: { thread: 'test-thread-prepare-step-results', resource: 'test-resource' },
+      prepareStep: ({ stepNumber, steps }) => {
+        if (stepNumber === 2) atStepThree = steps.map(step => ids(step.toolResults));
+        return undefined;
+      },
+      stopWhen: ({ steps }) => steps.length === 3,
+    });
+
+    expect(atStepThree).toEqual([
+      ['send-1', 'end-1'],
+      ['send-2', 'end-2'],
+    ]);
+    expect(processInputAtStepThree).toEqual([
+      ['send-1', 'end-1'],
+      ['send-2', 'end-2'],
+    ]);
+  });
+
   it('should trigger OM observation after multi-step execution', async () => {
     const result = await agent.generate('Hello, I need help with something important.', {
       memory: {
