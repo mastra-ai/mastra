@@ -551,5 +551,39 @@ describe('MessageList sealed message handling', () => {
       expect(toolInvocation(assistants[0])).toMatchObject({ state: 'result', result: 'complete' });
       expect(signatureCountInPrompt(messageList)).toBe(1);
     });
+
+    it('marks the sealed message changed when a later copy resolves its call', () => {
+      const messageList = createList();
+      messageList.add(approvalMessage('call', { sealed: true }), 'memory');
+
+      messageList.add(approvalMessage('result', { sealed: false }), 'response');
+
+      // Observational memory skips sealed messages when saving; this marker is what makes it
+      // re-save the row so the resolved call survives the next turn.
+      expect(assistantMessages(messageList)[0]!.content.metadata?.mastra).toMatchObject({
+        sealed: true,
+        sealedChanged: true,
+      });
+    });
+
+    it('marks the sealed message changed when its call is resolved in place', () => {
+      const messageList = createList();
+      messageList.add(approvalMessage('call', { sealed: true }), 'memory');
+
+      messageList.updateToolInvocation({
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'call-1',
+          toolName: 'runWorkflow',
+          args: { id: 'wf-1' },
+          result: 'complete',
+        },
+      } as MastraMessagePart);
+
+      const sealed = assistantMessages(messageList)[0]!;
+      expect(toolInvocation(sealed)).toMatchObject({ state: 'result', result: 'complete' });
+      expect(sealed.content.metadata?.mastra).toMatchObject({ sealed: true, sealedChanged: true });
+    });
   });
 });

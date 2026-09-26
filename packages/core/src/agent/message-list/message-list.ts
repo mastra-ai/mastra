@@ -152,6 +152,17 @@ function advanceFrozenToolInvocations(frozen: MastraDBMessage, incoming: MastraD
   return true;
 }
 
+/**
+ * Records that a sealed message changed after it was persisted. Observational memory skips sealed
+ * messages when saving (buffering already wrote them), so without this marker the stored copy would
+ * keep showing a held tool call as pending and its result would be lost on the next turn.
+ */
+function markSealedMessageChanged(message: MastraDBMessage): void {
+  const content = message.content;
+  const metadata = (content.metadata ?? (content.metadata = {})) as { mastra?: Record<string, unknown> };
+  metadata.mastra = { ...metadata.mastra, sealedChanged: true };
+}
+
 // Identifies a part by its content: seal markers (metadata) and add-time stamps (createdAt) differ
 // between copies of the same part.
 function partContentKey(part: MastraMessagePart): string {
@@ -1849,6 +1860,11 @@ export class MessageList {
     // Update ordering and queue the merged result for persistence.
     this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
     this.updateLastCreatedAt(msg);
+    // A sealed row was already written by buffering; record that it now holds a newer tool state
+    // so observational memory re-saves it instead of skipping it as an unchanged sealed message.
+    if (MessageMerger.isSealed(msg)) {
+      markSealedMessageChanged(msg);
+    }
     if (!this.stateManager.isResponseMessage(msg)) {
       this.stateManager.removeMessage(msg);
       this.stateManager.addToSource(msg, 'response');
@@ -2313,8 +2329,11 @@ export class MessageList {
             return this;
           }
 
-          if (advanceFrozenToolInvocations(existingMessage, messageV2) && messageSource !== 'memory') {
-            this.pushMessageToSource(existingMessage, messageSource);
+          if (advanceFrozenToolInvocations(existingMessage, messageV2)) {
+            markSealedMessageChanged(existingMessage);
+            if (messageSource !== 'memory') {
+              this.pushMessageToSource(existingMessage, messageSource);
+            }
           }
 
           const newParts = partsMissingFromFrozenMessage(existingMessage, messageV2);

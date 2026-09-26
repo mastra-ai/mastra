@@ -209,14 +209,15 @@ describe('pending approval message sealed while suspended (simulated)', () => {
         role: 'tool',
         content: [expect.objectContaining({ type: 'tool-result', toolCallId: 'call-1' })],
       });
+
+      // The resolved call is re-saved even though the row is sealed, so the next turn still has it.
+      expect(carriesApprovedCall(prompts[2]!, 'call-1')).toBe(true);
     },
     30_000,
   );
 
-  // Control for the sealed cases above: without the simulated seal, the approved call and its
-  // result stay in the thread for the next turn. With it, observational memory never re-saves the
-  // sealed row (no observation marker), so the next turn loses them. That loss comes from sealing a
-  // pending call, not from the duplicate guard.
+  // Control for the sealed cases above: nothing seals the pending message, so the approved call and
+  // its result stay in the thread for the next turn through the ordinary (unsealed) save path.
   it.each(OBSERVATION_CONFIGS)(
     'keeps the approved call for the next turn with %s when nothing seals the pending message',
     async (label, observation) => {
