@@ -1982,7 +1982,7 @@ function analyzeDegenerateRepetition(text: string): DegenerateAnalysis {
   // observation line is a loop, not a faithful summary. Grouping ignores
   // indentation but the budget counts it. Newlines are counted only between
   // occurrences, so a run that serializes to exactly one maximum-size line is
-  // not flagged.
+  // not flagged. A single occurrence never counts as a loop, however padded.
   const shortLineChars = new Map<string, number>();
   let shortLineFired = false;
   for (const line of lines) {
@@ -1990,7 +1990,7 @@ function analyzeDegenerateRepetition(text: string): DegenerateAnalysis {
     if (!trimmed || trimmed.length >= MIN_DUPLICATE_LINE_CHARS) continue;
     const prev = shortLineChars.get(trimmed);
     const total = prev === undefined ? line.length : prev + 1 + line.length;
-    if (total > MAX_OBSERVATION_LINE_CHARS) {
+    if (prev !== undefined && total > MAX_OBSERVATION_LINE_CHARS) {
       shortLineFired = true;
       break;
     }
