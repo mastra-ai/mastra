@@ -353,9 +353,9 @@ To change the resource ID, use [`controller.setResourceId()`](/reference/agent-c
 
 `session.thread` owns the active thread binding and resource-scoped thread operations. Stored threads and messages can survive controller recreation when storage is configured. The live session and its event bus don't.
 
-### `session.thread.create({ title?, id? })`
+### `session.thread.create({ title?, id?, requestContext? })`
 
-Create a thread, bind the session to it, and open its event stream.
+Create a thread, bind the session to it, and open its event stream. Pass `requestContext` when memory is a function that reads the signed-in user.
 
 ```typescript
 const thread = await session.thread.create({
@@ -374,9 +374,9 @@ Rename the active stored thread.
 await session.thread.rename({ title: 'Fix login failure' })
 ```
 
-### `session.thread.clone({ sourceThreadId?, title?, resourceId? })`
+### `session.thread.clone({ sourceThreadId?, title?, resourceId?, requestContext? })`
 
-Clone an owned thread and its messages, then bind the session to the clone.
+Clone an owned thread and its messages, then bind the session to the clone. Pass `requestContext` when memory is a function that reads the signed-in user.
 
 ```typescript
 const clone = await session.thread.clone({
@@ -387,9 +387,9 @@ const clone = await session.thread.clone({
 
 Returns: `Promise<AgentControllerThread>`
 
-### `session.thread.switch({ threadId, emitEvent? })`
+### `session.thread.switch({ threadId, emitEvent?, requestContext? })`
 
-Switch to an owned stored thread and hydrate its mode, model, and observational memory settings.
+Switch to an owned stored thread and hydrate its mode, model, and observational memory settings. Pass `requestContext` when memory is a function that reads the signed-in user.
 
 ```typescript
 await session.thread.switch({ threadId: 'thread-8' })

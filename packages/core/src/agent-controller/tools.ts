@@ -91,6 +91,8 @@ export interface CreateSubagentToolOptions {
     sourceThreadId: string;
     resourceId?: string;
     title?: string;
+    /** The parent run's context, so a dynamic memory resolves for the run's user. */
+    requestContext?: RequestContext;
   }) => Promise<{ id: string; resourceId: string }>;
   /**
    * Resolves the toolsets the parent agent runs with for the current request.
@@ -232,6 +234,7 @@ Use this tool when:
             sourceThreadId: parentThreadId,
             resourceId: controllerCtx?.resourceId,
             title: `Fork: ${definition.name} subagent`,
+            requestContext: context?.requestContext,
           });
         } catch (err) {
           return {

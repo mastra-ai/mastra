@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 import { MockMemory } from '../memory/mock';
+import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
@@ -88,6 +89,141 @@ describe('AgentController cloneThread', () => {
     expect(cloned.resourceId).toBe('target-resource');
   });
 
+  it("resolves dynamic memory with the caller's request context when cloning", async () => {
+    const now = new Date('2026-01-01T00:00:00.000Z');
+    const storage = new InMemoryStore();
+    // The caller's copy of the clone lives only in that caller's store, so the
+    // post-clone history subscription finds it only when it resolves memory
+    // with the same caller.
+    const callerStorage = new InMemoryStore();
+    let cloningUser: unknown;
+    const recalled: Promise<{ messages: { id: string }[] }>[] = [];
+    const memoryFactory = vi.fn().mockImplementation(({ requestContext }) => {
+      const user = requestContext.get('user') as { id: string } | undefined;
+      const memory = new MockMemory({ storage: user?.id === 'user-1' ? callerStorage : storage });
+      const recall = memory.recall.bind(memory);
+      return Object.assign(memory, {
+        recall: (args: Parameters<typeof recall>[0]) => {
+          const result = recall(args);
+          if (args.threadId === 'c') recalled.push(result as any);
+          return result;
+        },
+        cloneThread: vi.fn().mockImplementation(async () => {
+          cloningUser = user;
+          return {
+            thread: { id: 'c', resourceId: 'controller-resource', createdAt: now, updatedAt: now, metadata: {} },
+            clonedMessages: [],
+            messageIdMap: {},
+          };
+        }),
+      });
+    });
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'test-controller',
+      resourceId: 'controller-resource',
+      storage,
+      memory: memoryFactory as any,
+      modes: [
+        {
+          id: 'default',
+          name: 'Default',
+          default: true,
+          agent: new Agent({
+            id: 'a',
+            name: 'a',
+            instructions: 'x',
+            model: { provider: 'openai', name: 'gpt-4o' } as any,
+          }),
+        },
+      ],
+    });
+    await controller.init();
+    const memoryStore = await storage.getStore('memory');
+    await memoryStore!.saveThread({
+      thread: { id: 'src', resourceId: 'controller-resource', createdAt: now, updatedAt: now, metadata: {} },
+    });
+    const callerStore = await callerStorage.getStore('memory');
+    await callerStore!.saveThread({
+      thread: { id: 'c', resourceId: 'controller-resource', createdAt: now, updatedAt: now, metadata: {} },
+    });
+    await callerStore!.saveMessages({
+      messages: [
+        {
+          id: 'copied-message',
+          threadId: 'c',
+          resourceId: 'controller-resource',
+          role: 'user',
+          createdAt: now,
+          content: { format: 2, parts: [{ type: 'text', text: 'copied' }] },
+        },
+      ],
+    });
+    const session = await controller.createSession({ id: 's', ownerId: 'o' });
+
+    const requestContext = new RequestContext();
+    requestContext.set('user', { id: 'user-1' });
+    await session.thread.clone({ sourceThreadId: 'src', requestContext });
+
+    expect(cloningUser).toEqual({ id: 'user-1' });
+    // The subscription opened on the clone loaded the copied history.
+    expect(recalled).toHaveLength(1);
+    expect((await recalled[0]!).messages.map(m => m.id)).toEqual(['copied-message']);
+    // The clone row is visible to controller-side thread reads, so the caller
+    // can switch back to it after leaving.
+    expect(await session.thread.getById({ threadId: 'c' })).toMatchObject({ id: 'c' });
+    await session.thread.create({ requestContext });
+    await expect(session.thread.switch({ threadId: 'c', requestContext })).resolves.not.toThrow();
+
+    // Deleting the clone removes it from the caller's store too, so its
+    // messages are not orphaned there.
+    await session.thread.delete({ threadId: 'c', requestContext });
+    expect(await memoryStore!.getThreadById({ threadId: 'c' })).toBeNull();
+    expect(await callerStore!.getThreadById({ threadId: 'c' })).toBeNull();
+    expect((await callerStore!.listMessages({ threadId: 'c' })).messages).toEqual([]);
+  });
+
+  it('removes the caller-side clone when mirroring its row to controller storage fails', async () => {
+    const now = new Date('2026-01-01T00:00:00.000Z');
+    const storage = new InMemoryStore();
+    const callerStorage = new InMemoryStore();
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'test-controller',
+      resourceId: 'controller-resource',
+      storage,
+      memory: (() => new MockMemory({ storage: callerStorage })) as any,
+      modes: [
+        {
+          id: 'default',
+          name: 'Default',
+          default: true,
+          agent: new Agent({
+            id: 'a',
+            name: 'a',
+            instructions: 'x',
+            model: { provider: 'openai', name: 'gpt-4o' } as any,
+          }),
+        },
+      ],
+    });
+    await controller.init();
+    const memoryStore = await storage.getStore('memory');
+    const callerStore = await callerStorage.getStore('memory');
+    for (const store of [memoryStore!, callerStore!]) {
+      await store.saveThread({
+        thread: { id: 'src', resourceId: 'controller-resource', createdAt: now, updatedAt: now, metadata: {} },
+      });
+    }
+    const session = await controller.createSession({ id: 's', ownerId: 'o' });
+    vi.spyOn(memoryStore!, 'saveThread').mockRejectedValue(new Error('controller write failed'));
+
+    await expect(session.thread.clone({ sourceThreadId: 'src' })).rejects.toThrow('controller write failed');
+
+    const { threads } = await callerStore!.listThreads({ filter: { resourceId: 'controller-resource' } });
+    expect(threads.map(t => t.id)).toEqual(['src']);
+  });
+
   it('uses the raw memory storage clone when configured memory is absent', async () => {
     const now = new Date('2026-01-01T00:00:00.000Z');
     const storage = new InMemoryStore();
@@ -166,5 +302,50 @@ describe('AgentController cloneThread', () => {
     await expect(controller.createSession({ id: 'test-session', ownerId: 'test-owner' })).rejects.toThrow(
       'Function-based memory returned empty value',
     );
+  });
+
+  it.each([
+    ['a separate caller store that never had the thread', false],
+    ['memory backed by the controller store itself', true],
+  ])('deletes a thread when resolved memory is %s, with adapters that throw on missing threads', async (_, same) => {
+    const storage = new InMemoryStore();
+    const callerStorage = same ? storage : new InMemoryStore();
+    for (const store of new Set([storage, callerStorage])) {
+      const memoryStore = (await store.getStore('memory'))!;
+      const deleteThread = memoryStore.deleteThread.bind(memoryStore);
+      memoryStore.deleteThread = async args => {
+        if (!(await memoryStore.getThreadById(args))) throw new Error(`Thread ${args.threadId} not found`);
+        return deleteThread(args);
+      };
+    }
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'test-controller',
+      resourceId: 'controller-resource',
+      storage,
+      memory: (() => new MockMemory({ storage: callerStorage })) as any,
+      modes: [
+        {
+          id: 'default',
+          name: 'Default',
+          default: true,
+          agent: new Agent({
+            id: 'a',
+            name: 'a',
+            instructions: 'x',
+            model: { provider: 'openai', name: 'gpt-4o' } as any,
+          }),
+        },
+      ],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 's', ownerId: 'o' });
+    const thread = await session.thread.create();
+    await session.thread.create();
+
+    await session.thread.delete({ threadId: thread.id });
+
+    const memoryStore = await storage.getStore('memory');
+    expect(await memoryStore!.getThreadById({ threadId: thread.id })).toBeNull();
   });
 });

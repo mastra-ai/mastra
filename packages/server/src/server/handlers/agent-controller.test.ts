@@ -20,6 +20,8 @@ import {
   SWITCH_AGENT_CONTROLLER_MODE_ROUTE,
   DELETE_AGENT_CONTROLLER_THREAD_ROUTE,
   RENAME_AGENT_CONTROLLER_THREAD_ROUTE,
+  CREATE_AGENT_CONTROLLER_THREAD_ROUTE,
+  SEND_AGENT_CONTROLLER_NOTIFICATION_ROUTE,
   LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE,
   SWITCH_AGENT_CONTROLLER_THREAD_ROUTE,
   STEER_AGENT_CONTROLLER_SESSION_ROUTE,
@@ -333,6 +335,77 @@ describe('agent-controller routes', () => {
       } as any);
 
       expect(spy).toHaveBeenCalledWith({ content: 'hello', requestContext });
+    });
+
+    it('forwards requestContext to session.thread.switch', async () => {
+      const session = await getRouteSession('user-rc');
+      const spy = vi.spyOn(session.thread, 'switch').mockResolvedValue(undefined);
+      const requestContext = makeRequestContext();
+
+      await SWITCH_AGENT_CONTROLLER_THREAD_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        threadId: 'another-thread',
+        requestContext,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({ threadId: 'another-thread', requestContext });
+    });
+
+    it('forwards requestContext to session.thread.switch when renaming another thread', async () => {
+      const session = await getRouteSession('user-rc');
+      const spy = vi.spyOn(session.thread, 'switch').mockResolvedValue(undefined);
+      vi.spyOn(session.thread, 'rename').mockResolvedValue(undefined);
+      const requestContext = makeRequestContext();
+
+      await RENAME_AGENT_CONTROLLER_THREAD_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        threadId: 'another-thread',
+        title: 'Renamed',
+        requestContext,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({ threadId: 'another-thread', requestContext });
+    });
+
+    it('forwards requestContext to session.thread.create', async () => {
+      const session = await getRouteSession('user-rc');
+      const now = new Date();
+      const spy = vi
+        .spyOn(session.thread, 'create')
+        .mockResolvedValue({ id: 't', resourceId: 'user-rc', title: 'New', createdAt: now, updatedAt: now } as any);
+      const requestContext = makeRequestContext();
+
+      await CREATE_AGENT_CONTROLLER_THREAD_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        title: 'New',
+        requestContext,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({ title: 'New', requestContext });
+    });
+
+    it('forwards requestContext to session.sendNotificationSignal', async () => {
+      const session = await getRouteSession('user-rc');
+      const spy = vi.spyOn(session, 'sendNotificationSignal').mockResolvedValue({} as any);
+      const requestContext = makeRequestContext();
+
+      await SEND_AGENT_CONTROLLER_NOTIFICATION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        source: 'test',
+        kind: 'info',
+        summary: 'hi',
+        requestContext,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ source: 'test' }), { requestContext });
     });
 
     it('forwards files to session.sendMessage', async () => {

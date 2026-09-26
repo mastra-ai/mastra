@@ -691,6 +691,7 @@ describe('createSubagentTool forked subagent behavior', () => {
       sourceThreadId: 'parent-thread-1',
       resourceId: 'parent-resource-1',
       title: expect.stringContaining('Fork:'),
+      requestContext,
     });
 
     // Parent agent's stream is used — no fresh Agent is constructed for the fork.
