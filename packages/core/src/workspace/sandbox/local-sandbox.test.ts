@@ -946,6 +946,37 @@ describe('LocalSandbox', () => {
         expect(foundBindFalse).toBe(true);
       });
 
+      it('should emit denyWritePaths as --ro-bind after the workspace and readWritePaths binds', () => {
+        const workspacePath = '/path/to/workspace';
+        const denied = '/path/to/workspace/ro-mount';
+        const rw = '/other/rw';
+        const { args } = buildBwrapCommand('echo 1', workspacePath, { readWritePaths: [rw], denyWritePaths: [denied] });
+
+        const indexOfBind = (flag: string, target: string) =>
+          args.findIndex((a, i) => a === flag && args[i + 1] === target && args[i + 2] === target);
+        const denyIdx = indexOfBind('--ro-bind', denied);
+        expect(denyIdx).toBeGreaterThan(indexOfBind('--bind', workspacePath));
+        expect(denyIdx).toBeGreaterThan(indexOfBind('--bind', rw));
+        // Must still precede --dev so it does not shadow the device mount
+        expect(denyIdx).toBeLessThan(args.indexOf('--dev'));
+      });
+
+      it('should emit a seatbelt deny for denyWritePaths after every write allow', () => {
+        const workspacePath = '/path/to/workspace';
+        const denied = '/path/to/workspace/ro-mount';
+        const profile = generateSeatbeltProfile(workspacePath, {
+          readWritePaths: ['/other/rw'],
+          denyWritePaths: [denied],
+        });
+
+        const denyLine = `(deny file-write* (subpath "${denied}"))`;
+        expect(profile).toContain(denyLine);
+        const lines = profile.split('\n');
+        const denyIdx = lines.indexOf(denyLine);
+        const lastAllowWriteIdx = lines.reduce((acc, l, i) => (l.startsWith('(allow file-write*') ? i : acc), -1);
+        expect(denyIdx).toBeGreaterThan(lastAllowWriteIdx);
+      });
+
       it('should exclude a read-only workspace from broad temp directory write permissions', () => {
         const workspacePath = '/private/var/folders/path/to/workspace';
         const profile = generateSeatbeltProfile(workspacePath, { readOnly: true });
@@ -1041,7 +1072,7 @@ describe('LocalSandbox', () => {
       const configHash = crypto
         .createHash('sha256')
         .update(tempDir)
-        .update(JSON.stringify({ readWritePaths: [], readOnlyPaths: [] }))
+        .update(JSON.stringify({ readWritePaths: [], readOnlyPaths: [], denyWritePaths: [] }))
         .digest('hex')
         .slice(0, 8);
       const profilePath = path.join(process.cwd(), '.sandbox-profiles', `seatbelt-${configHash}.sb`);
@@ -1220,7 +1251,7 @@ describe('LocalSandbox', () => {
       const configHash = crypto
         .createHash('sha256')
         .update(tempDir)
-        .update(JSON.stringify({ readWritePaths: [], readOnlyPaths: [] }))
+        .update(JSON.stringify({ readWritePaths: [], readOnlyPaths: [], denyWritePaths: [] }))
         .digest('hex')
         .slice(0, 8);
       const profilePath = path.join(process.cwd(), '.sandbox-profiles', `seatbelt-${configHash}.sb`);
@@ -2084,6 +2115,150 @@ describe('LocalSandbox', () => {
       expect(isoConfig?.readWritePaths).not.toContain(resolvedSource);
 
       await seatbeltSandbox._destroy();
+    });
+
+    it('should route a readOnly filesystem mount to denyWritePaths instead of readWritePaths', async () => {
+      if (os.platform() !== 'darwin') return;
+
+      const seatbeltSandbox = new LocalSandbox({ workingDirectory: mountDir, isolation: 'seatbelt' });
+      await seatbeltSandbox._start();
+
+      const source = path.join(mountDir, 'seatbelt-ro-source');
+      await fs.mkdir(source, { recursive: true });
+      const resolvedSource = await fs.realpath(source);
+
+      await seatbeltSandbox.mount(makeMockLocalFs(source, { readOnly: true }), '/ro');
+
+      let info = await seatbeltSandbox.getInfo();
+      let isoConfig = info.metadata?.isolationConfig as { readWritePaths?: string[]; denyWritePaths?: string[] };
+      expect(isoConfig.denyWritePaths).toEqual(expect.arrayContaining([resolvedSource]));
+      expect(isoConfig.readWritePaths).not.toContain(resolvedSource);
+
+      await seatbeltSandbox.unmount('/ro');
+      info = await seatbeltSandbox.getInfo();
+      isoConfig = info.metadata?.isolationConfig as { readWritePaths?: string[]; denyWritePaths?: string[] };
+      expect(isoConfig.denyWritePaths).not.toContain(resolvedSource);
+
+      await seatbeltSandbox._destroy();
+    });
+
+    it('should move the isolation entry when the same path is re-mounted with a different readOnly flag', async () => {
+      if (os.platform() !== 'darwin') return;
+
+      const seatbeltSandbox = new LocalSandbox({ workingDirectory: mountDir, isolation: 'seatbelt' });
+      await seatbeltSandbox._start();
+
+      const source = path.join(mountDir, 'seatbelt-remount-source');
+      await fs.mkdir(source, { recursive: true });
+      await fs.writeFile(path.join(source, 'file.txt'), 'original');
+      const resolvedSource = await fs.realpath(source);
+      const readConfig = async () =>
+        (await seatbeltSandbox.getInfo()).metadata?.isolationConfig as {
+          readWritePaths?: string[];
+          denyWritePaths?: string[];
+        };
+
+      // Mount config (basePath) is identical, so mount() takes the "already mounted" path.
+      await seatbeltSandbox.mount(makeMockLocalFs(source), '/data');
+      expect((await readConfig()).readWritePaths).toContain(resolvedSource);
+
+      await seatbeltSandbox.mount(makeMockLocalFs(source, { readOnly: true }), '/data');
+      let isoConfig = await readConfig();
+      expect(isoConfig.readWritePaths).not.toContain(resolvedSource);
+      expect(isoConfig.denyWritePaths).toContain(resolvedSource);
+
+      const target = path.join(mountDir, 'data', 'file.txt');
+      const write = await seatbeltSandbox.executeCommand('sh', ['-c', `echo changed > '${target}'`]);
+      expect(write.success).toBe(false);
+      expect(await fs.readFile(path.join(source, 'file.txt'), 'utf-8')).toBe('original');
+
+      await seatbeltSandbox.mount(makeMockLocalFs(source), '/data');
+      isoConfig = await readConfig();
+      expect(isoConfig.denyWritePaths).not.toContain(resolvedSource);
+      expect(isoConfig.readWritePaths).toContain(resolvedSource);
+
+      await seatbeltSandbox._destroy();
+    });
+
+    it('should deny shell writes to a readOnly mount under seatbelt even though it is inside the workspace', async () => {
+      if (os.platform() !== 'darwin') return;
+
+      // Mount target lives under the (writable) working directory, so only an
+      // explicit deny — not the absence of an allow — can make it read-only.
+      const source = path.join(mountDir, 'seatbelt-ro-target');
+      await fs.mkdir(source, { recursive: true });
+      await fs.writeFile(path.join(source, 'existing.txt'), 'readable');
+
+      const seatbeltSandbox = new LocalSandbox({ workingDirectory: mountDir, isolation: 'seatbelt' });
+      await seatbeltSandbox._start();
+      try {
+        await seatbeltSandbox.mount(makeMockLocalFs(source, { readOnly: true }), '/ro');
+        const viaMount = path.join(mountDir, 'ro');
+
+        const readResult = await seatbeltSandbox.executeCommand('cat', [path.join(viaMount, 'existing.txt')]);
+        expect(readResult.success).toBe(true);
+        expect(readResult.stdout.trim()).toBe('readable');
+
+        const writeResult = await seatbeltSandbox.executeCommand('sh', [
+          '-c',
+          `echo nope > "${path.join(viaMount, 'new.txt')}"`,
+        ]);
+        expect(writeResult.success).toBe(false);
+        expect(writeResult.stderr).toContain('Operation not permitted');
+        await expect(fs.access(path.join(source, 'new.txt'))).rejects.toThrow();
+
+        const overwriteResult = await seatbeltSandbox.executeCommand('sh', [
+          '-c',
+          `echo nope > "${path.join(viaMount, 'existing.txt')}"`,
+        ]);
+        expect(overwriteResult.success).toBe(false);
+        await expect(fs.readFile(path.join(source, 'existing.txt'), 'utf8')).resolves.toBe('readable');
+
+        // The rest of the workspace is still writable
+        const wsResult = await seatbeltSandbox.executeCommand('sh', [
+          '-c',
+          `echo ok > "${path.join(mountDir, 'still-writable.txt')}"`,
+        ]);
+        expect(wsResult.success).toBe(true);
+      } finally {
+        await seatbeltSandbox._destroy();
+      }
+    });
+
+    it('should deny shell writes to a readOnly mount under bwrap', async () => {
+      if (os.platform() !== 'linux' || !isBwrapAvailable()) return;
+
+      const bwrapRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-bwrap-ro-mount-'));
+      const source = path.join(bwrapRoot, 'ro-target');
+      await fs.mkdir(source, { recursive: true });
+      await fs.writeFile(path.join(source, 'existing.txt'), 'readable');
+
+      const bwrapSandbox = new LocalSandbox({ workingDirectory: bwrapRoot, isolation: 'bwrap' });
+      await bwrapSandbox._start();
+      try {
+        await bwrapSandbox.mount(makeMockLocalFs(source, { readOnly: true }), '/ro');
+        const viaMount = path.join(bwrapRoot, 'ro');
+
+        const readResult = await bwrapSandbox.executeCommand('cat', [path.join(viaMount, 'existing.txt')]);
+        expect(readResult.success).toBe(true);
+        expect(readResult.stdout.trim()).toBe('readable');
+
+        const writeResult = await bwrapSandbox.executeCommand('sh', [
+          '-c',
+          `echo nope > "${path.join(viaMount, 'new.txt')}"`,
+        ]);
+        expect(writeResult.success).toBe(false);
+        await expect(fs.access(path.join(source, 'new.txt'))).rejects.toThrow();
+
+        const wsResult = await bwrapSandbox.executeCommand('sh', [
+          '-c',
+          `echo ok > "${path.join(bwrapRoot, 'still-writable.txt')}"`,
+        ]);
+        expect(wsResult.success).toBe(true);
+      } finally {
+        await bwrapSandbox._destroy();
+        await fs.rm(bwrapRoot, { recursive: true, force: true });
+      }
     });
 
     it('should add resolved symlink target to bwrap readWritePaths (not the symlink path)', async () => {
