@@ -21,6 +21,7 @@ import type { AIV5Type } from '../types';
 import { findToolCallArgs } from '../utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from '../utils/response-item-metadata';
 import { sanitizeToolName } from '../utils/tool-name';
+import { unwrapLegacyToolOutput } from '../utils/unwrap-legacy-tool-output';
 
 /**
  * Compact malformed entries and filter out empty text parts from message parts arrays.
@@ -627,10 +628,7 @@ export class AIV5Adapter {
         if (p.state === 'output-available') {
           return {
             args: p.input,
-            result:
-              typeof p.output === 'object' && p.output && 'value' in p.output
-                ? (p.output as { value: unknown }).value
-                : p.output,
+            result: unwrapLegacyToolOutput(p.output),
             toolCallId: p.toolCallId,
             toolName,
             state: 'result',
@@ -682,10 +680,7 @@ export class AIV5Adapter {
                 toolCallId: p.toolCallId,
                 toolName,
                 args: p.input,
-                result:
-                  typeof p.output === 'object' && p.output && 'value' in p.output
-                    ? (p.output as { value: unknown }).value
-                    : p.output,
+                result: unwrapLegacyToolOutput(p.output),
                 state: 'result' as const,
               },
               providerMetadata: callProviderMetadata,
