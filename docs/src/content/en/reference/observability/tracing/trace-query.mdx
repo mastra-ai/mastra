@@ -297,7 +297,8 @@ Hono and Fastify enforce the request-body limit before JSON parsing. Express and
 | Trace metadata | `metadata.<key>` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Trace | `startedAt`, `endedAt`, `durationMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Trace | `tags` | `includes`, `notIncludes`, `exists`, `notExists` |
-| Span | `name`, `spanType`, `model`, `provider`, `status`, `entityType`, `entityId`, `entityName`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Span | `name` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists`, `matches`, `notMatches` |
+| Span | `spanType`, `model`, `provider`, `status`, `entityType`, `entityId`, `entityName`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Span | `startedAt`, `endedAt`, `durationMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Span | `error` | `exists`, `notExists` |
 | Score | `scorerId`, `scorerVersion`, `scoreSource`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
@@ -305,11 +306,11 @@ Hono and Fastify enforce the request-body limit before JSON parsing. Express and
 | Score | `spanId` | `exists`, `notExists` |
 | Feedback | `feedbackType`, `feedbackSource`, `feedbackUserId`, `sourceId`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Feedback | `value`, `timestamp` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
-| Feedback | `comment` | `exists`, `notExists` |
+| Feedback | `comment` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists`, `matches`, `notMatches` |
 
-Compose predicates with `{ op: 'and', args: [...] }`, `{ op: 'or', args: [...] }`, and `{ op: 'not', arg: ... }`. Comparison predicates place a field reference on the left and a literal on the right. Membership predicates use a field reference in `value` and a homogeneous literal array in `set`. Tag predicates name the stored tag collection in `path`. `includes` and `notIncludes` also take one tag in `value`, while `exists` and `notExists` take only `op` and `path`. See [Filter by tags](#filter-by-tags).
+Compose predicates with `{ op: 'and', args: [...] }`, `{ op: 'or', args: [...] }`, and `{ op: 'not', arg: ... }`. Comparison predicates place a field reference on the left and a literal on the right. Membership predicates use a field reference in `value` and a homogeneous literal array in `set`. Tag predicates name the stored tag collection in `path`. `includes` and `notIncludes` also take one tag in `value`, while `exists` and `notExists` take only `op` and `path`. See [Filter by tags](#filter-by-tags). Text predicates use the comparison shape with a string literal. See [Filter by text](#filter-by-text).
 
-String comparisons are case-sensitive, and literals are never coerced. Canonical string fields compare exact stored values. Metadata string values are trimmed before comparison, as described below. Numeric predicates, including `score` and `durationMs`, require numbers, while timestamp predicates require ISO timestamp strings. A missing value satisfies neither positive nor ordered predicates, although it does satisfy the negative operators `ne` and `notIn`. Combine a negative predicate with `exists` when the field must also be present.
+String comparisons are case-sensitive, and literals are never coerced. `matches` and `notMatches` are the exception: they compare words case-insensitively. Canonical string fields compare exact stored values. Metadata string values are trimmed before comparison, as described below. Numeric predicates, including `score` and `durationMs`, require numbers, while timestamp predicates require ISO timestamp strings. A missing value satisfies neither positive nor ordered predicates, although it does satisfy the negative operators `ne` and `notIn`. Combine a negative predicate with `exists` when the field must also be present.
 
 ### Filter by root duration
 
@@ -507,6 +508,31 @@ Tags compare exactly and case-sensitively as whole strings. `value` must be one 
 
 `tags` is available in trace predicates only, including those inside `traces.some` or `traces.none`. `in`, `notIn`, and the comparison operators are rejected for `tags`. Value discovery for `tags` returns each observed tag with the number of qualifying traces that carry it.
 
+### Filter by text
+
+Human-written text fields support word matching in addition to exact comparison. `matches` succeeds when the literal's words appear in the field, in order, as whole words. `notMatches` succeeds when the field exists but doesn't contain those words. This query finds traces whose current feedback mentions an incorrect dosage:
+
+```typescript
+const incorrectDosage = {
+  feedback: {
+    some: {
+      op: 'matches',
+      left: { path: 'comment' },
+      right: { literal: 'incorrect dosage' },
+    },
+  },
+}
+```
+
+Both the literal and the stored value are lowercased and split into words. A word is a run of letters, digits, and combining marks, so any other character, such as punctuation, spaces, or `_`, separates words. `incorrect` matches `This answer is incorrect.` but not `This was incorrectly formatted.`, and `gpt 5` matches `llm: 'gpt-5'`. A literal with several words must appear as a contiguous phrase in that order. Letters keep their accents: `café` doesn't match `cafe`. Text is composed to Unicode NFC first, so `café` matches whether the accent is stored as part of the letter or as a separate mark, and marks stay inside their word, so `नमस` doesn't match `नमस्ते`. The Turkish `İ` folds to `i`. PostgreSQL classifies and lowercases letters according to the database locale, so a database created with the `C` locale treats letters outside ASCII as separators and doesn't fold their case. Use a UTF-8 locale such as `en_US.UTF-8` for consistent results.
+
+| Operator | Matches when |
+| - | - |
+| `matches` | The field contains the literal's words as a contiguous whole-word phrase |
+| `notMatches` | The field is present and doesn't contain that phrase |
+
+The literal must contain at least one letter or digit; otherwise the request fails with `422 TRACE_QUERY_INVALID`. A missing field satisfies neither operator. Use `{ op: 'not', arg: { op: 'matches', ... } }` when records without the field should also match. Text operators are available on span `name` and feedback `comment`. Other string fields, numbers, timestamps, tags, and metadata reject them. Substring, wildcard, regular-expression, and fuzzy matching aren't supported, and there is no search across several fields.
+
 ### Filter by feedback
 
 Every condition inside one `feedback.some` or `feedback.none` clause applies to the same current feedback record. `feedbackType` and `feedbackSource` are exact application-defined strings rather than built-in enums. This query finds traces with a numeric patient rating below zero:
@@ -544,7 +570,7 @@ const missingClinicianReview = {
 }
 ```
 
-Feedback `timestamp` predicates are independent of the root `timeRange`. Use `comment` only with `exists` or `notExists`. Comment contents aren't searchable. The deprecated feedback fields `source` and `userId` aren't available. Use `feedbackSource` and `feedbackUserId`.
+Feedback `timestamp` predicates are independent of the root `timeRange`. `comment` supports exact string operators and word matching with `matches` and `notMatches`. See [Filter by text](#filter-by-text). The deprecated feedback fields `source` and `userId` aren't available. Use `feedbackSource` and `feedbackUserId`.
 
 ## Responses
 

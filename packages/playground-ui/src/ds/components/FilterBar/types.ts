@@ -8,6 +8,11 @@ export type FilterBarOperator = {
   id: string;
   label: string;
   arity?: FilterBarArity;
+  /**
+   * The value is typed text, such as a word to match: the field's suggestions are not offered
+   * and a `strict` field accepts free text.
+   */
+  freeText?: boolean;
 };
 
 export type FilterBarOption = {

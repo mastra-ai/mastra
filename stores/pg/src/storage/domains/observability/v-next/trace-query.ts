@@ -135,6 +135,42 @@ function placeholders(values: readonly unknown[], offset: number): string {
   return values.map((_, index) => `$${offset + index}`).join(', ');
 }
 
+/**
+ * Unicode combining marks as PostgreSQL bracket ranges, so `[^[:alnum:]<ranges>]` splits words
+ * like the planner's `[^\p{L}\p{M}\p{N}]`. PostgreSQL regexes have no `\p{M}`, and glibc files
+ * some marks, such as the Devanagari virama, under punct. Derived once from the runtime's own
+ * Unicode tables. A run may also absorb neighbouring letters, digits, and unassigned code
+ * points, which are word characters already or never stored.
+ */
+let pgCombiningMarkRanges: string | undefined;
+function getPgCombiningMarkRanges(): string {
+  if (pgCombiningMarkRanges !== undefined) return pgCombiningMarkRanges;
+  const escape = (cp: number) =>
+    cp > 0xffff ? `\\U${cp.toString(16).padStart(8, '0')}` : `\\u${cp.toString(16).padStart(4, '0')}`;
+  // Every code point except surrogates, built in chunks to keep the peak allocation small.
+  const chunks: string[] = [];
+  for (let start = 0; start <= 0x10ffff; start += 0x2000) {
+    const codePoints: number[] = [];
+    for (let cp = start; cp < start + 0x2000 && cp <= 0x10ffff; cp++) {
+      if (cp < 0xd800 || cp > 0xdfff) codePoints.push(cp);
+    }
+    chunks.push(String.fromCodePoint(...codePoints));
+  }
+  const text = chunks.join('');
+  const ranges: string[] = [];
+  for (const match of text.matchAll(/[\p{L}\p{M}\p{N}\p{Cn}\p{Co}]+/gu)) {
+    if (!/\p{M}/u.test(match[0])) continue;
+    const first = match[0].codePointAt(0)!;
+    const lastUnit = match.index + match[0].length - 1;
+    const last = text.codePointAt(
+      text.charCodeAt(lastUnit) >= 0xdc00 && text.charCodeAt(lastUnit) <= 0xdfff ? lastUnit - 1 : lastUnit,
+    )!;
+    ranges.push(first === last ? escape(first) : `${escape(first)}-${escape(last)}`);
+  }
+  pgCombiningMarkRanges = ranges.join('');
+  return pgCombiningMarkRanges;
+}
+
 function compileScalarPredicate<TField extends string>(
   predicate: TrustedTraceQueryScalarPredicate,
   registry: Partial<FieldRegistry<TField>>,
@@ -187,6 +223,20 @@ function compileScalarPredicate<TField extends string>(
       };
     }
     return { sql: `cardinality(${field}) ${predicate.operator === 'empty' ? '=' : '>'} 0`, values: fieldValues };
+  }
+
+  if (predicate.type === 'text') {
+    // Same normalization as `normalizeTraceQueryText`: NFC, lowercase, words = runs of letters,
+    // marks, and digits. PostgreSQL regexes lack `\p{L}` and `\p{M}`: `[[:alnum:]]` follows the
+    // database locale (a C-locale database treats non-ASCII letters as separators) and glibc files
+    // some marks such as the Devanagari virama under punct, so the mark ranges are listed explicitly.
+    // `lower()` already folds `İ` to `i`.
+    const words = `' ' || lower(regexp_replace(normalize(${field}), '[^[:alnum:]${getPgCombiningMarkRanges()}]+', ' ', 'g')) || ' '`;
+    const found = `strpos(${words}, $${parameterOffset}) > 0`;
+    return {
+      sql: `COALESCE(${predicate.operator === 'matches' ? found : `NOT (${found})`}, false)`,
+      values: [...fieldValues, ` ${predicate.value} `],
+    };
   }
 
   if (predicate.type === 'membership') {

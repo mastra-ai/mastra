@@ -12,6 +12,7 @@ import {
   getTraceQueryValuesArgsSchema,
   getTraceQueryValuesResponseSchema,
   isTraceQueryValueSuggestionsPath,
+  normalizeTraceQueryText,
   parseGetTraceQueryFieldsArgs,
   parseGetTraceQueryValuesArgs,
   parseQueryThreadsInput,
@@ -1057,6 +1058,94 @@ describe('planTraceQuery', () => {
       );
       expect(threads.issues).toContainEqual(expect.objectContaining({ code: 'field_not_allowed' }));
     }
+  });
+
+  it('plans text predicates on human-text fields and rejects them elsewhere', () => {
+    const plan = planTraceQuery(
+      parsed({
+        ...baseRequest,
+        where: {
+          op: 'and',
+          args: [
+            {
+              feedback: {
+                some: { op: 'matches', left: { path: 'comment' }, right: { literal: ' Incorrect, DOSAGE! ' } },
+              },
+            },
+            { spans: { some: { op: 'notMatches', left: { path: '${name}' }, right: { literal: 'gpt-5' } } } },
+          ],
+        },
+      }),
+    );
+    expect(plan.where).toEqual({
+      type: 'boolean',
+      operator: 'and',
+      args: [
+        {
+          type: 'relation',
+          collection: 'feedback',
+          quantifier: 'some',
+          predicate: { type: 'text', field: 'comment', operator: 'matches', value: 'incorrect dosage' },
+        },
+        {
+          type: 'relation',
+          collection: 'spans',
+          quantifier: 'some',
+          predicate: { type: 'text', field: 'name', operator: 'notMatches', value: 'gpt 5' },
+        },
+      ],
+    });
+
+    const noWords = validationError(() =>
+      planTraceQuery(
+        parsed({
+          ...baseRequest,
+          where: { feedback: { some: { op: 'matches', left: { path: 'comment' }, right: { literal: '!!! ---' } } } },
+        }),
+      ),
+    );
+    expect(noWords.issues).toContainEqual(
+      expect.objectContaining({ code: 'invalid_literal', path: ['where', 'feedback', 'some', 'right', 'literal'] }),
+    );
+
+    for (const field of ['environment', 'durationMs', 'tags', 'metadata.region']) {
+      const rejected = validationError(() =>
+        planTraceQuery(
+          parsed({ ...baseRequest, where: { op: 'matches', left: { path: field }, right: { literal: 'production' } } }),
+        ),
+      );
+      expect(rejected.issues).toContainEqual(
+        expect.objectContaining({ code: 'operator_not_allowed', path: ['where', 'op'] }),
+      );
+    }
+
+    expect(
+      traceQueryScalarPredicateSchema.safeParse({ op: 'matches', left: { path: 'comment' }, right: { literal: 42 } })
+        .success,
+    ).toBe(false);
+    expect(
+      traceQueryScalarPredicateSchema.safeParse({ op: 'matches', left: { literal: 'x' }, right: { literal: 'y' } })
+        .success,
+    ).toBe(false);
+
+    expect(getTraceQueryCanonicalFieldDescriptors('feedback', 'comment')).toEqual([
+      {
+        path: 'comment',
+        valueKind: 'string',
+        operators: ['eq', 'ne', 'in', 'notIn', 'exists', 'notExists', 'matches', 'notMatches'],
+        valueSuggestions: false,
+      },
+    ]);
+  });
+
+  it('normalizes text literals to lowercase words', () => {
+    expect(normalizeTraceQueryText(' Incorrect, DOSAGE! ')).toBe('incorrect dosage');
+    expect(normalizeTraceQueryText("llm: 'gpt-5'")).toBe('llm gpt 5');
+    expect(normalizeTraceQueryText('see café notes')).toBe('see café notes');
+    expect(normalizeTraceQueryText('see cafe\u0301 notes')).toBe('see café notes');
+    expect(normalizeTraceQueryText('नमस्ते, दुनिया!')).toBe('नमस्ते दुनिया');
+    expect(normalizeTraceQueryText('İstanbul')).toBe('istanbul');
+    expect(normalizeTraceQueryText('!!! ---')).toBe('');
   });
 
   it('plans tag collection predicates and rejects scalar operators on tags', () => {

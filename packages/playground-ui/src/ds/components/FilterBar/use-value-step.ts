@@ -34,9 +34,15 @@ export function useValueStep({ field, operator, query, enabled, initialValue, on
     setSelected(enabled ? toStrings(initialValueRef.current) : []);
   }, [enabled]);
 
-  const suggestions = useValueSuggestions({ field, operatorId: operator?.id ?? '', query, enabled });
+  const freeTextOperator = operator?.freeText === true;
+  const suggestions = useValueSuggestions({
+    field: freeTextOperator ? undefined : field,
+    operatorId: operator?.id ?? '',
+    query,
+    enabled,
+  });
   const type = field?.type;
-  const allowFreeText = !field?.strict && type !== 'boolean';
+  const allowFreeText = (!field?.strict || freeTextOperator) && type !== 'boolean';
 
   const toggle = useCallback((value: string) => {
     setSelected(current => (current.includes(value) ? current.filter(v => v !== value) : [...current, value]));

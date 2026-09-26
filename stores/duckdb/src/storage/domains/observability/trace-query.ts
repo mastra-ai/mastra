@@ -183,6 +183,17 @@ function compileScalarPredicate<TField extends string>(
     };
   }
 
+  if (predicate.type === 'text') {
+    // Same normalization as `normalizeTraceQueryText`: NFC, lowercase, words = runs of
+    // letters, marks, and digits. DuckDB's `lower()` already folds `İ` to `i`.
+    const words = `' ' || lower(regexp_replace(nfc_normalize(${field.sql}), '[^\\p{L}\\p{M}\\p{N}]+', ' ', 'g')) || ' '`;
+    const found = `contains(${words}, ?)`;
+    return {
+      sql: `coalesce(${predicate.operator === 'matches' ? found : `NOT ${found}`}, false)`,
+      values: [...fieldValues, ` ${predicate.value} `],
+    };
+  }
+
   if (predicate.type === 'membership') {
     const list = predicate.values.map(() => parameterSql(field.parameterType)).join(', ');
     if (predicate.operator === 'in') {

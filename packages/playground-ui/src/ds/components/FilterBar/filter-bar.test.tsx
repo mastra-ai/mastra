@@ -54,12 +54,14 @@ const FIELDS: FilterBarField[] = [
 function Harness({
   initial = [],
   fields = FIELDS,
+  operators = OPERATORS,
   onChange,
   readOnlyIds = [],
   nonRemovableIds = [],
 }: {
   initial?: FilterBarItem[];
   fields?: FilterBarField[];
+  operators?: FilterBarOperator[];
   onChange?: (items: FilterBarItem[]) => void;
   readOnlyIds?: string[];
   nonRemovableIds?: string[];
@@ -68,7 +70,7 @@ function Harness({
   return (
     <FilterBar
       fields={fields}
-      operators={OPERATORS}
+      operators={operators}
       value={items}
       onValueChange={next => {
         setItems(next);
@@ -523,6 +525,31 @@ describe('FilterBar', () => {
         operatorId: 'in',
         value: ['prod', 'staging'],
       });
+    });
+
+    it('takes typed text instead of the pick list when the operator is free text', async () => {
+      const onChange = vi.fn();
+      const fields: FilterBarField[] = [
+        {
+          id: 'name',
+          label: 'Name',
+          operators: ['is', 'matches'],
+          strict: true,
+          suggestions: [{ value: 'agent run' }],
+        },
+      ];
+      const operators: FilterBarOperator[] = [...OPERATORS, { id: 'matches', label: 'matches', freeText: true }];
+      render(<Harness fields={fields} operators={operators} onChange={onChange} />);
+      getInput().focus();
+      type('name');
+      key('Enter');
+      type('matches');
+      key('Enter');
+      await screen.findByText('Type a value');
+      expect(screen.queryByRole('option', { name: 'agent run' })).toBeNull();
+      type('gpt');
+      key('Enter');
+      expect(argAt(onChange, 0, 0)[0]).toMatchObject({ fieldId: 'name', operatorId: 'matches', value: 'gpt' });
     });
 
     it('does not commit free text for strict fields', async () => {
