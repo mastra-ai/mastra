@@ -9,6 +9,20 @@ const RECLAIM_PAGE_SIZE = 100;
 const TRIM_PAGE_SIZE = 500;
 
 /**
+ * Heartbeat: reset a pending entry's idle time only if this consumer still
+ * owns it, so a late heartbeat never takes an entry back from a sibling.
+ * KEYS[1] stream, ARGV[1] group, ARGV[2] consumer, ARGV[3] entry id
+ */
+const EXTEND_IF_OWNED_SCRIPT = `
+  local pending = redis.call("XPENDING", KEYS[1], ARGV[1], ARGV[3], ARGV[3], 1)
+  if #pending == 0 or pending[1][2] ~= ARGV[2] then
+    return 0
+  end
+  redis.call("XCLAIM", KEYS[1], ARGV[1], ARGV[2], 0, ARGV[3], "JUSTID")
+  return 1
+`;
+
+/**
  * Atomically nack a pending entry only if it is still owned by the given
  * consumer. Returns 1 if this consumer owned it and it was settled, 0 if the
  * entry was not pending for this consumer (acked, or claimed by a sibling).
@@ -1207,6 +1221,21 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
 
     // Mark this entry in-flight for the reclaim loop's benefit for exactly the
     // window between invoking the handler and the delivery settling (ack/nack).
+    // Heartbeat for long handlers: reset the entry's PEL idle time so the
+    // reclaim loop (ours or a sibling's) does not XCLAIM it mid-execution, and
+    // push back the local inFlightTimeoutMs deadline.
+    const extend = async () => {
+      const entry = sub.inFlight.get(streamId);
+      if (!entry || entry.expire !== expire) return;
+      entry.since = Date.now();
+      if (sub.isGrouped) {
+        await this.#writeClient.eval(EXTEND_IF_OWNED_SCRIPT, {
+          keys: [sub.streamKey],
+          arguments: [sub.group, sub.consumer, streamId],
+        });
+      }
+    };
+
     sub.inFlight.set(streamId, { since: Date.now(), expire });
     try {
       // EventCallback is typed `=> void` but handlers commonly return a
@@ -1215,7 +1244,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
       // instead of silently dropping the message. We do NOT await here —
       // serializing messages on a subscription would deadlock orchestration
       // callbacks that await their own future events.
-      const result: unknown = sub.cb(event, ack, nack);
+      const result: unknown = sub.cb(event, ack, nack, extend);
       if (result && typeof (result as { then?: unknown; catch?: unknown }).catch === 'function') {
         (result as Promise<unknown>).catch(async () => {
           await nack();
