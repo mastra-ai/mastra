@@ -1,5 +1,5 @@
 import { RequestContext } from '@mastra/core/request-context';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { FactoryProject } from '../storage/domains/projects/base.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import { canCallerActAsFactorySession } from './authorize-session-resource.js';
@@ -53,7 +53,9 @@ describe('canCallerActAsFactorySession', () => {
     await expect(canCallerActAsFactorySession({}, 'factory-supervisor:project-1', user)).resolves.toBe(false);
   });
 
-  it('denies instead of throwing when a lookup fails', async () => {
+  it('denies instead of throwing when a lookup fails, and logs the failure', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
     const user = as({ workosId: 'owner', organizationId: 'org-1' });
     const fail = async () => {
       throw new Error('Factory session exists in multiple source-control providers.');
@@ -64,5 +66,13 @@ describe('canCallerActAsFactorySession', () => {
     await expect(
       canCallerActAsFactorySession({ projects: { get: fail } }, 'factory-supervisor:project-1', user),
     ).resolves.toBe(false);
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('lookup failed'),
+      expect.objectContaining({
+        resourceId: 'session-1',
+        error: 'Factory session exists in multiple source-control providers.',
+      }),
+    );
   });
 });

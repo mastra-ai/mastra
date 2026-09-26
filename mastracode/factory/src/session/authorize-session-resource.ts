@@ -32,7 +32,13 @@ export async function canCallerActAsFactorySession(
     }
     const session = await lookups.sessions?.getBySessionId(resourceId);
     return !!session && canAccessFactorySession(session, user.organizationId, userId);
-  } catch {
+  } catch (error) {
+    // Logged because the denial is otherwise indistinguishable from a real
+    // one: the caller just sees main's thread-ownership error.
+    console.warn('[Factory] Session resource lookup failed; denying mapped caller', {
+      resourceId,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return false;
   }
 }
