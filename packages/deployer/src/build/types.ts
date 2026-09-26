@@ -34,6 +34,8 @@ export interface BundlerOptions {
   enableMinify?: boolean;
   enableEsmShim: boolean;
   externals: boolean | string[];
+  /** Preserve the default external-all behavior alongside explicitly listed packages. */
+  externalsPreset?: boolean;
   dynamicPackages?: string[];
 }
 
