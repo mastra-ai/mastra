@@ -2055,6 +2055,55 @@ describe('TokenLimiterProcessor', () => {
       expect((providerMetadata?.mastra as any)?.modelOutputCapped).toBeUndefined();
     });
 
+    it('when a later output processor throws TripWire, no raw oversized result was ever stored', async () => {
+      // Drives the real ProcessorRunner.runProcessToolResult (not the processor's hook
+      // directly), with a second output processor registered after this one that always
+      // aborts via TripWire. If capOversizedToolResult ever promoted the part's state/result
+      // itself (instead of writing only providerMetadata), that promotion would already be
+      // sitting in messageList by the time the TripWire fires -- with no rollback path. This
+      // asserts on the actual stored history, not just on control flow, so it discriminates:
+      // it fails against a token-limiter.ts that promotes state on cap, and passes here.
+      const big = 'word '.repeat(2000);
+      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 50 });
+      const tripwireProcessor = {
+        id: 'tripwire-after-cap',
+        name: 'tripwire-after-cap',
+        processToolResult: async () => {
+          throw new TripWire('blocked after cap');
+        },
+      };
+      const messageList = new MessageList();
+      messageList.add(pendingToolCall('tool-now', 1), 'response');
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors: [processor, tripwireProcessor as any],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      await expect(
+        runner.runProcessToolResult({
+          steps: [],
+          messages: messageList.get.all.db(),
+          messageList,
+          stepNumber: 1,
+          toolName: 'lookup',
+          toolCallId: 'call-tool-now',
+          toolArgs: {},
+          result: big,
+        }),
+      ).rejects.toThrow(TripWire);
+
+      const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+      // The part must not have been promoted to 'result' with the raw oversized value --
+      // that would mean the cap's mutation landed in stored history before the TripWire
+      // checkpoint could veto it, with nothing to roll it back.
+      expect(part.toolInvocation.state).toBe('call');
+      expect(part.toolInvocation.result).toBeUndefined();
+      expect(JSON.stringify(messageList.get.all.db())).not.toContain(big);
+    });
+
     it('rejects a non-positive maxToolResultTokens', () => {
       expect(() => new TokenLimiterProcessor({ limit: 100, maxToolResultTokens: 0 })).toThrow(/maxToolResultTokens/);
     });
