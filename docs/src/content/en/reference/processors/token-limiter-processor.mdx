@@ -12,7 +12,7 @@ The `TokenLimiterProcessor` limits the number of tokens in messages. Depending o
 
 - **Prompt processor** (`processLLMRequest`): In the default `best-fit` and `contiguous` trim modes, enforces the input budget on the provider prompt right before each model call, at every step of the agentic loop. The prompt is measured after earlier prompt processors (such as `ToolCallFilter`) have transformed it, so only tokens that actually reach the model are counted. Tool call and tool result messages are grouped so they're kept or removed together, and trimming is transient: stored messages are never modified. Trimming is uniform: no group is exempt because it belongs to the current run.
 - **Input processor** (`processInput`): In `memory-only` trim mode, filters historical messages to fit within the context window before the agentic loop starts, prioritizing recent messages
-- **Output processor**: Limits generated response tokens via streaming or non-streaming with configurable strategies for handling exceeded limits. When `maxToolResultTokens` is set, the processor must also be registered in `outputProcessors`, which is what runs `processToolResult`; this caps individual tool results before the engine commits the final tool result.
+- **Output processor**: Limits generated response tokens via streaming or non-streaming with configurable strategies for handling exceeded limits. When `maxToolResultTokens` is set, the processor must also be registered in `outputProcessors`, which is what runs `processToolResult`. This caps individual tool results before the engine commits the final tool result.
 
 ## Usage example
 
@@ -176,7 +176,7 @@ Images and file attachments are estimated instead of tokenized, including `file`
 
 ## Capping large tool results
 
-Trimming (`processLLMRequest` / `processInputStep`) removes whole messages from the prompt or stored history to fit the token budget, and applies uniformly; it doesn't exempt messages produced by the current run. If a single tool result is too large to fit, best-fit trimming can drop the current run's own tool call and result, and the agent may re-call the tool until it hits `maxSteps`. Set `maxToolResultTokens` so the model sees a truncated copy of that result instead (media and non-JSON-serializable results are not capped). Capping requires the processor to also be registered in `outputProcessors`, since it runs through `processToolResult`:
+Trimming (`processLLMRequest` / `processInputStep`) removes whole messages from the prompt or stored history to fit the token budget, and applies uniformly. It doesn't exempt messages produced by the current run. If a single tool result is too large to fit, best-fit trimming can drop the current run's own tool call and result, and the agent may re-call the tool until it hits `maxSteps`. Set `maxToolResultTokens` so the model sees a truncated copy of that result instead (media and non-JSON-serializable results aren't capped). Capping requires the processor to also be registered in `outputProcessors`, since it runs through `processToolResult`:
 
 ```typescript
 const processor = new TokenLimiterProcessor({
