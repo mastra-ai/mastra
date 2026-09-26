@@ -18,6 +18,7 @@ import {
   isTemporalHelperModule,
   isWorkflowHelperDestructure,
   nodeReferencesName,
+  normalizeTemporalFactoryAliases,
   parseModule,
   parserPlugins,
   pruneUnusedTopLevelBindings,
@@ -869,6 +870,7 @@ export async function buildTemporalWorkflowModule(
         name: 'temporal-workflow-transform',
         transform(code, id) {
           const ast = parseModule(id, code);
+          normalizeTemporalFactoryAliases(ast.program);
           const state = createWorkflowTransformState(ast.program, id);
           collectWorkflowTransformMetadata(ast.program, state);
           for (const statement of ast.program.body) {
