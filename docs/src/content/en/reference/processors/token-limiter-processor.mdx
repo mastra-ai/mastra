@@ -131,7 +131,7 @@ const processor = new TokenLimiterProcessor({
     name: 'processToolResult',
     type: '(args: ProcessToolResultArgs) => Promise<void>',
     description:
-      "When `maxToolResultTokens` is set and the processor is registered in `outputProcessors`, caps each tool result to that many tokens right after the tool runs, before the result is added to the message list. The full result stays in storage; the model-facing copy is capped via the tool-invocation part's `providerMetadata`, the same mechanism a tool's `toModelOutput` uses. If a result already carries a `toModelOutput` mapping, that mapping is left alone.",
+      "Only present on the processor instance when `maxToolResultTokens` is set (an agentic-loop optimization checks for the method's presence). When present, and the processor is registered in `outputProcessors`, it caps each tool result to that many tokens right after the tool runs, before the result is added to the message list. The full result stays in storage; the model-facing copy is capped via the tool-invocation part's `providerMetadata`, the same mechanism a tool's `toModelOutput` uses. A tool's own `toModelOutput` mapping is computed later and always wins over this cap.",
     isOptional: true,
   },
   {
