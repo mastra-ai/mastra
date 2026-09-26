@@ -33,6 +33,10 @@ type ResolvedJsonPromptInjection = Exclude<JsonPromptInjection, 'auto'>;
  */
 const RETRY_MIN_TIMEOUT_MS = 1_000;
 const RETRY_BACKOFF_FACTOR = 2;
+const PROCESSOR_SCHEMA_PREFIX =
+  'Your response will be processed by another agent to extract structured data. Please ensure your response contains comprehensive information for all the following fields that will be extracted:\n';
+const PROCESSOR_SCHEMA_SUFFIX =
+  "\n\nYou don't need to format your response as JSON unless the user asks you to. Just ensure your natural language response includes relevant information for each field in the schema above.";
 
 const CONTENT_CHUNK_TYPES = new Set([
   'text-delta',
@@ -116,7 +120,19 @@ function injectJsonInstructionIntoLatestUserMessage({
   schema: unknown;
   instructions?: string;
 }): LanguageModelV2Prompt {
-  const instruction = buildJsonInstruction(schema, instructions);
+  return injectInstructionIntoLatestUserMessage({
+    messages,
+    instruction: buildJsonInstruction(schema, instructions),
+  });
+}
+
+function injectInstructionIntoLatestUserMessage({
+  messages,
+  instruction,
+}: {
+  messages: LanguageModelV2Prompt;
+  instruction: string;
+}): LanguageModelV2Prompt {
   const prompt = messages.map(message => ({
     ...message,
     content: Array.isArray(message.content) ? [...message.content] : message.content,
@@ -138,6 +154,10 @@ function injectJsonInstructionIntoLatestUserMessage({
   }
 
   return [...prompt, { role: 'user', content: [{ type: 'text', text: instruction }] }] as LanguageModelV2Prompt;
+}
+
+function buildProcessorJsonInstruction(schema: unknown): string {
+  return [PROCESSOR_SCHEMA_PREFIX, JSON.stringify(schema), PROCESSOR_SCHEMA_SUFFIX].join('\n');
 }
 
 function omit<T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> {
@@ -265,12 +285,23 @@ export function execute<OUTPUT = undefined>({
     responseFormat?.schema &&
     !structuredOutput?.useAgent
   ) {
-    prompt = injectJsonInstructionIntoMessages({
-      messages: inputMessages,
-      schema: responseFormat.schema,
-      schemaPrefix: `Your response will be processed by another agent to extract structured data. Please ensure your response contains comprehensive information for all the following fields that will be extracted:\n`,
-      schemaSuffix: `\n\nYou don't need to format your response as JSON unless the user asks you to. Just ensure your natural language response includes relevant information for each field in the schema above.`,
-    });
+    // The primary model never receives a native response format in processor mode, so retain
+    // the existing system-prompt default even when `auto` resolves to no direct-mode injection.
+    const processorInjectionMode = injectionMode === false ? false : injectionMode === 'inline' ? 'inline' : 'system';
+
+    if (processorInjectionMode === 'inline') {
+      prompt = injectInstructionIntoLatestUserMessage({
+        messages: inputMessages,
+        instruction: buildProcessorJsonInstruction(responseFormat.schema),
+      });
+    } else if (processorInjectionMode === 'system') {
+      prompt = injectJsonInstructionIntoMessages({
+        messages: inputMessages,
+        schema: responseFormat.schema,
+        schemaPrefix: PROCESSOR_SCHEMA_PREFIX,
+        schemaSuffix: PROCESSOR_SCHEMA_SUFFIX,
+      });
+    }
   }
 
   /**
