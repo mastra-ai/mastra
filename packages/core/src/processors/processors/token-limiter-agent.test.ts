@@ -8,8 +8,12 @@ import { Agent } from '../../agent';
 import { createDurableAgent } from '../../agent/durable/create-durable-agent';
 import { MessageList } from '../../agent/message-list';
 import { EventEmitterPubSub } from '../../events/event-emitter';
-import { readCappedProviderMetadataFromMessageList } from '../../loop/shared/read-tool-result';
-import { computeModelOutputProviderMetadata, commitToolResult } from '../../loop/shared/steps/tool-result-commit-core';
+import { carryCappedProviderMetadata } from '../../loop/shared/read-tool-result';
+import {
+  commitToolResult,
+  computeModelOutputProviderMetadata,
+  shouldComputeModelOutputProviderMetadata,
+} from '../../loop/shared/steps/tool-result-commit-core';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import type { MastraDBMessage } from '../../memory/types';
@@ -298,8 +302,10 @@ describe('TokenLimiterProcessor through an agent', () => {
         state: {},
       } as any);
 
-      const cappedProviderMetadata = readCappedProviderMetadataFromMessageList(toolCallMessageList, 'call-1');
-      expect(cappedProviderMetadata).toBeDefined();
+      // Drives the exact function tool-call.ts calls to carry the cap onto its step
+      // output (see tool-call.ts's `carried = carryCappedProviderMetadata(...)` call).
+      const carried = carryCappedProviderMetadata(toolCallMessageList, 'call-1', undefined);
+      expect(carried.resultCapped).toBe(true);
 
       // Step 2: the tool-call step's output crosses to llm-mapping.ts as JSON (the real
       // engine round-trips it through pubsub/storage). JSON.parse/stringify severs any
@@ -310,8 +316,8 @@ describe('TokenLimiterProcessor through an agent', () => {
           toolCallId: 'call-1',
           toolName: 'lookup',
           result: big,
-          resultCapped: true,
-          providerMetadata: cappedProviderMetadata,
+          resultCapped: carried.resultCapped,
+          providerMetadata: carried.providerMetadata,
         }),
       );
 
@@ -320,17 +326,19 @@ describe('TokenLimiterProcessor through an agent', () => {
       // below fail.
       const mappedTool = { toModelOutput: () => 'SHOULD-NOT-BE-SEEN-WHEN-CAP-IS-CARRIED' };
 
-      // Mirrors llm-mapping.ts's guard (llm-mapping.ts ~224-230): a `resultCapped` result
-      // is not recomputed through `toModelOutput`, the carried metadata is used as-is.
-      const providerMetadata = toolCallStepOutput.resultCapped
-        ? toolCallStepOutput.providerMetadata
-        : await computeModelOutputProviderMetadata({
+      // Drives the exact guard llm-mapping.ts calls (see llm-mapping.ts's
+      // `if (shouldComputeModelOutputProviderMetadata(toolResult))` check): a
+      // `resultCapped` result is not recomputed through `toModelOutput`, the carried
+      // metadata is used as-is.
+      const providerMetadata = shouldComputeModelOutputProviderMetadata(toolCallStepOutput)
+        ? await computeModelOutputProviderMetadata({
             tool: mappedTool,
             toolName: toolCallStepOutput.toolName,
             toolCallId: toolCallStepOutput.toolCallId,
             result: toolCallStepOutput.result,
             existingProviderMetadata: toolCallStepOutput.providerMetadata,
-          });
+          })
+        : toolCallStepOutput.providerMetadata;
 
       // Step 3: llm-mapping.ts commits against a freshly rebuilt MessageList, not the
       // tool-call step's local copy.

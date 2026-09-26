@@ -3,10 +3,7 @@ import { executeAdoptedBackgroundOperation } from '../../../../background-tasks/
 import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
 import type { PubSub } from '../../../../events/pubsub';
 import { normalizeModelOutput } from '../../../../loop/shared/normalize-model-output';
-import {
-  readCappedProviderMetadataFromMessageList,
-  readToolResultFromMessageList,
-} from '../../../../loop/shared/read-tool-result';
+import { carryCappedProviderMetadata, readToolResultFromMessageList } from '../../../../loop/shared/read-tool-result';
 import { dispatchBackgroundTool } from '../../../../loop/shared/steps/background-dispatch-core';
 import { applyBackgroundToolResult } from '../../../../loop/shared/steps/background-task-result-core';
 import { executeToolCall } from '../../../../loop/shared/steps/execute-tool-core';
@@ -1681,17 +1678,9 @@ export function createDurableToolCallStep() {
             // *returned* value rather than the local messageList, so the cap
             // must be carried across the boundary explicitly here, the same
             // way `modelOutputComputed` carries a `toModelOutput` mapping.
-            const cappedProviderMetadata = readCappedProviderMetadataFromMessageList(messageList, toolCallId);
-            if (cappedProviderMetadata) {
-              const existingMastra = (providerMetadata as { mastra?: Record<string, unknown> } | undefined)?.mastra;
-              const cappedMastra = (cappedProviderMetadata as { mastra?: Record<string, unknown> }).mastra;
-              providerMetadata = {
-                ...providerMetadata,
-                ...cappedProviderMetadata,
-                mastra: { ...existingMastra, ...cappedMastra },
-              };
-              resultCapped = true;
-            }
+            const carried = carryCappedProviderMetadata(messageList, toolCallId, providerMetadata);
+            providerMetadata = carried.providerMetadata;
+            resultCapped = carried.resultCapped;
           } catch (processorError) {
             if (processorError instanceof TripWire) {
               // Blocked: emit a tripwire chunk instead of the tool-result and

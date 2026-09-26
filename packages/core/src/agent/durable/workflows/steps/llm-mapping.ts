@@ -3,6 +3,7 @@ import type { PubSub } from '../../../../events/pubsub';
 import {
   commitToolResult,
   computeModelOutputProviderMetadata,
+  shouldComputeModelOutputProviderMetadata,
 } from '../../../../loop/shared/steps/tool-result-commit-core';
 import type { Mastra } from '../../../../mastra';
 import { SpanType } from '../../../../observability';
@@ -221,13 +222,7 @@ export function createDurableLLMMappingStep() {
           let providerMetadata: Record<string, unknown> | undefined = toolResult.providerMetadata as
             | Record<string, unknown>
             | undefined;
-          if (
-            !toolResult.error &&
-            toolResult.result != null &&
-            !toolResult.providerExecuted &&
-            !toolResult.modelOutputComputed &&
-            !toolResult.resultCapped
-          ) {
+          if (shouldComputeModelOutputProviderMetadata(toolResult)) {
             providerMetadata = await computeModelOutputProviderMetadata({
               tool: registryTools?.[toolResult.toolName] as
                 | { toModelOutput?: (output: unknown) => unknown }

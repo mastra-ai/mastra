@@ -56,3 +56,36 @@ export function readCappedProviderMetadataFromMessageList(
   }
   return undefined;
 }
+
+/**
+ * Fold a metadata-only `maxToolResultTokens` cap (if `processToolResult`
+ * wrote one onto the tool-call step's local `messageList`) into the
+ * `providerMetadata` that step returns, so the cap survives the durable
+ * step boundary. Returns the (possibly merged) `providerMetadata` plus
+ * whether a cap was actually found, which the caller carries as
+ * `resultCapped` so `llm-mapping` knows not to recompute it.
+ *
+ * Pulled out of the durable `tool-call` step so this exact carry logic can
+ * be exercised directly in tests without re-implementing it — see the
+ * step-boundary threading test in token-limiter-agent.test.ts.
+ */
+export function carryCappedProviderMetadata(
+  messageList: MessageList,
+  toolCallId: string,
+  providerMetadata: Record<string, unknown> | undefined,
+): { providerMetadata: Record<string, unknown> | undefined; resultCapped: boolean } {
+  const cappedProviderMetadata = readCappedProviderMetadataFromMessageList(messageList, toolCallId);
+  if (!cappedProviderMetadata) {
+    return { providerMetadata, resultCapped: false };
+  }
+  const existingMastra = (providerMetadata as { mastra?: Record<string, unknown> } | undefined)?.mastra;
+  const cappedMastra = (cappedProviderMetadata as { mastra?: Record<string, unknown> }).mastra;
+  return {
+    providerMetadata: {
+      ...providerMetadata,
+      ...cappedProviderMetadata,
+      mastra: { ...existingMastra, ...cappedMastra },
+    },
+    resultCapped: true,
+  };
+}

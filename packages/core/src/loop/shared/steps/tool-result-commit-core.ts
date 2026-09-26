@@ -15,6 +15,38 @@ export interface ToolMappingParentSpan {
 }
 
 /**
+ * Whether a durable tool result's `providerMetadata` should be (re)computed
+ * via `computeModelOutputProviderMetadata`, or left as-is because something
+ * upstream already produced (or intentionally omitted) the mapped output.
+ *
+ * `modelOutputComputed`: tool-call.ts already ran `toModelOutput` eagerly and
+ * carried the mapped output across the step boundary — the serialization
+ * boundary is why durable maps eagerly instead of deferring to this step.
+ *
+ * `resultCapped`: TokenLimiterProcessor's maxToolResultTokens cap already
+ * wrote `providerMetadata.mastra.modelOutput` on the tool-call step's local
+ * messageList and carried it across the boundary (see
+ * `carryCappedProviderMetadata`). Recomputing here would at best re-derive
+ * the same pass-through value, and at worst clobber the cap with a fresh
+ * (uncapped) `toModelOutput` mapping.
+ */
+export function shouldComputeModelOutputProviderMetadata(toolResult: {
+  error?: unknown;
+  result?: unknown;
+  providerExecuted?: boolean;
+  modelOutputComputed?: boolean;
+  resultCapped?: boolean;
+}): boolean {
+  return (
+    !toolResult.error &&
+    toolResult.result != null &&
+    !toolResult.providerExecuted &&
+    !toolResult.modelOutputComputed &&
+    !toolResult.resultCapped
+  );
+}
+
+/**
  * Shared `toModelOutput` computation for the tool-result commit.
  *
  * Runs the tool's `toModelOutput` mapper under a MAPPING child span, normalizes
