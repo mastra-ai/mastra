@@ -330,6 +330,8 @@ type AgentThreadRuntimeState = {
   threadRunsByStreamId: Map<string, AgentThreadRunRecord<any>>;
   threadKeysByRunId: Map<string, string>;
   remoteThreadKeysByRunId: Map<string, string>;
+  remoteAgentIdsByRunId: Map<string, string>;
+  unobservedRemoteRunIds: Set<string>;
   activeThreadRunIds: Map<string, string>;
   activeThreadStreamIds: Map<string, string>;
   streamSeqByRunId: Map<string, number>;
@@ -406,7 +408,7 @@ export type AgentThreadRunRegistration = {
 type SerializableAgentSignal = AgentSignal & Pick<CreatedAgentSignal, 'id' | 'createdAt'>;
 
 type AgentThreadStreamRuntimeEvent =
-  | { type: 'run-registered'; runId: string; streamId: string; streamSeq: number; sourceId?: string }
+  | { type: 'run-registered'; runId: string; streamId: string; streamSeq: number; sourceId?: string; agentId?: string }
   | {
       type: 'stream-part';
       runId: string;
@@ -494,6 +496,8 @@ function createRuntimeState(): AgentThreadRuntimeState {
     threadRunsByStreamId: new Map(),
     threadKeysByRunId: new Map(),
     remoteThreadKeysByRunId: new Map(),
+    remoteAgentIdsByRunId: new Map(),
+    unobservedRemoteRunIds: new Set(),
     activeThreadRunIds: new Map(),
     activeThreadStreamIds: new Map(),
     streamSeqByRunId: new Map(),
@@ -2320,6 +2324,8 @@ export class AgentThreadStreamRuntime {
     state.threadRunsByStreamId.clear();
     state.threadKeysByRunId.clear();
     state.remoteThreadKeysByRunId.clear();
+    state.remoteAgentIdsByRunId.clear();
+    state.unobservedRemoteRunIds.clear();
     state.activeThreadRunIds.clear();
     state.approvalSuspendedRunIds.clear();
     state.suspendedRunIds.clear();
@@ -2451,6 +2457,7 @@ export class AgentThreadStreamRuntime {
       streamId,
       streamSeq,
       sourceId: this.#getSourceId(),
+      agentId,
     });
     void registered.then(startBroadcast, startBroadcast);
     // Wait for the local stream to finish AND for every stream-part publish to
@@ -2694,6 +2701,7 @@ export class AgentThreadStreamRuntime {
         streamId,
         streamSeq,
         sourceId: this.#getSourceId(),
+        agentId: agent.id,
       });
     })();
     // Always drive the run's stream to completion, even when no caller consumes
@@ -2830,6 +2838,7 @@ export class AgentThreadStreamRuntime {
         streamId,
         streamSeq,
         sourceId: this.#getSourceId(),
+        agentId: agent.id,
       });
       registrationPublished = true;
       await registrationOptions.validate?.();
@@ -3589,7 +3598,11 @@ export class AgentThreadStreamRuntime {
       }
       state.activeThreadRunIds.delete(key);
       state.activeThreadStreamIds.delete(key);
-      if (state.remoteThreadKeysByRunId.get(runId) === key) state.remoteThreadKeysByRunId.delete(runId);
+      if (state.remoteThreadKeysByRunId.get(runId) === key) {
+        state.remoteThreadKeysByRunId.delete(runId);
+        state.remoteAgentIdsByRunId.delete(runId);
+        state.unobservedRemoteRunIds.delete(runId);
+      }
     };
     const finish = () => {
       if (settled) return;
@@ -3794,7 +3807,11 @@ export class AgentThreadStreamRuntime {
       if (!local && !(await this.#hasLiveThreadLease(resolvedPubSub, key, runId))) return;
       state.activeThreadRunIds.set(key, runId);
       state.activeThreadStreamIds.set(key, streamId);
-      if (!local) state.remoteThreadKeysByRunId.set(runId, key);
+      if (!local) {
+        state.remoteThreadKeysByRunId.set(runId, key);
+        // The lease check awaited; only trust the run if someone still observes the thread.
+        if (state.threadControlSubscriptions.get(key)?.observers) state.unobservedRemoteRunIds.delete(runId);
+      }
     };
 
     // A deferred run may be flushed only when its replayed chunks ended with a
@@ -3839,7 +3856,11 @@ export class AgentThreadStreamRuntime {
       }
       state.activeThreadRunIds.delete(key);
       state.activeThreadStreamIds.delete(key);
-      if (state.remoteThreadKeysByRunId.get(runId) === key) state.remoteThreadKeysByRunId.delete(runId);
+      if (state.remoteThreadKeysByRunId.get(runId) === key) {
+        state.remoteThreadKeysByRunId.delete(runId);
+        state.remoteAgentIdsByRunId.delete(runId);
+        state.unobservedRemoteRunIds.delete(runId);
+      }
     };
 
     const stopRemoteRunLeaseWatch = (streamId: string) => {
@@ -3919,14 +3940,26 @@ export class AgentThreadStreamRuntime {
         // covers runs that complete before the event is delivered in-process
         // (record cleaned up, lease released) where deferral would strand the
         // run because its terminal event was already processed.
+        // A finished local record must not displace a different active run.
+        const currentActiveRunId = state.activeThreadRunIds.get(key);
+        const displacesActiveRun =
+          localRecord !== undefined && currentActiveRunId !== undefined && currentActiveRunId !== data.runId;
+        const sameSourceLive =
+          !backlog && !displacesActiveRun && data.sourceId !== undefined && data.sourceId === this.#getSourceId();
+        // A nonblocking local record is never live via the lease: fallback lease
+        // providers report every run as leased.
         const live =
-          local ||
-          (!backlog && data.sourceId !== undefined && data.sourceId === this.#getSourceId()) ||
-          (await this.#hasLiveThreadLease(resolvedPubSub, key, data.runId));
+          localRecord !== undefined
+            ? this.#isThreadBlockingRun(state, localRecord) || sameSourceLive
+            : sameSourceLive || (await this.#hasLiveThreadLease(resolvedPubSub, key, data.runId));
         if (live) {
           state.activeThreadRunIds.set(key, data.runId);
           state.activeThreadStreamIds.set(key, data.streamId);
-          if (!local) state.remoteThreadKeysByRunId.set(data.runId, key);
+          if (!local) {
+            state.remoteThreadKeysByRunId.set(data.runId, key);
+            if (state.threadControlSubscriptions.get(key)?.observers) state.unobservedRemoteRunIds.delete(data.runId);
+            if (data.agentId) state.remoteAgentIdsByRunId.set(data.runId, data.agentId);
+          }
         }
         // Reuse a proxy that a stream-part-first delivery already created for
         // this stream — creating a fresh record here would orphan its
@@ -4212,6 +4245,13 @@ export class AgentThreadStreamRuntime {
       remoteRunLeaseTimers.clear();
       control.references--;
       control.observers--;
+      // With no observer left, remote terminal events go unseen: stop trusting
+      // these runs as signal targets until a live registration confirms them.
+      if (!control.observers) {
+        for (const [runId, runKey] of state.remoteThreadKeysByRunId) {
+          if (runKey === key) state.unobservedRemoteRunIds.add(runId);
+        }
+      }
       this.#releaseUnusedThreadControlSubscription(state, key);
       void resolvedPubSub.unsubscribe(topic, onEvent).catch(() => {});
       // Cancel current reader so the generator's inner loop breaks.
@@ -4606,6 +4646,7 @@ export class AgentThreadStreamRuntime {
     const idleBehavior = target.ifIdle?.behavior ?? 'wake';
 
     let activeRecord: AgentThreadRunRecord<any> | undefined;
+    let remoteCrossAgent = false;
     if (target.resourceId && target.threadId) {
       key = this.#threadKey(target.resourceId, target.threadId);
       const activeRunId = state.activeThreadRunIds.get(key);
@@ -4620,7 +4661,15 @@ export class AgentThreadStreamRuntime {
       if (activeRecord && activeRecord.agent.id === agent.id) {
         runId = activeRecord.runId;
       } else if (activeRunId && !activeRecord) {
-        if (state.threadKeysByRunId.get(activeRunId) === key) {
+        if (
+          state.threadKeysByRunId.get(activeRunId) === key ||
+          (state.remoteThreadKeysByRunId.get(activeRunId) === key && !state.unobservedRemoteRunIds.has(activeRunId))
+        ) {
+          // A remote run whose owner agent is unknown (e.g. seen via a stream part
+          // before its registration) is not a safe target for this agent.
+          remoteCrossAgent =
+            state.threadKeysByRunId.get(activeRunId) !== key &&
+            state.remoteAgentIdsByRunId.get(activeRunId) !== agent.id;
           // A run can be reserved before its stream record is registered. Keep the reserved
           // id so early follow-ups still attach to the run that is starting.
           runId = activeRunId;
@@ -4659,6 +4708,13 @@ export class AgentThreadStreamRuntime {
       signal,
       isActiveTarget ? target.ifActive?.attributes : target.ifIdle?.attributes,
     );
+
+    if (remoteCrossAgent) {
+      return {
+        signal,
+        accepted: Promise.resolve({ action: 'blocked' as const, reason: 'thread-blocked' as const, runId: runId! }),
+      };
+    }
 
     if (isActiveTarget && activeBehavior !== 'deliver') {
       if (activeBehavior === 'persist') {
