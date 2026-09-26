@@ -262,4 +262,49 @@ describe('AgentController cloneThread', () => {
       'Function-based memory returned empty value',
     );
   });
+
+  it.each([
+    ['a separate caller store that never had the thread', false],
+    ['memory backed by the controller store itself', true],
+  ])('deletes a thread when resolved memory is %s, with adapters that throw on missing threads', async (_, same) => {
+    const storage = new InMemoryStore();
+    const callerStorage = same ? storage : new InMemoryStore();
+    for (const store of new Set([storage, callerStorage])) {
+      const memoryStore = (await store.getStore('memory'))!;
+      const deleteThread = memoryStore.deleteThread.bind(memoryStore);
+      memoryStore.deleteThread = async args => {
+        if (!(await memoryStore.getThreadById(args))) throw new Error(`Thread ${args.threadId} not found`);
+        return deleteThread(args);
+      };
+    }
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'test-controller',
+      resourceId: 'controller-resource',
+      storage,
+      memory: (() => new MockMemory({ storage: callerStorage })) as any,
+      modes: [
+        {
+          id: 'default',
+          name: 'Default',
+          default: true,
+          agent: new Agent({
+            id: 'a',
+            name: 'a',
+            instructions: 'x',
+            model: { provider: 'openai', name: 'gpt-4o' } as any,
+          }),
+        },
+      ],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 's', ownerId: 'o' });
+    const thread = await session.thread.create();
+    await session.thread.create();
+
+    await session.thread.delete({ threadId: thread.id });
+
+    const memoryStore = await storage.getStore('memory');
+    expect(await memoryStore!.getThreadById({ threadId: thread.id })).toBeNull();
+  });
 });

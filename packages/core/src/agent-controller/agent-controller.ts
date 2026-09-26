@@ -1069,12 +1069,16 @@ export class AgentController<TState = {}> {
     // Delete through memory first: Memory.deleteThread reads the row to find
     // the resourceId it needs for observational-memory cleanup, and if the
     // controller row goes first a failure here leaves nothing to retry against.
+    // Some adapters throw when the thread is missing, so each store is only
+    // asked to delete a row it has: a thread made with create() exists only in
+    // controller storage, and when both resolve to the same store the first
+    // delete already removed it.
     if (this.config.memory) {
       const memory = await this.resolveMemory(session, requestContext);
-      await memory.deleteThread(threadId);
+      if (await memory.getThreadById({ threadId })) await memory.deleteThread(threadId);
     }
     const memoryStorage = await this.getMemoryStorage();
-    await memoryStorage.deleteThread({ threadId });
+    if (await memoryStorage.getThreadById({ threadId })) await memoryStorage.deleteThread({ threadId });
   }
 
   /** Clone a thread (and messages) via the host's memory (gateway primitive for the Session thread domain). */
