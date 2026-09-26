@@ -5,7 +5,7 @@
  * This is the default filesystem for development and local agents.
  */
 
-import { constants as fsConstants, realpathSync } from 'node:fs';
+import { constants as fsConstants, lstatSync, readlinkSync, realpathSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as nodePath from 'node:path';
 import type { RequestContext } from '../../request-context';
@@ -39,6 +39,22 @@ import { MastraFilesystem } from './mastra-filesystem';
 import type { MastraFilesystemOptions } from './mastra-filesystem';
 import type { FilesystemMountConfig } from './mount';
 
+/** Matches the kernel's symlink-following limit (ELOOP), applied to dangling links. */
+const MAX_DANGLING_SYMLINK_HOPS = 40;
+
+/**
+ * If `path` is a symlink (necessarily dangling, since `realpath` on it failed),
+ * return its absolute target. Returns `undefined` for anything else.
+ */
+function readDanglingSymlink(path: string): string | undefined {
+  try {
+    if (!lstatSync(path).isSymbolicLink()) return undefined;
+    return nodePath.resolve(nodePath.dirname(path), readlinkSync(path));
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Local filesystem provider configuration.
  */
@@ -59,6 +75,16 @@ export interface LocalFilesystemOptions extends MastraFilesystemOptions {
    *
    * Set to `false` when the filesystem needs to access paths outside basePath,
    * such as global skills directories or user home directories.
+   *
+   * Symlinks are resolved before every operation, including for targets that
+   * don't exist yet (creation is checked against the nearest existing
+   * ancestor). File writes additionally verify the opened descriptor, so a
+   * symlink swapped concurrently cannot redirect content outside the root.
+   * Directory creation, copy, move and delete remain check-then-act: a
+   * concurrent swap between the check and the syscall is not re-validated.
+   * Containment applies to filesystem operations only — it does not
+   * constrain commands run in a sandbox. Use OS-level isolation for hard
+   * boundaries against untrusted concurrent actors.
    *
    * @default true
    */
@@ -226,7 +252,19 @@ export class LocalFilesystem extends MastraFilesystem {
     return !relative.startsWith('..') && !nodePath.isAbsolute(relative);
   }
 
-  private _resolvePathForContainment(absolutePath: string): string | undefined {
+  /**
+   * Resolve a path that may not exist yet to where it would land on disk.
+   *
+   * Walks up to the nearest existing ancestor, resolves its real path and
+   * re-appends the remainder. A dangling symlink on the way (a link whose
+   * target doesn't exist yet) is followed via `readlink`, since creating
+   * through it would create the file at the link's target, not at the link.
+   */
+  private _resolvePathForContainment(absolutePath: string, hops = 0): string | undefined {
+    // Guard against symlink loops made of dangling links (realpath would
+    // catch loops between existing entries, but never sees these).
+    if (hops > MAX_DANGLING_SYMLINK_HOPS) return undefined;
+
     let currentPath = absolutePath;
 
     while (true) {
@@ -240,6 +278,12 @@ export class LocalFilesystem extends MastraFilesystem {
         return nodePath.join(realPath, remainder);
       } catch (error: unknown) {
         if (!isEnoentError(error)) return undefined;
+      }
+
+      const linkTarget = readDanglingSymlink(currentPath);
+      if (linkTarget !== undefined) {
+        const remainder = nodePath.relative(currentPath, absolutePath);
+        return this._resolvePathForContainment(nodePath.join(linkTarget, remainder), hops + 1);
       }
 
       const parentPath = nodePath.dirname(currentPath);
@@ -354,14 +398,17 @@ export class LocalFilesystem extends MastraFilesystem {
       return;
     }
 
-    // Resolve symlinks for the target path. If it doesn't exist,
-    // there are no symlinks to escape through — nothing to check.
+    // Resolve symlinks for the target path. If the target doesn't exist yet,
+    // resolve through its nearest existing ancestor instead — a symlinked
+    // ancestor can still redirect a create/write outside the root.
     let targetReal: string;
     try {
       targetReal = await fs.realpath(absolutePath);
     } catch (error: unknown) {
-      if (isEnoentError(error)) return; // path doesn't exist yet — safe
-      throw error;
+      if (!isEnoentError(error)) throw error;
+      const resolved = this._resolvePathForContainment(absolutePath);
+      if (!resolved) return; // no existing ancestor at all — nothing to escape through
+      targetReal = resolved;
     }
 
     // Resolve real paths for roots, skipping any that don't exist
@@ -383,6 +430,46 @@ export class LocalFilesystem extends MastraFilesystem {
     if (!isWithinRoot) {
       throw new PermissionError(absolutePath, 'access');
     }
+  }
+
+  /**
+   * Open a file for writing and verify that the descriptor we actually got
+   * lives under a permitted root.
+   *
+   * `assertPathContained` is check-then-act: a symlinked ancestor swapped in
+   * between the check and the open could redirect the write outside the root.
+   * Comparing the open descriptor's identity (dev/ino) against the file the
+   * contained path currently resolves to narrows that window: a descriptor
+   * pointing anywhere else is closed and the operation refused, so no content
+   * is ever written outside the root. An escaped `O_CREAT` open can still
+   * leave an empty file at the outside target.
+   *
+   * Callers must not pass `O_TRUNC`: the file is only truncated after it has
+   * been verified, so an escaped open cannot clobber an outside file.
+   */
+  private async openVerified(absolutePath: string, flags: number): Promise<fs.FileHandle> {
+    const handle = await fs.open(absolutePath, flags);
+    if (!this._contained) return handle;
+
+    try {
+      let realPath: string;
+      try {
+        realPath = await fs.realpath(absolutePath);
+      } catch (error: unknown) {
+        // The path stopped resolving after we opened it — a link was swapped underneath us.
+        if (isEnoentError(error)) throw new PermissionError(absolutePath, 'access');
+        throw error;
+      }
+      await this.assertPathContained(realPath);
+      const [handleStat, pathStat] = await Promise.all([handle.stat(), fs.stat(realPath)]);
+      if (handleStat.dev !== pathStat.dev || handleStat.ino !== pathStat.ino) {
+        throw new PermissionError(absolutePath, 'access');
+      }
+    } catch (error: unknown) {
+      await handle.close();
+      throw error;
+    }
+    return handle;
   }
 
   async readFile(inputPath: string, options?: ReadOptions): Promise<string | Buffer> {
@@ -457,15 +544,23 @@ export class LocalFilesystem extends MastraFilesystem {
       }
     }
 
-    // Use 'wx' flag for atomic overwrite check (avoids TOCTOU race)
-    const writeFlag = options?.overwrite === false ? 'wx' : 'w';
+    // O_EXCL gives an atomic overwrite check; O_TRUNC is deliberately omitted
+    // so the file is only truncated once the descriptor has been verified.
+    const flags = fsConstants.O_WRONLY | fsConstants.O_CREAT | (options?.overwrite === false ? fsConstants.O_EXCL : 0);
+    let handle: fs.FileHandle;
     try {
-      await fs.writeFile(absolutePath, this.toBuffer(content), { flag: writeFlag });
+      handle = await this.openVerified(absolutePath, flags);
     } catch (error: unknown) {
       if (options?.overwrite === false && isEexistError(error)) {
         throw new FileExistsError(inputPath);
       }
       throw error;
+    }
+    try {
+      await handle.truncate(0);
+      await handle.writeFile(this.toBuffer(content));
+    } finally {
+      await handle.close();
     }
   }
 
@@ -478,7 +573,15 @@ export class LocalFilesystem extends MastraFilesystem {
     await this.assertPathContained(absolutePath);
     const dir = nodePath.dirname(absolutePath);
     await fs.mkdir(dir, { recursive: true });
-    await fs.appendFile(absolutePath, this.toBuffer(content));
+    const handle = await this.openVerified(
+      absolutePath,
+      fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_APPEND,
+    );
+    try {
+      await handle.appendFile(this.toBuffer(content));
+    } finally {
+      await handle.close();
+    }
   }
 
   async deleteFile(inputPath: string, options?: RemoveOptions): Promise<void> {
@@ -713,11 +816,13 @@ export class LocalFilesystem extends MastraFilesystem {
           try {
             // Get the symlink target path
             symlinkTarget = await fs.readlink(entryPath);
-            // Determine the type of the target (follow the symlink)
+            // Only follow the link if its target stays inside the permitted
+            // roots — an escaping link is listed but never descended into.
+            await this.assertPathContained(entryPath);
             const targetStat = await fs.stat(entryPath);
             resolvedType = targetStat.isDirectory() ? 'directory' : 'file';
           } catch {
-            // If we can't read the symlink target or it's broken, treat as file
+            // Broken, unreadable, or escaping link — treat as a file
             resolvedType = 'file';
           }
         } else {

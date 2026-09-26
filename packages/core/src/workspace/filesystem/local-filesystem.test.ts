@@ -586,6 +586,212 @@ describe('LocalFilesystem', () => {
       expect(content).toBe('written');
     });
 
+    describe('symlink escape', () => {
+      let outsideDir: string;
+
+      beforeEach(async () => {
+        outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-fs-symlink-outside-'));
+        await fs.writeFile(path.join(outsideDir, 'existing.txt'), 'unchanged');
+        await fs.symlink(outsideDir, path.join(tempDir, 'alias'));
+      });
+
+      afterEach(async () => {
+        await fs.rm(outsideDir, { recursive: true, force: true });
+      });
+
+      it('should block writing to an existing file through a symlinked ancestor', async () => {
+        await expect(localFs.writeFile('alias/existing.txt', 'changed')).rejects.toThrow(PermissionError);
+        expect(await fs.readFile(path.join(outsideDir, 'existing.txt'), 'utf-8')).toBe('unchanged');
+      });
+
+      it('should block creating a new file through a symlinked ancestor', async () => {
+        await expect(localFs.writeFile('alias/new.txt', 'outside write')).rejects.toThrow(PermissionError);
+        await expect(fs.access(path.join(outsideDir, 'new.txt'))).rejects.toThrow();
+      });
+
+      it('should block creating a new file in a nested missing directory through a symlinked ancestor', async () => {
+        await expect(localFs.writeFile('alias/a/b/new.txt', 'outside write')).rejects.toThrow(PermissionError);
+        await expect(fs.access(path.join(outsideDir, 'a'))).rejects.toThrow();
+      });
+
+      it('should block appending to a new file through a symlinked ancestor', async () => {
+        await expect(localFs.appendFile('alias/new.txt', 'outside append')).rejects.toThrow(PermissionError);
+        await expect(fs.access(path.join(outsideDir, 'new.txt'))).rejects.toThrow();
+      });
+
+      it('should block creating a directory through a symlinked ancestor', async () => {
+        await expect(localFs.mkdir('alias/new-directory')).rejects.toThrow(PermissionError);
+        await expect(fs.access(path.join(outsideDir, 'new-directory'))).rejects.toThrow();
+      });
+
+      it('should block recursive mkdir of nested missing directories through a symlinked ancestor', async () => {
+        await expect(localFs.mkdir('alias/a/b/c', { recursive: true })).rejects.toThrow(PermissionError);
+        await expect(fs.access(path.join(outsideDir, 'a'))).rejects.toThrow();
+      });
+
+      it('should block recursive directory copy into a symlinked ancestor', async () => {
+        await localFs.writeFile('srcdir/one.txt', 'one');
+        await localFs.writeFile('srcdir/sub/two.txt', 'two');
+        await expect(localFs.copyFile('srcdir', 'alias/copied-dir', { recursive: true })).rejects.toThrow(
+          PermissionError,
+        );
+        await expect(fs.access(path.join(outsideDir, 'copied-dir'))).rejects.toThrow();
+      });
+
+      it('should block deleting files and directories through a symlinked ancestor', async () => {
+        await fs.mkdir(path.join(outsideDir, 'existing-dir'));
+        await expect(localFs.deleteFile('alias/existing.txt')).rejects.toThrow(PermissionError);
+        await expect(localFs.rmdir('alias/existing-dir', { recursive: true })).rejects.toThrow(PermissionError);
+        expect(await fs.readFile(path.join(outsideDir, 'existing.txt'), 'utf-8')).toBe('unchanged');
+        expect((await fs.stat(path.join(outsideDir, 'existing-dir'))).isDirectory()).toBe(true);
+      });
+
+      it('should block creation through a chain of symlinks whose final target is outside', async () => {
+        // inside/hop -> inside/alias -> outsideDir
+        await fs.symlink(path.join(tempDir, 'alias'), path.join(tempDir, 'hop'));
+        await expect(localFs.writeFile('hop/new.txt', 'outside write')).rejects.toThrow(PermissionError);
+        await expect(fs.access(path.join(outsideDir, 'new.txt'))).rejects.toThrow();
+      });
+
+      it('should block creation through a symlinked ancestor when the same relative path also exists inside', async () => {
+        // The lexical path <base>/alias/new.txt looks inside; the check must use the real parent.
+        await fs.mkdir(path.join(tempDir, 'real-dir'));
+        await fs.writeFile(path.join(tempDir, 'real-dir', 'new.txt'), 'inside');
+        await expect(localFs.writeFile('alias/../alias/new.txt', 'outside write')).rejects.toThrow(PermissionError);
+        await expect(fs.access(path.join(outsideDir, 'new.txt'))).rejects.toThrow();
+      });
+
+      it('should block copying and moving to a new destination through a symlinked ancestor', async () => {
+        await localFs.writeFile('source.txt', 'source');
+        await expect(localFs.copyFile('source.txt', 'alias/copied.txt')).rejects.toThrow(PermissionError);
+        await expect(localFs.moveFile('source.txt', 'alias/moved.txt')).rejects.toThrow(PermissionError);
+        await expect(fs.access(path.join(outsideDir, 'copied.txt'))).rejects.toThrow();
+        await expect(fs.access(path.join(outsideDir, 'moved.txt'))).rejects.toThrow();
+        expect(await localFs.readFile('source.txt', { encoding: 'utf-8' })).toBe('source');
+      });
+
+      describe('dangling symlink whose target is outside', () => {
+        // The link itself is inside the root but its target doesn't exist yet,
+        // so realpath fails on it; creating through it creates the outside target.
+        beforeEach(async () => {
+          await fs.symlink(path.join(outsideDir, 'target.txt'), path.join(tempDir, 'dangling.txt'));
+          await fs.symlink(path.join(outsideDir, 'target-dir'), path.join(tempDir, 'dangling-dir'));
+        });
+
+        it('should block writeFile and appendFile', async () => {
+          await expect(localFs.writeFile('dangling.txt', 'outside write')).rejects.toThrow(PermissionError);
+          await expect(localFs.appendFile('dangling.txt', 'outside append')).rejects.toThrow(PermissionError);
+          await expect(fs.access(path.join(outsideDir, 'target.txt'))).rejects.toThrow();
+        });
+
+        it('should block copyFile and copyDir', async () => {
+          await localFs.writeFile('source.txt', 'source');
+          await localFs.writeFile('srcdir/one.txt', 'one');
+          await expect(localFs.copyFile('source.txt', 'dangling.txt')).rejects.toThrow(PermissionError);
+          await expect(localFs.copyFile('srcdir', 'dangling-dir', { recursive: true })).rejects.toThrow(
+            PermissionError,
+          );
+          await expect(fs.access(path.join(outsideDir, 'target.txt'))).rejects.toThrow();
+          await expect(fs.access(path.join(outsideDir, 'target-dir'))).rejects.toThrow();
+        });
+
+        it('should block mkdir and moveFile', async () => {
+          await localFs.writeFile('source.txt', 'source');
+          await expect(localFs.mkdir('dangling-dir', { recursive: true })).rejects.toThrow(PermissionError);
+          await expect(localFs.mkdir('dangling-dir/nested', { recursive: true })).rejects.toThrow(PermissionError);
+          await expect(localFs.moveFile('source.txt', 'dangling.txt')).rejects.toThrow(PermissionError);
+          await expect(fs.access(path.join(outsideDir, 'target-dir'))).rejects.toThrow();
+          expect(await localFs.readFile('source.txt', { encoding: 'utf-8' })).toBe('source');
+        });
+
+        it('should still allow a dangling symlink whose target is inside the root', async () => {
+          await fs.symlink(path.join(tempDir, 'inside-target.txt'), path.join(tempDir, 'inside-dangling.txt'));
+          await localFs.writeFile('inside-dangling.txt', 'ok');
+          expect(await fs.readFile(path.join(tempDir, 'inside-target.txt'), 'utf-8')).toBe('ok');
+        });
+
+        it('should not hang on a loop of dangling symlinks', async () => {
+          await fs.symlink(path.join(tempDir, 'loop-b'), path.join(tempDir, 'loop-a'));
+          await fs.symlink(path.join(tempDir, 'loop-a'), path.join(tempDir, 'loop-b'));
+          // The OS reports ELOOP before our own hop limit is reached; either way it must reject.
+          await expect(localFs.writeFile('loop-a', 'x')).rejects.toThrow();
+        });
+      });
+
+      describe('symlink swapped between containment check and write (TOCTOU)', () => {
+        // Simulates an adversary re-pointing `swap` from an inside directory to
+        // outsideDir after the pre-operation containment check has passed.
+        const swapAfterFirstCheck = () => {
+          const original = (LocalFilesystem.prototype as any).assertPathContained;
+          let swapped = false;
+          return vi.spyOn(LocalFilesystem.prototype as any, 'assertPathContained').mockImplementation(async function (
+            this: LocalFilesystem,
+            absolutePath: string,
+          ) {
+            await original.call(this, absolutePath);
+            if (!swapped) {
+              swapped = true;
+              await fs.unlink(path.join(tempDir, 'swap'));
+              await fs.symlink(outsideDir, path.join(tempDir, 'swap'));
+            }
+          });
+        };
+
+        beforeEach(async () => {
+          await fs.mkdir(path.join(tempDir, 'inside-target'));
+          await fs.symlink(path.join(tempDir, 'inside-target'), path.join(tempDir, 'swap'));
+        });
+
+        afterEach(() => {
+          vi.restoreAllMocks();
+        });
+
+        it('should not overwrite an existing outside file via writeFile', async () => {
+          swapAfterFirstCheck();
+          await expect(localFs.writeFile('swap/existing.txt', 'changed')).rejects.toThrow(PermissionError);
+          expect(await fs.readFile(path.join(outsideDir, 'existing.txt'), 'utf-8')).toBe('unchanged');
+        });
+
+        it('should not write content to a new outside file via writeFile', async () => {
+          swapAfterFirstCheck();
+          await expect(localFs.writeFile('swap/new.txt', 'outside write')).rejects.toThrow(PermissionError);
+          // The open itself may have created an empty entry; no content must land outside.
+          const content = await fs.readFile(path.join(outsideDir, 'new.txt'), 'utf-8').catch(() => '');
+          expect(content).toBe('');
+        });
+
+        it('should not append content to an outside file via appendFile', async () => {
+          swapAfterFirstCheck();
+          await expect(localFs.appendFile('swap/existing.txt', ' more')).rejects.toThrow(PermissionError);
+          expect(await fs.readFile(path.join(outsideDir, 'existing.txt'), 'utf-8')).toBe('unchanged');
+        });
+      });
+
+      it('should list an escaping symlink without following it during recursive readdir', async () => {
+        await localFs.writeFile('keep.txt', 'keep');
+        const entries = await localFs.readdir('.', { recursive: true });
+        const names = entries.map(e => e.name);
+        expect(names).toContain('keep.txt');
+        expect(names).toContain('alias');
+        expect(names.some(n => n.startsWith('alias/'))).toBe(false);
+      });
+
+      it('should still allow creating new files in missing directories inside the root', async () => {
+        await localFs.writeFile('nested/deep/new.txt', 'inside');
+        expect(await localFs.readFile('nested/deep/new.txt', { encoding: 'utf-8' })).toBe('inside');
+      });
+
+      it('should allow creation through a symlinked ancestor when its target is an allowed path', async () => {
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+          allowedPaths: [outsideDir],
+        });
+        await fsWithAllowed.writeFile('alias/new.txt', 'allowed write');
+        expect(await fs.readFile(path.join(outsideDir, 'new.txt'), 'utf-8')).toBe('allowed write');
+      });
+    });
+
     it('should allow access when containment is disabled', async () => {
       // Create a file in os.tmpdir() (parent of tempDir since tempDir is created via mkdtemp in tmpdir)
       const outsideFile = path.join(os.tmpdir(), 'outside-test.txt');
