@@ -357,7 +357,12 @@ export class PlatformGithubEventWorker extends MastraWorker {
         const { errors, ...counts } = await this.#reconcileIssuesFactoryState(targets);
         const context = { ...counts, candidateRepositories: targets.length, durationMs: Date.now() - startedAt };
         if (counts.failed > 0) {
-          this.deps?.logger.warn('Platform GitHub issue reconcile sweep completed with failures', { ...context, errors });
+          this.deps?.logger.warn('Platform GitHub issue reconcile sweep completed with failures', {
+            ...context,
+            errors,
+          });
+        } else if (counts.created > 0) {
+          this.deps?.logger.info('Platform GitHub issue reconcile replayed missed opens', context);
         } else if (counts.closed > 0) {
           this.deps?.logger.info('Platform GitHub issue reconcile replayed closed work items', context);
         } else if (counts.updated > 0) {
@@ -373,7 +378,6 @@ export class PlatformGithubEventWorker extends MastraWorker {
         });
       }
     }
-
   }
 
   /**
@@ -452,6 +456,13 @@ export class PlatformGithubEventWorker extends MastraWorker {
         }
         if (isFactoryIngestedEvent(parsed)) {
           await this.#ingestFactoryEvent?.(parsed);
+        } else {
+          this.deps?.logger.debug('Platform GitHub event not forwarded to Factory ingress', {
+            repositoryId,
+            deliveryId: parsed.deliveryId,
+            event: parsed.event,
+            action: parsed.payload.action,
+          });
         }
         const result = await this.#dispatch(parsed, {
           controller: this.#controller,
@@ -573,6 +584,8 @@ function normalizeSettings(value: PlatformGithubEventWorkerSettings | null): Pla
 // parsed event; the platform path gates because the remaining events (issue
 // edits, comment edits and deletions) only interest the subscription
 // dispatcher, not the factory rules.
+const ISSUE_INGESTED_ACTIONS = new Set(['opened', 'reopened', 'edited', 'labeled', 'unlabeled']);
+
 function isFactoryIngestedEvent(event: ParsedGithubWebhook): boolean {
   if ((event.event === 'issues' || event.event === 'pull_request') && event.payload.action === 'closed') {
     return true;
@@ -584,6 +597,9 @@ function isFactoryIngestedEvent(event: ParsedGithubWebhook): boolean {
     // only path a local deployment has.
     if (action === 'opened' || action === 'synchronize' || action === 'review_requested') return true;
   }
+  // Issue opens, reopens, edits and label changes mint and update Work cards.
+  // Without them a new issue never becomes a card on the polling path (#24972).
+  if (event.event === 'issues' && ISSUE_INGESTED_ACTIONS.has(String(event.payload.action))) return true;
   if (event.event === 'pull_request_review' && event.payload.action === 'submitted') return true;
   if (event.event === 'issue_comment' && event.payload.action === 'created') return true;
   // Default-branch pushes drive base-checkpoint rebuilds
