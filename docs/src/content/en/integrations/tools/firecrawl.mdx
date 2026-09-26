@@ -1,150 +1,332 @@
 ---
-title: "Firecrawl | Tools"
-description: "Build Mastra tools with Firecrawl so agents and workflows can search, scrape, and extract live web content as markdown or structured JSON."
+title: 'Firecrawl | Tools'
+description: 'Add Firecrawl Search and Scrape tools to Mastra agents with typed Zod inputs and outputs and clean Markdown page content.'
 packages:
-  - '@mastra/core'
+  - '@mastra/firecrawl'
 ---
-
-import Steps from "@site/src/components/Steps";
-import StepItem from "@site/src/components/StepItem";
 
 # Firecrawl
 
-Firecrawl is a web data API that turns websites into clean markdown or structured JSON. In this guide, you will wire Firecrawl into Mastra tools so your agents and workflows can search and scrape live web data on demand.
-
-## Prerequisites
-
-- Node.js `v22.13.0` or later installed
-- A Firecrawl API key (get one at [https://firecrawl.dev](https://firecrawl.dev))
-- An API key from a supported [Model Provider](/models)
-- An existing Mastra project. Follow [Get started](/docs) to create one.
+The `@mastra/firecrawl` package exposes [Firecrawl Search](https://docs.firecrawl.dev/features/search) and [Scrape](https://docs.firecrawl.dev/features/scrape) as Mastra-compatible tools. Each factory returns a tool created with [`createTool()`](/reference/tools/create-tool) and a typed Zod input and output schema.
 
 ## Installation
 
-Install the Firecrawl SDK:
-
 ```bash npm2yarn
-npm install firecrawl
+npm install @mastra/firecrawl firecrawl zod
 ```
 
-## Configure environment variables
+Set `FIRECRAWL_API_KEY` in your environment. You can also pass an API key directly to any factory.
 
-Create a `.env` file in your project root:
+## Quick start
 
-```bash title=".env"
-FIRECRAWL_API_KEY=fc-your-api-key
-# Optional: FIRECRAWL_API_URL=http://localhost:3002
+Use `createFirecrawlTools()` to create both tools with shared client configuration:
+
+```typescript title="src/mastra/tools/index.ts"
+import { createFirecrawlTools } from '@mastra/firecrawl'
+
+export const firecrawlTools = createFirecrawlTools()
+// Or pass an explicit API key:
+// export const firecrawlTools = createFirecrawlTools({ apiKey: 'fc-api-key' })
 ```
 
-## Build the Firecrawl tools
+The returned object contains `firecrawlSearch` and `firecrawlScrape`.
 
-Create a tool file that exposes Firecrawl search and scrape to Mastra.
+Create either tool separately when an agent doesn't need both:
 
-<Steps>
-  <StepItem>
-    Create `src/mastra/tools/firecrawl.ts` and set up Firecrawl:
+```typescript title="src/mastra/tools/index.ts"
+import { createFirecrawlScrapeTool, createFirecrawlSearchTool } from '@mastra/firecrawl'
 
-    ```ts title="src/mastra/tools/firecrawl.ts"
-    import { Firecrawl } from 'firecrawl'
-    import { createTool } from '@mastra/core/tools'
-    import { z } from 'zod'
+export const searchTool = createFirecrawlSearchTool()
+export const scrapeTool = createFirecrawlScrapeTool({ apiKey: 'fc-api-key' })
+```
 
-    const firecrawl = new Firecrawl({ apiKey: process.env.FIRECRAWL_API_KEY! })
+The client isn't initialized until the tool executes. A missing API key therefore fails at execution time with a configuration error.
 
-    export const firecrawlSearch = createTool({
-      id: 'firecrawl-search',
-      description: 'Search the web and return top results.',
-      inputSchema: z.object({ query: z.string().min(1) }),
-      outputSchema: z.object({
-        results: z.array(
-          z.object({
-            title: z.string().nullable(),
-            url: z.string(),
-          }),
-        ),
-      }),
-      execute: async ({ query }) => {
-        const results = await firecrawl.search(query, { limit: 3 })
-        return {
-          results: (results.web ?? []).map(item => ({
-            title: item.title ?? null,
-            url: item.url,
-          })),
-        }
+## Configuration
+
+All factories accept `FirecrawlClientOptions`, the constructor options of the official `firecrawl` client:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'Firecrawl API key. Falls back to `FIRECRAWL_API_KEY`.',
+    isOptional: true,
+  },
+  {
+    name: 'apiUrl',
+    type: 'string',
+    description: 'Base URL for self-hosted Firecrawl deployments.',
+    isOptional: true,
+    defaultValue: "'https://api.firecrawl.dev'",
+  },
+  {
+    name: 'timeoutMs',
+    type: 'number',
+    description: 'Request timeout in milliseconds.',
+    isOptional: true,
+  },
+  {
+    name: 'maxRetries',
+    type: 'number',
+    description: 'Maximum retries for temporary failures.',
+    isOptional: true,
+  },
+  {
+    name: 'backoffFactor',
+    type: 'number',
+    description: 'Multiplier applied between retries.',
+    isOptional: true,
+  },
+]}
+/>
+
+The package also exports `getFirecrawlClient()` for applications that need the configured official client directly.
+
+## `createFirecrawlSearchTool()`
+
+Creates the `firecrawl-search` tool. Search returns web, news and image results for a query and can optionally scrape each web result into Markdown in the same call.
+
+```typescript
+import { createFirecrawlSearchTool } from '@mastra/firecrawl'
+
+const searchTool = createFirecrawlSearchTool()
+```
+
+### Search input
+
+<PropertiesTable
+  content={[
+  { name: 'query', type: 'string', description: 'The search query.' },
+  {
+    name: 'limit',
+    type: 'number',
+    description: 'Maximum number of results to return (1-100).',
+    isOptional: true,
+  },
+  {
+    name: 'sources',
+    type: "('web' | 'news' | 'images')[]",
+    description: 'Result sources to include.',
+    isOptional: true,
+    defaultValue: "['web']",
+  },
+  {
+    name: 'categories',
+    type: "('github' | 'research' | 'pdf')[]",
+    description: 'Restrict results to these content categories.',
+    isOptional: true,
+  },
+  {
+    name: 'includeDomains',
+    type: 'string[]',
+    description: 'Only return results from these domains.',
+    isOptional: true,
+  },
+  {
+    name: 'excludeDomains',
+    type: 'string[]',
+    description: 'Never return results from these domains.',
+    isOptional: true,
+  },
+  {
+    name: 'tbs',
+    type: 'string',
+    description:
+      'Time filter such as `qdr:d` (past day), `qdr:w` (past week), `qdr:m` (past month) or `qdr:y` (past year).',
+    isOptional: true,
+  },
+  {
+    name: 'location',
+    type: 'string',
+    description: 'Geographic location to bias results toward, for example `Germany`.',
+    isOptional: true,
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    description: 'Request timeout in milliseconds.',
+    isOptional: true,
+  },
+  {
+    name: 'scrapeContent',
+    type: 'boolean',
+    description: 'Scrape each web result and include its Markdown content. Slower and uses more credits.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+]}
+/>
+
+### Search output
+
+<PropertiesTable
+  content={[
+  {
+    name: 'web',
+    type: 'WebResult[]',
+    description: 'Web results.',
+    properties: [
+      {
+        type: 'WebResult',
+        parameters: [
+          { name: 'url', type: 'string', description: 'Result URL.' },
+          { name: 'title', type: 'string', description: 'Page title.', isOptional: true },
+          { name: 'description', type: 'string', description: 'Result snippet.', isOptional: true },
+          { name: 'category', type: 'string', description: 'Content category.', isOptional: true },
+          {
+            name: 'markdown',
+            type: 'string',
+            description: 'Page content when `scrapeContent` is true.',
+            isOptional: true,
+          },
+        ],
       },
-    })
-
-    export const firecrawlScrape = createTool({
-      id: 'firecrawl-scrape',
-      description: 'Scrape a URL and return markdown content.',
-      inputSchema: z.object({ url: z.string().url() }),
-      outputSchema: z.object({ markdown: z.string() }),
-      execute: async ({ url }) => {
-        const result = await firecrawl.scrape(url, {
-          formats: ['markdown'],
-          onlyMainContent: true,
-        })
-        return { markdown: result.markdown ?? '' }
+    ],
+  },
+  {
+    name: 'news',
+    type: 'NewsResult[]',
+    description: 'News results when `sources` includes `news`.',
+    properties: [
+      {
+        type: 'NewsResult',
+        parameters: [
+          { name: 'url', type: 'string', description: 'Article URL.', isOptional: true },
+          { name: 'title', type: 'string', description: 'Article title.', isOptional: true },
+          { name: 'snippet', type: 'string', description: 'Article snippet.', isOptional: true },
+          { name: 'date', type: 'string', description: 'Publication date.', isOptional: true },
+          { name: 'imageUrl', type: 'string', description: 'Thumbnail URL.', isOptional: true },
+          { name: 'category', type: 'string', description: 'Content category.', isOptional: true },
+        ],
       },
-    })
-    ```
-  </StepItem>
+    ],
+  },
+  {
+    name: 'images',
+    type: 'ImageResult[]',
+    description: 'Image results when `sources` includes `images`.',
+    properties: [
+      {
+        type: 'ImageResult',
+        parameters: [
+          { name: 'url', type: 'string', description: 'Page the image was found on.', isOptional: true },
+          { name: 'title', type: 'string', description: 'Image title.', isOptional: true },
+          { name: 'imageUrl', type: 'string', description: 'Image URL.', isOptional: true },
+          { name: 'imageWidth', type: 'number', description: 'Image width in pixels.', isOptional: true },
+          { name: 'imageHeight', type: 'number', description: 'Image height in pixels.', isOptional: true },
+        ],
+      },
+    ],
+  },
+]}
+/>
 
-  <StepItem>
-    Create a new agent at `src/mastra/agents/web-agent.ts`:
+## `createFirecrawlScrapeTool()`
 
-    ```ts title="src/mastra/agents/web-agent.ts"
-    import { Agent } from '@mastra/core/agent'
-    import { firecrawlSearch, firecrawlScrape } from '../tools/firecrawl'
+Creates the `firecrawl-scrape` tool. Scrape fetches a single URL and returns its content in the requested formats.
 
-    export const webAgent = new Agent({
-      id: 'web-agent',
-      name: 'Web Agent',
-      instructions: 'Use Firecrawl tools to search and scrape web pages, then summarize the results.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      tools: { firecrawlSearch, firecrawlScrape },
-    })
-    ```
-  </StepItem>
+```typescript
+import { createFirecrawlScrapeTool } from '@mastra/firecrawl'
 
-  <StepItem>
-    Register the newly created agent in `src/mastra/index.ts` on your Mastra instance:
-
-    ```ts title="src/mastra/index.ts" {2, 5}
-    import { Mastra } from '@mastra/core'
-    import { webAgent } from './agents/web-agent'
-
-    export const mastra = new Mastra({
-      agents: { webAgent },
-    })
-    ```
-  </StepItem>
-</Steps>
-
-## Test in Studio
-
-Run the dev server and open [Studio](/docs/studio/overview):
-
-```bash
-mastra dev
+const scrapeTool = createFirecrawlScrapeTool()
 ```
 
-In Studio, open the **Web Agent** and try:
+### Scrape input
 
-- "Find the latest Mastra changelog and summarize the last release."
-- "Search for Firecrawl pricing and extract the plan tiers."
+<PropertiesTable
+  content={[
+  { name: 'url', type: 'string', description: 'The URL to scrape.' },
+  {
+    name: 'formats',
+    type: "('markdown' | 'html' | 'rawHtml' | 'links' | 'summary')[]",
+    description: 'Content formats to return.',
+    isOptional: true,
+    defaultValue: "['markdown']",
+  },
+  {
+    name: 'onlyMainContent',
+    type: 'boolean',
+    description: 'Return only the main content of the page, excluding headers, navigation and footers.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'includeTags',
+    type: 'string[]',
+    description: 'HTML tags, classes or ids to include.',
+    isOptional: true,
+  },
+  {
+    name: 'excludeTags',
+    type: 'string[]',
+    description: 'HTML tags, classes or ids to exclude.',
+    isOptional: true,
+  },
+  {
+    name: 'waitFor',
+    type: 'number',
+    description: 'Milliseconds to wait for the page to load before scraping.',
+    isOptional: true,
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    description: 'Request timeout in milliseconds.',
+    isOptional: true,
+  },
+  {
+    name: 'maxAge',
+    type: 'number',
+    description: 'Return a cached version if it is younger than this many milliseconds.',
+    isOptional: true,
+  },
+  {
+    name: 'mobile',
+    type: 'boolean',
+    description: 'Emulate a mobile device.',
+    isOptional: true,
+  },
+]}
+/>
 
-## Self-hosted Firecrawl
+### Scrape output
 
-If you run Firecrawl locally, set `FIRECRAWL_API_URL` or pass `apiUrl` in the client:
+<PropertiesTable
+  content={[
+  { name: 'url', type: 'string', description: 'Final URL of the scraped page.', isOptional: true },
+  { name: 'title', type: 'string', description: 'Page title.', isOptional: true },
+  { name: 'description', type: 'string', description: 'Page description.', isOptional: true },
+  { name: 'statusCode', type: 'number', description: 'HTTP status code.', isOptional: true },
+  { name: 'markdown', type: 'string', description: 'Markdown content when requested.', isOptional: true },
+  { name: 'html', type: 'string', description: 'Cleaned HTML when requested.', isOptional: true },
+  { name: 'rawHtml', type: 'string', description: 'Raw HTML when requested.', isOptional: true },
+  { name: 'links', type: 'string[]', description: 'Links found on the page when requested.', isOptional: true },
+  { name: 'summary', type: 'string', description: 'Page summary when requested.', isOptional: true },
+  { name: 'warning', type: 'string', description: 'Warning returned by Firecrawl.', isOptional: true },
+]}
+/>
 
-```ts title="src/mastra/tools/firecrawl.ts"
-const firecrawl = new Firecrawl({
-  apiKey: process.env.FIRECRAWL_API_KEY!,
-  apiUrl: process.env.FIRECRAWL_API_URL,
+## Use the tools with an agent
+
+```typescript title="src/mastra/agents/research-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createFirecrawlTools } from '@mastra/firecrawl'
+
+export const researchAgent = new Agent({
+  id: 'research-agent',
+  name: 'Research Agent',
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+  instructions:
+    'Search the web for current sources, then scrape the most relevant pages for details.',
+  tools: createFirecrawlTools(),
 })
 ```
 
 ## Related
 
-- [Firecrawl documentation](https://docs.firecrawl.dev)
+- [Firecrawl Search documentation](https://docs.firecrawl.dev/features/search)
+- [Firecrawl Scrape documentation](https://docs.firecrawl.dev/features/scrape)
+- [Firecrawl browser](/integrations/browsers/firecrawl)
+- [`createTool()` reference](/reference/tools/create-tool)

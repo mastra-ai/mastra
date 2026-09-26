@@ -57,6 +57,7 @@
     "@mastra/core": "workspace:*",
     "@mastra/duckdb": "workspace:*",
     "@mastra/fastembed": "workspace:*",
+    "@mastra/firecrawl": "workspace:*",
     "@mastra/github-signals": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/mcp": "workspace:*",

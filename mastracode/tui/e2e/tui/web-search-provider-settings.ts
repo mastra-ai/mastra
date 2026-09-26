@@ -10,6 +10,7 @@ export const webSearchProviderSettingsScenario = {
     return {
       TAVILY_API_KEY: 'mc-e2e-tavily-key',
       PARALLEL_API_KEY: '',
+      FIRECRAWL_API_KEY: 'mc-e2e-firecrawl-key',
     };
   },
   prepare({ appDataDir }) {
@@ -55,5 +56,16 @@ export const webSearchProviderSettingsScenario = {
     terminal.submit('/settings');
     await runtime.waitForScreenText(/Web search provider\s+Tavily/i, terminal);
     runtime.printScreen('web search provider reopened', terminal);
+
+    // Firecrawl has its key configured too, so it is selectable as well.
+    terminal.write('\x1b[B'.repeat(5));
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Firecrawl/i, terminal);
+    runtime.printScreen('provider submenu reopened', terminal);
+    // The submenu opens on the current choice (Tavily); Firecrawl is two rows below.
+    terminal.write('\x1b[B'.repeat(2));
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Web search provider\s+Firecrawl/i, terminal);
+    runtime.printScreen('firecrawl selected', terminal);
   },
 } satisfies McE2eScenario;
