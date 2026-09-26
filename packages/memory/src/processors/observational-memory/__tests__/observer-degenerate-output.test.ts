@@ -11,7 +11,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import { BufferingCoordinator } from '../buffering-coordinator';
 import { ObservationalMemory } from '../observational-memory';
-import { parseMultiThreadObserverOutput, parseObserverOutput } from '../observer-agent';
+import { detectDegenerateRepetition, parseMultiThreadObserverOutput, parseObserverOutput } from '../observer-agent';
 import { parseReflectorOutput } from '../reflector-agent';
 
 beforeEach(() => {
@@ -312,5 +312,37 @@ describe('Observer degenerate detection (#24354)', () => {
     await seedMessages(storage, threadId);
 
     await expect(om.observe({ threadId })).rejects.toThrow(/degenerate repetition/);
+  });
+});
+
+describe('detectDegenerateRepetition short-line loops', () => {
+  it('flags a short line repeated past one maximum-size observation line', () => {
+    const loop = Array.from({ length: 1000 }, () => '  * -> pnpm build → ok').join('\n');
+    expect(detectDegenerateRepetition(loop)).toBe(true);
+  });
+
+  it('still accepts a bounded run of the same short line', () => {
+    const bounded = ['* Ran the build', ...Array.from({ length: 200 }, () => '  * -> pnpm build → ok')].join('\n');
+    expect(detectDegenerateRepetition(bounded)).toBe(false);
+  });
+
+  // 588 occurrences of a 16-char line split across two runs (so the bounded-run
+  // collapse does not apply): the repeated-line aggregate is 588 * 16 + 587
+  // separators = 9,995 characters before padding.
+  // Padding one occurrence with leading spaces lands on the exact boundary.
+  const splitRuns = (pad: number) => {
+    const line = '* built pkg ok #';
+    const first = Array.from({ length: 294 }, () => line);
+    const second = Array.from({ length: 294 }, () => line);
+    first[0] = ' '.repeat(pad) + line;
+    return [...first, 'Ran a separate step here', ...second].join('\n');
+  };
+
+  it('accepts a short line whose occurrences total exactly one maximum-size observation line', () => {
+    expect(detectDegenerateRepetition(splitRuns(5))).toBe(false);
+  });
+
+  it('flags a short line whose occurrences total one character more', () => {
+    expect(detectDegenerateRepetition(splitRuns(6))).toBe(true);
   });
 });

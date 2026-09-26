@@ -2,11 +2,14 @@
 '@mastra/memory': patch
 ---
 
-Fixed Observational Memory flagging faithful summaries of long or repetitive tool output as degenerate. Giant single lines are now truncated instead of rejected in both Observer and Reflector output, and a back-to-back run of one repeated tool-result line (e.g. many successful `pnpm --filter ./packages/memory build → ok` calls) no longer trips the repetition check, whatever the line length, as long as the run fits in one maximum-size observation line (10,000 chars).
+Observational Memory rejects far fewer faithful summaries of long or repetitive tool output as degenerate. Very long lines are truncated instead of rejected, though a line whose retained text repeats may still be rejected. A short run of the same short tool line is accepted, but a short line whose occurrences add up to more than one maximum-size observation line (10,000 characters) is still treated as a loop.
 
-Genuinely degenerate output is handled by mode:
+Output that really is degenerate is handled by mode:
 
-- **Synchronous Observer and Reflector** follow `failurePolicy`. With `'continue'` the cycle is skipped, the input stays pending, and `onObservationEnd` / `onReflectionEnd` receive the error. With the default `'abort'` the turn fails as before.
+- **Synchronous Observer** follows `failurePolicy`. With `'continue'` the observation cycle is skipped, the messages stay unobserved, and `onObservationEnd` receives the error. With the default `'abort'` the turn fails as before.
+- **Synchronous Reflector** follows `failurePolicy`. With `'continue'` no reflection is committed, the existing observations are kept unreflected, and `onReflectionEnd` receives the error. With the default `'abort'` the turn fails as before.
 - **Buffered (background) reflection** never fails the turn, regardless of `failurePolicy`. Nothing is committed, a failure marker is recorded when a stream writer is attached, and `onReflectionEnd` receives the error.
+
+Under `'continue'`, repeated skips can let unobserved messages grow; limiting that backlog is left to a follow-up.
 
 Fixes #24354.
