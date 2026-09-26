@@ -82,7 +82,18 @@ export async function computeModelOutputProviderMetadata(deps: {
   const existingMastra = (deps.existingProviderMetadata as { mastra?: Record<string, unknown> } | undefined)?.mastra;
   const providerMetadata = {
     ...deps.existingProviderMetadata,
-    ...(modelOutput != null ? { mastra: { ...existingMastra, modelOutput } } : {}),
+    ...(modelOutput != null
+      ? {
+          // A real `toModelOutput` mapping always wins over any transient,
+          // processor-generated `modelOutput` (e.g. TokenLimiterProcessor's
+          // maxToolResultTokens cap). Explicitly clear `modelOutputCapped` too
+          // (an own key set to `undefined`, not merely absent, so it overwrites
+          // a stale `true` left by that processor's own commit) — otherwise
+          // persistence filtering would mistake this permanent mapping for a
+          // transient cap and strip it from storage.
+          mastra: { ...existingMastra, modelOutput, modelOutputCapped: undefined },
+        }
+      : {}),
   };
   return Object.keys(providerMetadata).length > 0 ? providerMetadata : undefined;
 }

@@ -1981,73 +1981,120 @@ describe('TokenLimiterProcessor', () => {
       expect(part.providerMetadata?.mastra?.modelOutput).toBeUndefined();
     });
 
-    it('does nothing when maxToolResultTokens is unset', async () => {
+    it('does not attach a processToolResult hook when maxToolResultTokens is unset', () => {
+      // The agentic loop checks `'processToolResult' in processor` to decide whether
+      // to hold eager tool dispatch back for the output-processor pipeline. An
+      // always-present hook here would force that slower path even when this
+      // processor has nothing to cap, so the hook must not exist at all in this case.
       const processor = new TokenLimiterProcessor({ limit: 400 });
+      expect(processor.processToolResult).toBeUndefined();
+      expect('processToolResult' in processor).toBe(false);
+    });
+
+    it('a real toModelOutput mapping always wins over this cap (via computeModelOutputProviderMetadata)', async () => {
+      // This processor's own hook has no visibility into a tool's `toModelOutput`
+      // mapping -- that mapping is computed and committed by the engine *after*
+      // this hook runs (see computeModelOutputProviderMetadata in
+      // tool-result-commit-core.ts), and its write always wins on the
+      // `modelOutput` key. Reproduce that ordering directly here.
+      const { computeModelOutputProviderMetadata } = await import('../../loop/shared/steps/tool-result-commit-core');
+      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 5 });
       const messageList = new MessageList();
       const big = 'word '.repeat(2000);
       messageList.add(toolResult('tool-now', big, 1), 'response');
 
+      // This processor's hook runs first and caps the result.
       await runProcessToolResult(processor, messageList, 'tool-now', big);
+      const cappedPart = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+      expect(cappedPart.providerMetadata?.mastra?.modelOutputCapped).toBe(true);
 
-      const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
-      expect(part.providerMetadata?.mastra?.modelOutput).toBeUndefined();
-    });
+      // The engine's own commit then runs with a real toModelOutput mapping,
+      // using the cap's own output as `existingProviderMetadata` (the same
+      // shape it would read off the in-flight commit).
+      const providerMetadata = await computeModelOutputProviderMetadata({
+        tool: { toModelOutput: () => 'already mapped' },
+        toolName: 'lookup',
+        toolCallId: 'call-tool-now',
+        result: big,
+        existingProviderMetadata: cappedPart.providerMetadata,
+      });
 
-    it('respects an existing toModelOutput mapping instead of overwriting it', async () => {
-      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 5 });
-      const messageList = new MessageList();
-      const big = 'word '.repeat(2000);
-      const mapped: MastraDBMessage = {
-        id: 'tool-now',
-        role: 'assistant',
-        content: {
-          format: 2,
-          content: '',
-          parts: [
-            {
-              type: 'tool-invocation',
-              toolInvocation: { state: 'result', toolCallId: 'call-tool-now', toolName: 'lookup', args: {}, result: big },
-              providerMetadata: { mastra: { modelOutput: { type: 'text', value: 'already mapped' } } },
-            },
-          ],
-        },
-        createdAt: at(1),
-      };
-      messageList.add(mapped, 'response');
-
-      await runProcessToolResult(processor, messageList, 'tool-now', big);
-
-      const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
-      expect(part.providerMetadata?.mastra?.modelOutput).toEqual({ type: 'text', value: 'already mapped' });
+      expect((providerMetadata?.mastra as any)?.modelOutput).toBe('already mapped');
+      // The stale cap flag must be cleared, not left behind -- otherwise persistence
+      // filtering would mistake this permanent mapping for a transient cap and strip it.
+      expect((providerMetadata?.mastra as any)?.modelOutputCapped).toBeUndefined();
     });
 
     it('rejects a non-positive maxToolResultTokens', () => {
       expect(() => new TokenLimiterProcessor({ limit: 100, maxToolResultTokens: 0 })).toThrow(/maxToolResultTokens/);
     });
 
-    it.each([5, 20, 50])('always emits a truncation marker whose reported count matches the actual tokens shown (cap=%i)', async cap => {
-      const big = 'word '.repeat(2000);
-      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: cap });
-      const messageList = new MessageList();
-      messageList.add(toolResult('tool-now', big, 1), 'response');
+    it.each([5, 20, 50, 1234])(
+      'always emits a truncation marker whose reported count matches the actual tokens shown (cap=%i)',
+      async cap => {
+        // 20,000 tokens of content so even the cap=1234 case leaves a "shown" count
+        // >= 1000 -- large enough to hit the toLocaleString comma-formatting path
+        // (e.g. "1,220") in both the shown-count and total-count parts of the marker.
+        const big = 'word '.repeat(20000);
+        const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: cap });
+        const messageList = new MessageList();
+        messageList.add(toolResult('tool-now', big, 1), 'response');
 
-      await runProcessToolResult(processor, messageList, 'tool-now', big);
+        await runProcessToolResult(processor, messageList, 'tool-now', big);
+
+        const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+        const value: string = part.providerMetadata.mastra.modelOutput.value;
+
+        if (value === '') {
+          // The cap is too small even for the bare "showing 0 of M" marker: capText
+          // documents falling back to an empty string rather than a marker that
+          // itself exceeds the configured budget (see capText docstring).
+          return;
+        }
+
+        // Both the shown-count and the total-count are formatted with toLocaleString,
+        // so either can carry thousands separators (e.g. "1,220") once >= 1000.
+        const match = value.match(/\[truncated: showing ([\d,]+) of ([\d,]+) tokens\]$/);
+        expect(match).not.toBeNull();
+        const reportedShown = Number(match![1].replace(/,/g, ''));
+        const slice = value.slice(0, value.length - match![0].length);
+        // The marker's reported count must match the actual token count of the slice it
+        // describes (not the requested cap) -- Tyler's review found cases where the two diverged.
+        expect(estimateTokenCount(slice)).toBe(reportedShown);
+        // The whole capped payload (slice + marker) must always fit inside the requested cap,
+        // for every cap size tested, including caps >= 1000.
+        expect(estimateTokenCount(value)).toBeLessThanOrEqual(cap);
+      },
+    );
+
+    it('does not crash on a circular result, and leaves it uncapped', async () => {
+      const circular: Record<string, unknown> = { data: 'x'.repeat(10_000) };
+      circular.self = circular;
+      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 50 });
+      const messageList = new MessageList();
+      messageList.add(toolResult('tool-now', circular, 1), 'response');
+
+      // JSON.stringify throws on circular references; the hook must catch that
+      // and leave the result uncapped rather than crashing the run.
+      await expect(runProcessToolResult(processor, messageList, 'tool-now', circular)).resolves.not.toThrow();
 
       const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
-      const value: string = part.providerMetadata.mastra.modelOutput.value;
-      const match = value.match(/\[truncated: showing (\d+) of ([\d,]+) tokens\]$/);
-      expect(match).not.toBeNull();
-      const reportedShown = Number(match![1]);
-      const slice = value.slice(0, value.length - match![0].length);
-      // The marker's reported count must match the actual token count of the slice it
-      // describes (not the requested cap) -- Tyler's review found cases where the two diverged.
-      expect(estimateTokenCount(slice)).toBe(reportedShown);
-      // Once any content is shown, the whole capped payload (slice + marker) must still fit
-      // inside the requested cap. When the cap is too small even for the marker alone, capText
-      // documents falling back to a marker-only "showing 0 of M" response (see capText docstring).
-      if (reportedShown > 0) {
-        expect(estimateTokenCount(value)).toBeLessThanOrEqual(cap);
-      }
+      expect(part.providerMetadata?.mastra?.modelOutput).toBeUndefined();
+    });
+
+    it('does not crash on a result containing a bigint, and caps it', async () => {
+      const withBigint = { count: 123n, data: 'word '.repeat(2000) };
+      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 50 });
+      const messageList = new MessageList();
+      messageList.add(toolResult('tool-now', withBigint, 1), 'response');
+
+      // JSON.stringify throws on bigint without a replacer; the hook must serialize
+      // bigints safely (e.g. via a replacer) instead of crashing the run.
+      await expect(runProcessToolResult(processor, messageList, 'tool-now', withBigint)).resolves.not.toThrow();
+
+      const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+      const modelOutput = part.providerMetadata?.mastra?.modelOutput;
+      expect(modelOutput?.value).toMatch(/\[truncated: showing \d+ of [\d,]+ tokens\]$/);
     });
 
     it('caps regardless of trimMode, including memory-only', async () => {

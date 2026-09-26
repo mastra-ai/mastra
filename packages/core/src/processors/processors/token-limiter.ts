@@ -13,6 +13,7 @@ import type {
   ProcessLLMRequestArgs,
   ProcessLLMRequestResult,
   ProcessOutputStreamArgs,
+  ProcessToolResultArgs,
   Processor,
 } from '../index';
 
@@ -47,9 +48,11 @@ export interface TokenLimiterOptions {
   /** Persist a memory cursor after trimming. */
   onMemoryTrim?: (messages: MastraDBMessage[], requestContext?: ProcessInputArgs['requestContext']) => Promise<void>;
   /**
-   * Cap each tool result produced in the current run to this many tokens before it reaches the model.
-   * The stored result is kept intact; the model receives a truncated copy ending in a
-   * `[truncated: showing N of M tokens]` marker. Unset by default (no capping).
+   * Cap every tool result to this many tokens before it reaches the model, instead of letting
+   * it be trimmed away entirely by ordinary trimming. The stored result is kept intact; the model
+   * receives a truncated copy ending in a `[truncated: showing N of M tokens]` marker. A tool's own
+   * `toModelOutput` mapping always takes precedence over this cap. Requires the processor to also be
+   * registered in `outputProcessors` — that's what runs `processToolResult`. Unset by default (no capping).
    */
   maxToolResultTokens?: number;
 }
@@ -132,6 +135,15 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
   private onMemoryTrim?: TokenLimiterOptions['onMemoryTrim'];
   private maxToolResultTokens?: number;
 
+  /**
+   * Only present when `maxToolResultTokens` is set. The agentic loop checks
+   * `'processToolResult' in processor` to decide whether a provider-executed
+   * tool result must be routed through the output-processor pipeline before
+   * eager dispatch of the next tool call; an always-present method here would
+   * force that slower path even when this processor has nothing to cap.
+   */
+  declare public processToolResult?: (args: ProcessToolResultArgs) => Promise<void>;
+
   // Token counting constants for input processing
   private static readonly TOKENS_PER_MESSAGE = 3.8;
   private static readonly TOKENS_PER_CONVERSATION = 24;
@@ -166,6 +178,9 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
         (!Number.isFinite(this.maxToolResultTokens) || this.maxToolResultTokens <= 0)
       ) {
         throw new Error('maxToolResultTokens must be a finite, positive number');
+      }
+      if (this.maxToolResultTokens !== undefined) {
+        this.processToolResult = this.capOversizedToolResult.bind(this);
       }
       if (
         this.trimMode === 'memory-only' &&
@@ -328,8 +343,9 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
    * reports the exact number of tokens actually shown. Shrinks the visible
    * slice as needed to keep the marker itself inside `maxTokens`; if `maxTokens`
    * is too small to fit any content, the result is the marker alone (reporting
-   * 0 tokens shown) so the caller is never silently handed a truncated payload
-   * with no indication.
+   * 0 tokens shown). If `maxTokens` is too small even for the bare marker, the
+   * result is an empty string -- the cap is honored strictly rather than
+   * emitting a marker whose own size exceeds the configured budget.
    */
   private capText(text: string, maxTokens: number): string | undefined {
     const total = this.countTokens(text);
@@ -344,7 +360,11 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
       }
       shown -= 1;
     }
-    return `[truncated: showing 0 of ${total.toLocaleString('en-US')} tokens]`;
+    const bareMarker = `[truncated: showing 0 of ${total.toLocaleString('en-US')} tokens]`;
+    if (this.countTokens(bareMarker) <= maxTokens) return bareMarker;
+    // maxTokens is too small to fit even the marker alone: honor the cap
+    // strictly rather than emit a marker whose own size exceeds the budget.
+    return '';
   }
 
   /**
@@ -355,8 +375,19 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
   private capToolResult(result: unknown, maxTokens: number): string | undefined {
     const isMediaArray = Array.isArray(result) && result.length > 0 && result.every(isMediaPayload);
     if (result === undefined || isMediaPayload(result) || isMediaArray) return undefined;
-    const text = typeof result === 'string' ? result : JSON.stringify(result);
-    if (text === undefined) return undefined;
+    let text: string;
+    if (typeof result === 'string') {
+      text = result;
+    } else {
+      try {
+        text = JSON.stringify(result, (_key, value) => (typeof value === 'bigint' ? value.toString() : value));
+      } catch {
+        // Circular references (or other values JSON.stringify can't handle)
+        // shouldn't crash the run; leave the result uncapped.
+        return undefined;
+      }
+      if (text === undefined) return undefined;
+    }
     return this.capText(text, maxTokens);
   }
 
@@ -365,28 +396,22 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
    * sent to the model. Runs unconditionally (regardless of `trimMode`) for every
    * output processor invocation, so register this processor in `outputProcessors`
    * for capping to take effect (`inputProcessors` alone only trims history).
+   *
+   * If the tool has its own `toModelOutput` mapping, that mapping is computed
+   * and committed to the message list *after* this hook runs, and its write
+   * always wins on the `modelOutput` key — this cap never overrides a genuine
+   * tool-level mapping. (See `computeModelOutputProviderMetadata`, which also
+   * clears a stale `modelOutputCapped` flag left behind by this hook in that
+   * case, so the mapper's permanent output doesn't get mistaken for our
+   * transient truncation and stripped before persistence.)
    */
-  async processToolResult(args: {
-    result: unknown;
-    toolCallId: string;
-    toolName: string;
-    messageList: ProcessInputStepArgs['messageList'];
-  }): Promise<void> {
+  private async capOversizedToolResult(args: ProcessToolResultArgs): Promise<void> {
     if (this.maxToolResultTokens === undefined) return;
-    const { result, toolCallId, toolName, messageList } = args;
+    const { result, toolCallId, toolName, args: toolArgs, messageList } = args;
     if (!messageList) return;
-
-    const existingPart = messageList
-      .get.all.db()
-      .flatMap(message => (Array.isArray(message.content?.parts) ? message.content.parts : []))
-      .find(part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolCallId);
-    const existingMastraMeta = existingPart?.providerMetadata?.mastra as Record<string, unknown> | undefined;
-    if (existingMastraMeta?.modelOutput != null) return;
 
     const value = this.capToolResult(result, this.maxToolResultTokens);
     if (value === undefined) return;
-
-    const toolArgs = existingPart?.type === 'tool-invocation' ? existingPart.toolInvocation.args : undefined;
 
     messageList.updateToolInvocation({
       type: 'tool-invocation',
