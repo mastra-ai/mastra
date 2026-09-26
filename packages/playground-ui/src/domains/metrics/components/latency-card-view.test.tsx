@@ -54,14 +54,14 @@ describe('LatencyCardView', () => {
     it('says so when the request failed', () => {
       render(<LatencyCardView data={undefined} isLoading={false} isError />);
 
-      expect(screen.getByText('Failed to load latency data')).toBeTruthy();
+      expect(screen.getByText('Couldn’t load latency')).toBeTruthy();
       expect(screen.queryByRole('tab')).toBeNull();
     });
 
     it('prefers the spinner over the error while both are set', () => {
       render(<LatencyCardView data={undefined} isLoading isError />);
 
-      expect(screen.queryByText('Failed to load latency data')).toBeNull();
+      expect(screen.queryByText('Couldn’t load latency')).toBeNull();
     });
   });
 

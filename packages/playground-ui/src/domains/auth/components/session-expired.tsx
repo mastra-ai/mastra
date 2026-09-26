@@ -31,8 +31,8 @@ export function SessionExpired({ variant }: SessionExpiredProps) {
     <EmptyState
       variant={variant}
       iconSlot={<TimerOffIcon />}
-      titleSlot="Session Expired"
-      descriptionSlot="Your session has expired. Please log in again to continue."
+      titleSlot="Session expired"
+      descriptionSlot="Your session expired. Log in again to continue."
       actionSlot={
         <Button icon={<LogInIcon />} variant="default" onClick={logIn} disabled={isRedirecting}>
           {isRedirecting ? 'Redirecting...' : 'Log in'}

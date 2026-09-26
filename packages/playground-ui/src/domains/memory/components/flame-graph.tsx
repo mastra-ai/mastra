@@ -32,6 +32,7 @@ import {
   toMessageData,
   toSelectedT,
 } from './flame-graph-data';
+import { formatFullNumber } from '@/lib/cost';
 import { formatDate } from '@/utils/date-format';
 
 export interface ZoomRange {
@@ -112,7 +113,7 @@ export function FlameTooltip({
           <div key={entry.name} className="flex items-center justify-between gap-3">
             <span className="text-muted-foreground">{entry.name}</span>
             <span className="text-foreground">
-              {typeof entry.value === 'number' ? Math.round(entry.value).toLocaleString() : String(entry.value)}
+              {typeof entry.value === 'number' ? formatFullNumber(Math.round(entry.value)) : String(entry.value)}
             </span>
           </div>
         ))}

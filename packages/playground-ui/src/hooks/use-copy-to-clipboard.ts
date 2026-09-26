@@ -83,7 +83,7 @@ export function useCopyToClipboard(props: UseCopyToClipboardProps | UseCopyToCli
     (value: string) => {
       void copyTextToClipboard(value).then(copied => {
         if (!copied) {
-          if (showToast) toast.error('Failed to copy to clipboard.');
+          if (showToast) toast.error('Couldn’t copy to clipboard');
           return;
         }
 

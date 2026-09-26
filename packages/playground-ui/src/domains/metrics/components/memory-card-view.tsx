@@ -76,17 +76,17 @@ export function MemoryCardView({
       <MetricsCard.TopBar>
         <MetricsCard.TitleAndDescription title="Memory" description="Resource and Thread consumption" />
         {activeTab === 'threads' && hasThreadData && (
-          <MetricsCard.Summary value={threadTotal.toLocaleString()} label="Total runs" />
+          <MetricsCard.Summary value={formatCompactNumber(threadTotal)} label="Total runs" />
         )}
         {activeTab === 'resources' && hasResourceData && (
-          <MetricsCard.Summary value={resourceTotal.toLocaleString()} label="Total threads" />
+          <MetricsCard.Summary value={formatCompactNumber(resourceTotal)} label="Total threads" />
         )}
         {renderedActions ? <MetricsCard.Actions>{renderedActions}</MetricsCard.Actions> : null}
       </MetricsCard.TopBar>
       {active.isLoading ? (
         <MetricsCard.Loading />
       ) : active.isError ? (
-        <MetricsCard.Error message="Failed to load memory data" />
+        <MetricsCard.Error message="Couldn’t load memory usage" />
       ) : (
         <MetricsCard.Content>
           <Tabs
@@ -119,7 +119,7 @@ export function MemoryCardView({
                           {shortId(row.threadId)}
                         </DataList.RowHeaderCell>
                         <DataList.NumberCell>{row.resourceId ? shortId(row.resourceId) : '—'}</DataList.NumberCell>
-                        <DataList.NumberCell highlight>{row.runs.toLocaleString()}</DataList.NumberCell>
+                        <DataList.NumberCell highlight>{formatCompactNumber(row.runs)}</DataList.NumberCell>
                         <DataList.NumberCell>
                           {row.tokens > 0 ? formatCompactNumber(row.tokens) : '—'}
                         </DataList.NumberCell>
@@ -158,7 +158,7 @@ export function MemoryCardView({
                         <DataList.RowHeaderCell className="text-caption">
                           {shortId(row.resourceId)}
                         </DataList.RowHeaderCell>
-                        <DataList.NumberCell highlight>{row.threadCount.toLocaleString()}</DataList.NumberCell>
+                        <DataList.NumberCell highlight>{formatCompactNumber(row.threadCount)}</DataList.NumberCell>
                         <DataList.NumberCell>
                           {row.tokens > 0 ? formatCompactNumber(row.tokens) : '—'}
                         </DataList.NumberCell>

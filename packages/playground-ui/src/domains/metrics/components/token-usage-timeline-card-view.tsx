@@ -81,7 +81,7 @@ export function TokenUsageTimelineCardView({
       {isLoading ? (
         <MetricsCard.Loading />
       ) : isError ? (
-        <MetricsCard.Error message="Failed to load token usage timeline" />
+        <MetricsCard.Error message="Couldn’t load token usage timeline" />
       ) : (
         <MetricsCard.Content>
           {!hasData ? (

@@ -67,7 +67,7 @@ export function TokenUsageByAgentCardView({
       {isLoading ? (
         <MetricsCard.Loading />
       ) : isError ? (
-        <MetricsCard.Error message="Failed to load token usage data" />
+        <MetricsCard.Error message="Couldn’t load token usage" />
       ) : (
         <MetricsCard.Content>
           {!hasData ? (

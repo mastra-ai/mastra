@@ -17,7 +17,7 @@ describe('LogsErrorContent', () => {
   it('offers a way back in when the session has expired', () => {
     render(withClient(<LogsErrorContent error={{ status: 401 }} resource="logs" errorTitle="Failed to load logs" />));
 
-    expect(screen.getByText('Session Expired')).toBeTruthy();
+    expect(screen.getByText('Session expired')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Log in' })).toBeTruthy();
     expect(screen.queryByText('Failed to load logs')).toBeNull();
   });

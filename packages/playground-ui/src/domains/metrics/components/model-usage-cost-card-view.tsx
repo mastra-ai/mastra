@@ -56,7 +56,7 @@ export function ModelUsageCostCardView({
       {isLoading ? (
         <MetricsCard.Loading />
       ) : isError ? (
-        <MetricsCard.Error message="Failed to load model usage data" />
+        <MetricsCard.Error message="Couldn’t load model usage" />
       ) : (
         <MetricsCard.Content>
           {!hasData ? (

@@ -43,7 +43,7 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
       </DataDetailsPanel.Header>
 
       {isLoading ? (
-        <DataDetailsPanel.LoadingData>Loading span...</DataDetailsPanel.LoadingData>
+        <DataDetailsPanel.LoadingData>Loading span</DataDetailsPanel.LoadingData>
       ) : !span ? (
         <DataDetailsPanel.NoData>Span not found.</DataDetailsPanel.NoData>
       ) : (

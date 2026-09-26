@@ -74,7 +74,7 @@ export function SpanScoring({
     return (
       <>
         <DialogBody>
-          <Notice variant="destructive">Failed to load scorers.</Notice>
+          <Notice variant="destructive">Couldn’t load scorers.</Notice>
         </DialogBody>
         <DialogFooter>
           <DialogCancel>Cancel</DialogCancel>
@@ -102,8 +102,8 @@ export function SpanScoring({
         <DialogDescription>Select a scorer to evaluate this trace.</DialogDescription>
         <Combobox
           aria-label="Select scorer"
-          searchPlaceholder="Search scorers..."
-          placeholder="Select a scorer..."
+          searchPlaceholder="Search scorers"
+          placeholder="Choose a scorer"
           options={scorerList.map(scorer => ({
             label: scorer.name || scorer.id,
             value: scorer.id || scorer.name || '',

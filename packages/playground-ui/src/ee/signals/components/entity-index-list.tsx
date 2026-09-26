@@ -1,8 +1,8 @@
 import type { ThemeLearningEntity } from '@mastra/client-js';
 
-import { entityIndexMetadata, entityStatusLabel } from './entity-index-model';
-import { Badge } from '@/ds/components/Badge';
+import { entityIndexMetadata, entityStatusPresentation } from './entity-index-model';
 import { DataList } from '@/ds/components/DataList';
+import { Status } from '@/ds/components/StatusIndicators';
 import type { LinkComponent } from '@/ds/types/link-component';
 
 const columns = 'minmax(12rem,1.5fr) minmax(7rem,0.6fr) minmax(8rem,0.7fr) minmax(8rem,0.7fr) minmax(12rem,1fr)';
@@ -12,16 +12,6 @@ export interface EntityIndexListProps {
   hasSearch: boolean;
   getEntityHref: (entity: ThemeLearningEntity) => string;
   LinkComponent: LinkComponent;
-}
-
-function Status({ entity }: { entity: ThemeLearningEntity }) {
-  const label = entityStatusLabel(entity.status);
-  const variant = entity.status === 'ready' ? 'green' : entity.status === 'processing' ? 'blue' : 'neutral';
-  return (
-    <Badge variant={variant} size="sm" indicator={entity.status === undefined ? undefined : 'dot'}>
-      {label}
-    </Badge>
-  );
 }
 
 export function EntityIndexList({ entities, hasSearch, getEntityHref, LinkComponent }: EntityIndexListProps) {
@@ -54,7 +44,7 @@ export function EntityIndexList({ entities, hasSearch, getEntityHref, LinkCompon
               <DataList.NumberCell>{metadata.traceCount}</DataList.NumberCell>
               <DataList.Cell>{metadata.signalsSet}</DataList.Cell>
               <DataList.Cell>
-                <Status entity={entity} />
+                <Status presentation={entityStatusPresentation(entity.status)} />
               </DataList.Cell>
               <DataList.Cell title={entity.updatedAt}>{metadata.updatedAt}</DataList.Cell>
             </DataList.RowLink>

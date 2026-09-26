@@ -59,7 +59,7 @@ const FieldLevelSelect: React.FC<FieldLevelSelectProps> = ({
                   {getFieldTypeIcon(option.type)}
                 </Icon>
                 {option.label}
-                {option.hasChildren && <span className="text-muted-foreground">...</span>}
+                {option.hasChildren && <span className="text-muted-foreground">…</span>}
               </span>
             </SelectItem>
           ))}
