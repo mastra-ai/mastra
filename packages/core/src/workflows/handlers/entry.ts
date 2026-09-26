@@ -4,6 +4,7 @@ import type { SerializedError } from '../../error';
 import type { PubSub } from '../../events/pubsub';
 import { resolveObservabilityContext } from '../../observability';
 import type { ObservabilityContext } from '../../observability';
+import { WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import type {
   EntryExecutionResult,
@@ -827,7 +828,10 @@ export async function executeEntry(
   }
 
   if (abortController?.signal?.aborted) {
-    execResults = { ...execResults, status: 'canceled' };
+    execResults = {
+      ...execResults,
+      status: abortController.signal.reason === WORKFLOW_CANCELLED_SYMBOL ? 'canceled' : 'waiting',
+    };
   }
 
   await engine.persistStepUpdate({
