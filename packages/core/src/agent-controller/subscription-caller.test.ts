@@ -106,12 +106,16 @@ describe('AgentController subscription caller binding', () => {
 
     await session.thread.switch({ threadId: 't', requestContext: callerContext('alice') });
     const subscribe = session.machinery.subscribeToThread.bind(session.machinery);
-    const opened: { abort: ReturnType<typeof vi.spyOn>; unsubscribe: ReturnType<typeof vi.spyOn> }[] = [];
+    type Spied = { abort: ReturnType<typeof vi.spyOn>; unsubscribe: ReturnType<typeof vi.spyOn> };
+    const opened: Spied[] = [];
+    let alice: Spied | undefined;
     vi.spyOn(session.machinery, 'subscribeToThread').mockImplementation(async input => {
       const subscription = await subscribe(input);
       opened.push({ abort: vi.spyOn(subscription, 'abort'), unsubscribe: vi.spyOn(subscription, 'unsubscribe') });
       // While bob's subscription opens, alice re-subscribes and her run starts.
-      session.stream.attach({ subscription: await subscribe(input), key: 'alice-key', callerId: 'alice' });
+      const aliceSubscription = await subscribe(input);
+      alice = { abort: vi.spyOn(aliceSubscription, 'abort'), unsubscribe: vi.spyOn(aliceSubscription, 'unsubscribe') };
+      session.stream.attach({ subscription: aliceSubscription, key: 'alice-key', callerId: 'alice' });
       vi.spyOn(session.run, 'isRunning').mockReturnValue(true);
       return subscription;
     });
@@ -122,6 +126,9 @@ describe('AgentController subscription caller binding', () => {
     expect(session.stream.callerId()).toBe('alice');
     expect(opened[0]!.unsubscribe).toHaveBeenCalled();
     expect(opened[0]!.abort).not.toHaveBeenCalled();
+    // alice's live subscription is left alone.
+    expect(alice!.abort).not.toHaveBeenCalled();
+    expect(alice!.unsubscribe).not.toHaveBeenCalled();
   });
 
   it('refuses a different caller while a run is in flight instead of tearing it down', async () => {
