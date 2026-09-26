@@ -3,6 +3,7 @@ import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { Memory } from '../../../memory/src';
 import { noopLogger } from '../logger';
 import type { Processor, ProcessOutputStepArgs } from '../processors/index';
 import { isProcessorWorkflow } from '../processors/index';
@@ -11,6 +12,7 @@ import { ProviderHistoryCompat } from '../processors/provider-history-compat';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema } from '../processors/step-schema';
 import { StreamErrorRetryProcessor } from '../processors/stream-error-retry-processor';
 import { RequestContext } from '../request-context';
+import { InMemoryStore } from '../storage';
 import { createTool } from '../tools/tool';
 import { createStep, createWorkflow, isProcessor } from '../workflows';
 import type { MastraDBMessage } from './types';
@@ -4238,5 +4240,129 @@ describe('LLM request lane — error-phase processors', () => {
     // the default ProviderHistoryCompat must not rewrite the outbound prompt.
     expect(phcSpy).not.toHaveBeenCalled();
     phcSpy.mockRestore();
+  });
+});
+
+describe('anthropic tool id repair — prompt-scoped through the agent', () => {
+  const ANTHROPIC_MODEL = { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' };
+
+  /** Formats the tool ids carried by a converted v2 prompt, in order. */
+  const promptToolIds = (prompt: LanguageModelV2Prompt): string[] =>
+    prompt
+      .flatMap(message => (Array.isArray(message.content) ? message.content : []))
+      .map(part => (part as { toolCallId?: string }).toolCallId)
+      .filter((id): id is string => typeof id === 'string');
+
+  /**
+   * Format-2 history carrying an Anthropic-illegal tool id (`call.abc:1`). The array is kept by
+   * reference so the test can assert afterwards that the agent did not rewrite it in place.
+   */
+  const historyWithInvalidToolId = () => [
+    { role: 'user' as const, content: 'search for this' },
+    {
+      role: 'assistant' as const,
+      content: [
+        { type: 'text' as const, text: 'Searching.' },
+        {
+          type: 'tool-call' as const,
+          toolCallId: 'call.abc:1',
+          toolName: 'search',
+          input: { query: 'Mastra' },
+        },
+      ],
+    },
+    {
+      role: 'tool' as const,
+      content: [
+        {
+          type: 'tool-result' as const,
+          toolCallId: 'call.abc:1',
+          toolName: 'search',
+          output: { type: 'text' as const, value: 'result' },
+        },
+      ],
+    },
+    { role: 'user' as const, content: 'thanks' },
+  ];
+
+  /** Every tool id the message objects carry, wherever the message shape stores it. */
+  const idsInMessages = (messages: unknown): string[] =>
+    JSON.stringify(messages).match(/call[._][A-Za-z0-9_:.]+/g) ?? [];
+
+  it('repairs the outbound prompt on a bare Anthropic agent, leaving persisted history alone', async () => {
+    const capturedPrompts: LanguageModelV2Prompt[] = [];
+    const agent = new Agent({
+      id: 'tool-id-repair-agent',
+      name: 'Tool Id Repair Agent',
+      instructions: 'test',
+      model: new MockLanguageModelV2({
+        provider: ANTHROPIC_MODEL.provider,
+        modelId: ANTHROPIC_MODEL.modelId,
+        doGenerate: async ({ prompt }) => {
+          capturedPrompts.push(prompt as LanguageModelV2Prompt);
+          return {
+            content: [{ type: 'text' as const, text: 'ok' }],
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            rawCall: { rawPrompt: [], rawSettings: {} },
+            warnings: [],
+          };
+        },
+      }),
+    });
+
+    const history = historyWithInvalidToolId();
+    const before = structuredClone(history);
+
+    // A bare agent carries the shared stability defaults, so `ProviderHistoryCompat` runs in the
+    // prompt lane without the caller wiring anything.
+    await agent.generate(history as never);
+
+    expect(capturedPrompts).toHaveLength(1);
+    const sentIds = promptToolIds(capturedPrompts[0]!);
+    expect(sentIds).toEqual(['call_abc_1', 'call_abc_1']);
+    for (const id of sentIds) expect(id).toMatch(/^[a-zA-Z0-9_-]+$/);
+
+    // Prompt-scoped: the caller's own message objects are not rewritten in place.
+    expect(history).toEqual(before);
+    expect(idsInMessages(history)).toEqual(['call.abc:1', 'call.abc:1']);
+  });
+
+  it('keeps the original ids in stored history when the agent has memory', async () => {
+    const storage = new InMemoryStore();
+    const memory = new Memory({ storage, options: { lastMessages: 100, generateTitle: false } });
+    const capturedPrompts: LanguageModelV2Prompt[] = [];
+    const agent = new Agent({
+      id: 'tool-id-repair-memory-agent',
+      name: 'Tool Id Repair Memory Agent',
+      instructions: 'test',
+      model: new MockLanguageModelV2({
+        provider: ANTHROPIC_MODEL.provider,
+        modelId: ANTHROPIC_MODEL.modelId,
+        doGenerate: async ({ prompt }) => {
+          capturedPrompts.push(prompt as LanguageModelV2Prompt);
+          return {
+            content: [{ type: 'text' as const, text: 'ok' }],
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            rawCall: { rawPrompt: [], rawSettings: {} },
+            warnings: [],
+          };
+        },
+      }),
+      memory,
+    });
+
+    const threadId = 'tool-id-repair-thread';
+    const resourceId = 'tool-id-repair-resource';
+    await agent.generate(historyWithInvalidToolId() as never, { memory: { thread: threadId, resource: resourceId } });
+
+    // The outbound prompt was sanitized.
+    expect(promptToolIds(capturedPrompts[0]!)).toEqual(['call_abc_1', 'call_abc_1']);
+
+    // Stored history still carries the original ids.
+    const memoryStore = await storage.getStore('memory');
+    const { messages } = await memoryStore!.listMessages({ threadId, perPage: 100 });
+    expect(idsInMessages(messages)).toEqual(['call.abc:1', 'call.abc:1']);
   });
 });
