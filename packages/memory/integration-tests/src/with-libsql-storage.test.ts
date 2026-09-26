@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Agent } from '@mastra/core/agent';
+import { Agent, MessageList } from '@mastra/core/agent';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
@@ -290,7 +290,7 @@ describe('Memory with LibSQL Integration', () => {
       const threadId = randomUUID();
       const resourceId = 'om-14745-libsql-resource';
 
-      await runOm14745RotationScenario({
+      const sealedBeforeResult = await runOm14745RotationScenario({
         memoryStore,
         threadId,
         resourceId,
@@ -310,11 +310,44 @@ describe('Memory with LibSQL Integration', () => {
         part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === OM_14745_TOOL_CALL_ID,
       );
 
-      expect(
-        preSealToolPart?.toolInvocation?.state,
-        'sealed pre-seal tool call must not be mutated after rotation',
-      ).toBe('call');
+      // Sealing freezes the assistant content and its boundary, not the outcome of a held call.
+      // Leaving the stored call pending loses the result when the thread is loaded again.
+      expect(preSealToolPart?.toolInvocation).toMatchObject({
+        state: 'result',
+        toolCallId: OM_14745_TOOL_CALL_ID,
+        toolName: 'test',
+        args: { action: 'trigger' },
+        result: { success: true, message: 'Tool executed after seal' },
+      });
+      expect(preSealRow!.createdAt).toEqual(sealedBeforeResult.createdAt);
+      expect(preSealRow!.content.metadata?.mastra).toMatchObject({ sealed: true });
+      expect(preSealRow!.content.parts.filter(part => part.type !== 'tool-invocation')).toEqual(
+        sealedBeforeResult.content.parts.filter(part => part.type !== 'tool-invocation'),
+      );
       expect(getMessageText(preSealRow!)).not.toContain(OM_14745_POST_SEAL_TEXT);
+      expect(
+        postSealRow!.content.parts.some(part => part.type === 'tool-invocation' || part.type === 'reasoning'),
+      ).toBe(false);
+      assertUniqueMessageIds(messages);
+      assertCreatedAtMonotonic(messages);
+
+      const reloaded = new MessageList({ threadId, resourceId });
+      reloaded.add(messages, 'memory');
+      const prompt = reloaded.get.all.aiV5.model();
+      const calls = prompt
+        .filter(message => message.role === 'assistant')
+        .flatMap(message => message.content)
+        .filter(part => typeof part !== 'string' && part.type === 'tool-call');
+      expect(calls).toEqual([
+        expect.objectContaining({
+          type: 'tool-call',
+          toolCallId: OM_14745_TOOL_CALL_ID,
+          input: { action: 'trigger' },
+        }),
+      ]);
+      const results = prompt.filter(message => message.role === 'tool').flatMap(message => message.content);
+      expect(results).toEqual([expect.objectContaining({ type: 'tool-result', toolCallId: OM_14745_TOOL_CALL_ID })]);
+      expect(JSON.stringify(prompt).match(/sealed-signature/g)).toHaveLength(1);
     });
   });
 });

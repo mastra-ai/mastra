@@ -1920,6 +1920,10 @@ export class ObservationalMemory {
    *
    * Messages with observation markers are always saved (upserted) even if sealed,
    * because the markers need to be persisted to storage.
+   *
+   * A sealed message whose tool call moved forward after it was buffered is saved too
+   * (metadata.mastra.sealedChanged): the stored copy still shows the call as pending, so
+   * skipping it would drop the result and replay the unresolved call on the next turn.
    */
   async persistMessages(
     messagesToSave: MastraDBMessage[],
@@ -1928,11 +1932,12 @@ export class ObservationalMemory {
   ): Promise<void> {
     const filteredMessages: MastraDBMessage[] = [];
     for (const msg of messagesToSave) {
-      const isSealed = !!(msg.content?.metadata as { mastra?: { sealed?: boolean } })?.mastra?.sealed;
-      if (isSealed) {
+      const mastra = (msg.content?.metadata as { mastra?: { sealed?: boolean; sealedChanged?: boolean } })?.mastra;
+      if (mastra?.sealed) {
         // Sealed messages were already persisted by buffer(). Only re-save if they
-        // now have observation markers (need to upsert the markers to storage).
-        if (findLastCompletedObservationBoundary(msg) !== -1) {
+        // now have observation markers (need to upsert the markers to storage) or a
+        // tool call that advanced past the buffered state.
+        if (mastra.sealedChanged || findLastCompletedObservationBoundary(msg) !== -1) {
           filteredMessages.push(msg);
         }
       } else {

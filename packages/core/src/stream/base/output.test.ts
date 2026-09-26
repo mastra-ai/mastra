@@ -6,7 +6,35 @@ import { ConsoleLogger } from '../../logger';
 import type { Processor, ProcessorStreamWriter } from '../../processors';
 import { ChunkFrom } from '../types';
 import type { ChunkType } from '../types';
-import { MastraModelOutput } from './output';
+import { MastraModelOutput, persistProcessorDataChunk } from './output';
+
+describe('persistProcessorDataChunk', () => {
+  it('keeps a newly emitted data event even when it repeats a sealed message part', () => {
+    const messageList = new MessageList();
+    const chunk = { type: 'data-progress', data: { value: 1 } } as const;
+    messageList.add(
+      {
+        id: 'sealed',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          metadata: { mastra: { sealed: true } },
+          parts: [chunk, { type: 'text', text: 'old' }],
+        },
+      },
+      'memory',
+    );
+
+    persistProcessorDataChunk(messageList, 'sealed', chunk);
+
+    const messages = messageList.get.all.db();
+    expect(messages).toHaveLength(2);
+    expect(messages[0]!.content.parts).toEqual([chunk, { type: 'text', text: 'old' }]);
+    expect(messages[1]!.id).not.toBe('sealed');
+    expect(messages[1]!.content.parts).toEqual([expect.objectContaining(chunk)]);
+  });
+});
 
 /**
  * Creates a ReadableStream that emits the given chunks in order.
