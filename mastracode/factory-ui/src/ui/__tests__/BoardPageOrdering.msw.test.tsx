@@ -12,12 +12,12 @@ const FACTORY_ID = 'fp-1';
 const REPO_ID = 'repo-1';
 const OTHER_FACTORY_ID = 'fp-2';
 
-function workItem(id: string, title: string, createdAt: string, enteredAt: string) {
+function workItem(id: string, title: string, createdAt: string, enteredAt: string, factoryProjectId = FACTORY_ID) {
   return {
     id,
     orgId: 'org-1',
     createdBy: 'user-1',
-    factoryProjectId: FACTORY_ID,
+    factoryProjectId,
     board: 'work',
     externalSource: null,
     parentWorkItemId: null,
@@ -67,12 +67,30 @@ function stubWorkBoard() {
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/work-items`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/work-items`, ({ params }) =>
       HttpResponse.json({
-        workItems: [
-          workItem('newer-card', 'Created later', '2026-08-02T00:00:00.000Z', '2026-08-03T00:00:00.000Z'),
-          workItem('recent-card', 'Moved recently', '2026-07-01T00:00:00.000Z', '2026-08-04T00:00:00.000Z'),
-        ],
+        workItems:
+          params.factoryId === OTHER_FACTORY_ID
+            ? [
+                workItem(
+                  'other-card',
+                  'Other factory card',
+                  '2026-08-01T00:00:00.000Z',
+                  '2026-08-02T00:00:00.000Z',
+                  OTHER_FACTORY_ID,
+                ),
+                workItem(
+                  'other-moved-card',
+                  'Other factory moved',
+                  '2026-07-01T00:00:00.000Z',
+                  '2026-08-04T00:00:00.000Z',
+                  OTHER_FACTORY_ID,
+                ),
+              ]
+            : [
+                workItem('newer-card', 'Created later', '2026-08-02T00:00:00.000Z', '2026-08-03T00:00:00.000Z'),
+                workItem('recent-card', 'Moved recently', '2026-07-01T00:00:00.000Z', '2026-08-04T00:00:00.000Z'),
+              ],
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/decisions`, () => HttpResponse.json({ decisions: [] })),
@@ -237,10 +255,15 @@ describe('Factory board view memory', () => {
     await waitFor(() => expect(router.state.location.search).toBe('?q=Created'));
 
     await act(() => router.navigate(`/factories/${OTHER_FACTORY_ID}/work`));
-    await within(await screen.findByTestId('board-column-triage')).findByText('Moved recently');
+    const otherTriage = await screen.findByTestId('board-column-triage');
+    // The first factory's search isn't applied here: both of this factory's own cards show.
+    await within(otherTriage).findByText('Other factory card');
+    expect(within(otherTriage).getByText('Other factory moved')).toBeInTheDocument();
+    expect(within(otherTriage).queryByText('Created later')).not.toBeInTheDocument();
     expect(router.state.location.search).toBe('');
     await searchBoard('Moved');
     await waitFor(() => expect(router.state.location.search).toBe('?q=Moved'));
+    await waitFor(() => expect(within(otherTriage).queryByText('Other factory card')).not.toBeInTheDocument());
 
     await act(() => router.navigate(`/factories/${FACTORY_ID}/work`));
     await waitFor(() => expect(router.state.location.search).toBe('?q=Created'));
