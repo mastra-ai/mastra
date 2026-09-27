@@ -883,9 +883,20 @@ export class FactoryDecisionDispatcher {
             const current = await this.#storage.get({ orgId: record.orgId, id: record.workItemId });
             if (current === null) return true;
             const decidedAt = record.createdAt.getTime();
-            return current.stageHistory.some(
+            const enteredSince = current.stageHistory.filter(
               entry => entry.exitedAt === undefined && new Date(entry.enteredAt).getTime() > decidedAt,
             );
+            if (enteredSince.length === 0) return false;
+            // A transition from the same rule evaluation lands after this decision
+            // was created; entering that stage is part of this kickoff's intent.
+            const siblingStages = new Set(
+              (await this.#storage.listDeferredDecisions(record.orgId, record.factoryProjectId))
+                .filter(
+                  sibling => sibling.evaluationId === record.evaluationId && sibling.decision.type === 'transition',
+                )
+                .map(sibling => sibling.decision.stage),
+            );
+            return enteredSince.some(entry => !siblingStages.has(entry.stage));
           };
           const runStillActive = () =>
             this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);

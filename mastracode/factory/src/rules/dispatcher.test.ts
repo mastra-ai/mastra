@@ -2775,6 +2775,109 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.sendSignal).not.toHaveBeenCalled();
   });
 
+  it('does not resend a dropped kickoff once its binding is revoked', async () => {
+    const { storage, transitionService } = await prepareDeliverScenario('skill-binding-revoked');
+    const [binding] = await storage.listActiveRunBindings();
+    const { controller, session } = createSession(undefined, {
+      signalAccepted: Promise.resolve({ accepted: true, action: 'deliver' }),
+      dropDeliveredSignal: true,
+      endRunAfterDroppedSignal: true,
+      acceptRedeliveredSignal: true,
+      beforeRunEnd: async () => {
+        await storage.revokeRunBinding({
+          orgId: 'org-1',
+          factoryProjectId: PROJECT_ID,
+          bindingId: binding!.id,
+          revokedAt: new Date(),
+        });
+      },
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(session.sendSignal).toHaveBeenCalledTimes(1);
+  });
+
+  it('delivers a kickoff whose own rule batch moved the card', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const transitionService = new FactoryTransitionService({
+      storage,
+      configVersion: 'rules-v1',
+      boards: createLifecycleTestRegistry({
+        intake: {
+          issue: {
+            onExit: () => ({ type: 'transition', idempotencyKey: 'batch-move', board: 'work', stage: 'review' }),
+          },
+        },
+        execute: {
+          issue: {
+            onEnter: () => ({
+              type: 'invokeSkill',
+              role: 'work',
+              skillName: 'understand-issue',
+              arguments: 'Issue 42',
+              idempotencyKey: 'batch-skill',
+            }),
+          },
+        },
+      }),
+    });
+    const moved = await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      board: 'work',
+      stage: 'execute',
+      expectedRevision: item.revision,
+      actor: { type: 'system', id: 'factory-rule-dispatcher' },
+      ingress: { type: 'rule', identity: 'move-batch' },
+      cause: 'rule_decision',
+    });
+    expect(moved.status).toBe('accepted');
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: 'kickoff-null',
+      kickoffMessage: null,
+    });
+    await new Promise(resolve => setTimeout(resolve, 5));
+    const { controller, session } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['review']);
+    expect(session.sendSignal).toHaveBeenCalledTimes(1);
+  });
+
   it('drops a dropped kickoff instead of resending it once the card is deleted', async () => {
     const { storage, item, transitionService } = await prepareDeliverScenario('skill-card-deleted');
     const { controller, session } = createSession(undefined, {
