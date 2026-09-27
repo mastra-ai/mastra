@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSourceInspectionWorkflow } from '../src/mastra/workflows/source-inspection.js';
 import type { SourceCatalog } from '../src/mastra/workspaces/catalog.js';
 import { loadCatalog, validateEnvironment } from '../src/mastra/workspaces/catalog.js';
+import { SourceIdentityError, validateAndPersistSourceIdentity } from '../src/mastra/workspaces/identity-ledger.js';
 import { createSourceRuntime } from '../src/mastra/workspaces/sources.js';
 
 const testEnvironment = {
@@ -32,6 +33,21 @@ describe('source integration', () => {
   afterEach(async () => {
     vi.unstubAllGlobals();
     await rm(directory, { recursive: true, force: true });
+  });
+
+  it.each([
+    '{',
+    JSON.stringify({ version: 1, sources: null }),
+    JSON.stringify({ version: 1, sources: [] }),
+    JSON.stringify({ version: 1, sources: { sample: null } }),
+    JSON.stringify({ version: 1, sources: { sample: { provider: 'local' } } }),
+    JSON.stringify({ version: 1, sources: { sample: { provider: 'unknown', root: './sample' } } }),
+    JSON.stringify({ version: 1, sources: { sample: { provider: 'local', root: 123 } } }),
+  ])('rejects malformed identity state without overwriting it: %s', async content => {
+    const path = join(directory, 'ledger.json');
+    await writeFile(path, content);
+    await expect(validateAndPersistSourceIdentity(path, catalog().sources)).rejects.toBeInstanceOf(SourceIdentityError);
+    expect(await readFile(path, 'utf8')).toBe(content);
   });
 
   function catalog(overrides: Partial<SourceCatalog> = {}): SourceCatalog {

@@ -1,11 +1,17 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
+import { z } from 'zod';
+
 import type { CatalogSource } from './catalog.js';
 import { sourceIdentity } from './catalog.js';
 
 type LedgerEntry = { provider: CatalogSource['provider']; root: string };
-type Ledger = { version: 1; sources: Record<string, LedgerEntry> };
+const ledgerSchema = z.object({
+  version: z.literal(1),
+  sources: z.record(z.string(), z.object({ provider: z.enum(['local', 'google-drive', 's3']), root: z.string() })),
+});
+type Ledger = z.infer<typeof ledgerSchema>;
 
 export class SourceIdentityError extends Error {
   constructor(message: string) {
@@ -20,18 +26,15 @@ function identityFor(source: CatalogSource): LedgerEntry {
 
 async function readLedger(ledgerPath: string): Promise<Ledger> {
   try {
-    const parsed: unknown = JSON.parse(await readFile(ledgerPath, 'utf8'));
-    if (
-      typeof parsed === 'object' &&
-      parsed !== null &&
-      (parsed as { version?: unknown }).version === 1 &&
-      typeof (parsed as { sources?: unknown }).sources === 'object'
-    ) {
-      return parsed as Ledger;
-    }
+    const parsed = ledgerSchema.safeParse(JSON.parse(await readFile(ledgerPath, 'utf8')));
+    if (parsed.success) return parsed.data;
     throw new SourceIdentityError('The source identity ledger is invalid. Remove only derived state before retrying.');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { version: 1, sources: {} };
+    if (error instanceof SyntaxError)
+      throw new SourceIdentityError(
+        'The source identity ledger is invalid. Remove only derived state before retrying.',
+      );
     throw error;
   }
 }
