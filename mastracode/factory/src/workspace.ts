@@ -381,6 +381,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   // observe the same Workspace object even when no Mastra registry is wired
   // (the registry stays the source of truth when present).
   const constructedWorkspaces = new Map<string, Workspace>();
+  // Review-skill visibility last used to populate each workspace's skill cache.
+  const skillCacheReviewState = new Map<string, boolean>();
 
   return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
@@ -721,6 +723,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           if (evicted && githubTokenInjectors.get(workspaceId) === registered) {
             githubTokenInjectors.delete(workspaceId);
             constructedWorkspaces.delete(workspaceId);
+            skillCacheReviewState.delete(workspaceId);
           }
         }
         throw error;
@@ -741,6 +744,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     existing ??= constructedWorkspaces.get(workspaceId);
     if (existing) {
       existing.setToolsConfig(MASTRACODE_WORKSPACE_TOOLS);
+      // The skill cache does not recheck the source on get(), so rescan when the
+      // session's role flips; otherwise a cached review skill outlives the review binding.
+      if (!skillExtension) {
+        const isReview = await isReviewSession();
+        if (skillCacheReviewState.get(workspaceId) !== isReview) {
+          skillCacheReviewState.set(workspaceId, isReview);
+          await existing.skills?.refresh();
+        }
+      }
       // A materialization kicked off by another caller may still be running.
       // Deliberately do NOT wait for it: a metadata-only resolution (thread
       // list, messages, activity) must not block on the clone/setup that lazy
@@ -896,6 +908,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       async () => {
         githubTokenInjectors.delete(workspaceId);
         constructedWorkspaces.delete(workspaceId);
+        skillCacheReviewState.delete(workspaceId);
         // Retirement drops the memoized session sandbox so a later re-open
         // constructs (and the provider resolves) fresh instead of reusing an
         // instance whose VM the retirement path may stop or destroy.

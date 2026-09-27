@@ -1120,6 +1120,26 @@ describe('GitHub session workspace preparation', () => {
     expect((await workspace.skills?.get('factory-plan'))?.instructions).toContain('# Factory Plan');
   });
 
+  it('drops cached review skills when a reused workspace leaves the review role', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    const reviewWorkspace = (await resolver({ requestContext }))!;
+    await reviewWorkspace.skills?.maybeRefresh();
+    expect((await reviewWorkspace.skills?.get('factory-review'))?.instructions).toContain('# Factory Review');
+
+    mocks.runBindingRole = 'work';
+    const workWorkspace = (await resolver({ requestContext }))!;
+
+    expect(workWorkspace).toBe(reviewWorkspace);
+    expect(await workWorkspace.skills?.get('factory-review')).toBeFalsy();
+    expect(await workWorkspace.skills?.get('factory-rereview')).toBeFalsy();
+    expect((await workWorkspace.skills?.get('factory-plan'))?.instructions).toContain('# Factory Plan');
+  });
+
   it('resolves bundled Factory skills without waiting on sandbox materialization (kickoff path stays lazy)', async () => {
     const { resolver } = await createLocalFactory();
     addProject();
