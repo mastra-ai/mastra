@@ -156,6 +156,13 @@ describe('LocalSandbox outputEncoding', () => {
     expect(result.stdout).toBe('中');
   });
 
+  it('preserves outputEncoding when cloned', async () => {
+    const clone = create('gbk').clone();
+    sandboxes.push(clone);
+    const result = await clone.executeCommand(process.execPath, ['-e', gbkScript]);
+    expect(result.stdout).toBe('中文');
+  });
+
   it('defaults to UTF-8', async () => {
     const result = await create().executeCommand(process.execPath, ['-e', gbkScript]);
     expect(result.stdout).not.toBe('中文');
