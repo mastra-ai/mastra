@@ -192,4 +192,42 @@ describe('null transform with nullable parents (#25112)', () => {
     }
     expect(transformNullToUndefined({ a: null }, { ...obj, type: ['object', 'null'] })).toEqual({ a: undefined });
   });
+
+  it('applies parent properties alongside anyOf', () => {
+    const schema = {
+      type: 'object',
+      properties: { a: { type: 'string' } },
+      anyOf: [{ type: 'object' }, { type: 'null' }],
+    };
+    expect(transformNullToUndefined({ a: null }, schema)).toEqual({ a: undefined });
+  });
+
+  it('selects the discriminated branch matching the value', () => {
+    const schema = {
+      oneOf: [
+        { type: 'object', properties: { kind: { const: 'a' }, note: { type: 'string' } }, required: ['kind'] },
+        {
+          type: 'object',
+          properties: { kind: { const: 'b' }, note: { type: ['string', 'null'] } },
+          required: ['kind', 'note'],
+        },
+      ],
+    };
+    expect(transformNullToUndefined({ kind: 'b', note: null }, schema)).toEqual({ kind: 'b', note: null });
+    expect(transformNullToUndefined({ kind: 'a', note: null }, schema)).toEqual({ kind: 'a', note: undefined });
+  });
+
+  it('keeps nulls in discriminated unions of zod objects', async () => {
+    const schema = z.object({
+      item: z
+        .discriminatedUnion('kind', [
+          z.object({ kind: z.literal('a'), note: z.string().optional() }),
+          z.object({ kind: z.literal('b'), note: z.string().nullable() }),
+        ])
+        .nullable(),
+    });
+    const result = await validate(schema, { item: { kind: 'b', note: null } });
+    expect(result.issues).toBeUndefined();
+    expect((result as { value: unknown }).value).toEqual({ item: { kind: 'b', note: null } });
+  });
 });
