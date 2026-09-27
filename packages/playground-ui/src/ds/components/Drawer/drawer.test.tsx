@@ -194,6 +194,28 @@ describe('Drawer', () => {
     expect(popup?.classList.contains('custom-popup-class')).toBe(true);
   });
 
+  it.each([
+    ['default', 'bottom'],
+    ['default', 'top'],
+    ['default', 'left'],
+    ['default', 'right'],
+    ['floating', 'right'],
+    ['floating', 'bottom'],
+  ] as const)('leaves the %s %s popup edge to the surface rim instead of a border', (variant, side) => {
+    render(
+      <Drawer defaultOpen side={side} variant={variant}>
+        <DrawerContent>
+          <DrawerTitle>Edge</DrawerTitle>
+        </DrawerContent>
+      </Drawer>,
+    );
+
+    const popup = document.querySelector('[data-slot="drawer-popup"]');
+    const borderClasses = [...(popup?.classList ?? [])].filter(name => /^border(-[xytblr])?$/.test(name));
+    expect(popup?.classList.contains('shadow-overlay')).toBe(true);
+    expect(borderClasses).toEqual([]);
+  });
+
   // Regression: modal viewport must keep pointer events or the swipe-to-dismiss gesture dies.
   it('keeps pointer events on the viewport for a modal drawer', () => {
     render(
@@ -228,11 +250,11 @@ describe('Drawer', () => {
     expect(viewport?.classList.contains('p-2')).toBe(true);
     expect(viewport?.classList.contains('inset-0')).toBe(false);
     expect(viewport?.classList.contains('right-0')).toBe(true);
-    expect(viewport?.classList.contains('w-[calc(32rem+1.5rem)]')).toBe(true);
+    expect(viewport?.classList.contains('w-134')).toBe(true);
     expect(popup?.getAttribute('data-variant')).toBe('floating');
     expect(popup?.classList.contains('drawer-popup-floating')).toBe(true);
     expect(popup?.classList.contains('pointer-events-auto')).toBe(true);
-    expect(popup?.classList.contains('w-[32rem]')).toBe(true);
+    expect(popup?.classList.contains('w-128')).toBe(true);
   });
 
   it('renders a native drag handle outside interactive content for floating side drawers', () => {
@@ -314,7 +336,7 @@ describe('Drawer', () => {
       expect(overlayDismissLayer).toBeNull();
       expect(viewport?.classList.contains('inset-0')).toBe(true);
       expect(viewport?.classList.contains('right-0')).toBe(false);
-      expect(viewport?.classList.contains('w-[calc(32rem+1.5rem)]')).toBe(false);
+      expect(viewport?.classList.contains('w-134')).toBe(false);
     },
   );
 

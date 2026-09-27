@@ -44,12 +44,12 @@ const drawerViewportVariants = cva('fixed z-50 flex', {
     {
       side: 'right',
       layout: 'floating',
-      className: 'inset-y-0 right-0 w-[calc(32rem+1.5rem)] max-w-full sm:w-[calc(32rem+2rem)]',
+      className: 'inset-y-0 right-0 w-134 max-w-full sm:w-136',
     },
     {
       side: 'left',
       layout: 'floating',
-      className: 'inset-y-0 left-0 w-[calc(32rem+1.5rem)] max-w-full sm:w-[calc(32rem+2rem)]',
+      className: 'inset-y-0 left-0 w-134 max-w-full sm:w-136',
     },
     {
       side: 'bottom',
@@ -68,15 +68,13 @@ const drawerViewportVariants = cva('fixed z-50 flex', {
   },
 });
 
-// `drawer-popup` hooks into drawer.css for swipe/stack transforms; `::after` dims under nested drawers.
+// `drawer-popup` hooks into drawer.css for swipe/stack transforms.
 const drawerPopupVariants = cva(
   cn(
-    'drawer-popup group/popup relative z-50 box-border flex [touch-action:auto] flex-col overflow-y-auto overscroll-contain will-change-transform outline-none',
+    'drawer-popup group/popup relative z-50 box-border flex touch-auto flex-col overflow-y-auto overscroll-contain will-change-transform outline-none',
     'text-foreground',
     dialogSurfaceStyle,
-    'data-[swiping]:select-none',
-    "after:pointer-events-none after:absolute after:inset-0 after:bg-transparent after:transition-[background-color] after:duration-[450ms] after:content-['']",
-    'data-[nested-drawer-open]:after:bg-black/25',
+    'data-swiping:select-none',
   ),
   {
     variants: {
@@ -88,37 +86,35 @@ const drawerPopupVariants = cva(
       },
       variant: {
         default: '',
-        floating: 'drawer-popup-floating pointer-events-auto rounded-lg border',
+        floating: 'drawer-popup-floating pointer-events-auto rounded-lg',
       },
     },
     compoundVariants: [
       {
         side: 'bottom',
         variant: 'default',
-        className:
-          '-mb-12 h-[var(--drawer-height,auto)] max-h-[calc(85vh_+_3rem)] w-full rounded-t-xl border-x border-t pb-12',
+        className: '-mb-12 h-(--drawer-height,auto) max-h-[calc(85vh_+_3rem)] w-full rounded-t-xl pb-12',
       },
       {
         side: 'top',
         variant: 'default',
-        className:
-          '-mt-12 h-[var(--drawer-height,auto)] max-h-[calc(85vh_+_3rem)] w-full rounded-b-xl border-x border-b pt-12',
+        className: '-mt-12 h-(--drawer-height,auto) max-h-[calc(85vh_+_3rem)] w-full rounded-b-xl pt-12',
       },
       {
         side: 'left',
         variant: 'default',
-        className: 'h-full w-[20rem] max-w-[85vw] rounded-r-xl border-y border-r',
+        className: 'h-full w-80 max-w-[85vw] rounded-r-xl',
       },
       {
         side: 'right',
         variant: 'default',
-        className: 'h-full w-[20rem] max-w-[85vw] rounded-l-xl border-y border-l',
+        className: 'h-full w-80 max-w-[85vw] rounded-l-xl',
       },
       {
         side: ['left', 'right'],
         variant: 'floating',
         className:
-          'h-[calc(100dvh-1.5rem)] w-[32rem] max-w-[calc(100vw-1.5rem)] sm:h-[calc(100dvh-2rem)] sm:max-w-[calc(100vw-2rem)]',
+          'h-[calc(100dvh-1.5rem)] w-128 max-w-[calc(100vw-1.5rem)] sm:h-[calc(100dvh-2rem)] sm:max-w-[calc(100vw-2rem)]',
       },
       {
         side: ['top', 'bottom'],
@@ -345,15 +341,15 @@ DrawerPopup.displayName = 'DrawerPopup';
 
 // Inner-content fade while a nested drawer covers the parent. Off the popup itself so border/shadow stay crisp.
 const nestedFadeClass = cn(
-  'transition-opacity duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:duration-0',
-  'group-data-[nested-drawer-open]/popup:opacity-0',
+  'transition-opacity duration-slow ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:duration-0',
+  'group-data-nested-drawer-open/popup:opacity-0',
 );
 
 const DrawerHandleBar = () => (
   <div
     aria-hidden
     data-slot="drawer-handle"
-    className={cn('mx-auto my-2 h-1 w-12 shrink-0 rounded-full bg-muted', nestedFadeClass)}
+    className={cn('mx-auto my-2 h-1 w-12 shrink-0 rounded-full bg-fill-strong', nestedFadeClass)}
   />
 );
 DrawerHandleBar.displayName = 'DrawerHandleBar';
@@ -377,7 +373,7 @@ const DrawerFloatingSideHandle = ({ side, variant }: DrawerFloatingSideHandlePro
         side === 'right' ? '-left-2' : '-right-2',
       )}
     >
-      <div className="h-10 w-1 rounded-full bg-border-strong" />
+      <div className="h-10 w-1 rounded-full bg-fill-strong" />
     </div>
   );
 };

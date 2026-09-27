@@ -451,7 +451,7 @@ function SwipeToOpenExample() {
       className="relative h-80 w-96 overflow-hidden rounded-xl border border-border bg-background"
     >
       <Drawer side="right" modal={false}>
-        <DrawerSwipeArea className="absolute inset-y-0 right-0 z-10 w-10 border-l border-dashed border-border-strong bg-muted/40" />
+        <DrawerSwipeArea className="absolute inset-y-0 right-0 z-10 w-10 border-l border-dashed border-border-strong bg-fill-subtle" />
         <div className="flex h-full items-center justify-center px-12 text-center">
           <p className="text-caption text-muted-foreground">Swipe from the right edge to open the drawer.</p>
         </div>
