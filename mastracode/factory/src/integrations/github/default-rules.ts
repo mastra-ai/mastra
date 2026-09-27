@@ -1,4 +1,5 @@
 import { hasRecordedVerdict } from '../../boards/review.js';
+import { isTerminalFactoryRuleStage } from '../../rules/types.js';
 import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleHandler } from '../../rules/types.js';
 
 export type GithubRuleOverrides = Partial<
@@ -19,6 +20,8 @@ function githubActorLogin(context: Pick<FactoryGithubRuleContext, 'actor'>): str
 function retriageGithubIssue(context: FactoryGithubRuleContext) {
   if (!context.item || context.item.source !== 'github-issue' || !context.item.url) return;
   if (context.actor.type === 'github' && context.actor.factoryAuthored) return;
+  // A finished card has nothing left to triage; talk on a closed issue must not park a run on it.
+  if (isTerminalFactoryRuleStage(context.item.stages)) return;
 
   const reason =
     context.event === 'issueEdited'
