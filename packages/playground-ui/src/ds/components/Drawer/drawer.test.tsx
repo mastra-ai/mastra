@@ -194,6 +194,19 @@ describe('Drawer', () => {
     expect(popup?.classList.contains('custom-popup-class')).toBe(true);
   });
 
+  it.each(['default', 'floating'] as const)('colors the %s popup edge with the border token', variant => {
+    render(
+      <Drawer defaultOpen side="right" variant={variant}>
+        <DrawerContent>
+          <DrawerTitle>Edge</DrawerTitle>
+        </DrawerContent>
+      </Drawer>,
+    );
+
+    const popup = document.querySelector('[data-slot="drawer-popup"]');
+    expect(popup?.classList.contains('border-border')).toBe(true);
+  });
+
   // Regression: modal viewport must keep pointer events or the swipe-to-dismiss gesture dies.
   it('keeps pointer events on the viewport for a modal drawer', () => {
     render(
