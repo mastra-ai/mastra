@@ -147,3 +147,49 @@ describe('wrapSchemaWithNullTransform', () => {
     expect(jsonSchema).toHaveProperty('type', 'object');
   });
 });
+
+describe('null transform with nullable parents (#25112)', () => {
+  const validate = async (schema: z.ZodTypeAny, input: unknown) =>
+    wrapSchemaWithNullTransform(toStandardSchema(schema))['~standard'].validate(input);
+
+  const address = z.object({ street: z.string(), unit: z.string().optional() });
+
+  it('drops optional nulls inside a nullable object', async () => {
+    const result = await validate(z.object({ address: address.nullable() }), {
+      address: { street: 'Main', unit: null },
+    });
+    expect(result.issues).toBeUndefined();
+    expect((result as { value: unknown }).value).toEqual({ address: { street: 'Main' } });
+  });
+
+  it('drops optional nulls inside a nullish object', async () => {
+    const result = await validate(z.object({ address: address.nullish() }), {
+      address: { street: 'Main', unit: null },
+    });
+    expect(result.issues).toBeUndefined();
+    expect((result as { value: unknown }).value).toEqual({ address: { street: 'Main' } });
+  });
+
+  it('drops optional nulls inside a nullable array of objects', async () => {
+    const result = await validate(z.object({ list: z.array(address).nullable() }), {
+      list: [{ street: 'A', unit: null }],
+    });
+    expect(result.issues).toBeUndefined();
+    expect((result as { value: unknown }).value).toEqual({ list: [{ street: 'A' }] });
+  });
+
+  it('preserves a null nullable parent and required nullable children', async () => {
+    const schema = z.object({ address: z.object({ street: z.string(), note: z.string().nullable() }).nullable() });
+    expect(((await validate(schema, { address: null })) as { value: unknown }).value).toEqual({ address: null });
+    const result = await validate(schema, { address: { street: 'Main', note: null } });
+    expect((result as { value: unknown }).value).toEqual({ address: { street: 'Main', note: null } });
+  });
+
+  it('resolves raw anyOf, oneOf and type arrays', () => {
+    const obj = { type: 'object', properties: { a: { type: 'string' } }, required: [] };
+    for (const key of ['anyOf', 'oneOf']) {
+      expect(transformNullToUndefined({ a: null }, { [key]: [{ type: 'null' }, obj] })).toEqual({ a: undefined });
+    }
+    expect(transformNullToUndefined({ a: null }, { ...obj, type: ['object', 'null'] })).toEqual({ a: undefined });
+  });
+});

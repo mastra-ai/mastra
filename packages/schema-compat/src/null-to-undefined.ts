@@ -15,6 +15,12 @@ export function transformNullToUndefined(value: unknown, jsonSchema: Record<stri
     return value;
   }
 
+  const branches = (jsonSchema.anyOf ?? jsonSchema.oneOf) as Record<string, unknown>[] | undefined;
+  if (Array.isArray(branches)) {
+    const branch = findMatchingBranch(value, branches);
+    return branch ? transformNullToUndefined(value, branch) : value;
+  }
+
   if (typeof value !== 'object' || Array.isArray(value)) {
     if (Array.isArray(value) && jsonSchema.items && typeof jsonSchema.items === 'object') {
       return value.map(item => transformNullToUndefined(item, jsonSchema.items as Record<string, unknown>));
@@ -43,6 +49,23 @@ export function transformNullToUndefined(value: unknown, jsonSchema: Record<stri
   }
 
   return result;
+}
+
+/**
+ * Picks the non-null union branch (from `anyOf`/`oneOf`) whose shape matches the value,
+ * e.g. the object branch of a `.nullable()` object.
+ */
+function findMatchingBranch(value: unknown, branches: Record<string, unknown>[]): Record<string, unknown> | undefined {
+  const isArray = Array.isArray(value);
+  if (typeof value !== 'object' && !isArray) {
+    return undefined;
+  }
+  return branches.find(branch => {
+    if (!branch || typeof branch !== 'object') return false;
+    const types = Array.isArray(branch.type) ? branch.type : [branch.type];
+    if (isArray) return 'items' in branch || types.includes('array');
+    return 'properties' in branch || 'anyOf' in branch || 'oneOf' in branch || types.includes('object');
+  });
 }
 
 /**
