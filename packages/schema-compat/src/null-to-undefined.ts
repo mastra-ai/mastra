@@ -68,10 +68,21 @@ function findMatchingBranch(value: unknown, branches: Record<string, unknown>[])
   return branches.find(branch => {
     if (!branch || typeof branch !== 'object') return false;
     const types = Array.isArray(branch.type) ? branch.type : [branch.type];
-    if (isArray) return 'items' in branch || types.includes('array');
+    if (isArray) {
+      if (!('items' in branch || types.includes('array'))) return false;
+      const items = branch.items as Record<string, unknown> | undefined;
+      return !items || typeof items !== 'object' || (value as unknown[]).every(item => itemMatches(item, items));
+    }
     if (!('properties' in branch || 'anyOf' in branch || 'oneOf' in branch || types.includes('object'))) return false;
     return objectMatchesBranch(value as Record<string, unknown>, branch);
   });
+}
+
+function itemMatches(item: unknown, schema: Record<string, unknown>): boolean {
+  if (item === null || typeof item !== 'object' || Array.isArray(item)) return true;
+  const branches = (schema.anyOf ?? schema.oneOf) as Record<string, unknown>[] | undefined;
+  if (Array.isArray(branches)) return findMatchingBranch(item, branches) !== undefined;
+  return objectMatchesBranch(item as Record<string, unknown>, schema);
 }
 
 function objectMatchesBranch(value: Record<string, unknown>, branch: Record<string, unknown>): boolean {
@@ -87,10 +98,11 @@ function objectMatchesBranch(value: Record<string, unknown>, branch: Record<stri
 }
 
 function mergeSchemas(parent: Record<string, unknown>, branch: Record<string, unknown>): Record<string, unknown> {
-  if (!parent.properties) return branch;
+  const merged: Record<string, unknown> = { ...parent, ...branch };
+  if (parent.items && !branch.items) merged.items = parent.items;
+  if (!parent.properties) return merged;
   return {
-    ...parent,
-    ...branch,
+    ...merged,
     properties: { ...(parent.properties as object), ...(branch.properties as object | undefined) },
     required: [...new Set([...((parent.required as string[]) ?? []), ...((branch.required as string[]) ?? [])])],
   };

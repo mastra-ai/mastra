@@ -230,4 +230,28 @@ describe('null transform with nullable parents (#25112)', () => {
     expect(result.issues).toBeUndefined();
     expect((result as { value: unknown }).value).toEqual({ item: { kind: 'b', note: null } });
   });
+
+  it('applies parent items alongside anyOf', () => {
+    const schema = {
+      items: { type: 'object', properties: { note: { type: 'string' } }, required: [] },
+      anyOf: [{ type: 'array' }, { type: 'null' }],
+    };
+    expect(transformNullToUndefined([{ note: null }], schema)).toEqual([{ note: undefined }]);
+  });
+
+  it('selects the array branch whose items match the elements', () => {
+    const item = (kind: string, required: string[]) => ({
+      type: 'object',
+      properties: { kind: { const: kind }, note: { type: ['string', 'null'] } },
+      required,
+    });
+    const schema = {
+      oneOf: [
+        { type: 'array', items: item('a', ['kind']) },
+        { type: 'array', items: item('b', ['kind', 'note']) },
+      ],
+    };
+    expect(transformNullToUndefined([{ kind: 'b', note: null }], schema)).toEqual([{ kind: 'b', note: null }]);
+    expect(transformNullToUndefined([{ kind: 'a', note: null }], schema)).toEqual([{ kind: 'a', note: undefined }]);
+  });
 });
