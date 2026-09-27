@@ -2753,6 +2753,28 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
   });
 
+  it('drops a retried kickoff once the card has moved on since the decision was made', async () => {
+    const { storage, item, transitionService } = await prepareDeliverScenario('skill-card-moved-before-retry');
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { stages: ['review'] } });
+    const { controller, session } = createSession(undefined, {
+      signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(decision?.status).toBe('succeeded');
+    expect(session.sendSignal).not.toHaveBeenCalled();
+  });
+
   it('retries the skill kickoff when the wake signal is rejected instead of marking it succeeded', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {

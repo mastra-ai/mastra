@@ -873,13 +873,18 @@ export class FactoryDecisionDispatcher {
             record.deliveryGeneration === 0 ? record.id : `${record.id}:retry:${record.deliveryGeneration}`;
           const kickoffLanded = async () =>
             (await session.thread.listActiveMessages()).some(message => message.id === deliveryId);
-          const stagesKey = (stages: readonly string[]) => [...stages].sort().join('\n');
-          const stagesAtDispatch = item ? stagesKey(item.stages) : undefined;
+          // The card moved on once any stage it now sits in was entered after this
+          // decision was made. Anchored on the decision, not on this attempt, so a
+          // retry after the move is still recognised as stale.
           const kickoffStale = async () => {
             if (await this.#roleSuperseded(record, decision.role)) return true;
-            if (stagesAtDispatch === undefined || !record.workItemId) return false;
+            if (!record.workItemId) return false;
             const current = await this.#storage.get({ orgId: record.orgId, id: record.workItemId });
-            return current === null || stagesKey(current.stages) !== stagesAtDispatch;
+            if (current === null) return true;
+            const decidedAt = record.createdAt.getTime();
+            return current.stageHistory.some(
+              entry => entry.exitedAt === undefined && new Date(entry.enteredAt).getTime() > decidedAt,
+            );
           };
           const runStillActive = () =>
             this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
@@ -925,6 +930,7 @@ export class FactoryDecisionDispatcher {
             );
           }
           if (await kickoffLanded()) return;
+          if (await kickoffStale()) return;
           // Safe under the replay guard above: it matches deliveryId, never prompt content.
           const kickoffContents = await withWorkItemFeed(
             this.#feedReader,
