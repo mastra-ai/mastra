@@ -208,7 +208,11 @@ const integrationCatalogResponseSchema = z.object({
 });
 
 export const credentialSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('oauth2'), accessToken: z.string(), expiresAt: z.string().nullable() }),
+  z.object({
+    type: z.literal('oauth2'),
+    accessToken: z.string(),
+    expiresAt: z.string().nullable(),
+  }),
   z.object({ type: z.literal('api_key'), apiKey: z.string() }),
 ]);
 

@@ -1579,13 +1579,15 @@ describe('Agent Routes Authorization', () => {
     async function persistSuspendedDurableRun({
       resourceId,
       toolCallId = 'tool-call-1',
+      workflowName = 'durable-agentic-loop',
     }: {
       resourceId: string;
       toolCallId?: string;
+      workflowName?: string;
     }) {
       const workflowsStore = await storage.getStore('workflows');
       await workflowsStore?.persistWorkflowSnapshot({
-        workflowName: 'durable-agentic-loop',
+        workflowName,
         runId: 'durable-run-1',
         snapshot: {
           runId: 'durable-run-1',
@@ -1653,6 +1655,81 @@ describe('Agent Routes Authorization', () => {
         new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' }),
       );
       expect(execution).not.toHaveBeenCalled();
+    });
+
+    // Issue #25154: createInngestAgent() persists its loop under a namespaced
+    // workflow name and advertises it via `durableLoopWorkflowName`.
+    describe('agent with a namespaced loop workflow name', () => {
+      const namespacedLoop = 'inngest:durable-agentic-loop';
+
+      beforeEach(() => {
+        Object.defineProperty(mockAgent, 'durableLoopWorkflowName', { value: namespacedLoop, configurable: true });
+      });
+
+      afterEach(() => {
+        delete (mockAgent as any).durableLoopWorkflowName;
+      });
+
+      it.each(approvalRoutes)('$name accepts a run persisted under the advertised name', async ({ route, method }) => {
+        await persistSuspendedDurableRun({ resourceId: 'user-a', workflowName: namespacedLoop });
+        const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({
+          fullStream: new ReadableStream(),
+        });
+
+        await (route.handler as any)({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          abortSignal: new AbortController().signal,
+          runId: 'durable-run-1',
+          toolCallId: 'tool-call-1',
+        });
+
+        expect(execution).toHaveBeenCalledTimes(1);
+      });
+
+      it.each(approvalRoutes)(
+        '$name rejects a run under the advertised name owned by another resource',
+        async ({ route, method }) => {
+          await persistSuspendedDurableRun({ resourceId: 'user-b', workflowName: namespacedLoop });
+          const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({
+            fullStream: new ReadableStream(),
+          });
+
+          await expect(
+            (route.handler as any)({
+              mastra,
+              agentId: 'test-agent',
+              requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+              abortSignal: new AbortController().signal,
+              runId: 'durable-run-1',
+              toolCallId: 'tool-call-1',
+            }),
+          ).rejects.toThrow(
+            new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
+          );
+          expect(execution).not.toHaveBeenCalled();
+        },
+      );
+
+      it.each(approvalRoutes)('$name does not fall back to the core loop workflow name', async ({ route, method }) => {
+        await persistSuspendedDurableRun({ resourceId: 'user-a' });
+        const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({
+          fullStream: new ReadableStream(),
+        });
+
+        await expect(
+          (route.handler as any)({
+            mastra,
+            agentId: 'test-agent',
+            requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+            abortSignal: new AbortController().signal,
+            runId: 'durable-run-1',
+            toolCallId: 'tool-call-1',
+          }),
+        ).rejects.toThrow(HTTPException);
+        expect(execution).not.toHaveBeenCalled();
+      });
     });
   });
 

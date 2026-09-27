@@ -175,7 +175,7 @@ export interface CreateInngestAgentOptions {
   /**
    * Accepted for API symmetry with `createDurableAgent`, but **ignored** by
    * InngestAgent (a warning is logged if set). Inngest's step memoization and
-   * replay own durability, so InngestAgent pins a `suspended`-only snapshot
+   * replay own durability, so InngestAgent pins a suspended-and-terminal snapshot
    * policy — Mastra snapshots exist purely for human-in-the-loop resume.
    */
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
@@ -483,6 +483,12 @@ export interface InngestAgent<TOutput = undefined> {
   getDurableWorkflows(): Workflow<any, any, any, any, any, any, any>[];
 
   /**
+   * Storage workflow name of the agentic-loop snapshot (`inngest:durable-agentic-loop`).
+   * Server handlers and suspended-run discovery use it to locate this agent's runs.
+   */
+  readonly durableLoopWorkflowName: string;
+
+  /**
    * Set the Mastra instance for observability.
    * Called by Mastra during agent registration.
    * @internal
@@ -565,6 +571,13 @@ export interface InngestAgent<TOutput = undefined> {
   subscribeToThread: Agent<any, any, TOutput>['subscribeToThread'];
   /** Get the active run id for a thread. Forwarded to the underlying Agent. */
   getActiveThreadRunId: Agent<any, any, TOutput>['getActiveThreadRunId'];
+  /**
+   * Abort the thread's active run, including on the Inngest worker executing it.
+   * Returns `false` when there is no matching active run.
+   */
+  abortThreadStream: Agent<any, any, TOutput>['abortThreadStream'];
+  /** Abort a run by id, including on the Inngest worker executing it. */
+  abortRunStream: Agent<any, any, TOutput>['abortRunStream'];
   /**
    * Resume a suspended durable run and return its streaming output. Routes
    * through {@link InngestAgent.resume}; requires `runId` in `streamOptions`.
@@ -650,7 +663,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     console.warn(
       `InngestAgent '${idOverride ?? agent.id}': ignoring the shouldPersistSnapshot option. ` +
         `Inngest's step memoization/replay owns durability, so InngestAgent always persists ` +
-        `'suspended' snapshots only (for human-in-the-loop resume).`,
+        `only 'suspended' and terminal snapshots (for human-in-the-loop resume).`,
     );
   }
 
@@ -801,6 +814,19 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     }
   }
 
+  /**
+   * Stop `runId` wherever it is executing: the controller this process holds
+   * for it, if any, plus the abort request that reaches the Inngest step
+   * worker. Mirrors the `abort()` handed out with a stream result.
+   */
+  function abortDurableRun(runId: string): void {
+    const controller = globalRunRegistry.get(runId)?.abortController;
+    if (controller && !controller.signal.aborted) {
+      controller.abort(new Error('Aborted'));
+    }
+    void requestRemoteAbort(runId);
+  }
+
   // Return the InngestAgent object (Agent methods are added by the Proxy below)
   const inngestAgent: Pick<
     InngestAgent<TOutput>,
@@ -821,13 +847,18 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     | 'declineToolCall'
     | 'approveToolCallGenerate'
     | 'declineToolCallGenerate'
+    | 'abortThreadStream'
+    | 'abortRunStream'
     | '__fork'
     | 'getDurableWorkflows'
+    | 'durableLoopWorkflowName'
     | '__setMastra'
   > = {
     get id() {
       return agentId;
     },
+
+    durableLoopWorkflowName: InngestDurableStepIds.AGENTIC_LOOP,
 
     get name() {
       return agentName;
@@ -1503,6 +1534,27 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         { approved: false, ...(reason !== undefined ? { reason } : {}) },
         resumeOptions as InngestAgentResumeOptions<TOutput>,
       );
+    },
+
+    // The wrapped Agent's thread/run abort only reaches in-process state; an
+    // Inngest run executes on the step worker, which must be told to stop.
+    abortThreadStream(abortOptions) {
+      // Resolve the run before the base call: aborting releases the thread
+      // lease, after which the thread no longer has an active run to look up.
+      const runId = agent.getActiveThreadRunId(abortOptions);
+      const aborted = agent.abortThreadStream(abortOptions);
+      if (!aborted || !runId) return aborted;
+
+      abortDurableRun(runId);
+      return true;
+    },
+
+    abortRunStream(runId) {
+      const aborted = agent.abortRunStream(runId);
+      // Publish regardless of local knowledge: the run is normally executing
+      // on an Inngest worker this process cannot see.
+      abortDurableRun(runId);
+      return aborted || globalRunRegistry.get(runId) !== undefined;
     },
 
     __fork() {

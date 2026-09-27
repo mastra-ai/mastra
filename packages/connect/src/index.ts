@@ -10,7 +10,7 @@ export type {
   ChannelsResolverContext,
   ResolvedChannels,
 } from './channels.js';
-export type { ChannelProviderRegistration, ChannelBuildContext } from './providers/channel-provider.js';
+export type { ChannelProviderRegistration, ChannelInstance, ChannelRuntime } from './providers/channel-provider.js';
 export { credential } from './credential.js';
 export { environment } from './environment.js';
 export type { ConnectEnvironment, EnvironmentIntegrationOptions, EnvironmentOptions } from './environment.js';
