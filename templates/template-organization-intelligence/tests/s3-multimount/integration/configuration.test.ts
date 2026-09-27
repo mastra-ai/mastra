@@ -114,10 +114,6 @@ describe('S3-multimount integration', () => {
         S3_SECRET_ACCESS_KEY: _s3Secret,
         ...withoutProviders
       } = process.env;
-      await command('npm', ['exec', '--', 'tsc', '-p', 'tsconfig.eval.json'], {
-        cwd: process.cwd(),
-        env: withoutProviders,
-      });
       const evaluationRunner = join(process.cwd(), 'build', 'eval', 'mastra', 'evaluation', 'eval-runner.js');
       const evaluationState = await mkdtemp(join(tmpdir(), 'organization-f5-seeded-'));
       try {

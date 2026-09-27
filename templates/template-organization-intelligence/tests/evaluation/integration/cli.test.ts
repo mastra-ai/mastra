@@ -9,7 +9,6 @@ const command = promisify(execFile);
 describe('evaluation integration', () => {
   it('evaluation CLI rejects invalid arguments without provider access', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'organization-eval-cli-'));
-    await command('npm', ['exec', '--', 'tsc', '-p', 'tsconfig.eval.json']);
     const runner = fileURLToPath(new URL('../../../build/eval/mastra/evaluation/eval-runner.js', import.meta.url));
     const { OPENAI_API_KEY: _key, ...withoutKey } = process.env;
     await expect(

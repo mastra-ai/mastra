@@ -18,6 +18,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'integration',
+          globalSetup: ['./tests/fixtures/build-evaluation.ts'],
           environment: 'node',
           include: ['src/**/*.integration.test.ts', 'tests/**/*.integration.test.ts', 'tests/**/integration/*.test.ts'],
           testTimeout: 15000,

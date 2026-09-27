@@ -80,7 +80,6 @@ describe('Native comparable experiments', () => {
       const stateDirectory = join(cliRoot, 'state');
       const runner = join(process.cwd(), 'build', 'eval', 'mastra', 'evaluation', 'eval-runner.js');
       const { OPENAI_API_KEY: _key, ...withoutKey } = process.env;
-      await execFileAsync('npm', ['exec', '--', 'tsc', '-p', 'tsconfig.eval.json'], { cwd: process.cwd() });
       await execFileAsync(process.execPath, [runner, '--mode', 'seed', '--state-dir', stateDirectory], {
         cwd: cliRoot,
         env: withoutKey,
