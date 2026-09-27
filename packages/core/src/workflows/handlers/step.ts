@@ -167,14 +167,15 @@ export async function executeStep(
     suspendDataToUse = userSuspendData;
   }
 
-  const startTime = resumeDataToUse ? undefined : Date.now();
-  const resumeTime = resumeDataToUse ? Date.now() : undefined;
+  const hasResumeData = resumeDataToUse !== undefined;
+  const startTime = hasResumeData ? undefined : Date.now();
+  const resumeTime = hasResumeData ? Date.now() : undefined;
 
   const stepInfo = {
     // Drop prior completion/suspend fields so they cannot linger across re-entry
     // (e.g. suspendPayload/suspendedAt after resume, or startedAt > suspendedAt on loops).
     ...omitPriorCompletionFields((stepResults[step.id] ?? {}) as Record<string, unknown>),
-    ...(resumeDataToUse ? { resumePayload: resumeDataToUse } : { payload: inputData }),
+    ...(hasResumeData ? { resumePayload: resumeDataToUse } : { payload: inputData }),
     ...(startTime ? { startedAt: startTime } : {}),
     ...(resumeTime ? { resumedAt: resumeTime } : {}),
     status: 'running',

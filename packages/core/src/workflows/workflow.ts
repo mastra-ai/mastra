@@ -3139,17 +3139,17 @@ export class Workflow<
     // The parent keeps this step as `suspended` until the nested resume settles. If the
     // process died mid-resume, the nested run is already `running`/`waiting` and must be
     // restarted rather than resumed. See https://github.com/mastra-ai/mastra/issues/25187
-    let restartNested = !!restart;
-    if (!restartNested && isResume && !isTimeTravel) {
-      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-      const nestedSnapshot = await workflowsStore?.loadWorkflowSnapshot({
-        workflowName: this.id,
-        runId: run.runId,
-      });
-      restartNested = nestedSnapshot?.status === 'running' || nestedSnapshot?.status === 'waiting';
-    }
-
     try {
+      let restartNested = !!restart;
+      if (!restartNested && isResume && !isTimeTravel) {
+        const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+        const nestedSnapshot = await workflowsStore?.loadWorkflowSnapshot({
+          workflowName: this.id,
+          runId: run.runId,
+        });
+        restartNested = nestedSnapshot?.status === 'running' || nestedSnapshot?.status === 'waiting';
+      }
+
       if (isTimeTravel) {
         res = await run.timeTravel({
           inputData: timeTravel?.inputData,
