@@ -356,6 +356,16 @@ describe('built-in board and integration handlers', () => {
     },
   );
 
+  it.each(['done', 'canceled'])('does not re-triage a GitHub issue whose card is %s', async stage => {
+    const decision = await defaultGithubRules.issueCommentCreated?.({
+      ...githubContext('issueCommentCreated'),
+      item: { ...item, source: 'github-issue', stages: [stage] },
+      board: 'work',
+      itemRevision: 3,
+    });
+    expect(decision).toBeUndefined();
+  });
+
   it('starts investigation when a board drag or reconciliation moves an issue into Triage', async () => {
     const rule = workBoard.rules.triage?.issue?.onEnter;
     const context = {
