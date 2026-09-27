@@ -240,8 +240,8 @@ Before publishing:
 1. Run the focused adapter tests and affected core tests.
 2. Build and typecheck the affected packages with matching workspace dependencies
    in CI, then run this gate against the resulting SDK artifact.
-3. Smoke-test the packaged `mastracode --acp` entry in BB with a real authenticated
-   provider, including a reply, approved and denied tools, and cancellation.
+3. Smoke-test the packaged `mastracode --acp` entry in an ACP client with a real
+   authenticated provider, including a reply, approved and denied tools, and cancellation.
 4. Archive the reports with the exact package versions and checksums.
 
 Passing this gate supports a claim of tested compatibility with the documented
