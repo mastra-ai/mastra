@@ -151,12 +151,14 @@ function buildWorkItem(context: FactoryStageRuleContext) {
   } as const;
 }
 
+export const COMPLETE_ISSUE_SKILL = 'factory-complete-issue';
+
 function completeIssue(context: FactoryStageRuleContext) {
   return {
     type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:factory-complete-issue`,
+    idempotencyKey: `${context.ingress.id}:${COMPLETE_ISSUE_SKILL}`,
     role: 'triage',
-    skillName: 'factory-complete-issue',
+    skillName: COMPLETE_ISSUE_SKILL,
     arguments: context.item.url ? `GitHub issue (${context.item.url})` : context.item.title,
   } as const;
 }

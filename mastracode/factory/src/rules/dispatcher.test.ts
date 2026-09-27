@@ -3375,7 +3375,11 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
   });
 
-  it('leaves the close-out an external close queued unapproved', async () => {
+  it.each([
+    { skillName: 'understand-issue', held: true },
+    // The close-out only tidies Factory's own labels, so it never waits on a click.
+    { skillName: 'factory-complete-issue', held: false },
+  ])('holds the $skillName run an external close queues: $held', async ({ skillName, held }) => {
     // A GitHub event is data, not an authorized execution context: the rest it
     // causes never pre-approves the run it queues — that run asks like any other.
     const storage = (await createFactoryStorageForTests()).workItems;
@@ -3385,7 +3389,7 @@ describe('FactoryDecisionDispatcher', () => {
           onEnter: () => ({
             type: 'invokeSkill',
             role: 'work',
-            skillName: 'factory-complete-issue',
+            skillName,
             idempotencyKey: 'close-out-2',
           }),
         },
@@ -3425,8 +3429,66 @@ describe('FactoryDecisionDispatcher', () => {
     });
     await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
 
+    const status = (await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status;
+    if (held) {
+      expect(status).toBe('proposed');
+      expect(session.sendSignal).not.toHaveBeenCalled();
+    } else {
+      expect(status).not.toBe('proposed');
+    }
+  });
+
+  it('retires a held run when the card moves off the stage that asked for it', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const transitionService = new FactoryTransitionService({
+      storage,
+      configVersion: 'rules-v1',
+      boards: createLifecycleTestRegistry({}),
+    });
+    const item = await createItem(storage);
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      ingress: { identity: 'held-triage-1', triggerType: 'github' },
+      configVersion: 'rules-v1',
+      expectedRevision: item.revision,
+      actor: { type: 'github', login: 'stranger', trusted: false, factoryAuthored: false },
+      outcome: { status: 'accepted' },
+      decisions: [
+        { type: 'invokeSkill', role: 'triage', skillName: 'factory-triage', idempotencyKey: 'held-triage-1' },
+      ],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => false,
+    });
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('proposed');
-    expect(session.sendSignal).not.toHaveBeenCalled();
+
+    const current = await storage.get({ orgId: 'org-1', id: item.id });
+    const closed = await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      board: 'work',
+      stage: 'done',
+      expectedRevision: current!.revision,
+      actor: { type: 'github', login: 'stranger', trusted: false, factoryAuthored: false },
+      ingress: { type: 'github', identity: 'close-held-1' },
+      cause: 'issue closed',
+    });
+
+    expect(closed.status).toBe('accepted');
+    const statuses = (await storage.listDeferredDecisions('org-1', PROJECT_ID)).map(record => record.status);
+    expect(statuses).not.toContain('proposed');
+    expect(statuses).toContain('superseded');
   });
 
   it("approves a plan on the project's behalf when plan review is off", async () => {

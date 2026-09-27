@@ -1699,8 +1699,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   async commitTransition(input: CommitFactoryTransitionInput): Promise<CommitFactoryTransitionResult> {
+    let supersededHeld: FactoryDeferredDecisionRecord[] = [];
     const commit = (): Promise<CommitFactoryTransitionResult> =>
       this.storage.withTransaction<CommitFactoryTransitionResult>(async ops => {
+        supersededHeld = [];
         const prior = await ops.findOne<GovernanceDbRow>('factory_rule_ingress', {
           org_id: input.orgId,
           factory_project_id: input.factoryProjectId,
@@ -1718,6 +1720,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         let code: string | null = null;
         let reason: string | null = null;
         let result: Record<string, unknown>;
+        let moved = false;
         const updated = await ops.updateAtomic<WorkItemDbRow>(
           'work_items',
           {
@@ -1755,6 +1758,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                   })
                 : null;
             }
+            moved = true;
             return patchColumns({
               ...(arm ? { autonomyArmedAt: now } : {}),
               ...(disarm ? { autonomyArmedAt: null } : {}),
@@ -1815,6 +1819,30 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             causal_chain: input.causalChain,
             created_at: now,
           });
+          if (moved && outcome === 'accepted') {
+            // A run held for approval was asked for by the stage the card just
+            // left; once the card moves it can never be the right run again.
+            const held = await ops.findMany<GovernanceDbRow>('factory_deferred_decisions', {
+              org_id: input.orgId,
+              factory_project_id: input.factoryProjectId,
+              work_item_id: item.id,
+              status: 'proposed',
+            });
+            for (const row of held) {
+              const settled = await ops.updateAtomic<GovernanceDbRow>(
+                'factory_deferred_decisions',
+                { id: row.id, org_id: input.orgId, factory_project_id: input.factoryProjectId },
+                current =>
+                  current.status === 'proposed' ? { status: 'superseded', updated_at: now, completed_at: now } : null,
+              );
+              if (!settled || settled.status !== 'superseded') continue;
+              await ops.deleteMany(
+                'factory_attention_receipts',
+                proposalReceiptFilter(input.orgId, input.factoryProjectId, String(row.id)),
+              );
+              supersededHeld.push(toDeferredDecision(settled));
+            }
+          }
           if (outcome === 'accepted' && input.evaluation.outcome === 'accepted') {
             for (const [index, decision] of input.evaluation.decisions.entries()) {
               // Consent pre-approves only the runs this same commit queues.
@@ -1849,12 +1877,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         }
         return { status: 'committed', item, result };
       });
+    let committed: CommitFactoryTransitionResult;
     try {
-      return await commit();
+      committed = await commit();
     } catch (error) {
       if (!(error instanceof UniqueViolationError)) throw error;
-      return commit();
+      committed = await commit();
     }
+    for (const record of supersededHeld) this.#attentionChanged(record);
+    return committed;
   }
 
   async commitRuleEvaluation(input: CommitFactoryRuleEvaluationInput): Promise<CommitFactoryRuleEvaluationResult> {

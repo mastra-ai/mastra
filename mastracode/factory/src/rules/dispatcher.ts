@@ -13,6 +13,7 @@ import {
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { moveCardToBoard } from '../boards/relocate.js';
+import { COMPLETE_ISSUE_SKILL } from '../boards/work.js';
 import {
   FACTORY_OPEN_RUN_STALE_MS,
   heartbeatSessionOpenRun,
@@ -758,6 +759,9 @@ export class FactoryDecisionDispatcher {
     // Withholding auto-run decides what the Factory may pick up on its own, not
     // whether it may finish work a person already handed it. Once someone starts
     // an item, the runs that carry it to review are that same request continuing.
+    // Closing out a finished card only tidies Factory's own labels and never
+    // reads the author's words, so it is not code from outside to consent to.
+    if (decision.type === 'invokeSkill' && decision.skillName === COMPLETE_ISSUE_SKILL) return false;
     const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
     // Neither arming nor auto-run is standing consent for code from outside the write-access
     // circle: only a run pre-approved by a person's gesture or its own agent's governed move passes.
