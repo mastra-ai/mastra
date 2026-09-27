@@ -10,6 +10,7 @@ import { Agent, isDurableAgentLike } from '@mastra/core/agent';
 import {
   AGENT_CONTROL_TOPIC,
   AGENT_STREAM_TOPIC,
+  AgentControlEventTypes,
   AgentStreamEventTypes,
   globalRunRegistry,
 } from '@mastra/core/agent/durable';
@@ -22,6 +23,7 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { DefaultStorage } from '@mastra/libsql';
 import { Inngest } from 'inngest';
 import { describe, it, expect, vi } from 'vitest';
+import { z } from 'zod';
 
 import { InngestDurableStepIds } from '../durable-agent/create-inngest-agentic-workflow';
 import { InngestExecutionEngine } from '../execution-engine';
@@ -451,6 +453,62 @@ describe('createInngestAgent observe-replay wiring', () => {
     expect(customPublish).toHaveBeenCalledWith(
       AGENT_STREAM_TOPIC(runId),
       expect.objectContaining({ type: AgentStreamEventTypes.ERROR, runId }),
+      undefined,
+    );
+  });
+
+  it('publishes the real message when the failed result carries a serialized error (#25161)', async () => {
+    const customPubsub = new EventEmitterPubSub();
+    const customPublish = vi.spyOn(customPubsub, 'publish');
+    const durableAgent = createInngestAgent({
+      agent: makeAgent('runtime-serialized-error'),
+      inngest,
+      pubsub: customPubsub,
+    });
+    const workflow = durableAgent
+      .getDurableWorkflows()
+      .find((candidate: any) => candidate.id === InngestDurableStepIds.AGENTIC_LOOP) as any;
+    // Step failures reach the workflow result as plain SerializedError objects (formatResultError → toJSON()).
+    const execute = vi.spyOn(InngestExecutionEngine.prototype, 'execute').mockResolvedValue({
+      status: 'failed',
+      steps: {},
+      state: {},
+      error: { name: 'Error', message: 'step output size is greater than the limit' },
+    } as any);
+    const lifecycle = vi
+      .spyOn(InngestExecutionEngine.prototype as any, 'invokeLifecycleCallbacksInternal')
+      .mockResolvedValue(undefined);
+    const runId = 'inngest-runtime-serialized-error-run';
+    const step = {
+      run: vi.fn(async (_id: string, fn: () => unknown) => fn()),
+    };
+
+    try {
+      await expect(
+        workflow.getFunction().fn({
+          event: {
+            data: {
+              inputData: { __workflowKind: 'durable-agent', runId },
+              runId,
+            },
+          },
+          step,
+          attempt: 0,
+        }),
+      ).rejects.toThrow('Workflow failed');
+    } finally {
+      execute.mockRestore();
+      lifecycle.mockRestore();
+    }
+
+    expect(customPublish).toHaveBeenCalledOnce();
+    expect(customPublish).toHaveBeenCalledWith(
+      AGENT_STREAM_TOPIC(runId),
+      expect.objectContaining({
+        type: AgentStreamEventTypes.ERROR,
+        runId,
+        data: { error: expect.objectContaining({ message: 'step output size is greater than the limit' }) },
+      }),
       undefined,
     );
   });
@@ -1392,6 +1450,82 @@ describe('InngestAgent parity surface', () => {
     // itself, so it should NOT be the agent's bound generate.
     expect(durableAgent.generate).not.toBe((durableAgent.agent as any).generate);
   });
+
+  describe('structuredOutput (issue #25148)', () => {
+    const citySchema = z.object({ city: z.string(), country: z.string() });
+
+    async function publishJsonTextRun(durableAgent: ReturnType<typeof makeIsolatedAgent>, runId: string) {
+      const json = JSON.stringify({ city: 'Paris', country: 'France' });
+      const chunks = [
+        { type: 'text-start', payload: { id: 'text-1' } },
+        { type: 'text-delta', payload: { id: 'text-1', text: json } },
+        { type: 'text-end', payload: { id: 'text-1' } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: { steps: [], usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            stepResult: { reason: 'stop', warnings: [] },
+            metadata: {},
+          },
+        },
+      ];
+      for (const data of chunks) {
+        await publishStreamEvent(durableAgent, runId, { type: AgentStreamEventTypes.CHUNK, data });
+      }
+      await publishStreamEvent(durableAgent, runId, {
+        type: AgentStreamEventTypes.FINISH,
+        data: {
+          output: { text: json, steps: [], usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          stepResult: { reason: 'stop' },
+        },
+      });
+    }
+
+    it('generate() populates object from the model JSON text', async () => {
+      const durableAgent = makeIsolatedAgent('structured-generate');
+      const sendSpy = vi.spyOn(inngest as any, 'send').mockImplementation(async (event: any) => {
+        await publishJsonTextRun(durableAgent, event.data.runId);
+      });
+
+      try {
+        const result = await durableAgent.generate([{ role: 'user', content: 'Paris?' }], {
+          structuredOutput: { schema: citySchema },
+        });
+
+        expect(result.text).toBe('{"city":"Paris","country":"France"}');
+        expect(result.object).toEqual({ city: 'Paris', country: 'France' });
+      } finally {
+        sendSpy.mockRestore();
+      }
+    });
+
+    it('resumeGenerate() populates object using the in-process registry entry', async () => {
+      const durableAgent = makeIsolatedAgent('structured-resume-generate');
+      setSuspendedSnapshot(durableAgent);
+      const runId = 'structured-resume-generate-run';
+      globalRunRegistry.set(runId, {
+        tools: {},
+        model: undefined as any,
+        structuredOutput: { schema: citySchema },
+      } as any);
+      await publishStreamEvent(durableAgent, runId, {
+        type: AgentStreamEventTypes.SUSPENDED,
+        data: { suspendedPaths: { 'agentic-loop': ['agentic-loop'] } },
+      });
+      const sendSpy = vi.spyOn(inngest as any, 'send').mockImplementation(async () => {
+        await publishJsonTextRun(durableAgent, runId);
+      });
+
+      try {
+        const result = await durableAgent.resumeGenerate(runId, { approved: true });
+
+        expect(result.object).toEqual({ city: 'Paris', country: 'France' });
+      } finally {
+        globalRunRegistry.delete(runId);
+        sendSpy.mockRestore();
+      }
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1757,5 +1891,126 @@ describe('InngestAgent fork and resume overrides (#24736)', () => {
       result.cleanup();
       sendSpy.mockRestore();
     }
+  });
+});
+
+describe('thread and run abort (#25156)', () => {
+  const inngest = new Inngest({
+    id: 'create-inngest-agent-abort',
+    baseUrl: `http://localhost:${INNGEST_PORT}`,
+  });
+
+  function makeDurable(id: string) {
+    const durableAgent = createInngestAgent({
+      agent: new Agent({ id, name: id, instructions: 'Test', model: createMockModel() as any }),
+      inngest,
+    });
+    // Keep publishes in-process; the Inngest realtime transport is not under test.
+    (durableAgent.pubsub as any).inner = new EventEmitterPubSub();
+    return durableAgent;
+  }
+
+  function abortRequestsFor(publish: ReturnType<typeof vi.spyOn>, runId: string) {
+    return publish.mock.calls.filter(
+      ([topic, event]: any[]) =>
+        topic === AGENT_CONTROL_TOPIC(runId) &&
+        event?.type === AgentControlEventTypes.ABORT_REQUEST &&
+        event.runId === runId,
+    );
+  }
+
+  async function startThreadRun(durableAgent: ReturnType<typeof makeDurable>, threadId: string, resourceId: string) {
+    const sendSpy = vi.spyOn(inngest as any, 'send').mockResolvedValue(undefined as any);
+    const result = await durableAgent.stream([{ role: 'user', content: 'hi' }], {
+      memory: { thread: threadId, resource: resourceId },
+    } as any);
+    const deadline = Date.now() + 1_000;
+    while (!durableAgent.getActiveThreadRunId({ threadId, resourceId }) && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    return { result, sendSpy };
+  }
+
+  it('abortThreadStream stops the active Inngest run and asks the worker to abort it', async () => {
+    const durableAgent = makeDurable('abort-thread');
+    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const threadId = 'abort-thread-t';
+    const resourceId = 'abort-thread-r';
+    const { result, sendSpy } = await startThreadRun(durableAgent, threadId, resourceId);
+
+    try {
+      const runId = durableAgent.getActiveThreadRunId({ threadId, resourceId });
+      expect(runId).toBe(result.runId);
+      const controller = globalRunRegistry.get(result.runId)?.abortController;
+      expect(controller?.signal.aborted).toBe(false);
+
+      expect(durableAgent.abortThreadStream({ threadId, resourceId })).toBe(true);
+
+      expect(controller?.signal.aborted).toBe(true);
+      await vi.waitFor(() => expect(abortRequestsFor(publish, result.runId)).toHaveLength(1));
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('abortThreadStream publishes nothing when expectedRunId does not match the active run', async () => {
+    const durableAgent = makeDurable('abort-thread-stale');
+    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const threadId = 'abort-thread-stale-t';
+    const resourceId = 'abort-thread-stale-r';
+    const { result, sendSpy } = await startThreadRun(durableAgent, threadId, resourceId);
+
+    try {
+      expect(durableAgent.abortThreadStream({ threadId, resourceId, expectedRunId: 'some-other-run' })).toBe(false);
+      await new Promise(resolve => setTimeout(resolve, 10));
+      expect(abortRequestsFor(publish, result.runId)).toHaveLength(0);
+      expect(globalRunRegistry.get(result.runId)?.abortController?.signal.aborted).toBe(false);
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('abortThreadStream returns false and publishes nothing for a thread without an active run', async () => {
+    const durableAgent = makeDurable('abort-thread-idle');
+    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+
+    expect(durableAgent.abortThreadStream({ threadId: 'idle-t', resourceId: 'idle-r' })).toBe(false);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(publish.mock.calls.filter(([topic]: any[]) => String(topic).startsWith('agent.control.'))).toHaveLength(0);
+  });
+
+  it('abortRunStream asks the worker to abort a run this process does not know', async () => {
+    const durableAgent = makeDurable('abort-run-remote');
+    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const runId = 'abort-run-remote-run';
+
+    expect(typeof durableAgent.abortRunStream(runId)).toBe('boolean');
+    await vi.waitFor(() => expect(abortRequestsFor(publish, runId)).toHaveLength(1));
+  });
+
+  it('abortRunStream flips the local controller of a run started here and reports it aborted', async () => {
+    const durableAgent = makeDurable('abort-run-local');
+    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const { result, sendSpy } = await startThreadRun(durableAgent, 'abort-run-local-t', 'abort-run-local-r');
+
+    try {
+      const controller = globalRunRegistry.get(result.runId)?.abortController;
+      expect(durableAgent.abortRunStream(result.runId)).toBe(true);
+      expect(controller?.signal.aborted).toBe(true);
+      await vi.waitFor(() => expect(abortRequestsFor(publish, result.runId)).toHaveLength(1));
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('does not throw when publishing the abort request fails', async () => {
+    const durableAgent = makeDurable('abort-run-publish-fails');
+    vi.spyOn(durableAgent.pubsub, 'publish').mockRejectedValue(new Error('transport down'));
+
+    expect(() => durableAgent.abortRunStream('abort-run-publish-fails-run')).not.toThrow();
+    await new Promise(resolve => setTimeout(resolve, 10));
   });
 });

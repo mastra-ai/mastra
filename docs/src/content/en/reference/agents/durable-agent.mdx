@@ -404,6 +404,12 @@ Returns: `boolean`. `false` when this process has no active run recorded for the
 
 ### Recovery
 
+:::warning
+
+Recovery re-drives a run from its last persisted snapshot. Mastra treats a sub-agent delegation as one generated `agent-<name>` tool step and doesn't checkpoint its inner LLM or tool calls independently. If recovery replays that step, the entire sub-agent run can execute again, including already-completed tool side effects. Make tools used by sub-agents idempotent, or deduplicate their external side effects. See [crash recovery](/docs/harness/durable-agents#crash-recovery) for operational guidance.
+
+:::
+
 #### `listActiveRuns(options?)`
 
 Lists this agent's runs whose persisted snapshot is in `running` status: runs whose agentic loop was mid-execution when the workflow engine last saved state. On a live process they transition to `suspended` or a terminal status. After a crash or restart they stay `running` with nothing driving them, which is what `recoverActiveRuns()` re-drives. Runs started by other durable agents on the same storage aren't included.

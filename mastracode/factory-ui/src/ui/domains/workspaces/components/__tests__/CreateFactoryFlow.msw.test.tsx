@@ -25,6 +25,7 @@ const STEP_KEY = 'mastracode.factory-create.step';
 const NAME_KEY = 'mastracode.factory-create.name';
 const REPO_KEY = 'mastracode.factory-create.repository';
 const FACTORY_KEY = 'mastracode.factory-create.factory-id';
+const LINKED_KEY = 'mastracode.factory-create.linked-repository-id';
 const WIZARD_PATH = '/factories/fp-host/new-factory';
 
 const connectedGithub: GithubStatus = {
@@ -366,7 +367,7 @@ describe('Create Factory wizard', () => {
     expect(await screen.findByRole('option', { name: /Connect GitHub/ })).toHaveAttribute('aria-disabled', 'false');
   });
 
-  it('offers Platform connection when GitHub App is not configured on the server', async () => {
+  it('marks GitHub unavailable and does not leak env details when the GitHub App is not configured', async () => {
     seedDraft('vcs');
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/status`, () =>
@@ -382,9 +383,9 @@ describe('Create Factory wizard', () => {
 
     renderFlow();
 
-    const row = await screen.findByRole('option', { name: /Connect GitHub/ });
-    expect(row).toHaveAttribute('aria-disabled', 'false');
-    expect(row).toHaveTextContent('Connect your GitHub account through Mastra Platform.');
+    const row = await screen.findByRole('option', { name: /GitHub unavailable/ });
+    expect(row).toHaveAttribute('aria-disabled', 'true');
+    expect(row).toHaveTextContent('GitHub is not configured for this deployment.');
     expect(row).not.toHaveTextContent('GITHUB_APP_ID');
   });
 
@@ -823,6 +824,111 @@ function stubConnectedJira() {
     ),
   );
 }
+
+describe('back navigation', () => {
+  it('has no back button on the name step', async () => {
+    server.use(http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })));
+
+    renderFlow();
+
+    expect(await screen.findByLabelText('Name your new Factory')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Go back to previous step/ })).not.toBeInTheDocument();
+  });
+
+  it('steps back from vcs to name while preserving the typed name', async () => {
+    seedDraft('vcs');
+    const user = userEvent.setup();
+
+    renderFlow();
+
+    expect(await screen.findByLabelText('Choose your codebase')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Go back to previous step/ }));
+
+    // Back returns to the name step, and the previously typed name is still in the draft.
+    expect(await screen.findByLabelText('Name your new Factory')).toBeInTheDocument();
+    expect(sessionStorage.getItem(STEP_KEY)).toBe('name');
+    expect(sessionStorage.getItem(NAME_KEY)).toBe('Mastra');
+  });
+
+  it('steps back from project-management to vcs', async () => {
+    seedDraft('project-management');
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
+      ),
+    );
+    const user = userEvent.setup();
+
+    renderFlow();
+
+    expect(await screen.findByLabelText('Connect the work behind the code')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Go back to previous step/ }));
+
+    expect(await screen.findByLabelText('Choose your codebase')).toBeInTheDocument();
+    expect(sessionStorage.getItem(STEP_KEY)).toBe('vcs');
+  });
+
+  it('drops the back button once a Factory has been created but the final commit failed', async () => {
+    // The final commit on model-provider persists `factoryId` (and possibly
+    // `linkedRepositoryId`) so a retry resumes instead of duplicating. If the
+    // user could still step back, they might pick a new name or repository
+    // while the retry silently finishes the prior IDs, so Back is removed
+    // once these server-side checkpoints exist.
+    seedDraft('model-provider');
+    sessionStorage.setItem(FACTORY_KEY, 'fp-existing');
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({ projects: [{ id: 'fp-existing', name: 'Mastra' }] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/om`, () => HttpResponse.json({})),
+    );
+
+    renderFlow();
+
+    expect(await screen.findByLabelText('Choose your Factory model')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Go back to previous step/ })).not.toBeInTheDocument();
+  });
+
+  it('also drops the back button when only the repository link has been persisted', async () => {
+    seedDraft('model-provider');
+    sessionStorage.setItem(LINKED_KEY, 'lnk-existing');
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })),
+      http.get(`${TEST_BASE_URL}/web/om`, () => HttpResponse.json({})),
+    );
+
+    renderFlow();
+
+    expect(await screen.findByLabelText('Choose your Factory model')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Go back to previous step/ })).not.toBeInTheDocument();
+  });
+
+  it('preserves the repository pick when Back rewinds through name back to vcs', async () => {
+    seedDraft('project-management');
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
+      ),
+    );
+    const user = userEvent.setup();
+
+    renderFlow();
+
+    // Back twice: project-management → vcs → name. The repository the user
+    // already picked must survive the rewind so it is still there when they
+    // continue back to vcs.
+    expect(await screen.findByLabelText('Connect the work behind the code')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Go back to previous step/ }));
+    expect(await screen.findByLabelText('Choose your codebase')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Go back to previous step/ }));
+    expect(await screen.findByLabelText('Name your new Factory')).toBeInTheDocument();
+
+    // The repository pick is still in sessionStorage after landing on name.
+    expect(sessionStorage.getItem(STEP_KEY)).toBe('name');
+    expect(sessionStorage.getItem(REPO_KEY)).not.toBeNull();
+    expect(sessionStorage.getItem(NAME_KEY)).toBe('Mastra');
+  });
+});
 
 /** Seed a mid-flow draft: name typed, repository picked, nothing created yet. */
 function seedDraft(step: 'vcs' | 'project-management' | 'model-provider') {

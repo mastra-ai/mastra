@@ -200,4 +200,29 @@ describe('MastraMemory config serialization', () => {
       retrieval: undefined,
     });
   });
+
+  it('round-trips observation and reflection maxRetries and failurePolicy through getConfig()', () => {
+    const memory = new MockMemory({
+      storage: new InMemoryStore(),
+      options: {
+        observationalMemory: {
+          model: 'test-model',
+          observation: { maxRetries: 1, failurePolicy: 'continue' },
+          reflection: { maxRetries: 0, failurePolicy: 'abort' },
+        },
+      },
+    });
+
+    const omConfig = memory.getConfig().observationalMemory;
+    expect(omConfig).toMatchObject({
+      observation: { maxRetries: 1, failurePolicy: 'continue' },
+      reflection: { maxRetries: 0, failurePolicy: 'abort' },
+    });
+
+    const restored = new MockMemory({
+      storage: new InMemoryStore(),
+      options: { observationalMemory: omConfig },
+    });
+    expect(restored.getConfig().observationalMemory).toEqual(omConfig);
+  });
 });
