@@ -283,8 +283,44 @@ describe('HttpTransport', () => {
       logger.info('test message');
 
       await expect(timeoutTransport._flush()).rejects.toThrow();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
 
       vi.useFakeTimers();
+    });
+
+    it('should preserve explicit zero and false retry options', () => {
+      const t = new HttpTransport({
+        ...defaultOptions,
+        retryOptions: { maxRetries: 0, retryDelay: 0, exponentialBackoff: false },
+      });
+      expect((t as any).retryOptions).toEqual({ maxRetries: 0, retryDelay: 0, exponentialBackoff: false });
+    });
+
+    it('should make a single request when maxRetries is 0', async () => {
+      fetchMock.mockImplementation(() => Promise.resolve({ ok: false, status: 500, statusText: 'Error' }));
+      const t = new HttpTransport({
+        ...defaultOptions,
+        retryOptions: { maxRetries: 0, retryDelay: 0, exponentialBackoff: false },
+      });
+      await expect((t as any).makeHttpRequest({ logs: [] })).rejects.toThrow('HTTP 500');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('should use a constant delay when exponentialBackoff is false', async () => {
+      fetchMock.mockImplementation(() => Promise.resolve({ ok: false, status: 500, statusText: 'Error' }));
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+      const t = new HttpTransport({
+        ...defaultOptions,
+        retryOptions: { maxRetries: 2, retryDelay: 10, exponentialBackoff: false },
+      });
+      const promise = (t as any).makeHttpRequest({ logs: [] });
+      const assertion = expect(promise).rejects.toThrow('HTTP 500');
+      await vi.advanceTimersByTimeAsync(100);
+      await assertion;
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      const retryDelays = setTimeoutSpy.mock.calls.map(c => c[1]).filter(d => d === 10 || d === 20);
+      expect(retryDelays).toEqual([10, 10]);
+      setTimeoutSpy.mockRestore();
     });
   });
 
