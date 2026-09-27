@@ -318,7 +318,7 @@ export function createDurableToolCallStep() {
         args = argsFromInput;
         resumeDataFromArgs = resumeDataFromInput;
       }
-      // Non-transient data-* chunks emitted by output processors via
+      // Non-transient data-* chunks emitted by output processors or tools via
       // writer.custom() during this tool call. This step's messageList is a
       // local copy whose mutations don't cross the step boundary, so parts are
       // collected here and carried on the output record for the mapping step
@@ -998,8 +998,13 @@ export function createDurableToolCallStep() {
 
       // Provide outputWriter so context.writer.write() / context.writer.custom()
       // emit chunks through pubsub (matching the regular agent's tool streaming).
+      // Non-transient data-* chunks are also collected for persistence, as the
+      // regular agent does for tool-written data parts (#25122).
       const outputWriter = pubsub
         ? async (chunk: any) => {
+            if (typeof chunk?.type === 'string' && chunk.type.startsWith('data-') && !chunk.transient) {
+              collectProcessorDataPart({ type: chunk.type, data: chunk.data, messageId: chunk.messageId });
+            }
             await emitChunkEvent(pubsub, runId, chunk as ChunkType);
           }
         : undefined;
