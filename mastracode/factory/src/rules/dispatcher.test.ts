@@ -50,6 +50,10 @@ function createSession(
     acceptRedeliveredSignal?: boolean;
     /** Number of consecutive sends swallowed by ending runs before a redelivery wakes the session. */
     droppedSignalCount?: number;
+    /** The queued copy only surfaces once the run it was queued onto ends, then runs to completion. */
+    surfaceQueuedSignalOnRunEnd?: boolean;
+    /** Runs just before the busy run ends, e.g. to move the card on mid-run. */
+    beforeRunEnd?: () => Promise<void>;
     initialDeliveredSignalIds?: string[];
     /**
      * Per-call notification outcomes. `deliver` models a kickoff queued onto a
@@ -188,7 +192,13 @@ function createSession(
       } else if (options?.endRunAfterDroppedSignal) {
         // The busy run finishes without ever answering the queued prompt, which
         // is the moment the session becomes free to take it again.
-        queueMicrotask(() => emitAgentEnd('complete'));
+        queueMicrotask(async () => {
+          if (options?.surfaceQueuedSignalOnRunEnd) await new Promise(resolve => setTimeout(resolve, 0));
+          await options?.beforeRunEnd?.();
+          if (options?.surfaceQueuedSignalOnRunEnd) deliveredSignals.add(input.id);
+          emitAgentEnd('complete');
+          if (options?.surfaceQueuedSignalOnRunEnd) setTimeout(() => emitAgentEnd('complete'), 0);
+        });
       } else if (!options?.signalAccepted && !options?.dropDeliveredSignal) {
         // Default landed-deliver path: the in-flight run drains the prompt and
         // finishes, which is what the dispatcher now waits to observe.
@@ -2658,6 +2668,89 @@ describe('FactoryDecisionDispatcher', () => {
     expect(decision?.attempts).toBe(1);
     expect(session.sendSignal).toHaveBeenCalledTimes(2);
     expect(getAgentEndListenerCount()).toBe(0);
+  });
+
+  async function prepareDeliverScenario(idempotencyKey: string) {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      arguments: 'Issue 42',
+      idempotencyKey,
+    });
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: 'kickoff-null',
+      kickoffMessage: null,
+    });
+    return { storage, item, transitionService };
+  }
+
+  it('does not resend a queued kickoff that surfaces once the ending run finishes', async () => {
+    const { storage, transitionService } = await prepareDeliverScenario('skill-queued-surfaces-late');
+    const { controller, session } = createSession(undefined, {
+      signalAccepted: Promise.resolve({ accepted: true, action: 'deliver' }),
+      dropDeliveredSignal: true,
+      endRunAfterDroppedSignal: true,
+      surfaceQueuedSignalOnRunEnd: true,
+      acceptRedeliveredSignal: true,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(decision?.status).toBe('succeeded');
+    expect(session.sendSignal).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops a dropped kickoff instead of resending it once the card has moved to another stage', async () => {
+    const { storage, item, transitionService } = await prepareDeliverScenario('skill-card-moved-on');
+    const { controller, session } = createSession(undefined, {
+      signalAccepted: Promise.resolve({ accepted: true, action: 'deliver' }),
+      dropDeliveredSignal: true,
+      endRunAfterDroppedSignal: true,
+      acceptRedeliveredSignal: true,
+      beforeRunEnd: async () => {
+        await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { stages: ['review'] } });
+      },
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(decision?.status).toBe('succeeded');
+    expect(decision?.attempts).toBe(1);
+    expect(session.sendSignal).toHaveBeenCalledTimes(1);
   });
 
   it('retries the skill kickoff when the wake signal is rejected instead of marking it succeeded', async () => {

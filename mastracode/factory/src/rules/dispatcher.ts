@@ -871,6 +871,16 @@ export class FactoryDecisionDispatcher {
           await this.#switchThread(session, binding);
           const deliveryId =
             record.deliveryGeneration === 0 ? record.id : `${record.id}:retry:${record.deliveryGeneration}`;
+          const kickoffLanded = async () =>
+            (await session.thread.listActiveMessages()).some(message => message.id === deliveryId);
+          const stagesKey = (stages: readonly string[]) => [...stages].sort().join('\n');
+          const stagesAtDispatch = item ? stagesKey(item.stages) : undefined;
+          const kickoffStale = async () => {
+            if (await this.#roleSuperseded(record, decision.role)) return true;
+            if (stagesAtDispatch === undefined || !record.workItemId) return false;
+            const current = await this.#storage.get({ orgId: record.orgId, id: record.workItemId }).catch(() => null);
+            return current !== null && stagesKey(current.stages) !== stagesAtDispatch;
+          };
           const runStillActive = () =>
             this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
           // Only a *live* run on this binding can be duplicated by a second
@@ -914,8 +924,7 @@ export class FactoryDecisionDispatcher {
               `Factory binding ${binding.id} changed while waiting for its open run to end.`,
             );
           }
-          const delivered = await session.thread.listActiveMessages();
-          if (delivered.some(message => message.id === deliveryId)) return;
+          if (await kickoffLanded()) return;
           // Safe under the replay guard above: it matches deliveryId, never prompt content.
           const kickoffContents = await withWorkItemFeed(
             this.#feedReader,
@@ -993,8 +1002,7 @@ export class FactoryDecisionDispatcher {
               // nobody working. Signals persist under their generation-scoped id
               // (the same identity the replay guard above reads), so confirm the
               // message actually landed in the thread rather than trusting the ack.
-              const landed = await session.thread.listActiveMessages();
-              if (landed.some(message => message.id === deliveryId)) break;
+              if (await kickoffLanded()) break;
 
               // Another run can start while the previous run is finishing, so one
               // redelivery is not enough to prove the session is idle. Follow each
@@ -1006,6 +1014,12 @@ export class FactoryDecisionDispatcher {
                   'Factory skill invocation is waiting on a run whose terminal event was not observed.',
                 );
               }
+              // The queued copy often surfaces only once the run it was queued
+              // onto ends. Resend only when it is still missing, and never once
+              // the card has moved on or the seat was handed over or revoked —
+              // a stale kickoff would restart a phase that already finished.
+              if (await kickoffLanded()) break;
+              if (await kickoffStale()) return;
               run.arm();
               settled = await sendKickoff();
             }
