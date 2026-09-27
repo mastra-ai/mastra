@@ -653,11 +653,12 @@ export class ModelSpanTracker {
 
     // Remove verbose/redundant fields from metadata:
     // - request: too verbose
+    // - body/headers: raw provider HTTP response; duplicates output/usage and leaks provider details
     // - id/timestamp: chunk-level data, not step-related
     // - modelId/modelVersion/modelProvider: duplicates of modelMetadata
     const cleanMetadata = metadata ? { ...metadata } : undefined;
     if (cleanMetadata) {
-      for (const key of ['request', 'id', 'timestamp', 'modelId', 'modelVersion', 'modelProvider']) {
+      for (const key of ['request', 'body', 'headers', 'id', 'timestamp', 'modelId', 'modelVersion', 'modelProvider']) {
         delete cleanMetadata[key];
       }
     }

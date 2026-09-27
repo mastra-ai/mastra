@@ -1504,6 +1504,46 @@ describe('ModelSpanTracker', () => {
     });
   });
 
+  describe('step metadata cleanup', () => {
+    it('should strip raw provider response body and headers from step metadata', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1', request: {} } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: {},
+            stepResult: { reason: 'stop' },
+            metadata: {
+              providerMetadata: { openai: { responseId: 'resp_1' } },
+              modelMetadata: { modelId: 'gpt-4o-mini', modelProvider: 'openai' },
+              request: { body: '{}' },
+              body: { id: 'resp_1', output: [{ type: 'message', content: 'x'.repeat(1000) }] },
+              headers: { 'x-request-id': 'req_1', 'apim-request-id': 'abc' },
+            },
+          },
+        },
+      ];
+
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      const metadata = stepSpans[0]!.metadata as Record<string, unknown>;
+      expect(metadata).not.toHaveProperty('body');
+      expect(metadata).not.toHaveProperty('headers');
+      expect(metadata).not.toHaveProperty('request');
+      expect(metadata.modelMetadata).toEqual({ modelId: 'gpt-4o-mini', modelProvider: 'openai' });
+    });
+  });
+
   describe('tool-result preview in step input', () => {
     it('should show transformed tool-result providerOptions from final inputMessages', async () => {
       const modelSpan = tracing.startSpan({
