@@ -8035,6 +8035,12 @@ export class Agent<
               )
                 .then(async title => {
                   if (title) {
+                    // Do not resurrect a thread if it was deleted while title was being generated
+                    const existingThread = await memory.getThreadById({ threadId: thread.id });
+                    if (!existingThread) {
+                      return undefined;
+                    }
+
                     await memory.createThread({
                       threadId: thread.id,
                       resourceId,
