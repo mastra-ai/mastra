@@ -369,6 +369,8 @@ export interface RevokeStaleFactoryRunBindingsInput {
   /** Active bindings created before this instant are revoked regardless of item state. */
   olderThan: Date;
   now: Date;
+  /** Bindings kept despite sitting on a finished card (a close-out still running). */
+  spareOnTerminal?: ReadonlySet<string>;
 }
 
 export interface RevokeFactoryRunBindingsForWorkItemInput {
@@ -2850,7 +2852,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         stale =
           !item ||
           item.stages.length !== 1 ||
-          this.#isTerminal(item) ||
+          (this.#isTerminal(item) && !input.spareOnTerminal?.has(binding.id)) ||
           item.factoryProjectId !== binding.factoryProjectId;
       }
       if (!stale) continue;

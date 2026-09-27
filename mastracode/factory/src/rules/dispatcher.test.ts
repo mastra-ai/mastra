@@ -529,6 +529,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect(sweep).toHaveBeenCalledExactlyOnceWith({
       olderThan: new Date(t1.getTime() - 24 * 60 * 60_000),
       now: t1,
+      spareOnTerminal: new Set(),
     });
 
     // And the cadence resets: the next sweep waits another full interval.
@@ -1618,6 +1619,66 @@ describe('FactoryDecisionDispatcher', () => {
       await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
       expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'succeeded',
+        attempts: 1,
+      });
+    });
+
+    it('runs the close-out on a finished card by minting its own seat', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, {
+        type: 'invokeSkill',
+        idempotencyKey: 'close-out-terminal',
+        role: 'triage',
+        skillName: 'factory-complete-issue',
+        arguments: 'Issue 42',
+      } as FactoryCommitDecision);
+      const current = await storage.get({ orgId: 'org-1', id: item.id });
+      await storage.commitTransition({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        workItemId: item.id,
+        expectedRevision: current!.revision,
+        destinationStage: 'done',
+        actorId: 'user-1',
+        ingress: { identity: 'external-close', triggerType: 'github', transitionId: 'external-close' },
+        configVersion: 'rules-v1',
+        causalChain: [],
+        evaluation: { outcome: 'accepted', decisions: [] },
+      });
+      const { controller, session } = createSession();
+      let seatDuringRun: Promise<number> | undefined;
+      const send = session.sendSignal.getMockImplementation()!;
+      session.sendSignal.mockImplementation((input, options) => {
+        // A sweep mid-run must leave the close-out's seat on the finished card.
+        seatDuringRun = storage.listRunBindings('org-1', PROJECT_ID, item.id).then(bindings =>
+          storage.revokeStaleRunBindings({
+            olderThan: new Date(0),
+            now: new Date(),
+            spareOnTerminal: new Set(bindings.filter(b => b.status === 'active').map(b => b.id)),
+          }),
+        );
+        return send(input, options);
+      });
+      const prepareBinding = vi.fn(async () => {
+        await bindRole(storage, item.id, 'triage', 'close-out-seat');
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        prepareBinding,
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect(prepareBinding).toHaveBeenCalledTimes(1);
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      expect(await seatDuringRun).toBe(0);
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        lastError: null,
         status: 'succeeded',
         attempts: 1,
       });

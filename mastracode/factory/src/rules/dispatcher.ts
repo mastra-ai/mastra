@@ -436,6 +436,10 @@ function reviewsFactoryAuthoredCode(
   return decision.type === 'invokeSkill' && decision.role === 'review';
 }
 
+function isCloseOut(record: FactoryDeferredDecisionRecord): boolean {
+  return record.decision.type === 'invokeSkill' && record.decision.skillName === COMPLETE_ISSUE_SKILL;
+}
+
 function leaseIdentity(
   record: Pick<FactoryDeferredDecisionRecord | FactoryPendingStartRecord, 'id' | 'orgId' | 'factoryProjectId'>,
   ownerId: string,
@@ -514,6 +518,7 @@ export class FactoryDecisionDispatcher {
   #activeClaim?: Promise<void>;
   readonly #inFlight = new Set<Promise<void>>();
   readonly #bindingSkillRuns = new Map<string, Promise<void>>();
+  readonly #closeOutBindings = new Set<string>();
 
   constructor(options: FactoryDecisionDispatcherOptions) {
     this.#audit = options.audit;
@@ -638,6 +643,9 @@ export class FactoryDecisionDispatcher {
       const revoked = await this.#storage.revokeStaleRunBindings({
         olderThan: new Date(now.getTime() - this.#staleBindingTtlMs),
         now,
+        // A close-out holds a seat on a finished card on purpose; leave it
+        // until its run ends.
+        spareOnTerminal: new Set(this.#closeOutBindings),
       });
       if (revoked > 0) console.info(`Factory stale-binding sweep revoked ${revoked} binding(s)`);
     } catch (error) {
@@ -853,6 +861,7 @@ export class FactoryDecisionDispatcher {
         // no seat can be minted for it, and the work it was for is done.
         if (await this.#roleSuperseded(record, decision.role)) return;
         const binding = await this.#requireOrPrepareBinding(record, decision.role);
+        if (isCloseOut(record)) this.#closeOutBindings.add(binding.id);
         await this.#withBindingSkillRun(binding.id, async () => {
           const item = record.workItemId
             ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId })
@@ -1351,7 +1360,9 @@ export class FactoryDecisionDispatcher {
     // out from under the run by terminal-stage cleanup. Treat the decision as
     // superseded so it stops retrying to MAX_ATTEMPTS as `session_unavailable`.
     const item = await this.#storage.get({ orgId: record.orgId, id: record.workItemId }).catch(() => null);
-    if (item && workItemPhaseSemantics(this.#boards, item)?.kind === 'terminal') return true;
+    // The close-out is the one run meant for a finished card, so it mints its
+    // own seat there instead of being retired for lacking one.
+    if (item && workItemPhaseSemantics(this.#boards, item)?.kind === 'terminal') return !isCloseOut(record);
     return own.some(
       revoked =>
         revoked.revokedAt !== null &&
@@ -1426,7 +1437,10 @@ export class FactoryDecisionDispatcher {
     try {
       await run;
     } finally {
-      if (this.#bindingSkillRuns.get(bindingId) === run) this.#bindingSkillRuns.delete(bindingId);
+      if (this.#bindingSkillRuns.get(bindingId) === run) {
+        this.#bindingSkillRuns.delete(bindingId);
+        this.#closeOutBindings.delete(bindingId);
+      }
     }
   }
 

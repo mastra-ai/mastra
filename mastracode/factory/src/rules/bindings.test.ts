@@ -195,6 +195,26 @@ describe('Factory run binding authority', () => {
       ).resolves.toBe(1);
     });
 
+    it('spares a binding on a finished card while its close-out is still running', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const prepared = await prepareBinding(storage);
+      await storage.update({
+        orgId: 'org-1',
+        id: prepared.item.id,
+        userId: 'user-1',
+        patch: { stages: ['done'] },
+      });
+      const sweep = (spare?: string) =>
+        storage.revokeStaleRunBindings({
+          olderThan: new Date(Date.now() - 60_000),
+          now: new Date(),
+          ...(spare ? { spareOnTerminal: new Set([spare]) } : {}),
+        });
+
+      await expect(sweep(prepared.binding.id)).resolves.toBe(0);
+      await expect(sweep()).resolves.toBe(1);
+    });
+
     it('revokes fresh bindings whose work item is missing', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const prepared = await prepareBinding(storage);
