@@ -32,7 +32,7 @@ function credentialToken(credential: ConnectionCredential): string {
  * inlineMedia, etc.) is forwarded to the provider constructor unchanged.
  */
 const SLACK_RESERVED_KEYS = ['baseUrl', 'refreshToken', 'token', 'tokenResolver', 'encryptionKey'] as const;
-const TELEGRAM_RESERVED_KEYS = ['baseUrl', 'apiBaseUrl', 'botToken', 'encryptionKey'] as const;
+const TELEGRAM_RESERVED_KEYS = ['baseUrl', 'apiBaseUrl', 'botToken', 'tokenResolver', 'encryptionKey'] as const;
 const DISCORD_RESERVED_KEYS = ['baseUrl', 'encryptionKey'] as const;
 
 /** Reserved (credential + framework-managed) `providerOptions` keys per integration. */
@@ -108,18 +108,17 @@ const slackChannel: ChannelProviderRegistration = {
 };
 
 /**
- * Telegram: wraps `@mastra/telegram`'s `TelegramProvider`. The provider is
- * constructed credential-less (so its routes can mount before a connection
- * exists); the platform-stored BotFather bot token is pushed in via
- * `configure({ botToken })` on every resolution while a connection is active.
- * It becomes the default the provider's `connect(agentId)` call falls back to
- * (per-agent `connect()` may override with a different token, but with
- * `channels()` most apps won't need to).
+ * Telegram: wraps `@mastra/telegram`'s `TelegramProvider` in delegated
+ * credential mode. The provider is constructed with a `tokenResolver` that
+ * fetches the platform-stored BotFather bot token (the connection's `api_key`
+ * credential) on demand — the token is never persisted in the provider's
+ * install store and is re-resolved per Bot API call, so a token re-pasted on
+ * the platform takes effect without a restart or `sync()`.
  *
  * Reserved `providerOptions` fields (`baseUrl`, `apiBaseUrl`, `botToken`,
- * `encryptionKey`) are rejected at the type level and stripped at runtime.
- * Non-reserved provider config (`mode`, `commands`, `streaming`,
- * `typingStatus`, handlers, etc.) is forwarded unchanged. See
+ * `tokenResolver`, `encryptionKey`) are rejected at the type level and
+ * stripped at runtime. Non-reserved provider config (`mode`, `commands`,
+ * `streaming`, `typingStatus`, handlers, etc.) is forwarded unchanged. See
  * `@mastra/telegram`'s `TelegramProviderConfig` for the full option surface.
  */
 const telegramChannel: ChannelProviderRegistration = {
@@ -129,16 +128,13 @@ const telegramChannel: ChannelProviderRegistration = {
       TelegramProvider: new (config: Record<string, unknown>) => ChannelProvider;
     };
     const safeOptions = stripReservedOptions('telegram', options);
-    const provider = new mod.TelegramProvider({ ...(safeOptions ?? {}) });
-    return {
-      provider,
-      // `configure()` merges the token into provider config and is cheap when
-      // nothing changed, so re-applying on every resolution is safe.
-      async sync() {
-        const botToken = credentialToken(await runtime.getCredential());
-        await provider.configure?.({ botToken });
-      },
+    // Fetch the current credential on every call — the platform owns the
+    // token, so a swap there is picked up on the next Bot API request.
+    const tokenResolver = async (): Promise<string> => {
+      const fresh = await runtime.getCredential();
+      return credentialToken(fresh);
     };
+    return { provider: new mod.TelegramProvider({ tokenResolver, ...(safeOptions ?? {}) }) };
   },
 };
 

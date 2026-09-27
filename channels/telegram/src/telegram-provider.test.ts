@@ -687,6 +687,77 @@ describe('TelegramProvider — public method parity (getInstallation / isConfigu
   });
 });
 
+describe('TelegramProvider — delegated credentials (tokenResolver)', () => {
+  it('connects with the resolver-supplied token and never persists it', async () => {
+    const { provider } = makeProvider({ tokenResolver: async () => BOT_TOKEN });
+    const { setWebhook } = stubActiveConnect(BOT_TOKEN);
+
+    const result = await provider.connect('agent-1');
+    expect(result).toMatchObject({ type: 'immediate' });
+    // The Bot API was driven with the resolved token (the stubs are token-scoped).
+    expect(setWebhook()).toMatchObject({ url: expect.stringContaining(`${BASE_URL}/telegram/events/`) });
+
+    // The token is externally managed — never written to the install store.
+    const installation = await provider.getInstallation('agent-1');
+    expect(installation).not.toBeNull();
+    expect(installation!.botToken).toBeUndefined();
+    expect(installation!.botUserId).toBe(42);
+    expect(provider.isConfigured()).toBe(true);
+  });
+
+  it('rejects a per-connect botToken in delegated mode', async () => {
+    const { provider } = makeProvider({ tokenResolver: async () => BOT_TOKEN });
+    await expect(provider.connect('agent-1', { botToken: '999:other' })).rejects.toThrow(/managed externally/i);
+  });
+
+  it('rejects configure({ botToken }) but still allows non-credential settings', async () => {
+    const { provider } = makeProvider({ tokenResolver: async () => BOT_TOKEN });
+    await expect(provider.configure?.({ botToken: '999:other' })).rejects.toThrow(/managed externally/i);
+    // Non-credential settings stay configurable in delegated mode.
+    await expect(provider.configure?.({ baseUrl: 'https://elsewhere.example.com' })).resolves.toBeUndefined();
+  });
+
+  it('blocks a second agent from connecting the same delegated bot (by bot user id)', async () => {
+    const { provider } = makeProvider({ tokenResolver: async () => BOT_TOKEN });
+    stubActiveConnect(BOT_TOKEN);
+    await provider.connect('agent-1');
+    await expect(provider.connect('agent-2')).rejects.toThrow(/already connected to agent "agent-1"/i);
+  });
+
+  it('re-resolves the current token for disconnect (picks up upstream swaps)', async () => {
+    let currentToken = BOT_TOKEN;
+    const { provider } = makeProvider({ tokenResolver: async () => currentToken });
+    stubActiveConnect(BOT_TOKEN);
+    await provider.connect('agent-1');
+
+    // The platform credential is swapped after connect; disconnect must use
+    // the *current* token, not a stale stored one (there is none).
+    const rotated = '777888:ROTATED';
+    currentToken = rotated;
+    const deleteBody = stubMethod(rotated, 'deleteWebhook');
+
+    await provider.disconnect('agent-1');
+    expect(deleteBody()).toMatchObject({ drop_pending_updates: true });
+    expect(await provider.getInstallation('agent-1')).toBeNull();
+  });
+
+  it('surfaces resolver failures from connect()', async () => {
+    const { provider } = makeProvider({
+      tokenResolver: async () => {
+        throw new Error('platform credential unavailable');
+      },
+    });
+    await expect(provider.connect('agent-1')).rejects.toThrow(/platform credential unavailable/);
+  });
+
+  it('rejects combining botToken with a tokenResolver at compile time', () => {
+    const resolver = async () => BOT_TOKEN;
+    // @ts-expect-error — botToken and tokenResolver are mutually exclusive
+    const invalid: import('./types').TelegramProviderConfig = { botToken: BOT_TOKEN, tokenResolver: resolver };
+    expect(invalid).toBeDefined();
+  });
+});
+
 describe('TelegramProvider — polling mode (getUpdates loop)', () => {
   function persist(method: 'GET' | 'POST', path: string, body: () => Record<string, unknown>) {
     mockAgent.get(API_ORIGIN).intercept({ path, method }).reply(200, body).persist();

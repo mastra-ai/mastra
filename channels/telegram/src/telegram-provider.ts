@@ -180,13 +180,21 @@ export class TelegramProvider implements ChannelProvider {
    * via {@link connect}/{@link disconnect}.
    */
   async configure(credentials: { apiBaseUrl?: string; baseUrl?: string; botToken?: string } | null): Promise<void> {
+    if (this.#config.tokenResolver && credentials?.botToken !== undefined) {
+      throw new Error(
+        'TelegramProvider was constructed with a tokenResolver — bot tokens are managed externally. ' +
+          'Remove the tokenResolver to manage credentials manually via configure().',
+      );
+    }
     if (credentials === null) {
-      this.#config = { ...this.#config, botToken: undefined };
+      this.#config = { ...this.#config, botToken: undefined } as TelegramProviderConfig;
       return;
     }
     const apiBaseUrlChanged =
       credentials.apiBaseUrl !== undefined && credentials.apiBaseUrl !== this.#config.apiBaseUrl;
-    this.#config = { ...this.#config, ...credentials };
+    // The guard above rejects a botToken when a tokenResolver is set, so this
+    // merge cannot mix the two credential modes.
+    this.#config = { ...this.#config, ...credentials } as TelegramProviderConfig;
     if (!apiBaseUrlChanged) return;
 
     // Live adapters captured the previous apiBaseUrl — tear them down and, if
@@ -220,11 +228,21 @@ export class TelegramProvider implements ChannelProvider {
       throw new Error(`Agent "${agentId}" is already connected to Telegram. Disconnect first to reconnect.`);
     }
 
+    // Delegated mode: the resolver is the single source of truth — a per-call
+    // token would silently diverge from the externally managed credential.
+    if (this.#config.tokenResolver && options.botToken !== undefined) {
+      throw new Error(
+        'TelegramProvider was constructed with a tokenResolver — bot tokens are managed externally ' +
+          'and cannot be supplied per connect() call.',
+      );
+    }
     // Per-call token wins, falling back to the provider-config default so
     // callers can hold the bot token in `new TelegramProvider({ botToken })`
-    // (or via `channels()` off a Mastra Connect credential) and not repeat it
-    // at every connect() site.
-    const botToken = options.botToken ?? this.#config.botToken;
+    // and not repeat it at every connect() site. In delegated mode the
+    // resolver supplies the current externally managed token instead.
+    const botToken = this.#config.tokenResolver
+      ? await this.#config.tokenResolver()
+      : (options.botToken ?? this.#config.botToken);
     if (!botToken) {
       const installationId = existing?.id ?? randomUUID();
       await store.save({
@@ -252,15 +270,23 @@ export class TelegramProvider implements ChannelProvider {
       this.#connectingBotTokens.add(botToken);
     }
     try {
+      const me = await getMe(botToken, this.#apiBaseUrl());
       if (mode === 'webhook') {
-        const duplicate = (await store.list()).find(i => i.status === 'active' && i.botToken === botToken);
+        // Two agents on one bot would clobber each other's webhook. Compare by
+        // the stored token, or by the bot's user id when the token is not
+        // persisted (delegated mode).
+        const duplicate = (await store.list()).find(
+          i =>
+            i.status === 'active' &&
+            i.agentId !== agentId &&
+            (i.botToken ? i.botToken === botToken : i.botUserId === me.id),
+        );
         if (duplicate) {
           throw new Error(
             `This Telegram bot is already connected to agent "${duplicate.agentId}". Disconnect it before connecting another agent.`,
           );
         }
       }
-      const me = await getMe(botToken, this.#apiBaseUrl());
       const installationId = existing?.id ?? randomUUID();
       const webhookId = existing?.webhookId ?? randomUUID();
       const webhookUrl = mode === 'webhook' ? `${baseUrl}/${PLATFORM}/events/${webhookId}` : undefined;
@@ -270,7 +296,10 @@ export class TelegramProvider implements ChannelProvider {
         agentId,
         webhookId,
         status: 'active',
-        botToken,
+        // Delegated mode never persists the token — the resolver is the
+        // single source of truth and re-supplies it per Bot API call.
+        ...(this.#config.tokenResolver ? {} : { botToken }),
+        botUserId: me.id,
         secretToken: generateSecretToken(),
         username: options.name ?? me.username ?? me.first_name,
         webhookUrl,
@@ -280,8 +309,8 @@ export class TelegramProvider implements ChannelProvider {
 
       // Register the transport before persisting so a Bot API failure surfaces to
       // the caller instead of leaving a half-connected install.
-      await this.#registerTransport(installation, mode);
-      await this.#registerCommands(installation);
+      await this.#registerTransport(installation, mode, botToken);
+      await this.#registerCommands(installation, botToken);
       await store.save(installation);
       await this.#activateInstallation(installation);
       this.#configured = true;
@@ -308,12 +337,13 @@ export class TelegramProvider implements ChannelProvider {
         console.warn(`[Telegram] Failed to stop polling for agent "${agentId}":`, err);
       }
     }
-    if (existing.botToken) {
-      try {
-        await deleteWebhook(existing.botToken, true, this.#apiBaseUrl());
-      } catch (err) {
-        console.warn(`[Telegram] Failed to delete webhook for agent "${agentId}":`, err);
-      }
+    // Delegated installs don't persist the token — resolve the current one.
+    // Best-effort either way: a resolver/API failure must not block removal.
+    try {
+      const botToken = existing.botToken ?? (await this.#config.tokenResolver?.());
+      if (botToken) await deleteWebhook(botToken, true, this.#apiBaseUrl());
+    } catch (err) {
+      console.warn(`[Telegram] Failed to delete webhook for agent "${agentId}":`, err);
     }
     this.#adapters.delete(existing.id);
     await store.deleteByAgent(agentId);
@@ -413,12 +443,19 @@ export class TelegramProvider implements ChannelProvider {
     return mode;
   }
 
-  /** Register (or clear) the receive transport for a bot, enforcing the exclusion. */
-  async #registerTransport(installation: TelegramInstallation, mode: Exclude<TelegramMode, 'auto'>): Promise<void> {
-    if (!installation.botToken) return;
+  /**
+   * Register (or clear) the receive transport for a bot, enforcing the
+   * exclusion. The token is passed explicitly — delegated-mode installations
+   * do not persist one.
+   */
+  async #registerTransport(
+    installation: TelegramInstallation,
+    mode: Exclude<TelegramMode, 'auto'>,
+    botToken: string,
+  ): Promise<void> {
     if (mode === 'webhook' && installation.webhookUrl && installation.secretToken) {
       await setWebhook(
-        installation.botToken,
+        botToken,
         {
           url: installation.webhookUrl,
           secretToken: installation.secretToken,
@@ -429,16 +466,16 @@ export class TelegramProvider implements ChannelProvider {
       );
     } else {
       // Polling: clear any existing webhook so `getUpdates` can run (exclusion).
-      await deleteWebhook(installation.botToken, true, this.#apiBaseUrl());
+      await deleteWebhook(botToken, true, this.#apiBaseUrl());
     }
   }
 
   /** Publish the bot's command list (best-effort — a failure won't block connect). */
-  async #registerCommands(installation: TelegramInstallation): Promise<void> {
-    if (!installation.botToken || !installation.commands?.length) return;
+  async #registerCommands(installation: TelegramInstallation, botToken: string): Promise<void> {
+    if (!installation.commands?.length) return;
     try {
       await setMyCommands(
-        installation.botToken,
+        botToken,
         { commands: installation.commands, scope: this.#config.commandScope },
         this.#apiBaseUrl(),
       );
@@ -451,7 +488,10 @@ export class TelegramProvider implements ChannelProvider {
     const existing = this.#adapters.get(installation.id);
     if (existing) return existing;
     const adapter = createTelegramAdapter({
-      botToken: installation.botToken,
+      // Delegated installs carry no token — hand the adapter the resolver,
+      // which it invokes per Bot API request, so upstream token changes take
+      // effect without rebuilding the adapter.
+      botToken: installation.botToken ?? this.#config.tokenResolver,
       secretToken: installation.secretToken,
       userName: installation.username,
       apiBaseUrl: this.#apiBaseUrl(),
