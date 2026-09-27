@@ -264,6 +264,49 @@ describe('prepareFactoryRuleBinding', () => {
     expect(userId).toBe('approver-1');
   });
 
+  it("does not inherit an earlier session on another of the card's repositories", async () => {
+    const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository();
+    const installation = await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: '123',
+    });
+    const otherRepository = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: '789', slug: 'mastra-ai/other', defaultBranch: 'main' },
+    });
+    const otherLink = await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: projectRepository.connectionId,
+      repositoryId: otherRepository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/other',
+    });
+    const planSession = await sourceControl.sessions.create({
+      sessionId: 'sess-plan',
+      projectRepositoryId: otherLink.id,
+      orgId: 'org-1',
+      userId: 'plan-owner',
+      branch: 'factory/issue-49',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    const prepare = vi.fn(async () => ({}) as never);
+
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      boards,
+      withPlanSession(bindingInput(project.id, ['execute'], { role: 'work' })),
+    );
+
+    const { sessionId, userId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string; userId: string };
+    expect(sessionId).not.toBe(planSession.sessionId);
+    expect(userId).toBe('approver-1');
+  });
+
   it('mints a fresh session when the held ref no longer resolves to the project', async () => {
     const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository();
     const installation = await sourceControl.installations.upsert({

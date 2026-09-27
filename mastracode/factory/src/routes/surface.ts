@@ -23,6 +23,7 @@ import {
   resolveFactoryDefaultModelId,
   resolveFactoryProjectForSession,
   resolveFactorySourceControl,
+  resolveFactorySourceRepository,
 } from '../session/factory-session.js';
 import type { EnsuredFactorySourceSession } from '../session/factory-session.js';
 import type { LiveSessions } from '../session/live-sessions.js';
@@ -228,8 +229,18 @@ async function inheritEarlierSession(
   input: FactoryBindingPreparationInput,
   board: { roleForPhase(phase: string): string | undefined } | undefined,
   branch: string,
+  repositorySlug: string | undefined,
 ): Promise<EnsuredFactorySourceSession | undefined> {
   if (input.role === 'review') return undefined;
+  // The card's linked repository can change after an earlier role ran; only
+  // continue in a session on the repository a fresh session would use.
+  const repository = await resolveFactorySourceRepository({
+    sourceControl,
+    orgId: input.record.orgId,
+    factoryProjectId: input.record.factoryProjectId,
+    repositorySlug,
+  });
+  if (!repository.found) return undefined;
   const candidates: string[] = [];
   for (const entry of [...(input.item.stageHistory ?? [])].reverse()) {
     const role = board?.roleForPhase(entry.stage);
@@ -240,7 +251,9 @@ async function inheritEarlierSession(
   }
   for (const role of candidates) {
     const session = await reuseBoundSession(sourceControl, input, role);
-    if (session && session.branch === branch) return session;
+    if (session && session.branch === branch && session.projectRepositoryId === repository.projectRepositoryId) {
+      return session;
+    }
   }
   return undefined;
 }
@@ -294,7 +307,7 @@ export async function prepareFactoryRuleBinding(
     const approver = input.record.approvedBy ?? undefined;
     const preparedSession =
       (await reuseBoundSession(sourceControl, input)) ??
-      (await inheritEarlierSession(sourceControl, input, board, branch)) ??
+      (await inheritEarlierSession(sourceControl, input, board, branch, repositorySlug)) ??
       (await ensureFactorySourceSession({
         sourceControl,
         orgId: input.record.orgId,
