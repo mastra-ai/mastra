@@ -14,8 +14,10 @@ A bot syncs accepted changes to this repository.
 ## Local setup
 
 1. From the monorepo root, run `cd templates/template-organization-intelligence`.
-2. Run `npm ci` to install the locked dependencies.
+2. Run `npm install` to install dependencies and generate a local lockfile. Use `npm ci` for subsequent clean installs with that lockfile.
 3. To run the application, copy `.env.example` to `.env`, add your OpenAI API key, and run `npm run dev`. The default catalog uses the bundled local documents.
+
+Official templates use `latest` for Mastra dependencies and do not commit lockfiles, following the [template contribution policy](https://github.com/mastra-ai/mastra/blob/main/templates/README.md). Keep the generated lockfile locally to reproduce your installed versions. `npm run dev:local` installs with `npm install` on the first run and `npm ci` when a local lockfile exists, then starts the application.
 
 ## Making changes
 

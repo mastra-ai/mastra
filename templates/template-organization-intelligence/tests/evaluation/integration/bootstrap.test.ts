@@ -47,7 +47,7 @@ describe('Evaluation integration', () => {
     }
   });
 
-  it('local bootstrap and checks are reproducible', async () => {
+  it('local bootstrap installs without a lockfile and reuses it on subsequent runs', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'organization-bootstrap-'));
     const bin = join(directory, 'bin');
     const log = join(directory, 'calls.log');
@@ -63,9 +63,14 @@ describe('Evaluation integration', () => {
     await chmod(fakeNpm, 0o755);
     const script = fileURLToPath(new URL('../../../scripts/bootstrap.mjs', import.meta.url));
     const environment = { ...process.env, BOOTSTRAP_LOG: log, PATH: `${bin}:${process.env.PATH}` };
+    await expect(
+      command(process.execPath, [script], { cwd: directory, env: { ...environment, BOOTSTRAP_FAIL: 'install' } }),
+    ).rejects.toMatchObject({ code: 17 });
+    expect(await readFile(log, 'utf8')).toBe('install\n');
+    await writeFile(log, '');
     await command(process.execPath, [script], { cwd: directory, env: environment });
     await command(process.execPath, [script], { cwd: directory, env: environment });
-    expect((await readFile(log, 'utf8')).trim().split('\n')).toEqual(['ci', 'run dev', 'ci', 'run dev']);
+    expect((await readFile(log, 'utf8')).trim().split('\n')).toEqual(['install', 'run dev', 'ci', 'run dev']);
     await expect(readFile(join(directory, '.env'), 'utf8')).resolves.toContain('BOOTSTRAP_ENV_SENTINEL');
     await expect(readFile(join(directory, 'source-catalog.json'), 'utf8')).resolves.toContain(
       'BOOTSTRAP_CATALOG_SENTINEL',

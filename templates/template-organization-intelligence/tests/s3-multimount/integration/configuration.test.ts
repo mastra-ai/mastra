@@ -91,7 +91,7 @@ describe('S3-multimount integration', () => {
         cwd: directory,
         env: { ...process.env, BOOTSTRAP_LOG: log, PATH: `${bin}:${process.env.PATH}` },
       });
-      expect(await readFile(log, 'utf8')).toBe('ci\nrun dev\n');
+      expect(await readFile(log, 'utf8')).toBe('install\nrun dev\n');
       expect(await readFile(stateFile, 'utf8')).toBe('state-preserved\n');
 
       // The isolated F5 state accepts a sibling and rejects a symlink to the

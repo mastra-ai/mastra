@@ -24,7 +24,7 @@ Remote credentials are needed only when the corresponding source is enabled. Kee
 
 1. **Create the template**
    - Run `npx create-mastra@latest --template organization-intelligence` and choose `organization-intelligence` as the project directory when prompted.
-   - Run `cd organization-intelligence`, then `npm ci` to install the locked dependencies.
+   - Run `cd organization-intelligence`, then `npm install` to install dependencies and generate a local lockfile. Use `npm ci` for subsequent clean installs with that lockfile.
 2. **Add your API key**
    - Run `cp .env.example .env` and set `OPENAI_API_KEY` as described in Prerequisites.
    - Keep the supplied `source-catalog.json`. Only the local source is enabled; no Drive or R2 account is needed.
