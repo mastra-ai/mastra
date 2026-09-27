@@ -3,18 +3,24 @@ import type { EmbeddingFunction } from './source-index.js';
 export function openAIEmbedder(apiKey: string, request: typeof fetch = fetch): EmbeddingFunction {
   return async text => {
     for (let attempt = 0; attempt < 3; attempt++) {
-      const response = await request('https://api.openai.com/v1/embeddings', {
-        method: 'POST',
-        headers: { authorization: 'Bearer ' + apiKey, 'content-type': 'application/json' },
-        body: JSON.stringify({
-          model: 'text-embedding-3-small',
-          input: text,
-          encoding_format: 'float',
-          dimensions: 1536,
-        }),
-        signal: AbortSignal.timeout(30_000),
-        redirect: 'error',
-      });
+      let response: Response;
+      try {
+        response = await request('https://api.openai.com/v1/embeddings', {
+          method: 'POST',
+          headers: { authorization: 'Bearer ' + apiKey, 'content-type': 'application/json' },
+          body: JSON.stringify({
+            model: 'text-embedding-3-small',
+            input: text,
+            encoding_format: 'float',
+            dimensions: 1536,
+          }),
+          signal: AbortSignal.timeout(30_000),
+          redirect: 'error',
+        });
+      } catch (error) {
+        if (attempt < 2) continue;
+        throw error;
+      }
       if ((response.status === 429 || response.status >= 500) && attempt < 2) {
         await response.body?.cancel();
         continue;
