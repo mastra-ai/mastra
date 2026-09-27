@@ -10,6 +10,7 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useState } from 'react';
 
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
+import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { candidatePayload } from '../../factory/boardDrag';
 import { cardMoves } from '../../factory/cardPrimaryAction';
 import { useBoardItems } from '../../factory/hooks/useBoardItems';
@@ -35,6 +36,7 @@ import { GlobalSearchWorkItemResults } from './GlobalSearchWorkItemResults';
 import { GlobalSearchWorkItemsStatus } from './GlobalSearchWorkItemsStatus';
 
 export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factoryId: string; closeSearch: () => void }) {
+  const currentUserId = useFactoryAuth().data?.user?.userId;
   const factories = useFactoriesQuery().data ?? [];
   const activeFactory = factories.find(factory => factory.id === factoryId);
   const repositoryIds = activeFactory?.repositories.map(repository => repository.projectRepositoryId) ?? [];
@@ -43,11 +45,18 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const workItems = useGlobalSearchWorkItems(searchableFactoryId);
   // Both boards read `repositories[0]`, so that is the repository whose intake feeds are searchable.
   const projectRepositoryId = activeFactory?.repositories[0]?.projectRepositoryId;
-  const intake = useGlobalSearchIntake(projectRepositoryId);
+  const intake = useGlobalSearchIntake(factoryId, projectRepositoryId, activeFactory?.repositories[0]?.provider);
   // The palette closes on select, so a failed move has no card left to carry its reason.
-  const board = useBoardItems({
+  const workBoard = useBoardItems({
     factoryProjectId: searchableFactoryId,
     kind: 'work',
+    currentUserId,
+    onFailure: message => toast.error(message),
+  });
+  const reviewBoard = useBoardItems({
+    factoryProjectId: searchableFactoryId,
+    kind: 'review',
+    currentUserId,
     onFailure: message => toast.error(message),
   });
   const runs = useBoardRuns({ factoryProjectId: factoryId, refetchItems: workItems.refetch });
@@ -62,8 +71,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const unstartedItems = createWorkItemSearchResults({
     factoryId,
     workItems: workItems.items,
-    issues: intake.issues,
-    pullRequests: intake.pullRequests,
+    candidates: intake.candidates,
   });
   const counts = createGlobalSearchScopeCounts({
     work: sessionGroups.work.length,
@@ -104,11 +112,16 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
                 const target = result.target;
                 if (target.kind === 'candidate') {
                   const [move] = cardMoves(target.candidate, target.candidate.column);
+                  const board =
+                    target.candidate.source === 'github-pr' || target.candidate.source === 'gitlab-pr'
+                      ? reviewBoard
+                      : workBoard;
                   if (move) board.handleDrop(candidatePayload(target.candidate), move.stage, 'card_action');
                   return;
                 }
                 const [move] = cardMoves(target.item, 'intake');
                 if (move) {
+                  const board = target.item.board === 'review' ? reviewBoard : workBoard;
                   board.move(target.item.id, move.stage);
                   return;
                 }

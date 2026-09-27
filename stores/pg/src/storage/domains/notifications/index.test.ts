@@ -80,6 +80,23 @@ describe('NotificationsPG', () => {
     expect(listed.map(record => record.id)).toEqual(['n1']);
   });
 
+  it('repairs notification JSON without losing literal escape text', async () => {
+    const literal = String.raw`literal\uD800`;
+    const payload = { path: 'C:\\path\\\ud800-end', literal, nul: 'a\0b' };
+    await store.createNotification({
+      id: 'json-repair',
+      threadId: 'thread-json',
+      source: 'mastracode',
+      kind: 'manual',
+      priority: 'high',
+      summary: 'JSON repair',
+      payload,
+    });
+
+    const stored = await store.getNotification({ threadId: 'thread-json', id: 'json-repair' });
+    expect(stored?.payload).toEqual({ path: 'C:\\path\\\ufffd-end', literal, nul: 'ab' });
+  });
+
   it('filters notifications by status, priority, source, resource, agent, search, and limit', async () => {
     await store.createNotification({
       id: 'n1',

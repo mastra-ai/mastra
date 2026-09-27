@@ -46,8 +46,8 @@ describe('MainSidebarSections', () => {
     const parent = screen.getByRole('link', { name: 'Agents' });
     const child = screen.getByRole('link', { name: 'Templates' });
 
-    expect(parent.className).not.toContain('bg-selected');
-    expect(child.className).toContain('bg-selected');
+    expect(parent.getAttribute('aria-current')).toBe(null);
+    expect(child.getAttribute('aria-current')).toBe('page');
   });
 
   it('compares nested links against longer matches across the section', () => {
@@ -73,8 +73,8 @@ describe('MainSidebarSections', () => {
     const nestedPrefixMatch = screen.getByRole('link', { name: 'Templates' });
     const longerSectionMatch = screen.getByRole('link', { name: 'Template Runs' });
 
-    expect(nestedPrefixMatch.className).not.toContain('bg-selected');
-    expect(longerSectionMatch.className).toContain('bg-selected');
+    expect(nestedPrefixMatch.getAttribute('aria-current')).toBe(null);
+    expect(longerSectionMatch.getAttribute('aria-current')).toBe('page');
   });
 
   it('labels a titled section by its heading and an untitled one by its key', () => {
@@ -165,8 +165,8 @@ describe('MainSidebarSections', () => {
       />,
     );
 
-    expect(screen.getByRole('link', { name: 'Agents' }).className).toContain('bg-selected');
-    expect(screen.getByRole('link', { name: 'Workflows' }).className).not.toContain('bg-selected');
+    expect(screen.getByRole('link', { name: 'Agents' }).getAttribute('aria-current')).toBe('page');
+    expect(screen.getByRole('link', { name: 'Workflows' }).getAttribute('aria-current')).toBe(null);
   });
 
   it('gives a leaf link no nested list to hold children it does not have', () => {

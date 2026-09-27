@@ -69,7 +69,7 @@ export function ExperimentTraceTimelineTools({
           onReset={() => setLocalSearchPhrase('')}
         />
       </div>
-      <ButtonsGroup spacing="close">
+      <ButtonsGroup>
         {usedSpanTypes.map(item => {
           const spanUI = getExperimentSpanTypeUi(item);
           const isFaded = fadedTypes?.includes(item);

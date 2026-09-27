@@ -7,6 +7,7 @@ import type {
   TraceQueryFeedbackField,
   TraceQueryField,
   TraceQueryPredicateField,
+  TraceQueryTenantScope,
   TraceQueryResponse,
   TraceQueryScoreField,
   TraceQuerySpanField,
@@ -21,6 +22,13 @@ import type {
 
 import type { DbClient, TxClient } from '../../../client';
 import { qualifiedTable, TABLE_FEEDBACK_EVENTS, TABLE_SCORE_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
+import {
+  assertDeltaPollingEnabled,
+  decodeDeltaCursor,
+  deltaPollingFeatureEnabled,
+  encodeDeltaCursor,
+  readSafeXactHorizon,
+} from './polling';
 import { latestScorePredicate } from './scores';
 
 type SqlFragment = { sql: string; values: unknown[] };
@@ -33,16 +41,22 @@ type TraceSelection = {
 
 const TRACE_STATUS_SQL = `CASE WHEN r."error" IS NOT NULL THEN 'error' ELSE 'success' END`;
 
+function durationMsSql(startedAt: string, endedAt: string): string {
+  return `EXTRACT(EPOCH FROM (${endedAt} - ${startedAt}))::numeric * 1000`;
+}
+
 const TRACE_FIELDS = {
   traceId: 'r."traceId"',
   threadId: 'r."threadId"',
   resourceId: 'r."resourceId"',
   startedAt: 'r."startedAt"',
   endedAt: 'r."endedAt"',
+  durationMs: durationMsSql('r."startedAt"', 'r."endedAt"'),
   entityName: 'r."entityName"',
   entityType: 'r."entityType"',
   environment: 'r."environment"',
   status: TRACE_STATUS_SQL,
+  tags: 'r."tags"',
 } satisfies FieldRegistry<TraceQueryField>;
 
 const SPAN_FIELDS = {
@@ -93,7 +107,7 @@ const TRACE_SELECT = `
   r."name" AS "name",
   r."entityId" AS "entityId",
   r."parentSpanId" AS "parentSpanId",
-  r."metadata" AS "metadata",
+  r."metadataRaw" AS "metadata",
   r."input" AS "input",
   r."threadId" AS "threadId",
   r."resourceId" AS "resourceId",
@@ -163,6 +177,18 @@ function compileScalarPredicate<TField extends string>(
     };
   }
 
+  if (predicate.type === 'collection') {
+    // `tags` is `text[] NOT NULL DEFAULT '{}'`, so an empty list is the only "no tags" shape.
+    if (predicate.operator === 'includes' || predicate.operator === 'notIncludes') {
+      const contains = `${field} @> ARRAY[$${parameterOffset}]::text[]`;
+      return {
+        sql: predicate.operator === 'includes' ? contains : `cardinality(${field}) > 0 AND NOT (${contains})`,
+        values: [...fieldValues, predicate.value],
+      };
+    }
+    return { sql: `cardinality(${field}) ${predicate.operator === 'empty' ? '=' : '>'} 0`, values: fieldValues };
+  }
+
   if (predicate.type === 'membership') {
     const list = placeholders(predicate.values, parameterOffset);
     if (predicate.operator === 'in') {
@@ -207,6 +233,7 @@ function compileFeedbackScalarPredicate(
   if (predicate.field !== 'value') {
     return compileScalarPredicate(predicate, FEEDBACK_FIELDS, parameterOffset);
   }
+  if (predicate.type === 'collection') throw new Error(`Unsupported trusted trace-query field: ${predicate.field}`);
   if (predicate.type === 'presence') {
     const present = `(s."valueString" IS NOT NULL OR s."valueNumber" IS NOT NULL)`;
     return { sql: predicate.operator === 'exists' ? present : `NOT ${present}`, values: [] };
@@ -355,11 +382,35 @@ function compilePostgresTraceScope(
   schema: string,
   selection: TraceSelection,
   relationCollections: Set<RelatedCollection>,
+  scope: TraceQueryTenantScope | undefined,
+  deltaWindow?: { xactId: string; cursorId: string; safeHorizon: string },
 ): { ctes: string[]; values: unknown[] } {
   const spanTable = qualifiedTable(schema, TABLE_SPAN_EVENTS);
   const scoreTable = qualifiedTable(schema, TABLE_SCORE_EVENTS);
   const feedbackTable = qualifiedTable(schema, TABLE_FEEDBACK_EVENTS);
   const values: unknown[] = [selection.timeRange.from, selection.timeRange.to];
+  // The delta window binds fixed positions $3..$5, so it must be pushed before the
+  // dynamically numbered tenant scope values.
+  const deltaConditions: string[] = [];
+  if (deltaWindow) {
+    values.push(deltaWindow.xactId, deltaWindow.cursorId, deltaWindow.safeHorizon);
+    // Restrict candidates before materializing roots and their related records.
+    // latestRootPredicate must still see replacements outside this interval.
+    deltaConditions.push(`(r."xactId", r."cursorId") > ($3::xid8, $4::bigint)`, `r."xactId" < $5::xid8`);
+  }
+  // Tenant scope is ANDed into every scan (roots and related signals) so a related
+  // row from another tenant sharing a traceId can never match.
+  const scopeConditions: string[] = [];
+  if (scope) {
+    values.push(scope.organizationId);
+    scopeConditions.push(`"organizationId" = $${values.length}`);
+    if (scope.resourceId !== undefined) {
+      values.push(scope.resourceId);
+      scopeConditions.push(`"resourceId" = $${values.length}`);
+    }
+  }
+  const scopeSql = (alias: string): string =>
+    scopeConditions.map(condition => `\n      AND ${alias}.${condition}`).join('');
   const rootConditions = [
     `r."parentSpanId" IS NULL`,
     latestRootPredicate(spanTable),
@@ -367,6 +418,8 @@ function compilePostgresTraceScope(
     `r."endedAt" IS NOT NULL`,
     `r."startedAt" >= $1`,
     `r."startedAt" < $2`,
+    ...deltaConditions,
+    ...scopeConditions.map(condition => `r.${condition}`),
   ];
   const ctes = [
     `root_scope AS MATERIALIZED (
@@ -388,7 +441,7 @@ function compilePostgresTraceScope(
       CASE WHEN s."isPending" THEN NULL ELSE s."endedAt" END AS "endedAt",
       CASE
         WHEN s."isPending" THEN NULL
-        ELSE EXTRACT(EPOCH FROM (s."endedAt" - s."startedAt")) * 1000
+        ELSE ${durationMsSql('s."startedAt"', 's."endedAt"')}
       END AS "durationMs",
       CASE WHEN s."error" IS NOT NULL THEN 'error' ELSE 'success' END AS "status",
       s."error",
@@ -401,7 +454,7 @@ function compilePostgresTraceScope(
     FROM ${spanTable} s
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)
-      AND ${latestSpanPredicate(spanTable)}
+      AND ${latestSpanPredicate(spanTable)}${scopeSql('s')}
   )`);
   }
   if (relationCollections.has('scores')) {
@@ -420,7 +473,7 @@ function compilePostgresTraceScope(
     FROM ${scoreTable} s
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)
-      AND ${latestScorePredicate(scoreTable)}
+      AND ${latestScorePredicate(scoreTable)}${scopeSql('s')}
   )`);
   }
   if (relationCollections.has('feedback')) {
@@ -441,7 +494,7 @@ function compilePostgresTraceScope(
     FROM ${feedbackTable} s
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)
-      AND ${latestFeedbackPredicate(feedbackTable)}
+      AND ${latestFeedbackPredicate(feedbackTable)}${scopeSql('s')}
   )`);
   }
 
@@ -452,9 +505,17 @@ export function compilePostgresTraceQuery(
   schema: string,
   plan: TrustedTraceQueryPlan,
   mode: 'data' | 'count' = 'data',
+  safeHorizon?: string,
 ): CompiledPostgresTraceQuery {
   const relationCollections = collectRelationCollections(plan.where);
-  const { ctes, values } = compilePostgresTraceScope(schema, plan, relationCollections);
+  let deltaWindow: { xactId: string; cursorId: string; safeHorizon: string } | undefined;
+  if (plan.paginationMode === 'delta') {
+    const watermark = coreStorage.getTraceQueryDeltaWatermark(plan, 'pg');
+    if (watermark === undefined || safeHorizon === undefined)
+      throw new Error('Delta query requires a cursor and safe horizon');
+    deltaWindow = { ...decodeTraceDeltaWatermark(watermark), safeHorizon };
+  }
+  const { ctes, values } = compilePostgresTraceScope(schema, plan, relationCollections, plan.scope, deltaWindow);
 
   let predicateSql = 'TRUE';
   if (plan.where) {
@@ -463,7 +524,7 @@ export function compilePostgresTraceQuery(
     values.push(...predicate.values);
   }
   ctes.push(`candidates AS (
-    SELECT ${TRACE_SELECT}
+    SELECT ${TRACE_SELECT}${plan.paginationMode === 'delta' ? ', r."xactId", r."cursorId"' : ''}
     FROM root_scope r
     WHERE ${predicateSql}
   )`);
@@ -474,6 +535,17 @@ export function compilePostgresTraceQuery(
       text: `${candidates}
 SELECT COUNT(*)::text AS count
 FROM candidates`,
+      values,
+    };
+  }
+
+  if (plan.paginationMode === 'delta') {
+    values.push(plan.limit + 1);
+    return {
+      text: `${candidates}
+SELECT * FROM candidates
+ORDER BY "xactId" ASC, "cursorId" ASC
+LIMIT $${values.length}`,
       values,
     };
   }
@@ -532,7 +604,7 @@ LIMIT $${values.length}`,
 export function compilePostgresThreadQuery(schema: string, plan: TrustedThreadQueryPlan): CompiledPostgresTraceQuery {
   const relationCollections = collectRelationCollections(plan.traces.where);
   collectThreadRelationCollections(plan.where, relationCollections);
-  const { ctes, values } = compilePostgresTraceScope(schema, plan.traces, relationCollections);
+  const { ctes, values } = compilePostgresTraceScope(schema, plan.traces, relationCollections, plan.scope);
 
   let eligibilitySql = 'TRUE';
   if (plan.traces.where) {
@@ -601,7 +673,7 @@ export function compilePostgresTraceQueryObservedFields(
   schema: string,
   plan: TrustedTraceQueryObservedFieldsPlan,
 ): CompiledPostgresTraceQuery {
-  const { ctes, values } = compilePostgresTraceScope(schema, plan, new Set());
+  const { ctes, values } = compilePostgresTraceScope(schema, plan, new Set(), plan.scope);
   const searchParameter = values.length + 1;
   const search = plan.search ? `AND strpos(lower('metadata.' || entry.key), lower($${searchParameter})) > 0` : '';
   if (plan.search) values.push(plan.search);
@@ -629,17 +701,26 @@ export function compilePostgresTraceQueryValues(
   schema: string,
   plan: TrustedTraceQueryValuesPlan,
 ): CompiledPostgresTraceQuery {
-  const { ctes, values } = compilePostgresTraceScope(schema, plan, discoveryCollections(plan.predicateScope));
-  let field: string;
-  if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
+  const { ctes, values } = compilePostgresTraceScope(
+    schema,
+    plan,
+    discoveryCollections(plan.predicateScope),
+    plan.scope,
+  );
+  let extracted: string;
+  if (plan.predicateScope === 'trace' && plan.path === 'tags') {
+    // One row per (trace, distinct tag) so the outer count is a per-trace count.
+    extracted = `SELECT value FROM (SELECT DISTINCT r."traceId", UNNEST(r."tags") AS value FROM root_scope r) t`;
+  } else if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
     const keyParameter = `$${values.length + 1}`;
-    field = `COALESCE(
+    extracted = `SELECT COALESCE(
       CASE WHEN jsonb_typeof(r."metadataSearch" -> ${keyParameter}) = 'string' THEN r."metadataSearch" ->> ${keyParameter} END,
       CASE WHEN jsonb_typeof(r."metadataRaw" -> ${keyParameter}) = 'string' THEN NULLIF(btrim(r."metadataRaw" ->> ${keyParameter}), '') END
-    )`;
+    )::text AS value FROM root_scope r`;
     values.push(plan.path.slice('metadata.'.length));
   } else {
-    field = fieldSql(discoveryRegistry(plan.predicateScope), plan.path as TraceQueryCanonicalField);
+    const field = fieldSql(discoveryRegistry(plan.predicateScope), plan.path as TraceQueryCanonicalField);
+    extracted = `SELECT ${field}::text AS value FROM ${discoverySource(plan.predicateScope)}`;
   }
   const searchParameter = values.length + 1;
   const search = plan.search ? `AND strpos(lower(value), lower($${searchParameter})) > 0` : '';
@@ -647,7 +728,7 @@ export function compilePostgresTraceQueryValues(
   values.push(plan.limit + 1);
   return {
     text: `WITH ${ctes.join(',\n')}, extracted AS (
-  SELECT ${field}::text AS value FROM ${discoverySource(plan.predicateScope)}
+  ${extracted}
 )
 SELECT value, count(*)::bigint AS count
 FROM extracted
@@ -735,50 +816,117 @@ export async function getTraceQueryValues(
   });
 }
 
+function decodeTraceDeltaWatermark(watermark: string) {
+  try {
+    return decodeDeltaCursor(watermark);
+  } catch {
+    throw new coreStorage.TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
+  }
+}
+
+function emptyDeltaWatermark(horizon: string, watermark?: string): string {
+  // Preserve monotonicity if a query envelope contains a future native watermark.
+  if (watermark !== undefined && BigInt(decodeTraceDeltaWatermark(watermark).xactId) >= BigInt(horizon))
+    return watermark;
+  return encodeDeltaCursor(horizon, 0);
+}
+
+async function setRemainingTimeout(transaction: TxClient, deadline: number): Promise<void> {
+  const remainingTimeoutMs = Math.floor(deadline - performance.now());
+  if (remainingTimeoutMs <= 0) throw new coreStorage.TraceQueryExecutionError();
+  await transaction.query(`SELECT set_config('statement_timeout', $1, true)`, [`${remainingTimeoutMs}ms`]);
+}
+
+function traceRowToResult(row: Record<string, unknown>) {
+  return {
+    traceId: String(row.traceId),
+    rootSpanId: String(row.rootSpanId),
+    name: row.name,
+    entityId: row.entityId ?? null,
+    parentSpanId: row.parentSpanId ?? null,
+    createdAt: asIsoTimestamp(row.startedAt),
+    metadata: row.metadata ?? null,
+    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
+    threadId: row.threadId == null ? null : String(row.threadId),
+    resourceId: row.resourceId == null ? null : String(row.resourceId),
+    startedAt: asIsoTimestamp(row.startedAt),
+    endedAt: asIsoTimestamp(row.endedAt),
+    entityName: row.entityName == null ? null : String(row.entityName),
+    entityType: row.entityType == null ? null : String(row.entityType),
+    environment: row.environment == null ? null : String(row.environment),
+    status: row.status,
+  };
+}
+
 export async function queryTraces(
   client: DbClient,
   schema: string,
   plan: TrustedTraceQueryPlan,
   timeoutMs: number,
 ): Promise<TraceQueryResponse> {
+  if (plan.paginationMode === 'delta') {
+    assertDeltaPollingEnabled();
+    const watermark = coreStorage.getTraceQueryDeltaWatermark(plan, 'pg');
+    if (watermark !== undefined) decodeTraceDeltaWatermark(watermark);
+    const resolvedTimeoutMs = coreStorage.resolveTraceQueryTimeoutMs(timeoutMs);
+    const deadline = performance.now() + resolvedTimeoutMs;
+    return runWithPostgresTraceQueryTimeout(
+      client,
+      resolvedTimeoutMs,
+      async transaction => {
+        await setRemainingTimeout(transaction, deadline);
+        const horizon = await readSafeXactHorizon(transaction);
+        let rows: Record<string, unknown>[] = [];
+        if (watermark !== undefined) {
+          await setRemainingTimeout(transaction, deadline);
+          const query = compilePostgresTraceQuery(schema, plan, 'data', horizon);
+          rows = await transaction.any<Record<string, unknown>>(query.text, query.values);
+        }
+        const visible = rows.slice(0, plan.limit);
+        const last = visible.at(-1);
+        return coreStorage.traceQueryResponseSchema.parse({
+          traces: visible.map(traceRowToResult),
+          delta: { limit: plan.limit, hasMore: rows.length > plan.limit },
+          deltaCursor: coreStorage.encodeTraceQueryDeltaCursor(
+            plan,
+            'pg',
+            last ? encodeDeltaCursor(last.xactId, last.cursorId) : emptyDeltaWatermark(horizon, watermark),
+          ),
+        });
+      },
+      { repeatableRead: true },
+    );
+  }
   if (plan.paginationMode === 'page') {
     const resolvedTimeoutMs = coreStorage.resolveTraceQueryTimeoutMs(timeoutMs);
     const deadline = performance.now() + resolvedTimeoutMs;
     const countQuery = compilePostgresTraceQuery(schema, plan, 'count');
     const dataQuery = compilePostgresTraceQuery(schema, plan);
-    const { total, rows } = await runWithPostgresTraceQueryTimeout(
+    const { total, rows, deltaCursor } = await runWithPostgresTraceQueryTimeout(
       client,
       resolvedTimeoutMs,
       async transaction => {
+        // The list-polling feature predates the trace-query cursor encoder.
+        let deltaCursor: string | undefined;
+        if (deltaPollingFeatureEnabled() && typeof coreStorage.encodeTraceQueryDeltaCursor === 'function') {
+          await setRemainingTimeout(transaction, deadline);
+          const horizon = await readSafeXactHorizon(transaction);
+          deltaCursor = coreStorage.encodeTraceQueryDeltaCursor(plan, 'pg', encodeDeltaCursor(horizon, 0));
+        }
+        if (deltaCursor !== undefined) await setRemainingTimeout(transaction, deadline);
         const countRows = await transaction.any<{ count: string }>(countQuery.text, countQuery.values);
         const remainingTimeoutMs = Math.floor(deadline - performance.now());
         if (remainingTimeoutMs <= 0) throw new coreStorage.TraceQueryExecutionError();
         await transaction.query(`SELECT set_config('statement_timeout', $1, true)`, [`${remainingTimeoutMs}ms`]);
         const rows = await transaction.any<Record<string, unknown>>(dataQuery.text, dataQuery.values);
-        return { total: Number(countRows[0]?.count ?? 0), rows };
+        return { total: Number(countRows[0]?.count ?? 0), rows, deltaCursor };
       },
       { repeatableRead: true },
     );
-    const traces = rows.map(row => ({
-      traceId: String(row.traceId),
-      rootSpanId: String(row.rootSpanId),
-      name: row.name,
-      entityId: row.entityId ?? null,
-      parentSpanId: row.parentSpanId ?? null,
-      createdAt: asIsoTimestamp(row.startedAt),
-      metadata: row.metadata ?? null,
-      inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
-      threadId: row.threadId == null ? null : String(row.threadId),
-      resourceId: row.resourceId == null ? null : String(row.resourceId),
-      startedAt: asIsoTimestamp(row.startedAt),
-      endedAt: asIsoTimestamp(row.endedAt),
-      entityName: row.entityName == null ? null : String(row.entityName),
-      entityType: row.entityType == null ? null : String(row.entityType),
-      environment: row.environment == null ? null : String(row.environment),
-      status: row.status,
-    }));
+    const traces = rows.map(traceRowToResult);
     return coreStorage.traceQueryResponseSchema.parse({
       traces,
+      ...(deltaCursor === undefined ? {} : { deltaCursor }),
       pagination: {
         total,
         page: plan.page,
@@ -808,24 +956,7 @@ export async function queryTraces(
     });
   }
 
-  const traces = visibleRows.map(row => ({
-    traceId: String(row.traceId),
-    rootSpanId: String(row.rootSpanId),
-    name: row.name,
-    entityId: row.entityId ?? null,
-    parentSpanId: row.parentSpanId ?? null,
-    createdAt: asIsoTimestamp(row.startedAt),
-    metadata: row.metadata ?? null,
-    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
-    threadId: row.threadId == null ? null : String(row.threadId),
-    resourceId: row.resourceId == null ? null : String(row.resourceId),
-    startedAt: asIsoTimestamp(row.startedAt),
-    endedAt: asIsoTimestamp(row.endedAt),
-    entityName: row.entityName == null ? null : String(row.entityName),
-    entityType: row.entityType == null ? null : String(row.entityType),
-    environment: row.environment == null ? null : String(row.environment),
-    status: row.status,
-  }));
+  const traces = visibleRows.map(traceRowToResult);
   const last = traces.at(-1);
   return coreStorage.traceQueryResponseSchema.parse({
     traces,

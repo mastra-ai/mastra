@@ -236,7 +236,7 @@ export const TreeRoot = React.forwardRef<HTMLUListElement, TreeRootProps>(
           <ul
             ref={handleRootRef}
             role="tree"
-            className={cn('flex flex-col text-ui-sm', className)}
+            className={cn('flex flex-col text-caption', className)}
             onKeyDown={handleKeyDown}
           >
             {children}

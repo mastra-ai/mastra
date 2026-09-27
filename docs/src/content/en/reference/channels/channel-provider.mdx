@@ -29,6 +29,25 @@ The provider's `baseUrl` is the public URL the platform sends webhooks and event
 
 Mastra includes [`SlackProvider`](/reference/channels/slack-provider) and [`TelegramProvider`](/reference/channels/telegram-provider) implementations. Build a custom provider by implementing this interface.
 
+## Dynamic resolution
+
+Instead of a static record, `channels` also accepts a resolver: an async function returning the current provider map, with a synchronous `getRoutes()` method. Mastra mounts the resolver's routes at construction and resolves providers at runtime, so connections added after boot become usable without a redeploy. The `channels()` helper from `@mastra/connect` returns a resolver backed by the Mastra platform.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { channels } from '@mastra/connect'
+
+export const mastra = new Mastra({
+  channels: await channels({ projectId: process.env.MASTRA_PROJECT_ID! }),
+})
+```
+
+With a resolver configured, call `resolveChannels()` to get the current provider map. It also works with a static record, where it returns the record directly.
+
+```typescript
+const providers = await mastra.resolveChannels()
+```
+
 ## Properties
 
 <PropertiesTable
@@ -103,7 +122,7 @@ Access a registered provider through the `channels` getter, keyed by the id you 
 await mastra.channels.slack.configure({ refreshToken })
 ```
 
-When the key is only known at runtime, look the provider up by string id instead. `getChannelProvider` takes the concrete type as a generic, and `getChannelProviders` returns every registered provider keyed by id.
+When the key is only known at runtime, look the provider up by string id instead. `getChannelProvider` takes the concrete type as a generic, and `getChannelProviders` returns every registered provider keyed by id. With a [resolver](#dynamic-resolution), both return the latest resolved snapshot. Use `resolveChannels()` when you need providers that reflect the current platform state.
 
 ```typescript
 import type { SlackProvider } from '@mastra/slack'

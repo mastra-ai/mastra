@@ -188,6 +188,41 @@ describe('createOnScorerHook', () => {
     );
   });
 
+  it('does not save a score when the scorer declares the run not scorable', async () => {
+    const debug = vi.fn();
+    mockMastra.getLogger.mockReturnValue({ debug, error: vi.fn(), warn: vi.fn(), trackException: vi.fn() });
+
+    const hookData = {
+      runId: 'test-run',
+      scorer: { id: 'refund-judge' },
+      input: [{ message: 'test' }],
+      output: { result: 'test' },
+      source: 'LIVE' as const,
+      entity: { id: 'test-entity' },
+      entityType: 'AGENT' as const,
+    };
+
+    const mockScorer = {
+      id: 'refund-judge',
+      name: 'refund-judge',
+      run: vi.fn().mockResolvedValue({
+        runId: 'scorer-run-1',
+        notScorable: { step: 'preprocess', reason: 'refundCustomer was not called' },
+      }),
+    };
+
+    mockMastra.getAgentById.mockReturnValue({
+      listScorers: vi.fn().mockReturnValue({ 'refund-judge': { scorer: mockScorer } }),
+    });
+
+    await hook(hookData);
+
+    expect(mockScorer.run).toHaveBeenCalledTimes(1);
+    expect(mockScoresStore.saveScore).not.toHaveBeenCalled();
+    expect(mockMastra.getLogger().trackException).not.toHaveBeenCalled();
+    expect(debug).toHaveBeenCalledWith(expect.stringContaining('refundCustomer was not called'));
+  });
+
   it('should extract a trajectory from live agent output for trajectory scorers', async () => {
     const output = [
       {

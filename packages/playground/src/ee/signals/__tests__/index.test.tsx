@@ -5,9 +5,6 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { navHandleWithChildren } from '../../../lib/nav';
-import { RouteHeader } from '../../../lib/route-header/route-header';
-import { SignalsEntityCrumb } from '../signals-entity-crumb';
 import { SignalsEntityDetailPage } from '../signals-entity-detail-page';
 import {
   allThemePathsResponse,
@@ -80,12 +77,8 @@ function renderSignalsPageWithShell(entityId = 'support-agent') {
     [
       {
         path: '/intelligence/entities/:entityType/:entityId',
-        handle: navHandleWithChildren('/intelligence', [
-          { id: 'signals-entity', Component: SignalsEntityCrumb, heading: 'Entity' },
-        ]),
         element: (
           <QueryClientProvider client={queryClient}>
-            <RouteHeader />
             <SignalsEntityDetailPage />
           </QueryClientProvider>
         ),
@@ -613,7 +606,7 @@ describe('Trace Intelligence page', () => {
       );
       renderSignalsPageWithShell('billing-agent');
 
-      expect(await screen.findByText('Snapshot 1/2 · Jul 1–8, 2026 · 20 traces')).not.toBeNull();
+      expect(await screen.findByText('Snapshot 1/2 · Jul 1 – 8, 2026 · 20 traces')).not.toBeNull();
       expect(headerEntityCrumb().textContent).toContain('billing-agent');
     });
   });

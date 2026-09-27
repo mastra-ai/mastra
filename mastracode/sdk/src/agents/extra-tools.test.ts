@@ -134,153 +134,69 @@ describe('createDynamicTools – extraTools', () => {
     expect(tools.mastra_expert.execute).toBe(mastraExpert.execute);
   });
 
-  it('should enable explicit background requests only for the Alexandria expert plugin tool when enabled', async () => {
-    const mastraExpert = createTool({
-      id: 'mastra_expert',
-      description: 'Ask the Alexandria expert',
-      inputSchema: z.object({ question: z.string() }),
-      execute: async () => ({ answer: 'expert answer' }),
-    });
-    const otherPluginTool = createTool({
-      id: 'other_plugin_tool',
-      description: 'Another plugin tool',
+  it.each(['mastra_expert', 'adversarial_review', 'custom_tool'])(
+    'does not infer background support from %s',
+    async name => {
+      const tool = createTool({ id: name, inputSchema: z.object({}), execute: async () => ({ answer: 'ack' }) });
+      const tools = await createDynamicTools(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { [name]: tool },
+        true,
+      )({ requestContext: makeRequestContext() });
+      expect(tools[name]).toBe(tool);
+      expect(tools[name].background).toBeUndefined();
+    },
+  );
+
+  it.each([true, false])('respects plugin-declared background configuration with setting %s', async enabled => {
+    const background = { enabled: true, defaultDisposition: 'foreground' as const, timeoutMs: 1234, maxRetries: 0 };
+    const tool = createTool({
+      id: 'custom_tool',
       inputSchema: z.object({}),
-      execute: async () => ({ result: 'plugin' }),
+      background,
+      execute: async () => 'answer',
     });
-
     const tools = await createDynamicTools(
       undefined,
       undefined,
       undefined,
       undefined,
-      {
-        mastra_expert: mastraExpert,
-        other_plugin_tool: otherPluginTool,
-      },
-      true,
+      { custom_tool: tool },
+      enabled,
     )({ requestContext: makeRequestContext() });
-
-    expect(tools.mastra_expert).not.toBe(mastraExpert);
-    expect(tools.mastra_expert.background).toEqual({ enabled: true, defaultDisposition: 'foreground' });
-    expect(tools.mastra_expert.execute).not.toBe(mastraExpert.execute);
-    await expect(tools.mastra_expert.execute!({ question: 'How does this work?' })).resolves.toEqual({
-      answer: 'expert answer',
-    });
-    expect(tools.other_plugin_tool).toBe(otherPluginTool);
-    expect(tools.other_plugin_tool.background).toBeUndefined();
+    expect(tools.custom_tool.background).toEqual({ ...background, enabled });
+    expect(tools.custom_tool.execute).toBe(tool.execute);
+    expect(tool.background).toEqual(background);
+    if (enabled) expect(tools.custom_tool).toBe(tool);
   });
 
-  it('should serialize Alexandria expert executions', async () => {
-    const releases: Array<() => void> = [];
+  it('does not serialize plugin-owned execution across requests', async () => {
+    const release = createDeferred<void>();
     const started: string[] = [];
-    const mastraExpert = createTool({
+    const tool = createTool({
       id: 'mastra_expert',
-      description: 'Ask the Alexandria expert',
       inputSchema: z.object({ question: z.string() }),
+      background: { enabled: true, defaultDisposition: 'foreground' },
       execute: async ({ question }) => {
         started.push(question);
-        await new Promise<void>(resolve => releases.push(resolve));
-        return { answer: question };
+        await release.promise;
+        return question;
       },
     });
-    const tools = await createDynamicTools(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      { mastra_expert: mastraExpert },
-      true,
-    )({ requestContext: makeRequestContext() });
-
-    const first = tools.mastra_expert.execute!({ question: 'first' });
-    const second = tools.mastra_expert.execute!({ question: 'second' });
-    await vi.waitFor(() => expect(started).toEqual(['first']));
-
-    releases.shift()?.();
-    await expect(first).resolves.toEqual({ answer: 'first' });
-    await vi.waitFor(() => expect(started).toEqual(['first', 'second']));
-
-    releases.shift()?.();
-    await expect(second).resolves.toEqual({ answer: 'second' });
-  });
-
-  it('should retain the Alexandria execution slot until an aborted execution settles', async () => {
-    const firstAbortObserved = createDeferred<void>();
-    const releaseFirst = createDeferred<void>();
-    const started: string[] = [];
-    const mastraExpert = createTool({
-      id: 'mastra_expert',
-      description: 'Ask the Alexandria expert',
-      inputSchema: z.object({ question: z.string() }),
-      execute: async ({ question }, context) => {
-        started.push(question);
-        if (question === 'first') {
-          context?.abortSignal?.addEventListener('abort', () => firstAbortObserved.resolve(), { once: true });
-          await releaseFirst.promise;
-        }
-        return { answer: question };
-      },
-    });
-    const tools = await createDynamicTools(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      { mastra_expert: mastraExpert },
-      true,
-    )({ requestContext: makeRequestContext() });
-    const firstAbort = new AbortController();
-
-    const first = tools.mastra_expert.execute!({ question: 'first' }, { abortSignal: firstAbort.signal } as any);
-    const second = tools.mastra_expert.execute!({ question: 'second' });
-    await vi.waitFor(() => expect(started).toEqual(['first']));
-
-    firstAbort.abort(new Error('cancelled'));
-    await firstAbortObserved.promise;
-    expect(started).toEqual(['first']);
-
-    releaseFirst.resolve();
-    await expect(first).resolves.toEqual({ answer: 'first' });
-    await vi.waitFor(() => expect(started).toEqual(['first', 'second']));
-    await expect(second).resolves.toEqual({ answer: 'second' });
-  });
-
-  it('should skip an Alexandria execution cancelled while waiting for the queue', async () => {
-    const releaseFirst = createDeferred<void>();
-    const started: string[] = [];
-    const mastraExpert = createTool({
-      id: 'mastra_expert',
-      description: 'Ask the Alexandria expert',
-      inputSchema: z.object({ question: z.string() }),
-      execute: async ({ question }) => {
-        started.push(question);
-        if (question === 'first') await releaseFirst.promise;
-        return { answer: question };
-      },
-    });
-    const tools = await createDynamicTools(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      { mastra_expert: mastraExpert },
-      true,
-    )({ requestContext: makeRequestContext() });
-    const queuedAbort = new AbortController();
-
-    const first = tools.mastra_expert.execute!({ question: 'first' });
-    const cancelled = tools.mastra_expert.execute!({ question: 'cancelled' }, {
-      abortSignal: queuedAbort.signal,
-    } as any);
-    const third = tools.mastra_expert.execute!({ question: 'third' });
-    await vi.waitFor(() => expect(started).toEqual(['first']));
-
-    queuedAbort.abort(new Error('cancelled while queued'));
-    releaseFirst.resolve();
-    await expect(first).resolves.toEqual({ answer: 'first' });
-    await expect(cancelled).rejects.toThrow('cancelled while queued');
-    await expect(third).resolves.toEqual({ answer: 'third' });
-    expect(started).toEqual(['first', 'third']);
+    const getTools = createDynamicTools(undefined, undefined, undefined, undefined, { mastra_expert: tool }, true);
+    const firstTools = await getTools({ requestContext: makeRequestContext() });
+    const secondTools = await getTools({ requestContext: makeRequestContext() });
+    const first = firstTools.mastra_expert.execute!({ question: 'first' });
+    const second = secondTools.mastra_expert.execute!({ question: 'second' });
+    try {
+      await vi.waitFor(() => expect(started).toEqual(['first', 'second']));
+    } finally {
+      release.resolve();
+      await Promise.all([first, second]);
+    }
   });
 
   it('should let extraTools win over pluginTools for embedding overrides', async () => {

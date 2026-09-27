@@ -21,7 +21,7 @@ import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import { COPILOT_HEADERS, fetchCopilotModels, getGitHubCopilotBaseUrl } from '../auth/providers/github-copilot.js';
 import type { CopilotModelEntry, GitHubCopilotCredentials } from '../auth/providers/github-copilot.js';
 import { AuthStorage } from '../auth/storage.js';
-import type { CredentialStore } from '../auth/types.js';
+import type { CredentialStore, OAuthCredential } from '../auth/types.js';
 
 const COPILOT_PROVIDER_ID = 'github-copilot';
 
@@ -119,6 +119,8 @@ export function buildGitHubCopilotOAuthFetch(
   opts: { authStorage?: CredentialStore; rewriteUrl?: boolean } = {},
 ): typeof fetch {
   return (async (url: string | URL | Request, init?: Parameters<typeof fetch>[1]) => {
+    const { headers: initHeaders, ...requestInit } = init ?? {};
+    const request = new Request(url, requestInit);
     const storage = opts.authStorage ?? getAuthStorage();
     storage.reload();
 
@@ -127,43 +129,36 @@ export function buildGitHubCopilotOAuthFetch(
       throw new ProviderAuthRequiredError('Not logged in to GitHub Copilot.');
     }
 
-    // getApiKey() refreshes the Copilot bearer if it has expired.
-    const accessToken = await storage.getApiKey(COPILOT_PROVIDER_ID);
-    if (!accessToken) {
+    let accessToken: string | undefined;
+    let activeCred: OAuthCredential | undefined;
+    if (storage.getOAuthCredential) {
+      activeCred = await storage.getOAuthCredential(COPILOT_PROVIDER_ID);
+      accessToken = activeCred?.access;
+    } else {
+      accessToken = await storage.getApiKey(COPILOT_PROVIDER_ID);
+      storage.reload();
+      const reloaded = storage.get(COPILOT_PROVIDER_ID);
+      activeCred = reloaded?.type === 'oauth' ? { ...reloaded, access: accessToken ?? reloaded.access } : undefined;
+    }
+    if (!accessToken || !activeCred) {
       throw new ProviderAuthRequiredError('Failed to refresh the GitHub Copilot token.');
     }
-    storage.reload();
-
-    const enterpriseUrl = (cred as GitHubCopilotCredentials).enterpriseUrl;
+    const enterpriseUrl = (activeCred as GitHubCopilotCredentials).enterpriseUrl;
 
     let parsedBody: unknown;
-    if (typeof init?.body === 'string') {
-      try {
-        parsedBody = JSON.parse(init.body);
-      } catch {
-        parsedBody = undefined;
-      }
+    try {
+      const body = await request.clone().text();
+      parsedBody = body ? JSON.parse(body) : undefined;
+    } catch {
+      parsedBody = undefined;
     }
     const isAgent = detectIsAgent(parsedBody);
     const isVision = detectIsVision(parsedBody);
 
-    // Preserve non-auth headers from caller.
-    const headers = new Headers();
-    if (init?.headers) {
-      const source =
-        init.headers instanceof Headers
-          ? init.headers
-          : Array.isArray(init.headers)
-            ? new Headers(init.headers as Array<[string, string]>)
-            : new Headers(init.headers as Record<string, string>);
-      source.forEach((value, key) => {
-        const lower = key.toLowerCase();
-        if (lower !== 'authorization' && lower !== 'x-api-key') {
-          headers.set(key, value);
-        }
-      });
-    }
-
+    const headers = new Headers(url instanceof Request ? url.headers : undefined);
+    if (initHeaders) new Headers(initHeaders).forEach((value, key) => headers.set(key, value));
+    headers.delete('authorization');
+    headers.delete('x-api-key');
     headers.set('Authorization', `Bearer ${accessToken}`);
     headers.set('x-initiator', isAgent ? 'agent' : 'user');
     headers.set('Openai-Intent', 'conversation-edits');
@@ -178,16 +173,20 @@ export function buildGitHubCopilotOAuthFetch(
     }
 
     const finalUrl =
-      opts.rewriteUrl !== false
-        ? rewriteToCopilotBase(url, accessToken, enterpriseUrl)
-        : url instanceof URL
-          ? url
-          : typeof url === 'string'
-            ? new URL(url)
-            : new URL((url as Request).url);
+      opts.rewriteUrl !== false ? rewriteToCopilotBase(request, accessToken, enterpriseUrl) : new URL(request.url);
 
+    const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body;
+    const finalRequest = new Request(finalUrl, {
+      method: request.method,
+      headers,
+      body,
+      signal: request.signal,
+      redirect: request.redirect,
+      integrity: request.integrity,
+      ...(body ? ({ duplex: 'half' } as RequestInit) : {}),
+    });
     try {
-      return await fetch(finalUrl, { ...init, headers });
+      return await fetch(finalRequest);
     } catch (error) {
       if (error && typeof error === 'object') {
         Object.assign(error as Record<string, unknown>, {
@@ -331,13 +330,29 @@ interface CatalogCacheEntry {
   models: CopilotModelEntry[];
 }
 
-let catalogCache: CatalogCacheEntry | null = null;
-let inflightFetch: Promise<CopilotModelEntry[]> | null = null;
+const catalogCache = new Map<string, CatalogCacheEntry>();
+const inflightFetches = new Map<string, Promise<CopilotModelEntry[]>>();
+
+/**
+ * Resolve the account identity for a credential read through `getApiKey`, which
+ * may await a refresh with a rotation landing inside it. The registry is
+ * consulted on both sides of that await, and only an id that survived it names
+ * the account that produced the token: an id that moved describes whichever
+ * account is active *now*, so trusting it would file this fetch's models under
+ * the wrong account and serve them to it. Unidentified is the safe answer — the
+ * caller then skips the TTL cache, exactly as it does when the store exposes no
+ * registry at all. (`AuthStorage` never needs this: its snapshots name their
+ * account.)
+ */
+function readStableAccountId(storage: CredentialStore, idBeforeToken: string | undefined): string | undefined {
+  const idAfterToken = storage.getActiveAccount?.(COPILOT_PROVIDER_ID)?.id;
+  return idBeforeToken !== undefined && idBeforeToken === idAfterToken ? idAfterToken : undefined;
+}
 
 /** Reset the in-process Copilot catalog cache (test seam, also useful after logout). */
 export function clearCopilotCatalogCache(): void {
-  catalogCache = null;
-  inflightFetch = null;
+  catalogCache.clear();
+  inflightFetches.clear();
 }
 
 /**
@@ -352,33 +367,67 @@ export function clearCopilotCatalogCache(): void {
  *
  * Concurrent calls during a fetch share the inflight promise.
  */
-export async function getCopilotModelCatalog(opts: { authStorage?: AuthStorage } = {}): Promise<CopilotModelEntry[]> {
+export async function getCopilotModelCatalog(
+  opts: { authStorage?: CredentialStore } = {},
+): Promise<CopilotModelEntry[]> {
   const storage = opts.authStorage ?? getAuthStorage();
-  storage.reload();
 
-  const cred = storage.get(COPILOT_PROVIDER_ID);
-  if (!cred || cred.type !== 'oauth') {
-    return [];
+  // Resolve one coherent credential snapshot before consulting the cache so a
+  // token can never be paired with another account's enterprise endpoint.
+  // `getOAuthCredential` is optional (deployed stores have no local registry),
+  // so fall back to the always-present `getApiKey`, taking any enterprise
+  // endpoint from the same slot via `get()`.
+  let accessToken: string | undefined;
+  let accountInstanceId: string | undefined;
+  let enterpriseUrl: string | undefined;
+  if (storage.getOAuthCredential) {
+    const credential = await storage.getOAuthCredential(COPILOT_PROVIDER_ID);
+    if (!credential || credential.type !== 'oauth') return [];
+    accessToken = credential.access;
+    // A snapshot that names its account is coherent by construction — the store
+    // read the identity and the token in the same breath. One that does not
+    // cannot be attributed to a registry entry we then read afterwards, because
+    // a rotation may have landed in between; leave it unnamed so the caller
+    // skips the TTL cache instead of guessing. (`AuthStorage` always stamps.)
+    accountInstanceId = credential.accountInstanceId;
+    enterpriseUrl = (credential as GitHubCopilotCredentials).enterpriseUrl;
+  } else {
+    // This store republishes its registry but not the OAuth snapshot API, so the
+    // identity has to come from the registry. `getApiKey` may await a refresh and
+    // a rotation can land inside it, so bracket the fetch: only an id that held
+    // still names the account that produced this token.
+    const idBeforeToken = storage.getActiveAccount?.(COPILOT_PROVIDER_ID)?.id;
+    accessToken = await storage.getApiKey(COPILOT_PROVIDER_ID);
+    if (!accessToken) return [];
+    accountInstanceId = readStableAccountId(storage, idBeforeToken);
+    const stored = storage.get(COPILOT_PROVIDER_ID);
+    if (stored?.type === 'oauth') {
+      enterpriseUrl = (stored as GitHubCopilotCredentials).enterpriseUrl;
+    }
+    // The id is non-secret, and keying per account is what keeps entitlements
+    // (per account, per `github-copilot-catalog.test.ts`) from leaking across a
+    // rotation. Deriving the key from the token is what `cba11389e7` removed.
   }
+  const baseUrl = getGitHubCopilotBaseUrl(accessToken, enterpriseUrl);
+  // No identity means the store cannot name the account it just served, so the
+  // TTL cache cannot be keyed per account — one entry would outlive the request
+  // and serve those models to every other account of the store. The in-flight
+  // map is no safer: two callers that resolved *different* accounts of an
+  // unnamed store would otherwise collide on one key and share whichever
+  // catalog was fetched first. So both caches are identified-only, and an
+  // unnamed store pays one `/models` request per call.
+  const credentialKey = accountInstanceId === undefined ? undefined : `${accountInstanceId}\0${baseUrl}`;
+  const dedupeKey = credentialKey;
 
   const now = Date.now();
-  if (catalogCache && now - catalogCache.fetchedAt < catalogCache.ttl) {
-    return catalogCache.models;
-  }
+  const cached = credentialKey ? catalogCache.get(credentialKey) : undefined;
+  if (cached && now - cached.fetchedAt < cached.ttl) return cached.models;
 
-  if (inflightFetch) return inflightFetch;
+  const existingFetch = dedupeKey === undefined ? undefined : inflightFetches.get(dedupeKey);
+  if (existingFetch) return existingFetch;
 
-  inflightFetch = (async (): Promise<CopilotModelEntry[]> => {
+  const fetchPromise = (async (): Promise<CopilotModelEntry[]> => {
     try {
-      // getApiKey() refreshes the Copilot bearer if it has expired.
-      const accessToken = await storage.getApiKey(COPILOT_PROVIDER_ID);
-      if (!accessToken) throw new Error('No Copilot bearer token');
-      storage.reload();
-
-      const refreshed = storage.get(COPILOT_PROVIDER_ID);
-      const enterpriseUrl = (refreshed as GitHubCopilotCredentials | undefined)?.enterpriseUrl;
-      const baseUrl = getGitHubCopilotBaseUrl(accessToken, enterpriseUrl);
-
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), CATALOG_FETCH_TIMEOUT_MS);
       try {
@@ -387,26 +436,28 @@ export async function getCopilotModelCatalog(opts: { authStorage?: AuthStorage }
           bearerToken: accessToken,
           signal: controller.signal,
         });
-        catalogCache = { fetchedAt: Date.now(), ttl: CATALOG_TTL_MS, models };
+        if (credentialKey) catalogCache.set(credentialKey, { fetchedAt: Date.now(), ttl: CATALOG_TTL_MS, models });
         return models;
       } finally {
         clearTimeout(timer);
       }
     } catch (error) {
-      catalogCache = {
-        fetchedAt: Date.now(),
-        ttl: CATALOG_FAILURE_TTL_MS,
-        models: COPILOT_FALLBACK_MODELS,
-      };
+      if (credentialKey) {
+        catalogCache.set(credentialKey, {
+          fetchedAt: Date.now(),
+          ttl: CATALOG_FAILURE_TTL_MS,
+          models: COPILOT_FALLBACK_MODELS,
+        });
+      }
       console.warn(
         'Failed to fetch live GitHub Copilot models, using fallback list:',
         error instanceof Error ? error.message : error,
       );
       return COPILOT_FALLBACK_MODELS;
     } finally {
-      inflightFetch = null;
+      if (dedupeKey !== undefined) inflightFetches.delete(dedupeKey);
     }
   })();
-
-  return inflightFetch;
+  if (dedupeKey !== undefined) inflightFetches.set(dedupeKey, fetchPromise);
+  return fetchPromise;
 }

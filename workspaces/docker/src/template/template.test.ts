@@ -151,6 +151,52 @@ describe('DockerTemplate.build', () => {
     expect(mockDocker.buildImage).toHaveBeenCalledTimes(1);
   });
 
+  it('cancels one shared waiter without interrupting the other caller', async () => {
+    mockImage.inspect.mockRejectedValue(new Error('no such image'));
+    let release!: () => void;
+    mockDocker.modem.followProgress.mockImplementationOnce((_stream, onFinish) => {
+      release = () => onFinish(null, []);
+    });
+    const controller = new AbortController();
+    const template = new DockerTemplate().runCmd('echo hi');
+    const cancelled = template.build({ abortSignal: controller.signal });
+    const remaining = template.build();
+    await new Promise(r => setImmediate(r));
+
+    controller.abort();
+    await expect(cancelled).rejects.toMatchObject({ code: 'ABORTED' });
+    expect(mockDocker.buildImage).toHaveBeenCalledTimes(1);
+    release();
+    await expect(remaining).resolves.toMatchObject({ status: 'ready' });
+  });
+
+  it('cancels the underlying stream when the last shared waiter aborts and remains retryable', async () => {
+    mockImage.inspect.mockRejectedValue(new Error('no such image'));
+    const stream = { destroy: vi.fn() };
+    mockDocker.buildImage.mockResolvedValueOnce(stream);
+    mockDocker.modem.followProgress.mockImplementationOnce(() => undefined);
+    const controller = new AbortController();
+    const template = new DockerTemplate().runCmd('echo hi');
+    const build = template.build({ abortSignal: controller.signal });
+    await new Promise(r => setImmediate(r));
+
+    controller.abort();
+    await expect(build).rejects.toMatchObject({ code: 'ABORTED' });
+    expect(stream.destroy).toHaveBeenCalledTimes(1);
+    await expect(template.build()).resolves.toMatchObject({ status: 'ready' });
+    expect(mockDocker.buildImage).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects pre-aborted builds without inspecting or building', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(new DockerTemplate().build({ abortSignal: controller.signal })).rejects.toMatchObject({
+      code: 'ABORTED',
+    });
+    expect(mockDocker.getImage).not.toHaveBeenCalled();
+    expect(mockDocker.buildImage).not.toHaveBeenCalled();
+  });
+
   it('queues a build with different options behind the in-flight one instead of sharing it', async () => {
     mockImage.inspect.mockRejectedValue(new Error('no such image'));
     let release!: () => void;
@@ -172,6 +218,32 @@ describe('DockerTemplate.build', () => {
     mockImage.inspect.mockResolvedValueOnce({});
     await expect(template.build()).resolves.toMatchObject({ status: 'ready' });
     expect(mockDocker.buildImage).toHaveBeenCalledTimes(2);
+  });
+
+  it('lets plain callers join the active plain build while an option-specific build is queued', async () => {
+    mockImage.inspect.mockRejectedValue(new Error('no such image'));
+    const releases: Array<() => void> = [];
+    mockDocker.modem.followProgress.mockImplementation((_stream, onFinish) => {
+      releases.push(() => onFinish(null, []));
+    });
+    const template = new DockerTemplate().runCmd('echo hi');
+
+    const firstPlain = template.build();
+    const forced = template.build({ force: true });
+    const secondPlain = template.build();
+    await new Promise(r => setImmediate(r));
+
+    expect(mockDocker.buildImage).toHaveBeenCalledTimes(1);
+    releases[0]!();
+    await expect(Promise.all([firstPlain, secondPlain])).resolves.toEqual([
+      { status: 'ready', templateId: template.templateId },
+      { status: 'ready', templateId: template.templateId },
+    ]);
+
+    await new Promise(r => setImmediate(r));
+    expect(mockDocker.buildImage).toHaveBeenCalledTimes(2);
+    releases[1]!();
+    await expect(forced).resolves.toMatchObject({ status: 'ready' });
   });
 
   it('builds on the docker client passed in options', async () => {
@@ -299,6 +371,52 @@ describe('DockerTemplate.build', () => {
     mockImage.inspect.mockRejectedValueOnce(new Error('daemon unreachable'));
     const template = new DockerTemplate().runCmd('echo hi');
     await expect(template.build()).rejects.toThrow('daemon unreachable');
+  });
+
+  it('cancels a pending buildImage acquisition and remains retryable', async () => {
+    mockImage.inspect.mockRejectedValue(new Error('no such image'));
+    let resolveBuild!: (stream: { destroy: ReturnType<typeof vi.fn> }) => void;
+    const lateStream = { destroy: vi.fn() };
+    mockDocker.buildImage.mockImplementationOnce(
+      () => new Promise(resolve => (resolveBuild = resolve)) as ReturnType<typeof mockDocker.buildImage>,
+    );
+    const controller = new AbortController();
+    const template = new DockerTemplate().runCmd('echo hi');
+    const build = template.build({ abortSignal: controller.signal });
+    await vi.waitFor(() => expect(mockDocker.buildImage).toHaveBeenCalledTimes(1));
+
+    controller.abort(new Error('cancel acquisition'));
+    await expect(build).rejects.toMatchObject({ code: 'ABORTED', cause: controller.signal.reason });
+    resolveBuild(lateStream);
+    await vi.waitFor(() => expect(lateStream.destroy).toHaveBeenCalledTimes(1));
+
+    await expect(template.build()).resolves.toMatchObject({ status: 'ready' });
+    expect(mockDocker.buildImage).toHaveBeenCalledTimes(2);
+  });
+
+  it('cancels a pending secret build acquisition and closes late resources', async () => {
+    mockImage.inspect.mockRejectedValue(new Error('no such image'));
+    let dialCallback!: (error: Error | null, stream?: unknown) => void;
+    const request = { destroy: vi.fn() };
+    const lateStream = { destroy: vi.fn() };
+    mockDocker.modem.dial.mockImplementationOnce((_options, callback) => {
+      dialCallback = callback;
+      return request;
+    });
+    const controller = new AbortController();
+    const template = new DockerTemplate({ secrets: { TOKEN: 'value' } }).runWithSecrets('echo hi', {
+      secrets: ['TOKEN'],
+      output: '/out',
+    });
+    const build = template.build({ abortSignal: controller.signal });
+    await vi.waitFor(() => expect(mockDocker.modem.dial).toHaveBeenCalledTimes(1));
+
+    controller.abort(new Error('cancel secret acquisition'));
+    await expect(build).rejects.toMatchObject({ code: 'ABORTED', cause: controller.signal.reason });
+    expect(request.destroy).toHaveBeenCalledTimes(1);
+    expect(mockSession.close).toHaveBeenCalled();
+    dialCallback(null, lateStream);
+    expect(lateStream.destroy).toHaveBeenCalledTimes(1);
   });
 });
 

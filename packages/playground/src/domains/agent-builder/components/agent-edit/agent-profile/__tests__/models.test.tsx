@@ -72,58 +72,14 @@ describe('Models', () => {
     cleanup();
   });
 
-  describe('when an agentId is provided', () => {
-    it('paints the selected model container with border-based HSL and no accent classes', async () => {
-      const { getByTestId } = await renderModels();
-
-      const container = getByTestId('model-card-openai-gpt-4o') as HTMLButtonElement;
-      expect(container.style.borderColor).toMatch(/^(rgb|hsl)\(/);
-      expect(container.style.boxShadow).toBe('');
-      expect(container.className).toContain('focus-visible:!border-[var(--agent-color-bg)]');
-      expect(container.className).not.toContain('border-accent1');
-      expect(container.className).not.toContain('ring-1 ring-accent1');
-      expect(container.className).not.toContain('focus-visible:ring');
-    });
-
-    it('paints the selected model check cell with border-based HSL', async () => {
-      const { getByTestId } = await renderModels();
-
-      const check = getByTestId('model-card-check-openai-gpt-4o') as HTMLSpanElement;
-      expect(check.style.backgroundColor).toMatch(/^(rgb|hsl)\(/);
-      expect(check.style.borderColor).toMatch(/^(rgb|hsl)\(/);
-      expect(check.className).not.toContain('bg-accent1');
-    });
-
-    it('leaves unselected model borders untouched while using agent color for focus', async () => {
-      const { getByTestId } = await renderModels();
-
-      const container = getByTestId('model-card-anthropic-claude-3-5-sonnet') as HTMLButtonElement;
-      expect(container.style.getPropertyValue('--agent-color-bg')).toMatch(/^hsl\(/);
-      expect(container.style.borderColor).toBe('');
-      expect(container.className).toContain('border-border1');
-      expect(container.className).toContain('focus-visible:!border-[var(--agent-color-bg)]');
-      expect(container.className).not.toContain('focus-visible:ring');
-    });
-
-    it('paints the checked provider checkbox with agent color', async () => {
-      const { getByTestId } = await renderModels();
-
-      const checkbox = getByTestId('models-provider-filter-checkbox-openai') as HTMLButtonElement;
-      expect(checkbox.style.backgroundColor).toMatch(/^(rgb|hsl)\(/);
-      expect(checkbox.style.borderColor).toMatch(/^(rgb|hsl)\(/);
-      expect(checkbox.className).not.toContain('bg-accent1');
-    });
-  });
-
   describe('when rendering the model grid', () => {
-    it('renders an uppercase text-neutral3 section title per provider', async () => {
+    it('renders an uppercase section title per provider', async () => {
       const { getByTestId } = await renderModels();
 
       const openaiTitle = getByTestId('model-provider-section-title-openai');
       expect(openaiTitle.textContent).toBe('OpenAI');
-      expect(openaiTitle.className).toContain('text-neutral3');
       expect(openaiTitle.className).toContain('uppercase');
-      expect(openaiTitle.className).toContain('text-ui-sm');
+      expect(openaiTitle.className).toContain('text-caption');
 
       const anthropicTitle = getByTestId('model-provider-section-title-anthropic');
       expect(anthropicTitle.textContent).toBe('Anthropic');

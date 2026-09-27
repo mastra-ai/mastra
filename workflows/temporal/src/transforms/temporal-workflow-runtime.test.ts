@@ -30,10 +30,23 @@ describe('temporal workflow runtime helper module', () => {
 
     const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
     const workflow = createWorkflow('weather-workflow').then('fetch-weather').commit();
-    const result = await workflow({ inputData: { city: 'SF' }, initialState: { started: true } });
+    const result = await workflow({
+      inputData: { city: 'SF' },
+      initialState: { started: true },
+      requestContext: { tenantId: 'tenant-1' },
+      runId: 'run-1',
+      resourceId: 'resource-1',
+    });
 
     expect(proxyActivities).toHaveBeenCalledWith({ startToCloseTimeout: '1 minute' });
-    expect(fetchWeather).toHaveBeenCalledWith({ inputData: { city: 'SF' } });
+    expect(fetchWeather).toHaveBeenCalledWith({
+      inputData: { city: 'SF' },
+      initData: { city: 'SF' },
+      requestContext: { tenantId: 'tenant-1' },
+      runId: 'run-1',
+      resourceId: 'resource-1',
+      workflowId: 'weather-workflow',
+    });
     expect(result).toEqual({
       status: 'success',
       input: { city: 'SF' },
@@ -55,9 +68,21 @@ describe('temporal workflow runtime helper module', () => {
 
     const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
     const workflow = createWorkflow('mapped-workflow').map(mappingId).commit();
-    const result = await workflow({ inputData: { value: 21 } });
+    const result = await workflow({
+      inputData: { value: 21 },
+      requestContext: { tenantId: 'tenant-1' },
+      runId: 'run-1',
+      resourceId: 'resource-1',
+    });
 
-    expect(mapping).toHaveBeenCalledWith({ inputData: { value: 21 }, initData: { value: 21 } });
+    expect(mapping).toHaveBeenCalledWith({
+      inputData: { value: 21 },
+      initData: { value: 21 },
+      requestContext: { tenantId: 'tenant-1' },
+      runId: 'run-1',
+      resourceId: 'resource-1',
+      workflowId: 'mapped-workflow',
+    });
     expect(result).toEqual({
       status: 'success',
       input: { value: 21 },
@@ -100,9 +125,24 @@ describe('temporal workflow runtime helper module', () => {
 
     const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
     const workflow = createWorkflow('weather-workflow').thenWorkflow('childWorkflow').commit();
-    const result = await workflow({ inputData: { city: 'SF' } });
+    const result = await workflow({
+      inputData: { city: 'SF' },
+      requestContext: { tenantId: 'tenant-1' },
+      runId: 'run-1',
+      resourceId: 'resource-1',
+    });
 
-    expect(executeChild).toHaveBeenCalledWith('childWorkflow', { args: [{ inputData: { city: 'SF' } }] });
+    expect(executeChild).toHaveBeenCalledWith('childWorkflow', {
+      args: [
+        {
+          inputData: { city: 'SF' },
+          requestContext: { tenantId: 'tenant-1' },
+          runId: 'run-1',
+          resourceId: 'resource-1',
+          workflowId: 'weather-workflow',
+        },
+      ],
+    });
     expect(result).toEqual({
       status: 'success',
       input: { city: 'SF' },
@@ -141,8 +181,16 @@ describe('temporal workflow runtime helper module', () => {
       .commit();
     const result = await workflow({ inputData: { value: 1 } });
 
-    expect(first).toHaveBeenCalledWith({ inputData: { value: 1 } });
-    expect(second).toHaveBeenCalledWith({ inputData: { value: 1 } });
+    expect(first).toHaveBeenCalledWith({
+      inputData: { value: 1 },
+      initData: { value: 1 },
+      workflowId: 'parallel-workflow',
+    });
+    expect(second).toHaveBeenCalledWith({
+      inputData: { value: 1 },
+      initData: { value: 1 },
+      workflowId: 'parallel-workflow',
+    });
     expect(result).toEqual({
       status: 'success',
       input: { value: 1 },
@@ -169,7 +217,7 @@ describe('temporal workflow runtime helper module', () => {
     const result = await workflow({ inputData: { value: 'parent-input' } });
 
     expect(executeChild).toHaveBeenCalledWith('childWorkflow', {
-      args: [{ inputData: { value: 'parent-input' } }],
+      args: [{ inputData: { value: 'parent-input' }, workflowId: 'parallel-child-workflow' }],
     });
     expect(result).toEqual({
       status: 'success',
@@ -198,9 +246,13 @@ describe('temporal workflow runtime helper module', () => {
       .commit();
     const result = await workflow({ inputData: { value: 'parent-input' } });
 
-    expect(activity).toHaveBeenCalledWith({ inputData: { value: 'parent-input' } });
+    expect(activity).toHaveBeenCalledWith({
+      inputData: { value: 'parent-input' },
+      initData: { value: 'parent-input' },
+      workflowId: 'mixed-parallel-workflow',
+    });
     expect(executeChild).toHaveBeenCalledWith('childWorkflow', {
-      args: [{ inputData: { value: 'parent-input' } }],
+      args: [{ inputData: { value: 'parent-input' }, workflowId: 'mixed-parallel-workflow' }],
     });
     expect(result).toMatchObject({
       result: {
@@ -223,9 +275,22 @@ describe('temporal workflow runtime helper module', () => {
     const result = await workflow({ inputData: [{ value: 1 }, { value: 2 }, { value: 3 }] });
 
     expect(map).toHaveBeenCalledTimes(3);
-    expect(map).toHaveBeenNthCalledWith(1, { inputData: { value: 1 } });
-    expect(map).toHaveBeenNthCalledWith(2, { inputData: { value: 2 } });
-    expect(map).toHaveBeenNthCalledWith(3, { inputData: { value: 3 } });
+    const initData = [{ value: 1 }, { value: 2 }, { value: 3 }];
+    expect(map).toHaveBeenNthCalledWith(1, {
+      inputData: { value: 1 },
+      initData,
+      workflowId: 'foreach-workflow',
+    });
+    expect(map).toHaveBeenNthCalledWith(2, {
+      inputData: { value: 2 },
+      initData,
+      workflowId: 'foreach-workflow',
+    });
+    expect(map).toHaveBeenNthCalledWith(3, {
+      inputData: { value: 3 },
+      initData,
+      workflowId: 'foreach-workflow',
+    });
     expect(result).toMatchObject({
       result: [{ value: 11 }, { value: 12 }, { value: 13 }],
       steps: {
@@ -295,9 +360,13 @@ describe('temporal workflow runtime helper module', () => {
       .commit();
     const result = await workflow({ inputData: { value: 3 } });
 
-    expect(isSmall).toHaveBeenCalledWith({ inputData: { value: 3 } });
-    expect(isLarge).toHaveBeenCalledWith({ inputData: { value: 3 } });
-    expect(smallStep).toHaveBeenCalledWith({ inputData: { value: 3 } });
+    expect(isSmall).toHaveBeenCalledWith({ inputData: { value: 3 }, workflowId: 'branch-workflow' });
+    expect(isLarge).toHaveBeenCalledWith({ inputData: { value: 3 }, workflowId: 'branch-workflow' });
+    expect(smallStep).toHaveBeenCalledWith({
+      inputData: { value: 3 },
+      initData: { value: 3 },
+      workflowId: 'branch-workflow',
+    });
     expect(largeStep).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       result: {
@@ -331,6 +400,24 @@ describe('temporal workflow runtime helper module', () => {
       steps: {
         incrementUntil: { value: 2 },
       },
+    });
+    expect(incrementWhile).toHaveBeenNthCalledWith(1, {
+      inputData: { value: 0 },
+      initData: { value: 0 },
+      workflowId: 'dowhile-workflow',
+    });
+    expect(continueWhile).toHaveBeenNthCalledWith(1, {
+      inputData: { value: 1 },
+      workflowId: 'dowhile-workflow',
+    });
+    expect(incrementUntil).toHaveBeenNthCalledWith(1, {
+      inputData: { value: 0 },
+      initData: { value: 0 },
+      workflowId: 'dountil-workflow',
+    });
+    expect(stopUntil).toHaveBeenNthCalledWith(1, {
+      inputData: { value: 1 },
+      workflowId: 'dountil-workflow',
     });
     expect(incrementWhile).toHaveBeenCalledTimes(2);
     expect(continueWhile).toHaveBeenCalledTimes(2);

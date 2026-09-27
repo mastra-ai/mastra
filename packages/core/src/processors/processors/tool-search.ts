@@ -616,6 +616,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
             score: z.number(),
           }),
         ),
+        loaded: z.array(z.string()).optional(),
         message: z.string(),
       }),
       execute: async ({ query }) => {
@@ -644,6 +645,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
 
           return {
             results,
+            loaded: results.map(r => r.name),
             message:
               `Found and loaded ${results.length} tool(s): ${results.map(r => r.name).join(', ')}. ` +
               `They are available on your next turn — call them directly.` +

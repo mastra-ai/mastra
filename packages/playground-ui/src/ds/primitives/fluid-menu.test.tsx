@@ -113,11 +113,61 @@ describe('fluid-menu primitive', () => {
     });
   });
 
+  describe('when rows unmount and new ones mount (virtualized lists)', () => {
+    it('reuses the released index instead of growing the index space', async () => {
+      const view = await setup({ rows: ['a', 'b', 'c'] });
+      view.rerender(<Menu rows={['a', 'b']} />);
+      view.rerender(<Menu rows={['a', 'b', 'd']} />);
+      screen.getAllByRole('button').forEach((row, i) => stubLayout(row, i * ROW_HEIGHT));
+      await flushFrames();
+
+      fireEvent.mouseMove(screen.getByTestId('menu'), { clientX: 10, clientY: ROW_HEIGHT * 2 + 5 });
+      await flushFrames();
+      expect(activeRow()).toBe('d');
+      expect(screen.getByTestId('menu').getAttribute('data-fluid-hover-active-index')).toBe('2');
+    });
+
+    it('skips a natively disabled row', async () => {
+      await setup();
+      (screen.getByText('c') as HTMLButtonElement).disabled = true;
+      fireEvent.mouseMove(screen.getByTestId('menu'), { clientX: 10, clientY: ROW_HEIGHT * 2 + 5 });
+      await flushFrames();
+      expect(activeRow()).toBe('a');
+    });
+  });
+
   describe('when a row renders outside a provider', () => {
     it('still renders and forwards its ref', () => {
       const ref = React.createRef<HTMLButtonElement>();
       render(<Row ref={ref}>solo</Row>);
       expect(ref.current?.textContent).toBe('solo');
+    });
+  });
+
+  describe('when a row holds an open submenu (data-popup-open)', () => {
+    it('keeps the highlight on that row after the pointer leaves for the submenu', async () => {
+      await setup();
+      fireEvent.mouseMove(screen.getByTestId('menu'), { clientX: 10, clientY: 5 });
+      await flushFrames();
+      await act(async () => {
+        screen.getByText('a').setAttribute('data-popup-open', '');
+      });
+
+      fireEvent.mouseLeave(screen.getByTestId('menu'));
+      await flushFrames();
+
+      expect(activeRow()).toBe('a');
+    });
+  });
+
+  describe('when a row takes focus (roving-focus lists)', () => {
+    it('moves the highlight to that row', async () => {
+      await setup();
+
+      act(() => screen.getByText('c').focus());
+      await flushFrames();
+
+      expect(activeRow()).toBe('c');
     });
   });
 });

@@ -43,12 +43,12 @@ async function setup(overrides?: LinearRuleOverrides, boards = createBoardRegist
 describe('LinearRules', () => {
   it.each([
     { name: 'the bound custom board initial phase', sourceId: 'proj-release', board: 'release', stage: 'queued' },
-    { name: 'Work triage when the source is unbound', sourceId: 'proj-other', board: 'work', stage: 'triage' },
+    { name: 'Work Intake when the source is unbound', sourceId: 'proj-other', board: 'work', stage: 'intake' },
     {
-      name: 'Work triage when the bound board is not installed',
+      name: 'Work Intake when the bound board is not installed',
       sourceId: 'proj-gone',
       board: 'work',
-      stage: 'triage',
+      stage: 'intake',
     },
   ])('routes an observed issue to $name', async ({ sourceId, board, stage }) => {
     const { project, service, workItems } = await setup(
@@ -403,7 +403,7 @@ describe('LinearRules', () => {
     },
   );
 
-  it('commits one triage decision and replays an unchanged observation', async () => {
+  it('commits one Intake decision and replays an unchanged observation', async () => {
     const { project, service, workItems } = await setup();
     const input = { orgId: 'org-1', factoryProjectId: project.id, userId: 'user-1', issues: [issue] };
 
@@ -418,7 +418,7 @@ describe('LinearRules', () => {
         type: 'upsertLinkedWorkItem',
         source: 'linear-issue',
         sourceKey: 'linear:ENG-42',
-        stage: 'triage',
+        stage: 'intake',
       },
     });
   });

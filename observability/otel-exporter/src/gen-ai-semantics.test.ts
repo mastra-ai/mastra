@@ -87,6 +87,28 @@ describe('getAttributes - tool attributes', () => {
     expect(attrs).not.toHaveProperty('gen_ai.tool.type');
   });
 
+  it('exports MCP server request metadata', () => {
+    const span = createSpan(SpanType.MCP_SERVER_REQUEST);
+    span.attributes = {
+      mcpMethod: 'tools/call',
+      targetName: 'lookup',
+      mcpServer: 'roster',
+      serverVersion: '1.0.0',
+      mcpProtocolVersion: '2026-07-28',
+      clientName: 'claude-desktop',
+      clientVersion: '2.1.0',
+    };
+    expect(getAttributes(span)).toMatchObject({
+      'mcp.method.name': 'tools/call',
+      'mcp.protocol.version': '2026-07-28',
+      'mastra.mcp_server_request.server_name': 'roster',
+      'mastra.mcp_server_request.server_version': '1.0.0',
+      'mastra.mcp_server_request.target_name': 'lookup',
+      'mastra.mcp_server_request.client_name': 'claude-desktop',
+      'mastra.mcp_server_request.client_version': '2.1.0',
+    });
+  });
+
   it.each([SpanType.TOOL_CALL, SpanType.PROVIDER_TOOL_CALL])('does not export MCP metadata for %s', type => {
     const attrs = getAttributes(createSpan(type));
     expect(attrs).not.toHaveProperty('server.address');

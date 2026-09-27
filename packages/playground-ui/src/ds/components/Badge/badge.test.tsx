@@ -38,21 +38,8 @@ describe('Badge', () => {
       expect(badge.tagName).toBe('SPAN');
       expect(badge.getAttribute('title')).toBe('Publication status');
       expect(badge.parentElement?.textContent).toBe('Status: Published');
-      expect(badge.classList.contains('bg-neutral6/5')).toBe(true);
-      expect(badge.classList.contains('text-badge-neutral-fg')).toBe(true);
       expect(Array.from(badge.classList)).toEqual(
-        expect.arrayContaining([
-          'rounded-[7px]',
-          'inset-ring-1',
-          'inset-ring-current/5',
-          'inset-shadow-xs',
-          'inset-shadow-white/5',
-          'dark:inset-shadow-[0_3px_10px_-2px_white]',
-          'dark:inset-shadow-white/7',
-          'dark:bg-linear-to-b',
-          'dark:from-white/3',
-          'dark:to-white/0',
-        ]),
+        expect.arrayContaining(['rounded-[7px]', 'inset-ring-1', 'inset-shadow-xs']),
       );
     });
   });
@@ -69,7 +56,7 @@ describe('Badge', () => {
       expect(indicator?.textContent).toBe('');
     });
 
-    it('only animates pulse indicators and keeps their selected color', () => {
+    it('only animates pulse indicators', () => {
       const { container, rerender } = render(
         <Badge variant="blue" indicator="pulse">
           Live
@@ -77,7 +64,6 @@ describe('Badge', () => {
       );
 
       const pulse = container.querySelector('[aria-hidden="true"]');
-      expect(pulse?.classList.contains('bg-badge-blue')).toBe(true);
       expect(pulse?.classList.contains('motion-safe:animate-pulse')).toBe(true);
 
       rerender(

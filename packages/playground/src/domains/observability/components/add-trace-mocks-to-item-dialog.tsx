@@ -8,14 +8,13 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
+import { useDatasetMutations, useDatasets } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { EyeIcon, WrenchIcon, Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import { useDatasetItem, useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
-import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 
 type AddTraceMocksToItemDialogProps = {
   traceId?: string;
@@ -77,7 +76,7 @@ export function AddTraceMocksToItemDialog({ traceId, isOpen, onClose, level = 2 
         </SideDialog.Header>
 
         {isTrajectoryLoading ? (
-          <div className="text-neutral4 text-ui-md px-2 py-4">Loading tool calls from trace...</div>
+          <div className="px-2 py-4 text-body text-muted-foreground">Loading tool calls from trace...</div>
         ) : (
           // Remount when the source trace changes so the form's useState seeds
           // from the freshly derived mocks — no state-reset effect needed.
@@ -179,7 +178,7 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
           </SelectTrigger>
           <SelectContent>
             {datasets.length === 0 ? (
-              <div className="text-neutral4 text-ui-md px-2 py-4 text-center">No datasets available</div>
+              <div className="px-2 py-4 text-center text-body text-muted-foreground">No datasets available</div>
             ) : (
               datasets.map(dataset => (
                 <SelectItem key={dataset.id} value={dataset.id}>
@@ -207,7 +206,7 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
           </SelectTrigger>
           <SelectContent>
             {items.length === 0 ? (
-              <div className="text-neutral4 text-ui-md px-2 py-4 text-center">No items available</div>
+              <div className="px-2 py-4 text-center text-body text-muted-foreground">No items available</div>
             ) : (
               items.map(item => (
                 <SelectItem key={item.id} value={item.id}>
@@ -222,13 +221,13 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
       <div className="grid gap-2">
         <Label htmlFor="derived-mocks">Tool Mocks (JSON)</Label>
         <CodeEditor value={mocksJson} onChange={setMocksJson} showCopyButton={false} className="min-h-[160px]" />
-        <p className="text-neutral4 text-ui-sm">
+        <p className="text-caption text-muted-foreground">
           Seeded from the trace&apos;s tool calls. Edit or remove entries before appending.
         </p>
       </div>
 
       <div className="flex justify-end gap-2 pt-4">
-        <Button icon={<X />} type="button" variant="outline" onClick={onClose}>
+        <Button icon={<X />} type="button" onClick={onClose}>
           Cancel
         </Button>
         <Button

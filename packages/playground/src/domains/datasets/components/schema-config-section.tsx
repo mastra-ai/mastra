@@ -1,7 +1,11 @@
 'use client';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
+import { FieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
+import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JSONSchema7 } from 'json-schema';
 import { ChevronRight } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
@@ -9,7 +13,7 @@ import { useAgentSchema } from '../hooks/use-agent-schema';
 import { useScorerSchema } from '../hooks/use-scorer-schema';
 import { useWorkflowSchema } from '../hooks/use-workflow-schema';
 import { SchemaField } from './schema-settings/schema-field';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 type SourceType = 'custom' | 'agent' | 'workflow' | 'scorer';
 type ScorerTargetType = 'agent' | 'custom';
@@ -45,7 +49,9 @@ export function SchemaConfigSection({
   const [scorerTargetType, setScorerTargetType] = useState<ScorerTargetType>('agent');
 
   // Fetch workflows for workflow source selection
-  const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
+  const { data: workflows, isLoading: workflowsLoading } = useWorkflows({
+    requestContext: usePlaygroundStore().requestContext,
+  });
   const workflowOptions = workflows ? Object.entries(workflows) : [];
 
   // Fetch workflow schema when workflow selected
@@ -171,7 +177,7 @@ export function SchemaConfigSection({
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger className="text-neutral4 hover:text-neutral5 text-ui-md flex w-full items-center gap-2 py-2 font-medium">
+      <CollapsibleTrigger className={cn(quietTextHover, 'flex w-full items-center gap-2 py-2 text-subheading')}>
         <ChevronRight className="h-4 w-4" />
         Schema Configuration (Optional)
       </CollapsibleTrigger>
@@ -195,10 +201,12 @@ export function SchemaConfigSection({
 
         {/* Source selector */}
         <div className="space-y-2">
-          <label className="text-neutral4 text-ui-md font-medium">Import From</label>
+          <FieldBlock.Label name="schema-source" size="bigger">
+            Import From
+          </FieldBlock.Label>
           <div className="flex items-center gap-2">
             <Select value={sourceType} onValueChange={v => handleSourceChange(v as SourceType)} disabled={disabled}>
-              <SelectTrigger size="sm" className="w-40">
+              <SelectTrigger id="input-schema-source" size="sm" className="w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -237,7 +245,7 @@ export function SchemaConfigSection({
 
             {/* Loading indicator for workflow schema */}
             {sourceType === 'workflow' && selectedWorkflow && workflowSchemaLoading && (
-              <span className="text-neutral3 text-ui-sm">Loading schema...</span>
+              <span className="text-caption text-muted-foreground">Loading schema...</span>
             )}
 
             {/* Scorer target type picker */}
@@ -260,7 +268,7 @@ export function SchemaConfigSection({
 
           {/* Helper text for scorer */}
           {sourceType === 'scorer' && (
-            <p className="text-neutral3 text-ui-sm">
+            <p className="text-caption text-muted-foreground">
               {scorerTargetType === 'agent'
                 ? 'For calibrating agent-type scorers'
                 : 'For calibrating custom scorers (input/output as any)'}

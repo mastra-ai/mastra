@@ -14,6 +14,7 @@ const MINUTE_MS = 60_000;
 export class IdleCounterComponent extends Container {
   private timingState?: Pick<TUIState, 'lastAgentRunDurationMs' | 'lastAgentRunEndedAt' | 'lastAgentRunEndReason'>;
   private textChild: Text;
+  private thinking = false;
 
   constructor() {
     super();
@@ -29,7 +30,18 @@ export class IdleCounterComponent extends Container {
     this.update(now);
   }
 
+  /** Quiet mode shows the live "Thinking..." indicator here instead of in the chat. */
+  setThinking(thinking: boolean): void {
+    if (this.thinking === thinking) return;
+    this.thinking = thinking;
+    this.update();
+  }
+
   update(now = Date.now()): void {
+    if (this.thinking) {
+      this.textChild.setText(`  ${theme.italic(theme.fg('thinkingText', 'Thinking...'))}`);
+      return;
+    }
     const segments = this.timingState ? formatIdleStatusTimingSegments(this.timingState, now) : null;
     if (!segments) {
       this.textChild.setText('');

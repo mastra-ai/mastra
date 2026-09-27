@@ -7,6 +7,7 @@ import type { TaskItemSnapshot } from '@mastra/core/signals';
 import type { AskUserSelectionMode } from '@mastra/core/tools';
 
 import { acceptBackgroundActivity, getBackgroundActivitiesForTarget } from './background-activity.js';
+import { getBackgroundToolMetadata } from './background-tool-result.js';
 import {
   handleAgentStart,
   handleAgentEnd,
@@ -15,6 +16,7 @@ import {
   handleGoalEvaluation,
   handleMessageStart,
   handleMessageUpdate,
+  handlePackFallbackState,
   handleMessageEnd,
   handleOMObservationStart,
   handleOMObservationEnd,
@@ -36,6 +38,7 @@ import {
   handleToolApprovalRequired,
   handleToolStart,
   handleToolUpdate,
+  handleCommandExit,
   handleShellOutput,
   handleToolInputStart,
   handleToolInputDelta,
@@ -44,7 +47,6 @@ import {
   clearPendingShellOutputs,
   clearToolInputParsers,
 } from './handlers/index.js';
-import { getBackgroundToolTaskId } from './handlers/tool.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import { flushRender } from './render-scheduler.js';
 import type { TUIState } from './state.js';
@@ -65,6 +67,30 @@ function trackInteractivePrompt(
 function isMessageForCurrentThread(message: MastraDBMessage, state: TUIState): boolean {
   if (state.pendingNewThread) return !message.threadId;
   return !message.threadId || message.threadId === state.session.thread.getId();
+}
+
+const threadLifecycleGenerations = new WeakMap<TUIState, number>();
+
+export function getThreadLifecycleGeneration(state: TUIState): number {
+  return threadLifecycleGenerations.get(state) ?? 0;
+}
+
+function beginThreadLifecycle(state: TUIState, threadId: string): (() => boolean) | undefined {
+  if (threadId !== state.session.thread.getId()) return undefined;
+
+  const generation = (threadLifecycleGenerations.get(state) ?? 0) + 1;
+  threadLifecycleGenerations.set(state, generation);
+  return () => threadLifecycleGenerations.get(state) === generation && state.session.thread.getId() === threadId;
+}
+
+async function clearThreadState(state: TUIState, isCurrent: () => boolean): Promise<boolean> {
+  const updates = { tasks: [], activePlan: null, sandboxAllowedPaths: [] };
+  if (state.session.state.setIf) {
+    return state.session.state.setIf(updates, isCurrent);
+  }
+  if (!isCurrent()) return false;
+  await state.session.state.set(updates);
+  return isCurrent();
 }
 
 function applyMessageUpdate(
@@ -96,6 +122,15 @@ export async function dispatchEvent(
   ectx: EventHandlerContext,
   state: TUIState,
 ): Promise<void> {
+  if (
+    'toolCallId' in event &&
+    'threadId' in event &&
+    event.threadId &&
+    (state.pendingNewThread || event.threadId !== state.session.thread.getId())
+  ) {
+    return;
+  }
+
   switch (event.type) {
     case 'agent_start':
       clearToolInputParsers();
@@ -104,7 +139,10 @@ export async function dispatchEvent(
       // last turn's reading stays visible while idle — short single-step turns
       // would otherwise zero it before it could be read.
       state.tokensPerSec = 0;
+      state.decodeMessageId = undefined;
       state.decodeStartedAt = 0;
+      state.decodeLastDeltaAt = 0;
+      state.decodeHasReasoning = false;
       state.agentRunStartedAt = Date.now();
       state.agentRunLastStreamPartAt = state.agentRunStartedAt;
       state.lastAgentRunDurationMs = undefined;
@@ -115,8 +153,11 @@ export async function dispatchEvent(
       break;
 
     case 'agent_end':
-      // Keep tokensPerSec as the last turn's reading; only clear the in-flight
-      // decode window so a stale start can't bleed into the next turn.
+      // Keep tokensPerSec as the last turn's reading while idle.
+      state.decodeMessageId = undefined;
+      state.decodeStartedAt = 0;
+      state.decodeLastDeltaAt = 0;
+      state.decodeHasReasoning = false;
       if (state.agentRunStartedAt !== undefined) {
         const now = Date.now();
         state.lastAgentRunDurationMs = Math.max(0, now - state.agentRunStartedAt);
@@ -125,7 +166,6 @@ export async function dispatchEvent(
         state.agentRunStartedAt = undefined;
         state.agentRunLastStreamPartAt = undefined;
       }
-      state.decodeStartedAt = 0;
       ectx.updateStatusLine();
       if (event.reason === 'aborted') {
         clearPendingShellOutputs();
@@ -151,14 +191,26 @@ export async function dispatchEvent(
       const updated = applyMessageUpdate(message, event.event);
       if (!updated) break;
 
-      // Only open the decode window when an assistant message carries actual
-      // streamed text. Tool-result-only updates and user/system messages must
-      // not count toward tokens/sec.
-      if (event.event.type === 'text-delta') {
-        state.agentRunLastStreamPartAt = Date.now();
-        if (state.decodeStartedAt === 0) {
-          state.decodeStartedAt = state.agentRunLastStreamPartAt;
+      // Measure streamed generation, including thinking, but never replayed tool results.
+      // The window is bound to the assistant message, so a step whose usage never arrived
+      // cannot leave its interval open over the next step's tool execution.
+      if (
+        (event.event.type === 'text-delta' || event.event.type === 'reasoning-delta') &&
+        event.event.delta.length > 0
+      ) {
+        const now = Date.now();
+        state.agentRunLastStreamPartAt = now;
+        const isReasoning = event.event.type === 'reasoning-delta';
+        if (state.decodeMessageId !== event.id) {
+          state.decodeMessageId = event.id;
+          state.decodeStartedAt = now;
+          state.decodeHasReasoning = isReasoning;
+        } else if (isReasoning) {
+          // Thinking can start after the window opened on text; the whole window measured
+          // it, so usage_update must not subtract it as if it had never streamed.
+          state.decodeHasReasoning = true;
         }
+        state.decodeLastDeltaAt = now;
         ectx.updateStatusLine();
       }
       handleMessageUpdate(ectx, updated);
@@ -174,7 +226,7 @@ export async function dispatchEvent(
     case 'tool_start':
       state.agentRunLastStreamPartAt = Date.now();
       if (state.options.backgroundToolsEnabled) {
-        const threadId = state.session.thread.getId();
+        const threadId = event.threadId ?? state.session.thread.getId();
         if (threadId) {
           state.backgroundToolContexts.set(event.toolCallId, {
             toolName: event.toolName,
@@ -206,6 +258,10 @@ export async function dispatchEvent(
       handleShellOutput(ectx, event.toolCallId, event.output, event.stream);
       break;
 
+    case 'command_exit':
+      handleCommandExit(ectx, event.toolCallId, event.exitCode, event.success);
+      break;
+
     case 'tool_input_start':
       if (event.toolName === 'ask_user' || event.toolName === 'request_access' || event.toolName === 'submit_plan') {
         trackInteractivePrompt(ectx, event.toolName, {
@@ -220,6 +276,19 @@ export async function dispatchEvent(
     case 'tool_input_delta':
       // Display processors may transform argsTextDelta to a non-string payload.
       if (typeof event.argsTextDelta === 'string') {
+        if (event.argsTextDelta.length > 0) {
+          const now = Date.now();
+          // Arguments stream before this step's message_start, so the stamped id is what
+          // attributes them to a step. Unstamped (older server) keeps the existing window.
+          if (event.messageId !== undefined && state.decodeMessageId !== event.messageId) {
+            state.decodeMessageId = event.messageId;
+            state.decodeStartedAt = now;
+            state.decodeHasReasoning = false;
+          } else if (state.decodeStartedAt === 0) {
+            state.decodeStartedAt = now;
+          }
+          state.decodeLastDeltaAt = now;
+        }
         handleToolInputDelta(ectx, event.toolCallId, event.argsTextDelta);
       }
       break;
@@ -231,7 +300,8 @@ export async function dispatchEvent(
     case 'tool_end': {
       state.agentRunLastStreamPartAt = Date.now();
       if (state.options.backgroundToolsEnabled) {
-        const taskId = getBackgroundToolTaskId(event.result);
+        const background = getBackgroundToolMetadata(event.providerMetadata);
+        const taskId = !event.isError && background?.status === 'running' ? background.taskId : undefined;
         const context = state.backgroundToolContexts.get(event.toolCallId);
         if (taskId && context) {
           acceptBackgroundActivity(state.backgroundActivities, taskId, event.toolCallId, context);
@@ -247,7 +317,7 @@ export async function dispatchEvent(
         }
         if (!taskId) state.backgroundToolContexts.delete(event.toolCallId);
       }
-      handleToolEnd(ectx, event.toolCallId, event.result, event.isError);
+      handleToolEnd(ectx, event.toolCallId, event.result, event.isError, event.providerMetadata);
       break;
     }
 
@@ -268,28 +338,35 @@ export async function dispatchEvent(
       break;
 
     case 'thread_changed': {
+      const isCurrent = beginThreadLifecycle(state, event.threadId);
+      if (!isCurrent) break;
+
       ectx.showInfo(`Switched to thread: ${event.threadId}`);
       state.latestRequestPromptTokens = undefined;
+      state.backgroundToolContexts?.clear();
       // Clear per-thread ephemeral state first so renderExistingMessages
       // and other downstream observers see clean state.
-      await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      if (!(await clearThreadState(state, isCurrent))) break;
       state.previousPlanSnapshot = undefined;
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
         flushRender(state);
       }
       state.taskToolInsertIndex = -1;
-      await ectx.renderExistingMessages();
-      await state.controller.loadOMProgress(state.session);
+      await ectx.renderExistingMessages(isCurrent);
+      if (!isCurrent()) break;
+      await state.controller.loadOMProgress(state.session, isCurrent);
+      if (!isCurrent()) break;
       // Refresh git branch async so TUI status line reflects the current branch
       getCurrentGitBranchAsync(state.projectInfo.rootPath).then(freshBranch => {
-        if (freshBranch) {
+        if (freshBranch && isCurrent()) {
           state.projectInfo.gitBranch = freshBranch;
           ectx.updateStatusLine();
         }
       });
       // Update current thread title for status line display
       const threads = await state.session.thread.list();
+      if (!isCurrent()) break;
       const currentThread = threads.find((t: AgentControllerThread) => t.id === event.threadId);
       if (currentThread) {
         setCurrentThreadTitle(state, currentThread.title);
@@ -299,7 +376,8 @@ export async function dispatchEvent(
         state.githubPrGradientAnimator?.stop();
         // Load the objective from the durable ThreadState slot, falling back to
         // the legacy thread-metadata goal for pre-migration threads.
-        await state.goalManager.loadFromThread(state);
+        await state.goalManager.loadFromThread(state, isCurrent);
+        if (!isCurrent()) break;
         if (!state.goalManager.getGoal()) {
           state.goalManager.loadFromThreadMetadata(metadata);
         }
@@ -308,8 +386,12 @@ export async function dispatchEvent(
     }
 
     case 'thread_created': {
+      const isCurrent = beginThreadLifecycle(state, event.thread.id);
+      if (!isCurrent) break;
+
       ectx.showInfo(`Created thread: ${event.thread.id}`);
       state.latestRequestPromptTokens = undefined;
+      state.backgroundToolContexts?.clear();
       // Update current thread title for status line display
       setCurrentThreadTitle(state, event.thread.title);
       state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(
@@ -332,7 +414,7 @@ export async function dispatchEvent(
         state.editor.escapeEnabled = tState.escapeAsCancel;
       }
       // Clear per-thread ephemeral state so new threads start clean.
-      await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      if (!(await clearThreadState(state, isCurrent))) break;
       state.previousPlanSnapshot = undefined;
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
@@ -345,24 +427,25 @@ export async function dispatchEvent(
       // Token accumulation handled by AgentController display state. Keep the
       // latest step separate for context auditing; cumulative usage is billing data.
       state.latestRequestPromptTokens = event.usage.promptTokens ?? 0;
-      // usage_update fires at step-finish and carries the completion (and any
-      // reasoning) tokens generated during this step. Measure tokens/sec over the
-      // decode window only — from this step's first content delta
-      // (state.decodeStartedAt) to now — which excludes TTFT and inter-step
-      // tool/scheduling time. Smooth with an exponential moving average (α=0.3).
-      const now = Date.now();
-      const stepTokens = (event.usage.completionTokens ?? 0) + (event.usage.reasoningTokens ?? 0);
-      if (state.decodeStartedAt > 0 && stepTokens > 0) {
-        const decodeSec = (now - state.decodeStartedAt) / 1000;
-        if (decodeSec > 0) {
-          const instantaneous = stepTokens / decodeSec;
-          const alpha = 0.3;
-          const ema = state.tokensPerSec > 0 ? alpha * instantaneous + (1 - alpha) * state.tokensPerSec : instantaneous;
-          state.tokensPerSec = Math.round(ema);
-        }
+      // Provider output already includes reasoning. Measure only streamed generation,
+      // not initial waiting, tool execution, or usage delivery. Buffered bursts may spike.
+      const completionTokens = event.usage.completionTokens ?? 0;
+      const reportedReasoning = event.usage.reasoningTokens ?? 0;
+      // Thinking that never streamed has no observable duration, so measure the output
+      // we did see rather than dividing hidden tokens by a text-only window.
+      const stepTokens =
+        reportedReasoning > 0 && !state.decodeHasReasoning ? completionTokens - reportedReasoning : completionTokens;
+      const decodeSec = (state.decodeLastDeltaAt - state.decodeStartedAt) / 1000;
+      if (state.decodeStartedAt > 0 && decodeSec > 0 && stepTokens > 0) {
+        const instantaneous = stepTokens / decodeSec;
+        const alpha = 0.3;
+        const ema = state.tokensPerSec > 0 ? alpha * instantaneous + (1 - alpha) * state.tokensPerSec : instantaneous;
+        state.tokensPerSec = Math.round(ema);
       }
-      // Re-arm: the next step's decode window opens on its first content delta.
+      state.decodeMessageId = undefined;
       state.decodeStartedAt = 0;
+      state.decodeLastDeltaAt = 0;
+      state.decodeHasReasoning = false;
       ectx.updateStatusLine();
       state.ui.requestRender();
       break;
@@ -562,6 +645,10 @@ export async function dispatchEvent(
       }
       break;
     }
+
+    case 'state_changed':
+      await handlePackFallbackState(ectx, event);
+      break;
 
     case 'display_state_changed':
       // The AgentController emits this after every event with the updated display state.

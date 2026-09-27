@@ -14,16 +14,16 @@ export const ToolInformation = ({ toolDescription, toolId, toolType }: ToolInfor
   const ToolIconComponent = ToolIconMap[toolType || 'tool'];
 
   return (
-    <div className="text-neutral6 flex gap-2">
-      <Icon size="lg" className="bg-surface4 shrink-0 self-start rounded-md p-1">
+    <div className="flex gap-2 text-foreground">
+      <Icon size="lg" className="shrink-0 self-start rounded-md bg-muted p-1">
         <ToolIconComponent />
       </Icon>
 
       <div className="flex min-w-0 flex-col">
-        <Txt variant="header-md" as="h2" className="truncate font-medium">
+        <Txt variant="heading" as="h2" className="truncate">
           {toolId}
         </Txt>
-        <ClampedText variant="ui-sm" className="text-neutral3">
+        <ClampedText variant="caption" className="text-muted-foreground">
           {toolDescription}
         </ClampedText>
       </div>

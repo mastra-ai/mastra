@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { UIMessage } from '@internal/ai-sdk-v4';
 import type { ModelMessage } from '@internal/ai-sdk-v5';
 import { wrapSchemaWithNullTransform } from '@mastra/schema-compat';
@@ -113,7 +112,7 @@ import type { SignalProvider } from '../signals/signal-provider';
 import { resolveAgentSkills, mergeWorkspaceSkills } from '../skills/agent-skills-resolver';
 import type { AgentSkillsInput, AgentSkillsResolver, SkillInput } from '../skills/types';
 
-import { InMemoryStore } from '../storage';
+import { getSnapshotMemoryInfo, InMemoryStore } from '../storage';
 import type { GoalObjectiveRecord } from '../storage/domains/thread-state/base';
 import { ChunkFrom } from '../stream';
 import type { ChunkType, MastraAgentNetworkStream, MastraOnFinishCallback } from '../stream';
@@ -197,6 +196,7 @@ import type { ActiveThreadRun } from './thread-stream-runtime';
 import { TripWire } from './trip-wire';
 import type {
   AgentClaimThreadPeerOptions,
+  AgentAbortThreadOptions,
   AgentConfig,
   AgentUpdateThreadPeerOptions,
   AgentDurableOption,
@@ -223,6 +223,7 @@ import type {
   DiscoverAgentThreadPeersOptions,
   CancelQueuedAgentMessagesOptions,
   CancelQueuedAgentMessagesResult,
+  DurableAgentLike,
   AgentThreadEventListener,
   SubscribeAgentThreadEventsOptions,
   PublicStructuredOutputOptions,
@@ -487,9 +488,8 @@ function resolveMaybePromise<T, R = void>(value: T | Promise<T> | PromiseLike<T>
  * provider that returns fresh processors per call still gets the instance on
  * the ones that run.
  *
- * `mastra.addProcessor` is deliberately not used here: it early-returns on the
- * first instance registered under an id, so a second agent's processor instance
- * would never receive the instance.
+ * `mastra.addProcessor` is deliberately not used here because these processors belong
+ * to the agent's resolved chain and shouldn't be added to Mastra's processor registry.
  */
 function registerProviderProcessors(
   processors: Array<InputProcessorOrWorkflow | OutputProcessorOrWorkflow>,
@@ -1112,6 +1112,18 @@ export class Agent<
   }
 
   /**
+   * Whether `maxRetries` was explicitly configured on this agent. Durable
+   * preparation serializes this alongside `maxRetries` so the llm-execution
+   * step's retry ladder can apply the same precedence as the in-process loop:
+   * an explicitly configured agent value (including 0) beats call-time
+   * `modelSettings.maxRetries`; otherwise the call-time value wins.
+   * @internal
+   */
+  __getMaxRetriesConfigured(): boolean {
+    return this.#maxRetriesConfigured;
+  }
+
+  /**
    * Returns a closure that drains pending signals for a given run from the
    * shared `AgentThreadStreamRuntime`. Used by `prepareForDurableExecution` to
    * store the drain function on the in-process `RunRegistryEntry`.
@@ -1188,7 +1200,7 @@ export class Agent<
         ? suppliedActiveDurationMs
         : 0;
     const record: GoalObjectiveRecord = {
-      id: options.id ?? randomUUID(),
+      id: options.id ?? globalThis.crypto.randomUUID(),
       objective,
       status: 'active',
       runsUsed: 0,
@@ -1937,6 +1949,12 @@ export class Agent<
     if (isProcessorWorkflow(committedWorkflow)) {
       committedWorkflow.__processOutputStream = validProcessors.some(
         processor => isProcessorWorkflow(processor) || !!processor.processOutputStream,
+      );
+      committedWorkflow.__processOutputStep = validProcessors.some(
+        processor => isProcessorWorkflow(processor) || !!processor.processOutputStep || !!processor.processLLMResponse,
+      );
+      committedWorkflow.__processToolResult = validProcessors.some(
+        processor => isProcessorWorkflow(processor) || !!processor.processToolResult,
       );
       if (validProcessors.every(processor => !isProcessorWorkflow(processor))) {
         committedWorkflow.__executeOutputStream = async ({ inputData, ...context }) => {
@@ -3287,7 +3305,7 @@ export class Agent<
     defaultMaxRetriesConfigured: boolean,
   ): ModelFallbacks[number] {
     return {
-      id: mdl.id ?? randomUUID(),
+      id: mdl.id ?? globalThis.crypto.randomUUID(),
       model: mdl.model as DynamicArgument<MastraModelConfig>,
       maxRetries: mdl.maxRetries ?? defaultMaxRetries,
       maxRetriesConfigured: mdl.maxRetries !== undefined || defaultMaxRetriesConfigured,
@@ -3566,6 +3584,14 @@ export class Agent<
   #primitives?: MastraPrimitives;
 
   /**
+   * Returns the logger registered with the agent.
+   * @internal
+   */
+  __getLogger() {
+    return this.logger;
+  }
+
+  /**
    * Registers  logger primitives with the agent.
    * @internal
    */
@@ -3718,6 +3744,17 @@ export class Agent<
    */
   __markStoredVersionApplied() {
     this.#storedVersionApplied = true;
+  }
+
+  /**
+   * Whether this agent is a stored-version fork produced by
+   * `Mastra.resolveVersionedAgent()`. Subclasses that implement their own
+   * resume paths (e.g. DurableAgent) use this to skip re-pinning a version
+   * that the caller already resolved explicitly.
+   * @internal
+   */
+  __isStoredVersionApplied(): boolean {
+    return this.#storedVersionApplied;
   }
 
   /**
@@ -5109,7 +5146,7 @@ export class Agent<
           execute: async (inputData: SubAgentToolInput, context) => {
             const invocationActor = getInvocationActor(context);
             const startTime = Date.now();
-            const toolCallId = context?.agent?.toolCallId || randomUUID();
+            const toolCallId = context?.agent?.toolCallId || globalThis.crypto.randomUUID();
 
             // Get messages from context - available at tool execution time
             const contextMessages = (context?.agent?.messages || []) as MastraDBMessage[];
@@ -5168,7 +5205,7 @@ export class Agent<
                 maxSteps: inputData.maxSteps || undefined,
               },
               iteration: derivedIteration,
-              runId: runId || randomUUID(),
+              runId: runId || globalThis.crypto.randomUUID(),
               threadId,
               resourceId,
               parentAgentId: this.id,
@@ -5181,13 +5218,13 @@ export class Agent<
             // Generate sub-agent thread and resource IDs early (before any rejection)
             // These are needed for both successful execution and rejection cases
             const subAgentThreadId = inputData.threadId
-              ? `${inputData.threadId}-${randomUUID()}`
+              ? `${inputData.threadId}-${globalThis.crypto.randomUUID()}`
               : context?.mastra?.generateId({
                   idType: 'thread',
                   source: 'agent',
                   entityId: agentName,
                   resourceId,
-                }) || randomUUID();
+                }) || globalThis.crypto.randomUUID();
 
             const subAgentResourceId = inputData.resourceId
               ? `${inputData.resourceId}-${agentName}`
@@ -5364,7 +5401,7 @@ export class Agent<
                   await context.writer?.write({
                     type: 'text-delta',
                     payload: {
-                      id: randomUUID(),
+                      id: globalThis.crypto.randomUUID(),
                       text: `[Delegation Rejected] ${rejectionMessage}`,
                     },
                     runId,
@@ -5378,7 +5415,7 @@ export class Agent<
                   try {
                     // Create user message with the original prompt
                     const userMessage: MastraDBMessage = {
-                      id: this.#mastra?.generateId() || randomUUID(),
+                      id: this.#mastra?.generateId() || globalThis.crypto.randomUUID(),
                       role: 'user',
                       type: 'text',
                       createdAt: new Date(),
@@ -5397,7 +5434,7 @@ export class Agent<
 
                     // Create assistant message with the rejection
                     const assistantMessage: MastraDBMessage = {
-                      id: this.#mastra?.generateId() || randomUUID(),
+                      id: this.#mastra?.generateId() || globalThis.crypto.randomUUID(),
                       role: 'assistant',
                       type: 'text',
                       createdAt: new Date(new Date().getTime() + 1),
@@ -5496,7 +5533,7 @@ export class Agent<
                     primitiveType: 'agent',
                     prompt: effectivePrompt,
                     iteration: derivedIteration,
-                    runId: runId || randomUUID(),
+                    runId: runId || globalThis.crypto.randomUUID(),
                     threadId,
                     resourceId,
                     parentAgentId: this.id,
@@ -5551,7 +5588,7 @@ export class Agent<
               // observational memory finalizing a turn), the explicit save after the run
               // upserts the same row instead of inserting a duplicate prompt.
               const subAgentUserMessage: MastraDBMessage = {
-                id: this.#mastra?.generateId() || randomUUID(),
+                id: this.#mastra?.generateId() || globalThis.crypto.randomUUID(),
                 role: 'user',
                 // New runs let MessageList stamp this after it adds forwarded context.
                 // Resume runs neither add the prompt again nor include it in the
@@ -5883,7 +5920,7 @@ export class Agent<
                     duration: Date.now() - startTime,
                     success: result.finishReason !== 'error',
                     iteration: derivedIteration,
-                    runId: runId || randomUUID(),
+                    runId: runId || globalThis.crypto.randomUUID(),
                     toolCallId,
                     parentAgentId: this.id,
                     parentAgentName: this.name,
@@ -5910,7 +5947,7 @@ export class Agent<
                   // Handle feedback if provided
                   if (completeResult?.feedback) {
                     const feedbackMessage: MastraDBMessage = {
-                      id: this.#mastra?.generateId() || randomUUID(),
+                      id: this.#mastra?.generateId() || globalThis.crypto.randomUUID(),
                       role: 'assistant',
                       type: 'text',
                       createdAt: new Date(),
@@ -5983,7 +6020,7 @@ export class Agent<
                     success: false,
                     error: err instanceof Error ? err : new Error(String(err)),
                     iteration: derivedIteration,
-                    runId: runId || randomUUID(),
+                    runId: runId || globalThis.crypto.randomUUID(),
                     toolCallId,
                     parentAgentId: this.id,
                     parentAgentName: this.name,
@@ -6005,7 +6042,7 @@ export class Agent<
 
                   if (completeResult?.feedback) {
                     const feedbackMessage: MastraDBMessage = {
-                      id: this.#mastra?.generateId() || randomUUID(),
+                      id: this.#mastra?.generateId() || globalThis.crypto.randomUUID(),
                       role: 'assistant',
                       type: 'text',
                       createdAt: new Date(),
@@ -6207,7 +6244,7 @@ export class Agent<
               // resolved by the framework from persisted suspension state may select an
               // existing run; model-authored arguments never control run identity.
               const shouldResumeWorkflow = resumeData !== undefined && !!suspendedToolRunId;
-              runIdToUse = shouldResumeWorkflow ? suspendedToolRunId : randomUUID();
+              runIdToUse = shouldResumeWorkflow ? suspendedToolRunId : globalThis.crypto.randomUUID();
               this.logger.debug('Executing workflow as tool', {
                 agent: this.name,
                 workflow: workflowName,
@@ -7047,23 +7084,9 @@ export class Agent<
   }
 
   #getSnapshotMemoryInfo(existingSnapshot: WorkflowRunState | null | undefined): AgentSnapshotMemoryInfo | undefined {
-    for (const key in existingSnapshot?.context) {
-      const step = existingSnapshot?.context[key];
-      if (step && step.status === 'suspended' && step.suspendPayload?.__streamState) {
-        return step.suspendPayload?.__streamState?.messageList?.memoryInfo;
-      }
-    }
-
-    // Durable agentic-loop snapshots don't embed `__streamState` in suspend
-    // payloads; their thread/resource info lives on the serialized workflow
-    // input's message-list state instead.
-    const durableMemoryInfo = (existingSnapshot?.context as Record<string, any> | undefined)?.input?.messageListState
-      ?.memoryInfo;
-    if (durableMemoryInfo && typeof durableMemoryInfo === 'object') {
-      return durableMemoryInfo as AgentSnapshotMemoryInfo;
-    }
-
-    return undefined;
+    // Canonical extraction shared with storage adapters — see
+    // `getSnapshotMemoryInfo` in storage/domains/workflows/snapshot-memory-info.ts.
+    return getSnapshotMemoryInfo(existingSnapshot);
   }
 
   #getSnapshotAgentId(existingSnapshot: WorkflowRunState | null | undefined): string | undefined {
@@ -7108,6 +7131,14 @@ export class Agent<
           toolCallId: payload.requireToolApproval.toolCallId,
           toolName: payload.requireToolApproval.toolName,
           args: payload.requireToolApproval.args,
+          requiresApproval: true,
+        });
+      } else if (payload.type === 'approval' && payload.toolCallId) {
+        // Durable tool-call step suspending a directly approval-gated tool.
+        toolCalls.push({
+          toolCallId: payload.toolCallId,
+          toolName: payload.toolName,
+          args: payload.args,
           requiresApproval: true,
         });
       } else if (payload.toolCallSuspended || payload.toolName || payload.toolCallId) {
@@ -7607,7 +7638,7 @@ export class Agent<
         threadId: threadFromArgs?.id,
         resourceId,
       }) ||
-      randomUUID();
+      globalThis.crypto.randomUUID();
     const instructions = options.instructions || (await this.getInstructions({ requestContext }));
     const mcpServerGuidance = await this.getMcpServerGuidance({
       requestContext,
@@ -7706,7 +7737,7 @@ export class Agent<
       logger: this.logger,
       getMemory: this.getMemory.bind(this),
       getModel: this.getModel.bind(this),
-      generateMessageId: this.#mastra?.generateId?.bind(this.#mastra) || (() => randomUUID()),
+      generateMessageId: this.#mastra?.generateId?.bind(this.#mastra) || (() => globalThis.crypto.randomUUID()),
       mastra: this.#mastra,
       _agentNetworkAppend:
         '_agentNetworkAppend' in this
@@ -7778,6 +7809,12 @@ export class Agent<
       returnScorerData: options.returnScorerData,
       requireToolApproval: options.requireToolApproval,
       toolCallConcurrency: options.toolCallConcurrency,
+      // Resolved to a boolean here, at the one entry point the contract covers, rather
+      // than left undefined and defaulted deep in the loop. Anything that reaches the
+      // agentic-execution workflow without coming through a regular agent call — the
+      // durable steps, a direct `loop()` caller — therefore has to opt in by passing
+      // `true`, instead of inheriting the default by omission.
+      eagerToolExecution: options.eagerToolExecution ?? true,
       resumeContext,
       agentId: this.id,
       agentVersionId: this.toRawConfig()?.resolvedVersionId as string | undefined,
@@ -8176,7 +8213,7 @@ export class Agent<
       completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
     };
 
-    const runId = mergedOptions?.runId || this.#mastra?.generateId() || randomUUID();
+    const runId = mergedOptions?.runId || this.#mastra?.generateId() || globalThis.crypto.randomUUID();
 
     // Reserved keys from requestContext take precedence for security.
     // This allows middleware to securely set resourceId/threadId based on authenticated user,
@@ -8201,7 +8238,7 @@ export class Agent<
         modelSettings: mergedOptions?.modelSettings,
         memory: mergedOptions?.memory,
       },
-      generateId: context => this.#mastra?.generateId(context) || randomUUID(),
+      generateId: context => this.#mastra?.generateId(context) || globalThis.crypto.randomUUID(),
       maxIterations: mergedOptions?.maxSteps || 1,
       messages,
       threadId,
@@ -8277,7 +8314,7 @@ export class Agent<
         modelSettings: mergedOptions?.modelSettings,
         memory: mergedOptions?.memory,
       },
-      generateId: context => this.#mastra?.generateId(context) || randomUUID(),
+      generateId: context => this.#mastra?.generateId(context) || globalThis.crypto.randomUUID(),
       maxIterations: mergedOptions?.maxSteps || 1,
       messages: [],
       threadId,
@@ -8490,9 +8527,18 @@ export class Agent<
   /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
+  subscribeToThread<OUTPUT = TOutput>(
+    options: AgentSubscribeToThreadOptions & { withInitialHistory: true | { perPage?: number } },
+  ): Promise<AgentThreadSubscription<OUTPUT, true>>;
+  subscribeToThread<OUTPUT = TOutput>(
+    options: AgentSubscribeToThreadOptions & { withInitialHistory?: false },
+  ): Promise<AgentThreadSubscription<OUTPUT>>;
+  subscribeToThread<OUTPUT = TOutput>(
+    options: AgentSubscribeToThreadOptions,
+  ): Promise<AgentThreadSubscription<OUTPUT, boolean>>;
   async subscribeToThread<OUTPUT = TOutput>(
     options: AgentSubscribeToThreadOptions,
-  ): Promise<AgentThreadSubscription<OUTPUT>> {
+  ): Promise<AgentThreadSubscription<OUTPUT, boolean>> {
     return agentThreadStreamRuntime.subscribeToThread<OUTPUT>(this.#getThreadRuntimeAgent(), options, this.getPubSub());
   }
 
@@ -8506,6 +8552,16 @@ export class Agent<
       | AgentExecutionOptions<OUTPUT>
       | (() => AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>>);
     peer?: false | AgentClaimThreadPeerOptions;
+    /**
+     * Called when another process asks to claim this thread. Return `true` to
+     * transfer the claim to that requester when leasing is available, or release
+     * it on lease-less transports.
+     */
+    yieldOwnership?: () => boolean;
+    /** Called after this claim has been transferred or released for the requester. */
+    onOwnershipYielded?: () => void;
+    /** Called when lease renewal proves that another live owner has taken this claim. */
+    onOwnershipLost?: () => void;
   }): Promise<{ claimed: boolean; unsubscribe: () => void }> {
     return agentThreadStreamRuntime.claimThreadOwnership(
       this.#getThreadRuntimeAgent(),
@@ -8533,7 +8589,7 @@ export class Agent<
    * @experimental Agent signals are experimental and may change in a future release.
    */
   async discoverThreadPeers(options?: DiscoverAgentThreadPeersOptions): Promise<AgentThreadPeerAdvertisement[]> {
-    return agentThreadStreamRuntime.discoverThreadPeers(options, this.getPubSub());
+    return agentThreadStreamRuntime.discoverThreadPeers(options, this.getPubSub(), this.#getThreadRuntimeAgent());
   }
 
   getActiveThreadRunId(options: AgentThreadIdentityOptions): string | undefined {
@@ -8607,13 +8663,16 @@ export class Agent<
       });
     }
 
-    // resourceId is a storage column, so push it down to narrow the query;
-    // threadId lives inside the snapshot state, so filter here. The in-process
-    // resource check below stays as the correctness backstop: adapters silently
-    // skip the filter when the column is missing, and rows persisted before the
-    // column was populated carry the resource only in the snapshot. Durable
-    // agents persist their agentic loop under a separate workflow name, so
-    // query both — otherwise suspended durable runs are never discoverable.
+    // resourceId is a storage column and threadId is a best-effort JSON-path
+    // filter, so push both down to narrow the query where the adapter supports
+    // them. The in-process checks below stay as the correctness backstop:
+    // adapters silently skip filters they can't evaluate (missing column,
+    // non-JSON snapshot storage) and return a superset, and rows persisted
+    // before the resourceId column was populated carry the resource only in
+    // the snapshot. Durable agents persist their agentic loop under a separate
+    // workflow name, so query both — otherwise suspended durable runs are
+    // never discoverable. Durable wrappers from other engines (e.g. Inngest)
+    // namespace that name and advertise it on the runtime agent.
     const storagePageSize = 100;
     const isPaginated = perPage !== undefined && page !== undefined;
     const firstRequestedMatch = isPaginated ? page * perPage : 0;
@@ -8621,12 +8680,19 @@ export class Agent<
     const matchedRuns: AgentRun[] = [];
     let total = 0;
 
-    for (const workflowName of ['agentic-loop', DurableStepIds.AGENTIC_LOOP]) {
+    const runtimeLoopWorkflowName = (
+      this.#threadRuntimeAgent as Partial<Pick<DurableAgentLike, 'durableLoopWorkflowName'>> | undefined
+    )?.durableLoopWorkflowName;
+    const workflowNames = new Set(['agentic-loop', DurableStepIds.AGENTIC_LOOP]);
+    if (typeof runtimeLoopWorkflowName === 'string') workflowNames.add(runtimeLoopWorkflowName);
+
+    for (const workflowName of workflowNames) {
       for (let storagePage = 0; ; storagePage++) {
         const { runs: workflowRuns } = await workflowsStore.listWorkflowRuns({
           workflowName,
           status: 'suspended',
           resourceId,
+          threadId,
           fromDate,
           toDate,
           perPage: storagePageSize,
@@ -8681,7 +8747,12 @@ export class Agent<
     return { runs: matchedRuns, total };
   }
 
-  abortThreadStream(options: AgentThreadIdentityOptions): boolean {
+  /** @internal Allows server adapters to detect thread-wide cancellation and clear-on-abort support. */
+  get __supportsThreadSignalCancellation(): boolean {
+    return true;
+  }
+
+  abortThreadStream(options: AgentAbortThreadOptions): boolean {
     return agentThreadStreamRuntime.abortThread(options, this.getPubSub());
   }
 
@@ -9141,7 +9212,7 @@ export class Agent<
         idType: 'run',
         source: 'agent',
         entityId: this.id,
-      }) ?? randomUUID();
+      }) ?? globalThis.crypto.randomUUID();
     // The wait also reserves the thread for this runId, so concurrent stream()
     // calls on the same thread serialize instead of racing between this wait
     // and registerRun below.
@@ -9914,7 +9985,7 @@ export class Agent<
       return { accepted: continuation.accepted, runId: continuation.runId, toolCallId: options.toolCallId };
     }
 
-    let runId = this.getActiveThreadRunId({ threadId, resourceId });
+    let runId = executionOptions.runId ?? this.getActiveThreadRunId({ threadId, resourceId });
     // Tracks whether runId was recovered from storage (not the in-memory active-run
     // map). This path resumes directly because the snapshot has already been
     // discovered here, avoiding a second storage lookup in sendStreamResume().

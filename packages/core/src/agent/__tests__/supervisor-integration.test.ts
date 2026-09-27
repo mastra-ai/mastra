@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { openai } from '@ai-sdk/openai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -3935,8 +3934,8 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
       memory: new MockMemory(),
     });
 
-    const resourceId = randomUUID();
-    const threadId = randomUUID();
+    const resourceId = globalThis.crypto.randomUUID();
+    const threadId = globalThis.crypto.randomUUID();
 
     // Supervisor conversation has multiple user messages
     await supervisorAgent.generate(
@@ -4043,8 +4042,8 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
     });
 
     let supervisorCallCount = 0;
-    const resourceId = randomUUID();
-    const threadId = randomUUID();
+    const resourceId = globalThis.crypto.randomUUID();
+    const threadId = globalThis.crypto.randomUUID();
 
     const supervisorAgent = new Agent({
       id: 'supervisor-reserved-keys',

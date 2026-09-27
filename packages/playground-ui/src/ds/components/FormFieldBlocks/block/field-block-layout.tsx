@@ -1,4 +1,3 @@
-import '../../../../../new-theme.css';
 import { cn } from '@/lib/utils';
 
 export type FieldBlockLayoutProps = {
@@ -18,7 +17,7 @@ export function FieldBlockLayout({
   return (
     <div
       className={cn(
-        'new-theme relative grid gap-2 text-foreground',
+        'relative grid gap-2 text-foreground',
         {
           'horizontal-field-block grid-cols-[auto_1fr] items-baseline': layout === 'horizontal',
         },

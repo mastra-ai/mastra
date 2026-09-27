@@ -31,7 +31,7 @@ export function DisconnectChannelContent({ platform, agentId, onCancel, onClose 
       <DialogHeader>
         <DialogTitle>Are you sure?</DialogTitle>
         <DialogDescription>
-          Your agent will be removed from <span className="text-neutral6">{platform.name}</span>.
+          Your agent will be removed from <span className="text-foreground">{platform.name}</span>.
         </DialogDescription>
       </DialogHeader>
       <DialogFooter>

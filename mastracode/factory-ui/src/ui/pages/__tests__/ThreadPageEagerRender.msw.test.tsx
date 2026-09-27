@@ -13,7 +13,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
+import { findPageHeader, renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
 
 const FACTORY_ID = 'fp-1';
@@ -75,7 +75,7 @@ function stubThreadRoute(): ThreadRouteController {
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [workspaceSession] }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
@@ -137,7 +137,7 @@ describe('ThreadPage eager render', () => {
 
     // Header + composer + transcript region should render right away.
     expect(await screen.findByRole('region', { name: 'Thread composer' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Factory session' })).toBeInTheDocument();
+    expect(await findPageHeader()).toBeInTheDocument();
 
     // The only blocking window is initial message loading — the loader shows
     // "Loading messages…" and Send stays disabled while it is held.
@@ -186,7 +186,7 @@ describe('ThreadPage eager render', () => {
     const image = new File(['png'], 'diagram.png', { type: 'image/png' });
     fireEvent.drop(composerRegion.querySelector('form') ?? composerRegion, { dataTransfer: { files: [image] } });
     fireEvent.paste(textarea, { clipboardData: { files: [image] } });
-    expect(screen.queryByRole('button', { name: 'Remove image' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Remove diagram.png' })).not.toBeInTheDocument();
 
     // User types a draft while messages load.
     const user = userEvent.setup();
@@ -205,7 +205,7 @@ describe('ThreadPage eager render', () => {
 
     // Attachments now work.
     fireEvent.drop(composerRegion.querySelector('form') ?? composerRegion, { dataTransfer: { files: [image] } });
-    expect(await screen.findByRole('button', { name: 'Remove image' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Remove diagram.png' })).toBeInTheDocument();
 
     await waitForMutationsIdle(client);
   });

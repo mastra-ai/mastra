@@ -5,5 +5,5 @@ import { Agent } from '@mastra/core/agent';
 const agent = new Agent({});
 
 const llm = agent.getLLM();
-const tools = agent.getTools();
+const tools = agent.listTools();
 const instructions = agent.getInstructions();

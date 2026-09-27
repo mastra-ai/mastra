@@ -67,7 +67,7 @@ export function CommandComposer({
           onKeyDown={handleComposerKeyDown}
         />
         <ComposerActions>
-          <Txt variant="ui-sm" role="status">
+          <Txt variant="caption" role="status">
             {submitted ? `Submitted: ${submitted}` : 'Ready'}
           </Txt>
           <Button type="submit" disabled={!value.trim()}>

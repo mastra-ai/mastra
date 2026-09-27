@@ -93,13 +93,6 @@ export type CurrentUser = {
 } | null;
 
 /**
- * SSO login response
- */
-export type SSOLoginResponse = {
-  url: string;
-};
-
-/**
  * SSO callback response
  */
 export type SSOCallbackResponse = {

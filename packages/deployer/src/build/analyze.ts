@@ -386,12 +386,14 @@ export async function analyzeBundle(
     platform,
     isDev = false,
     bundlerOptions,
+    env = { 'process.env.NODE_ENV': JSON.stringify('production') },
   }: {
     outputDir: string;
     projectRoot: string;
     platform: BundlerPlatform;
     isDev?: boolean;
     bundlerOptions?: Pick<BundlerOptions, 'externals' | 'enableSourcemap' | 'dynamicPackages'> | null;
+    env?: Record<string, string>;
   },
   logger: IMastraLogger,
 ) {
@@ -436,9 +438,12 @@ export async function analyzeBundle(
       sourcemapEnabled: bundlerOptions?.enableSourcemap ?? false,
       workspaceMap,
       projectRoot,
+      env,
       shouldCheckTransitiveDependencies: true,
       analyzeCache,
       activeEntries: activeAnalyzeEntries,
+      externals: mergedExternals,
+      externalsPreset,
     });
 
     // Detect pino transports in the bundled output

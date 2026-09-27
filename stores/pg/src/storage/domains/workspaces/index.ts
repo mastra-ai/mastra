@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   WorkspacesStorage,
@@ -22,9 +23,10 @@ import type {
   ListWorkspaceVersionsInput,
   ListWorkspaceVersionsOutput,
 } from '@mastra/core/storage/domains/workspaces';
-import { parseSqlIdentifier } from '@mastra/core/utils';
+import { schemaNamePrefix } from '../../../shared/schema-name';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = [
@@ -70,7 +72,7 @@ export class WorkspacesPG extends WorkspacesStorage {
 
   static getExportDDL(schemaName?: string): string[] {
     const statements: string[] = [];
-    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const parsedSchema = schemaName ? schemaNamePrefix(schemaName) : '';
     const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
 
     for (const tableName of WorkspacesPG.MANAGED_TABLES) {
@@ -92,7 +94,7 @@ export class WorkspacesPG extends WorkspacesStorage {
   }
 
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const schemaPrefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     return WorkspacesPG.getDefaultIndexDefs(schemaPrefix);
   }
 
@@ -194,7 +196,7 @@ export class WorkspacesPG extends WorkspacesStorage {
           'draft',
           null,
           workspace.authorId ?? null,
-          workspace.metadata ? JSON.stringify(workspace.metadata) : null,
+          workspace.metadata ? toPgJson(workspace.metadata) : null,
           nowIso,
           nowIso,
           nowIso,
@@ -302,11 +304,17 @@ export class WorkspacesPG extends WorkspacesStorage {
         } = latestVersion;
 
         const newConfig = { ...latestConfig, ...configFields };
+        const normalized = (value: unknown) => {
+          const json = toPgJson(value);
+          return json === undefined ? undefined : JSON.parse(json);
+        };
         const changedFields = SNAPSHOT_FIELDS.filter(
           field =>
             field in configFields &&
-            JSON.stringify(configFields[field as keyof typeof configFields]) !==
-              JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
+            !isDeepStrictEqual(
+              normalized(configFields[field as keyof typeof configFields]),
+              normalized(latestConfig[field as keyof typeof latestConfig]),
+            ),
         );
 
         if (changedFields.length > 0) {
@@ -349,9 +357,10 @@ export class WorkspacesPG extends WorkspacesStorage {
       }
 
       if (metadata !== undefined) {
-        const mergedMetadata = { ...(existingWorkspace.metadata || {}), ...metadata };
+        const normalizedMetadata = JSON.parse(toPgJson(metadata));
+        const mergedMetadata = { ...(existingWorkspace.metadata || {}), ...normalizedMetadata };
         setClauses.push(`metadata = $${paramIndex++}`);
-        values.push(JSON.stringify(mergedMetadata));
+        values.push(toPgJson(mergedMetadata));
       }
 
       // Always update timestamps
@@ -449,7 +458,7 @@ export class WorkspacesPG extends WorkspacesStorage {
 
       if (metadata && Object.keys(metadata).length > 0) {
         conditions.push(`metadata @> $${paramIdx++}::jsonb`);
-        queryParams.push(JSON.stringify(metadata));
+        queryParams.push(toPgJson(metadata));
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -533,15 +542,15 @@ export class WorkspacesPG extends WorkspacesStorage {
           input.versionNumber,
           input.name,
           input.description ?? null,
-          input.filesystem ? JSON.stringify(input.filesystem) : null,
-          input.sandbox ? JSON.stringify(input.sandbox) : null,
-          input.mounts ? JSON.stringify(input.mounts) : null,
-          input.search ? JSON.stringify(input.search) : null,
-          input.skills ? JSON.stringify(input.skills) : null,
-          input.tools ? JSON.stringify(input.tools) : null,
+          input.filesystem ? toPgJson(input.filesystem) : null,
+          input.sandbox ? toPgJson(input.sandbox) : null,
+          input.mounts ? toPgJson(input.mounts) : null,
+          input.search ? toPgJson(input.search) : null,
+          input.skills ? toPgJson(input.skills) : null,
+          input.tools ? toPgJson(input.tools) : null,
           input.autoSync ?? false,
           input.operationTimeout ?? null,
-          input.changedFields ? JSON.stringify(input.changedFields) : null,
+          input.changedFields ? toPgJson(input.changedFields) : null,
           input.changeMessage ?? null,
           nowIso,
           nowIso,

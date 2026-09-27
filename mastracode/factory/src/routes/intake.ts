@@ -222,6 +222,8 @@ async function settleByIntegration<T>(
   return { pages, failures };
 }
 
+const MAX_INTAKE_SOURCE_ID_LENGTH = 1024;
+
 interface ParsedBinding {
   integrationId: string;
   sourceId: string;
@@ -235,7 +237,9 @@ export function parseIntakeBinding(body: unknown): ParsedBinding | null {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return null;
   const { integrationId, sourceId, factoryProjectId, board } = body as Record<string, unknown>;
   const isId = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 256;
-  if (!isId(integrationId) || !isId(sourceId)) return null;
+  const isSourceId = (value: unknown) =>
+    typeof value === 'string' && value.length > 0 && value.length <= MAX_INTAKE_SOURCE_ID_LENGTH;
+  if (!isId(integrationId) || !isSourceId(sourceId)) return null;
   if (factoryProjectId !== null && !isId(factoryProjectId)) return null;
   if (board !== undefined && board !== null && !isId(board)) return null;
   return {
@@ -273,7 +277,9 @@ function loose(c: unknown): Context {
 function sanitizeIdList(value: unknown): string[] | null | undefined {
   if (value === null) return null;
   if (!Array.isArray(value) || value.length > 200) return undefined;
-  const ids = value.filter((item): item is string => typeof item === 'string' && item.length > 0 && item.length <= 256);
+  const ids = value.filter(
+    (item): item is string => typeof item === 'string' && item.length > 0 && item.length <= MAX_INTAKE_SOURCE_ID_LENGTH,
+  );
   return ids.length === value.length && new Set(ids).size === ids.length ? ids : undefined;
 }
 

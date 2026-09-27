@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 56c9369bd7c6 — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -50,7 +50,7 @@ export const getBotUserOutputSchema = z.object({
   type: z.literal('bot'),
   bot: z.object({
     owner: z.object({
-      type: z.enum(['user', 'workspace']),
+      type: z.enum(['user', 'workspace']).or(z.string()),
       user_id: z.string().optional(),
       user_name: z.string().optional(),
       user_email: z.string().optional(),

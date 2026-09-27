@@ -58,7 +58,7 @@ function UserLandControls() {
           <div ref={provided.innerRef} {...provided.droppableProps} className="flex flex-wrap items-center gap-2">
             {controlColumns.map(column => {
               const checkbox = (
-                <label className="flex items-center gap-2">
+                <label className="flex items-center gap-2 text-caption">
                   <Checkbox
                     checked={column.visible}
                     onCheckedChange={() => toggleColumn(column.id)}
@@ -72,7 +72,7 @@ function UserLandControls() {
                 return (
                   <div
                     key={column.id}
-                    className="border-border1 bg-surface2 text-ui-sm text-neutral5 rounded-md border px-2.5 py-1.5"
+                    className="rounded-md border border-border bg-background px-2.5 py-1.5 text-caption text-foreground"
                   >
                     {checkbox}
                   </div>
@@ -86,13 +86,13 @@ function UserLandControls() {
                     <div
                       ref={dragProvided.innerRef}
                       {...dragProvided.draggableProps}
-                      className="border-border1 bg-surface2 text-ui-sm text-neutral5 flex items-center gap-2 rounded-md border px-2.5 py-1.5"
+                      className="flex items-center gap-2 rounded-md border border-border bg-background px-2.5 py-1.5 text-caption text-foreground"
                     >
                       {checkbox}
                       <button
                         type="button"
                         {...dragProvided.dragHandleProps}
-                        className="text-neutral3 focus-visible:ring-neutral5 rounded-sm outline-hidden focus-visible:ring-1"
+                        className="rounded-sm text-muted-foreground outline-hidden focus-visible:ring-1 focus-visible:ring-border-focus"
                         aria-label={`Reorder ${column.label}`}
                       >
                         <GripVertical className="size-3.5" aria-hidden="true" />
@@ -132,7 +132,7 @@ export const ClickableCurves: Story = {
         <Sankey data={data} columns={columns}>
           <SankeyChart onCurveClick={setSelection} />
         </Sankey>
-        <div className="border-border1 bg-surface2 text-ui-sm text-neutral4 rounded-md border p-3">
+        <div className="rounded-md border border-border bg-background p-3 text-caption text-muted-foreground">
           {selection
             ? `${selection.source.column.label}: ${selection.source.value} → ${selection.target.column.label}: ${selection.target.value} (${selection.records.length} records)`
             : 'Select a curve to inspect its records.'}
@@ -162,7 +162,7 @@ const signalColumns = [
 export const SignalColumnHeaders: Story = {
   render: () => (
     <div className="w-full p-8">
-      <div className="border-border1 rounded-lg border">
+      <div className="rounded-lg border border-border">
         <Sankey data={signalData} columns={signalColumns}>
           <SankeyChart height={420} margin={{ top: 64, right: 32, bottom: 24, left: 32 }} />
         </Sankey>

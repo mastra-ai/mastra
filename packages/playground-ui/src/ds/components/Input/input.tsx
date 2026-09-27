@@ -1,25 +1,25 @@
-import '../../../../new-theme.css';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
 import { controlSizeClasses } from '@/ds/primitives/control-size';
 import {
-  disabledOutlineSurfaceStyle,
-  disabledFilledSurfaceStyle,
-  inputOutlineAndFocusStyle,
+  fieldErrorRim,
   inputSurfaceAndFocusStyle,
   resolveFieldVariant,
   sharedFormElementDisabledStyle,
   unstyledFormElementStyle,
 } from '@/ds/primitives/form-element';
 import type { DeprecatedFilledVariant } from '@/ds/primitives/form-element';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 const inputVariants = cva(
   cn(
-    'new-theme flex w-full border bg-transparent text-foreground',
-    'transition-[background-color,border-color,color] duration-normal ease-out-custom motion-reduce:transition-none',
+    // A text field is a block control: it fills its field. Content-sized controls (a
+    // Select or Combobox trigger, a Button) do the opposite and let the call site grow them.
+    'flex w-full text-ellipsis text-foreground',
+    controlStateColorTransition,
     'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
     'focus:placeholder:opacity-70 motion-reduce:placeholder:transition-none',
     // type="number": hide native browser spinner arrows (they clip the pill).
@@ -36,22 +36,10 @@ const inputVariants = cva(
   {
     variants: {
       variant: {
-        default: cn(
-          inputSurfaceAndFocusStyle,
-          'rounded-full',
-          sharedFormElementDisabledStyle,
-          disabledFilledSurfaceStyle,
-        ),
-        outline: cn(
-          inputOutlineAndFocusStyle,
-          'rounded-full',
-          sharedFormElementDisabledStyle,
-          disabledOutlineSurfaceStyle,
-        ),
+        default: cn(inputSurfaceAndFocusStyle, 'rounded-full', sharedFormElementDisabledStyle),
         unstyled: unstyledFormElementStyle,
       },
       size: {
-        xs: cn(controlSizeClasses.xs, 'px-[.75em]'),
         sm: cn(controlSizeClasses.sm, 'px-[.75em]'),
         md: cn(controlSizeClasses.md, 'px-[.75em]'),
         lg: cn(controlSizeClasses.lg, 'px-[.85em]'),
@@ -79,7 +67,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         type={type}
         className={cn(
           inputVariants({ variant: resolveFieldVariant(variant), size }),
-          error && 'border-error focus-visible:border-error',
+          error && fieldErrorRim,
           className,
         )}
         data-testid={testId}

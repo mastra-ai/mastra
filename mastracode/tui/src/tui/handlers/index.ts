@@ -6,7 +6,7 @@ export {
   handleAgentError,
   handleGoalEvaluation,
 } from './agent-lifecycle.js';
-export { handleMessageStart, handleMessageUpdate, handleMessageEnd } from './message.js';
+export { handlePackFallbackState, handleMessageStart, handleMessageUpdate, handleMessageEnd } from './message.js';
 export {
   handleOMObservationStart,
   handleOMObservationEnd,
@@ -26,6 +26,7 @@ export {
   handleToolApprovalRequired,
   handleToolStart,
   handleToolUpdate,
+  handleCommandExit,
   handleShellOutput,
   handleToolInputStart,
   handleToolInputDelta,

@@ -207,7 +207,9 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
-                      "parameters": {},
+                      "parameters": {
+                        "maxRetries": 0
+                      },
                       "availableTools": ["childSpanTool"],
                       "toolChoice": "auto",
                       "usage": {
@@ -278,7 +280,7 @@
                         "traceId": "<trace-1>",
                         "name": "chunk: 'tool-result'",
                         "type": "model_chunk",
-                        "completed": false,
+                        "completed": true,
                         "isEvent": true,
                         "isRootSpan": false,
                         "parentId": "<span-4>",
@@ -434,7 +436,9 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
-                      "parameters": {},
+                      "parameters": {
+                        "maxRetries": 0
+                      },
                       "availableTools": ["childSpanTool"],
                       "toolChoice": "auto",
                       "usage": {

@@ -131,4 +131,66 @@ describe('AgentBadgeWrapper', () => {
       );
     });
   });
+
+  describe('when the fetched subagent thread has older pages', () => {
+    it('exposes a load-previous handler that fetches the older page into the badge', async () => {
+      const olderThread: ListMemoryThreadMessagesResponse = {
+        messages: [
+          {
+            id: 'sub-0',
+            role: 'assistant',
+            createdAt: new Date(1700000000000),
+            content: { format: 2, parts: [{ type: 'text', text: 'older' }] },
+          },
+        ],
+        hasMore: false,
+      };
+      const newestThread: ListMemoryThreadMessagesResponse = {
+        messages: [
+          {
+            id: 'sub-1',
+            role: 'assistant',
+            createdAt: new Date(1700000001000),
+            content: { format: 2, parts: [{ type: 'text', text: 'newest' }] },
+          },
+        ],
+        hasMore: true,
+      };
+      server.use(
+        http.get(`${BASE_URL}/api/memory/threads/thread-1/messages`, ({ request }) =>
+          HttpResponse.json(new URL(request.url).searchParams.has('filter') ? olderThread : newestThread),
+        ),
+      );
+      mockResolveToChildMessages.mockImplementation((messages: Array<{ id: string }>) =>
+        messages.map(message => ({ type: 'text', content: message.id })),
+      );
+
+      await renderWrapper({
+        agentId: 'agent-1',
+        result: { childMessages: [], subAgentThreadId: 'thread-1' },
+        toolCallId: 'tool-call-1',
+        toolName: 'subagent-tool',
+        toolApprovalMetadata: undefined,
+        isNetwork: false,
+      });
+
+      const firstProps = mockAgentBadge.mock.calls.at(-1)?.[0] as {
+        messages: unknown[];
+        onLoadPrevious?: () => void;
+      };
+      expect(firstProps.messages).toEqual([{ type: 'text', content: 'sub-1' }]);
+      expect(firstProps.onLoadPrevious).toBeTypeOf('function');
+
+      firstProps.onLoadPrevious?.();
+
+      await waitFor(() => {
+        const props = mockAgentBadge.mock.calls.at(-1)?.[0] as { messages: unknown[]; onLoadPrevious?: () => void };
+        expect(props.messages).toEqual([
+          { type: 'text', content: 'sub-0' },
+          { type: 'text', content: 'sub-1' },
+        ]);
+        expect(props.onLoadPrevious).toBeUndefined();
+      });
+    });
+  });
 });

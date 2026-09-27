@@ -1,5 +1,7 @@
 import { promisify } from 'node:util';
 
+import { resolveGithubAuthEnv } from './github-auth-env.js';
+
 export type GithubAppOwner = {
   login: string;
   type: 'User' | 'Organization';
@@ -14,7 +16,11 @@ type CachedGithubAppOwner = {
 
 const OWNER_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
-type ExecFileAsync = (file: string, args: readonly string[]) => Promise<{ stdout: string }>;
+type ExecFileAsync = (
+  file: string,
+  args: readonly string[],
+  options?: { env?: NodeJS.ProcessEnv },
+) => Promise<{ stdout: string }>;
 let execFileAsync: ExecFileAsync | undefined;
 
 const defaultRunGhApi: GithubAppOwnerCommandRunner = async args => {
@@ -23,7 +29,7 @@ const defaultRunGhApi: GithubAppOwnerCommandRunner = async args => {
     execFileAsync = promisify(execFile) as ExecFileAsync;
   }
 
-  return execFileAsync!('gh', args);
+  return execFileAsync!('gh', args, { env: await resolveGithubAuthEnv() });
 };
 
 export class GithubAppOwnerResolver {

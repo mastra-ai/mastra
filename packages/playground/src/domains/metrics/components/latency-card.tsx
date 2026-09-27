@@ -4,8 +4,8 @@ import { LatencyCardView } from '@mastra/playground-ui/domains/metrics/component
 import type { LatencyTab } from '@mastra/playground-ui/domains/metrics/components/latency-card-view';
 import { useDrilldown } from '@mastra/playground-ui/domains/metrics/hooks/use-drilldown';
 import { useLatencyMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-latency-metrics';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useNavigate } from 'react-router';
-import { useLinkComponent } from '@/lib/framework';
 
 const TAB_TO_ROOT_ENTITY: Record<LatencyTab, EntityType> = {
   agents: EntityType.AGENT,

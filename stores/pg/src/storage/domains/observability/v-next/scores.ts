@@ -25,6 +25,7 @@ import type {
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
 import type { DbClient } from '../../../client';
+import { toPgJson } from '../../../db/sanitize-json';
 import { qualifiedTable, TABLE_SCORE_EVENTS } from './ddl';
 import { applyCommonFilters, applySingleOrArrayFilter, newFilterAccumulator, whereOrEmpty } from './filters';
 import { rowToScoreRecord, scoreRecordToRow } from './helpers';
@@ -66,7 +67,7 @@ function applyScoreFilters(
     // Per-top-level-key exact equality (jsonb `=` normalizes formatting), matching in-memory semantics
     for (const [key, value] of Object.entries(filters.metadata)) {
       acc.conditions.push(`"metadata"->($${acc.next++}::text) = $${acc.next++}::jsonb`);
-      acc.params.push(key, JSON.stringify(value ?? null));
+      acc.params.push(key, toPgJson(value ?? null));
     }
   }
 }

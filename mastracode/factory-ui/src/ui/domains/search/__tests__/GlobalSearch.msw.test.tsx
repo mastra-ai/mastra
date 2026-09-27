@@ -131,20 +131,23 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
       const serveFixtures = String(params.projectRepositoryId) === FIRST_REPOSITORY_ID;
       return HttpResponse.json({ pullRequests: serveFixtures ? intakePullRequests : [], nextPage: null });
     }),
-    http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/sessions`, async ({ params, request }) => {
-      const repositoryId = String(params.projectRepositoryId);
-      state.sessionRequests[repositoryId] = (state.sessionRequests[repositoryId] ?? 0) + 1;
-      if (repositoryId === SECOND_REPOSITORY_ID && options.secondRepositoryGate) {
-        request.signal.addEventListener('abort', () => options.onSecondRepositoryAbort?.(), { once: true });
-        await options.secondRepositoryGate;
-      }
-      const failedAttempts = options.failRepositoryAttempts?.[repositoryId] ?? 1;
-      if (failRepositories.has(repositoryId) && state.sessionRequests[repositoryId] <= failedAttempts) {
-        return HttpResponse.json({ error: 'sessions unavailable' }, { status: 500 });
-      }
-      return HttpResponse.json({ sessions: sessionsByRepository[repositoryId] ?? [] });
-    }),
-    http.post(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/sessions`, async ({ request }) => {
+    http.get(
+      `${TEST_BASE_URL}/web/source-control/projects/:projectRepositoryId/sessions`,
+      async ({ params, request }) => {
+        const repositoryId = String(params.projectRepositoryId);
+        state.sessionRequests[repositoryId] = (state.sessionRequests[repositoryId] ?? 0) + 1;
+        if (repositoryId === SECOND_REPOSITORY_ID && options.secondRepositoryGate) {
+          request.signal.addEventListener('abort', () => options.onSecondRepositoryAbort?.(), { once: true });
+          await options.secondRepositoryGate;
+        }
+        const failedAttempts = options.failRepositoryAttempts?.[repositoryId] ?? 1;
+        if (failRepositories.has(repositoryId) && state.sessionRequests[repositoryId] <= failedAttempts) {
+          return HttpResponse.json({ error: 'sessions unavailable' }, { status: 500 });
+        }
+        return HttpResponse.json({ sessions: sessionsByRepository[repositoryId] ?? [] });
+      },
+    ),
+    http.post(`${TEST_BASE_URL}/web/source-control/projects/:projectRepositoryId/sessions`, async ({ request }) => {
       state.createSessionRequests += 1;
       const body = (await request.json()) as { branch?: string };
       return HttpResponse.json({
@@ -285,8 +288,8 @@ async function warmFirstRepositoryAndWorkItems(client: ReturnType<typeof createQ
 }
 
 async function openFromSidebar() {
-  const navigation = await screen.findByRole('navigation', { name: /Settings sections|Main/ }, { timeout: 5_000 });
-  const trigger = within(navigation).getByRole('button', { name: 'Search and navigate' });
+  const sidebar = await screen.findByRole('complementary', { name: 'Main sidebar' }, { timeout: 5_000 });
+  const trigger = within(sidebar).getByRole('button', { name: 'Search and navigate' });
   await userEvent.click(trigger);
   return screen.findByRole('dialog', { name: 'Global search' }, { timeout: 5_000 });
 }
@@ -314,8 +317,9 @@ describe('Global search', () => {
     renderSearchRoute();
 
     await screen.findByRole('heading', { name: 'Preferences' });
-    const navigation = await screen.findByRole('navigation', { name: /Settings sections|Main/ });
-    const trigger = within(navigation).getByRole('button', { name: 'Search and navigate' });
+    await screen.findByRole('navigation', { name: 'Settings sections' });
+    const sidebar = screen.getByRole('complementary', { name: 'Main sidebar' });
+    const trigger = within(sidebar).getByRole('button', { name: 'Search and navigate' });
     await user.click(trigger);
     await screen.findByRole('dialog', { name: 'Global search' });
 
@@ -492,6 +496,99 @@ describe('Global search', () => {
     expect(await screen.findByText(/^Board cards could not be loaded/)).toBeInTheDocument();
   });
 
+  it('searches GitLab issue and MR intake for a GitLab-linked repository without querying GitHub intake', async () => {
+    const requests = stubSearchApi();
+    let githubIntakeRequests = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/source-control-connections`, () =>
+        HttpResponse.json({
+          connections: [
+            {
+              ...factoryConnections[ACTIVE_FACTORY_ID][0],
+              integrationId: 'gitlab',
+              repositories: [
+                {
+                  ...factoryConnections[ACTIVE_FACTORY_ID][0].repositories[0],
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/issues`, () =>
+        HttpResponse.json({
+          issues: [
+            {
+              id: '43',
+              externalId: 'gitlab-issue:43',
+              identifier: 'group/repo#43',
+              title: 'Search GitLab issue',
+              url: 'https://gitlab.com/group/repo/-/issues/43',
+              state: 'opened',
+              stateType: 'unstarted',
+              priority: null,
+              assignee: null,
+              author: 'alice',
+              source: 'group/repo',
+              sourceId: 'gitlab-project:repo',
+              labels: [],
+              createdAt: '2026-07-29T12:00:00.000Z',
+              updatedAt: '2026-07-29T12:00:00.000Z',
+            },
+          ],
+          nextCursor: null,
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/projects/${FIRST_REPOSITORY_ID}/prs`, () =>
+        HttpResponse.json({
+          pullRequests: [
+            {
+              number: 44,
+              externalId: 'gitlab-mr:44',
+              title: 'Search GitLab MR',
+              url: 'https://gitlab.com/group/repo/-/merge_requests/44',
+              author: 'alice',
+              assignees: [],
+              requestedReviewers: [],
+              baseBranch: 'main',
+              headBranch: 'feature',
+              createdAt: '2026-07-29T13:00:00.000Z',
+              updatedAt: '2026-07-29T13:00:00.000Z',
+            },
+          ],
+          nextPage: null,
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/issues`, () => {
+        githubIntakeRequests += 1;
+        return HttpResponse.json({ issues: [], nextPage: null });
+      }),
+      http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/prs`, () => {
+        githubIntakeRequests += 1;
+        return HttpResponse.json({ pullRequests: [], nextPage: null });
+      }),
+    );
+    const { client } = renderSearchRoute();
+    await openFromSidebar();
+
+    expect(await screen.findByText('Search GitLab issue')).toBeInTheDocument();
+    const mr = await screen.findByText('Search GitLab MR');
+    expect(githubIntakeRequests).toBe(0);
+
+    await userEvent.click(mr);
+    await waitFor(() => expect(requests.transitions).toHaveLength(1));
+    await waitForMutationsIdle(client);
+    expect(requests.created).toEqual([
+      expect.objectContaining({
+        title: 'Search GitLab MR',
+        board: 'review',
+        stages: ['intake'],
+        externalSource: expect.objectContaining({ integrationId: 'gitlab', type: 'pull-request' }),
+      }),
+    ]);
+    expect(requests.transitions[0]).toMatchObject({ itemId: 'work-item-filed', body: { stage: 'review' } });
+  });
+
   it.each(['#900', '900', 'PR #900'])('finds the review session by GitHub identifier "%s"', async query => {
     stubSearchApi();
     const user = userEvent.setup();
@@ -598,7 +695,7 @@ describe('Global search', () => {
     await waitFor(() => expect(requests.transitions).toHaveLength(1));
     await waitForMutationsIdle(client);
     expect(requests.created).toEqual([
-      expect.objectContaining({ title: 'Harden the review board drop target', stages: ['intake'] }),
+      expect.objectContaining({ title: 'Harden the review board drop target', board: 'review', stages: ['intake'] }),
     ]);
     expect(requests.transitions[0]).toMatchObject({ itemId: 'work-item-filed', body: { stage: 'review' } });
     expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument();
@@ -626,7 +723,7 @@ describe('Global search', () => {
     const dialog = await openFromSidebar();
 
     expect(await screen.findByText('Bump the command palette dependencies')).toBeInTheDocument();
-    expect(await screen.findByText('GitHub intake could not be loaded.')).toBeInTheDocument();
+    expect(await screen.findByText('Intake could not be loaded.')).toBeInTheDocument();
     expect(within(dialog).queryByText('Harden the review board drop target')).not.toBeInTheDocument();
 
     await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
@@ -735,8 +832,8 @@ describe('Global search', () => {
     // route has stopped swapping its frame — and a trigger captured mid-swap can never take focus.
     await screen.findByRole('button', { name: 'Abort' }, { timeout: 5_000 });
 
-    const navigation = screen.getByRole('navigation', { name: 'Main' });
-    const trigger = within(navigation).getByRole('button', { name: 'Search and navigate' });
+    const sidebar = screen.getByRole('complementary', { name: 'Main sidebar' });
+    const trigger = within(sidebar).getByRole('button', { name: 'Search and navigate' });
     await user.click(trigger);
     expect(await screen.findByRole('dialog', { name: 'Global search' })).toBeInTheDocument();
 

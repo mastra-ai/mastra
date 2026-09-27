@@ -25,7 +25,7 @@ export function ToolCallArguments({
   if (!text) return null;
 
   return (
-    <ToolCallMono copyText={text} data-testid={testId} className="text-icon5">
+    <ToolCallMono copyText={text} data-testid={testId} className="text-foreground">
       {text}
     </ToolCallMono>
   );

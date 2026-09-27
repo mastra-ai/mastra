@@ -1,5 +1,6 @@
 import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen } from '@testing-library/react';
@@ -23,7 +24,6 @@ if (typeof Element !== 'undefined' && typeof Element.prototype.getAnimations !==
 }
 import { AgentBuilderSidebar } from '../agent-builder-sidebar';
 import { authDisabledCapabilities, builderSettings } from './fixtures/builder';
-import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -122,10 +122,10 @@ describe('AgentBuilderSidebar', () => {
       renderSidebar('/agent-builder/library');
 
       const libraryLink = await screen.findByRole('link', { name: /Library/i });
-      expect(libraryLink.classList.contains('bg-selected')).toBe(true);
+      expect(libraryLink.getAttribute('aria-current')).toBe('page');
 
       const agentsLink = await screen.findByRole('link', { name: /My agents/i });
-      expect(agentsLink.classList.contains('bg-selected')).toBe(false);
+      expect(agentsLink.getAttribute('aria-current')).toBe(null);
     });
   });
 
@@ -134,13 +134,13 @@ describe('AgentBuilderSidebar', () => {
       renderSidebar('/agent-builder/favorite');
 
       const favoritesLink = await screen.findByRole('link', { name: /Favorites/i });
-      expect(favoritesLink.classList.contains('bg-selected')).toBe(true);
+      expect(favoritesLink.getAttribute('aria-current')).toBe('page');
 
       const agentsLink = await screen.findByRole('link', { name: /My agents/i });
-      expect(agentsLink.classList.contains('bg-selected')).toBe(false);
+      expect(agentsLink.getAttribute('aria-current')).toBe(null);
 
       const libraryLink = await screen.findByRole('link', { name: /Library/i });
-      expect(libraryLink.classList.contains('bg-selected')).toBe(false);
+      expect(libraryLink.getAttribute('aria-current')).toBe(null);
     });
   });
 });

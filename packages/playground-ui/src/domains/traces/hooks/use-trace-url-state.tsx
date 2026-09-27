@@ -8,18 +8,22 @@ import {
   TRACE_DATE_PRESET_PARAM,
   TRACE_DATE_PRESET_VALUES,
   TRACE_DATE_TO_PARAM,
-  TRACE_PROPERTY_FILTER_FIELD_IDS,
   TRACE_LIST_MODE_PARAM,
   TRACE_LIST_MODE_VALUES,
-  TRACE_PROPERTY_FILTER_PARAM_BY_FIELD,
   TRACE_ROOT_ENTITY_TYPE_PARAM,
   TRACE_STATUS_PARAM,
   TRACE_STATUS_VALUES,
   applyTracePropertyFilterTokens,
+  getTraceFilterGroups,
   getTracePropertyFilterTokens,
 } from '../trace-filters';
-import type { EntityOptions, TraceListMode, TraceStatusFilter } from '../trace-filters';
-import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
+import type {
+  EntityOptions,
+  TraceFilterGroup,
+  TraceFilterToken,
+  TraceListMode,
+  TraceStatusFilter,
+} from '../trace-filters';
 
 const TRACE_ID_PARAM = 'traceId';
 const SPAN_ID_PARAM = 'spanId';
@@ -90,7 +94,9 @@ export interface UseTraceUrlStateResult {
   listMode: TraceListMode;
   selectedEntityOption: EntityOptions | undefined;
   selectedStatus: TraceStatusFilter | undefined;
-  filterTokens: PropertyFilterToken[];
+  filterTokens: TraceFilterToken[];
+  /** Root-level advanced (AND/OR) filter groups, read from the `filterGroup` params. */
+  filterGroups: TraceFilterGroup[];
 
   // URL-modifying handlers
   /**
@@ -118,7 +124,7 @@ export interface UseTraceUrlStateResult {
   handleHighlightSpans: (spanIds: string[]) => void;
   /** Switches the list view between traces and branches. Clears the current selection. */
   handleListModeChange: (mode: TraceListMode) => void;
-  handleFilterTokensChange: (nextTokens: PropertyFilterToken[]) => void;
+  handleFilterTokensChange: (nextTokens: TraceFilterToken[], nextGroups?: TraceFilterGroup[]) => void;
   handleDateChange: (value: Date | undefined, type: 'from' | 'to') => void;
   /** Writes both ends of a custom range in one URL update (two `handleDateChange` calls in the
    *  same tick would clobber each other through react-router's closure-bound setter). */
@@ -127,7 +133,7 @@ export interface UseTraceUrlStateResult {
   handleRemoveAll: () => void;
 
   /** Lower-level helper used by `handleClear`: writes a token set and clears the trace/span selection. */
-  applyFilterTokens: (tokens: PropertyFilterToken[]) => void;
+  applyFilterTokens: (tokens: TraceFilterToken[], groups?: TraceFilterGroup[]) => void;
 }
 
 /**
@@ -206,6 +212,7 @@ export function useTraceUrlState(
     return value && TRACE_STATUS_VALUES.has(value as TraceStatusFilter) ? (value as TraceStatusFilter) : undefined;
   }, [searchParams]);
   const filterTokens = useMemo(() => getTracePropertyFilterTokens(searchParams), [searchParams]);
+  const filterGroups = useMemo(() => getTraceFilterGroups(searchParams), [searchParams]);
 
   const handleTraceClick = useCallback(
     (traceId: string, spanId?: string, anchorSpanId?: string) => {
@@ -380,14 +387,14 @@ export function useTraceUrlState(
   );
 
   const applyFilterTokens = useCallback(
-    (tokens: PropertyFilterToken[]) => {
+    (tokens: TraceFilterToken[], groups: TraceFilterGroup[] = []) => {
       setSearchParams(
         prev => {
           const next = new URLSearchParams(prev);
           // applyTracePropertyFilterTokens wipes all filter params (including
-          // rootEntityType / status) and re-adds them in `nextTokens` order so
-          // URL insertion order == filter creation order.
-          applyTracePropertyFilterTokens(next, tokens);
+          // rootEntityType / status / filterGroup) and re-adds them in `nextTokens`
+          // order so URL insertion order == filter creation order.
+          applyTracePropertyFilterTokens(next, tokens, groups);
           clearSelectionParams(next);
           return next;
         },
@@ -497,11 +504,8 @@ export function useTraceUrlState(
       prev => {
         const next = new URLSearchParams(prev);
         next.delete(TRACE_LIST_MODE_PARAM);
-        next.delete(TRACE_ROOT_ENTITY_TYPE_PARAM);
-        next.delete(TRACE_STATUS_PARAM);
-        for (const fieldId of TRACE_PROPERTY_FILTER_FIELD_IDS) {
-          next.delete(TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[fieldId]);
-        }
+        // Wipes rootEntityType/status, every filter* param, their `.op` siblings and metadata params.
+        applyTracePropertyFilterTokens(next, []);
         clearSelectionParams(next);
         return next;
       },
@@ -528,6 +532,7 @@ export function useTraceUrlState(
     selectedEntityOption,
     selectedStatus,
     filterTokens,
+    filterGroups,
     handleTraceClick,
     handleTraceClose,
     handleSpanChange,

@@ -1,15 +1,16 @@
 import type { ListStoredAgentsParams } from '@mastra/client-js';
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { CircleSlashIcon, PlusIcon } from 'lucide-react';
+import { PlusIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import {
@@ -20,7 +21,6 @@ import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
 import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
-import { useLinkComponent } from '@/lib/framework';
 
 export default function AgentBuilderAgentsPage() {
   const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();
@@ -66,7 +66,7 @@ export default function AgentBuilderAgentsPage() {
       }
       return (
         <div className="flex items-center justify-center pt-10">
-          <ErrorState title="Failed to load agents" message={error.message} />
+          <EmptyState tone="error" titleSlot="Failed to load agents" descriptionSlot={error.message} />
         </div>
       );
     }
@@ -75,7 +75,6 @@ export default function AgentBuilderAgentsPage() {
       return (
         <div className="flex items-center-safe justify-center-safe">
           <EmptyState
-            iconSlot={<CircleSlashIcon className="text-neutral3 h-8 w-8" />}
             titleSlot="No agents yet"
             descriptionSlot="Start building your first agent with the Agent Builder."
             actionSlot={
@@ -98,34 +97,40 @@ export default function AgentBuilderAgentsPage() {
   })();
 
   return (
-    <PageLayout height="full" className="px-4 md:px-10">
-      <PageLayout.TopArea>
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
-          <PageHeader>
-            <PageHeader.Title>
-              <AgentIcon /> My agents
-            </PageHeader.Title>
-            <PageHeader.Description>Agents you've created.</PageHeader.Description>
-          </PageHeader>
-          {agents.length > 0 && canWrite && (
-            <div className="w-full shrink-0 md:w-auto">
-              <Button
-                render={<FrameworkLink href="/agent-builder/agents/create" />}
-
-                variant="primary"
-                className="w-full justify-center md:w-auto"
-                icon={<PlusIcon />}
-              >
-                New agent
-              </Button>
-            </div>
-          )}
-        </div>
-        <div className="max-w-120">
-          <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or description" />
-        </div>
-      </PageLayout.TopArea>
-
+    <PageLayout
+      actionRow={
+        <>
+          <ActionRow className="items-start">
+            <ActionRow.Start>
+              <PageHeader>
+                <PageHeader.Title>
+                  <AgentIcon /> My agents
+                </PageHeader.Title>
+                <PageHeader.Description>Agents you've created.</PageHeader.Description>
+              </PageHeader>
+            </ActionRow.Start>
+            {agents.length > 0 && canWrite && (
+              <ActionRow.End>
+                <Button
+                  render={<FrameworkLink href="/agent-builder/agents/create" />}
+                  variant="primary"
+                  icon={<PlusIcon />}
+                >
+                  New agent
+                </Button>
+              </ActionRow.End>
+            )}
+          </ActionRow>
+          <ActionRow>
+            <ActionRow.Start>
+              <div className="max-w-120 flex-1">
+                <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or description" />
+              </div>
+            </ActionRow.Start>
+          </ActionRow>
+        </>
+      }
+    >
       {body}
     </PageLayout>
   );

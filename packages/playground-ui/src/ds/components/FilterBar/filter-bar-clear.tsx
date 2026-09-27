@@ -9,7 +9,7 @@ export function FilterBarClear({ label }: { label: string }) {
   return (
     <Button
       variant="ghost"
-      size="icon-xs"
+      size="icon-sm"
       aria-label={label}
       tooltip={label}
       onClick={event => {

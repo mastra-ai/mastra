@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AssistantRenderRegistry } from '../../assistant-render-registry.js';
 import { AssistantMessageComponent } from '../../components/assistant-message.js';
 import { isChatBoundarySpacer } from '../../components/chat-boundary-spacer.js';
+import { IdleCounterComponent } from '../../components/idle-counter.js';
 import { JudgeDisplayComponent } from '../../components/judge-display.js';
 import { NotificationSummaryComponent } from '../../components/notification-summary.js';
 import { NotificationComponent } from '../../components/notification.js';
@@ -22,7 +23,7 @@ import { RenderScheduler } from '../../render-scheduler.js';
 import type { TUIState } from '../../state.js';
 import { handleGoalEvaluation } from '../agent-lifecycle.js';
 import { handleMessageEnd, handleMessageStart, handleMessageUpdate } from '../message.js';
-import { handleToolInputStart } from '../tool.js';
+import { handleToolEnd, handleToolInputStart } from '../tool.js';
 import type { EventHandlerContext } from '../types.js';
 
 function visibleChildren(state: TUIState) {
@@ -248,16 +249,14 @@ describe('handleMessageStart signals', () => {
             updates: [
               {
                 id: 'activity-1',
-                action: 'fact-created',
-                type: 'fact',
-                recordId: 'fact-1',
+                action: 'node-created',
+                type: 'node',
+                recordId: 'node-1',
                 name: 'Atlas launch',
-                targetId: 'atlas',
-                targetType: 'entity',
                 createdAt: '2026-07-15T00:00:00.000Z',
               },
             ],
-            hot: [{ type: 'entity', id: 'atlas', name: 'Atlas launch', updates: 1 }],
+            hot: [{ type: 'node', name: 'Atlas launch', updates: 1 }],
           },
         },
       } as Parameters<typeof createSignal>[0]),
@@ -645,6 +644,36 @@ describe('handleMessageUpdate assistant streaming', () => {
     } as EventHandlerContext;
   });
 
+  it('shows quiet-mode Thinking in the status line while reasoning streams, and nowhere in the chat', () => {
+    const idleCounter = new IdleCounterComponent();
+    Object.assign(state, { quietMode: true, hideThinkingBlock: true, idleCounter });
+    const status = () => stripAnsi(idleCounter.render(80).join('')).trim();
+    const chat = () => stripAnsi(state.chatContainer.render(80).join('\n'));
+
+    handleMessageStart(ctx, assistantMessage([{ type: 'reasoning', reasoning: 'planning' } as Part]));
+    expect(status()).toBe('Thinking...');
+
+    handleMessageUpdate(
+      ctx,
+      assistantMessage([{ type: 'reasoning', reasoning: 'planning' } as Part, { type: 'text', text: 'Answer' }]),
+    );
+    expect(status()).toBe('');
+
+    handleMessageUpdate(
+      ctx,
+      assistantMessage([
+        { type: 'reasoning', reasoning: 'planning' } as Part,
+        { type: 'text', text: 'Answer' },
+        { type: 'reasoning', reasoning: 'more' } as Part,
+      ]),
+    );
+    expect(status()).toBe('Thinking...');
+
+    handleMessageEnd(ctx, assistantMessage([{ type: 'text', text: 'Answer' }]));
+    expect(status()).toBe('');
+    expect(chat()).not.toContain('Thinking...');
+  });
+
   it('adds spacing as soon as assistant text starts after a user message', () => {
     addUserMessage(state, userMessage('hello'));
 
@@ -800,6 +829,28 @@ describe('handleMessageUpdate assistant streaming', () => {
     expect([...record.segments.values()].map(segment => segment.finalized)).toEqual([true, false]);
     expect(record.activeSegmentKey).toContain('tool-1');
     expect(state.streamingComponent).toBe(record.segments.get(record.activeSegmentKey!)?.component);
+  });
+
+  it.each(['aborted', 'error'])('preserves detached tool rows after %s and reconciles their result', stopReason => {
+    state.pendingAskUserComponents = new Map();
+    handleMessageUpdate(ctx, assistantMessage([{ type: 'text', text: 'partial' }]));
+    const background = new ToolExecutionComponentEnhanced('view', {}, { showImages: false }, state.ui);
+    background.setBackgroundTaskId('task-detached');
+    background.updateResult({ content: [{ type: 'text', text: 'Running in background…' }], isError: false }, true);
+    const foreground = new ToolExecutionComponentEnhanced('view', {}, { showImages: false }, state.ui);
+    state.pendingTools.set('detached', background);
+    state.pendingTools.set('foreground', foreground);
+    state.pendingTaskToolIds.add('foreground');
+
+    handleMessageEnd(ctx, terminalMessage([], { stopReason }));
+
+    expect(state.pendingTools.get('detached')).toBe(background);
+    expect(state.pendingTools.has('foreground')).toBe(false);
+    expect(state.pendingTaskToolIds.has('foreground')).toBe(false);
+    expect(stripAnsi(background.render(100).join('\n'))).not.toContain('Operation aborted');
+    handleToolEnd(ctx, 'detached', 'Detached result', false);
+    expect(state.pendingTools.has('detached')).toBe(false);
+    expect(stripAnsi(background.render(100).join('\n'))).toContain('✓ background · task-detached');
   });
 
   it.each([

@@ -1,19 +1,41 @@
-import { ListFilterIcon } from 'lucide-react';
+import { Fragment } from 'react';
 import type { ReactNode } from 'react';
+import { FilterBarAdvancedChip } from './filter-bar-advanced-chip';
 import { FilterBarChip } from './filter-bar-chip';
 import { FilterBarClear } from './filter-bar-clear';
-import { FilterBarProvider, useFilterBarContext } from './filter-bar-context';
+import { FILTER_BAR_SCOPE_ATTR, FilterBarProvider, useFilterBarContext } from './filter-bar-context';
 import { FilterBarInput } from './filter-bar-input';
-import type { FilterBarField, FilterBarItem, FilterBarOperator } from './types';
-import { inputFocusBorderWithin, inputHoverBorderWithin } from '@/ds/primitives/form-element';
+import { isFilterBarGroup } from './types';
+import type { FilterBarExpression, FilterBarField, FilterBarItem, FilterBarOperator } from './types';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
 
-export type FilterBarProps = {
+type FilterBarValueProps =
+  | {
+      /** Flat list of filters, implicitly joined with `and`. Advanced filters are never offered. */
+      value: FilterBarItem[];
+      onValueChange: (items: FilterBarItem[]) => void;
+    }
+  | {
+      /**
+       * Tree of filters and groups. Root nodes are joined with `and`; each root group renders
+       * as one "Advanced filter" chip whose popover edits the nested `and` / `or` logic.
+       */
+      value: FilterBarExpression;
+      onValueChange: (expression: FilterBarExpression) => void;
+    };
+
+export type FilterBarProps = FilterBarValueProps & {
   fields: FilterBarField[];
   operators: FilterBarOperator[];
-  value: FilterBarItem[];
-  onValueChange: (items: FilterBarItem[]) => void;
+  /**
+   * Id given to a newly added item. Defaults to a random id. Consumers that rebuild `value` from
+   * their own store (URL, query params…) should return the id they will rebuild it with, so the
+   * draft chip and the committed chip are the same element.
+   */
+  createItemId?: (fieldId: string) => string;
+  /** How deep advanced-filter groups may nest (root-level group = 1). Defaults to 3. */
+  maxDepth?: number;
   'aria-label'?: string;
   /** Accessible label of the trailing "remove every filter" button. */
   clearLabel?: string;
@@ -36,26 +58,16 @@ function FilterBarSurface({
       role="group"
       aria-label={ctx.ariaLabel}
       data-slot="filter-bar"
+      {...{ [FILTER_BAR_SCOPE_ATTR]: 'bar' }}
       className={cn(
-        // Same surface/hover/focus recipe as InputGroup (wrapper whose focus lives on the nested input).
-        // Layout: leading icon | wrapping chip list | Clear. Icon and Clear stay pinned to the
-        // first line; only the list wraps.
-        'flex w-full items-start gap-0.5 rounded-2xl border border-border1 bg-surface-overlay-soft p-0.5',
-        'cursor-text transition-all duration-normal ease-out-custom',
-        'hover:bg-surface-overlay-strong',
-        inputHoverBorderWithin,
-        'outline-hidden focus-within:bg-surface-overlay-strong focus-within:outline-hidden',
-        inputFocusBorderWithin,
+        // No chrome of its own: chips and the typeahead input sit directly on the parent surface.
+        // Layout: chips, input, then Clear right beside the input — all in one wrapping row so
+        // Clear never drifts to the far edge of a wide container.
+        'flex w-full flex-wrap items-center gap-1',
         className,
       )}
-      onClick={ctx.focusInput}
     >
-      <span className="flex shrink-0 items-center py-1 pr-1 pl-1.5">
-        <ListFilterIcon aria-hidden className="text-neutral3 size-3" />
-      </span>
-      <div data-slot="filter-bar-list" className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
-        {children}
-      </div>
+      {children}
       <span className="flex shrink-0 items-center empty:hidden">
         <FilterBarClear label={clearLabel} />
       </span>
@@ -69,6 +81,11 @@ function FilterBarSurface({
  * single typeahead input, rendered as inline editable chips. Domain-agnostic —
  * fields, operators and values are plain strings supplied by the consumer.
  *
+ * Pass a `FilterBarExpression` as `value` to enable Linear-style advanced filters:
+ * the input offers "Advanced filter…", which adds one chip whose popover hosts a
+ * recursive rule builder (`and` / `or` connectors, nested groups). The bar itself
+ * stays flat. A flat `FilterBarItem[]` stays flat.
+ *
  * @example
  * <FilterBar value={items} onValueChange={setItems} fields={fields} operators={DEFAULT_FILTER_OPERATORS}>
  *   <FilterBar.Chips />
@@ -80,6 +97,8 @@ export function FilterBar({
   operators,
   value,
   onValueChange,
+  createItemId,
+  maxDepth,
   'aria-label': ariaLabel = 'Filters',
   clearLabel = 'Clear filters',
   className,
@@ -91,6 +110,8 @@ export function FilterBar({
       operators={operators}
       value={value}
       onValueChange={onValueChange}
+      createItemId={createItemId}
+      maxDepth={maxDepth}
       ariaLabel={ariaLabel}
     >
       <FilterBarSurface className={className} clearLabel={clearLabel}>
@@ -100,18 +121,43 @@ export function FilterBar({
   );
 }
 
-/** Default layout: one editable chip per item, in order. */
-export function FilterBarChips() {
+/**
+ * Default layout: one editable chip per root item, one "Advanced filter" chip per root
+ * group, in order, then the chip of the filter being built in the bar's input (which
+ * becomes the last item's chip once committed).
+ */
+export function FilterBarChips({ renderChip = defaultRenderChip }: FilterBarChipsProps) {
   const ctx = useFilterBarContext();
-  return (
-    <>
-      {ctx.items.map(item => (
-        <FilterBarChip key={item.id} item={item} />
-      ))}
-    </>
-  );
+  // One keyed array: the draft chip and the item it becomes share a key, so React
+  // keeps the element across the commit instead of mounting a new chip.
+  const chips: ReactNode[] = [];
+  for (const node of ctx.expression.nodes) {
+    const chip = isFilterBarGroup(node) ? <FilterBarAdvancedChip group={node} /> : renderChip(node);
+    if (chip !== null) chips.push(<Fragment key={node.id}>{chip}</Fragment>);
+  }
+  if (ctx.draft && !ctx.draft.groupId) {
+    // `FilterBarChip` needs a full item; the draft's missing parts are blank until picked.
+    const { id, fieldId, operatorId = '' } = ctx.draft;
+    chips.push(
+      <Fragment key={id}>
+        <FilterBarChip draft item={{ id, fieldId, operatorId, value: '' }} />
+      </Fragment>,
+    );
+  }
+  return <>{chips}</>;
 }
+
+export type FilterBarChipsProps = {
+  /**
+   * Chip for an item; return `null` to render none (e.g. an item only held in the
+   * value for scoping). Defaults to a plain editable `FilterBar.Chip`.
+   */
+  renderChip?: (item: FilterBarItem) => ReactNode;
+};
+
+const defaultRenderChip = (item: FilterBarItem) => <FilterBarChip item={item} />;
 
 FilterBar.Chips = FilterBarChips;
 FilterBar.Chip = FilterBarChip;
+FilterBar.AdvancedChip = FilterBarAdvancedChip;
 FilterBar.Input = FilterBarInput;

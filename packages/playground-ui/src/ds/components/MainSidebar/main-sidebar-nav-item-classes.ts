@@ -1,17 +1,24 @@
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
+import { controlHeight } from '@/ds/primitives/control-size';
+import { surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
+import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
-const navItemVariants = cva('flex min-w-0 cursor-pointer items-center rounded-lg whitespace-nowrap', {
+// A nav row is a control: same rhythm as a button or a field, from the same rungs, so a
+// sidebar row and a toolbar button in the same app are never 2px apart. A nav label is a
+// label at every row height, so only the box grows — 12px reads too small for a primary
+// navigation target, and 400 weight makes the label recede below its icon.
+const navItemVariants = cva('flex min-w-0 cursor-pointer items-center rounded-lg text-label whitespace-nowrap', {
   variants: {
     size: {
-      default: 'h-8 text-ui-md',
-      sm: 'h-7 text-ui-sm',
-      lg: 'h-9 text-ui-md',
+      sm: controlHeight.sm,
+      md: controlHeight.md,
+      lg: controlHeight.lg,
     },
   },
   defaultVariants: {
-    size: 'sm',
+    size: 'md',
   },
 });
 
@@ -34,18 +41,17 @@ type ItemStyleOptions = NavRowSurfaceOptions & NavItemLayoutOptions;
 
 const nestedExpandedItemClasses = (level: number) => {
   if (level <= 0) return 'gap-2 py-1 px-3';
-  if (level === 1) return 'gap-2 py-1 pr-3 pl-8 text-ui-sm h-8';
-  if (level === 2) return 'gap-2 py-1 pr-3 pl-10 text-ui-sm h-8';
-  return 'gap-2 py-1 pr-3 pl-12 text-ui-sm h-8';
+  if (level === 1) return `gap-2 py-1 pr-3 pl-8 ${controlHeight.md}`;
+  if (level === 2) return `gap-2 py-1 pr-3 pl-10 ${controlHeight.md}`;
+  return `gap-2 py-1 pr-3 pl-12 ${controlHeight.md}`;
 };
 
-const idleSurface = cn(
-  'rounded-lg text-muted-foreground [&_svg]:text-muted-foreground/70',
-  'hover:bg-sidebar-accent hover:text-foreground [&:hover_svg]:text-foreground',
-);
+// Two neutral tones, never more: a row is either quiet (`muted-foreground`) or
+// current (`foreground`). Icons inherit that colour — lucide strokes with
+// `currentColor` — so there is nothing to restate per state.
+const idleSurface = cn('rounded-lg text-muted-foreground hover:text-foreground', surfaceStateLayerStyle);
 
-const activeSurface =
-  'bg-selected text-foreground hover:bg-selected hover:text-foreground [&_svg]:text-foreground [&:hover_svg]:text-foreground';
+const activeSurface = 'bg-fill text-foreground';
 
 const featuredSurface = cn(
   'my-2 border border-accent1/30 bg-accent1Dark text-accent1 hover:bg-accent1Darker hover:text-accent1',
@@ -59,16 +65,13 @@ export const navRowSurfaceClasses = ({ isActive, isFeatured }: NavRowSurfaceOpti
 export const navItemLayoutClasses = ({ isCollapsed, level = 0, size }: NavItemLayoutOptions) =>
   cn(
     navItemVariants({ size }),
-    'w-full justify-start transition-[padding,gap,background-color,color] duration-slow ease-out-custom motion-reduce:transition-none',
-    '[&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:transition-colors [&_svg]:duration-normal motion-reduce:[&_svg]:transition-none',
-    'focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden',
+    'w-full justify-start',
+    controlStateColorTransition,
+    '[&_svg]:size-4 [&_svg]:shrink-0',
+    focusRing.visible,
     !isCollapsed && nestedExpandedItemClasses(level),
     isCollapsed && 'gap-0 px-[13.5px] py-0',
   );
 
 export const navItemClasses = ({ isActive, isCollapsed, isFeatured, level, size }: ItemStyleOptions = {}) =>
-  cn(
-    navItemLayoutClasses({ isCollapsed, level, size }),
-    navRowSurfaceClasses({ isActive, isFeatured }),
-    isCollapsed && !isActive && '[&_svg]:text-muted-foreground',
-  );
+  cn(navItemLayoutClasses({ isCollapsed, level, size }), navRowSurfaceClasses({ isActive, isFeatured }));

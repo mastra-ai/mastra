@@ -12,20 +12,31 @@ describe('Reasoning', () => {
       render(<Reasoning text="Let me think" />);
 
       expect(screen.getByText('Let me think')).not.toBeNull();
-      expect(screen.getByRole('button', { name: /Hide reasoning/ })).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Reasoning' }).getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('starts collapsed when asked to, and opens on click', () => {
+      render(<Reasoning text="Let me think" defaultOpen={false} />);
+      const toggle = screen.getByRole('button', { name: 'Reasoning' });
+
+      expect(toggle.getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByText('Let me think')).toBeNull();
+
+      fireEvent.click(toggle);
+      expect(screen.getByText('Let me think')).not.toBeNull();
     });
 
     it('collapses and re-expands when the toggle is clicked', () => {
       render(<Reasoning text="Let me think" />);
+      const toggle = screen.getByRole('button', { name: 'Reasoning' });
 
-      fireEvent.click(screen.getByRole('button', { name: /Hide reasoning/ }));
-      expect(screen.getByRole('button', { name: /Show reasoning/ }).getAttribute('aria-expanded')).toBe('false');
+      fireEvent.click(toggle);
+      expect(toggle.getAttribute('aria-expanded')).toBe('false');
       expect(screen.queryByText('Let me think')).toBeNull();
-      expect(screen.getByRole('button', { name: /Show reasoning/ })).not.toBeNull();
 
-      fireEvent.click(screen.getByRole('button', { name: /Show reasoning/ }));
+      fireEvent.click(toggle);
+      expect(toggle.getAttribute('aria-expanded')).toBe('true');
       expect(screen.getByText('Let me think')).not.toBeNull();
-      expect(screen.getByRole('button', { name: /Hide reasoning/ }).getAttribute('aria-expanded')).toBe('true');
     });
 
     it('renders markdown links and inline code', () => {
@@ -37,12 +48,12 @@ describe('Reasoning', () => {
 
     it('keeps a collapsed passage closed when more reasoning arrives', () => {
       const { rerender } = render(<Reasoning text="First thought" streaming />);
-      fireEvent.click(screen.getByRole('button', { name: 'Hide reasoning' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Reasoning' }));
 
       rerender(<Reasoning text="First thought, then another" streaming />);
 
       expect(screen.queryByText('First thought, then another')).toBeNull();
-      fireEvent.click(screen.getByRole('button', { name: 'Show reasoning' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Reasoning' }));
       expect(screen.getByText('First thought, then another')).toBeTruthy();
     });
   });

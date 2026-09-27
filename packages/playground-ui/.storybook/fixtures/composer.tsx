@@ -77,7 +77,7 @@ export function ComposerPreview({
           <ComposerActions>
             {controls === 'mode' ? (
               <Select value={selectedMode} onValueChange={setSelectedMode} disabled={disabled}>
-                <SelectTrigger variant="ghost" size="xs" aria-label="Session mode" className="w-auto">
+                <SelectTrigger variant="ghost" size="sm" aria-label="Session mode" className="w-auto">
                   <ComposerToneLabel tone={tone} className="inline-flex items-center gap-1.5">
                     {modeOption && <modeOption.Icon size={12} aria-hidden />}
                     {modeOption?.label ?? selectedMode}
@@ -92,15 +92,15 @@ export function ComposerPreview({
                 </SelectContent>
               </Select>
             ) : (
-              <ButtonsGroup spacing="close" aria-label="Input controls">
-                <Button type="button" size="icon-md" aria-label="Attach file" disabled={disabled}>
+              <ButtonsGroup size="sm" aria-label="Input controls">
+                <Button type="button" size="icon-sm" aria-label="Attach file" disabled={disabled}>
                   <Paperclip />
                 </Button>
-                <Button type="button" size="icon-md" aria-label="Voice input" disabled={disabled}>
+                <Button type="button" size="icon-sm" aria-label="Voice input" disabled={disabled}>
                   <Mic />
                 </Button>
                 <Select defaultValue="default" disabled={disabled}>
-                  <SelectTrigger size="sm" aria-label="Model" className="w-auto">
+                  <SelectTrigger aria-label="Model" className="w-auto">
                     Default model
                   </SelectTrigger>
                   <SelectContent>
@@ -114,7 +114,6 @@ export function ComposerPreview({
               {running ? (
                 <Button
                   type="button"
-                  variant="outline"
                   size="icon-sm"
                   aria-label="Stop response"
                   onClick={() => {
@@ -125,13 +124,7 @@ export function ComposerPreview({
                   <Square />
                 </Button>
               ) : (
-                <Button
-                  type="submit"
-                  variant="outline"
-                  size="icon-sm"
-                  aria-label="Send message"
-                  disabled={disabled || !text.trim()}
-                >
+                <Button type="submit" size="icon-sm" aria-label="Send message" disabled={disabled || !text.trim()}>
                   <ArrowUp />
                 </Button>
               )}
@@ -148,7 +141,7 @@ export function ComposerModeStates() {
     <div className="mx-auto grid max-w-3xl gap-6">
       {modes.map(mode => (
         <section key={mode.id} aria-label={mode.label} className="grid gap-3">
-          <h2 className="text-ui-md text-neutral4">{mode.label}</h2>
+          <h2 className="text-ui-md text-muted-foreground">{mode.label}</h2>
           <ComposerPreview mode={mode.id} />
           <ComposerPreview mode={mode.id} busy />
         </section>

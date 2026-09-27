@@ -260,7 +260,9 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     super({
       ...options,
       name: 'E2BSandbox',
-      processes: new E2BProcessManager(),
+      processes: new E2BProcessManager({
+        defaultTimeout: options.timeout ?? 300_000,
+      }),
     });
 
     this.id = options.id ?? this.generateId();
@@ -1017,7 +1019,7 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     }
 
     try {
-      return await Sandbox.connect(preferredSandboxId, this.connectionOpts);
+      return await Sandbox.connect(preferredSandboxId, { ...this.connectionOpts, timeoutMs: this.timeout });
     } catch (e) {
       // The sandbox can terminate between getInfo and connect.
       if (this.isSandboxDeadError(e)) {
@@ -1040,7 +1042,7 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     const info = await this.lookupExistingSandboxInfo();
     if (!info) return null;
     try {
-      return await this.connectSdkSandbox(info.sandboxId, this.connectionOpts);
+      return await this.connectSdkSandbox(info.sandboxId, { ...this.connectionOpts, timeoutMs: this.timeout });
     } catch (e) {
       this.logger.debug(`${LOG_PREFIX} Error connecting to existing sandbox:`, e);
       return null;

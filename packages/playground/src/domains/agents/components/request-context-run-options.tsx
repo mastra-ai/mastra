@@ -1,18 +1,20 @@
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { RequestContextLabel } from '@mastra/playground-ui/domains/request-context/components/request-context-label';
+import { RequestContextSchemaForm } from '@mastra/playground-ui/domains/request-context/components/request-context-schema-form';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { DynamicForm } from '@mastra/playground-ui/lib/form/dynamic-form';
+import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { FileJson, FormInput } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { useOptionalAgentEditFormContext } from '../context/agent-edit-form-context';
 import { RequestContext } from './request-context';
-import { RequestContextLabel } from '@/domains/request-context/components/request-context-label';
-import { RequestContextSchemaForm } from '@/domains/request-context/components/request-context-schema-form';
 import { useSchemaRequestContext } from '@/domains/request-context/context/schema-request-context';
-import { DynamicForm } from '@/lib/form';
-import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 
 interface AgentRequestContextRunOptionsProps {
   requestContextSchema?: string;
@@ -55,7 +57,7 @@ function VariablesRequestContextForm({
   if (!zodSchema) {
     return (
       <div className="p-4">
-        <Txt variant="ui-sm" className="text-red-400">
+        <Txt variant="caption" className="text-red-400">
           Failed to parse request context schema
         </Txt>
       </div>
@@ -81,17 +83,18 @@ function VariablesRequestContextForm({
 
 function ModeSwitcher({ mode, onModeChange }: { mode: InputMode; onModeChange: (mode: InputMode) => void }) {
   return (
-    <div className="border-border1 flex items-center gap-1 rounded-md border p-0.5">
+    <div className="flex items-center gap-1 rounded-md border border-border p-0.5">
       <button
         type="button"
         aria-pressed={mode === 'form'}
         onClick={() => onModeChange('form')}
         className={cn(
-          'flex items-center gap-1.5 px-2 py-1 rounded text-ui-sm transition-colors',
-          mode === 'form' ? 'bg-surface3 text-neutral5' : 'text-neutral3 hover:text-neutral5',
+          'flex items-center gap-1.5 rounded px-2 py-1 text-caption',
+          controlStateColorTransition,
+          mode === 'form' ? 'bg-fill-hover text-foreground' : quietTextHover,
         )}
       >
-        <Icon size="sm">
+        <Icon size="xs">
           <FormInput />
         </Icon>
         Form
@@ -101,11 +104,12 @@ function ModeSwitcher({ mode, onModeChange }: { mode: InputMode; onModeChange: (
         aria-pressed={mode === 'json'}
         onClick={() => onModeChange('json')}
         className={cn(
-          'flex items-center gap-1.5 px-2 py-1 rounded text-ui-sm transition-colors',
-          mode === 'json' ? 'bg-surface3 text-neutral5' : 'text-neutral3 hover:text-neutral5',
+          'flex items-center gap-1.5 rounded px-2 py-1 text-caption',
+          controlStateColorTransition,
+          mode === 'json' ? 'bg-fill-hover text-foreground' : quietTextHover,
         )}
       >
-        <Icon size="sm">
+        <Icon size="xs">
           <FileJson />
         </Icon>
         JSON
@@ -126,6 +130,8 @@ export function AgentRequestContextRunOptionsBody({
   const hasVariables = hasSchemaProperties(variables);
   const hasSchemaForm = Boolean(requestContextSchema) || hasVariables;
 
+  const { schemaValues, setSchemaValues } = useSchemaRequestContext();
+
   return (
     <div className="space-y-4">
       {hasSchemaForm ? (
@@ -139,6 +145,8 @@ export function AgentRequestContextRunOptionsBody({
               <RequestContextSchemaForm
                 requestContextSchema={requestContextSchema}
                 labelTooltip={requestContextTooltip}
+                values={schemaValues}
+                onSave={setSchemaValues}
               />
             ) : hasVariables ? (
               <VariablesRequestContextForm variablesSchema={variables} labelTooltip={requestContextTooltip} />

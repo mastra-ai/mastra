@@ -5,11 +5,11 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
+import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { X } from 'lucide-react';
 import { useState } from 'react';
-import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 
 type ExpectedTrajectory = AddDatasetItemParams['expectedTrajectory'];
 
@@ -175,19 +175,19 @@ export function CreateDatasetFromItemsDialog({
               />
             </div>
 
-            <p className="text-muted-foreground text-ui-md">
+            <p className="text-body text-muted-foreground">
               {items.length} item{items.length !== 1 ? 's' : ''} will be copied to the new dataset
             </p>
 
             {isCreating && (
               <div className="space-y-2">
-                <div className="bg-muted h-2 w-full overflow-hidden rounded-full">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                   <div
                     className="bg-primary h-full transition-all duration-200"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
-                <p className="text-muted-foreground text-ui-md">
+                <p className="text-body text-muted-foreground">
                   Copying items: {progress} / {items.length}
                 </p>
               </div>

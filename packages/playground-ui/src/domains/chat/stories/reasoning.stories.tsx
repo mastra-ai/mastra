@@ -39,8 +39,9 @@ export const Collapsed: Story = {
   args: Reloaded.args,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: 'Hide reasoning' }));
-    await expect(canvas.getByRole('button', { name: 'Show reasoning' })).toBeVisible();
+    const toggle = canvas.getByRole('button', { name: 'Reasoning' });
+    await userEvent.click(toggle);
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await expect(canvas.queryByText(Reloaded.args.part.reasoning)).not.toBeInTheDocument();
   },
 };

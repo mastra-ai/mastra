@@ -1,66 +1,24 @@
-import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
-import { FolderIcon } from '@mastra/playground-ui/icons/FolderIcon';
-import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
-import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
-import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
-import { BrainIcon } from 'lucide-react';
+import { getSpanTypeUi } from '@mastra/playground-ui/domains/traces/components/shared';
 import type { ExperimentUISpanStyle } from '../types';
 
-export const spanTypePrefixes = ['agent', 'workflow', 'model', 'mcp', 'tool', 'workspace', 'other'];
+const styledSpanTypePrefixes = ['agent', 'workflow', 'model', 'mcp', 'tool', 'workspace'];
+
+export const spanTypePrefixes = [...styledSpanTypePrefixes, 'other'];
 
 export function getExperimentSpanTypeUi(type: string): ExperimentUISpanStyle | null {
-  const typePrefix = type?.toLowerCase().split('_')[0];
+  const typePrefix = type?.toLowerCase().split('_')[0] ?? '';
 
-  const spanTypeToUiElements: Record<string, ExperimentUISpanStyle> = {
-    agent: {
-      icon: <AgentIcon />,
-      color: 'oklch(0.75 0.15 250)',
-      label: 'Agent',
-      bgColor: 'bg-oklch(0.75 0.15 250 / 0.1)',
-      typePrefix: 'agent',
-    },
-    workflow: {
-      icon: <WorkflowIcon />,
-      color: 'oklch(0.75 0.15 200)',
-      label: 'Workflow',
-      bgColor: 'bg-oklch(0.75 0.15 200 / 0.1)',
-      typePrefix: 'workflow',
-    },
-    model: {
-      icon: <BrainIcon />,
-      color: 'oklch(0.75 0.15 320)',
-      label: 'Model',
-      bgColor: 'bg-oklch(0.75 0.15 320 / 0.1)',
-      typePrefix: 'model',
-    },
-    mcp: {
-      icon: <McpServerIcon />,
-      color: 'oklch(0.75 0.15 160)',
-      label: 'MCP',
-      bgColor: 'bg-oklch(0.75 0.15 160 / 0.1)',
-      typePrefix: 'mcp',
-    },
-    tool: {
-      icon: <ToolsIcon />,
-      color: 'oklch(0.75 0.15 100)',
-      label: 'Tool',
-      bgColor: 'bg-oklch(0.75 0.15 100 / 0.1)',
-      typePrefix: 'tool',
-    },
-    workspace: {
-      icon: <FolderIcon />,
-      color: 'oklch(0.75 0.15 40)',
-      label: 'Workspace',
-      bgColor: 'bg-oklch(0.75 0.15 40 / 0.1)',
-      typePrefix: 'workspace',
-    },
-  };
-
-  if (typePrefix in spanTypeToUiElements) {
-    return spanTypeToUiElements[typePrefix];
+  if (!styledSpanTypePrefixes.includes(typePrefix)) {
+    return { typePrefix: 'other' };
   }
 
+  const { icon, color, label } = getSpanTypeUi(typePrefix);
+
   return {
-    typePrefix: 'other',
+    icon,
+    color,
+    label,
+    bgColor: color ? `color-mix(in oklch, ${color} 10%, transparent)` : undefined,
+    typePrefix,
   };
 }

@@ -44,17 +44,14 @@ describe('DataListRoot', () => {
       expect(grid).not.toBe(container.firstElementChild);
       expect(grid?.className).not.toContain('overflow-auto');
       expect(container.firstElementChild?.className).toContain('rounded-xl');
-      expect(container.firstElementChild?.className).toContain('bg-surface4');
       expect(container.firstElementChild?.className).toContain('self-start');
       expect(container.firstElementChild?.className).toContain('max-h-full');
       expect(grid?.className).toContain('gap-y-px');
       expect(grid?.className).toContain('[&_.data-list-subheader+.data-list-row]:rounded-t-lg');
       expect(grid?.className).toContain('[&_.data-list-row:has(+.data-list-subheader)]:rounded-b-lg');
-      expect(grid?.className).not.toMatch(/border-|ring-/);
-      expect(grid?.className).not.toContain('[&_.data-list-row]:even:bg-surface-overlay-soft');
     });
 
-    it('drops the panel background in the light variant but keeps the header opaque', () => {
+    it('keeps the variant prop off the DOM node in the light variant', () => {
       const { container } = render(
         <DataList columns="1fr 1fr" variant="light">
           <Header />
@@ -62,30 +59,8 @@ describe('DataListRoot', () => {
       );
 
       const root = container.firstElementChild as HTMLElement;
-      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
-      expect(root.className).not.toContain('bg-surface4');
       expect(root.className).toContain('rounded-xl');
       expect(root.getAttribute('variant')).toBeNull();
-      expect(grid?.style.getPropertyValue('--data-list-background')).toBe('var(--surface1)');
-      expect(grid?.className).toContain('[&_.data-list-top]:bg-(--data-list-background)');
-    });
-
-    it('only defines the background color on the root; sticky parts reuse it', () => {
-      const { container } = render(
-        <DataList columns="1fr 1fr">
-          <Header />
-        </DataList>,
-      );
-
-      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
-      expect(grid?.style.getPropertyValue('--data-list-background')).toBe('var(--surface4)');
-      expect(grid?.className).toContain('[&_.data-list-top]:bg-(--data-list-background)');
-      expect(grid?.className).toContain('[&_.data-list-row>.data-list-sticky-start]:bg-surface2');
-      expect(grid?.className).not.toMatch(/hover:bg-|focus-within\]:bg-/);
-      expect(grid?.className).not.toContain('surface-header');
-      expect(grid?.className).not.toContain('surface-overlay');
-      expect(grid?.style.getPropertyValue('--data-list-border')).toBe('');
-      expect(grid?.className).not.toMatch(/border-|ring-|--data-list-border/);
     });
 
     it('forwards scrollRef to the scrolling viewport that contains the grid', () => {
@@ -287,7 +262,7 @@ describe('DataListRoot', () => {
   });
 
   describe('per-row error variant', () => {
-    it('exposes the error tone as data-variant without painting a color', () => {
+    it('exposes the error tone as data-variant', () => {
       const { container } = render(
         <DataList columns="1fr">
           <DataList.RowButton variant="error">
@@ -300,15 +275,24 @@ describe('DataListRoot', () => {
       );
       const [errorRow, defaultRow] = container.querySelectorAll<HTMLButtonElement>('.data-list-row');
       expect(errorRow.dataset.variant).toBe('error');
-      expect(errorRow.className).toContain('bg-surface2');
-      expect(errorRow.className).toContain('data-[variant=error]:bg-notice-destructive/10');
-      expect(errorRow.className).toContain('hover:bg-surface3');
-      expect(errorRow.className).toContain('active:bg-surface4');
-      expect(errorRow.className).toContain('focus-visible:ring-accent1');
       expect(defaultRow.dataset.variant).toBe('default');
     });
 
-    it('exposes featured rows as data-featured with the featured fill', () => {
+    describe('when the error row is pressed', () => {
+      it('keeps a red tint instead of the grey active fill', () => {
+        const { container } = render(
+          <DataList columns="1fr">
+            <DataList.RowButton variant="error">
+              <DataList.Cell>boom</DataList.Cell>
+            </DataList.RowButton>
+          </DataList>,
+        );
+        const row = container.querySelector<HTMLButtonElement>('.data-list-row');
+        expect(row?.className).toContain('data-[variant=error]:active:bg-notice-destructive/20');
+      });
+    });
+
+    it('exposes featured rows as data-featured', () => {
       const { container } = render(
         <DataList columns="1fr">
           <DataList.RowButton featured>
@@ -318,8 +302,6 @@ describe('DataListRoot', () => {
       );
       const row = container.querySelector<HTMLButtonElement>('.data-list-row');
       expect(row?.dataset.featured).toBe('true');
-      expect(row?.className).toContain('bg-surface2');
-      expect(row?.className).toContain('data-featured:bg-surface3');
     });
 
     it('does not leak the variant prop onto the DOM element', () => {
@@ -336,58 +318,44 @@ describe('DataListRoot', () => {
   });
 
   describe('SortableTopCell', () => {
-    it('starts with the default direction and reverses the active direction', () => {
+    it('starts ascending when unsorted and reverses the active sort, passing the column key', () => {
       const onSortChange = vi.fn();
       const { rerender } = render(
         <DataList columns="1fr">
           <DataList.Top>
-            <DataList.SortableTopCell onSortChange={onSortChange}>Name</DataList.SortableTopCell>
+            <DataList.SortableTopCell sortKey="name" onSortChange={onSortChange}>
+              Name
+            </DataList.SortableTopCell>
           </DataList.Top>
         </DataList>,
       );
 
       fireEvent.click(screen.getByRole('button', { name: /Name.*not sorted.*sort ascending/i }));
-      expect(onSortChange).toHaveBeenLastCalledWith('ascending');
+      expect(onSortChange).toHaveBeenLastCalledWith('asc', 'name');
 
       rerender(
         <DataList columns="1fr">
           <DataList.Top>
-            <DataList.SortableTopCell sortDirection="ascending" onSortChange={onSortChange}>
+            <DataList.SortableTopCell sortKey="name" sort="asc" onSortChange={onSortChange}>
               Name
             </DataList.SortableTopCell>
           </DataList.Top>
         </DataList>,
       );
       fireEvent.click(screen.getByRole('button', { name: /Name.*sorted ascending.*sort descending/i }));
-      expect(onSortChange).toHaveBeenLastCalledWith('descending');
+      expect(onSortChange).toHaveBeenLastCalledWith('desc', 'name');
 
       rerender(
         <DataList columns="1fr">
           <DataList.Top>
-            <DataList.SortableTopCell sortDirection="descending" onSortChange={onSortChange}>
+            <DataList.SortableTopCell sortKey="name" sort="desc" onSortChange={onSortChange}>
               Name
             </DataList.SortableTopCell>
           </DataList.Top>
         </DataList>,
       );
       fireEvent.click(screen.getByRole('button', { name: /Name.*sorted descending.*sort ascending/i }));
-      expect(onSortChange).toHaveBeenLastCalledWith('ascending');
-    });
-
-    it('supports descending as the first direction', () => {
-      const onSortChange = vi.fn();
-      render(
-        <DataList columns="1fr">
-          <DataList.Top>
-            <DataList.SortableTopCell defaultSortDirection="descending" onSortChange={onSortChange}>
-              Date
-            </DataList.SortableTopCell>
-          </DataList.Top>
-        </DataList>,
-      );
-
-      fireEvent.click(screen.getByRole('button', { name: /Date.*not sorted.*sort descending/i }));
-      expect(onSortChange).toHaveBeenCalledWith('descending');
+      expect(onSortChange).toHaveBeenLastCalledWith('asc', 'name');
     });
   });
 });

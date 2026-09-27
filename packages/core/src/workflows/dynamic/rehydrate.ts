@@ -5,7 +5,7 @@
  * missing — better to surface the failure at load time than at run time.
  */
 import type { Mastra } from '../../mastra';
-import { cloneWorkflow, createWorkflow } from '../create';
+import { cloneWorkflow, createEventedWorkflow, createWorkflow } from '../create';
 import { derivePredicateLabel } from '../predicate';
 import type { WorkflowScheduleConfig } from '../scheduler/types';
 import type { Step } from '../step';
@@ -57,7 +57,9 @@ export interface RehydratedWorkflow {
  * keywords. Forwarded to `jsonSchemaToZod` for every schema on the definition
  * (top-level + per-step `agent.outputSchema`). See `JsonSchemaToZodOptions`.
  */
-export type RehydrateWorkflowOptions = JsonSchemaToZodOptions;
+export type RehydrateWorkflowOptions = JsonSchemaToZodOptions & {
+  engineType?: 'default' | 'evented';
+};
 
 export async function rehydrateWorkflow(
   def: DynamicWorkflowGraph,
@@ -81,7 +83,7 @@ export async function rehydrateWorkflow(
 
   let wf;
   if (def.schedule === undefined) {
-    wf = createWorkflow(baseParams);
+    wf = opts?.engineType === 'evented' ? createEventedWorkflow(baseParams) : createWorkflow(baseParams);
   } else {
     try {
       // Presence of `schedule` promotes the workflow to the evented engine,
@@ -94,7 +96,7 @@ export async function rehydrateWorkflow(
       opts.onUnsupported?.(
         `Ignoring invalid stored schedule config: ${error instanceof Error ? error.message : String(error)}`,
       );
-      wf = createWorkflow(baseParams);
+      wf = opts.engineType === 'evented' ? createEventedWorkflow(baseParams) : createWorkflow(baseParams);
     }
   }
 
@@ -115,6 +117,7 @@ function applyGraphEntry(
   switch (entry.type) {
     case 'agent':
     case 'tool':
+    case 'classifier':
       wf.__pushStepFlowEntry(rehydrateSingleEntry(entry, mastra, schemaOpts), entry);
       return;
     case 'mapping': {
@@ -314,6 +317,23 @@ function rehydrateSingleEntry(
         );
       }
       return { type: 'tool', id: entry.id, toolId: entry.toolId, tool, options: rebuildToolOptions(entry) };
+    }
+    case 'classifier': {
+      let classifier;
+      try {
+        classifier = mastra.getClassifierById(entry.classifierId);
+      } catch {
+        throw new Error(
+          `Dynamic workflow references classifier "${entry.classifierId}" which is not registered on this Mastra instance.`,
+        );
+      }
+      return {
+        type: 'classifier',
+        id: entry.id,
+        classifierId: entry.classifierId,
+        classifier,
+        options: entry.options,
+      };
     }
     case 'step': {
       const { id } = entry.step;

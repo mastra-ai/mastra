@@ -69,14 +69,14 @@ export function ScoresCardView({ data, isLoading, isError }: ScoresCardViewProps
                 <Tab value="over-time">Over Time</Tab>
                 <Tab value="summary">Summary</Tab>
               </TabList>
-              <TabContent value="over-time" className="pb-0">
+              <TabContent value="over-time" className="pt-3 pb-0">
                 {data.overTimeData.length > 0 ? (
                   <MetricsLineChart data={data.overTimeData} series={series} yDomain={[0, 1]} />
                 ) : (
                   <MetricsCard.NoData message="No time series data yet" />
                 )}
               </TabContent>
-              <TabContent value="summary">
+              <TabContent value="summary" className="pt-3">
                 <DataList columns="auto auto auto auto auto" {...METRICS_DATA_LIST_PROPS}>
                   <DataList.Top>
                     <DataList.TopCell sticky="start">Scorer</DataList.TopCell>
@@ -87,7 +87,7 @@ export function ScoresCardView({ data, isLoading, isError }: ScoresCardViewProps
                   </DataList.Top>
                   {data.summaryData.map(row => (
                     <DataList.RowStatic key={row.scorer}>
-                      <DataList.RowHeaderCell className="text-ui-sm">{row.scorer}</DataList.RowHeaderCell>
+                      <DataList.RowHeaderCell className="text-caption">{row.scorer}</DataList.RowHeaderCell>
                       <DataList.NumberCell highlight>{row.avg.toFixed(2)}</DataList.NumberCell>
                       <DataList.NumberCell>{row.min.toFixed(2)}</DataList.NumberCell>
                       <DataList.NumberCell>{row.max.toFixed(2)}</DataList.NumberCell>

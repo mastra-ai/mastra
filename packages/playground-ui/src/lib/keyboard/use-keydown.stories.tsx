@@ -28,19 +28,19 @@ const useLog = () => {
 };
 
 const LogConsole = ({ entries, onClear }: { entries: LogEntry[]; onClear: () => void }) => (
-  <div className="border-border1 bg-surface2 text-ui-sm rounded-lg border font-mono">
-    <div className="border-border1 flex items-center justify-between border-b px-3 py-2">
-      <span className="text-neutral3">console ({entries.length})</span>
-      <button type="button" onClick={onClear} className="text-neutral3 hover:text-neutral5">
+  <div className="rounded-lg border border-border bg-background font-mono text-caption">
+    <div className="flex items-center justify-between border-b border-border px-3 py-2">
+      <span className="text-muted-foreground">console ({entries.length})</span>
+      <button type="button" onClick={onClear} className="text-muted-foreground hover:text-foreground">
         clear
       </button>
     </div>
     <ul className="max-h-64 overflow-auto p-3">
-      {entries.length === 0 && <li className="text-neutral3">Press a key…</li>}
+      {entries.length === 0 && <li className="text-muted-foreground">Press a key…</li>}
       {entries.map(entry => (
         <li key={entry.id} className="flex gap-3">
-          <span className="text-neutral3">{entry.time}</span>
-          <span className="text-neutral5">{entry.message}</span>
+          <span className="text-muted-foreground">{entry.time}</span>
+          <span className="text-foreground">{entry.message}</span>
         </li>
       ))}
     </ul>
@@ -51,7 +51,7 @@ const Keys = ({ keys }: { keys: string }) => (
   <span className="inline-flex items-center gap-1">
     {keys.split(/(\+|\s+then\s+)/).map((part, i) =>
       part === '+' || /then/.test(part) ? (
-        <span key={i} className="text-neutral3">
+        <span key={i} className="text-muted-foreground">
           {part.trim()}
         </span>
       ) : (
@@ -64,7 +64,7 @@ const Keys = ({ keys }: { keys: string }) => (
 );
 
 const Legend = ({ items }: { items: Array<[string, string]> }) => (
-  <ul className="text-ui-sm text-neutral4 flex flex-col gap-2">
+  <ul className="flex flex-col gap-2 text-caption text-muted-foreground">
     {items.map(([keys, label]) => (
       <li key={keys} className="flex items-center gap-3">
         <Keys keys={keys} />
@@ -84,7 +84,7 @@ const Layout = ({
   log: ReturnType<typeof useLog>;
 }) => (
   <div className="flex max-w-3xl flex-col gap-4">
-    <p className="text-ui-md text-neutral5">{title}</p>
+    <p className="text-body text-foreground">{title}</p>
     {children}
     <LogConsole entries={log.entries} onClear={log.clear} />
   </div>
@@ -207,13 +207,13 @@ const ScopedTargetDemo = () => {
         <div
           ref={ref}
           tabIndex={0}
-          className="border-border1 bg-surface3 text-ui-sm text-neutral4 focus:border-accent1 flex-1 rounded-lg border p-6 outline-none"
+          className="flex-1 rounded-lg border border-border bg-card p-6 text-caption text-muted-foreground outline-none focus:border-accent1"
         >
           Focus me, then press <Keys keys="g then a" /> or <Keys keys="Enter" />.
         </div>
         <div
           tabIndex={0}
-          className="border-border1 text-ui-sm text-neutral3 focus:border-accent1 flex-1 rounded-lg border border-dashed p-6 outline-none"
+          className="flex-1 rounded-lg border border-dashed border-border p-6 text-caption text-muted-foreground outline-none focus:border-accent1"
         >
           Keys pressed here are ignored.
         </div>
@@ -243,7 +243,7 @@ const TypingInFieldsDemo = () => {
     >
       <input
         placeholder="Type g, a or ? here — they are typed, not intercepted. Try mod+k."
-        className="border-border1 bg-surface3 text-ui-sm text-neutral5 focus:border-accent1 rounded-md border px-3 py-2 outline-none"
+        className="rounded-md border border-border bg-card px-3 py-2 text-caption text-foreground outline-none focus:border-accent1"
       />
     </Layout>
   );
@@ -258,7 +258,7 @@ const EnabledToggleDemo = () => {
 
   return (
     <Layout title="enabled: detaching the listener also cancels any armed sequence." log={out}>
-      <label className="text-ui-sm text-neutral4 flex items-center gap-2">
+      <label className="flex items-center gap-2 text-caption text-muted-foreground">
         <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
         listener enabled
       </label>
@@ -298,13 +298,13 @@ const ScopedOverrideDemo = () => {
             ['g then t', 'layout, or agent page when mounted'],
           ]}
         />
-        <label className="text-ui-sm text-neutral4 flex items-center gap-2">
+        <label className="flex items-center gap-2 text-caption text-muted-foreground">
           <input type="checkbox" checked={agentPageMounted} onChange={e => setAgentPageMounted(e.target.checked)} />
           mount the agent page
         </label>
         {agentPageMounted && (
           <KeyboardScope>
-            <div className="border-accent1 text-ui-sm text-neutral4 rounded-lg border border-dashed p-3">
+            <div className="rounded-lg border border-dashed border-accent1 p-3 text-caption text-muted-foreground">
               agent page mounted — <Keys keys="g then t" /> now targets the agent's traces
             </div>
             <AgentPageShortcuts log={out.log} />
@@ -326,7 +326,7 @@ const Level = ({ index, maxDepth, log }: { index: number; maxDepth: number; log:
   if (index > maxDepth) return null;
   return (
     <KeyboardScope>
-      <div className="border-border1 text-ui-sm text-neutral4 rounded-lg border p-3">
+      <div className="rounded-lg border border-border p-3 text-caption text-muted-foreground">
         scope depth {index}
         <LevelShortcuts level={`depth ${index}`} log={log} />
         <div className="mt-3">
@@ -345,7 +345,7 @@ const NestedScopesDemo = () => {
     <KeyboardShortcutsProvider>
       <LevelShortcuts level="root (depth 0)" log={out.log} />
       <Layout title="Every level binds k and g then a; the deepest mounted scope wins." log={out}>
-        <label className="text-ui-sm text-neutral4 flex items-center gap-2">
+        <label className="flex items-center gap-2 text-caption text-muted-foreground">
           mounted depth
           <input type="range" min={0} max={3} value={levels} onChange={e => setLevels(Number(e.target.value))} />
           {levels}
@@ -377,7 +377,7 @@ const TableNavigationDemo = () => {
       title="useTableKeydown: ArrowUp/Down, PageUp/Down (5), Home/End, mod+Home/End. Works before any row has focus (global)."
       log={out}
     >
-      <div ref={containerRef} className="border-border1 max-h-48 overflow-auto rounded-lg border">
+      <div ref={containerRef} className="max-h-48 overflow-auto rounded-lg border border-border">
         {rows.map((row, index) => (
           <div
             key={row}
@@ -387,8 +387,8 @@ const TableNavigationDemo = () => {
               getRowProps(index).onKeyDown(event);
               if (event.key === 'Enter') activate(index);
             }}
-            className={`text-ui-sm cursor-pointer px-3 py-1.5 outline-none ${
-              index === activeIndex ? 'bg-surface4 text-neutral5' : 'text-neutral4 hover:bg-surface3'
+            className={`cursor-pointer px-3 py-1.5 text-caption outline-none ${
+              index === activeIndex ? 'bg-fill-hover text-foreground' : 'text-muted-foreground hover:bg-fill-subtle'
             }`}
           >
             {row}

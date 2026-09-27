@@ -13,6 +13,7 @@ import { deleteIssueTool } from './tools/delete-issue.js';
 import { deleteWorklogTool } from './tools/delete-worklog.js';
 import { getCreateIssueMetadataTool } from './tools/get-create-issue-metadata.js';
 import { getEditIssueMetadataTool } from './tools/get-edit-issue-metadata.js';
+import { getFieldTool } from './tools/get-field.js';
 import { getIssueChangelogTool } from './tools/get-issue-changelog.js';
 import { getIssueTypeTool } from './tools/get-issue-type.js';
 import { getIssueTool } from './tools/get-issue.js';
@@ -54,6 +55,7 @@ export function createJiraTools(options?: ProviderToolsOptions) {
     jira_delete_worklog: deleteWorklogTool(platformProxy),
     jira_get_create_issue_metadata: getCreateIssueMetadataTool(platformProxy),
     jira_get_edit_issue_metadata: getEditIssueMetadataTool(platformProxy),
+    jira_get_field: getFieldTool(platformProxy),
     jira_get_issue_changelog: getIssueChangelogTool(platformProxy),
     jira_get_issue_type: getIssueTypeTool(platformProxy),
     jira_get_issue: getIssueTool(platformProxy),

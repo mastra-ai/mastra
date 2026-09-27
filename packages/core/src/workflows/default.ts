@@ -31,7 +31,7 @@ import { executeSleep as executeSleepHandler, executeSleepUntil as executeSleepU
 import type { ExecuteStepParams } from './handlers/step';
 import { executeStep as executeStepHandler } from './handlers/step';
 import type { ConditionFunction, ConditionFunctionParams, Step } from './step';
-import { createMappingStep, createStepFromAgent, createStepFromTool } from './step-factories';
+import { createMappingStep, createStepFromAgent, createStepFromClassifier, createStepFromTool } from './step-factories';
 import type {
   FormattedWorkflowResult,
   DefaultEngineType,
@@ -52,7 +52,7 @@ import type {
 } from './types';
 // Used by the per-type execute methods (executeAgent/executeTool/executeMapping)
 // to build a runnable step from a declarative entry.
-import { abortableSleep, getSingleStepEntryId, omitPriorCompletionFields } from './utils';
+import { abortableSleep, getRestartStartIndex, getSingleStepEntryId, omitPriorCompletionFields } from './utils';
 
 // Re-export ExecutionContext for backwards compatibility
 export type { ExecutionContext } from './types';
@@ -63,6 +63,9 @@ export type ExecuteAgentParams = Omit<ExecuteStepParams, 'step'> & {
   entry: Extract<SingleStepEntry, { type: 'agent' }>;
 };
 export type ExecuteToolParams = Omit<ExecuteStepParams, 'step'> & { entry: Extract<SingleStepEntry, { type: 'tool' }> };
+export type ExecuteClassifierParams = Omit<ExecuteStepParams, 'step'> & {
+  entry: Extract<SingleStepEntry, { type: 'classifier' }>;
+};
 export type ExecuteMappingParams = Omit<ExecuteStepParams, 'step'> & {
   entry: Extract<SingleStepEntry, { type: 'mapping' }>;
 };
@@ -218,6 +221,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     operationId: string;
     skipEmits?: boolean;
   }): Promise<number> {
+    // Nothing to publish, so avoid spending a durable operation on a bare timestamp.
+    if (params.skipEmits) {
+      return Date.now();
+    }
     return this.wrapDurableOperation(params.operationId, async () => {
       const startedAt = Date.now();
       if (!params.skipEmits) {
@@ -791,12 +798,19 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     let startIdx = 0;
+    let entryRestart = restart;
     if (timeTravel) {
       startIdx = timeTravel.executionPath[0]!;
       timeTravel.executionPath.shift();
     } else if (restart) {
-      startIdx = restart.activePaths[0]!;
-      restart.activePaths.shift();
+      startIdx = getRestartStartIndex(steps, restart);
+      if (startIdx === restart.activePaths[0]) {
+        restart.activePaths.shift();
+      } else {
+        // The checkpoint's entry had already finished and nothing is in flight,
+        // so the remaining entries run as a normal run rather than a recovery.
+        entryRestart = undefined;
+      }
     } else if (resume?.resumePath) {
       startIdx = resume.resumePath[0]!;
       resume.resumePath.shift();
@@ -902,7 +916,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         stepResults,
         resume,
         timeTravel,
-        restart,
+        restart: entryRestart,
         ...createObservabilityContext({ currentSpan: workflowSpan }),
         abortController: params.abortController,
         pubsub: params.pubsub,
@@ -1070,6 +1084,38 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       }
     }
 
+    if (lastOutput === undefined) {
+      // Restarted from a checkpoint written after the final entry finished, so
+      // nothing was left to run. Complete the run with that entry's saved output,
+      // shaped the way the entry returns it: parallel and conditional keep only the
+      // branches that succeeded, like executeParallel and executeConditional.
+      const lastIdx = steps.length - 1;
+      const lastEntry = steps[lastIdx]!;
+      const output =
+        lastEntry.type === 'parallel' || lastEntry.type === 'conditional'
+          ? Object.fromEntries(
+              lastEntry.steps
+                .map(getSingleStepEntryId)
+                .filter(id => stepResults[id]?.status === 'success')
+                .map(id => [id, stepResults[id].output]),
+            )
+          : this.getStepOutput(stepResults, lastEntry);
+      lastOutput = { result: { status: 'success', output }, stepResults };
+      lastExecutionContext = {
+        workflowId,
+        runId,
+        executionPath: [lastIdx],
+        stepExecutionPath,
+        activeStepsPath: {},
+        suspendedPaths: {},
+        resumeLabels: {},
+        retryConfig: { attempts, delay },
+        format: params.format,
+        state: lastState,
+        tracingIds: params.tracingIds,
+      };
+    }
+
     // after all steps are successful, return result
     const result = (await this.fmtReturnValue(
       params.pubsub,
@@ -1134,7 +1180,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       return stepResults.input;
     } else if (step.type === 'step') {
       return stepResults[step.step.id]?.output;
-    } else if (step.type === 'agent' || step.type === 'tool' || step.type === 'mapping') {
+    } else if (step.type === 'agent' || step.type === 'tool' || step.type === 'classifier' || step.type === 'mapping') {
       return stepResults[step.id]?.output;
     } else if (step.type === 'sleep' || step.type === 'sleepUntil') {
       return stepResults[step.id]?.output;
@@ -1196,6 +1242,32 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       );
     }
     return this.executeStep({ ...rest, step: { ...createStepFromTool(tool as any, entry.options), id: entry.id } });
+  }
+
+  async executeClassifier(params: ExecuteClassifierParams): Promise<StepExecutionResult> {
+    const { entry, ...rest } = params;
+    let classifier = entry.classifier;
+    if (!classifier) {
+      try {
+        classifier = this.mastra?.getClassifierById(entry.classifierId);
+      } catch {
+        throw new Error(
+          `Classifier '${entry.classifierId}' not found for workflow step '${entry.id}'. Register it with Mastra or pass the classifier instance directly.`,
+        );
+      }
+    }
+    if (!classifier) {
+      throw new Error(
+        `Classifier '${entry.classifierId}' not found for workflow step '${entry.id}'. Register it with Mastra or pass the classifier instance directly.`,
+      );
+    }
+    return this.executeStep({
+      ...rest,
+      step: createStepFromClassifier(classifier as any, {
+        ...entry.options,
+        id: entry.id,
+      }),
+    });
   }
 
   /**

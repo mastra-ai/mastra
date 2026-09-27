@@ -29,9 +29,8 @@ export interface SpanPayloadSectionProps {
 
 function ViewToggle({ view, onChange }: { view: SpanPayloadView; onChange: (view: SpanPayloadView) => void }) {
   return (
-    <ButtonsGroup spacing="close" aria-label="Payload view" data-slot="span-payload-view-toggle">
+    <ButtonsGroup size="sm" aria-label="Payload view" data-slot="span-payload-view-toggle">
       <Button
-        size="sm"
         variant={view === 'rich' ? 'primary' : 'default'}
         aria-pressed={view === 'rich'}
         onClick={() => onChange('rich')}
@@ -39,7 +38,6 @@ function ViewToggle({ view, onChange }: { view: SpanPayloadView; onChange: (view
         Preview
       </Button>
       <Button
-        size="sm"
         variant={view === 'raw' ? 'primary' : 'default'}
         aria-pressed={view === 'raw'}
         onClick={() => onChange('raw')}
@@ -77,7 +75,7 @@ export function SpanPayloadSection({
       className={cn('flex flex-col gap-2', className)}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <DataPanelSectionHeading icon={icon} className={layout === 'details' ? 'text-ui-xs' : undefined}>
+        <DataPanelSectionHeading icon={icon} className={layout === 'details' ? 'text-meta' : undefined}>
           {title}
         </DataPanelSectionHeading>
         <div className="ml-auto flex items-center gap-2">

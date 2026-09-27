@@ -1,9 +1,22 @@
+import { getCurrentGitBranchAsync } from '@mastra/code-sdk/utils/project';
 import type { TaskItemSnapshot } from '@mastra/core/signals';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { dispatchEvent } from './event-dispatch.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import type { TUIState } from './state.js';
+
+vi.mock('@mastra/code-sdk/utils/project', () => ({
+  getCurrentGitBranchAsync: vi.fn().mockResolvedValue(undefined),
+}));
+
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>(res => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
 
 function createMockAgentController(initialState: Record<string, unknown> = {}, previousTasks: TaskItemSnapshot[] = []) {
   let state = { ...initialState };
@@ -51,6 +64,7 @@ function createMockTUIState(controller: ReturnType<typeof createMockAgentControl
     goalManager: {
       getGoal: vi.fn(),
       saveToThread: vi.fn().mockResolvedValue(undefined),
+      loadFromThread: vi.fn().mockResolvedValue(undefined),
       loadFromThreadMetadata: vi.fn(),
       consumePersistOnNextThreadCreate: vi.fn(() => false),
     },
@@ -77,6 +91,7 @@ describe('dispatchEvent thread lifecycle', () => {
   let ectx: EventHandlerContext;
 
   beforeEach(() => {
+    vi.mocked(getCurrentGitBranchAsync).mockReset().mockResolvedValue(undefined);
     controller = createMockAgentController({
       tasks: [{ content: 'Old task', status: 'in_progress', activeForm: 'Working' }],
       activePlan: { title: 'Old plan', plan: '# Plan', approvedAt: '2026-01-01' },
@@ -85,6 +100,109 @@ describe('dispatchEvent thread lifecycle', () => {
     });
     state = createMockTUIState(controller);
     ectx = createMockEctx();
+  });
+
+  it.each(['thread_changed', 'thread_created'] as const)('clears tool contexts on %s', async type => {
+    state.backgroundToolContexts = new Map([
+      ['old-tool', { toolName: 'view', threadId: 'old-thread', resourceId: 'resource', createdAt: 0 }],
+    ]);
+    const event =
+      type === 'thread_changed'
+        ? { type, threadId: 'current-thread', previousThreadId: 'old-thread' }
+        : {
+            type,
+            thread: { id: 'current-thread', resourceId: 'resource', createdAt: new Date(), updatedAt: new Date() },
+          };
+    await dispatchEvent(event, ectx, state);
+    expect(state.backgroundToolContexts.size).toBe(0);
+  });
+
+  it('ignores a thread lifecycle event that is stale when dispatch begins', async () => {
+    state.backgroundToolContexts = new Map([
+      ['current-tool', { toolName: 'view', threadId: 'current-thread', resourceId: 'resource', createdAt: 0 }],
+    ]);
+
+    await dispatchEvent(
+      { type: 'thread_changed', threadId: 'stale-thread', previousThreadId: 'older-thread' } as any,
+      ectx,
+      state,
+    );
+
+    expect(state.backgroundToolContexts.size).toBe(1);
+    expect(state.session.state.set).not.toHaveBeenCalled();
+    expect(ectx.renderExistingMessages).not.toHaveBeenCalled();
+  });
+
+  it('does not resume an older thread lifecycle after newer switches return to the same thread', async () => {
+    const firstRender = deferred();
+    let activeThreadId = 'thread-a';
+    (state.session.thread.getId as any).mockImplementation(() => activeThreadId);
+    (state.session.thread.list as any).mockImplementation(async () => [
+      { id: activeThreadId, title: `Title ${activeThreadId}` },
+    ]);
+    (ectx.renderExistingMessages as any)
+      .mockImplementationOnce(async (isCurrent?: () => boolean) => {
+        await firstRender.promise;
+        if (isCurrent?.()) state.currentThreadTitle = 'stale render';
+      })
+      .mockResolvedValue(undefined);
+
+    const firstSwitch = dispatchEvent(
+      { type: 'thread_changed', threadId: 'thread-a', previousThreadId: 'old-thread' } as any,
+      ectx,
+      state,
+    );
+    await vi.waitFor(() => expect(ectx.renderExistingMessages).toHaveBeenCalledOnce());
+
+    activeThreadId = 'thread-b';
+    await dispatchEvent(
+      { type: 'thread_changed', threadId: 'thread-b', previousThreadId: 'thread-a' } as any,
+      ectx,
+      state,
+    );
+    activeThreadId = 'thread-a';
+    await dispatchEvent(
+      { type: 'thread_changed', threadId: 'thread-a', previousThreadId: 'thread-b' } as any,
+      ectx,
+      state,
+    );
+
+    firstRender.resolve();
+    await firstSwitch;
+
+    expect(state.currentThreadTitle).toBe('Title thread-a');
+    expect(state.controller.loadOMProgress).toHaveBeenCalledTimes(2);
+    expect(state.session.thread.list).toHaveBeenCalledTimes(2);
+    expect((state.goalManager as any).loadFromThread).toHaveBeenCalledTimes(2);
+  });
+
+  it('ignores a delayed git branch result from an older thread lifecycle', async () => {
+    const firstBranch = deferred<string | undefined>();
+    let activeThreadId = 'thread-a';
+    (state.session.thread.getId as any).mockImplementation(() => activeThreadId);
+    (state.session.thread.list as any).mockImplementation(async () => [
+      { id: activeThreadId, title: `Title ${activeThreadId}` },
+    ]);
+    vi.mocked(getCurrentGitBranchAsync).mockReturnValueOnce(firstBranch.promise).mockResolvedValueOnce('branch-b');
+
+    await dispatchEvent(
+      { type: 'thread_changed', threadId: 'thread-a', previousThreadId: 'old-thread' } as any,
+      ectx,
+      state,
+    );
+    activeThreadId = 'thread-b';
+    await dispatchEvent(
+      { type: 'thread_changed', threadId: 'thread-b', previousThreadId: 'thread-a' } as any,
+      ectx,
+      state,
+    );
+    await vi.waitFor(() => expect(state.projectInfo.gitBranch).toBe('branch-b'));
+
+    firstBranch.resolve('branch-a');
+    await vi.waitFor(() => expect(getCurrentGitBranchAsync).toHaveBeenCalledTimes(2));
+    await Promise.resolve();
+
+    expect(state.projectInfo.gitBranch).toBe('branch-b');
   });
 
   it('ignores live messages targeted at a different thread', async () => {
@@ -146,6 +264,32 @@ describe('dispatchEvent thread lifecycle', () => {
     expect(ectx.addUserMessage).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { type: 'tool_start', toolCallId: 'late-call', toolName: 'view', args: { path: 'old.ts' } },
+    { type: 'tool_input_start', toolCallId: 'late-call', toolName: 'view' },
+    { type: 'tool_update', toolCallId: 'late-call', partialResult: 'old progress' },
+    { type: 'shell_output', toolCallId: 'late-call', output: 'old output', stream: 'stdout' },
+    {
+      type: 'tool_end',
+      toolCallId: 'late-call',
+      result: 'old result',
+      isError: false,
+      providerMetadata: { mastra: { backgroundTask: { taskId: 'old-task', status: 'running' } } },
+    },
+  ] as const)('ignores late $type from another thread', async event => {
+    state.options.backgroundToolsEnabled = true;
+    state.backgroundToolContexts = new Map();
+    state.backgroundActivities = new Map();
+    state.pendingTools = new Map();
+    state.pendingSubagents = new Map();
+    await dispatchEvent({ ...event, threadId: 'origin-thread' }, ectx, state);
+    expect(state.backgroundToolContexts.size).toBe(0);
+    expect(state.backgroundActivities.size).toBe(0);
+    expect(state.pendingTools.size).toBe(0);
+    expect(state.pendingSubagents.size).toBe(0);
+    expect(state.agentRunLastStreamPartAt).toBeUndefined();
+  });
+
   it('updates the active and terminal titles when a generated title arrives', async () => {
     await dispatchEvent(
       { type: 'thread_title_updated', threadId: 'current-thread', title: 'Generated demo title' } as any,
@@ -186,6 +330,7 @@ describe('dispatchEvent thread lifecycle', () => {
 
   it('clears per-thread state on thread_changed', async () => {
     state.latestRequestPromptTokens = 90_000;
+    (state.session.thread.getId as any).mockReturnValue('new-thread');
     await dispatchEvent(
       { type: 'thread_changed', threadId: 'new-thread', previousThreadId: 'old-thread' } as any,
       ectx,
@@ -205,6 +350,7 @@ describe('dispatchEvent thread lifecycle', () => {
   it('clears per-thread state on thread_created', async () => {
     state.latestRequestPromptTokens = 90_000;
 
+    (state.session.thread.getId as any).mockReturnValue('brand-new');
     await dispatchEvent(
       { type: 'thread_created', thread: { id: 'brand-new', title: 'Brand New' } } as any,
       ectx,
@@ -224,6 +370,7 @@ describe('dispatchEvent thread lifecycle', () => {
   it('persists only explicitly pending goals to created threads', async () => {
     const goalManager = state.goalManager as any;
     goalManager.consumePersistOnNextThreadCreate.mockReturnValueOnce(true);
+    (state.session.thread.getId as any).mockReturnValue('brand-new');
 
     await dispatchEvent(
       { type: 'thread_created', thread: { id: 'brand-new', title: 'Brand New', metadata: { goal: null } } } as any,
@@ -237,6 +384,7 @@ describe('dispatchEvent thread lifecycle', () => {
 
   it('loads thread metadata instead of copying non-pending goals to created threads', async () => {
     const goalManager = state.goalManager as any;
+    (state.session.thread.getId as any).mockReturnValue('brand-new');
 
     await dispatchEvent(
       {
@@ -252,6 +400,7 @@ describe('dispatchEvent thread lifecycle', () => {
   });
 
   it('resets taskToolInsertIndex on thread_changed', async () => {
+    (state.session.thread.getId as any).mockReturnValue('new-thread');
     await dispatchEvent(
       { type: 'thread_changed', threadId: 'new-thread', previousThreadId: 'old-thread' } as any,
       ectx,
@@ -262,6 +411,7 @@ describe('dispatchEvent thread lifecycle', () => {
   });
 
   it('resets taskToolInsertIndex on thread_created', async () => {
+    (state.session.thread.getId as any).mockReturnValue('brand-new');
     await dispatchEvent(
       { type: 'thread_created', thread: { id: 'brand-new', title: 'Brand New' } } as any,
       ectx,
@@ -272,6 +422,7 @@ describe('dispatchEvent thread lifecycle', () => {
   });
 
   it('clears taskProgress UI component on thread_changed', async () => {
+    (state.session.thread.getId as any).mockReturnValue('new-thread');
     await dispatchEvent(
       { type: 'thread_changed', threadId: 'new-thread', previousThreadId: 'old-thread' } as any,
       ectx,
@@ -282,6 +433,7 @@ describe('dispatchEvent thread lifecycle', () => {
   });
 
   it('clears taskProgress UI component on thread_created', async () => {
+    (state.session.thread.getId as any).mockReturnValue('brand-new');
     await dispatchEvent(
       { type: 'thread_created', thread: { id: 'brand-new', title: 'Brand New' } } as any,
       ectx,
@@ -302,6 +454,7 @@ describe('dispatchEvent thread lifecycle', () => {
   });
 
   it('does not clear non-ephemeral state like currentModelId', async () => {
+    (state.session.thread.getId as any).mockReturnValue('brand-new');
     await dispatchEvent(
       { type: 'thread_created', thread: { id: 'brand-new', title: 'Brand New' } } as any,
       ectx,

@@ -2,10 +2,9 @@
 
 import type { DatasetItem } from '@mastra/client-js';
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
-import { Sections } from '@mastra/playground-ui/components/Sections';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
-import { format } from 'date-fns/format';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { HashIcon, FileInputIcon, FileOutputIcon, ListChecksIcon, TagIcon, RouteIcon } from 'lucide-react';
 
 export interface DatasetItemPageProps {
@@ -34,7 +33,7 @@ function DatasetItemContent({ item }: { item: DatasetItem }) {
   return (
     <>
       <div className="mb-4">
-        <h3 className="text-header-sm flex items-center gap-2 font-medium">
+        <h3 className="flex items-center gap-2 text-heading">
           <FileInputIcon className="h-5 w-5" /> Dataset Item
         </h3>
         <TextAndIcon>
@@ -42,12 +41,12 @@ function DatasetItemContent({ item }: { item: DatasetItem }) {
         </TextAndIcon>
       </div>
 
-      <Sections>
+      <div className="grid gap-6">
         <KeyValueList
           data={[
             {
               label: 'Created',
-              value: format(new Date(item.createdAt), 'MMM d, yyyy h:mm aaa'),
+              value: formatDate(item.createdAt, 'date-time') ?? '',
               key: 'createdAt',
             },
             ...(item.datasetVersion != null
@@ -83,7 +82,7 @@ function DatasetItemContent({ item }: { item: DatasetItem }) {
         />
 
         {metadataDisplay && <SideDialog.CodeSection title="Metadata" icon={<TagIcon />} codeStr={metadataDisplay} />}
-      </Sections>
+      </div>
     </>
   );
 }

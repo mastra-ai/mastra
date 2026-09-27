@@ -6,10 +6,10 @@ import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { ChevronLeftIcon, ChevronRightIcon, DatabaseIcon, Loader2Icon, TrashIcon, X } from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 
 export type BulkTraceItem = {
   input: string;
@@ -138,19 +138,17 @@ export function BulkTraceReviewDialog({
           <div className="flex items-center gap-2">
             <Button
               tooltip="Previous item"
-              variant="outline"
               size="icon-sm"
               disabled={currentIndex === 0}
               onClick={() => setCurrentIndex(prev => prev - 1)}
             >
               <ChevronLeftIcon />
             </Button>
-            <Txt variant="ui-sm" className="text-icon3 tabular-nums">
+            <Txt variant="caption" tone="muted" className="tabular-nums">
               {currentIndex + 1} / {total}
             </Txt>
             <Button
               tooltip="Next item"
-              variant="outline"
               size="icon-sm"
               disabled={currentIndex === total - 1}
               onClick={() => setCurrentIndex(prev => prev + 1)}
@@ -196,7 +194,7 @@ export function BulkTraceReviewDialog({
           </div>
 
           <div className="flex justify-end gap-2 pt-4">
-            <Button icon={<X />} type="button" variant="outline" onClick={onClose}>
+            <Button icon={<X />} type="button" onClick={onClose}>
               Cancel
             </Button>
             <Button variant="default" disabled={batchInsertItems.isPending} onClick={handleSubmit}>

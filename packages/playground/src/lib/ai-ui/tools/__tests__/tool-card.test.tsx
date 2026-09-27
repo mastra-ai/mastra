@@ -3,6 +3,7 @@ import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/too
 import { readToolPart } from '@mastra/playground-ui/domains/chat/messages/renderers/tool-part';
 import type { ToolPart } from '@mastra/playground-ui/domains/chat/messages/renderers/tool-part';
 import { WORKSPACE_TOOLS } from '@mastra/playground-ui/domains/chat/tools/workspace-tool-constants';
+import { WorkflowRunContext, WorkflowRunProvider } from '@mastra/playground-ui/domains/workflows';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -16,7 +17,6 @@ import { AgentBadge } from '../badges/agent-badge';
 import { ToolCard, ToolCardInner } from '../tool-card';
 import type { ToolCardProps } from '../tool-card';
 import { failedParentMessages, partialChildMessages, resumedChildMessages } from './fixtures/failed-delegation';
-import { WorkflowRunContext, WorkflowRunProvider } from '@/domains/workflows';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 import { server } from '@/test/msw-server';
 

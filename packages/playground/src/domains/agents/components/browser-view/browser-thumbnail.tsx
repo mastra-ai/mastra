@@ -1,5 +1,8 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Monitor, ChevronUp, ChevronDown, Maximize2, X } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
@@ -90,8 +93,8 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
   return (
     <div
       className={cn(
-        'bg-surface2 border border-border1 rounded-3xl overflow-hidden transition-all duration-200',
-        'hover:border-border2',
+        'overflow-hidden rounded-3xl border border-border bg-background transition-all duration-200',
+        'hover:border-border-strong',
       )}
     >
       {/* Collapsed header - always visible */}
@@ -99,18 +102,18 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
         type="button"
         onClick={handleToggleExpand}
         className={cn(
-          'group flex items-center gap-3 w-full px-4 py-3',
-          'hover:bg-surface3 transition-colors',
-          'focus:outline-none focus:ring-2 focus:ring-accent1 focus:ring-inset',
+          'group flex w-full items-center gap-3 px-4 py-3',
+          'hover:bg-fill-subtle',
+          'focus:ring-2 focus:ring-accent1 focus:outline-none focus:ring-inset',
         )}
       >
         {/* Thumbnail preview */}
-        <div className="bg-surface3 border-border1 relative h-14 w-24 shrink-0 overflow-hidden rounded-md border">
+        <div className={cn(raisedSurfaceStyle, 'relative h-14 w-24 shrink-0 overflow-hidden rounded-md')}>
           {hasFrame ? (
             <img ref={imgRef} alt="Browser preview" className="h-full w-full object-cover" />
           ) : (
             <div className="flex h-full w-full items-center justify-center">
-              <Monitor className="text-neutral3 h-5 w-5" />
+              <Monitor className="h-5 w-5 text-muted-foreground" />
             </div>
           )}
           {/* Live indicator dot */}
@@ -120,23 +123,23 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
         {/* Info section */}
         <div className="min-w-0 flex-1 text-left">
           <div className="flex items-center gap-2">
-            <span className="text-neutral6 text-ui-md truncate font-medium">{agentName}&apos;s browser</span>
+            <span className="truncate text-subheading text-foreground">{agentName}&apos;s browser</span>
             <Badge variant={isLive ? 'green' : 'neutral'} size="sm" indicator={isLive ? 'pulse' : 'dot'}>
               {isLive ? 'Live' : 'Idle'}
             </Badge>
           </div>
-          <p className="text-neutral4 text-ui-sm mt-0.5 truncate">{displayUrl}</p>
+          <p className="mt-0.5 truncate text-caption text-muted-foreground">{displayUrl}</p>
         </div>
 
         {/* Expand/collapse indicator */}
-        <div className="text-neutral4 group-hover:text-neutral5 shrink-0 transition-colors">
+        <div className={cn('shrink-0', quietTextHoverInGroup, controlStateColorTransition)}>
           {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
         </div>
       </button>
 
       {/* Expanded content */}
       {isExpanded && (
-        <div className="border-border1 border-t">
+        <div className="border-t border-border">
           {/* Interactive screencast */}
           <div className="p-3">
             <div className="relative">
@@ -148,7 +151,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
                   size="icon-sm"
                   tooltip="Center view"
                   onClick={handleOpenModal}
-                  className="bg-surface1/80 backdrop-blur-sm"
+                  className="bg-sidebar/80 backdrop-blur-sm"
                 >
                   <Maximize2 className="h-3.5 w-3.5" />
                 </Button>
@@ -157,7 +160,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
                   size="icon-sm"
                   tooltip="Close browser"
                   onClick={handleClose}
-                  className="bg-surface1/80 backdrop-blur-sm"
+                  className="bg-sidebar/80 backdrop-blur-sm"
                 >
                   <X className="h-3.5 w-3.5" />
                 </Button>
@@ -167,9 +170,9 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
 
           {/* Browser actions (scrollable, max height) */}
           {toolCalls.length > 0 && (
-            <div ref={actionsRef} className="border-border1 max-h-40 overflow-y-auto border-t">
+            <div ref={actionsRef} className="max-h-40 overflow-y-auto border-t border-border">
               <div className="px-3 py-2">
-                <h4 className="text-neutral4 text-ui-md mb-2 font-medium">Browser Actions</h4>
+                <h4 className="mb-2 text-subheading text-muted-foreground">Browser Actions</h4>
                 <div className="space-y-1">
                   {toolCalls.slice(-5).map(entry => (
                     <BrowserToolCallItem key={entry.toolCallId} entry={entry} />

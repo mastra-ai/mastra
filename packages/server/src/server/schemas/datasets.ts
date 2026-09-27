@@ -264,6 +264,32 @@ export const datasetAndItemIdPathParams = z.object({
 
 export const paginationQuerySchema = createPagePaginationSchema(10);
 
+/**
+ * Order-by query param. Arrives either as a nested object or as a JSON string
+ * (bracket notation `orderBy[field]=x&orderBy[direction]=ASC` is reconstructed
+ * into a JSON string by `normalizeQueryParams`).
+ */
+const createOrderByQuerySchema = <const T extends readonly [string, ...string[]]>(fields: T) =>
+  z
+    .preprocess(
+      val => {
+        if (typeof val !== 'string') return val;
+        try {
+          return JSON.parse(val);
+        } catch {
+          // Let the object schema reject it so the caller gets a 400.
+          return val;
+        }
+      },
+      z
+        .object({
+          field: z.enum(fields),
+          direction: z.enum(['ASC', 'DESC']),
+        })
+        .optional(),
+    )
+    .optional();
+
 export const listExperimentResultsQuerySchema = paginationQuerySchema.extend({
   tags: z
     .preprocess(v => {
@@ -275,6 +301,7 @@ export const listExperimentResultsQuerySchema = paginationQuerySchema.extend({
       return nonBlank.length > 0 ? nonBlank : undefined;
     }, z.array(z.string()).optional())
     .describe('Only return results that have all of these tags'),
+  orderBy: createOrderByQuerySchema(['startedAt', 'createdAt']),
 });
 
 const targetTypeQuerySchema = z
@@ -293,6 +320,7 @@ export const listDatasetsQuerySchema = paginationQuerySchema.extend({
       return nonBlank.length > 0 ? nonBlank : undefined;
     }, z.array(z.string()).optional())
     .describe('Only return datasets attached to at least one of these target IDs'),
+  orderBy: createOrderByQuerySchema(['createdAt', 'updatedAt', 'name']),
 });
 
 export const listExperimentsQuerySchema = paginationQuerySchema.extend({
@@ -302,6 +330,7 @@ export const listExperimentsQuerySchema = paginationQuerySchema.extend({
   trialIndex: z.coerce.number().int().min(0).optional(),
   targetType: targetTypeQuerySchema,
   targetId: z.string().optional().describe('Only return experiments run against this target ID'),
+  orderBy: createOrderByQuerySchema(['createdAt', 'status']),
 });
 
 export const tenancyQuerySchema = z.object({
@@ -312,6 +341,7 @@ export const tenancyQuerySchema = z.object({
 export const listItemsQuerySchema = createPagePaginationSchema(10).extend({
   version: z.coerce.number().int().optional(), // Optional version filter for snapshot semantics
   search: z.string().optional(),
+  orderBy: createOrderByQuerySchema(['createdAt', 'updatedAt']),
 });
 
 // ============================================================================
@@ -613,6 +643,8 @@ export const runExperimentItemResponseSchema = z.object({
       score: z.number().nullable(),
       reason: z.string().nullable(),
       error: z.string().nullable(),
+      // Set when the scorer declared the item not scorable; `score` and `error` are null.
+      notScorable: z.object({ step: z.string(), reason: z.string().optional() }).optional(),
       failedStep: z.string().optional(),
       completedSteps: z.array(z.string()).optional(),
       targetScope: z.enum(['span', 'trajectory']).optional(),

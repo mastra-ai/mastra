@@ -12,14 +12,16 @@ import {
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@mastra/playground-ui/components/Select';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { useDatasetMutations, useDatasets } from '@mastra/playground-ui/domains/datasets';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { DatabaseIcon, Save, X } from 'lucide-react';
 import { useState, useCallback, useEffect, useMemo } from 'react';
 
 import { useDatasetSaveContext } from '../context/dataset-save-context';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
-import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 
 function DatasetSaveDialog({
   open,
@@ -113,7 +115,7 @@ function DatasetSaveDialog({
               </SelectTrigger>
               <SelectContent>
                 {datasets.length === 0 ? (
-                  <div className="text-neutral4 text-ui-md px-2 py-4 text-center">No datasets available</div>
+                  <div className="px-2 py-4 text-center text-body text-muted-foreground">No datasets available</div>
                 ) : (
                   datasets.map(dataset => (
                     <SelectItem key={dataset.id} value={dataset.id}>
@@ -195,7 +197,7 @@ function DatasetSaveActionInner({ messageText }: DatasetSaveActionProps) {
         variant="default"
         size="icon-md"
         tooltip="Save to dataset"
-        className="text-neutral3 hover:text-neutral6 bg-transparent"
+        className={cn(quietTextHover, 'bg-transparent')}
         onClick={handleClick}
       >
         <DatabaseIcon className="h-4 w-4" />
@@ -265,7 +267,11 @@ function SaveFullConversationInner() {
         type="button"
         onClick={handleClick}
         disabled={isFetching}
-        className="text-neutral3 hover:text-neutral5 text-ui-xs leading-ui-xs mx-auto flex cursor-pointer items-center gap-1.5 py-3 transition-colors disabled:opacity-50"
+        className={cn(
+          quietTextHover,
+          controlStateColorTransition,
+          'mx-auto flex cursor-pointer items-center gap-1.5 py-3 text-meta disabled:opacity-50',
+        )}
       >
         {isFetching ? <Spinner className="h-3.5 w-3.5" /> : <DatabaseIcon className="h-3.5 w-3.5" />}
         Save full conversation to dataset

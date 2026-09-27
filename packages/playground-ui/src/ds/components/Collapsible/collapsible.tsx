@@ -23,8 +23,8 @@ const CollapsibleTrigger = React.forwardRef<HTMLButtonElement, CollapsibleTrigge
           '-outline-offset-2',
           transitions.colors,
           focusRing.visible,
-          'hover:text-neutral5',
-          '[&>svg]:duration-normal [&>svg]:transition-transform [&>svg]:ease-out-custom',
+          'hover:text-foreground',
+          '[&>svg]:transition-transform [&>svg]:duration-normal [&>svg]:ease-out-custom',
           '[&[data-panel-open]>svg]:rotate-90',
           className,
         )}

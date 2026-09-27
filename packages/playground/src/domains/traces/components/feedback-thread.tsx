@@ -24,7 +24,7 @@ import {
 } from '@mastra/playground-ui/components/InputGroup';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { format } from 'date-fns';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { ArrowUp, Trash2, ChevronRight, ChevronLeft, ClipboardCheck, EllipsisIcon } from 'lucide-react';
 import { useState } from 'react';
 
@@ -90,7 +90,7 @@ function FeedbackItems({
     const avatar = author ? <Avatar name={author} src={fb.author?.avatarUrl} size="sm" /> : null;
     const name = author && <CommentItemAuthor>{author}</CommentItemAuthor>;
     const timestamp = (
-      <CommentItemTimestamp dateTime={ts.toISOString()}>{format(ts, 'MMM d, h:mm:ss aaa')}</CommentItemTimestamp>
+      <CommentItemTimestamp dateTime={ts.toISOString()}>{formatDate(ts, 'date-time')}</CommentItemTimestamp>
     );
     const feedbackId = fb.feedbackId;
     const status = <FeedbackReviewStatusBadge status={fb.reviewStatus} />;
@@ -112,7 +112,7 @@ function FeedbackItems({
                 disabled={pendingFeedbackId === feedbackId}
                 onSelect={() => onMarkReviewed?.(feedbackId)}
               >
-                <Icon size="sm">
+                <Icon size="xs">
                   <ClipboardCheck />
                 </Icon>
                 Mark reviewed
@@ -120,7 +120,7 @@ function FeedbackItems({
             )}
             {canDelete && (
               <DropdownMenu.Item disabled={isDeleting} onSelect={() => onRequestDelete?.(feedbackId)}>
-                <Icon size="sm">
+                <Icon size="xs">
                   <Trash2 />
                 </Icon>
                 Delete feedback
@@ -223,7 +223,7 @@ export function FeedbackThread({
           }
         }}
       >
-        <InputGroup size="sm" variant="outline">
+        <InputGroup size="sm">
           <InputGroupInput
             aria-label="Leave feedback"
             placeholder="Leave feedback..."
@@ -240,11 +240,11 @@ export function FeedbackThread({
 
       <div className="min-h-0 overflow-y-auto">
         {isLoadingFeedbackData ? (
-          <Txt variant="ui-md" className="text-neutral3">
+          <Txt variant="body" tone="muted">
             Loading feedback...
           </Txt>
         ) : feedbackItems.length === 0 ? (
-          <Txt variant="ui-md" className="text-neutral3 text-center">
+          <Txt variant="body" tone="muted" className="text-center">
             No feedback yet
           </Txt>
         ) : (

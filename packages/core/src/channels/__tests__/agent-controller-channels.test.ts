@@ -130,8 +130,10 @@ async function createSetup({
   onSessionStart,
   resolveSession,
   onStaleToolApproval,
+  instructions,
 }: {
   responseText?: string;
+  instructions?: () => Promise<string>;
   model?: MockLanguageModelV2;
   tools?: Record<string, any>;
   toolDisplay?: 'text';
@@ -147,7 +149,7 @@ async function createSetup({
     id: 'mode-agent',
     name: 'mode-agent',
     model: model ?? createTextStreamModel(responseText),
-    instructions: 'You are a test agent.',
+    instructions: instructions ?? 'You are a test agent.',
     ...(tools ? { tools } : {}),
     ...(agentMemory ? { memory: agentMemory } : {}),
   });
@@ -544,6 +546,29 @@ describe('AgentControllerChannels', () => {
       expect(chatThread.post).toHaveBeenCalledWith('❌ Error: engine exploded');
     }, 30_000);
 
+    it('reports a stream-setup failure to the channel instead of treating the message as sent', async () => {
+      // Stream setup (instructions, workspace, tools, model resolution) runs
+      // before the run span opens and before the user message is persisted.
+      // A throw there must reach the sender: with a fire-and-forget signal the
+      // rejection lands after the next tick and the message silently vanishes.
+      const { adapter, mastra, channels } = await createSetup({
+        instructions: async () => {
+          await new Promise(resolve => setTimeout(resolve, 20));
+          throw new Error('workspace exploded');
+        },
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-setup-broken');
+
+      await (channels as any).handleChatMessage(
+        chatThread,
+        createMessage('m-1', 'hello'),
+        mastra,
+        new RequestContext(),
+      );
+
+      expect(chatThread.post).toHaveBeenCalledWith('❌ Error: workspace exploded');
+    }, 30_000);
+
     it('runs on approval continuations with the action requestContext, so routing can be revalidated', async () => {
       const seen: Array<unknown> = [];
       const { adapter, mastra, channels } = await createSetup({
@@ -829,6 +854,43 @@ describe('AgentControllerChannels', () => {
       // Card edited to its approved state
       expect(adapter.editMessage).toHaveBeenCalled();
     }, 30_000);
+
+    it.each([
+      { policy: 'allow' as const, executes: true },
+      { policy: 'deny' as const, executes: false },
+    ])(
+      'posts no approval card for $policy-policy tools the session resolves itself',
+      async ({ policy, executes }) => {
+        const { tool, executeSpy } = createDeployTool();
+        const { adapter, controller, mastra, channels } = await createSetup({
+          model: createApprovalFlowModel(),
+          tools: { deployTool: tool },
+        });
+        const threadId = `chan-1:t-${policy}`;
+        const resourceId = `channel:${threadId}`;
+        const session = await controller.createSession({ resourceId, id: resourceId, ownerId: controller.id });
+        await session.permissions.setForTool({ toolName: 'deployTool', policy });
+        const chatThread = createChatThread(adapter, threadId);
+
+        await (channels as any).processChatMessage(
+          chatThread,
+          createMessage('m-1', 'please deploy'),
+          mastra,
+          new RequestContext(),
+        );
+
+        await waitFor(() => allPostedText(adapter, chatThread).includes('Deployed successfully.'), {
+          what: 'continuation rendered',
+        });
+        expect(session.approval.isArmed()).toBe(false);
+        expect(executeSpy).toHaveBeenCalledTimes(executes ? 1 : 0);
+        // Cards are posted then edited in place, so check both paths.
+        expect(allPostedText(adapter, chatThread) + JSON.stringify(adapter.editMessage.mock.calls)).not.toContain(
+          'tool_approve:',
+        );
+      },
+      30_000,
+    );
 
     it('resolves the gate as a decline without executing the tool', async () => {
       const { tool, executeSpy } = createDeployTool();

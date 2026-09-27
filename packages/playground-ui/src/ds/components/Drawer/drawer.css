@@ -42,6 +42,16 @@
     opacity 450ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
+/* DataPanel grows from `wide` to `full` while a span detail opens; match the
+ * 300ms grid-template-columns transition inside TracePanelColumns. */
+.drawer-popup[data-slot='data-panel-popup'] {
+  transition:
+    transform 450ms cubic-bezier(0.32, 0.72, 0, 1),
+    width 300ms ease-in-out,
+    height 450ms cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 450ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
 /* Track the finger 1:1 — no easing while a drag (own or nested) is in progress. */
 .drawer-popup[data-swiping],
 .drawer-popup[data-nested-drawer-swiping] {

@@ -6,8 +6,10 @@
     "grok-4.3",
     "grok-4.5",
     "grok-4.6",
+    "grok-4.7",
     "grok-build-0.1",
     "grok-imagine-image",
+    "grok-imagine-image-quality",
     "grok-imagine-video",
     "grok-imagine-video-1.5"
   ],
@@ -18,6 +20,7 @@
     "grok-4.3",
     "grok-4.5",
     "grok-4.6",
+    "grok-4.7",
     "grok-build-0.1"
   ],
   "structuredOutput": [
@@ -27,6 +30,7 @@
     "grok-4.3",
     "grok-4.5",
     "grok-4.6",
+    "grok-4.7",
     "grok-build-0.1"
   ]
 }

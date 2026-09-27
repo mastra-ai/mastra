@@ -1,5 +1,5 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../tools';
 import { delay } from '../../utils';
@@ -28,7 +28,11 @@ function twoParallelToolCalls(toolNames: string[]) {
   });
 }
 
-function trackedTool(id: string, tracker: ConcurrencyTracker, options: { suspendable?: boolean } = {}) {
+function trackedTool(
+  id: string,
+  tracker: ConcurrencyTracker,
+  options: { suspendable?: boolean; requireApproval?: () => Promise<boolean> } = {},
+) {
   return createTool({
     id,
     description: id,
@@ -36,6 +40,7 @@ function trackedTool(id: string, tracker: ConcurrencyTracker, options: { suspend
     ...(options.suspendable
       ? { suspendSchema: z.object({ reason: z.string() }), resumeSchema: z.object({ approved: z.boolean() }) }
       : {}),
+    ...(options.requireApproval ? { requireApproval: options.requireApproval } : {}),
     execute: async () => {
       tracker.running++;
       tracker.peak = Math.max(tracker.peak, tracker.running);
@@ -129,5 +134,143 @@ describe("toolCallConcurrency strategy: 'called'", () => {
 
     // A batch that calls a statically-suspendable tool still runs sequentially.
     expect(tracker.peak).toBe(1);
+  });
+
+  it("parallelizes calls whose function approval policy returns false under strategy 'called' (#24232)", async () => {
+    const tracker: ConcurrencyTracker = { running: 0, peak: 0 };
+    const tool1Policy = vi.fn(async () => false);
+    const tool2Policy = vi.fn(async () => false);
+    const agent = new Agent({
+      id: 'repro-called-fn-policy',
+      name: 'repro-called-fn-policy',
+      instructions: 'x',
+      model: twoParallelToolCalls(['tool-1', 'tool-2']),
+      tools: {
+        'tool-1': trackedTool('tool-1', tracker, { requireApproval: tool1Policy }),
+        'tool-2': trackedTool('tool-2', tracker, { requireApproval: tool2Policy }),
+      },
+    });
+
+    const stream = await agent.stream('go', {
+      maxSteps: 1,
+      toolCallConcurrency: { limit: 10, strategy: 'called' },
+    });
+    await drain(stream);
+
+    expect(tracker.peak).toBe(2);
+    expect(tool1Policy).toHaveBeenCalledOnce();
+    expect(tool2Policy).toHaveBeenCalledOnce();
+  });
+
+  it("parallelizes calls when a run-wide function approval policy returns false under strategy 'called'", async () => {
+    const tracker: ConcurrencyTracker = { running: 0, peak: 0 };
+    const policy = vi.fn(() => false);
+    const agent = new Agent({
+      id: 'repro-called-global-fn',
+      name: 'repro-called-global-fn',
+      instructions: 'x',
+      model: twoParallelToolCalls(['tool-1', 'tool-2']),
+      tools: {
+        'tool-1': trackedTool('tool-1', tracker),
+        'tool-2': trackedTool('tool-2', tracker),
+      },
+    });
+
+    const stream = await agent.stream('go', {
+      maxSteps: 1,
+      requireToolApproval: policy,
+      toolCallConcurrency: { limit: 10, strategy: 'called' },
+    });
+    await drain(stream);
+
+    expect(tracker.peak).toBe(2);
+    expect(policy).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses the scheduling verdict when a stateful approval policy changes on later calls', async () => {
+    const tracker: ConcurrencyTracker = { running: 0, peak: 0 };
+    const policy = vi.fn(() => policy.mock.calls.length > 2);
+    const agent = new Agent({
+      id: 'repro-called-stateful-policy',
+      name: 'repro-called-stateful-policy',
+      instructions: 'x',
+      model: twoParallelToolCalls(['tool-1', 'tool-2']),
+      tools: {
+        'tool-1': trackedTool('tool-1', tracker),
+        'tool-2': trackedTool('tool-2', tracker),
+      },
+    });
+
+    const stream = await agent.stream('go', {
+      maxSteps: 1,
+      requireToolApproval: policy,
+      toolCallConcurrency: { limit: 10, strategy: 'called' },
+    });
+    await drain(stream);
+
+    expect(policy).toHaveBeenCalledTimes(2);
+    expect(tracker.peak).toBe(2);
+  });
+});
+
+describe("toolCallConcurrency default 'available' strategy with function approval policies (#24232)", () => {
+  // Mirrors what MCPClient builds when `requireToolApproval` is a function:
+  // a static `requireApproval: true` plus the real policy on `needsApprovalFn`.
+  function mcpShapedTool(id: string, tracker: ConcurrencyTracker, policy: () => boolean) {
+    const tool = createTool({
+      id,
+      description: id,
+      inputSchema: z.object({ data: z.string() }),
+      requireApproval: true,
+      execute: async () => {
+        tracker.running++;
+        tracker.peak = Math.max(tracker.peak, tracker.running);
+        await delay(50);
+        tracker.running--;
+        return { ok: true };
+      },
+    });
+    (tool as { needsApprovalFn?: unknown }).needsApprovalFn = policy;
+    return tool;
+  }
+
+  it('parallelizes MCP-style tools whose function policy returns false', async () => {
+    const tracker: ConcurrencyTracker = { running: 0, peak: 0 };
+    const policy = vi.fn(() => false);
+    const agent = new Agent({
+      id: 'available-mcp-fn',
+      name: 'available-mcp-fn',
+      instructions: 'x',
+      model: twoParallelToolCalls(['tool-1', 'tool-2']),
+      tools: {
+        'tool-1': mcpShapedTool('tool-1', tracker, policy),
+        'tool-2': mcpShapedTool('tool-2', tracker, policy),
+      },
+    });
+
+    await drain(await agent.stream('go', { maxSteps: 1 }));
+
+    expect(tracker.peak).toBe(2);
+    expect(policy).toHaveBeenCalledTimes(2);
+  });
+
+  it('parallelizes calls when a run-wide function policy returns false', async () => {
+    const tracker: ConcurrencyTracker = { running: 0, peak: 0 };
+    const policy = vi.fn(() => false);
+    const agent = new Agent({
+      id: 'available-global-fn',
+      name: 'available-global-fn',
+      instructions: 'x',
+      model: twoParallelToolCalls(['tool-1', 'tool-2']),
+      tools: {
+        'tool-1': trackedTool('tool-1', tracker),
+        'tool-2': trackedTool('tool-2', tracker),
+      },
+    });
+
+    await drain(await agent.stream('go', { maxSteps: 1, requireToolApproval: policy }));
+
+    expect(tracker.peak).toBe(2);
+    expect(policy).toHaveBeenCalledTimes(2);
   });
 });

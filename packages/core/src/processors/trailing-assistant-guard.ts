@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import type { MastraDBMessage } from '../agent/message-list';
 import {
   isMaybeAnthropicWithoutAssistantPrefill,
@@ -114,7 +112,7 @@ export class TrailingAssistantGuard implements Processor<'trailing-assistant-gua
     const createdAt = new Date(Math.max(Date.now(), (Number.isNaN(lastCreatedAt) ? 0 : lastCreatedAt) + 1));
 
     const continuation: MastraDBMessage = {
-      id: randomUUID(),
+      id: globalThis.crypto.randomUUID(),
       role: 'user',
       content: {
         format: 2,

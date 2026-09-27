@@ -490,7 +490,7 @@ describe('Tab', () => {
     });
   });
 
-  it('keeps a caller class alongside its own', () => {
+  it('keeps a caller class', () => {
     render(
       <Tabs defaultTab="first">
         <TabList>
@@ -504,7 +504,6 @@ describe('Tab', () => {
 
     const tab = screen.getByRole('tab', { name: 'First' });
     expect(tab.className).toContain('my-own-class');
-    expect(tab.className).toContain('text-neutral3');
   });
 
   describe('pill-ghost variant', () => {
@@ -542,8 +541,7 @@ describe('Tab', () => {
       );
 
       const tab = screen.getByRole('tab', { name: 'First' });
-      expect(tab.className).not.toContain('h-form-md');
-      expect(tab.className).toContain('text-neutral3');
+      expect(tab.className).not.toContain('h-control-md');
     });
   });
 
@@ -575,9 +573,7 @@ describe('Tab', () => {
       );
 
       const tab = screen.getByRole('tab', { name: 'First' });
-      expect(tab.className).toContain('h-form-sm');
-      expect(tab.className).toContain('text-ui-sm');
-      expect(tab.className).not.toContain('text-ui-smd');
+      expect(tab.className).toContain('h-control-sm');
       expect(screen.getByRole('tablist').getAttribute('data-size')).toBe('sm');
     });
 
@@ -592,8 +588,8 @@ describe('Tab', () => {
       );
 
       const tab = screen.getByRole('tab', { name: 'First' });
-      expect(tab.className).toContain('text-ui-smd');
-      expect(tab.className).not.toContain('h-form-sm');
+      expect(tab.className).toContain('text-label');
+      expect(tab.className).not.toContain('h-control-sm');
       expect(screen.getByRole('tablist').getAttribute('data-size')).toBe('md');
     });
   });

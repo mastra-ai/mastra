@@ -1,12 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { Check, Link as LinkIcon, Pencil } from 'lucide-react';
 
 import { useAgent } from '../hooks/use-agent';
 import { AgentConfigToggle } from './agent-config-toggle';
 import { useCanCreateAgent } from '@/domains/agent-builder/hooks/use-can-create-agent';
-import { useLinkComponent } from '@/lib/framework';
-import { RouteHeaderActions } from '@/lib/route-header';
 import { withStudioBasePath } from '@/lib/studio-base-path';
 
 export interface AgentDetailHeaderActionsProps {
@@ -29,26 +28,24 @@ export function AgentDetailHeaderActions({ agentId }: AgentDetailHeaderActionsPr
   const showEditButton = canCreateAgent && agent?.source === 'stored' && Boolean(editPath);
 
   return (
-    <RouteHeaderActions owner="agent-detail">
-      <div className="flex items-center gap-2">
-        {showEditButton && (
-          <Button variant="outline" size="sm" render={<FrameworkLink href={editPath} />} icon={<Pencil />}>
-            Edit
-          </Button>
-        )}
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          type="button"
-          aria-label="Copy session URL"
-          onClick={handleShareLink}
-          tooltip="Copy session URL to share with your team"
-          data-testid="agent-entity-header-share"
-        >
-          {isShareCopied ? <Check /> : <LinkIcon />}
+    <>
+      {showEditButton && (
+        <Button variant="ghost" size="sm" render={<FrameworkLink href={editPath} />} icon={<Pencil />}>
+          Edit
         </Button>
-        <AgentConfigToggle />
-      </div>
-    </RouteHeaderActions>
+      )}
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        type="button"
+        aria-label="Copy session URL"
+        onClick={handleShareLink}
+        tooltip="Copy session URL to share with your team"
+        data-testid="agent-entity-header-share"
+      >
+        {isShareCopied ? <Check /> : <LinkIcon />}
+      </Button>
+      <AgentConfigToggle />
+    </>
   );
 }

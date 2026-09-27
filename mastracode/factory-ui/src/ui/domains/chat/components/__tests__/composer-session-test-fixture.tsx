@@ -3,13 +3,13 @@ import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSideba
 import type { QueryClient } from '@tanstack/react-query';
 import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { Link, MemoryRouter, Route, Routes, useLocation, useParams } from 'react-router';
+import { Link, MemoryRouter, Outlet, Route, Routes, useLocation, useParams } from 'react-router';
 import { expect } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { OverlaysProvider } from '../../../../lib/overlays';
-import Chat from '../../Chat';
+import { ChatSessionRouteProvider } from '../../Chat';
 import { ChatSessionBoundary } from '../../context/ChatSessionProvider';
 import { ChatSessionTestProvider } from '../../context/ChatSessionTestProvider';
 import { useHandoffPrompt } from '../../hooks/useHandoffPrompt';
@@ -188,7 +188,7 @@ export function stubPreparingSession({
         },
       });
     }),
-    http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/source-control/projects/:projectRepositoryId/sessions`, () =>
       HttpResponse.json({ sessions: [] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/work-items`, () =>
@@ -335,15 +335,26 @@ function UserThreadRouteSurface() {
   );
 }
 
+/** Mirrors the provider stack `AppLayout` mounts around routed chat pages. */
+function ChatRouteShell() {
+  return (
+    <MainSidebarProvider>
+      <OverlaysProvider>
+        <ChatSessionRouteProvider>
+          <Outlet />
+        </ChatSessionRouteProvider>
+      </OverlaysProvider>
+    </MainSidebarProvider>
+  );
+}
+
 export function renderDraft() {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/user/new/${SESSION_ID}`]}>
       <Routes>
-        <Route path="/factories/:factoryId/user/new/:draftSessionId" element={<Chat />}>
-          <Route index element={<DraftRouteSurface />} />
-        </Route>
-        <Route path="/factories/:factoryId/user/threads/:threadId" element={<Chat />}>
-          <Route index element={<UserThreadRouteSurface />} />
+        <Route element={<ChatRouteShell />}>
+          <Route path="/factories/:factoryId/user/new/:draftSessionId" element={<DraftRouteSurface />} />
+          <Route path="/factories/:factoryId/user/threads/:threadId" element={<UserThreadRouteSurface />} />
         </Route>
       </Routes>
       <PathnameProbe />

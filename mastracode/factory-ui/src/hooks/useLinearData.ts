@@ -9,6 +9,7 @@ import {
   listLinearProjects,
   listLinearTeams,
 } from '../ui/domains/factory/services/linear';
+import { RequestError } from '../ui/domains/factory/services/request';
 import { DETAIL_STALE_MS, INTAKE_POLL_MS } from './useFactoryData';
 
 /**
@@ -61,6 +62,7 @@ export function useLinearIssueDetail(
         ? () => getLinearIssue(baseUrl, factoryProjectId, identifier, issueId)
         : skipToken,
     staleTime: DETAIL_STALE_MS,
+    retry: (failureCount, error) => !(error instanceof RequestError && error.status === 404) && failureCount < 3,
   });
 }
 

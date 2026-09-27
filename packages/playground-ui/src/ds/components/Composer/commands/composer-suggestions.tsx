@@ -38,13 +38,13 @@ export function ComposerSuggestions({
 
   return (
     <Collapsible.Root open={items.length > 0}>
-      <Collapsible.Panel className="duration-normal ease-out-custom h-[var(--collapsible-panel-height)] overflow-hidden transition-[height] data-[ending-style]:h-0 data-[starting-style]:h-0 motion-reduce:transition-none">
-        <div className="border-border1/60 border-b" role="region" aria-label={label}>
+      <Collapsible.Panel className="h-[var(--collapsible-panel-height)] overflow-hidden transition-[height] duration-normal ease-out-custom data-[ending-style]:h-0 data-[starting-style]:h-0 motion-reduce:transition-none">
+        <div className="border-b border-border/60" role="region" aria-label={label}>
           {contextLabel && onBack && (
-            <div className="border-border1/60 border-b px-1.5 py-1">
+            <div className="border-b border-border/60 px-1.5 py-1">
               <button
                 type="button"
-                className="text-icon3 hover:text-icon6 text-ui-sm duration-normal ease-out-custom hover:bg-neutral6/5 flex items-center gap-1.5 rounded-xl px-2 py-1.5 transition-colors motion-reduce:transition-none"
+                className="flex items-center gap-1.5 rounded-xl px-2 py-1.5 text-caption text-muted-foreground transition-colors duration-normal ease-out-custom hover:bg-fill-subtle hover:text-foreground motion-reduce:transition-none"
                 aria-label="Back to slash commands"
                 onMouseDown={event => event.preventDefault()}
                 onClick={onBack}
@@ -67,10 +67,10 @@ export function ComposerSuggestions({
                   aria-selected={index === activeIndex}
                   aria-current={item.active ? 'true' : undefined}
                   className={cn(
-                    'flex w-full cursor-pointer items-center justify-between gap-4 rounded-2xl px-2 py-1.5 text-left text-ui-sm transition-colors duration-normal ease-out-custom motion-reduce:transition-none',
+                    'flex w-full cursor-pointer items-center justify-between gap-4 rounded-2xl px-2 py-1.5 text-left text-caption transition-colors duration-normal ease-out-custom motion-reduce:transition-none',
                     index === activeIndex
-                      ? 'text-icon6 bg-neutral6/5'
-                      : 'text-icon3 hover:text-icon6 hover:bg-neutral6/5',
+                      ? 'bg-fill-subtle text-foreground'
+                      : 'text-muted-foreground hover:bg-fill-subtle hover:text-foreground',
                   )}
                   onMouseDown={event => event.preventDefault()}
                   onClick={() => onSelect(index)}

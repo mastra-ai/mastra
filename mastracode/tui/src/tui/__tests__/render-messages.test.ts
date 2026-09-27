@@ -1,4 +1,4 @@
-import { Container } from '@earendil-works/pi-tui';
+import { Container, visibleWidth } from '@earendil-works/pi-tui';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { createSignal } from '@mastra/core/signals';
 import { describe, expect, it, vi } from 'vitest';
@@ -18,6 +18,11 @@ import { TemporalGapComponent } from '../components/temporal-gap.js';
 import { UserMessageComponent } from '../components/user-message.js';
 import { addPendingUserMessage, addUserMessage, renderExistingMessages } from '../render-messages.js';
 import type { TUIState } from '../state.js';
+
+function stripAnsi(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/\u001b\[[0-9;]*m/g, '');
+}
 
 function createState(): TUIState {
   return {
@@ -169,6 +174,7 @@ interface ToolPair {
   args: unknown;
   result?: unknown;
   isError?: boolean;
+  providerMetadata?: Record<string, unknown>;
 }
 
 function assistantToolMessage(id: string, tools: ToolPair[]): MastraDBMessage {
@@ -180,6 +186,7 @@ function assistantToolMessage(id: string, tools: ToolPair[]): MastraDBMessage {
       format: 2,
       parts: tools.map(tool => ({
         type: 'tool-invocation',
+        ...(tool.providerMetadata ? { providerMetadata: tool.providerMetadata } : {}),
         toolInvocation: {
           toolCallId: tool.id,
           toolName: tool.name,
@@ -412,6 +419,87 @@ describe('addUserMessage', () => {
     expect(state.messageComponentsById.get('notification-1')).toBeInstanceOf(NotificationComponent);
   });
 
+  it('truncates notifications in quiet mode to the tool preview line limit', () => {
+    const state = createState();
+    state.quietMode = true;
+    state.quietModeMaxToolPreviewLines = 2;
+    const longMessage = Array.from({ length: 6 }, (_, i) => `detail line ${i + 1}`).join('\n');
+
+    addUserMessage(
+      state,
+      createNotificationMessage(
+        { message: longMessage, source: 'github', kind: 'ci-status', priority: 'high', status: 'delivered' },
+        'notification-quiet',
+      ),
+    );
+    addUserMessage(
+      state,
+      createNotificationSummaryMessage(
+        {
+          message: '3 pending notifications',
+          pending: 3,
+          bySource: { github: 2, 'goal-judge': 1 },
+          byPriority: { high: 3 },
+          notificationIds: ['a', 'b', 'c'],
+        },
+        'notification-summary-quiet',
+      ),
+    );
+
+    const notification = state.messageComponentsById.get('notification-quiet') as NotificationComponent;
+    const rendered = notification.render(100).map(line => stripAnsi(line));
+    // Same bordered box: top, title, 2 message lines, bottom — no details row.
+    expect(rendered).toHaveLength(5);
+    expect(rendered[0]).toContain('╭');
+    expect(rendered[1]).toContain('notification from github');
+    expect(rendered.join('\n')).not.toContain('high · ci-status');
+    expect(rendered.join('\n')).toContain('detail line 2…');
+    expect(rendered.join('\n')).not.toContain('detail line 3');
+    expect(rendered[4]).toContain('╰');
+
+    const summary = state.messageComponentsById.get('notification-summary-quiet') as NotificationSummaryComponent;
+    const summaryLines = summary.render(100).map(line => stripAnsi(line));
+    expect(summaryLines).toHaveLength(2);
+    expect(summaryLines[0]).toContain('Notification summary: 3 pending');
+    expect(summaryLines[1]).toContain('github: 2, goal-judge: 1');
+    expect(summaryLines.join('\n')).not.toContain('notification_inbox');
+
+    // Turning quiet mode off restores the full rendering.
+    notification.setQuietModeDisplay('normal');
+    summary.setQuietModeDisplay('normal');
+    const full = stripAnsi(notification.render(100).join('\n'));
+    expect(full).toContain('high · ci-status · delivered');
+    expect(full).toContain('detail line 6');
+    expect(stripAnsi(summary.render(100).join('\n'))).toContain('notification_inbox');
+  });
+
+  it('keeps the quiet notification ellipsis inside the terminal width', () => {
+    const state = createState();
+    state.quietMode = true;
+    state.quietModeMaxToolPreviewLines = 1;
+    // A single long word wraps into lines that fill the content width exactly.
+    const longMessage = 'x'.repeat(200);
+
+    addUserMessage(
+      state,
+      createNotificationMessage(
+        { message: longMessage, source: 'github', kind: 'ci-status', priority: 'high', status: 'delivered' },
+        'notification-narrow',
+      ),
+    );
+
+    const width = 60;
+    const notification = state.messageComponentsById.get('notification-narrow') as NotificationComponent;
+    const rendered = notification.render(width).map(line => stripAnsi(line));
+    expect(rendered).toHaveLength(4);
+    expect(rendered[2]).toContain('…');
+    expect(rendered[2]).toContain('x'.repeat(55));
+    expect(rendered[2]).not.toContain('x'.repeat(56));
+    for (const line of rendered) {
+      expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+    }
+  });
+
   it('renders one latest-position completion card for a stable background event id', () => {
     const state = createState();
     const createCompletionMessage = (id: string) =>
@@ -455,6 +543,50 @@ describe('addUserMessage', () => {
     );
     expect(completionComponents).toHaveLength(1);
     expect(state.chatContainer.children.at(-1)).toBe(completionComponents[0]);
+  });
+
+  it('keeps background completions to one line in quiet mode and expands them in full', () => {
+    const state = createState();
+    state.quietMode = true;
+    state.quietModeMaxToolPreviewLines = 1;
+    const longMessage = Array.from({ length: 4 }, (_, i) => `result line ${i + 1}`).join('\n');
+
+    addUserMessage(
+      state,
+      createSignal({
+        id: 'completion-quiet',
+        type: 'notification',
+        tagName: 'notification',
+        contents: longMessage,
+        attributes: { source: 'background-work', kind: 'background-task-completed', priority: 'low', status: 'failed' },
+        metadata: {
+          backgroundCompletion: {
+            eventId: 'background-task:task-q:failed',
+            taskId: 'task-q',
+            originRunId: 'run-q',
+            originToolCallId: 'call-q',
+            toolName: 'mastra_expert',
+            status: 'failed',
+            argsSummary: 'question: why',
+            errorSummary: 'boom',
+          },
+        },
+      }).toDBMessage(),
+    );
+
+    const component = state.messageComponentsById.get('completion-quiet') as NotificationComponent;
+    const collapsed = component.render(100).map(line => stripAnsi(line));
+    expect(collapsed).toHaveLength(1);
+    expect(collapsed[0]).toContain('mastra_expert failed in background');
+
+    // Expanding is a request to see everything: the full message and the detail rows, untrimmed.
+    component.setExpanded(true);
+    const expanded = stripAnsi(component.render(100).join('\n'));
+    expect(expanded).toContain('low · background-task-completed · failed');
+    expect(expanded).toContain('result line 4');
+    expect(expanded).toContain('invocation · question: why');
+    expect(expanded).toContain('failure · boom');
+    expect(expanded).not.toContain('…');
   });
 
   it.each(['work-deferred', 'work-awaited'] as const)(
@@ -688,7 +820,11 @@ describe('addUserMessage', () => {
     expect((state.chatContainer.children[0] as TemporalGapComponent).render(80).join('\n')).toContain(
       '⏳ 15 minutes later',
     );
-    expect(state.messageComponentsById.size).toBe(0);
+    // Reminders are registered in `messageComponentsById` before insertion —
+    // `render-messages.ts` keys the addUserMessage dedup guard on that map, so
+    // an unregistered reminder would double-render on a repeat dispatch.
+    expect(state.messageComponentsById.size).toBe(1);
+    expect(state.messageComponentsById.get('__temporal_1')).toBe(state.chatContainer.children[0]);
   });
 
   it('anchors a persisted temporal-gap marker before its target message when precedesMessageId is present', () => {
@@ -936,6 +1072,33 @@ describe('addUserMessage', () => {
 });
 
 describe('renderExistingMessages history bounds', () => {
+  it('does not replace the active transcript when its owner becomes stale during history loading', async () => {
+    const state = createState();
+    addUserMessage(state, createUserMessage('current transcript', 'current-user'));
+    const currentChildren = [...state.chatContainer.children];
+    let resolveMessages!: (messages: MastraDBMessage[]) => void;
+    state.session = {
+      ...state.session,
+      thread: {
+        listActiveMessages: vi.fn().mockReturnValue(
+          new Promise(resolve => {
+            resolveMessages = resolve;
+          }),
+        ),
+      },
+    } as unknown as TUIState['session'];
+    let isCurrent = true;
+
+    const rendering = renderExistingMessages(state, () => isCurrent);
+    isCurrent = false;
+    resolveMessages([createUserMessage('stale transcript', 'stale-user')]);
+    await rendering;
+
+    expect(state.chatContainer.children).toEqual(currentChildren);
+    expect(state.messageComponentsById.has('current-user')).toBe(true);
+    expect(state.messageComponentsById.has('stale-user')).toBe(false);
+  });
+
   it('prunes oversized startup history before the first render', async () => {
     const state = createState();
     const messages = Array.from({ length: 300 }, (_, index) => createUserMessage(`message-${index}`, `user-${index}`));
@@ -1130,6 +1293,35 @@ describe('renderExistingMessages tools', () => {
   });
 
   it.each([undefined, false, true])(
+    'replays completed task metadata without a completion signal (%s)',
+    async enabled => {
+      const message = assistantToolMessage('completed-metadata', [
+        {
+          id: 'completed-call',
+          name: 'view',
+          args: {},
+          result: 'Background task started. Task ID: misleading-text',
+          providerMetadata: { mastra: { backgroundTask: { taskId: 'real-task', status: 'completed' } } },
+        },
+      ]);
+      const state = createState();
+      state.options.backgroundToolsEnabled = enabled;
+      state.session = {
+        ...state.session,
+        thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
+      } as unknown as TUIState['session'];
+      await renderExistingMessages(state);
+      const rendered = state.chatContainer
+        .render(120)
+        .join('\n')
+        .replace(/\x1b\[[0-9;]*m/g, '');
+      expect(rendered).toContain('✓ background · real-task');
+      expect(rendered).not.toContain('background · misleading-text');
+      expect(state.pendingTools.has('completed-call')).toBe(false);
+    },
+  );
+
+  it.each([undefined, false, true])(
     'reconstructs pending background rows only when enabled is true (%s)',
     async enabled => {
       const message = assistantToolMessage('assistant-background-tool', [
@@ -1138,6 +1330,7 @@ describe('renderExistingMessages tools', () => {
           name: 'view',
           args: { path: 'package.json' },
           result: 'Background task started. Task ID: task-1',
+          providerMetadata: { mastra: { backgroundTask: { taskId: 'task-1', status: 'running' } } },
         },
       ]);
       const state = createState();
@@ -1195,7 +1388,8 @@ describe('renderExistingMessages subagents', () => {
         id: 'plugin-call',
         name: 'mastra_expert',
         args: { question: 'demo' },
-        result: 'Background task started. Task ID: visible-demo-123',
+        result: 'Background task resumed. Task ID: visible-demo-123',
+        providerMetadata: { mastra: { backgroundTask: { taskId: 'visible-demo-123', status: 'running' } } },
         isError: false,
       },
     ]);
@@ -1305,6 +1499,53 @@ describe('renderExistingMessages subagents', () => {
     expect(expanded).toContain('Authoritative Alexandria audit');
     expect(state.pendingSubagents.has('tool-background-plugin-1')).toBe(false);
   });
+
+  it.each([undefined, false, true])(
+    'replays cancelled ordinary tool text with background enabled %s',
+    async enabled => {
+      const state = createState();
+      state.options.backgroundToolsEnabled = enabled;
+      const message = assistantToolMessage('cancelled-tool-message', [
+        {
+          id: 'cancelled-call',
+          name: 'view',
+          args: {},
+          result: 'Background task started. Task ID: cancelled-task',
+          isError: false,
+        },
+      ]);
+      const cancellation = createSignal({
+        type: 'notification',
+        tagName: 'notification',
+        contents: 'view cancelled in background',
+        attributes: { source: 'background-work', status: 'cancelled' },
+        metadata: {
+          backgroundCompletion: {
+            eventId: 'background-task:cancelled-task:cancelled',
+            taskId: 'cancelled-task',
+            originRunId: 'cancelled-run',
+            originToolCallId: 'cancelled-call',
+            toolName: 'view',
+            status: 'cancelled',
+          },
+        },
+      }).toDBMessage();
+      state.session = {
+        ...state.session,
+        thread: { listActiveMessages: vi.fn().mockResolvedValue([message, cancellation]) },
+      } as unknown as TUIState['session'];
+      state.controller = { session: state.session } as unknown as TUIState['controller'];
+      await renderExistingMessages(state);
+      const rendered = state.chatContainer
+        .render(120)
+        .join('\n')
+        .replace(/\x1b\[[0-9;]*m/g, '');
+      expect(rendered).toContain('Background execution cancelled.');
+      expect(rendered).toContain('■ background · cancelled-task');
+      expect(rendered).not.toContain('Running in background');
+      expect(state.pendingTools.has('cancelled-call')).toBe(false);
+    },
+  );
 
   it('replays a cancelled background plugin subagent as terminal', async () => {
     const toolMessage = assistantToolMessage('assistant-plugin-background-cancelled', [

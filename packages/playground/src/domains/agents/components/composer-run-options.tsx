@@ -1,5 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Settings2 } from 'lucide-react';
 
 import { AgentRunOptionsContent } from './agent-run-options';
@@ -30,7 +33,7 @@ export function ComposerRunOptions({ requestContextSchema }: ComposerRunOptionsP
           tooltip="Run options"
           data-testid="composer-run-options-trigger"
         >
-          <Settings2 className="text-neutral3 hover:text-neutral6 h-5 w-5" />
+          <Settings2 className={cn('h-5 w-5', quietTextHover, controlStateColorTransition)} />
         </Button>
       </PopoverTrigger>
       <PopoverContent

@@ -12,7 +12,7 @@ import { safeStringify } from '@mastra/core/utils';
 import { parse as parseJsonRiver } from 'jsonriver';
 
 import { ensureAssistantRenderSegment } from '../assistant-render-registry.js';
-import { parseBackgroundToolTaskId } from '../background-tool-result.js';
+import { getBackgroundToolMetadata } from '../background-tool-result.js';
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
@@ -39,6 +39,7 @@ function createPostToolAssistantComponent(ctx: EventHandlerContext, toolCallId: 
   const messageId = state.streamingMessage?.id;
   if (!messageId) {
     const component = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
+    component.setQuietModeDisplay(state.quietMode ? 'quiet' : 'normal');
     state.streamingComponent = component;
     ctx.addChildBeforeFollowUps(component);
     return component;
@@ -315,15 +316,10 @@ function ensureSubmitPlanComponent(
  * Extracts content from common tool return structures like { content: "...", isError: false }
  */
 function isToolResultError(result: unknown): boolean {
-  return typeof result === 'object' && result !== null && (result as Record<string, unknown>).isError === true;
-}
-
-export function getBackgroundToolTaskId(result: unknown): string | undefined {
-  return parseBackgroundToolTaskId(formatToolResult(result));
-}
-
-export function isBackgroundToolPlaceholder(result: unknown): boolean {
-  return getBackgroundToolTaskId(result) !== undefined;
+  if (typeof result !== 'object' || result === null) return false;
+  const record = result as Record<string, unknown>;
+  // Input validation failures come back as `{ error: true, message }` rather than an error result.
+  return record.isError === true || record.error === true;
 }
 
 export function formatToolResult(result: unknown): string {
@@ -427,6 +423,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
 
   if (existingComponent) {
     // Component was created during input streaming — update with final args
+    existingComponent.setArgsStreaming?.(false);
     existingComponent.updateArgs(args);
     reconcileToolBoundaries(ctx);
   } else if (existingSubmitPlanComponent) {
@@ -475,7 +472,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
     const component = new ToolExecutionComponentEnhanced(
       toolName,
       args,
-      { showImages: false, collapsedByDefault: !state.toolOutputExpanded },
+      { showImages: false, collapsedByDefault: !state.toolOutputExpanded, projectRoot: state.projectInfo?.rootPath },
       state.ui,
     );
     component.setExpanded(state.toolOutputExpanded);
@@ -552,6 +549,22 @@ export function handleShellOutput(
 }
 
 /**
+ * Handle the sandbox's exit record for an execute_command call. It decides pass/fail even when the
+ * result text doesn't say, e.g. when the sandbox itself threw and the result is a bare `Error: …`.
+ */
+export function handleCommandExit(
+  ctx: EventHandlerContext,
+  toolCallId: string,
+  exitCode: number,
+  success: boolean,
+): void {
+  const component = ctx.state.pendingTools.get(toolCallId);
+  if (!component?.setCommandExit) return;
+  component.setCommandExit({ exitCode, success });
+  requestRender(ctx.state);
+}
+
+/**
  * Handle the start of streaming tool call input arguments.
  * Creates the tool component early so partial args can render as they arrive.
  */
@@ -623,11 +636,14 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     const component = new ToolExecutionComponentEnhanced(
       toolName,
       {},
-      { showImages: false, collapsedByDefault: !state.toolOutputExpanded },
+      { showImages: false, collapsedByDefault: !state.toolOutputExpanded, projectRoot: state.projectInfo?.rootPath },
       state.ui,
     );
     component.setExpanded(state.toolOutputExpanded);
     applyQuietDisplayForNewTool(ctx, component);
+    // Its args are about to stream in; until they do it has none, so it must not render as if complete
+    // (a quiet shell call would open a box for the project directory, then leave it).
+    component.setArgsStreaming(true);
     ctx.addChildBeforeFollowUps(component);
     state.pendingTools.set(toolCallId, component);
     state.allToolComponents.push(component);
@@ -653,6 +669,7 @@ function applyParsedToolArgs(
 
   const component = state.pendingTools.get(toolCallId);
   if (component) {
+    component.setArgsStreaming?.(true);
     component.updateArgs(partialArgs, false);
     reconcileToolBoundaries(ctx);
     component.refresh?.();
@@ -765,20 +782,30 @@ export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: strin
 export function handleToolInputEnd(ctx: EventHandlerContext, toolCallId: string): void {
   flushLatestParsedToolArgs(ctx, toolCallId);
   closeToolInputParser(toolCallId);
+  const component = ctx.state.pendingTools.get(toolCallId);
+  if (!component?.setArgsStreaming) return;
+  component.setArgsStreaming(false);
+  // An undescribed quiet shell call leaves its bare streaming line for a box, so re-measure spacing.
+  reconcileToolBoundaries(ctx);
 }
 
-export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, result: unknown, isError: boolean): void {
+export function handleToolEnd(
+  ctx: EventHandlerContext,
+  toolCallId: string,
+  result: unknown,
+  isError: boolean,
+  providerMetadata?: unknown,
+): void {
   flushPendingShellOutput(ctx, toolCallId);
   const { state } = ctx;
+  const background = state.options?.backgroundToolsEnabled ? getBackgroundToolMetadata(providerMetadata) : undefined;
   // If this is a subagent tool, store the result in the SubagentExecutionComponent
   const subagentComponent = state.pendingSubagents.get(toolCallId);
   if (subagentComponent) {
     const resultText = formatToolResult(result);
     if (pluginSubagentToolCallIds.has(toolCallId)) {
-      const backgroundTaskId =
-        state.options?.backgroundToolsEnabled && !isError ? getBackgroundToolTaskId(result) : undefined;
-      if (backgroundTaskId) {
-        subagentComponent.setBackgroundTaskId(backgroundTaskId);
+      if (background) subagentComponent.setBackgroundTaskId(background.taskId);
+      if (background?.status === 'running' && !isError) {
         flushRender(state);
       } else {
         subagentComponent.finish(isError, 0, resultText);
@@ -813,10 +840,8 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
     }
 
     const resultText = formatToolResult(result);
-    const backgroundTaskId =
-      state.options?.backgroundToolsEnabled && !effectiveIsError ? getBackgroundToolTaskId(result) : undefined;
-    const isBackgroundPlaceholder = backgroundTaskId !== undefined;
-    if (backgroundTaskId) component.setBackgroundTaskId?.(backgroundTaskId);
+    const isBackgroundPlaceholder = background?.status === 'running' && !effectiveIsError;
+    if (background) component.setBackgroundTaskId?.(background.taskId);
     const toolResult: ToolResult = {
       content: [{ type: 'text', text: resultText }],
       isError: effectiveIsError,

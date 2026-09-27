@@ -91,6 +91,11 @@ const b = new DockerSandbox({ template });
 const result = await template.build();
 if (result.status !== 'ready') throw new Error(result.error);
 
+// Cancel repository resolution or template preparation when needed.
+const controller = new AbortController();
+await a.start({ abortSignal: controller.signal });
+// Explicit builds accept the same option: template.build({ abortSignal: controller.signal }).
+
 // Remove the built image when done (independent of any sandbox's destroy()).
 await template.dispose();
 ```
@@ -105,6 +110,9 @@ template, and their signatures match the E2B and platform template builders.
 The image tag is content-addressed (`mastra-template:<hash>`), so `build()` is
 idempotent and reuses an existing image unless you pass `{ force: true }`,
 which also bypasses the daemon's layer cache so every step really re-runs.
+Concurrent callers share preparation work, but each caller can cancel its own
+wait independently; the underlying build is cancelled only after its last
+active caller aborts.
 
 Never put secrets in `setEnvs` — they are baked into the image. For a step that
 needs a credential, use `runWithSecrets`: the command runs in a throwaway build

@@ -1,4 +1,3 @@
-import '../../../../new-theme.css';
 import { Switch as SwitchPrimitive } from '@base-ui/react/switch';
 import * as React from 'react';
 
@@ -37,15 +36,15 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         ref={ref}
         data-slot="switch"
         className={cn(
-          'new-theme peer group/switch inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-0 bg-foreground/14 p-0.5 outline-hidden',
+          'peer group/switch inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-0 bg-fill-hover p-0.5 outline-hidden',
           'transition-colors duration-normal ease-out-custom motion-reduce:transition-none',
-          'hover:bg-foreground/18',
-          'active:bg-foreground/30',
-          'focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-foreground/45 focus-visible:outline-solid',
+          'hover:bg-fill-active',
+          'active:bg-fill-strong',
+          'focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-border-focus focus-visible:outline-solid',
           'data-[checked]:bg-foreground/90',
           'data-[checked]:hover:bg-foreground',
           'data-[checked]:active:bg-foreground/75',
-          'data-[disabled]:cursor-not-allowed data-[disabled]:bg-foreground/14 data-[disabled]:hover:bg-foreground/14',
+          'data-[disabled]:cursor-not-allowed data-[disabled]:bg-fill-hover data-[disabled]:hover:bg-fill-hover',
           'data-[disabled]:data-[checked]:bg-foreground/30 data-[disabled]:data-[checked]:hover:bg-foreground/30',
           className,
         )}

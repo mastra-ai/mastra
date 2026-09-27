@@ -30,7 +30,7 @@ import { RAIL_ROW_BODY } from './Timeline';
 /** What landed: the glyph the rail hangs the row off, and the word the row's badge wears. */
 const KIND = {
   mention: { glyph: MessageSquare, label: 'mention', tone: 'text-accent1', badge: 'green' },
-  activity: { glyph: MessagesSquare, label: 'comment', tone: 'text-icon3', badge: 'neutral' },
+  activity: { glyph: MessagesSquare, label: 'comment', tone: 'text-muted-foreground', badge: 'neutral' },
   'automation-failed': { glyph: TriangleAlert, label: 'failed', tone: 'text-error', badge: 'red' },
   'automation-proposed': { glyph: Sparkles, label: 'suggested', tone: 'text-warning1', badge: 'orange' },
   'supervisor-finding': { glyph: Brain, label: 'finding', tone: 'text-accent1', badge: 'blue' },
@@ -42,7 +42,7 @@ const KIND = {
 
 /** Actions ride over the row's right end rather than displacing the time, so a hover never reflows the row. */
 const REVEAL_ACTIONS =
-  'bg-surface4 absolute top-1/2 right-0 hidden -translate-y-1/2 items-center gap-0.5 rounded-md pl-2 pointer-coarse:flex pointer-fine:group-hover:flex pointer-fine:group-focus-within:flex';
+  'bg-fill absolute top-1/2 right-0 hidden -translate-y-1/2 items-center gap-0.5 rounded-md pl-2 pointer-coarse:flex pointer-fine:group-hover:flex pointer-fine:group-focus-within:flex';
 
 /** Kept in flow so nothing shifts; the action bar covers it. */
 const MASKED_BY_ACTIONS =
@@ -75,7 +75,7 @@ function RowAction({
     <Button
       type="button"
       variant="ghost"
-      size="icon-xs"
+      size="icon-sm"
       disabled={disabled}
       tooltip={tooltip}
       aria-label={label}
@@ -126,7 +126,7 @@ export function AttentionItemRow({
       />
       <span className="flex w-full items-center gap-2">
         <span className="sr-only">{item.read ? 'Read' : 'Unread'}</span>
-        <span className="text-ui-sm text-icon6 min-w-0 flex-1 truncate font-medium">{item.title}</span>
+        <span className="text-column text-foreground min-w-0 flex-1 truncate">{item.title}</span>
         <Badge
           variant={KIND[item.kind].badge}
           emphasis={item.read ? 'muted' : 'default'}
@@ -143,7 +143,7 @@ export function AttentionItemRow({
           <span className={REVEAL_ACTIONS}>
             <Button
               variant="ghost"
-              size="icon-xs"
+              size="icon-sm"
               tooltip="Ask supervisor"
               aria-label={`Ask supervisor about ${item.title}`}
               onClick={() => {
@@ -205,8 +205,8 @@ export function AttentionItemRow({
           </span>
         </span>
       </span>
-      <span className="text-ui-xs text-icon3 truncate">
-        {author ? <span className="text-icon4 font-medium">{author} </span> : null}
+      <span className="text-meta text-muted-foreground truncate">
+        {author ? <span className="text-muted-foreground font-medium">{author} </span> : null}
         {item.detail}
       </span>
     </div>

@@ -1,9 +1,9 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { InfoIcon } from 'lucide-react';
-import { useLinkComponent } from '@/lib/framework';
 
 const sectionAccentClasses = {
   amber: '[--section-accent:var(--badge-yellow-fg)]',
@@ -48,7 +48,7 @@ export const AgentMetadataSection = ({
     >
       <header className="col-span-2 flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 group-has-[[data-slot=metadata-empty]]/metadata:col-span-1">
         <div className="flex min-w-0 items-center gap-2">
-          <Txt as="h3" variant="ui-smd" className="text-neutral5 flex min-w-0 items-center gap-2 font-medium">
+          <Txt as="h3" variant="label" tone="ink" className="flex min-w-0 items-center gap-2">
             {icon && (
               <Icon aria-hidden="true" className="shrink-0 text-(--section-accent)">
                 {icon}
@@ -57,7 +57,7 @@ export const AgentMetadataSection = ({
             <span className="flex min-w-0 items-center gap-1.5">
               <span className="text-(--section-accent)">{title}</span>
               {count !== undefined && count > 0 && (
-                <Txt as="span" variant="caption" className="font-normal tabular-nums">
+                <Txt as="span" variant="caption" tone="muted" className="tabular-nums">
                   {count}
                 </Txt>
               )}
@@ -74,7 +74,7 @@ export const AgentMetadataSection = ({
                     rel="noopener noreferrer"
                     className="opacity-0 group-focus-within/metadata:opacity-100 group-hover/metadata:opacity-100 pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:items-center pointer-coarse:justify-center pointer-coarse:opacity-100"
                   >
-                    <Icon className="text-neutral3" size="sm">
+                    <Icon className="text-muted-foreground" size="xs">
                       {hint.icon || <InfoIcon />}
                     </Icon>
                   </Link>

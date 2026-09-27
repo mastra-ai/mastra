@@ -15,7 +15,13 @@ const meta: Meta<typeof Combobox> = {
     },
     variant: {
       control: { type: 'select' },
-      options: ['default', 'outline', 'ghost'],
+      options: ['default', 'ghost'],
+    },
+    showChevron: {
+      control: { type: 'boolean' },
+    },
+    iconOnlyValue: {
+      control: { type: 'boolean' },
     },
   },
 };
@@ -23,8 +29,8 @@ const meta: Meta<typeof Combobox> = {
 export default meta;
 type Story = StoryObj<typeof Combobox>;
 
-const iconClassName = 'h-4 w-4 shrink-0 text-neutral3';
-const badgeClassName = 'rounded-full border border-border1 px-2 py-0.5 text-ui-xs text-neutral3';
+const iconClassName = 'h-4 w-4 shrink-0 text-muted-foreground';
+const badgeClassName = 'rounded-full border border-border px-2 py-0.5 text-meta text-muted-foreground';
 
 const frameworkOptions = [
   { label: 'React', value: 'react' },
@@ -104,6 +110,17 @@ export const Default: Story = {
   },
 };
 
+export const WithError: Story = {
+  args: {
+    options: frameworkOptions,
+    placeholder: 'Select a framework...',
+    name: 'framework',
+    error: 'Choose a framework.',
+    'aria-label': 'Framework',
+    className: 'w-[200px]',
+  },
+};
+
 export const WithValue: Story = {
   args: {
     options: frameworkOptions,
@@ -141,30 +158,54 @@ export const CustomEmptyText: Story = {
 };
 
 export const ManyOptions: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Long lists scroll inside `ScrollArea`: an overlay scrollbar, fades at the clipped edges, and scroll padding that keeps the keyboard-highlighted row clear of the fade.',
+      },
+    },
+  },
   args: {
-    options: [
-      { label: 'Option 1', value: '1' },
-      { label: 'Option 2', value: '2' },
-      { label: 'Option 3', value: '3' },
-      { label: 'Option 4', value: '4' },
-      { label: 'Option 5', value: '5' },
-      { label: 'Option 6', value: '6' },
-      { label: 'Option 7', value: '7' },
-      { label: 'Option 8', value: '8' },
-      { label: 'Option 9', value: '9' },
-      { label: 'Option 10', value: '10' },
-      { label: 'Option 11', value: '11' },
-      { label: 'Option 12', value: '12' },
-    ],
+    options: Array.from({ length: 40 }, (_, index) => ({ label: `Option ${index + 1}`, value: `${index + 1}` })),
     placeholder: 'Select an option...',
     className: 'w-[200px]',
+  },
+};
+
+export const IconOnlyValue: Story = {
+  args: {
+    options: [
+      {
+        label: 'Database',
+        value: 'database',
+        start: <Database className={iconClassName} />,
+        displayLabel: <span className="sr-only">Database</span>,
+      },
+      {
+        label: 'Metrics',
+        value: 'metrics',
+        start: <Gauge className={iconClassName} />,
+        displayLabel: <span className="sr-only">Metrics</span>,
+      },
+      {
+        label: 'Branches',
+        value: 'branches',
+        start: <GitBranch className={iconClassName} />,
+        displayLabel: <span className="sr-only">Branches</span>,
+      },
+    ],
+    value: 'database',
+    'aria-label': 'Source',
+    showChevron: false,
+    iconOnlyValue: true,
   },
 };
 
 export const Variants: Story = {
   render: () => (
     <div className="flex flex-col gap-3">
-      {(['default', 'outline', 'ghost'] as const).map(variant => (
+      {(['default', 'ghost'] as const).map(variant => (
         <Fragment key={variant}>
           <Combobox variant={variant} options={frameworkOptions} placeholder={variant} className="w-50" />
         </Fragment>
@@ -190,7 +231,7 @@ export const WithDescriptions: Story = {
 export const Sizes: Story = {
   render: () => (
     <div className="flex flex-col gap-3">
-      {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
+      {(['sm', 'md', 'lg'] as const).map(size => (
         <Fragment key={size}>
           <Combobox size={size} options={frameworkOptions} placeholder={size} className="w-50" />
         </Fragment>
@@ -220,7 +261,7 @@ export const Multiple: Story = {
           {selectedCapabilities.map(option => (
             <span
               key={option.value}
-              className="border-border1 bg-surface3 text-ui-xs text-neutral4 rounded-full border px-2.5 py-1"
+              className="rounded-full border border-border bg-card px-2.5 py-1 text-meta text-muted-foreground"
             >
               {option.label}
             </span>

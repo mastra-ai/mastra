@@ -1,0 +1,59 @@
+/* Chart series and span-type hues. Consumed through `var()` by canvases and
+   timelines that pick a colour at runtime, so they generate no utility. */
+
+:root {
+  --chart-blue: oklch(0.63 0.174 263);
+  --chart-blue-deep: oklch(0.519 0.199 264);
+  --chart-green: oklch(0.723 0.192 150);
+  --chart-purple: oklch(0.606 0.219 293);
+  --chart-orange: oklch(0.758 0.159 56);
+  --chart-pink: oklch(0.725 0.175 350);
+  --chart-red: oklch(0.711 0.166 22);
+  --chart-yellow: oklch(0.861 0.173 92);
+
+  --chart-soft-1: oklch(0.62 0.19 285);
+  --chart-soft-2: oklch(0.7 0.145 285);
+  --chart-soft-3: oklch(0.78 0.1 285);
+  --chart-soft-4: oklch(0.85 0.06 285);
+  --chart-soft-5: oklch(0.9 0.03 285);
+
+  --span-type-agent: oklch(0.75 0.15 250);
+  --span-type-workflow: oklch(0.75 0.15 200);
+  --span-type-model: oklch(0.75 0.15 320);
+  --span-type-mcp: oklch(0.75 0.15 160);
+  --span-type-tool: oklch(0.75 0.15 100);
+  --span-type-provider: oklch(0.75 0.15 60);
+  --span-type-memory: oklch(0.75 0.12 50);
+  --span-type-workspace: oklch(0.75 0.15 40);
+  --span-type-skill: oklch(0.75 0.15 130);
+  --span-type-scorer: oklch(0.75 0.15 280);
+  --span-type-other: var(--muted-foreground);
+}
+
+html.light {
+  --chart-blue: oklch(0.55 0.2 263);
+  --chart-blue-deep: oklch(0.42 0.16 264);
+  --chart-green: oklch(0.55 0.15 150);
+  --chart-purple: oklch(0.52 0.24 293);
+  --chart-orange: oklch(0.62 0.15 56);
+  --chart-pink: oklch(0.57 0.2 350);
+  --chart-red: oklch(0.55 0.21 22);
+  --chart-yellow: oklch(0.62 0.12 92);
+
+  --chart-soft-1: oklch(0.52 0.2 285);
+  --chart-soft-2: oklch(0.64 0.16 285);
+  --chart-soft-3: oklch(0.75 0.11 285);
+  --chart-soft-4: oklch(0.85 0.065 285);
+  --chart-soft-5: oklch(0.92 0.035 285);
+
+  --span-type-agent: oklch(0.55 0.15 250);
+  --span-type-workflow: oklch(0.55 0.15 200);
+  --span-type-model: oklch(0.55 0.15 320);
+  --span-type-mcp: oklch(0.55 0.15 160);
+  --span-type-tool: oklch(0.55 0.15 100);
+  --span-type-provider: oklch(0.55 0.15 60);
+  --span-type-memory: oklch(0.55 0.12 50);
+  --span-type-workspace: oklch(0.55 0.15 40);
+  --span-type-skill: oklch(0.55 0.15 130);
+  --span-type-scorer: oklch(0.55 0.15 280);
+}

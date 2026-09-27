@@ -1,10 +1,11 @@
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { MetricsCardGroup } from '@mastra/playground-ui/components/MetricsCardGroup';
 import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { NoDataPageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import type { PropertyFilterToken } from '@mastra/playground-ui/components/PropertyFilter';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useAgentRunsKpiMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-agent-runs-kpi-metrics';
 import { MetricsProvider, isValidPreset } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
 import type { DatePreset, DateRange } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
@@ -22,6 +23,7 @@ import { useTags } from '@mastra/playground-ui/domains/traces/hooks/use-tags';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 import { LatencyCard } from '@/domains/metrics/components/latency-card';
 import { MemoryCard } from '@/domains/metrics/components/memory-card';
@@ -38,6 +40,7 @@ import { ModelUsageCostCard } from '@/domains/metrics/components/model-usage-cos
 import { TokenUsageByAgentCard } from '@/domains/metrics/components/token-usage-by-agent-card';
 import { TokenUsageTimelineCard } from '@/domains/metrics/components/token-usage-timeline-card';
 import { TracesVolumeCard } from '@/domains/metrics/components/traces-volume-card';
+import { metricsCrumbs } from '@/domains/metrics/metrics-crumbs';
 
 const PERIOD_PARAM = 'period';
 const DATE_FROM_PARAM = 'dateFrom';
@@ -211,25 +214,28 @@ function MetricsContent() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout>
-        <SessionExpired />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
+        <h1 className="sr-only">Metrics</h1>
+        <SessionExpired variant="fill" />
+      </PageLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout>
-        <PermissionDenied resource="metrics" />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
+        <h1 className="sr-only">Metrics</h1>
+        <PermissionDenied variant="fill" resource="metrics" />
+      </PageLayout>
     );
   }
 
   if (error) {
     return (
-      <NoDataPageLayout>
-        <ErrorState title="Failed to load metrics" message={error.message} />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
+        <h1 className="sr-only">Metrics</h1>
+        <EmptyState tone="error" variant="fill" titleSlot="Failed to load metrics" descriptionSlot={error.message} />
+      </PageLayout>
     );
   }
 
@@ -245,13 +251,13 @@ function MetricsContent() {
           </Notice>
         )}
 
-        <MetricsFlexGrid>
+        <MetricsCardGroup>
           <AgentRunsKpiCard />
           <ModelCostKpiCard />
           <TotalTokensKpiCard />
           <ActiveThreadsKpiCard />
           <ActiveResourcesKpiCard />
-        </MetricsFlexGrid>
+        </MetricsCardGroup>
 
         <MetricsFlexGrid>
           <ModelUsageCostCard />

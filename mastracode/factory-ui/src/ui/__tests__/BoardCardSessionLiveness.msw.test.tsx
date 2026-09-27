@@ -124,7 +124,7 @@ function stubFactoryWithBoundSession() {
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, () =>
       HttpResponse.json({ issues: [], nextPage: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, async () => {
+    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, async () => {
       sessionListRequests += 1;
       if (sessionListRequests > 1) await refetchGate.promise;
       return HttpResponse.json({ sessions });
@@ -162,7 +162,9 @@ describe('Board card session liveness', () => {
     // refetch sees them: the card must trust its own ref, not the intersection.
     stubFactoryWithBoundSession();
     server.use(
-      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
+      http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
+        HttpResponse.json({ sessions: [] }),
+      ),
     );
     const user = userEvent.setup();
     renderWorkBoard();
@@ -181,7 +183,7 @@ describe('Board card session liveness', () => {
   it('shows the initializing dot while a bound session is still materializing', async () => {
     stubFactoryWithBoundSession();
     server.use(
-      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+      http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
         HttpResponse.json({ sessions: [{ ...boundSession, materializedAt: null }] }),
       ),
     );

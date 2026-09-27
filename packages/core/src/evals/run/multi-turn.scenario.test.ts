@@ -12,6 +12,7 @@ import { LLMock } from '@copilotkit/aimock';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { Agent } from '../../agent';
 import { createScorer } from '../base';
+import { notScorable } from '../not-scorable';
 import { runEvals } from '.';
 
 // ─── AIMock lifecycle ───────────────────────────────────────────────────────────
@@ -358,5 +359,78 @@ describe('Per-turn assertions (turns) — scenario tests via runEvals + AIMock',
 
     expect(result.verdict).toBe('scored');
     expect(result.turnResults![0]!.thresholdResults![0]!.passed).toBe(false);
+  });
+
+  it('leaves not-scorable turns out of per-turn scores, gates, and the verdict', async () => {
+    const agent = textAgent('scripted answer');
+
+    /** Scores 1 when the turn asks for a refund; otherwise declares the turn not scorable. */
+    const refundTurnScorer = createScorer({
+      id: 'refund-turn',
+      description: 'Judges refund turns only',
+      name: 'Refund Turn',
+    })
+      .preprocess(({ run }) =>
+        typeof run.input === 'string' && run.input.includes('refund') ? { refund: true } : notScorable('not a refund'),
+      )
+      .generateScore(() => 1);
+
+    const result = await runEvals({
+      data: [
+        {
+          turns: [
+            { input: 'I want a refund', gates: [refundTurnScorer], scorers: [refundTurnScorer] },
+            { input: 'unrelated follow-up', gates: [refundTurnScorer], scorers: [refundTurnScorer] },
+          ],
+        },
+      ],
+      target: agent,
+    });
+
+    expect(result.verdict).toBe('passed');
+    expect(result.turnResults).toEqual([
+      {
+        index: 0,
+        gateResults: [{ id: 'refund-turn', passed: true, score: 1 }],
+        scores: { 'refund-turn': 1 },
+      },
+      // The second turn ran but was not scorable for both the gate and the
+      // scorer, so it carries no gate or score results.
+      { index: 1 },
+    ]);
+    expect(result.summary.notScorable).toEqual({ 'refund-turn': 2 });
+  });
+
+  it('omits the verdict when every per-turn gate and threshold was not scorable', async () => {
+    const agent = textAgent('scripted answer');
+
+    const refundTurnScorer = createScorer({
+      id: 'refund-turn',
+      description: 'Judges refund turns only',
+      name: 'Refund Turn',
+    })
+      .preprocess(({ run }) =>
+        typeof run.input === 'string' && run.input.includes('refund') ? { refund: true } : notScorable('not a refund'),
+      )
+      .generateScore(() => 1);
+
+    const result = await runEvals({
+      data: [
+        {
+          turns: [
+            { input: 'What is the weather?', gates: [refundTurnScorer] },
+            {
+              input: 'Tell me a joke',
+              scorers: [{ scorer: refundTurnScorer, threshold: 0.9 }],
+            },
+          ],
+        },
+      ],
+      target: agent,
+    });
+
+    expect(result.verdict).toBeUndefined();
+    expect(result.turnResults).toEqual([{ index: 0 }, { index: 1 }]);
+    expect(result.summary.notScorable).toEqual({ 'refund-turn': 2 });
   });
 });

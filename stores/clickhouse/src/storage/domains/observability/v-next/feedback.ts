@@ -27,7 +27,7 @@ import { parseFieldKey } from '@mastra/core/utils';
 import { isReplicationConfigured } from '../../../db/replication';
 import type { ClickhouseReplicationConfig } from '../../../db/replication';
 import { TABLE_DELETION_REQUESTS, TABLE_FEEDBACK_EVENTS, TABLE_FEEDBACK_EVENTS_DELTA } from './ddl';
-import { recordDeletionRequest } from './deletion-requests';
+import { markDeletionRequestApplied, recordDeletionRequest } from './deletion-requests';
 import { buildFeedbackFilterConditions, buildPaginationClause, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, feedbackRecordToRow, rowToFeedbackRecord } from './helpers';
@@ -223,9 +223,13 @@ export async function batchCreateFeedback(client: ClickHouseClient, args: BatchC
  * `organizationId` and `resourceId` values are ANDed into the predicate to
  * restrict deletion to records with matching scope fields.
  *
- * A durable deletion request is recorded before the lightweight delete. The
- * delete is immediately visible to subsequent reads; physical purge depends on
- * the table's configured retention TTL. The delta table is intentionally not
+ * A durable deletion request is recorded before the lightweight delete and
+ * marked applied once the delete succeeds. If the delete fails, the request
+ * stays unapplied and does not block updates to the still-visible rows; retry
+ * by calling this function again.
+ *
+ * The delete is immediately visible to subsequent reads; physical purge depends
+ * on the table's configured retention TTL. The delta table is intentionally not
  * touched and expires through its fixed two-day TTL.
  */
 export async function deleteFeedback(
@@ -235,7 +239,7 @@ export async function deleteFeedback(
 ): Promise<void> {
   if (args.feedbackIds.length === 0) return;
 
-  await recordDeletionRequest(client, {
+  const request = await recordDeletionRequest(client, {
     requestId: randomUUID(),
     organizationId: args.organizationId,
     resourceId: args.resourceId,
@@ -269,6 +273,8 @@ export async function deleteFeedback(
     query_params: params,
     clickhouse_settings: { lightweight_deletes_sync: isReplicationConfigured(replication) ? '2' : '1' },
   });
+
+  await markDeletionRequestApplied(client, request, replication);
 }
 
 // ============================================================================
@@ -285,18 +291,24 @@ function feedbackNotFoundError(feedbackId: string): MastraError {
   });
 }
 
+/**
+ * Finds a deletion request covering this feedback. With `appliedOnly`, only
+ * requests whose DELETE succeeded count; otherwise pending requests count too,
+ * including a delete that is still running or one that failed.
+ */
 async function hasFeedbackDeletionRequest(
   client: ClickHouseClient,
   feedbackId: string,
   organizationId: string | null,
   resourceId: string | null,
+  { appliedOnly }: { appliedOnly: boolean },
 ): Promise<boolean> {
   const rows = await queryJson<{ found: number }>(
     client,
     `SELECT 1 AS found FROM ${TABLE_DELETION_REQUESTS} FINAL
      WHERE signal = 'feedback'
        AND predicateType = 'itemIds'
-       AND has(predicateValues, {feedbackId:String})
+       AND has(predicateValues, {feedbackId:String})${appliedOnly ? '\n       AND lastAppliedAt > toDateTime64(0, 3)' : ''}
        AND (organizationId = '' OR organizationId = {organizationId:String})
        AND (resourceId = '' OR resourceId = {resourceId:String})
      LIMIT 1`,
@@ -305,6 +317,20 @@ async function hasFeedbackDeletionRequest(
   return rows.length > 0;
 }
 
+/**
+ * Review updates insert a replacement row, so they need only `INSERT` and the
+ * insert materialized view publishes the delta cursor.
+ *
+ * A replacement written after a concurrent DELETE is not covered by that
+ * DELETE. The post-write check therefore looks for any request, pending or
+ * applied, and re-runs the delete when it finds one. Only applied requests
+ * block the update up front, so feedback whose delete failed stays editable.
+ *
+ * If the post-write check reads a replica that has not received the request
+ * yet, or the check or its delete fails, the replacement stays visible. A row
+ * that is still visible under an applied request can only be such a leftover,
+ * so the next update deletes it again.
+ */
 export async function updateFeedbackReviewStatus(
   client: ClickHouseClient,
   args: UpdateFeedbackReviewStatusArgs,
@@ -324,27 +350,32 @@ export async function updateFeedbackReviewStatus(
   if (!existingRow) {
     throw feedbackNotFoundError(feedbackId);
   }
-
-  if (await hasFeedbackDeletionRequest(client, feedbackId, existingRow.organizationId, existingRow.resourceId)) {
+  const { organizationId, resourceId } = existingRow;
+  const redelete = async (): Promise<never> => {
+    await deleteFeedback(
+      client,
+      {
+        feedbackIds: [feedbackId],
+        organizationId: organizationId ?? undefined,
+        resourceId: resourceId ?? undefined,
+      },
+      replication,
+    );
     throw feedbackNotFoundError(feedbackId);
+  };
+
+  if (await hasFeedbackDeletionRequest(client, feedbackId, organizationId, resourceId, { appliedOnly: true })) {
+    return redelete();
   }
 
   const updated = rowToFeedbackRecord({ ...existingRow, reviewStatus });
   await batchCreateFeedback(client, { feedbacks: [updated] });
 
-  if (await hasFeedbackDeletionRequest(client, feedbackId, existingRow.organizationId, existingRow.resourceId)) {
-    await deleteFeedback(
-      client,
-      {
-        feedbackIds: [feedbackId],
-        organizationId: existingRow.organizationId ?? undefined,
-        resourceId: existingRow.resourceId ?? undefined,
-      },
-      replication,
-    );
-    throw feedbackNotFoundError(feedbackId);
+  // A pending request is either a delete that failed or one still running.
+  // They look the same here, so re-run the delete in both cases.
+  if (await hasFeedbackDeletionRequest(client, feedbackId, organizationId, resourceId, { appliedOnly: false })) {
+    return redelete();
   }
-
   return updated;
 }
 

@@ -1,5 +1,22 @@
-import { beforeEach, afterEach, describe, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import type { Mastra } from '../mastra';
+
+const consoleLoggerConstructor = vi.hoisted(() => vi.fn());
+
+vi.mock('../logger', async importOriginal => {
+  const actual = await importOriginal<typeof import('../logger')>();
+
+  return {
+    ...actual,
+    ConsoleLogger: class extends actual.ConsoleLogger {
+      constructor(options: ConstructorParameters<typeof actual.ConsoleLogger>[0]) {
+        consoleLoggerConstructor(options);
+        super(options);
+      }
+    },
+  };
+});
+
 import { loop } from './loop';
 import { fullStreamTests } from './test-utils/fullStream';
 import { generateTextTestsV5 } from './test-utils/generateText';
@@ -9,7 +26,7 @@ import { streamObjectTests } from './test-utils/streamObject';
 import { textStreamTests } from './test-utils/textStream';
 import { toolMediaTests } from './test-utils/tool-media';
 import { toolsTests } from './test-utils/tools';
-import { createTestMastra, mockDate } from './test-utils/utils';
+import { createMessageListWithUserMessage, createTestMastra, createTestModels, mockDate } from './test-utils/utils';
 
 // The agentic loop now runs on the evented engine, which requires a Mastra
 // instance with a pubsub adapter (and workers started) to dispatch events.
@@ -39,6 +56,20 @@ const setupEventedMastra = () => {
 describe('Loop Tests', () => {
   describe('AISDK v5', () => {
     setupEventedMastra();
+
+    it('uses an error-level fallback logger', () => {
+      consoleLoggerConstructor.mockClear();
+
+      loopFn({
+        methodType: 'stream',
+        models: createTestModels(),
+        tools: {},
+        messageList: createMessageListWithUserMessage(),
+        agentId: 'agent-id',
+      });
+
+      expect(consoleLoggerConstructor).toHaveBeenCalledWith({ level: 'error' });
+    });
 
     textStreamTests({ loopFn, runId: 'test-run-id' });
     fullStreamTests({ loopFn, runId: 'test-run-id', modelVersion: 'v2' });

@@ -1,10 +1,11 @@
 'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { Check, X } from 'lucide-react';
 import { useReducer } from 'react';
-import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 import { DEFAULT_SCORERS_HELPER_TEXT, DEFAULT_SCORERS_LABEL } from './default-scorers-copy';
 import { ScorerSelector } from './experiment-trigger/scorer-selector';
 import { SchemaConfigSection } from './schema-config-section';
@@ -168,11 +169,11 @@ export function EditDatasetForm({ dataset, onSuccess, onCancel }: EditDatasetFor
         defaultOpen={!!(dataset.inputSchema || dataset.groundTruthSchema || dataset.requestContextSchema)}
       />
 
-      {formState.validationError && (
-        <div className="rounded-md border border-red-900/50 bg-red-950/20 p-3">
-          <p className="text-ui-md text-red-200">{formState.validationError}</p>
+      {formState.validationError ? (
+        <div role="alert">
+          <Notice variant="destructive">{formState.validationError}</Notice>
         </div>
-      )}
+      ) : null}
 
       <div className="flex justify-end gap-2 pt-4">
         <Button icon={<X />} type="button" onClick={onCancel}>

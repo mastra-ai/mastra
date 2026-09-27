@@ -7,7 +7,12 @@ export type ItemListLabelCellProps = {
 
 export function ItemListLabelCell({ children, className }: ItemListLabelCellProps) {
   return (
-    <label className={cn('flex h-full w-14 items-center justify-center rounded-lg hover:bg-surface5', className)}>
+    <label
+      className={cn(
+        'flex h-full w-14 items-center justify-center rounded-lg text-caption hover:bg-fill-subtle',
+        className,
+      )}
+    >
       {children}
     </label>
   );

@@ -85,7 +85,7 @@ export const DataListControls = ({ dataLists }: { dataLists: ReactElement<Tabbed
                   <div data-slot="tabbed-container-filter" data-active={filterCount > 0 || undefined}>
                     <ListFilterIcon aria-hidden="true" />
                     {filterCount > 0 ? (
-                      <span aria-hidden="true" data-slot="tabbed-container-filter-count" className="text-ui-xs">
+                      <span aria-hidden="true" data-slot="tabbed-container-filter-count" className="text-meta">
                         {filterCount}
                       </span>
                     ) : null}
@@ -157,7 +157,7 @@ export function TabbedContainerRoot<T extends string>({
                 disabledTooltip={panel.props.disabledTooltip}
                 onClick={panel.props.onClick}
                 onClose={panel.props.onClose}
-                className={cn('font-medium', panel.props.tabClassName)}
+                className={panel.props.tabClassName}
               >
                 {panel.props.label}
               </Tab>
