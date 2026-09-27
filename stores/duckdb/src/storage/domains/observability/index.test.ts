@@ -1413,6 +1413,68 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(afterPageCursor.spans.map(span => span.traceId)).toEqual(['trace-delta-new']);
     });
 
+    it('computes branch page deltaCursor with post-aggregation filters', async () => {
+      const originalFeatures = new Set(coreFeatures);
+      coreFeatures.add('observability-delta-polling');
+      const toolSpan = (id: string, tags: string[], second: number) => ({
+        traceId: `trace-${id}`,
+        spanId: `tool-${id}`,
+        parentSpanId: null,
+        name: `tool-${id}`,
+        spanType: SpanType.TOOL_CALL,
+        isEvent: false,
+        entityType: null,
+        entityId: null,
+        entityName: null,
+        userId: null,
+        organizationId: null,
+        resourceId: null,
+        runId: null,
+        sessionId: null,
+        threadId: null,
+        requestId: null,
+        environment: null,
+        source: null,
+        serviceName: null,
+        scope: null,
+        attributes: null,
+        metadata: null,
+        tags,
+        links: null,
+        input: null,
+        output: null,
+        error: null,
+        startedAt: new Date(`2026-03-01T00:00:0${second}Z`),
+        endedAt: new Date(`2026-03-01T00:00:0${second + 1}Z`),
+      });
+
+      try {
+        await storage.createSpan({ span: toolSpan('keep-1', ['keep'], 0) });
+        await storage.createSpan({ span: toolSpan('skip-1', ['skip'], 2) });
+
+        const page = await storage.listBranches({ filters: { tags: ['keep'] } });
+        expect(page.branches.map(branch => branch.spanId)).toEqual(['tool-keep-1']);
+        expect(page.deltaCursor).toBeTruthy();
+
+        const none = await storage.listBranches({ filters: { tags: ['missing'] } });
+        expect(none.branches).toEqual([]);
+        expect(none.deltaCursor).toBeTruthy();
+
+        await storage.createSpan({ span: toolSpan('keep-2', ['keep'], 4) });
+        await storage.createSpan({ span: toolSpan('skip-2', ['skip'], 6) });
+
+        const delta = await storage.listBranches({
+          mode: 'delta',
+          filters: { tags: ['keep'] },
+          after: page.deltaCursor!,
+        });
+        expect(delta.branches.map(branch => branch.spanId)).toEqual(['tool-keep-2']);
+      } finally {
+        coreFeatures.clear();
+        for (const feature of originalFeatures) coreFeatures.add(feature);
+      }
+    });
+
     it('batch deletes traces', async () => {
       await storage.createSpan({
         span: {
