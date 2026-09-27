@@ -13,8 +13,10 @@ export function SideDialogHeading({ children, className, as = 'h1' }: SideDialog
     <HeadingTag
       className={cn(
         'flex items-start gap-2',
-        as === 'h1' ? 'text-heading text-foreground' : 'text-subheading text-foreground',
-        '[&>svg]:mt-0.5 [&>svg]:size-[1.25em] [&>svg]:shrink-0 [&>svg]:opacity-70',
+        as === 'h1'
+          ? 'text-heading text-foreground [&>svg]:size-icon-lg'
+          : 'text-subheading text-foreground [&>svg]:size-icon-md',
+        '[&>svg]:mt-0.5 [&>svg]:shrink-0 [&>svg]:opacity-70',
         className,
       )}
     >

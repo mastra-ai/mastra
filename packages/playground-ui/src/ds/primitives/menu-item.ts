@@ -36,9 +36,9 @@ export const menuItemDestructiveClass = cn(
 );
 
 // Trailing indicator (check / submenu chevron) — applied to a wrapper element, not the
-// svg itself, because the Button recipe's `[&>svg]:mx-[-.3em]` would beat `ml-auto`.
+// svg itself, because the Button recipe's `[&>svg]:-mx-1` would beat `ml-auto`.
 export const menuItemTrailingIconClass =
-  'ml-auto flex size-[1.1em] shrink-0 items-center justify-center [&>svg]:size-full';
+  'ml-auto flex size-icon-sm shrink-0 items-center justify-center [&>svg]:size-full';
 
 export const menuItemCheckClass = cn(menuItemTrailingIconClass, 'text-foreground');
 
@@ -63,7 +63,7 @@ export const menuPopupClass = cn(
   'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
 );
 
-export const menuLabelClass = 'px-[.9em] pt-1.5 pb-1 text-meta tracking-wider text-muted-foreground uppercase';
+export const menuLabelClass = 'px-2.5 pt-1.5 pb-1 text-meta tracking-wider text-muted-foreground uppercase';
 
 export const menuSeparatorClass = '-mx-1 my-1 h-px bg-border';
 
@@ -71,15 +71,14 @@ export const menuShortcutClass = 'ml-auto text-meta tracking-wider text-muted-fo
 
 /** Non-interactive row (empty / loading) on the same size grid as an item. */
 export const menuEmptyClass =
-  'flex h-control-md items-center gap-[.75em] px-[.9em] py-0.5 text-body-sm text-muted-foreground box-content';
+  'flex h-control-md items-center gap-2.5 px-3 py-0.5 text-body-sm text-muted-foreground box-content';
 
 export const menuSearchClasses = {
   // The input is a full control rung and the row adds `py-0.5` on top, so the search
   // row sits one notch taller than an item: the divider does not crowd the first
   // option while the text stays on the item grid.
-  container:
-    'flex items-center gap-[.75em] border-b border-border px-[.9em] py-0.5 text-body-sm focus-within:bg-fill-subtle',
-  icon: 'size-[1.1em] shrink-0 text-muted-foreground',
+  container: 'flex items-center gap-2.5 border-b border-border px-3 py-0.5 text-body-sm focus-within:bg-fill-subtle',
+  icon: 'size-icon-sm shrink-0 text-muted-foreground',
   input:
     'h-control-md w-full bg-transparent text-body-sm text-foreground outline-hidden placeholder:text-muted-foreground',
 };

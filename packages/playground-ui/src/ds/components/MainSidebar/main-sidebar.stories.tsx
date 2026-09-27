@@ -227,7 +227,7 @@ const StudioSidebarBody = () => {
             <div className="relative grid size-9 place-items-center">
               <LogoWithoutText
                 className={cn(
-                  'size-[1.5rem] shrink-0 transition-opacity duration-150',
+                  'size-6 shrink-0 transition-opacity duration-150',
                   !isMobile && 'group-hover/sidebar:opacity-0',
                 )}
               />
@@ -242,7 +242,7 @@ const StudioSidebarBody = () => {
         ) : (
           <span className="flex items-center justify-between pr-2 pl-3">
             <span className="flex min-w-0 flex-1 items-center gap-2">
-              <LogoWithoutText className="size-[1.5rem] shrink-0" />
+              <LogoWithoutText className="size-6 shrink-0" />
               <span className="truncate font-display text-subheading tracking-tight whitespace-nowrap">
                 Mastra Studio
               </span>

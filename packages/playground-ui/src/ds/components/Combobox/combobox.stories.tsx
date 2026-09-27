@@ -106,7 +106,7 @@ export const Default: Story = {
   args: {
     options: frameworkOptions,
     placeholder: 'Select a framework...',
-    className: 'w-[200px]',
+    className: 'w-50',
   },
 };
 
@@ -117,7 +117,7 @@ export const WithError: Story = {
     name: 'framework',
     error: 'Choose a framework.',
     'aria-label': 'Framework',
-    className: 'w-[200px]',
+    className: 'w-50',
   },
 };
 
@@ -126,7 +126,7 @@ export const WithValue: Story = {
     options: frameworkOptions,
     value: 'react',
     placeholder: 'Select a framework...',
-    className: 'w-[200px]',
+    className: 'w-50',
   },
 };
 
@@ -135,7 +135,7 @@ export const ModelSelector: Story = {
     options: modelOptions,
     placeholder: 'Select a model...',
     searchPlaceholder: 'Search models...',
-    className: 'w-[220px]',
+    className: 'w-55',
   },
 };
 
@@ -144,7 +144,7 @@ export const Disabled: Story = {
     options: frameworkOptions,
     placeholder: 'Select a framework...',
     disabled: true,
-    className: 'w-[200px]',
+    className: 'w-50',
   },
 };
 
@@ -153,7 +153,7 @@ export const CustomEmptyText: Story = {
     options: [],
     placeholder: 'Select an option...',
     emptyText: 'No options available',
-    className: 'w-[200px]',
+    className: 'w-50',
   },
 };
 
@@ -169,7 +169,7 @@ export const ManyOptions: Story = {
   args: {
     options: Array.from({ length: 40 }, (_, index) => ({ label: `Option ${index + 1}`, value: `${index + 1}` })),
     placeholder: 'Select an option...',
-    className: 'w-[200px]',
+    className: 'w-50',
   },
 };
 
@@ -224,7 +224,7 @@ export const WithDescriptions: Story = {
     ],
     value: 'gpt-4-turbo',
     placeholder: 'Select a model...',
-    className: 'w-[280px]',
+    className: 'w-70',
   },
 };
 

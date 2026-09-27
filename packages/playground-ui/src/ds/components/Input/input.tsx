@@ -40,9 +40,9 @@ const inputVariants = cva(
         unstyled: unstyledFormElementStyle,
       },
       size: {
-        sm: cn(controlSizeClasses.sm, 'px-[.75em]'),
-        md: cn(controlSizeClasses.md, 'px-[.75em]'),
-        lg: cn(controlSizeClasses.lg, 'px-[.85em]'),
+        sm: cn(controlSizeClasses.sm, 'px-2.5'),
+        md: cn(controlSizeClasses.md, 'px-2.5'),
+        lg: cn(controlSizeClasses.lg, 'px-3'),
       },
     },
     defaultVariants: {

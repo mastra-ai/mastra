@@ -88,7 +88,7 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
           className={cn(editableSegmentClass, 'gap-1.5')}
           title="Edit advanced filter"
         >
-          <BracesIcon className="size-[1.1em] shrink-0" aria-hidden />
+          <BracesIcon className="size-icon-sm shrink-0" aria-hidden />
           <span className="truncate">Advanced filter</span>
           {count > 0 && (
             <span className="text-column text-muted-foreground" aria-hidden>
@@ -98,7 +98,7 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
         </PopoverTrigger>
         {leaving ? (
           <span aria-hidden className={cn(editableSegmentClass, 'px-1.5')}>
-            <XIcon className="size-[1.1em]" />
+            <XIcon className="size-icon-sm" />
           </span>
         ) : (
           <button
@@ -110,7 +110,7 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
             className={cn(editableSegmentClass, 'px-1.5')}
             onClick={remove}
           >
-            <XIcon className="size-[1.1em]" />
+            <XIcon className="size-icon-sm" />
           </button>
         )}
       </div>

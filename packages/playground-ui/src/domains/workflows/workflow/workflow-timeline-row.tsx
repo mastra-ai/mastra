@@ -103,7 +103,7 @@ export function WorkflowTimelineRow({
         </span>
       </button>
       <div
-        className="relative h-5 min-w-0 overflow-hidden rounded-sm bg-muted @max-[540px]/workflow-timeline:col-span-full @max-[540px]/workflow-timeline:row-start-2 @max-[540px]/workflow-timeline:ml-[34px]"
+        className="relative h-5 min-w-0 overflow-hidden rounded-sm bg-muted @max-[540px]/workflow-timeline:col-span-full @max-[540px]/workflow-timeline:row-start-2 @max-[540px]/workflow-timeline:ml-9"
         aria-hidden
       >
         {row.timing && (

@@ -55,7 +55,7 @@ export const Crumb = ({ className, as, isCurrent, action, icon, isLoading, child
           className={cn(
             // Same box as `buttonVariants({ variant: 'ghost', size: 'sm' })` so a label and an
             // icon-sm control sitting next to it share height, radius, padding and colors.
-            'inline-flex min-w-0 items-center gap-2 overflow-hidden rounded-full px-[.9em]',
+            'inline-flex min-w-0 items-center gap-2 overflow-hidden rounded-full px-3',
             controlSizeClasses.sm,
             controlStateColorTransition,
             // Long labels truncate: the current crumb gets more room than nav crumbs.
@@ -69,7 +69,7 @@ export const Crumb = ({ className, as, isCurrent, action, icon, isLoading, child
           {icon && (
             <Icon
               className={cn(
-                '-ml-[.3em] shrink-0 opacity-50 group-hover:opacity-100',
+                '-ml-1 shrink-0 opacity-50 group-hover:opacity-100',
                 'transition-opacity duration-normal ease-out-custom',
               )}
             >

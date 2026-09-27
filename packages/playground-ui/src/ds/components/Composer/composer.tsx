@@ -33,7 +33,7 @@ export const ComposerBox = forwardRef<HTMLDivElement, ComposerBoxProps>(
       ref={ref}
       data-slot="composer-box"
       className={cn(
-        'composer-box @container relative mx-auto mt-auto w-full max-w-3xl overflow-hidden rounded-[22px] border border-border-strong/40 transition-colors duration-normal focus-within:border-border-strong',
+        'composer-box @container relative mx-auto mt-auto w-full max-w-3xl overflow-hidden rounded-3xl border border-border-strong/40 transition-colors duration-normal focus-within:border-border-strong',
         className,
       )}
       {...props}
@@ -68,7 +68,7 @@ export const ComposerRing = ({
       data-slot="composer-ring"
       data-composer-tone={tone}
       data-busy={busy ? 'true' : 'false'}
-      className={cn('composer-ring relative mx-auto w-full max-w-3xl rounded-[23px] p-px', className)}
+      className={cn('composer-ring relative mx-auto w-full max-w-3xl rounded-3xl p-px', className)}
       style={{ ...pointerStyle, ...style }}
       onPointerEnter={event => {
         onPointerEnter?.(event);

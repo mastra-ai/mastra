@@ -48,7 +48,7 @@ export const WorkflowEntityHeader = ({ workflowId, requestContext }: WorkflowEnt
                 role="note"
                 tabIndex={0}
                 aria-label="Dynamic workflow"
-                className="rounded-[7px] focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-border-focus focus-visible:outline-solid"
+                className="rounded-md focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-border-focus focus-visible:outline-solid"
               >
                 <Badge icon={<Database />} variant="blue">
                   Dynamic

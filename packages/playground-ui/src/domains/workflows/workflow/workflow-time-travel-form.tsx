@@ -110,7 +110,7 @@ const JsonField = ({
             editable={false}
             showCopyButton={false}
             aria-label={`Example ${label}`}
-            className="h-[150px] w-full"
+            className="h-38 w-full"
           />
         </div>
       )}

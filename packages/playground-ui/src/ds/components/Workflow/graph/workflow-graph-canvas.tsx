@@ -66,7 +66,7 @@ export function WorkflowGraphCanvas<NodeType extends Node, EdgeType extends Edge
     if (!graphRef.current?.contains(document.activeElement)) {
       graphRef.current?.focus({ preventScroll: true });
     }
-    const width = focusNode.measured?.width ?? focusNode.width ?? 274;
+    const width = focusNode.measured?.width ?? focusNode.width ?? 276;
     const height = focusNode.measured?.height ?? focusNode.height ?? 100;
     const duration = workflowCameraDuration();
     const exceedsVisibleWidth = canvasWidth > 0 && width > canvasWidth - leftInset - 80;

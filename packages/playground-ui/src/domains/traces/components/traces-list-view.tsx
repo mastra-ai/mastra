@@ -212,10 +212,10 @@ export function TracesListView({
                   render={
                     <button
                       type="button"
-                      className="focus-visible:outline-accent flex min-w-0 items-center gap-1 rounded-sm hover:text-foreground focus-visible:outline-2"
+                      className="flex min-w-0 items-center gap-1 rounded-sm hover:text-foreground focus-visible:outline-2"
                     >
                       <span className="min-w-0 truncate">{label}</span>
-                      <ListFilterIcon aria-hidden className="size-[1.2em] shrink-0" />
+                      <ListFilterIcon aria-hidden className="size-icon-sm shrink-0" />
                     </button>
                   }
                 />

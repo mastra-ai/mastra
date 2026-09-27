@@ -104,7 +104,7 @@ export const InlineVercelStyle: Story = {
         />
         <CommandList
           scrollArea
-          scrollAreaClassName="max-h-[22rem]"
+          scrollAreaClassName="max-h-88"
           scrollAreaViewportClassName="rounded-[inherit]"
           className="p-1.5"
         >

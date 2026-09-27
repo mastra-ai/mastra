@@ -33,12 +33,12 @@ export function WorkflowConditionCardView({
 
   return (
     <div
-      className={`${raisedSurfaceStyle} w-[274px] overflow-hidden rounded-xl p-0.5 has-focus-visible:outline-2 has-focus-visible:outline-offset-4 has-focus-visible:outline-accent3`}
+      className={`${raisedSurfaceStyle} w-69 overflow-hidden rounded-xl p-0.5 has-focus-visible:outline-2 has-focus-visible:outline-offset-4 has-focus-visible:outline-accent3`}
       data-workflow-node
       data-testid="workflow-condition-node"
       data-workflow-step-status={previousDisplayStatus ?? 'idle'}
     >
-      <div className="flex h-[46px] items-center gap-2 px-2.5 text-meta text-muted-foreground">
+      <div className="flex h-12 items-center gap-2 px-2.5 text-meta text-muted-foreground">
         <Badge size="xs" variant={type === 'else' ? 'neutral' : 'yellow'} emphasis="muted" icon={<Icon aria-hidden />}>
           {label}
         </Badge>

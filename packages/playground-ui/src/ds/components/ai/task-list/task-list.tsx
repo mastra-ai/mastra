@@ -71,7 +71,7 @@ const statusLabels: Record<TaskListItem['status'], string> = {
 };
 
 const ringClasses: Record<TaskListItem['status'], string> = {
-  completed: 'size-[7px] border-accent1 bg-card',
+  completed: 'size-2 border-accent1 bg-card',
   in_progress: 'size-2 border-accent6 bg-accent6/25',
   pending: 'size-1.5 border-muted-foreground/45 bg-card',
 };
@@ -89,7 +89,7 @@ export const TaskListStatusIcon = ({ status, className, ...props }: TaskListStat
   >
     <span
       className={cn(
-        'rounded-full border-[1.5px] transition-[width,height,border-color,background-color]',
+        'rounded-full border-2 transition-[width,height,border-color,background-color]',
         taskGraphMotion,
         ringClasses[status],
       )}
@@ -107,7 +107,7 @@ const TaskListLabel = ({ task }: { task: TaskListItem }) => {
           'col-start-1 row-start-1 truncate transition-[opacity,color,translate,filter]',
           taskGraphMotion,
           task.status === 'pending' ? 'text-muted-foreground/70' : 'text-muted-foreground',
-          active ? '-translate-y-1 opacity-0 blur-[2px]' : 'translate-y-0 opacity-100 blur-none',
+          active ? '-translate-y-1 opacity-0 blur-xs' : 'translate-y-0 opacity-100 blur-none',
         )}
       >
         <span
@@ -129,7 +129,7 @@ const TaskListLabel = ({ task }: { task: TaskListItem }) => {
           taskGraphMotion,
           active
             ? 'translate-y-0 bg-position-[0%_0] opacity-100 blur-none'
-            : 'translate-y-1 bg-position-[100%_0] opacity-0 blur-[2px]',
+            : 'translate-y-1 bg-position-[100%_0] opacity-0 blur-xs',
         )}
       >
         {task.activeForm}

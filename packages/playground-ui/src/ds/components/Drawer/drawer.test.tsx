@@ -232,7 +232,7 @@ describe('Drawer', () => {
     expect(popup?.getAttribute('data-variant')).toBe('floating');
     expect(popup?.classList.contains('drawer-popup-floating')).toBe(true);
     expect(popup?.classList.contains('pointer-events-auto')).toBe(true);
-    expect(popup?.classList.contains('w-[32rem]')).toBe(true);
+    expect(popup?.classList.contains('w-128')).toBe(true);
   });
 
   it('renders a native drag handle outside interactive content for floating side drawers', () => {

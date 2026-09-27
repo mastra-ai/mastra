@@ -65,11 +65,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
           />
         )}
       </PopoverTrigger>
-      <PopoverContent
-        className="backdrop-blur-4xl w-auto max-w-66 bg-muted p-0!"
-        align="start"
-        data-testid="datepicker-calendar"
-      >
+      <PopoverContent className="w-auto max-w-66 bg-muted p-0!" align="start" data-testid="datepicker-calendar">
         <DateTimePickerContent
           value={value}
           minValue={minValue}

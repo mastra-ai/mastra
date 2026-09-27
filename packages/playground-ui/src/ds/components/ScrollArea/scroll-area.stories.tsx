@@ -74,7 +74,7 @@ export const Badges: Story = {
     <ScrollArea
       orientation="horizontal"
       scrollButtons
-      className="w-[350px] max-w-[calc(100vw-2rem)] rounded-md border border-border p-2"
+      className="w-88 max-w-[calc(100vw-2rem)] rounded-md border border-border p-2"
     >
       <div className="flex gap-2 py-1">
         {[
@@ -137,7 +137,7 @@ const config = {
 
 export const ChatMessages: Story = {
   render: () => (
-    <ScrollArea className="h-75 w-[350px] rounded-md border border-border p-4">
+    <ScrollArea className="h-75 w-88 rounded-md border border-border p-4">
       <div className="space-y-4">
         {Array.from({ length: 10 }).map((_, i) => (
           <div key={i} className={`rounded-lg p-3 ${i % 2 === 0 ? 'ml-8 bg-card' : 'mr-8 bg-muted'}`}>

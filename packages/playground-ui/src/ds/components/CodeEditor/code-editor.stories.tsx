@@ -47,7 +47,7 @@ export const Default: Story = {
       model: 'gpt-4',
       temperature: 0.7,
     },
-    className: 'w-[400px]',
+    className: 'w-100',
   },
 };
 
@@ -60,7 +60,7 @@ export const WithValue: Story = {
     { "id": "step-2", "type": "action" }
   ]
 }`,
-    className: 'w-[400px]',
+    className: 'w-100',
   },
 };
 
@@ -82,7 +82,7 @@ export const ComplexData: Story = {
         type: 'conversation',
       },
     },
-    className: 'w-[500px]',
+    className: 'w-125',
   },
 };
 
@@ -93,7 +93,7 @@ export const ArrayData: Story = {
       { id: 2, name: 'Agent 2', status: 'inactive' },
       { id: 3, name: 'Agent 3', status: 'active' },
     ],
-    className: 'w-[400px]',
+    className: 'w-100',
   },
 };
 
@@ -180,7 +180,7 @@ export const LargeContent: Story = {
         },
       },
     },
-    className: 'w-[600px] max-h-[400px] overflow-auto',
+    className: 'w-150 max-h-100 overflow-auto',
   },
 };
 
@@ -191,7 +191,7 @@ export const WithoutLineWrapping: Story = {
         'https://example.com/search?q=this-is-a-very-long-url-with-structured-query-parameters-that-should-stay-on-one-line-for-inspection&filter=recent&sort=created_at_desc',
     },
     lineWrapping: false,
-    className: 'w-[400px] overflow-x-auto',
+    className: 'w-100 overflow-x-auto',
   },
 };
 
@@ -216,7 +216,7 @@ You are a helpful assistant for {{companyName}}.
 Hello {{userName}}, welcome to {{companyName}}! How can I help you today?`,
     language: 'markdown',
     highlightVariables: true,
-    className: 'w-[600px]',
+    className: 'w-150',
   },
 };
 
@@ -240,7 +240,7 @@ console.log(greeting);
 Regular text continues here.`,
     language: 'markdown',
     highlightVariables: false,
-    className: 'w-[600px]',
+    className: 'w-150',
   },
 };
 
@@ -301,7 +301,7 @@ Type {{ to see autocomplete suggestions for available variables.`,
     language: 'markdown',
     highlightVariables: true,
     schema: sampleSchema,
-    className: 'w-[600px] h-[400px]',
+    className: 'w-150 h-100',
   },
   parameters: {
     docs: {

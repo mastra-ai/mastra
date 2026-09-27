@@ -345,7 +345,7 @@ function FilterBarInputImpl({
             className,
           )}
         >
-          <ListFilterIcon aria-hidden className="-ml-[.3em] shrink-0 text-muted-foreground" />
+          <ListFilterIcon aria-hidden className="-ml-1 shrink-0 text-muted-foreground" />
           <ComboboxPrimitive.Input
             ref={el => {
               inputRef.current = el;
@@ -439,7 +439,7 @@ function FilterBarInputImpl({
                 />
               )}
               {step === 'value' && !valueStep.hasSuggestions && (
-                <div className="flex items-center justify-between gap-2 py-1 pr-1 pl-[.9em]">
+                <div className="flex items-center justify-between gap-2 py-1 pr-1 pl-3">
                   <Txt variant="caption" tone="muted">
                     Type a value
                   </Txt>

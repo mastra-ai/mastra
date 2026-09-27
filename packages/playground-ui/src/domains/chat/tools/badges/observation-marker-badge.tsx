@@ -234,7 +234,6 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
   const expandedBorderColor = 'border-green-500/10';
   const labelColor = 'text-green-600';
   const bufferExpandedBgColor = 'bg-background';
-  const bufferExpandedBorderColor = 'border-border-1';
   const actionLabel = isReflection ? 'Reflecting' : 'Observing';
   const completedLabel = isReflection ? 'Reflected' : 'Observed';
 
@@ -501,9 +500,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
           </MarkerPill>
 
           {isExpanded && (
-            <div
-              className={`mt-2 ml-6 rounded-lg ${bufferExpandedBgColor} space-y-2 border p-4 text-caption ${bufferExpandedBorderColor}`}
-            >
+            <div className={`mt-2 ml-6 rounded-lg ${bufferExpandedBgColor} space-y-2 border p-4 text-caption`}>
               {observations && <ObservationRenderer observations={observations} maxHeight="240px" />}
               <ExtractedValuesPanel
                 extractedValues={extractedValues}

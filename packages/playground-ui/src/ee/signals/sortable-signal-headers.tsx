@@ -138,7 +138,7 @@ export function SortableSignalHeaders({
                         >
                           <div
                             className={`relative inline-flex items-center justify-center rounded-md border border-transparent px-1 py-0.5 motion-safe:transition-[background-color,border-color,box-shadow,scale] motion-safe:duration-150 ${contentOffsetClass(anchor)} ${
-                              dragSnapshot.isDragging ? `scale-1.03 ${overlaySurfaceStyle}` : ''
+                              dragSnapshot.isDragging ? overlaySurfaceStyle : ''
                             }`}
                             data-header-anchor={anchor}
                             data-testid="signal-column-header-content"
