@@ -853,6 +853,25 @@ describe('ObservabilityStorageDuckDB', () => {
       });
       expect(branchIds).toEqual(['tool-dup-4', 'tool-dup-3', 'tool-dup-2', 'tool-dup-1', 'tool-dup-0']);
 
+      // Empty and past-the-end pages short-circuit without reconstruction.
+      const empty = await storage.listTraces({ filters: { startedAt: { end: new Date(0) } } });
+      expect(empty.pagination).toMatchObject({ total: 0, hasMore: false });
+      expect(empty.spans).toEqual([]);
+      const emptyLight = await storage.listTracesLight({ filters: { startedAt: { end: new Date(0) } } });
+      expect(emptyLight.spans).toEqual([]);
+      const pastEnd = await storage.listTraces({ pagination: { page: 2, perPage: 3 } });
+      expect(pastEnd.pagination).toEqual({ total: 5, page: 2, perPage: 3, hasMore: false });
+      expect(pastEnd.spans).toEqual([]);
+      const pastEndSlow = await storage.listTraces({
+        pagination: { page: 2, perPage: 3 },
+        orderBy: { field: 'endedAt', direction: 'DESC' },
+      });
+      expect(pastEndSlow.pagination).toEqual({ total: 5, page: 2, perPage: 3, hasMore: false });
+      expect(pastEndSlow.spans).toEqual([]);
+      const pastEndBranches = await storage.listBranches({ pagination: { page: 2, perPage: 3 } });
+      expect(pastEndBranches.pagination).toEqual({ total: 5, page: 2, perPage: 3, hasMore: false });
+      expect(pastEndBranches.branches).toEqual([]);
+
       const delta = await storage.listTraces({ mode: 'delta', after: bootstrap.deltaCursor!, limit: 3 });
       expect(delta.spans.map(span => span.traceId)).toEqual(['trace-dup-0', 'trace-dup-1', 'trace-dup-2']);
       expect(delta.delta).toEqual({ limit: 3, hasMore: true });
