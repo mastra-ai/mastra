@@ -80,6 +80,7 @@ describe('DockerTemplate (integration)', () => {
     templates.push(template);
     const result = await template.build({ force: true });
     expect(result.status).toBe('failed');
+    expect(result.error).toContain(marker);
     await template.dispose();
 
     const containers = await new Docker().listContainers({ all: true });
