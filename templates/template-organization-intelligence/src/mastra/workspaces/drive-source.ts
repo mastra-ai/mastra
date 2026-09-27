@@ -177,18 +177,16 @@ export class ScopedDriveReader {
   }
 
   async #extractContent(file: DriveFile): Promise<ExtractedRecord> {
-    if (file.mimeType === DOC || file.mimeType === SHEET) {
-      const mime =
-        file.mimeType === DOC
-          ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-          : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    if (file.mimeType === SHEET) {
+      const mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
       const bytes = await this.#get(
         DRIVE_API + '/files/' + encodeURIComponent(file.id) + '/export?mimeType=' + encodeURIComponent(mime),
         MAX_NATIVE_EXPORT_BYTES,
       );
-      const exported = await extractRecord(file.name + (file.mimeType === DOC ? '.docx' : '.xlsx'), bytes);
-      if (file.mimeType === SHEET) return exported;
-      // DOCX export lacks actual tab IDs. The approved read supplement preserves nested tabs and locators.
+      return extractRecord(file.name + '.xlsx', bytes);
+    }
+    if (file.mimeType === DOC) {
+      // The Docs API preserves nested tabs and locators without a redundant DOCX export.
       const document = JSON.parse(
         (
           await this.#get(

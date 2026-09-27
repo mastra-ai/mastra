@@ -373,7 +373,8 @@ describe('synchronization integration', () => {
       name: 'Native policy',
       parent: 'folder',
       mimeType: 'application/vnd.google-apps.document',
-      content: docx(),
+      // A broken export must not prevent reading the native Docs API representation.
+      content: Buffer.from('unavailable DOCX export'),
       docs: {
         tabs: [
           {
@@ -442,6 +443,8 @@ describe('synchronization integration', () => {
     expect(sheet?.metadata.url).toContain('sheet-id');
     expect(result.sources[1]?.errors.join(' ')).toContain('Missing cached formula');
     expect(drive.calls.some(call => call.includes('includeTabsContent=true'))).toBe(true);
+    expect(drive.calls.some(call => call.includes('/doc-id/export'))).toBe(false);
+    expect(drive.calls.some(call => call.includes('/sheet-id/export'))).toBe(true);
     drive.files.set('duplicate', { ...drive.files.get('sheet-id')!, id: 'duplicate' });
     drive.files.set('shortcut', {
       id: 'shortcut',
