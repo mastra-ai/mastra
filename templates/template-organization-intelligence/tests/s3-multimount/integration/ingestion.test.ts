@@ -10,6 +10,50 @@ import { s3Fixture } from '../../fixtures/s3.js';
 import { index, runtime } from './helpers/runtime.js';
 
 describe('S3 multi-mount integration', () => {
+  it('continues past invalid keys across pages without reconciling deletions', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'organization-s3-invalid-'));
+    const s3 = s3Fixture();
+    s3.setPageSize(1);
+    const add = (key: string, content: string) =>
+      s3.objects.set(key, {
+        key,
+        content: Buffer.from(content),
+        etag: '"revision"',
+        modifiedAt: new Date(),
+      });
+    add('organization/old.md', 'Previously indexed evidence.');
+    const { sourceIndex } = await index(directory, googleFixture(), s3);
+    try {
+      await sourceIndex.sync();
+      s3.objects.clear();
+      add('organization/%2e%2e', 'unsafe');
+      add('organization/a.md', 'New archive retention is twelve years.');
+      const deep = 'organization/' + 'nested/'.repeat(33) + 'deep.md';
+      add(deep, 'too deep');
+      add('organization/z.md', 'Final archive owner is Finance.');
+      const run = await sourceIndex.sync();
+      expect(run.sources[1]).toMatchObject({ discovered: 2, indexed: 2, removed: 0, status: 'partial' });
+      expect(run.sources[1]?.errors).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining('unsafe key'),
+          expect.stringContaining('nesting limit'),
+          expect.stringContaining('Deletion reconciliation was suppressed'),
+        ]),
+      );
+      const paths = (await sourceIndex.search('archive evidence', 6)).map(hit => hit.metadata.path);
+      expect(paths).toEqual(expect.arrayContaining(['/archive/a.md', '/archive/z.md', '/archive/old.md']));
+      const downloadedKeys = s3.calls.filter(call => call.operation === 'GetObjectCommand').map(call => call.key);
+      expect(downloadedKeys).not.toContain('organization/%2e%2e');
+      expect(downloadedKeys).not.toContain(deep);
+      s3.objects.delete('organization/%2e%2e');
+      s3.objects.delete(deep);
+      expect((await sourceIndex.sync()).sources[1]).toMatchObject({ removed: 1, status: 'success' });
+    } finally {
+      await sourceIndex.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it('S3 ingestion bounds pagination downloads and formats', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'organization-s3-'));
     const s3 = s3Fixture();

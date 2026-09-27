@@ -59,7 +59,9 @@ export function s3Fixture() {
         if (operation === 'ListObjectsV2Command') {
           const prefix = String(input.Prefix ?? '');
           const start = Number(input.ContinuationToken ?? 0);
-          const entries = [...objects.values()].filter(object => object.key.startsWith(prefix));
+          const entries = [...objects.values()]
+            .filter(object => object.key.startsWith(prefix))
+            .sort((a, b) => Buffer.compare(Buffer.from(a.key), Buffer.from(b.key)));
           if (includesOutOfPrefix) {
             const outsider = [...objects.values()].find(object => !object.key.startsWith(prefix));
             if (outsider) entries.push(outsider);

@@ -341,11 +341,11 @@ export class ScopedS3Reader {
           const relativePath = safeRelativeKey(object.Key.slice(prefix.length));
           if (!relativePath) {
             errors.push('S3 listing contains an unsafe key.');
-            return { objects, complete: false, errors };
+            continue;
           }
           if (relativePath.split('/').length > MAX_S3_DEPTH) {
             errors.push('S3 object exceeds nesting limit.');
-            return { objects, complete: false, errors };
+            continue;
           }
           objects.push({
             key: object.Key,
@@ -364,7 +364,7 @@ export class ScopedS3Reader {
           tokens.add(continuationToken);
         }
       } while (continuationToken);
-      return { objects, complete: true, errors };
+      return { objects, complete: errors.length === 0, errors };
     } catch {
       return { objects, complete: false, errors: ['S3 listing failed; check source access and retry.'] };
     }
