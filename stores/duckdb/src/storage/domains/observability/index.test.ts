@@ -853,7 +853,12 @@ describe('ObservabilityStorageDuckDB', () => {
       });
       expect(branchIds).toEqual(['tool-dup-4', 'tool-dup-3', 'tool-dup-2', 'tool-dup-1', 'tool-dup-0']);
 
-      // Empty and past-the-end pages short-circuit without reconstruction.
+      // Empty and past-the-end pages must short-circuit before the page query:
+      // an empty page_roots makes the reconstruction bound NULL, forcing a
+      // full scan of span_events.
+      const querySpy = vi.spyOn(DuckDBConnection.prototype, 'query');
+      const pageQueries = () =>
+        querySpy.mock.calls.filter(([sql]) => /page_(roots|anchors) AS/.test(String(sql))).length;
       const empty = await storage.listTraces({ filters: { startedAt: { end: new Date(0) } } });
       expect(empty.pagination).toMatchObject({ total: 0, hasMore: false });
       expect(empty.spans).toEqual([]);
@@ -871,6 +876,8 @@ describe('ObservabilityStorageDuckDB', () => {
       const pastEndBranches = await storage.listBranches({ pagination: { page: 2, perPage: 3 } });
       expect(pastEndBranches.pagination).toEqual({ total: 5, page: 2, perPage: 3, hasMore: false });
       expect(pastEndBranches.branches).toEqual([]);
+      expect(pageQueries()).toBe(0);
+      querySpy.mockRestore();
 
       const delta = await storage.listTraces({ mode: 'delta', after: bootstrap.deltaCursor!, limit: 3 });
       expect(delta.spans.map(span => span.traceId)).toEqual(['trace-dup-0', 'trace-dup-1', 'trace-dup-2']);
