@@ -419,7 +419,19 @@ export class StepExecutor extends MastraBase {
             iterationCount: 0,
           });
         } catch (e) {
-          this.mastra?.getLogger()?.error('error evaluating condition', e);
+          const errorInstance = getErrorFromUnknown(e, { serializeStack: false });
+          const mastraError = new MastraError(
+            {
+              id: 'WORKFLOW_CONDITION_EVALUATION_FAILED',
+              domain: ErrorDomain.MASTRA_WORKFLOW,
+              category: ErrorCategory.USER,
+              details: { workflowId: params.workflowId, runId },
+            },
+            errorInstance,
+          );
+          const logger = this.mastra?.getLogger();
+          logger?.trackException(mastraError);
+          logger?.error('Error evaluating condition: ' + errorInstance.stack);
           return false;
         }
       }),
@@ -480,9 +492,7 @@ export class StepExecutor extends MastraBase {
           resumeData: resumeData,
           getInitData: () => stepResults?.input as any,
           getStepResult: getStepResult.bind(this, stepResults),
-          bail: (_result: any) => {
-            throw new Error('Not implemented');
-          },
+          bail: (() => {}) as () => InnerOutput,
           writer: new ToolStream(
             {
               prefix: 'workflow-step',
