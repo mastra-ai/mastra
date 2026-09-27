@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { askOrganizationAgent } from '../../../src/mastra/agents/organization-agent.js';
+import { createAnswerOrganizationQuestionTool } from '../../../src/mastra/tools/answer-organization-question.js';
 import type { SourceIndex } from '../../../src/mastra/workspaces/source-index.js';
 import { createStatelessOrganizationAgent as createOrganizationAgent } from '../../fixtures/agent.js';
 import { hits, sourceStatus } from '../../fixtures/answers.js';
@@ -44,6 +45,11 @@ describe('Organization Agent grounded answer integration', () => {
       } as unknown as SourceIndex,
       fixedLanguageModel('{}', { onCall: () => invalidModelCalls++ }) as never,
     );
+    const tool = createAnswerOrganizationQuestionTool(invalidAgent);
+    for (const question of ['', '   \n\t', 'x'.repeat(4_001)]) {
+      expect((await tool.inputSchema!['~standard'].validate({ question })).issues).toBeDefined();
+    }
+    expect((await tool.inputSchema!['~standard'].validate({ question: 'x'.repeat(4_000) })).issues).toBeUndefined();
     await expect(askOrganizationAgent(invalidAgent, '')).rejects.toThrow('non-empty question');
     await expect(askOrganizationAgent(invalidAgent, 'x'.repeat(4_001))).rejects.toThrow('non-empty question');
     expect(invalidSearches).toBe(0);
