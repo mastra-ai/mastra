@@ -285,6 +285,7 @@ describe('HttpTransport', () => {
       await expect(timeoutTransport._flush()).rejects.toThrow();
       expect(fetchMock).toHaveBeenCalledTimes(1);
 
+      timeoutTransport.destroy();
       vi.useFakeTimers();
     });
 
