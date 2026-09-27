@@ -1140,6 +1140,26 @@ describe('GitHub session workspace preparation', () => {
     expect((await workWorkspace.skills?.get('factory-plan'))?.instructions).toContain('# Factory Plan');
   });
 
+  it('does not return a reused workspace to concurrent callers before its skill rescan finishes', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    const workspace = (await resolver({ requestContext }))!;
+    await workspace.skills?.maybeRefresh();
+    expect(await workspace.skills?.get('factory-review')).toBeTruthy();
+    await resolver({ requestContext });
+
+    mocks.runBindingRole = 'work';
+    const readReview = async () => (await resolver({ requestContext }))!.skills?.get('factory-review');
+    const [first, second] = await Promise.all([readReview(), readReview()]);
+
+    expect(first).toBeFalsy();
+    expect(second).toBeFalsy();
+  });
+
   it('resolves bundled Factory skills without waiting on sandbox materialization (kickoff path stays lazy)', async () => {
     const { resolver } = await createLocalFactory();
     addProject();

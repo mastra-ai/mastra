@@ -383,6 +383,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   const constructedWorkspaces = new Map<string, Workspace>();
   // Review-skill visibility last used to populate each workspace's skill cache.
   const skillCacheReviewState = new Map<string, boolean>();
+  const skillCacheRefreshes = new Map<string, Promise<void>>();
 
   return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
@@ -748,9 +749,18 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // session's role flips; otherwise a cached review skill outlives the review binding.
       if (!skillExtension) {
         const isReview = await isReviewSession();
-        if (skillCacheReviewState.get(workspaceId) !== isReview) {
-          skillCacheReviewState.set(workspaceId, isReview);
-          await existing.skills?.refresh();
+        // Concurrent reuses share one refresh, and the state is recorded only
+        // once the rescan succeeds so no caller returns a stale cache.
+        while (skillCacheReviewState.get(workspaceId) !== isReview) {
+          let pending = skillCacheRefreshes.get(workspaceId);
+          if (!pending) {
+            pending = (async () => {
+              await existing.skills?.refresh();
+              skillCacheReviewState.set(workspaceId, isReview);
+            })().finally(() => skillCacheRefreshes.delete(workspaceId));
+            skillCacheRefreshes.set(workspaceId, pending);
+          }
+          await pending;
         }
       }
       // A materialization kicked off by another caller may still be running.
