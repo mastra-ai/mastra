@@ -1417,7 +1417,7 @@ describe('Traces page sorting', () => {
     );
   };
 
-  describe('when traces are sorted from the Start column', () => {
+  describe('when traces are sorted from the Time column', () => {
     it('asks the server for newest-first by default', async () => {
       captureTraceQueries();
       const { queryClient } = renderPage();
@@ -1427,7 +1427,7 @@ describe('Traces page sorting', () => {
         expect(queryClient.isFetching()).toBe(0);
       });
       expect(orderBys.at(-1)).toEqual([{ field: 'startedAt', direction: 'desc' }]);
-      expect(screen.getByRole('button', { name: 'Start, sorted descending, sort ascending' })).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Time, sorted descending, sort ascending' })).not.toBeNull();
     });
 
     it('asks the server for oldest-first when toggled and writes it to the URL', async () => {
@@ -1438,7 +1438,7 @@ describe('Traces page sorting', () => {
         expect(queryClient.isFetching()).toBe(0);
       });
 
-      fireEvent.click(screen.getByRole('button', { name: 'Start, sorted descending, sort ascending' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Time, sorted descending, sort ascending' }));
 
       await waitFor(() => expect(orderBys.at(-1)).toEqual([{ field: 'startedAt', direction: 'asc' }]));
       expect(screen.getByTestId('location').textContent).toContain('sort=startedAt');
