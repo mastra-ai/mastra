@@ -91,6 +91,14 @@ export const FACTORY_SKILL_NAMES = new Set([
   'factory-triage',
 ]);
 
+/** Review skills only sessions with an active review run binding may discover or load. */
+export const REVIEW_ONLY_FACTORY_SKILLS = new Set([
+  'factory-gitlab-rereview',
+  'factory-gitlab-review',
+  'factory-rereview',
+  'factory-review',
+]);
+
 export class FactorySkillSource implements SkillSource {
   readonly #bundledSource = new LocalSkillSource({ basePath: BUNDLED_FACTORY_SKILLS_PATH });
   readonly #localSource: LocalSkillSource | undefined;
@@ -100,6 +108,8 @@ export class FactorySkillSource implements SkillSource {
     readonly fallback: SkillSource,
     fallbackSkillRoots: string[],
     localSkillsPath: string | undefined = resolveLocalFactorySkillsPath(),
+    /** Evaluated per call because a session's bound role changes across stages. */
+    readonly isReviewSession: () => Promise<boolean> = () => Promise.resolve(true),
   ) {
     this.#localSource = localSkillsPath ? new LocalSkillSource({ basePath: localSkillsPath }) : undefined;
     this.#fallbackSkillRoots = new Set(fallbackSkillRoots.map(skillPath => path.normalize(skillPath)));
@@ -114,6 +124,13 @@ export class FactorySkillSource implements SkillSource {
     return path.relative(FACTORY_SKILLS_MOUNT, path.normalize(skillPath));
   }
 
+  /** True when the path is inside a review-only skill that this session may not use. */
+  async #isHiddenReviewPath(relativePath: string): Promise<boolean> {
+    const skillName = relativePath.split(path.sep)[0];
+    if (!skillName || !REVIEW_ONLY_FACTORY_SKILLS.has(skillName)) return false;
+    return !(await this.isReviewSession());
+  }
+
   /** Pick the layer serving this mount-relative path: local wins when it has the entry. */
   async #layerFor(relativePath: string): Promise<LocalSkillSource> {
     if (this.#localSource && (await this.#localSource.exists(relativePath))) return this.#localSource;
@@ -123,6 +140,7 @@ export class FactorySkillSource implements SkillSource {
   async exists(skillPath: string): Promise<boolean> {
     if (!this.#isFactoryPath(skillPath)) return this.fallback.exists(skillPath);
     const relative = this.#factoryPath(skillPath);
+    if (await this.#isHiddenReviewPath(relative)) return false;
     if (this.#localSource && (await this.#localSource.exists(relative))) return true;
     return this.#bundledSource.exists(relative);
   }
@@ -130,18 +148,21 @@ export class FactorySkillSource implements SkillSource {
   async stat(skillPath: string): Promise<SkillSourceStat> {
     if (!this.#isFactoryPath(skillPath)) return this.fallback.stat(skillPath);
     const relative = this.#factoryPath(skillPath);
+    if (await this.#isHiddenReviewPath(relative)) throw skillSourceEnoent(skillPath);
     return (await this.#layerFor(relative)).stat(relative);
   }
 
   async readFile(skillPath: string): Promise<string | Buffer> {
     if (!this.#isFactoryPath(skillPath)) return this.fallback.readFile(skillPath);
     const relative = this.#factoryPath(skillPath);
+    if (await this.#isHiddenReviewPath(relative)) throw skillSourceEnoent(skillPath);
     return (await this.#layerFor(relative)).readFile(relative);
   }
 
   async readdir(skillPath: string): Promise<SkillSourceEntry[]> {
     if (this.#isFactoryPath(skillPath)) {
       const relative = this.#factoryPath(skillPath);
+      if (await this.#isHiddenReviewPath(relative)) throw skillSourceEnoent(skillPath);
       const [bundledExists, localExists] = await Promise.all([
         this.#bundledSource.exists(relative),
         this.#localSource?.exists(relative) ?? Promise.resolve(false),
@@ -155,7 +176,9 @@ export class FactorySkillSource implements SkillSource {
       for (const entry of bundledEntries) merged.set(entry.name, entry);
       // Local entries override bundled names.
       for (const entry of localEntries) merged.set(entry.name, entry);
-      return [...merged.values()];
+      const entries = [...merged.values()];
+      if (relative !== '' || (await this.isReviewSession())) return entries;
+      return entries.filter(entry => !REVIEW_ONLY_FACTORY_SKILLS.has(entry.name));
     }
     const entries = await this.fallback.readdir(skillPath);
     if (this.#fallbackSkillRoots.has(path.normalize(skillPath))) {
@@ -217,11 +240,21 @@ class UnmaterializedAwareSkillSource implements SkillSource {
   }
 }
 
-const factorySkillExtension: WorkspaceSkillExtension = {
-  id: 'web-factory',
-  paths: [FACTORY_SKILLS_MOUNT],
-  createSource: (fallback, fallbackSkillRoots) => new FactorySkillSource(fallback, fallbackSkillRoots),
-};
+function createFactorySkillExtension(isReviewSession: () => Promise<boolean>): WorkspaceSkillExtension {
+  return {
+    id: 'web-factory',
+    paths: [FACTORY_SKILLS_MOUNT],
+    createSource: (fallback, fallbackSkillRoots) =>
+      new FactorySkillSource(fallback, fallbackSkillRoots, resolveLocalFactorySkillsPath(), isReviewSession),
+  };
+}
+
+function isActiveReviewBinding(
+  runBinding: { role: string; status: string; orgId: string } | null | undefined,
+  orgId: string | undefined,
+): boolean {
+  return runBinding?.role === 'review' && runBinding.status === 'active' && !!orgId && runBinding.orgId === orgId;
+}
 
 type DynamicWorkspaceContext = Parameters<typeof getDynamicWorkspace>[0];
 
@@ -350,7 +383,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   const constructedWorkspaces = new Map<string, Workspace>();
 
   return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
-    const effectiveSkillExtension = skillExtension ?? factorySkillExtension;
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
     const supervisorProjectId = parseSupervisorResourceId(ctx?.resourceId);
     if (supervisorProjectId) {
@@ -569,6 +601,18 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       await ctx.setState({ projectPath: workdir, projectName: repoFullName });
     }
 
+    // Fails closed: without a readable active review binding, review skills stay hidden.
+    const isReviewSession = async (): Promise<boolean> => {
+      if (!workItems) return false;
+      try {
+        const address = getFactorySessionAddress(requestContext);
+        const runBinding = address ? await workItems.findRunBindingBySession(address) : null;
+        return isActiveReviewBinding(runBinding, session.orgId);
+      } catch {
+        return false;
+      }
+    };
+    const effectiveSkillExtension = skillExtension ?? createFactorySkillExtension(isReviewSession);
     const extensionId = effectiveSkillExtension ? `-${effectiveSkillExtension.id}` : '';
     const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
     const workspaceGeneration = workspaceRegistry.generation(session.sessionId);
@@ -589,9 +633,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       try {
         const address = getFactorySessionAddress(requestContext);
         const runBinding = address ? await workItems.findRunBindingBySession(address) : null;
-        return runBinding?.role === 'review' && runBinding.status === 'active' && runBinding.orgId === session.orgId
-          ? 'reviewer'
-          : 'default';
+        return isActiveReviewBinding(runBinding, session.orgId) ? 'reviewer' : 'default';
       } catch {
         // Preserve the installed role when binding storage is temporarily unavailable.
         return fallback;

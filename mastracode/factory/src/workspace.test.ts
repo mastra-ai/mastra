@@ -116,6 +116,7 @@ import {
 import {
   createWorkspaceFactory,
   FactorySkillSource,
+  REVIEW_ONLY_FACTORY_SKILLS,
   FactoryWorkspaceRegistry,
   resolveLocalFactorySkillsPath,
 } from './workspace.js';
@@ -1105,10 +1106,25 @@ describe('GitHub session workspace preparation', () => {
     expect(exec2.mock.calls.filter(([command]) => String(command).includes("printf '%s' 'sha256:")).length).toBe(1);
   });
 
+  it('does not expose review skills to a work-role session workspace', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'work';
+
+    const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+    expect(await workspace.skills?.get('factory-rereview')).toBeFalsy();
+    expect((await workspace.skills?.get('factory-plan'))?.instructions).toContain('# Factory Plan');
+  });
+
   it('resolves bundled Factory skills without waiting on sandbox materialization (kickoff path stays lazy)', async () => {
     const { resolver } = await createLocalFactory();
     addProject();
     addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
     // Resolution is fully lazy (no warm-up), and kickoff skill resolution
     // must never force materialization: provisioning never starts at all.
 
@@ -2549,6 +2565,34 @@ describe('FactorySkillSource layering', () => {
     ]);
     expect(await source.exists(path.join(mount, 'my-custom-skill', 'SKILL.md'))).toBe(false);
     await expect(source.readdir(path.join(mount, 'missing-skill'))).rejects.toThrow('ENOENT');
+  });
+
+  it('hides review-only skills from sessions without an active review binding', async () => {
+    let isReview = false;
+    const source = new FactorySkillSource(fallbackStub, [], undefined, async () => isReview);
+    const reviewSkill = path.join(mount, 'factory-review', 'SKILL.md');
+
+    const hiddenNames = (await source.readdir(mount)).map(entry => entry.name).sort();
+    expect(hiddenNames).toEqual([
+      'configure-factory-rules',
+      'factory-complete-issue',
+      'factory-plan',
+      'factory-triage',
+    ]);
+    for (const name of REVIEW_ONLY_FACTORY_SKILLS) {
+      expect(await source.exists(path.join(mount, name, 'SKILL.md'))).toBe(false);
+      await expect(source.readdir(path.join(mount, name))).rejects.toThrow('ENOENT');
+    }
+    await expect(source.readFile(reviewSkill)).rejects.toThrow('ENOENT');
+    await expect(source.stat(reviewSkill)).rejects.toThrow('ENOENT');
+    expect(String(await source.readFile(path.join(mount, 'factory-plan', 'SKILL.md')))).toContain('# Factory Plan');
+
+    // The role is re-evaluated per call, so the same source follows a role change.
+    isReview = true;
+    const visibleNames = (await source.readdir(mount)).map(entry => entry.name);
+    expect(visibleNames).toEqual(expect.arrayContaining([...REVIEW_ONLY_FACTORY_SKILLS]));
+    expect(await source.exists(reviewSkill)).toBe(true);
+    expect((await source.stat(reviewSkill)).type).toBe('file');
   });
 
   it('resolveLocalFactorySkillsPath handles the dev-server cwd variants', async () => {
