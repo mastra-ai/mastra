@@ -1498,6 +1498,7 @@ export function createDurableToolCallStep() {
             result: completedTask.result,
             providerMetadata: backgroundResultMetadata(bgOutcome.taskId, 'completed'),
             ...(bgOutcome.status === 'started' ? (approvalGrant ?? {}) : {}),
+            ...(processorDataParts.length ? { processorDataParts } : {}),
           };
         }
 

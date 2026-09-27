@@ -269,4 +269,59 @@ describe('DurableAgent processor data-chunk persistence (#19375)', () => {
 
     result.cleanup();
   });
+
+  it('persists tool-written data chunks when the tool runs as an awaited background task', async () => {
+    const probeTool = createTool({
+      id: 'probe',
+      description: 'Writes data parts',
+      inputSchema: z.object({ city: z.string() }),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async (_input, context) => {
+        await context?.writer?.custom({ type: 'data-probe', data: { note: 'bg-awaited-persisted' } });
+        return { ok: true };
+      },
+      background: { enabled: true },
+    });
+
+    const mockMemory = new MockMemory();
+    const baseAgent = new Agent({
+      id: 'bg-awaited-writer-agent',
+      name: 'BG Awaited Writer Agent',
+      instructions: 'You are a helpful agent.',
+      model: createToolCallingModel('probe', {
+        city: 'NYC',
+        _background: { disposition: 'awaited' },
+      }) as LanguageModelV2,
+      tools: { probe: probeTool },
+      memory: mockMemory,
+      backgroundTasks: { tools: { probe: true } },
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    const localMastra = new Mastra({
+      agents: { 'bg-awaited-writer-agent': durableAgent as any },
+      logger: false,
+      storage: new InMemoryStore(),
+      backgroundTasks: { enabled: true },
+      pubsub,
+    });
+    await localMastra.startWorkers();
+
+    const result = await durableAgent.stream('probe NYC', {
+      maxSteps: 3,
+      memory: { thread: 'thread-bg-awaited', resource: 'resource-bg-awaited' },
+    });
+    const chunks = await drain(result.fullStream);
+    expect(chunks.some((c: any) => c.type === 'data-probe')).toBe(true);
+
+    const recalled = await mockMemory.recall({
+      threadId: 'thread-bg-awaited',
+      resourceId: 'resource-bg-awaited',
+    });
+    const serialized = JSON.stringify(recalled.messages);
+    expect(serialized.split('bg-awaited-persisted').length - 1).toBe(1);
+
+    result.cleanup();
+    await localMastra.stopWorkers?.();
+  });
 });
