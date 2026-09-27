@@ -186,9 +186,11 @@ describe('explicit simultaneous Drive/R2 smoke', () => {
       let answerCalls = 0;
       const direct = await askOrganizationAgent(agent, fixture.question);
       answerCalls++;
-      const mcp = await createOrganizationMcpServer(agent).executeTool('answerOrganizationQuestion', {
+      const mcpExecution = await createOrganizationMcpServer(agent).executeTool('answerOrganizationQuestion', {
         question: fixture.question,
       });
+      expect(mcpExecution.status).toBe('completed');
+      const mcp = mcpExecution.status === 'completed' ? mcpExecution.output : undefined;
       answerCalls++;
       const route = createOrganizationAnswerRoute(agent) as unknown as {
         handler: (context: {

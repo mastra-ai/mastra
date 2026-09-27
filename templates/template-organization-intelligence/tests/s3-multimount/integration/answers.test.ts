@@ -53,9 +53,11 @@ describe('S3 multi-mount integration', () => {
       const direct = await askOrganizationAgent(agent, 'How are invoices retained and archive access approved?');
       const registered = new Mastra({ agents: { organizationAgent: agent } }).getAgent('organizationAgent');
       const studio = await askOrganizationAgent(registered, 'How are invoices retained and archive access approved?');
-      const mcp = await createOrganizationMcpServer(agent).executeTool('answerOrganizationQuestion', {
+      const mcpExecution = await createOrganizationMcpServer(agent).executeTool('answerOrganizationQuestion', {
         question: 'How are invoices retained and archive access approved?',
       });
+      expect(mcpExecution.status).toBe('completed');
+      const mcp = mcpExecution.status === 'completed' ? mcpExecution.output : undefined;
       const route = createOrganizationAnswerRoute(agent) as unknown as {
         handler: (context: {
           req: { json: () => Promise<unknown> };
@@ -156,9 +158,14 @@ describe('S3 multi-mount integration', () => {
         ) as never,
       );
       const staleDirect = await askOrganizationAgent(staleAgent, 'What do records say about archive access?');
-      const staleMcp = await createOrganizationMcpServer(staleAgent).executeTool('answerOrganizationQuestion', {
-        question: 'What do records say about archive access?',
-      });
+      const staleMcpExecution = await createOrganizationMcpServer(staleAgent).executeTool(
+        'answerOrganizationQuestion',
+        {
+          question: 'What do records say about archive access?',
+        },
+      );
+      expect(staleMcpExecution.status).toBe('completed');
+      const staleMcp = staleMcpExecution.status === 'completed' ? staleMcpExecution.output : undefined;
       const staleRoute = createOrganizationAnswerRoute(staleAgent) as unknown as {
         handler: (context: {
           req: { json: () => Promise<unknown> };

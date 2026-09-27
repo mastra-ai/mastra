@@ -98,7 +98,11 @@ describe('Evaluation integration', () => {
     expect((await askOrganizationAgent(app2.organizationAgent, 'procurement two')).citations[0]).toMatchObject({
       sourceId: 'replacement',
     });
-    const mcp = await app2.mcpServer.executeTool('answerOrganizationQuestion', { question: 'procurement two' });
+    const mcpExecution = await app2.mcpServer.executeTool('answerOrganizationQuestion', {
+      question: 'procurement two',
+    });
+    expect(mcpExecution.status).toBe('completed');
+    const mcp = mcpExecution.status === 'completed' ? mcpExecution.output : undefined;
     expect(mcp).toMatchObject({ citations: [expect.objectContaining({ sourceId: 'replacement' })] });
     const route = createOrganizationAnswerRoute(app2.organizationAgent) as unknown as {
       handler: (context: {

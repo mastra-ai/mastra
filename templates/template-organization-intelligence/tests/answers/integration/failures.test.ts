@@ -78,9 +78,14 @@ describe('Organization Agent grounded answer integration', () => {
     });
 
     const directFailure = await askOrganizationAgent(failingAgent, 'What is the retention rule?');
-    const mcpFailure = await createOrganizationMcpServer(failingAgent).executeTool('answerOrganizationQuestion', {
-      question: 'What is the retention rule?',
-    });
+    const mcpFailureExecution = await createOrganizationMcpServer(failingAgent).executeTool(
+      'answerOrganizationQuestion',
+      {
+        question: 'What is the retention rule?',
+      },
+    );
+    expect(mcpFailureExecution.status).toBe('completed');
+    const mcpFailure = mcpFailureExecution.status === 'completed' ? mcpFailureExecution.output : undefined;
     const route = createOrganizationAnswerRoute(failingAgent) as unknown as {
       handler: (context: {
         req: { json: () => Promise<unknown> };

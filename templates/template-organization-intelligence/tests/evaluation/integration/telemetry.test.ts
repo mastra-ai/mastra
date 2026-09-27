@@ -75,7 +75,7 @@ describe('Evaluation integration', () => {
       await app.mcpServer.executeTool('answerOrganizationQuestion', {
         question,
       }),
-    ).toMatchObject({ status: 'answered' });
+    ).toMatchObject({ status: 'completed', output: { status: 'answered' } });
     const answerRoute = createOrganizationAnswerRoute(app.organizationAgent) as unknown as {
       handler: (context: {
         req: { json: () => Promise<unknown> };

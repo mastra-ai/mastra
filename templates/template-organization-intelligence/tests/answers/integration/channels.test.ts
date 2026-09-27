@@ -60,9 +60,11 @@ describe('Organization Agent grounded answer integration', () => {
     });
     const registered = new Mastra({ agents: { organizationAgent: agent } }).getAgent('organizationAgent');
     const studio = await askOrganizationAgent(registered, 'How are invoice retention and archive access handled?');
-    const mcp = await createOrganizationMcpServer(agent).executeTool('answerOrganizationQuestion', {
+    const mcpExecution = await createOrganizationMcpServer(agent).executeTool('answerOrganizationQuestion', {
       question: 'How are invoice retention and archive access handled?',
     });
+    expect(mcpExecution.status).toBe('completed');
+    const mcp = mcpExecution.status === 'completed' ? mcpExecution.output : undefined;
     const route = createOrganizationAnswerRoute(agent) as unknown as {
       handler: (context: {
         req: { json: () => Promise<unknown> };
@@ -106,7 +108,6 @@ describe('Organization Agent grounded answer integration', () => {
         httpPath: '/mcp',
         req: request,
         res: response,
-        options: { serverless: true },
       });
     });
     await new Promise<void>((resolve, reject) => {
