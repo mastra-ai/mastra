@@ -138,6 +138,81 @@ describe('synchronization integration', () => {
     expect(calls).toHaveLength(before);
   });
 
+  it('persists only changed rows including cache updates and removals', async () => {
+    await writeFile(join(local, 'policy.md'), 'Original invoice policy.');
+    await writeFile(join(local, 'removed.md'), 'Obsolete invoice policy.');
+    const remote = drive.files.get('remote-record')!;
+    remote.version = '1';
+    const index = await openIndex();
+    await index.sync();
+    const client = createClient({ url: 'file:' + join(directory, '.mastra/index.db') });
+    try {
+      await client.execute('CREATE TABLE record_writes(operation TEXT, id TEXT)');
+      for (const operation of ['INSERT', 'UPDATE', 'DELETE']) {
+        const row = operation === 'DELETE' ? 'old' : 'new';
+        await client.execute(`CREATE TRIGGER audit_${operation} AFTER ${operation} ON oi_committed_records
+          BEGIN INSERT INTO record_writes VALUES ('${operation}', ${row}.id); END`);
+      }
+      await index.sync();
+      expect((await client.execute('SELECT * FROM record_writes')).rows).toHaveLength(0);
+      const readRecords = async () =>
+        (await client.execute('SELECT data FROM oi_committed_records')).rows.map(
+          row =>
+            JSON.parse(String(row.data)) as {
+              id: string;
+              sourceId: string;
+              relativePath: string;
+              cache?: { validator: { version?: string } };
+            },
+        );
+      const driveId = (await readRecords()).find(record => record.sourceId === 'drive')!.id;
+      await writeFile(join(local, 'policy.md'), 'Updated invoice policy.');
+      await writeFile(join(local, 'added.md'), 'Additional invoice policy.');
+      await rm(join(local, 'removed.md'));
+      remote.version = '2';
+      const run = await index.sync();
+      expect(run.sources[0]).toMatchObject({ indexed: 1, changed: 1, removed: 1 });
+      expect(run.sources[1]).toMatchObject({ unchanged: 1 });
+      const writes = (await client.execute('SELECT * FROM record_writes')).rows;
+      expect(writes.map(row => row.operation).sort()).toEqual(['DELETE', 'INSERT', 'UPDATE', 'UPDATE']);
+      expect(writes).toContainEqual({ operation: 'UPDATE', id: driveId });
+      expect((await readRecords()).find(record => record.id === driveId)?.cache?.validator.version).toBe('2');
+      expect((await readRecords()).some(record => record.relativePath === 'removed.md')).toBe(false);
+
+      await client.execute('DELETE FROM record_writes');
+      remote.name = 'renamed.md';
+      await index.sync();
+      expect((await client.execute('SELECT * FROM record_writes')).rows).toEqual([
+        { operation: 'UPDATE', id: driveId },
+      ]);
+      expect((await readRecords()).find(record => record.id === driveId)?.relativePath).toBe('renamed.md');
+
+      await client.execute('DELETE FROM record_writes');
+      delete remote.version;
+      await index.sync();
+      expect((await client.execute('SELECT * FROM record_writes')).rows).toEqual([
+        { operation: 'UPDATE', id: driveId },
+      ]);
+      expect((await readRecords()).find(record => record.id === driveId)?.cache).toBeUndefined();
+
+      await client.execute('DELETE FROM record_writes');
+      await writeFile(join(local, 'policy.md'), 'Failed candidate invoice policy.');
+      await client.execute(`CREATE TRIGGER reject_candidate BEFORE UPDATE ON oi_committed_records
+        WHEN new.data LIKE '%Failed candidate%'
+        BEGIN SELECT RAISE(ABORT, 'synthetic commit failure'); END`);
+      const before = await readRecords();
+      expect((await index.sync()).status).toBe('failed');
+      expect(await readRecords()).toEqual(before);
+      expect((await client.execute('SELECT * FROM record_writes')).rows).toHaveLength(0);
+      await index.close();
+      const reopened = await openIndex();
+      expect(textOf(await reopened.search('invoice'))).toContain('Updated invoice policy.');
+      expect(textOf(await reopened.search('invoice'))).not.toContain('Failed candidate');
+    } finally {
+      client.close();
+    }
+  });
+
   it('restart and overlap preserve search consistency', async () => {
     await writeFile(join(local, 'policy.md'), 'Original committed invoice evidence.');
     let release!: () => void;

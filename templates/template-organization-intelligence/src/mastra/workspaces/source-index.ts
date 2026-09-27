@@ -362,7 +362,11 @@ export class SourceIndex {
           ? 'failed'
           : 'partial';
       run.finishedAt = this.#now();
-      await this.#commit(candidateRecords, states, run, snapshot?.generation);
+      // Unchanged records retain their object identity, including their stored embeddings.
+      // Compare records rather than counters so cache-only updates are persisted too.
+      const changedRecords = new Map([...candidateRecords].filter(([id, record]) => this.#records.get(id) !== record));
+      const removedIds = [...this.#records.keys()].filter(id => !candidateRecords.has(id));
+      await this.#commit(changedRecords, removedIds, states, run, snapshot?.generation);
     } catch {
       if (snapshot) {
         snapshot.retired = true;
@@ -385,7 +389,7 @@ export class SourceIndex {
           lastSuccessAt: failures.get(source.id)?.lastSuccessAt ?? null,
           error: 'Search publication failed; cached evidence may be stale.',
         });
-      await this.#commit(this.#records, failures, run);
+      await this.#commit(new Map(), [], failures, run);
       this.#freshness = failures;
       this.#lastRun = run;
       return run;
@@ -407,15 +411,16 @@ export class SourceIndex {
 
   async #commit(
     records: Map<string, RecordData>,
+    removedIds: string[],
     states: Map<string, Freshness>,
     run: SyncResult,
     generation?: string,
   ): Promise<void> {
     await this.#client.batch(
       [
-        'DELETE FROM oi_committed_records',
+        ...removedIds.map(id => ({ sql: 'DELETE FROM oi_committed_records WHERE id = ?', args: [id] })),
         ...[...records.values()].map(record => ({
-          sql: 'INSERT INTO oi_committed_records(id,data) VALUES(?,?)',
+          sql: 'INSERT INTO oi_committed_records(id,data) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET data = excluded.data',
           args: [record.id, JSON.stringify(record)],
         })),
         ...[...states].map(([id, data]) => ({
