@@ -10039,7 +10039,9 @@ export class Agent<
 
     const resumeData =
       customResumeData !== undefined
-        ? customResumeData
+        ? customResumeData && typeof customResumeData === 'object' && !Array.isArray(customResumeData)
+          ? { ...customResumeData, approved }
+          : customResumeData
         : approved
           ? { approved }
           : declineContext

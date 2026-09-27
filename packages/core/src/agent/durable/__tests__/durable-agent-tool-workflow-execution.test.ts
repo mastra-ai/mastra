@@ -392,7 +392,9 @@ describe('DurableAgent tool approval workflow execution', () => {
     });
 
     let approvalData: any = null;
+    const memory = { thread: 'approval-note-thread', resource: 'approval-note-resource' };
     const { runId, cleanup } = await durableAgent.stream('Use the approval note tool', {
+      memory,
       onSuspended: data => {
         approvalData = data;
       },
@@ -402,22 +404,25 @@ describe('DurableAgent tool approval workflow execution', () => {
     expect(approvalData?.type).toBe('approval');
 
     let finishData: any = null;
-    const resumeResult = await durableAgent.resume(
+    await durableAgent.sendToolApproval({
+      threadId: memory.thread,
+      resourceId: memory.resource,
       runId,
-      { approved: true, note: 'hello' },
-      {
+      toolCallId: approvalData.toolCallId,
+      approved: true,
+      resumeData: { note: 'hello' },
+      streamOptions: {
         onFinish: data => {
           finishData = data;
         },
       },
-    );
+    });
 
     await delay(500);
 
-    // Same as the standard loop: only a bare `{ approved }` payload is withheld from the tool.
+    // The approval decision is preserved alongside the custom data by sendToolApproval().
     expect(receivedResumeData).toEqual([{ approved: true, note: 'hello' }]);
     expect(finishData).not.toBeNull();
-    resumeResult.cleanup();
     cleanup();
   });
 
