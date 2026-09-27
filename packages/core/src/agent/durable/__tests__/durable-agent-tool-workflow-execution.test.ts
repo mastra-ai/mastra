@@ -108,6 +108,15 @@ function createToolCallThenTextModel(toolName: string, toolArgs: Record<string, 
   });
 }
 
+function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs = 10_000): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`Timed out waiting for ${label} after ${timeoutMs}ms`)), timeoutMs);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
+}
+
 /**
  * Creates a mock model that returns multiple tool calls
  */
@@ -391,19 +400,25 @@ describe('DurableAgent tool approval workflow execution', () => {
       agents: { 'approval-note-agent': durableAgent as any },
     });
 
-    let approvalData: any = null;
+    let resolveApprovalData!: (data: any) => void;
+    const approvalDataPromise = new Promise<any>(resolve => {
+      resolveApprovalData = resolve;
+    });
     const memory = { thread: 'approval-note-thread', resource: 'approval-note-resource' };
     const { runId, cleanup } = await durableAgent.stream('Use the approval note tool', {
       memory,
       onSuspended: data => {
-        approvalData = data;
+        resolveApprovalData(data);
       },
     });
 
-    await delay(500);
+    const approvalData = await withTimeout(approvalDataPromise, 'tool approval callback');
     expect(approvalData?.type).toBe('approval');
 
-    let finishData: any = null;
+    let resolveFinishData!: (data: any) => void;
+    const finishDataPromise = new Promise<any>(resolve => {
+      resolveFinishData = resolve;
+    });
     await durableAgent.sendToolApproval({
       threadId: memory.thread,
       resourceId: memory.resource,
@@ -413,12 +428,12 @@ describe('DurableAgent tool approval workflow execution', () => {
       resumeData: { note: 'hello' },
       streamOptions: {
         onFinish: data => {
-          finishData = data;
+          resolveFinishData(data);
         },
       },
     });
 
-    await delay(500);
+    const finishData = await withTimeout(finishDataPromise, 'tool approval finish callback');
 
     // The approval decision is preserved alongside the custom data by sendToolApproval().
     expect(receivedResumeData).toEqual([{ approved: true, note: 'hello' }]);
