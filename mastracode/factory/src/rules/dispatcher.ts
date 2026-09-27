@@ -878,8 +878,8 @@ export class FactoryDecisionDispatcher {
           const kickoffStale = async () => {
             if (await this.#roleSuperseded(record, decision.role)) return true;
             if (stagesAtDispatch === undefined || !record.workItemId) return false;
-            const current = await this.#storage.get({ orgId: record.orgId, id: record.workItemId }).catch(() => null);
-            return current !== null && stagesKey(current.stages) !== stagesAtDispatch;
+            const current = await this.#storage.get({ orgId: record.orgId, id: record.workItemId });
+            return current === null || stagesKey(current.stages) !== stagesAtDispatch;
           };
           const runStillActive = () =>
             this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
