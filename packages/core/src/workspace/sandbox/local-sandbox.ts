@@ -108,6 +108,11 @@ export interface LocalSandboxOptions extends Omit<MastraSandboxOptions, 'process
    * ```
    */
   env?: NodeJS.ProcessEnv;
+  /**
+   * Encoding used to decode command stdout/stderr (any WHATWG encoding label, e.g. 'gbk').
+   * Useful on Windows systems whose native commands emit a legacy code page. Default: 'utf-8'.
+   */
+  outputEncoding?: string;
   /** Default timeout for operations in ms (default: 30000) */
   timeout?: number;
   /**
@@ -241,7 +246,7 @@ export class LocalSandbox extends MastraSandbox<string> {
     super({
       ...options,
       name: 'LocalSandbox',
-      processes: new LocalProcessManager({ env: options.env ?? {} }),
+      processes: new LocalProcessManager({ env: options.env ?? {}, outputEncoding: options.outputEncoding }),
     });
 
     this.id = options.id ?? this.generateId();

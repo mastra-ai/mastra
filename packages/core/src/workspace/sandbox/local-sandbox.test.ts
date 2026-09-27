@@ -111,6 +111,63 @@ describe('LocalSandbox explicit sh argv', () => {
   });
 });
 
+describe('LocalSandbox outputEncoding', () => {
+  let tempDir: string;
+  const sandboxes: LocalSandbox[] = [];
+
+  beforeEach(async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-local-sandbox-enc-'));
+  });
+
+  afterEach(async () => {
+    await Promise.all(sandboxes.splice(0).map(s => s._destroy().catch(() => {})));
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  const create = (outputEncoding?: string) => {
+    const s = new LocalSandbox({ workingDirectory: tempDir, env: process.env, outputEncoding });
+    sandboxes.push(s);
+    return s;
+  };
+
+  // GBK bytes for "中文" on stdout and "中" on stderr
+  const gbkScript =
+    'process.stdout.write(Buffer.from([0xd6,0xd0,0xce,0xc4]));process.stderr.write(Buffer.from([0xd6,0xd0]))';
+
+  it('decodes GBK output from executeCommand', async () => {
+    const result = await create('gbk').executeCommand(process.execPath, ['-e', gbkScript]);
+    expect(result.stdout).toBe('中文');
+    expect(result.stderr).toBe('中');
+  });
+
+  it('decodes GBK output from background processes', async () => {
+    const sandbox = create('gbk');
+    await sandbox._start();
+    const handle = await sandbox.processes!.spawn(`"${process.execPath}" -e "${gbkScript}"`);
+    const result = await handle.wait();
+    expect(result.stdout).toBe('中文');
+    expect(result.stderr).toBe('中');
+  });
+
+  it('decodes multi-byte characters split across chunks', async () => {
+    const script =
+      'process.stdout.write(Buffer.from([0xd6]));setTimeout(()=>process.stdout.write(Buffer.from([0xd0])),50)';
+    const result = await create('gbk').executeCommand(process.execPath, ['-e', script]);
+    expect(result.stdout).toBe('中');
+  });
+
+  it('defaults to UTF-8', async () => {
+    const result = await create().executeCommand(process.execPath, ['-e', gbkScript]);
+    expect(result.stdout).not.toBe('中文');
+    const utf8 = await create().executeCommand(process.execPath, ['-e', 'process.stdout.write("中文")']);
+    expect(utf8.stdout).toBe('中文');
+  });
+
+  it('rejects unsupported encodings at construction', () => {
+    expect(() => new LocalSandbox({ workingDirectory: tempDir, outputEncoding: 'not-an-encoding' })).toThrow();
+  });
+});
+
 describe('LocalSandbox', () => {
   let tempDir: string;
   let sandbox: LocalSandbox;
