@@ -2457,7 +2457,7 @@ describe('GithubRules', () => {
         title: 'PR 17',
         stages: ['review'],
         sessions: {},
-        metadata: {},
+        metadata: { state: 'open', merged: false },
       },
     });
     const service = new GithubRules({
@@ -2480,6 +2480,11 @@ describe('GithubRules', () => {
         decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
       }),
     ]);
+    // The card must read merged straight away, not only after the next sweep.
+    expect((await workItems.get({ orgId: 'org-1', id: card.item.id }))?.metadata).toMatchObject({
+      state: 'closed',
+      merged: true,
+    });
   });
 
   it('closes the merged Review card and wakes the work item it was opened from', async () => {

@@ -699,6 +699,21 @@ export class GithubRules {
             relatedItem,
           )
         : undefined;
+    // Moving the card to Done does not touch its pull request fields, so without
+    // this the card reads "open" until the next sweep and still offers Re-review.
+    // Stamped after the evaluations, which commit at the revision they read.
+    const stampClosed = async () => {
+      if ((event !== 'pullRequestMerged' && event !== 'pullRequestClosed') || !pullRequestNumber) return;
+      for (const card of [relatedItem, linked]) {
+        if (card?.externalSource?.type !== 'pull-request') continue;
+        await this.options.storage.update({
+          orgId: card.orgId,
+          id: card.id,
+          userId: 'factory-rule-dispatcher',
+          patch: { metadata: { state: 'closed', merged: event === 'pullRequestMerged' } },
+        });
+      }
+    };
     const authoringItem =
       linked === undefined &&
       pullRequestOpened &&
@@ -706,9 +721,13 @@ export class GithubRules {
       relatedItem.externalSource?.type !== 'pull-request'
         ? relatedItem
         : undefined;
-    if (linked === undefined && authoringItem === undefined) return primary;
+    if (linked === undefined && authoringItem === undefined) {
+      await stampClosed();
+      return primary;
+    }
     const companion = linked ?? authoringItem;
     const secondary = await evaluate(companion, `${deliveryIdentity}:${companion?.id ?? 'pull-request'}`);
+    await stampClosed();
     for (const status of ['committed', 'replayed'] as const) {
       if (primary.status === status || secondary.status === status) return { status };
     }
