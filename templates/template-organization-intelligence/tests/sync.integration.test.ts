@@ -501,7 +501,13 @@ describe('synchronization integration', () => {
       mimeType: 'application/vnd.google-apps.spreadsheet',
       content: xlsx(),
     });
-    const index = await openIndex();
+    // Distinct synthetic vectors keep extraction assertions independent of vector tie ordering.
+    const index = await openIndex({
+      embedding: async text => [
+        ...['certificate', 'archivist', 'charter', 'eleven'].map(term => (text.toLowerCase().includes(term) ? 1 : 0)),
+        0.1,
+      ],
+    });
     const result = await index.sync();
     expect(result.sources[0]?.errors.join(' ')).toContain('partial');
     const pdfHits = await index.search('archive certificate');
