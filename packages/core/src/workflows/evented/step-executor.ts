@@ -402,9 +402,9 @@ export class StepExecutor extends MastraBase {
     const abortController = params.abortController ?? new AbortController();
 
     const results = await Promise.all(
-      step.conditions.map(condition => {
+      step.conditions.map(async condition => {
         try {
-          return this.evaluateCondition({
+          return await this.evaluateCondition({
             workflowId: params.workflowId,
             condition,
             runId,
