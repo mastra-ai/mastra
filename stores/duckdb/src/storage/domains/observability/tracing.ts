@@ -582,6 +582,10 @@ async function insertSpanEvents(db: DuckDBConnection, rows: SpanEventRow[]): Pro
 // ============================================================================
 
 function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
+  // An ended non-event record also gets an 'end' row carrying the full payload,
+  // and reconstruction takes the latest non-null value per column, so the start
+  // row does not need its own copy of the large payload columns.
+  const payloadOnEndRow = !!s.endedAt && !s.isEvent;
   return {
     eventType: 'start',
     timestamp: s.startedAt,
@@ -610,15 +614,15 @@ function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     environment: s.environment ?? null,
     source: s.source ?? null,
     serviceName: s.serviceName ?? null,
-    attributes: (s.attributes as Record<string, unknown>) ?? null,
-    metadata: (s.metadata as Record<string, unknown>) ?? null,
+    attributes: payloadOnEndRow ? null : ((s.attributes as Record<string, unknown>) ?? null),
+    metadata: payloadOnEndRow ? null : ((s.metadata as Record<string, unknown>) ?? null),
     tags: s.tags == null ? null : normalizeTags(s.tags),
     scope: (s.scope as Record<string, unknown>) ?? null,
     links: null,
-    input: (s.input as Record<string, unknown>) ?? null,
+    input: payloadOnEndRow ? null : ((s.input as Record<string, unknown>) ?? null),
     output: null,
     error: null,
-    requestContext: (s.requestContext as Record<string, unknown>) ?? null,
+    requestContext: payloadOnEndRow ? null : ((s.requestContext as Record<string, unknown>) ?? null),
   };
 }
 
@@ -813,7 +817,8 @@ async function listTraceRows<TSpan>(
     // Fast path: order + paginate in the prefilter, reconstruct only the page.
     // Only `startedAt` reaches here (per SAFE_PREFILTER_ORDER_FIELDS), and on
     // start rows it lives in the `timestamp` column. A span can have more than
-    // one start row (the end event is also written as a create), so group first.
+    // one start row (the end event is also written as a create, with a
+    // payload-free start row), so group first.
     const prefilterOrderBy = `ORDER BY anchorStartedAt ${orderDir}, traceId, spanId`;
     const offset = page * perPage;
 
@@ -1225,7 +1230,8 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
     // Fast path: order + paginate in the prefilter, reconstruct only the page.
     // Only `startedAt` reaches here (per SAFE_PREFILTER_ORDER_FIELDS), and on
     // start rows it lives in the `timestamp` column. A span can have more than
-    // one start row (the end event is also written as a create), so group first.
+    // one start row (the end event is also written as a create, with a
+    // payload-free start row), so group first.
     const prefilterOrderBy = `ORDER BY anchorStartedAt ${orderDir}, traceId, spanId`;
     const offset = page * perPage;
 
