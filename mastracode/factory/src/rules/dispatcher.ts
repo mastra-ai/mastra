@@ -878,6 +878,7 @@ export class FactoryDecisionDispatcher {
           // retry after the move is still recognised as stale.
           const kickoffStale = async () => {
             if (await this.#roleSuperseded(record, decision.role)) return true;
+            if ((await this.#findBinding(record, decision.role))?.id !== binding.id) return true;
             if (!record.workItemId) return false;
             const current = await this.#storage.get({ orgId: record.orgId, id: record.workItemId });
             if (current === null) return true;
