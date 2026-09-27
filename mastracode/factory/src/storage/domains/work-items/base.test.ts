@@ -379,6 +379,29 @@ describe('WorkItemsStorage', () => {
     expect(second.pendingStart.bindingId).toBe(second.binding.id);
   });
 
+  it("revokes an earlier role's binding when a later role continues in its session", async () => {
+    const storage = await makeStorage();
+    const start = (role: string, threadId: string) =>
+      storage.prepareRunStart({
+        orgId: 'org1',
+        userId: 'user1',
+        factoryProjectId: 'project1',
+        workItem: { input: { ...input } },
+        role,
+        session: { sessionId: 'session-shared', branch: 'factory/42', threadId },
+        resourceId: 'resource-1',
+        kickoffKey: `kickoff-${role}`,
+        kickoffMessage: null,
+      });
+
+    const plan = await start('plan', 'thread-plan');
+    const work = await start('work', 'thread-work');
+
+    const bindings = await storage.listRunBindings('org1', 'project1', work.item.id);
+    expect(bindings.find(binding => binding.id === plan.binding.id)?.status).toBe('revoked');
+    expect(bindings.find(binding => binding.id === work.binding.id)?.status).toBe('active');
+  });
+
   it('replays the same binding when re-entered while it is still live', async () => {
     const storage = await makeStorage();
     const start = (kickoffKey: string) =>

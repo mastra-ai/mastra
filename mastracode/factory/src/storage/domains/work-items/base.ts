@@ -3010,6 +3010,19 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           },
           { status: 'revoked', revoked_at: now },
         );
+        // A role continuing in an earlier role's session (e.g. build after plan)
+        // may open a new thread; the earlier role's agent must stop acting.
+        await ops.updateMany(
+          'factory_run_bindings',
+          {
+            org_id: input.orgId,
+            factory_project_id: input.factoryProjectId,
+            work_item_id: item.id,
+            session_id: input.session.sessionId,
+            status: 'active',
+          },
+          { status: 'revoked', revoked_at: now },
+        );
         const bindingRow = await ops.insertOne<GovernanceDbRow>('factory_run_bindings', {
           org_id: input.orgId,
           factory_project_id: input.factoryProjectId,
