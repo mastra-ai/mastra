@@ -1160,6 +1160,26 @@ describe('GitHub session workspace preparation', () => {
     expect(second).toBeFalsy();
   });
 
+  it('retries the skill rescan on the next reuse when a role-change refresh fails', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    const workspace = (await resolver({ requestContext }))!;
+    await workspace.skills?.maybeRefresh();
+    expect(await workspace.skills?.get('factory-review')).toBeTruthy();
+    await resolver({ requestContext });
+
+    mocks.runBindingRole = 'work';
+    vi.spyOn(workspace.skills!, 'refresh').mockRejectedValueOnce(new Error('rescan failed'));
+    await expect(resolver({ requestContext })).rejects.toThrow('rescan failed');
+
+    const retried = (await resolver({ requestContext }))!;
+    expect(await retried.skills?.get('factory-review')).toBeFalsy();
+  });
+
   it('resolves bundled Factory skills without waiting on sandbox materialization (kickoff path stays lazy)', async () => {
     const { resolver } = await createLocalFactory();
     addProject();
