@@ -251,6 +251,26 @@ describe('MastraAuthWorkos', () => {
         expect(result?.organizationId).toBeUndefined();
       });
 
+      it('should not infer organizationId when there are no memberships', async () => {
+        mockSession();
+        mockMemberships([]);
+
+        const result = await createAuth(true).authenticateToken('', mockRequest);
+
+        expect(result?.organizationId).toBeUndefined();
+      });
+
+      it('should keep the session user without organizationId when the membership fetch fails', async () => {
+        mockSession();
+        mockListOrganizationMemberships.mockRejectedValueOnce(new Error('membership API unavailable'));
+
+        const result = await createAuth(true).authenticateToken('', mockRequest);
+
+        expect(result).toMatchObject({ workosId: 'user123' });
+        expect(result?.organizationId).toBeUndefined();
+        expect(result?.memberships).toBeUndefined();
+      });
+
       it('should keep the session organizationId over a single membership', async () => {
         mockSession('org-explicit');
         mockMemberships([{ id: 'om-1', organizationId: 'org-1', role: { slug: 'member' } }]);
