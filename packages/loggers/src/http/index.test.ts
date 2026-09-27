@@ -60,6 +60,23 @@ describe('HttpTransport', () => {
       expect(minimalTransport['flushInterval']).toBe(10000);
       expect(minimalTransport['timeout']).toBe(30000);
     });
+
+    it('should preserve explicit falsy retry options', () => {
+      const noRetryTransport = new HttpTransport({
+        url: 'https://example.com',
+        retryOptions: {
+          maxRetries: 0,
+          retryDelay: 0,
+          exponentialBackoff: false,
+        },
+      });
+
+      expect(noRetryTransport['retryOptions']).toEqual({
+        maxRetries: 0,
+        retryDelay: 0,
+        exponentialBackoff: false,
+      });
+    });
   });
 
   describe('logging functionality', () => {
@@ -155,6 +172,27 @@ describe('HttpTransport', () => {
   });
 
   describe('error handling and retries', () => {
+    it('should not retry when maxRetries is zero', async () => {
+      fetchMock.mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      });
+      const noRetryTransport = new HttpTransport({
+        ...defaultOptions,
+        retryOptions: {
+          maxRetries: 0,
+          retryDelay: 0,
+          exponentialBackoff: false,
+        },
+      });
+      noRetryTransport.write({ level: LogLevel.ERROR, msg: 'test message' });
+
+      await expect(noRetryTransport._flush()).rejects.toThrow('HTTP 500: Internal Server Error');
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
     it('should retry on HTTP errors', async () => {
       fetchMock
         .mockImplementationOnce(() =>
