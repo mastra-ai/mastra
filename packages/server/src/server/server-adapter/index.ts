@@ -4,6 +4,9 @@ import { MastraServer as SelectedMastraServer } from './selected';
 
 export * from './selected';
 export * from './routes';
+// PF-4446: framework-free fetch compiler. Exported from the package root
+// (not `./selected`) because the compiler imports shared helpers from there.
+export * from './fetch-compiler';
 
 /**
  * Default server adapter base with the complete built-in route registry.
