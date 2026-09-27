@@ -69,7 +69,7 @@ curl -sS http://localhost:4111/organization-answer \
 
 Connect an MCP client to `http://localhost:4111/api/mcp/organization-intelligence/mcp`. The server tool is `answerOrganizationQuestion`; a Mastra MCP client configured with the server name `organization` exposes it as `organization_answerOrganizationQuestion`. Pass `{"question":"How long are invoices retained?"}`. See the [Mastra MCP client documentation](https://mastra.ai/reference/tools/mcp-client).
 
-Studio renders a readable answer and citations; HTTP and MCP preserve the structured answer contract. This is a local/trusted single-organization template.
+Studio renders a readable answer and citations; HTTP and MCP preserve the structured answer contract. This is a local/trusted single-organization template. The default server binds to `127.0.0.1` and has no authentication provider. Before exposing it through a proxy, tunnel, or deployment, configure [Mastra authentication](https://mastra.ai/docs/auth/overview) and restrict access to trusted members of that organization. Both custom routes require authentication when a provider is configured; a route flag alone does not configure authentication.
 
 ## Operations
 

@@ -14,7 +14,7 @@ export function createOrganizationAnswerRoute(agent: Agent) {
       return context.json({ error: 'The answer request could not be completed.' }, 422);
     }
   };
-  return registerApiRoute('/organization-answer', { method: 'POST', requiresAuth: false, handler });
+  return registerApiRoute('/organization-answer', { method: 'POST', requiresAuth: true, handler });
 }
 
 /** Read-only operational summary; the telemetry store excludes query and provider payloads. */
@@ -26,5 +26,5 @@ export function createOrganizationTelemetryRoute(index: SourceIndex) {
       return context.json({ error: 'The telemetry summary could not be read.' }, 503);
     }
   };
-  return registerApiRoute('/organization-telemetry', { method: 'GET', requiresAuth: false, handler });
+  return registerApiRoute('/organization-telemetry', { method: 'GET', requiresAuth: true, handler });
 }
