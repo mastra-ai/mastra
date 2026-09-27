@@ -919,7 +919,7 @@ describe('ObservabilityStorageDuckDB', () => {
       await storage.batchCreateSpans({ records: [ended] });
 
       const rows = await store.db.query<Record<string, unknown>>(
-        `SELECT spanId, eventType, endedAt, input, attributes, metadata, requestContext FROM span_events ORDER BY spanId, eventType, endedAt NULLS FIRST`,
+        `SELECT spanId, eventType, endedAt, input, attributes, metadata, requestContext FROM span_events ORDER BY spanId, eventType, endedAt NULLS FIRST, cursorId`,
       );
       const payloadCols = (r: Record<string, unknown>) => [r.input, r.attributes, r.metadata, r.requestContext];
       const spanRows = rows.filter(r => r.spanId === 'span-payload');
