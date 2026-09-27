@@ -1160,6 +1160,48 @@ describe('GitHub session workspace preparation', () => {
     expect(second).toBeFalsy();
   });
 
+  it('does not hand a work-role caller the cache from an in-flight review rescan', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    const workspace = (await resolver({ requestContext }))!;
+    await workspace.skills?.maybeRefresh();
+    mocks.runBindingRole = 'work';
+    await resolver({ requestContext });
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+
+    const skills = workspace.skills!;
+    const originalRefresh = skills.refresh.bind(skills);
+    let scanned!: () => void;
+    const scanDone = new Promise<void>(resolve => (scanned = resolve));
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    vi.spyOn(skills, 'refresh').mockImplementationOnce(async () => {
+      await originalRefresh();
+      scanned();
+      await gate;
+    });
+
+    mocks.runBindingRole = 'review';
+    const reviewCaller = resolver({ requestContext });
+    await scanDone;
+    mocks.runBindingRole = 'work';
+    let workSettled = false;
+    const workCaller = resolver({ requestContext }).then(ws => {
+      workSettled = true;
+      return ws;
+    });
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(workSettled).toBe(false);
+    release();
+
+    await reviewCaller;
+    expect(await (await workCaller)!.skills?.get('factory-review')).toBeFalsy();
+  });
+
   it('retries the skill rescan on the next reuse when a role-change refresh fails', async () => {
     const { resolver } = await createLocalFactory();
     addProject();

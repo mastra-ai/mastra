@@ -748,19 +748,26 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // The skill cache does not recheck the source on get(), so rescan when the
       // session's role flips; otherwise a cached review skill outlives the review binding.
       if (!skillExtension) {
-        const isReview = await isReviewSession();
+        let isReview = await isReviewSession();
         // Concurrent reuses share one refresh, and the state is recorded only
-        // once the rescan succeeds so no caller returns a stale cache.
-        while (skillCacheReviewState.get(workspaceId) !== isReview) {
-          let pending = skillCacheRefreshes.get(workspaceId);
-          if (!pending) {
-            pending = (async () => {
-              await existing.skills?.refresh();
-              skillCacheReviewState.set(workspaceId, isReview);
-            })().finally(() => skillCacheRefreshes.delete(workspaceId));
-            skillCacheRefreshes.set(workspaceId, pending);
+        // once the rescan succeeds. Wait out any in-flight rescan (it may have
+        // been started for the opposite role) and re-read the role afterwards.
+        for (;;) {
+          const inFlight = skillCacheRefreshes.get(workspaceId);
+          if (inFlight) {
+            await inFlight;
+            isReview = await isReviewSession();
+            continue;
           }
+          if (skillCacheReviewState.get(workspaceId) === isReview) break;
+          const target = isReview;
+          const pending = (async () => {
+            await existing.skills?.refresh();
+            skillCacheReviewState.set(workspaceId, target);
+          })().finally(() => skillCacheRefreshes.delete(workspaceId));
+          skillCacheRefreshes.set(workspaceId, pending);
           await pending;
+          isReview = await isReviewSession();
         }
       }
       // A materialization kicked off by another caller may still be running.
