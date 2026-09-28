@@ -459,6 +459,50 @@ describe('WorkItemsStorage', () => {
     expect((await commit()).status).toBe('committed');
   });
 
+  it('claims deferred decisions by decision type, reaching past a backlog of filtered-out rows', async () => {
+    const storage = await makeStorage();
+    const scope = { orgId: 'org1', factoryProjectId: 'p1' };
+    const runDecisions = Array.from({ length: 60 }, (_, index) => ({
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'triage',
+      idempotencyKey: `run-${index}`,
+    }));
+    const commitResult = await storage.commitRuleEvaluation({
+      ...scope,
+      workItemId: null,
+      ingress: { identity: 'github:issue:1:1', triggerType: 'issue.observed' },
+      configVersion: 'v1',
+      expectedRevision: null,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [...runDecisions, { type: 'transition', stage: 'done', idempotencyKey: 'bookkeeping-1' }] as never,
+      causalChain: [],
+      now: new Date(),
+    });
+    expect(commitResult.status).toBe('committed');
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    const lease = { ownerId: 'worker-1', now, leaseExpiresAt: new Date(now.getTime() + 30_000) };
+
+    const bookkeeping = await storage.claimDeferredDecisions({
+      ...lease,
+      limit: 5,
+      decisionTypes: { exclude: ['invokeSkill', 'sendMessage'] },
+    });
+    expect(bookkeeping.map(d => d.idempotencyKey)).toEqual(['bookkeeping-1']);
+
+    const runs = await storage.claimDeferredDecisions({
+      ...lease,
+      limit: 3,
+      decisionTypes: { include: ['invokeSkill', 'sendMessage'] },
+    });
+    expect(runs.map(d => d.decision.type)).toEqual(['invokeSkill', 'invokeSkill', 'invokeSkill']);
+
+    const all = await storage.listDeferredDecisions('org1', 'p1');
+    expect(all.filter(d => d.status === 'leased')).toHaveLength(4);
+    expect(all.filter(d => d.status === 'pending')).toHaveLength(57);
+  });
+
   it('lists newest-first within the org/project scope and updates atomically', async () => {
     const storage = await makeStorage();
 

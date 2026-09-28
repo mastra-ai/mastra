@@ -1161,6 +1161,11 @@ describe('FactoryDecisionDispatcher', () => {
       await vi.advanceTimersByTimeAsync(0);
       await queueDecision(
         storage,
+        { type: 'sendMessage', role: 'work', message: 'Second run.', idempotencyKey: 'run-2' },
+        { sourceKey: 'github-issue:1', ingress: 'move-3' },
+      );
+      await queueDecision(
+        storage,
         {
           type: 'upsertLinkedWorkItem',
           idempotencyKey: 'fast-1',
@@ -1175,17 +1180,16 @@ describe('FactoryDecisionDispatcher', () => {
       );
       await vi.advanceTimersByTimeAsync(3_000);
 
-      // Capacity is exhausted by the hanging dispatch, so the newer decision
-      // must remain unclaimed.
-      expect(
-        (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(d => d.idempotencyKey === 'fast-1'),
-      ).toMatchObject({ status: 'pending' });
+      const find = async (key: string) =>
+        (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(d => d.idempotencyKey === key);
+      // Run capacity is exhausted by the hanging dispatch, so the next
+      // run-bearing decision waits, but board bookkeeping is not blocked.
+      expect(await find('run-2')).toMatchObject({ status: 'pending' });
+      expect(await find('fast-1')).toMatchObject({ status: 'succeeded' });
 
       accept({ action: 'wake', output: { consumeStream: vi.fn(async () => {}) } });
       await vi.advanceTimersByTimeAsync(2_000);
-      expect(
-        (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(d => d.idempotencyKey === 'fast-1'),
-      ).toMatchObject({ status: 'succeeded' });
+      expect(await find('run-2')).not.toMatchObject({ status: 'pending' });
       await dispatcher.stop();
     } finally {
       vi.useRealTimers();
@@ -1910,7 +1914,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect(abort).not.toHaveBeenCalled();
   });
 
-  it('holds a wake dispatch slot until agent end before claiming another decision', async () => {
+  it('holds a wake run slot until agent end while bookkeeping still dispatches', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
       type: 'invokeSkill',
@@ -1960,7 +1964,7 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       {
         type: 'upsertLinkedWorkItem',
-        idempotencyKey: 'blocked-by-wake',
+        idempotencyKey: 'bookkeeping-during-wake',
         board: 'work',
         source: 'github-issue',
         sourceKey: 'github-issue:99',
@@ -1971,19 +1975,21 @@ describe('FactoryDecisionDispatcher', () => {
       { sourceKey: 'github-issue:2', ingress: 'move-2' },
     );
 
+    await queueDecision(
+      storage,
+      { type: 'sendMessage', role: 'work', message: 'Next run.', idempotencyKey: 'run-behind-wake' },
+      { sourceKey: 'github-issue:1', ingress: 'move-3' },
+    );
+    const find = async (key: string) =>
+      (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(d => d.idempotencyKey === key);
+
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
-    expect(
-      (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(d => d.idempotencyKey === 'blocked-by-wake'),
-    ).toMatchObject({ status: 'pending' });
+    expect(await find('bookkeeping-during-wake')).toMatchObject({ status: 'succeeded' });
+    expect(await find('run-behind-wake')).toMatchObject({ status: 'pending' });
 
     emitAgentEnd();
     await first;
     expect(getAgentEndListenerCount()).toBe(0);
-
-    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
-    expect(
-      (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(d => d.idempotencyKey === 'blocked-by-wake'),
-    ).toMatchObject({ status: 'succeeded' });
   });
 
   it('waits for an open run on the same binding before sending another kickoff', async () => {
@@ -5181,12 +5187,14 @@ describe('FactoryDecisionDispatcher', () => {
       dispatcher.start();
       dispatcher.start();
       await vi.advanceTimersByTimeAsync(0);
-      expect(deferredClaim).toHaveBeenCalledTimes(1);
+      // One tick claims deferred decisions once per pool (runs, bookkeeping).
+      expect(deferredClaim).toHaveBeenCalledTimes(2);
       expect(pendingClaim).toHaveBeenCalledTimes(1);
 
       await dispatcher.stop();
       await vi.advanceTimersByTimeAsync(5_000);
-      expect(deferredClaim).toHaveBeenCalledTimes(1);
+      // One tick claims deferred decisions once per pool (runs, bookkeeping).
+      expect(deferredClaim).toHaveBeenCalledTimes(2);
       expect(pendingClaim).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();

@@ -419,6 +419,11 @@ export interface FactoryLeaseClaimInput {
   limit: number;
 }
 
+export interface FactoryDeferredDecisionClaimInput extends FactoryLeaseClaimInput {
+  /** Restrict the claim by `decision.type`; filtered-out rows are never leased. */
+  decisionTypes?: { include?: readonly string[]; exclude?: readonly string[] };
+}
+
 export interface FactoryLeaseIdentity {
   id: string;
   orgId: string;
@@ -857,6 +862,21 @@ function decisionSourceKey(decision: unknown): string | null {
   const record = decision as Record<string, unknown>;
   if (record.type !== 'upsertLinkedWorkItem' || typeof record.sourceKey !== 'string') return null;
   return record.sourceKey;
+}
+
+function decisionRowType(decision: unknown): string | undefined {
+  const parsed = typeof decision === 'string' ? safeJsonParse(decision) : decision;
+  if (typeof parsed !== 'object' || parsed === null) return undefined;
+  const type = (parsed as Record<string, unknown>).type;
+  return typeof type === 'string' ? type : undefined;
+}
+
+function safeJsonParse(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
 }
 
 function deferredDecisionType(decision: FactoryDeferredDecisionRecord): string | undefined {
@@ -1403,6 +1423,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     table: 'factory_deferred_decisions' | 'factory_pending_starts',
     input: FactoryLeaseClaimInput,
     map: (row: GovernanceDbRow) => T,
+    accept?: (row: GovernanceDbRow) => boolean,
   ): Promise<T[]> {
     const claim = () =>
       this.storage.withTransaction(async ops => {
@@ -1412,7 +1433,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         const candidates = await ops.findMany<GovernanceDbRow>(
           table,
           { status: { in: ['pending', 'retry', 'leased'] } },
-          { orderBy: [['created_at', 'asc']], limit: Math.max(input.limit * 5, 50) },
+          // A filtered claim widens its window so matching rows queued behind a
+          // backlog of filtered-out rows are still reachable.
+          { orderBy: [['created_at', 'asc']], limit: Math.max(input.limit * 5, accept ? 500 : 50) },
         );
         const claimed: T[] = [];
         for (const candidate of candidates) {
@@ -1425,6 +1448,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             (candidate.status === 'pending' || candidate.status === 'retry') && availableAt <= input.now.getTime();
           const expired = candidate.status === 'leased' && leaseExpiresAt <= input.now.getTime();
           if (!claimable && !expired) continue;
+          if (accept && !accept(candidate)) continue;
           let didClaim = false;
           const row = await ops.updateAtomic<GovernanceDbRow>(table, { id: candidate.id }, current => {
             const currentAvailable = new Date(current.available_at as Date | string).getTime();
@@ -2382,8 +2406,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     }
   }
 
-  async claimDeferredDecisions(input: FactoryLeaseClaimInput): Promise<FactoryDeferredDecisionRecord[]> {
-    return this.#claimLeases('factory_deferred_decisions', input, toDeferredDecision);
+  async claimDeferredDecisions(input: FactoryDeferredDecisionClaimInput): Promise<FactoryDeferredDecisionRecord[]> {
+    const filter = input.decisionTypes;
+    const accept = filter
+      ? (row: GovernanceDbRow) => {
+          const type = decisionRowType(row.decision);
+          if (filter.include && !(type !== undefined && filter.include.includes(type))) return false;
+          if (filter.exclude && type !== undefined && filter.exclude.includes(type)) return false;
+          return true;
+        }
+      : undefined;
+    return this.#claimLeases('factory_deferred_decisions', input, toDeferredDecision, accept);
   }
 
   async renewDeferredDecisionLease(identity: FactoryLeaseIdentity, leaseExpiresAt: Date): Promise<boolean> {

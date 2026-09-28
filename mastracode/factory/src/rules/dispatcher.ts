@@ -67,6 +67,9 @@ const SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS = 6 * 60 * 60_000;
 // capacity until their agent run reaches a terminal state; binding preparation
 // also runs detached from the poll loop under this concurrency cap.
 const MAX_IN_FLIGHT = 25;
+/** Decision types that may start or wake an agent run and so hold a run slot. */
+const RUN_DECISION_TYPES = ['invokeSkill', 'sendMessage'] as const;
+const BOOKKEEPING_MAX_IN_FLIGHT = 4;
 // Staleness sweep: legacy/leaked active bindings (item deleted, transition
 // path bypassed, or pre-dating terminal-stage revocation) are revoked on a
 // slow cadence so the per-tick reconcile walk stays bounded.
@@ -500,7 +503,12 @@ export class FactoryDecisionDispatcher {
   #reconcileInFlight?: Promise<void>;
   #timer?: ReturnType<typeof setInterval>;
   #activeClaim?: Promise<void>;
-  readonly #inFlight = new Set<Promise<void>>();
+  /** Starts and run-bearing decisions; capped by `maxInFlight`. */
+  readonly #runInFlight = new Set<Promise<void>>();
+  /** Fast board bookkeeping (transitions, linked-card upserts); its own small cap. */
+  readonly #bookkeepingInFlight = new Set<Promise<void>>();
+  /** Background work awaited on stop but outside both caps. */
+  readonly #backgroundInFlight = new Set<Promise<void>>();
   readonly #bindingSkillRuns = new Map<string, Promise<void>>();
 
   constructor(options: FactoryDecisionDispatcherOptions) {
@@ -543,7 +551,7 @@ export class FactoryDecisionDispatcher {
     if (this.#timer) clearInterval(this.#timer);
     this.#timer = undefined;
     await this.#activeClaim;
-    await Promise.allSettled([...this.#inFlight]);
+    await Promise.allSettled([...this.#runInFlight, ...this.#bookkeepingInFlight, ...this.#backgroundInFlight]);
   }
 
   async runOnce(now = new Date()): Promise<void> {
@@ -562,34 +570,54 @@ export class FactoryDecisionDispatcher {
     // binding, so awaiting it would stretch the tick as the active set grows.
     void this.#maybeSweepStaleBindings(now);
     this.#maybeReconcileToolResults(now);
-    const capacity = this.#maxInFlight - this.#inFlight.size;
-    if (capacity <= 0) return [];
-    const limit = Math.min(BATCH_SIZE, capacity);
     const leaseExpiresAt = new Date(now.getTime() + LEASE_MS);
-    // Starts are claimed before deferred decisions: a pending start is a user
-    // waiting on a brand-new session, while a deferred decision is a background
-    // continuation of one that is already running. A deep decision queue must
-    // never starve new sessions out of the tick.
-    const starts = await this.#storage.claimPendingStarts({
-      ownerId: this.#ownerId,
-      now,
-      leaseExpiresAt,
-      limit,
-    });
-    const decisionsLimit = limit - starts.length;
-    const decisions =
-      decisionsLimit > 0
-        ? await this.#storage.claimDeferredDecisions({
-            ownerId: this.#ownerId,
-            now,
-            leaseExpiresAt,
-            limit: decisionsLimit,
-          })
-        : [];
-    return [
-      ...starts.map(start => this.#track(this.#dispatchPendingStart(start, now))),
-      ...decisions.map(decision => this.#track(this.#dispatchDecision(decision, now))),
-    ];
+    const dispatches: Array<Promise<void>> = [];
+    // Run slots are held for whole agent runs (minutes), so bookkeeping that
+    // only mirrors the board is claimed from its own pool and never waits
+    // behind them.
+    const runCapacity = this.#maxInFlight - this.#runInFlight.size;
+    if (runCapacity > 0) {
+      const limit = Math.min(BATCH_SIZE, runCapacity);
+      // Starts are claimed before deferred decisions: a pending start is a user
+      // waiting on a brand-new session, while a deferred decision is a background
+      // continuation of one that is already running. A deep decision queue must
+      // never starve new sessions out of the tick.
+      const starts = await this.#storage.claimPendingStarts({
+        ownerId: this.#ownerId,
+        now,
+        leaseExpiresAt,
+        limit,
+      });
+      const decisionsLimit = limit - starts.length;
+      const decisions =
+        decisionsLimit > 0
+          ? await this.#storage.claimDeferredDecisions({
+              ownerId: this.#ownerId,
+              now,
+              leaseExpiresAt,
+              limit: decisionsLimit,
+              decisionTypes: { include: RUN_DECISION_TYPES },
+            })
+          : [];
+      dispatches.push(
+        ...starts.map(start => this.#track(this.#runInFlight, this.#dispatchPendingStart(start, now))),
+        ...decisions.map(decision => this.#track(this.#runInFlight, this.#dispatchDecision(decision, now))),
+      );
+    }
+    const bookkeepingCapacity = BOOKKEEPING_MAX_IN_FLIGHT - this.#bookkeepingInFlight.size;
+    if (bookkeepingCapacity > 0) {
+      const decisions = await this.#storage.claimDeferredDecisions({
+        ownerId: this.#ownerId,
+        now,
+        leaseExpiresAt,
+        limit: Math.min(BATCH_SIZE, bookkeepingCapacity),
+        decisionTypes: { exclude: RUN_DECISION_TYPES },
+      });
+      dispatches.push(
+        ...decisions.map(decision => this.#track(this.#bookkeepingInFlight, this.#dispatchDecision(decision, now))),
+      );
+    }
+    return dispatches;
   }
 
   /**
@@ -609,7 +637,7 @@ export class FactoryDecisionDispatcher {
         this.#reconcileInFlight = undefined;
       });
     this.#reconcileInFlight = run;
-    this.#track(run);
+    this.#track(this.#backgroundInFlight, run);
   }
 
   /** Slow-cadence revocation of leaked/legacy bindings; failures never block the claim path. */
@@ -633,9 +661,9 @@ export class FactoryDecisionDispatcher {
     }
   }
 
-  #track(dispatch: Promise<void>): Promise<void> {
-    this.#inFlight.add(dispatch);
-    void dispatch.catch(() => {}).then(() => this.#inFlight.delete(dispatch));
+  #track(pool: Set<Promise<void>>, dispatch: Promise<void>): Promise<void> {
+    pool.add(dispatch);
+    void dispatch.catch(() => {}).then(() => pool.delete(dispatch));
     return dispatch;
   }
 
