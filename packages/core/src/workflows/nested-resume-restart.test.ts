@@ -96,4 +96,51 @@ describe('nested workflow restart after crash during resume (issue #25187)', () 
       expect(nestedSnapshot?.status).toBe('success');
     },
   );
+
+  it('resumes the nested run when the process died before it claimed the resume', async () => {
+    const storage1 = new MockStore();
+    let markRunning!: () => void;
+    const running = new Promise<void>(r => (markRunning = r));
+    const p1 = build(async () => {
+      markRunning();
+      await new Promise(() => {}); // process "dies" here
+    });
+    new Mastra({ logger: false, storage: storage1, workflows: { parent: p1.parent, nested: p1.nested } });
+
+    const run1 = await p1.parent.createRun();
+    expect((await run1.start({ inputData: {} })).status).toBe('suspended');
+    const store1 = (await storage1.getStore('workflows'))!;
+    const suspendedNested = JSON.parse(
+      JSON.stringify(await store1.loadWorkflowSnapshot({ workflowName: 'nested', runId: run1.runId })),
+    );
+    expect(suspendedNested.status).toBe('suspended');
+
+    void run1.resume({ step: ['nested', 'gate'], resumeData: false });
+    await running;
+
+    // Crash after the parent recorded the resumed step but before the nested run left `suspended`.
+    const parentSnapshot = await store1.loadWorkflowSnapshot({ workflowName: 'parent', runId: run1.runId });
+    expect(parentSnapshot?.context.nested).toMatchObject({ status: 'running', resumePayload: false });
+    const storage2 = new MockStore();
+    const store2 = (await storage2.getStore('workflows'))!;
+    await store2.persistWorkflowSnapshot({
+      workflowName: 'parent',
+      runId: run1.runId,
+      snapshot: JSON.parse(JSON.stringify(parentSnapshot)),
+    });
+    await store2.persistWorkflowSnapshot({ workflowName: 'nested', runId: run1.runId, snapshot: suspendedNested });
+
+    const seen: any[] = [];
+    const p2 = build(async data => {
+      seen.push(data);
+    });
+    new Mastra({ logger: false, storage: storage2, workflows: { parent: p2.parent, nested: p2.nested } });
+
+    const result = await (await p2.parent.createRun({ runId: run1.runId })).restart();
+
+    expect(result.status).toBe('success');
+    expect(seen).toEqual([false]);
+    const nestedSnapshot = await store2.loadWorkflowSnapshot({ workflowName: 'nested', runId: run1.runId });
+    expect(nestedSnapshot?.status).toBe('success');
+  });
 });

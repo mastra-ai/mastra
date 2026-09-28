@@ -3136,18 +3136,25 @@ export class Workflow<
 
     let res: WorkflowResult<TState, TInput, TOutput, TSteps>;
 
-    // The parent keeps this step as `suspended` until the nested resume settles. If the
-    // process died mid-resume, the nested run is already `running`/`waiting` and must be
-    // restarted rather than resumed. See https://github.com/mastra-ai/mastra/issues/25187
+    // The parent and nested snapshots are written separately, so a crash can leave them out of
+    // sync. Trust the nested run's status: an active nested run must be restarted, and a nested
+    // run that never claimed its resume must be resumed. See https://github.com/mastra-ai/mastra/issues/25187
     try {
       let restartNested = !!restart;
-      if (!restartNested && isResume && !isTimeTravel) {
+      let resumeNested = isResume;
+      if ((restart || isResume) && !isTimeTravel) {
         const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
         const nestedSnapshot = await workflowsStore?.loadWorkflowSnapshot({
           workflowName: this.id,
           runId: run.runId,
         });
-        restartNested = nestedSnapshot?.status === 'running' || nestedSnapshot?.status === 'waiting';
+        const nestedStatus = nestedSnapshot?.status;
+        if (isResume && (nestedStatus === 'running' || nestedStatus === 'waiting')) {
+          restartNested = true;
+        } else if (restart && (nestedStatus === 'suspended' || nestedStatus === 'paused')) {
+          restartNested = false;
+          resumeNested = true;
+        }
       }
 
       if (isTimeTravel) {
@@ -3167,16 +3174,16 @@ export class Workflow<
         });
       } else if (restartNested) {
         res = await run.restart({ requestContext, actor, ...observabilityContext, outputWriter });
-      } else if (isResume) {
+      } else if (resumeNested) {
         res = await run.resume({
           resumeData,
-          step: resume.steps?.length > 0 ? (resume.steps as any) : undefined,
+          step: resume?.steps?.length ? (resume.steps as any) : undefined,
           requestContext,
           actor,
           ...observabilityContext,
           outputWriter,
           outputOptions: { includeState: true, includeResumeLabels: true },
-          label: resume.label,
+          label: resume?.label,
           perStep,
         });
       } else {
