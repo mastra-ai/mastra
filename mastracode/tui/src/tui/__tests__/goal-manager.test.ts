@@ -349,6 +349,20 @@ describe('GoalManager adapter', () => {
     });
   });
 
+  it('applyEvaluation keeps the existing cause when an already-paused goal is paused again without one', async () => {
+    const manager = new GoalManager();
+    await manager.setGoal(createState(createAgent()), 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+
+    manager.pause('judge unavailable');
+    manager.applyEvaluation({ runsUsed: 5, status: 'paused' });
+
+    expect(manager.getGoal()).toMatchObject({
+      status: 'paused',
+      turnsUsed: 5,
+      pausedReason: 'judge unavailable',
+    });
+  });
+
   it('applyEvaluation drops a stale pause cause once the goal is no longer paused', async () => {
     const agent = createAgent();
     const state = createState(agent);

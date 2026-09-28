@@ -224,12 +224,16 @@ export class GoalManager {
    */
   applyEvaluation(update: { runsUsed: number; status: GoalStatus; pausedReason?: string }): GoalState | null {
     if (!this.record) return null;
+    const pausedReason =
+      update.status === 'paused'
+        ? (update.pausedReason ?? (this.record.status === 'paused' ? this.record.pausedReason : undefined))
+        : undefined;
     this.record = {
       ...this.record,
       runsUsed: update.runsUsed,
       status: update.status,
-      // The cause only describes a paused goal; any other status retires it.
-      pausedReason: update.status === 'paused' ? update.pausedReason : undefined,
+      // The cause lasts for one pause; leaving paused retires it.
+      pausedReason,
       updatedAt: Date.now(),
     };
     return this.getGoal();
