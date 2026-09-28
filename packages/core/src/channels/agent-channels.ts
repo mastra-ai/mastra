@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { Agent } from '../agent/agent';
 import type { MastraProviderMetadata } from '../agent/message-list/state/types';
 import type { AgentSignalContents } from '../agent/signals';
-import { getErrorFromUnknown } from '../error';
+import { MastraError } from '../error';
 import type { IMastraLogger } from '../logger/logger';
 import type { Mastra } from '../mastra';
 import type { StorageThreadType } from '../memory/types';
@@ -37,6 +37,7 @@ import { ChatChannelOutputProcessor, CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './o
 import type { ChatChannelRenderContext } from './output-processor';
 import { ChatChannelProcessor } from './processor';
 import { MastraStateAdapter } from './state-adapter';
+import { extractErrorMessage } from './stream-helpers';
 import type { PendingApprovalRecord } from './stream-helpers';
 import type {
   ChannelAdapterConfig,
@@ -1189,9 +1190,19 @@ export class AgentChannels {
     }
     let loggedError;
     try {
-      loggedError = JSON.parse(JSON.stringify(getErrorFromUnknown(err)));
+      const message = extractErrorMessage(err);
+      const cause =
+        typeof err === 'object' && err !== null && 'cause' in err ? extractErrorMessage(err.cause) : undefined;
+      const { id, domain, category } = err instanceof MastraError ? err : {};
+      loggedError = {
+        message: typeof message === 'string' && message.length > 0 ? message : 'Unknown error',
+        ...(typeof id === 'string' ? { code: id } : {}),
+        ...(typeof domain === 'string' ? { domain } : {}),
+        ...(typeof category === 'string' ? { category } : {}),
+        ...(typeof cause === 'string' && cause.length > 0 ? { cause: { message: cause } } : {}),
+      };
     } catch {
-      loggedError = { message: error.message, serializationError: 'Error serialization failed' };
+      loggedError = { message: 'Error details unavailable' };
     }
     const diagnostic = {
       platform: chatThread.adapter.name,
