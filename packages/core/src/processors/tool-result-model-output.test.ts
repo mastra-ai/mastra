@@ -287,6 +287,63 @@ describe('toModelOutput after processToolResult', () => {
     expect(stored).not.toContain('SECRET-TOKEN');
   });
 
+  it('default engine keeps the transcript transform on a same-stream provider-executed result', async () => {
+    // Call and result arrive in one response, so buildMessagesFromChunks is the only
+    // persistence route for the result's transform metadata.
+    const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'r1', modelId: 'mock', timestamp: new Date(0) },
+          {
+            type: 'tool-call',
+            toolCallId: 'call-provider',
+            toolName: 'web_search',
+            input: '{}',
+            providerExecuted: true,
+          },
+          {
+            type: 'tool-result',
+            toolCallId: 'call-provider',
+            toolName: 'web_search',
+            providerExecuted: true,
+            result: 'hits',
+          },
+          { type: 'finish', finishReason: 'stop', usage },
+        ] as any[]),
+      }),
+    });
+    let stored = '';
+    const capture = {
+      id: 'capture',
+      async processOutputResult({ messageList, messages }: any) {
+        stored = JSON.stringify(messageList.get.all.db());
+        return messages;
+      },
+    };
+    const agent = new Agent({
+      id: 'mo-same-stream',
+      name: 'mo-same-stream',
+      instructions: 'x',
+      model: model as LanguageModelV2,
+      tools: { web_search: { type: 'provider-defined', id: 'openai.web_search', args: {} } as any },
+      outputProcessors: [redactor as any, capture as any],
+    });
+    const stream = await agent.stream('go', {
+      maxSteps: 1,
+      transform: {
+        targets: ['transcript'],
+        transformToolPayload: (ctx: any) => (ctx.phase === 'output-available' ? `T:${String(ctx.output)}` : ctx.input),
+      },
+    } as any);
+    for await (const _ of stream.fullStream) void _;
+
+    expect(stored).toContain('T:hits');
+  });
+
   it('durable engine maps the processor-rewritten result', async () => {
     const prompts: unknown[] = [];
     const baseAgent = new Agent({
@@ -307,7 +364,7 @@ describe('toModelOutput after processToolResult', () => {
     expect(prompt).not.toContain('SECRET-TOKEN');
   });
 
-  it('durable engine remaps a result the processor mutated in place', async () => {
+  it('durable engine maps a result the processor mutated in place', async () => {
     const prompts: unknown[] = [];
     const { tool, mutator } = inPlaceSetup();
     const baseAgent = new Agent({
@@ -401,6 +458,44 @@ describe('toModelOutput after processToolResult', () => {
     expect(secondPrompt(prompts)).toContain('mapped: [REDACTED]');
     expect(mapper.mock.calls.map(c => c[0])).toEqual(['[REDACTED]']);
     expect(outputs).not.toContain('SECRET-TOKEN body');
+  });
+
+  it('durable engine maps neither the raw result nor the placeholder when a processor throws', async () => {
+    const mapper = vi.fn((output: unknown) => ({ type: 'text' as const, value: `mapped: ${String(output)}` }));
+    const baseAgent = new Agent({
+      id: 'mo-durable-throw',
+      name: 'mo-durable-throw',
+      instructions: 'x',
+      model: recordingModel([]) as LanguageModelV2,
+      tools: {
+        getSecret: createTool({
+          id: 'getSecret',
+          description: 'Get secret',
+          inputSchema: z.object({ q: z.string() }),
+          execute: async () => 'SECRET-TOKEN body',
+          toModelOutput: mapper,
+        }),
+      },
+      outputProcessors: [
+        {
+          id: 'broken',
+          processToolResult: async () => {
+            throw new Error('boom');
+          },
+        } as any,
+      ],
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    new Mastra({
+      agents: { 'mo-durable-throw': durableAgent as any },
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub,
+    });
+    const result = await durableAgent.stream('go', { maxSteps: 3 });
+    for await (const _ of result.fullStream) void _;
+
+    expect(mapper).not.toHaveBeenCalled();
   });
 
   it('durable engine never hands the raw result of a rewritten tool to toModelOutput', async () => {

@@ -1687,10 +1687,11 @@ export function createDurableToolCallStep() {
             logger?.warn?.(`[DurableAgent] processToolResult failed for tool "${toolName}": ${processorError}`);
             result = { error: 'Tool result processing failed' };
             modelOutputInput = undefined;
+            // Marked computed so the later mapping step doesn't map the placeholder either.
+            modelOutputComputed = true;
           }
         }
 
-        // A failed processor leaves only the error placeholder, which is not mapped.
         if (toModelOutput && modelOutputInput !== undefined) {
           modelOutputComputed = true;
           const mappingSpan = stepSpan?.createChildSpan({

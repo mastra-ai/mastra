@@ -727,7 +727,13 @@ async function processOutputStream<OUTPUT = undefined>({
     // A tool result that processToolResult will see is transformed after the processors
     // run (in the 'tool-result' case below), so transforms never receive the raw value.
     const transformAfterProcessors =
-      chunk.type === 'tool-result' && 'result' in chunk.payload && !!outputProcessors?.length;
+      chunk.type === 'tool-result' &&
+      'result' in chunk.payload &&
+      Boolean(
+        outputProcessors?.some(processor =>
+          isProcessorWorkflow(processor) ? processor.__processToolResult !== false : 'processToolResult' in processor,
+        ),
+      );
     if (!transformAfterProcessors) {
       chunk = await addToolPayloadTransformToChunk(chunk, {
         resolveTool,
@@ -789,11 +795,12 @@ async function processOutputStream<OUTPUT = undefined>({
     }
 
     // Collect every chunk for post-stream message building
-    collectedChunks.push({
+    const collectedChunk: CollectedChunk = {
       type: chunk.type,
       payload: 'payload' in chunk ? chunk.payload : undefined,
       metadata: chunk.metadata,
-    });
+    };
+    collectedChunks.push(collectedChunk);
 
     // Track the assistant text emitted so far so an abort can hand the caller
     // the partial response. This sits after the `abortSignal.aborted` break
@@ -1027,6 +1034,8 @@ async function processOutputStream<OUTPUT = undefined>({
                 logger,
               });
               chunk.metadata = transformed.metadata;
+              // Same-stream results are persisted from collectedChunks, not updateToolInvocation.
+              collectedChunk.metadata = transformed.metadata;
             } catch (error) {
               if (error instanceof TripWire) {
                 toolResultTripwire = error;
