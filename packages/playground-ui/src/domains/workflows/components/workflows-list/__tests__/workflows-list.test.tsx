@@ -159,7 +159,7 @@ describe('WorkflowsList', () => {
   });
 
   describe('when nested workflows are not registered standalone', () => {
-    it('renders them as inline non-link rows', async () => {
+    it('renders them as non-link rows marked not registered', async () => {
       useRunCountsHandler();
       const { queryClient } = renderList();
 
@@ -167,10 +167,10 @@ describe('WorkflowsList', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Expand nested workflows of prd-groom-product' }));
 
-      const inlineName = screen.getByText('use-case-arch');
-      expect(inlineName.closest('a')).toBeNull();
-      expect(inlineName.closest('.data-list-row')).not.toBeNull();
-      expect(screen.getByText('inline')).not.toBeNull();
+      const unregisteredName = screen.getByText('use-case-arch');
+      expect(unregisteredName.closest('a')).toBeNull();
+      expect(unregisteredName.closest('.data-list-row')).not.toBeNull();
+      expect(screen.getByText('not registered')).not.toBeNull();
 
       await waitForMutationsIdle(queryClient);
     });
@@ -289,17 +289,15 @@ describe('WorkflowsList', () => {
       await waitForMutationsIdle(queryClient);
     });
 
-    it('skips inline non-link rows when expanded children are not registered', async () => {
+    it('skips unregistered non-link rows when expanded children are not registered', async () => {
       useRunCountsHandler();
       const { queryClient } = renderList();
 
       fireEvent.click(screen.getByRole('button', { name: 'Expand nested workflows of prd-groom-product' }));
-      const inlineRow = screen.getByText('use-case-arch').closest('.data-list-row') as HTMLElement;
+      const unregisteredRow = screen.getByText('use-case-arch').closest('.data-list-row') as HTMLElement;
 
-      // Inline rows never receive a roving tabindex slot.
-      expect(inlineRow.querySelector('[data-row-index]')).toBeNull();
+      expect(unregisteredRow.querySelector('[data-row-index]')).toBeNull();
 
-      // Indices stay contiguous across only the interactive rows.
       const indices = interactiveRows().map(row => Number(row.dataset.rowIndex));
       expect(indices).toEqual(indices.map((_, i) => i));
 
