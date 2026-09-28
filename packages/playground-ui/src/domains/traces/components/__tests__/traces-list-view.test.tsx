@@ -467,7 +467,7 @@ describe('TracesListView — environment and end time cells', () => {
   });
 
   describe('when the end time column is visible', () => {
-    it('formats the end timestamp like the start one', () => {
+    it('formats the end timestamp like the start one, without the year', () => {
       render(
         <TracesListView
           traces={[makeTrace({ traceId: 'trace-1', endedAt: new Date(2026, 5, 10, 13, 7, 47) })]}
@@ -486,7 +486,14 @@ describe('TracesListView — environment and end time cells', () => {
         minute: '2-digit',
         second: '2-digit',
       }).format(endedAt);
-      expect(screen.getByTitle(title).textContent).toBe(title);
+      const visible = new Intl.DateTimeFormat(undefined, {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+      }).format(endedAt);
+      expect(screen.getByTitle(title).textContent).toBe(visible);
     });
   });
 });

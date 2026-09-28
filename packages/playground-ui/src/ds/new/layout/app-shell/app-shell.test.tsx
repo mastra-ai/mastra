@@ -44,7 +44,11 @@ describe('AppShell', () => {
     });
 
     it('lays the sidebar and content out as a desktop grid', () => {
-      expect(markup).toContain('data-slot="app-shell" class="h-full min-h-0 lg:grid lg:grid-cols-[auto_1fr]');
+      expect(markup).toContain('data-slot="app-shell" class="h-full min-h-0 lg:grid lg:grid-cols-[auto_minmax(0,1fr)]');
+    });
+
+    it('lets wide content scroll inside itself instead of widening the content column', () => {
+      expect(markup).toMatch(/data-slot="app-shell-content" class="[^"]*\bmin-w-0\b/);
     });
 
     it('drops the left inset at lg so the sidebar padding provides the gap', () => {
@@ -61,7 +65,7 @@ describe('AppShell', () => {
     const markup = renderShell();
 
     it('does not reserve a sidebar column', () => {
-      expect(markup).not.toContain('lg:grid-cols-[auto_1fr]');
+      expect(markup).not.toContain('lg:grid-cols-');
     });
 
     it('insets the body on all sides', () => {

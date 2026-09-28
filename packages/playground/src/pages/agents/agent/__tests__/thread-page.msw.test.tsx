@@ -584,6 +584,20 @@ describe('Standalone thread page', () => {
     });
   });
 
+  describe('when a saved draft is still being restored', () => {
+    it('ignores files dragged over the page', async () => {
+      installHandlers();
+      renderAt(`/agents/${AGENT_ID}/threads/new`);
+      await screen.findByText('Restoring draft…');
+      const event = new Event('dragenter', { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'dataTransfer', { value: { types: ['Files'], files: [] } });
+      act(() => {
+        fireEvent(window, event);
+      });
+      expect(screen.queryByText('Drop to attach')).toBeNull();
+    });
+  });
+
   describe('when authentication status cannot be checked', () => {
     it.each([false, true])(
       'blocks fallback composing and restores the saved draft after recovery (retryOnMount=%s)',
