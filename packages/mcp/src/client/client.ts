@@ -160,7 +160,7 @@ const SUPPORTED_DIALECTS = new Set([
 function withDefaultDialect(schema: JSONSchema7): JSONSchema7 {
   if (!schema.$schema) return { ...schema, $schema: JSON_SCHEMA_2020_12 };
   if (SUPPORTED_DIALECTS.has(schema.$schema)) return schema;
-  return { ...toJsonSchema2020(schema), $schema: JSON_SCHEMA_2020_12 };
+  return toJsonSchema2020(schema) ?? schema;
 }
 const DEFAULT_INSTRUCTIONS_MAX_LENGTH = 512;
 const DEFAULT_SERVER_LOG_LEVEL: LoggingLevel = 'info';

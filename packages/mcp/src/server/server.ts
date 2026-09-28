@@ -366,7 +366,7 @@ export class MCPServer extends MCPServerBase {
       unknown
     >;
     if (!converted.$schema || converted.$schema === JSON_SCHEMA_2020_12) return converted;
-    return { ...toJsonSchema2020(converted), $schema: JSON_SCHEMA_2020_12 };
+    return toJsonSchema2020(converted) ?? converted;
   }
 
   private addTools(tools: ToolsInput): void {
