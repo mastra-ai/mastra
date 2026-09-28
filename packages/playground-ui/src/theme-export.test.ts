@@ -199,23 +199,21 @@ describe('theme.css export', () => {
     expect(lightTheme).not.toMatch(/--color-ds-/);
   });
 
-  it('loads legacy colors through the public theme entry in both modes', () => {
-    const legacyCss = readFileSync(resolve(pkgRoot, 'legacy-theme.css'), 'utf8');
-    const names = [...parseVariables(blocksOf(legacyCss, ':root')).keys()];
+  it('does not ship legacy colors', async () => {
+    expect(readFileSync(resolve(pkgRoot, 'theme.css'), 'utf8')).not.toContain('legacy-theme');
     const { darkVariables, lightVariables } = getThemeVariables(themeCss);
-    expect(readFileSync(resolve(pkgRoot, 'theme.css'), 'utf8')).toContain("@import './legacy-theme.css';");
-    expect(names).toContain('accent1');
-    expect(names).toContain('chart-blue');
-    expect(names).toContain('span-type-agent');
     for (const variables of [darkVariables, lightVariables]) {
-      for (const name of names) expect(resolveToken(name, variables)).not.toContain('var(');
+      for (const name of [
+        'accent1',
+        'positive1',
+        'notice-success',
+        'brand-green-500',
+        'chart-blue',
+        'span-type-agent',
+      ]) {
+        expect(variables.has(name)).toBe(false);
+      }
     }
-    expect(resolveToken('accent1', darkVariables)).toBe('oklch(0.723 0.219 149.579)');
-    expect(resolveToken('accent1', lightVariables)).toBe('oklch(0.627 0.194 149.214)');
-    expect(Colors.accent1).toBe('var(--accent1)');
-  });
-
-  it('generates legacy utilities alongside semantic utilities', async () => {
     const compiler = await compileStylesheet("@import 'tailwindcss'; @import './theme.css';", pkgRoot);
     const css = compiler.build([
       'bg-accent1',
@@ -224,9 +222,8 @@ describe('theme.css export', () => {
       'text-badge-green-fg',
       'bg-success-bg',
     ]);
-    for (const name of ['bg-accent1', 'text-positive1', 'bg-notice-success', 'text-badge-green-fg', 'bg-success-bg']) {
-      expect(css).toContain(`.${name}`);
-    }
+    for (const name of ['bg-accent1', 'text-positive1', 'bg-notice-success']) expect(css).not.toContain(`.${name}`);
+    for (const name of ['text-badge-green-fg', 'bg-success-bg']) expect(css).toContain(`.${name}`);
   });
 
   it('generates named chromatic utilities from the shared palette', async () => {

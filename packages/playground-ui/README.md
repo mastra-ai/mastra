@@ -88,24 +88,30 @@ import { ProductBadge } from '@mastra/playground-ui/components/ProductBadge';
 
 Charts use `--chart-1` through `--chart-8` for categories and `--chart-sequential-1` through `--chart-sequential-5` for ordered values. Span colors use `--span-agent`, `--span-workflow`, and the other span names. Pastel chart colors are fills, not text colors; keep labels on `--foreground` or `--muted-foreground`.
 
-Numbered `accent*` tokens and `positive1`, `negative1`, and `warning1` remain in `legacy-theme.css`, imported by `theme.css` for existing consumers. Status consumers use the existing `success`, `destructive`, `warning`, or `info` roles. Focus styling uses `border-focus`; categorical charts and span icons use their own roles. CodeMirror uses five local `--syntax-*` properties scoped to `.cm-editor`, not a global palette.
+Numbered `accent*` tokens, `positive1`, `negative1`, `warning1`, `notice-success/destructive/warning/info`, and `--brand-green-*` are removed. Status consumers use the existing `success`, `destructive`, `warning`, or `info` roles. Focus styling uses `border-focus`; categorical charts and span icons use their own roles. CodeMirror uses five local `--syntax-*` properties scoped to `.cm-editor`, not a global palette.
 
-The duplicated `notice-success/destructive/warning/info` color aliases are retained in the compatibility theme. `badge-green/red/yellow/blue` are now categorical badge tones built from the ramps, with `-bg`, `-border` and `-fg` like `badge-purple`. Badge backgrounds are a translucent tint of the ramp, so they sit on any surface. Use the status role with `-bg`, `-border`, `-fg`, or `-indicator` for its intended job. Notice variants are unchanged. Badge status variants are `success`, `destructive`, `warning`, and `info`, for states. `green`, `red`, `yellow`, and `blue` are categorical tones like `purple` and `orange`, for labels that are not states. New consumers use `--green-*` for the shared chromatic ramp, not Mastra brand green. `--brand-green-*` remains in the compatibility theme.
+`badge-green/red/yellow/blue` are now categorical badge tones built from the ramps, with `-bg`, `-border` and `-fg` like `badge-purple`. Badge backgrounds are a translucent tint of the ramp, so they sit on any surface. Use the status role with `-bg`, `-border`, `-fg`, or `-indicator` for its intended job. Notice variants are unchanged. Badge status variants are `success`, `destructive`, `warning`, and `info`, for states. `green`, `red`, `yellow`, and `blue` are categorical tones like `purple` and `orange`, for labels that are not states. Use `--green-*` for the shared chromatic ramp.
 
-To migrate chart consumers:
+To migrate removed tokens:
 
-| Removed token       | Replacement            |
-| ------------------- | ---------------------- |
-| `--chart-blue`      | `--chart-1`            |
-| `--chart-blue-deep` | `--chart-2`            |
-| `--chart-yellow`    | `--chart-3`            |
-| `--chart-green`     | `--chart-4`            |
-| `--chart-purple`    | `--chart-5`            |
-| `--chart-orange`    | `--chart-6`            |
-| `--chart-pink`      | `--chart-7`            |
-| `--chart-red`       | `--chart-8`            |
-| `--chart-soft-N`    | `--chart-sequential-N` |
-| `--span-type-NAME`  | `--span-NAME`          |
+| Removed token          | Replacement              |
+| ---------------------- | ------------------------ |
+| `--chart-blue`         | `--chart-1`              |
+| `--chart-blue-deep`    | `--chart-2`              |
+| `--chart-yellow`       | `--chart-3`              |
+| `--chart-green`        | `--chart-4`              |
+| `--chart-purple`       | `--chart-5`              |
+| `--chart-orange`       | `--chart-6`              |
+| `--chart-pink`         | `--chart-7`              |
+| `--chart-red`          | `--chart-8`              |
+| `--chart-soft-N`       | `--chart-sequential-N`   |
+| `--span-type-NAME`     | `--span-NAME`            |
+| `accent1`, `positive1` | `success-*`              |
+| `accent2`, `negative1` | `destructive-*`          |
+| `accent6`, `warning1`  | `warning-*`              |
+| `accent3`, `accent5`   | `info-*`                 |
+| `notice-STATUS`        | `STATUS-bg`, `STATUS-fg` |
+| `--brand-green-N`      | `--green-N`              |
 
 `SankeyChart` accepts `getNodeColor` and `getLinkColor` callbacks returning CSS colors. Explicit link colors keep the default link transparency and hover emphasis:
 

@@ -82,7 +82,7 @@ export const StatusFoundations: Story = {
         </Txt>
       }
       note="Light is not the dark value dimmed: the base keeps its saturation while the foreground flips to a deep tint, because ink has to darken when the surface turns white."
-      noteAside="Utilities: bg-notice-*, text-notice-*-fg, bg-badge-*, text-badge-*-fg."
+      noteAside="Utilities: bg-{status}-bg, text-{status}-fg, bg-badge-*-bg, text-badge-*-fg."
     >
       <FoundationSection
         label="Notice"
