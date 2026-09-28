@@ -249,7 +249,8 @@ export class GoalManager {
    * same statement as "there is nothing": the mirror is also emptied by storage
    * failures and thread switches. So a save with an empty mirror deletes the
    * goal (durable record and legacy key) only right after an explicit
-   * {@link clear} on the same thread, and is a complete no-op otherwise.
+   * {@link clear} on the same thread (or any thread, for a legacy-hydrated goal
+   * whose thread is unknown), and is a complete no-op otherwise.
    */
   async saveToThread(state: GoalManagerState): Promise<void> {
     const threadId = state.session.thread.getId();
