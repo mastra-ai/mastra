@@ -531,13 +531,13 @@ function BoardContent({
                           onDismissProposal={decisions.dismiss}
                           onRetryDecision={decisions.retry}
                           onCreateSession={() => void runs.openOrCreateSession(item)}
-                          onMove={(toStage, options) =>
+                          onMove={toStage =>
                             chooseRepository(
                               item.source,
                               item.metadata,
                               toStage,
-                              slug => items.move(item.id, toStage, { ...options, repositorySlug: slug }),
-                              () => items.move(item.id, toStage, options),
+                              slug => items.move(item.id, toStage, { repositorySlug: slug }),
+                              () => items.move(item.id, toStage),
                             )
                           }
                           onRemove={() => items.remove(item.id)}

@@ -1010,7 +1010,7 @@ export class FactoryDecisionDispatcher {
           // the break is invisible on the card.
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
-            approvePlans: await this.#plansAreAutoApproved(record, item),
+            approvePlans: await this.#plansAreAutoApproved(record),
             onAgentEnd: () => this.#roleSuperseded(record, decision.role),
             label: 'Factory skill run',
             runStillActive,
@@ -1449,11 +1449,13 @@ export class FactoryDecisionDispatcher {
   }
 
   /** Unset means off: a plan nobody asked us to answer is a plan someone should see. */
-  async #plansAreAutoApproved(
-    { orgId, factoryProjectId }: { orgId: string; factoryProjectId: string },
-    item?: { plansPreapprovedAt: Date | null } | null,
-  ): Promise<boolean> {
-    if (item?.plansPreapprovedAt) return true;
+  async #plansAreAutoApproved({
+    orgId,
+    factoryProjectId,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+  }): Promise<boolean> {
     return this.#autoApprovePlans ? await this.#autoApprovePlans({ orgId, factoryProjectId }) : false;
   }
 
@@ -1596,7 +1598,7 @@ export class FactoryDecisionDispatcher {
           // alone strands the card with a success ledger entry.
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
-            approvePlans: await this.#plansAreAutoApproved(record, item),
+            approvePlans: await this.#plansAreAutoApproved(record),
             label: 'Factory kickoff run',
             runStillActive: () =>
               this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),

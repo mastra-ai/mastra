@@ -1,5 +1,5 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { ArrowUpRight, CircleSlash, FastForward, ShieldCheck, Trash2 } from 'lucide-react';
+import { ArrowUpRight, CircleSlash, ShieldCheck, Trash2 } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { Link, useParams } from 'react-router';
 
@@ -23,7 +23,7 @@ export interface WorkItemMenuProps {
   approvingDecisionId?: string;
   onApproveProposal: (decisionId: string) => void;
   onDismissProposal: (decisionId: string) => void;
-  onMove: (toStage: string, options?: { preapprovePlans?: boolean }) => void;
+  onMove: (toStage: string) => void;
   onRemove: () => void;
 }
 
@@ -37,25 +37,14 @@ export function askSupervisorPath(
   return `/factories/${factoryId}/supervisor?ask=${encodeURIComponent(ask)}`;
 }
 
-/** A lane's menu entries: the plain move and, unless a person must decide its outcome, a hands-off twin. */
-function moveItemPair(move: CardMove, onMove: WorkItemMenuProps['onMove']): ReactElement[] {
-  return [
+/** A lane's available move. Plan approval remains a separate human decision. */
+function moveItem(move: CardMove, onMove: WorkItemMenuProps['onMove']): ReactElement {
+  return (
     <DropdownMenu.Item key={move.label} onClick={() => onMove(move.stage)}>
       {actionIcon(move.label)}
       <span>{move.label}</span>
-    </DropdownMenu.Item>,
-    ...(move.awaitsHumanDecision
-      ? []
-      : [
-          <DropdownMenu.Item
-            key={`${move.label} hands-off`}
-            onClick={() => onMove(move.stage, { preapprovePlans: true })}
-          >
-            <FastForward aria-hidden />
-            <span>{`${move.label} hands-off`}</span>
-          </DropdownMenu.Item>,
-        ]),
-  ];
+    </DropdownMenu.Item>
+  );
 }
 
 export function WorkItemMenuItems({
@@ -97,7 +86,7 @@ export function WorkItemMenuItems({
             <span>{choice.label}</span>
           </DropdownMenu.Item>
         ))}
-      {!decision && moves.flatMap(move => moveItemPair(move, onMove))}
+      {!decision && moves.map(move => moveItem(move, onMove))}
       {/* Once the card has a live session its surface opens details, so the
           menus stay the only place left to release a proposed run. */}
       {suggestion !== undefined && !decision && (

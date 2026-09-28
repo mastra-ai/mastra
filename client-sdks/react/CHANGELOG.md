@@ -1,5 +1,15 @@
 # @mastra/react
 
+## 1.7.0-alpha.6
+
+### Patch Changes
+
+- Fixed the Approve and Decline buttons doing nothing for tool approvals from Inngest durable agents in Studio. These agents stream the approval without a preceding `start` event, so the chat hook never learned the run ID and silently dropped the approval. The hook now takes the run ID from the approval event itself. ([#25292](https://github.com/mastra-ai/mastra/pull/25292))
+
+- Updated dependencies:
+  - @mastra/core@1.72.0-alpha.6
+  - @mastra/client-js@1.51.0-alpha.6
+
 ## 1.7.0-alpha.5
 
 ### Patch Changes

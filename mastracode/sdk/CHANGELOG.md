@@ -1,5 +1,13 @@
 # @mastra/code-sdk
 
+## 1.8.4-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`1818674`](https://github.com/mastra-ai/mastra/commit/18186744bebffdfecdca33e0b8b6a421cc95ed0d)]:
+  - @mastra/duckdb@1.11.2-alpha.1
+  - @mastra/core@1.72.0-alpha.6
+
 ## 1.8.4-alpha.5
 
 ### Patch Changes
