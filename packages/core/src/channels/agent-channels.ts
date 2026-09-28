@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { Agent } from '../agent/agent';
 import type { MastraProviderMetadata } from '../agent/message-list/state/types';
 import type { AgentSignalContents } from '../agent/signals';
+import { getErrorFromUnknown } from '../error';
 import type { IMastraLogger } from '../logger/logger';
 import type { Mastra } from '../mastra';
 import type { StorageThreadType } from '../memory/types';
@@ -54,6 +55,74 @@ import type {
 import { defaultTypingStatus } from './typing-status';
 import type { TypingStatusContext, TypingStatusFn } from './typing-status';
 import { resolveWaitUntil } from './wait-until';
+
+type ChannelErrorDetails = {
+  name: string;
+  message: string;
+  stack?: string;
+  cause?: ChannelErrorDetails;
+};
+
+// This only recognizes labelled credentials and URL credentials, not arbitrary secrets in prose.
+function scrubChannelDiagnostic(value: string): string {
+  return value
+    .replace(/\bauthorization\b["']?\s*[:=]?\s*["']?\s*(?:bearer|basic)\s+[^\s"',;}\]]+/gi, 'Authorization [REDACTED]')
+    .replace(
+      /(\b(?:token|password|api[_-]key)\b["']?\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}\]"']+)/gi,
+      '$1[REDACTED]',
+    )
+    .replace(/\b[a-z][a-z\d+.-]*:\/\/[^\s<>"']+/gi, url =>
+      url.replace(/^(\w[\w+.-]*:\/\/)[^/?#]*@/, '$1[REDACTED]@').replace(/[?#].*$/, '[REDACTED]'),
+    );
+}
+
+function channelErrorDiagnostic(err: unknown, thread: Thread, message: Message) {
+  const readCorrelation = (read: () => unknown): string | undefined => {
+    try {
+      const value = read();
+      return typeof value === 'string' ? scrubChannelDiagnostic(value) : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const correlation = {
+    platform: readCorrelation(() => thread.adapter.name) ?? 'unknown',
+    threadId: readCorrelation(() => thread.id),
+    messageId: readCorrelation(() => message.id),
+    authorId: readCorrelation(() => message.author?.userId),
+  };
+  let error: ChannelErrorDetails;
+  try {
+    const seen = new Set<object>();
+    const project = (value: unknown, depth: number): ChannelErrorDetails => {
+      const object = value !== null && typeof value === 'object' ? value : undefined;
+      if (object && seen.has(object)) return { name: 'Error', message: '[Circular cause]' };
+      if (depth > 5) return { name: 'Error', message: '[Cause depth limit]' };
+      if (!object) {
+        return { name: 'Error', message: typeof value === 'string' ? scrubChannelDiagnostic(value) : 'Unknown error' };
+      }
+      seen.add(object);
+      const name = Reflect.get(object, 'name');
+      const message = Reflect.get(object, 'message');
+      const stack = Reflect.get(object, 'stack');
+      const cause = Reflect.get(object, 'cause');
+      return {
+        name: typeof name === 'string' ? scrubChannelDiagnostic(name) : 'Error',
+        message: typeof message === 'string' ? scrubChannelDiagnostic(message) : 'Unknown error',
+        ...(typeof stack === 'string' ? { stack: scrubChannelDiagnostic(stack) } : {}),
+        ...(cause !== undefined ? { cause: project(cause, depth + 1) } : {}),
+      };
+    };
+    // Only the detached allowlist reaches the serializer, never the original exception or its toJSON.
+    error = JSON.parse(JSON.stringify(getErrorFromUnknown(project(err, 0), { maxDepth: 6 })));
+  } catch {
+    error = { name: 'Error', message: 'Error details unavailable' };
+  }
+  // Omit unavailable correlation consistently in both the message and structured metadata.
+  const record = JSON.parse(JSON.stringify({ ...correlation, error }));
+  const platform = JSON.stringify(correlation.platform).slice(1, -1);
+  return { record, message: `[${platform}] Error handling message ${JSON.stringify(record)}` };
+}
 
 /** Platforms whose chat-SDK adapters render interactive approval buttons. */
 const APPROVAL_BUTTON_PLATFORMS = new Set(['slack', 'discord', 'teams', 'gchat', 'google-chat', 'telegram']);
@@ -1173,7 +1242,6 @@ export class AgentChannels {
   }
 
   private async handleRunError(chatThread: Thread, message: Message, err: unknown): Promise<void> {
-    const error = err instanceof Error ? err : new Error(String(err));
     // A refused request is not a malfunction: the host decided this sender
     // gets nothing. Log it and stop — posting would echo the host's
     // authorization message into the chat thread and confirm the bot is
@@ -1182,15 +1250,13 @@ export class AgentChannels {
       this.log('info', `[${chatThread.adapter.name}] Session resolver refused the message`, {
         messageId: message.id,
         authorId: message.author?.userId,
-        reason: error.message,
+        reason: err.message,
       });
       return;
     }
-    this.log('error', `[${chatThread.adapter.name}] Error handling message`, {
-      messageId: message.id,
-      authorId: message.author?.userId,
-      error: String(err),
-    });
+    const diagnostic = channelErrorDiagnostic(err, chatThread, message);
+    this.log('error', diagnostic.message, diagnostic.record);
+    const error = err instanceof Error ? err : new Error(String(err));
     try {
       const adapterConfig = this.adapterConfigs[chatThread.adapter.name];
       const errorMessage = adapterConfig?.formatError ? adapterConfig.formatError(error) : `❌ Error: ${error.message}`;
