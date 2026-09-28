@@ -1045,6 +1045,8 @@ async function processOutputStream<OUTPUT = undefined>({
                   policy: toolPayloadTransform,
                   logger,
                 });
+                // Copy only the metadata: rebinding `chunk` would lose the tool-result
+                // narrowing, and the title the helper also adds is already on this chunk.
                 chunk.metadata = retransformed.metadata;
               }
             } catch (error) {

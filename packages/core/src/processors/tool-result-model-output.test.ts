@@ -241,6 +241,16 @@ describe('toModelOutput after processToolResult', () => {
         };
       },
     });
+    // Captures what the run would persist, so the test pins transform ordering
+    // before the history write and not only the emitted chunk.
+    let stored = '';
+    const capture = {
+      id: 'capture',
+      async processOutputResult({ messageList, messages }: any) {
+        stored = JSON.stringify(messageList.get.all.db());
+        return messages;
+      },
+    };
     const agent = new Agent({
       id: 'mo-provider',
       name: 'mo-provider',
@@ -250,7 +260,7 @@ describe('toModelOutput after processToolResult', () => {
         getSecret: secretTool(),
         web_search: { type: 'provider-defined', id: 'openai.web_search', args: {} } as any,
       },
-      outputProcessors: [redactor as any],
+      outputProcessors: [redactor as any, capture as any],
     });
     const stream = await agent.stream('go', {
       maxSteps: 3,
@@ -267,6 +277,8 @@ describe('toModelOutput after processToolResult', () => {
     expect(meta?.transcript?.['output-available']?.transformed).toBe('T:[REDACTED]');
     expect(meta?.display?.['output-available']?.transformed).toBe('T:[REDACTED]');
     expect(JSON.stringify(meta)).not.toContain('SECRET-TOKEN');
+    expect(stored).toContain('T:[REDACTED]');
+    expect(stored).not.toContain('SECRET-TOKEN');
   });
 
   it('durable engine maps the processor-rewritten result', async () => {
