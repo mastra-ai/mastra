@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { Agent } from '../agent/agent';
 import type { MastraProviderMetadata } from '../agent/message-list/state/types';
 import type { AgentSignalContents } from '../agent/signals';
+import { getErrorFromUnknown } from '../error';
 import type { IMastraLogger } from '../logger/logger';
 import type { Mastra } from '../mastra';
 import type { StorageThreadType } from '../memory/types';
@@ -1186,11 +1187,20 @@ export class AgentChannels {
       });
       return;
     }
-    this.log('error', `[${chatThread.adapter.name}] Error handling message`, {
+    let loggedError;
+    try {
+      loggedError = JSON.parse(JSON.stringify(getErrorFromUnknown(err)));
+    } catch {
+      loggedError = { message: error.message, serializationError: 'Error serialization failed' };
+    }
+    const diagnostic = {
+      platform: chatThread.adapter.name,
+      threadId: chatThread.id,
       messageId: message.id,
       authorId: message.author?.userId,
-      error: String(err),
-    });
+      error: loggedError,
+    };
+    this.log('error', `[${chatThread.adapter.name}] Error handling message ${JSON.stringify(diagnostic)}`, diagnostic);
     try {
       const adapterConfig = this.adapterConfigs[chatThread.adapter.name];
       const errorMessage = adapterConfig?.formatError ? adapterConfig.formatError(error) : `❌ Error: ${error.message}`;
