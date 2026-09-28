@@ -411,6 +411,22 @@ describe('GoalManager adapter', () => {
     expect(state.session.thread.setSetting).not.toHaveBeenCalled();
   });
 
+  it('keeps a clear pending across a save on another thread', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+
+    manager.clear();
+    state.session.thread.getId.mockReturnValue('other-thread');
+    await manager.saveToThread(state);
+    expect(agent.clearObjective).not.toHaveBeenCalled();
+
+    state.session.thread.getId.mockReturnValue('parent-thread');
+    await manager.saveToThread(state);
+    expect(agent.clearObjective).toHaveBeenCalledTimes(1);
+  });
+
   it('does not delete on a save after clear() when a new goal was set in between', async () => {
     const agent = createAgent();
     const state = createState(agent);

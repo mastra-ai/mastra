@@ -257,8 +257,8 @@ export class GoalManager {
     const agent = this.getAgent(state);
     if (!this.record && this.pendingDelete) {
       const clearedThreadId = this.pendingDelete.threadId;
-      this.pendingDelete = null;
       if (clearedThreadId === undefined || clearedThreadId === threadId) {
+        this.pendingDelete = null;
         await this.deleteFromThread(state);
       }
       return;
