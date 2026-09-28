@@ -145,9 +145,22 @@ function getJsonSchemaComplexityError(schema: unknown): string | undefined {
   return undefined;
 }
 
-/** MCP 2026-07-28 schemas default to JSON Schema 2020-12 when they declare no dialect. */
+const SUPPORTED_DIALECTS = new Set([
+  JSON_SCHEMA_2020_12,
+  `${JSON_SCHEMA_2020_12}#`,
+  'http://json-schema.org/draft-07/schema',
+  'http://json-schema.org/draft-07/schema#',
+]);
+
+/**
+ * MCP 2026-07-28 schemas default to JSON Schema 2020-12 when they declare no dialect.
+ * Dialects the validator cannot load (e.g. 2019-09 from zod v3 servers) are treated as
+ * 2020-12 so tool calls are not rejected before they run.
+ */
 function withDefaultDialect(schema: JSONSchema7): JSONSchema7 {
-  return schema.$schema ? schema : { ...schema, $schema: JSON_SCHEMA_2020_12 };
+  return schema.$schema && SUPPORTED_DIALECTS.has(schema.$schema)
+    ? schema
+    : { ...schema, $schema: JSON_SCHEMA_2020_12 };
 }
 const DEFAULT_INSTRUCTIONS_MAX_LENGTH = 512;
 const DEFAULT_SERVER_LOG_LEVEL: LoggingLevel = 'info';

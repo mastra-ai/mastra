@@ -102,6 +102,7 @@ export interface MCPServerHTTPOptions {
 type JSONSchema7 = NonNullable<Extract<MCPToolExecutionResultV2, { status: 'suspended' }>['resumeSchema']>;
 
 const EMPTY_OBJECT_SCHEMA = { type: 'object', properties: {} } as const;
+const JSON_SCHEMA_2020_12 = 'https://json-schema.org/draft/2020-12/schema';
 
 /** Tool description served over Mastra's REST routes; `id` is what Studio keys tools by. */
 type ToolInfo = {
@@ -352,13 +353,19 @@ export class MCPServer extends MCPServerBase {
   /**
    * Converts a tool schema to JSON Schema 2020-12, the dialect MCP 2026-07-28
    * assumes when none is declared. The dialect declaration is kept so validators
-   * that dispatch on `$schema` pick the same draft on both sides.
+   * that dispatch on `$schema` pick the same draft on both sides. Some vendors
+   * (e.g. zod v3) emit a 2019-09 declaration for this target, so it is relabelled.
    */
   private jsonSchema(schema: unknown, options?: { io: 'input' | 'output' }): Record<string, unknown> | undefined {
     if (!schema) return undefined;
-    return isStandardSchemaWithJSON(schema)
-      ? (standardSchemaToJSONSchema(schema, { ...options, target: 'draft-2020-12' }) as Record<string, unknown>)
-      : ((schema as { jsonSchema?: Record<string, unknown> }).jsonSchema ?? (schema as Record<string, unknown>));
+    if (!isStandardSchemaWithJSON(schema)) {
+      return (schema as { jsonSchema?: Record<string, unknown> }).jsonSchema ?? (schema as Record<string, unknown>);
+    }
+    const converted = standardSchemaToJSONSchema(schema, { ...options, target: 'draft-2020-12' }) as Record<
+      string,
+      unknown
+    >;
+    return converted.$schema ? { ...converted, $schema: JSON_SCHEMA_2020_12 } : converted;
   }
 
   private addTools(tools: ToolsInput): void {
