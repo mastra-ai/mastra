@@ -11,7 +11,7 @@ export function TextAndIcon({ children, className }: TextAndIconProps) {
       data-slot="text-and-icon"
       className={cn(
         'inline-flex items-center gap-1 text-caption text-muted-foreground',
-        '[&>svg]:size-[1.1em] [&>svg]:shrink-0 [&>svg]:opacity-50',
+        '[&>svg]:size-icon-sm [&>svg]:shrink-0 [&>svg]:opacity-50',
         className,
       )}
     >
