@@ -126,6 +126,19 @@ describe('ToolResultTokenLimiter', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it('limits a deferred provider-executed result whose call is already in the message list', async () => {
+    const messageList = listWithPendingCall();
+    await new ToolResultTokenLimiter(50).processToolResult!({
+      result: 'word '.repeat(500),
+      toolCallId: TOOL_CALL_ID,
+      toolName: 'lookup',
+      args: {},
+      providerExecuted: true,
+      messageList,
+    } as any);
+    expect(storedResult(messageList)).toContain('[truncated: showing');
+  });
+
   it('limits the result an earlier processor wrote to the message list', async () => {
     const messageList = listWithPendingCall();
     messageList.updateToolInvocation({

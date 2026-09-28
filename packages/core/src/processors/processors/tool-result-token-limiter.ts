@@ -58,7 +58,7 @@ export class ToolResultTokenLimiter implements Processor<'tool-result-token-limi
     // An earlier processor may already have rewritten the result in the message list.
     const current = findResult(messageList.get.all.db(), toolCallId);
     // A provider-executed result that arrived with its call has no message-list entry to rewrite.
-    if (providerExecuted && !current.found) return;
+    if (providerExecuted && !current.exists) return;
     const text = toText(current.found ? current.result : result);
     if (text === undefined) return;
 
@@ -93,18 +93,23 @@ export class ToolResultTokenLimiter implements Processor<'tool-result-token-limi
   }
 }
 
-function findResult(messages: MastraDBMessage[], toolCallId: string): { found: boolean; result?: unknown } {
+function findResult(
+  messages: MastraDBMessage[],
+  toolCallId: string,
+): { exists: boolean; found: boolean; result?: unknown } {
+  let exists = false;
   for (let i = messages.length - 1; i >= 0; i--) {
     const parts = messages[i]?.content?.parts;
     if (!parts) continue;
     for (const part of parts) {
       if (part?.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolCallId) {
         const invocation = part.toolInvocation;
-        if (invocation.state === 'result') return { found: true, result: invocation.result };
+        if (invocation.state === 'result') return { exists: true, found: true, result: invocation.result };
+        exists = true;
       }
     }
   }
-  return { found: false };
+  return { exists, found: false };
 }
 
 /** Text to measure, or undefined for results this processor leaves alone. */
