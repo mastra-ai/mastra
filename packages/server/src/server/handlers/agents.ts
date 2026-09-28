@@ -1748,6 +1748,7 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
     }
   }
 
+  const claimedProviderIds = listClaimedProviderIds(allProviders, gateways);
   return Object.entries(allProviders).map(([id, provider]) => {
     return {
       id,
@@ -1755,22 +1756,31 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
       label: readUndeclaredStringField(provider, 'label') ?? provider.name,
       description: readUndeclaredStringField(provider, 'description') ?? '',
       envVar: provider.apiKeyEnvVar,
-      connected: isProviderConnected(id, allProviders) || isClaimedByGateway(id, provider.models, gateways),
+      connected: isProviderConnected(id, allProviders) || claimedProviderIds.has(id),
       docUrl: provider.docUrl,
       models: [...provider.models],
     };
   });
 }
 
-function isClaimedByGateway(
-  providerId: string,
-  models: readonly string[],
+function listClaimedProviderIds(
+  providers: Record<string, ProviderConfig>,
   gateways: MastraModelGatewayInterface[],
-): boolean {
-  const [firstModel] = models;
-  if (!firstModel) return false;
-  const routerId = `${providerId}/${firstModel}`;
-  return gateways.some(gateway => gateway.shouldEnable?.() !== false && gateway.handlesModel?.(routerId) === true);
+): Set<string> {
+  const claimedProviderIds = new Set<string>();
+  for (const gateway of gateways) {
+    try {
+      if (gateway.shouldEnable?.() === false) continue;
+      for (const [providerId, provider] of Object.entries(providers)) {
+        const [firstModel] = provider.models;
+        if (!firstModel || claimedProviderIds.has(providerId)) continue;
+        if (gateway.handlesModel?.(`${providerId}/${firstModel}`) === true) claimedProviderIds.add(providerId);
+      }
+    } catch (error) {
+      console.warn(`Failed to check model claims for gateway "${gateway.id}":`, error);
+    }
+  }
+  return claimedProviderIds;
 }
 
 function readUndeclaredStringField(source: object, field: string): string | undefined {
