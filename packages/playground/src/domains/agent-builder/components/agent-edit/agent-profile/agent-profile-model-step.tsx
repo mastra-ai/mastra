@@ -1,7 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ProviderLogo } from '@mastra/playground-ui/domains/llm';
-import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
+import { ProviderLogo, cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 
 import { ArrowRightIcon } from 'lucide-react';

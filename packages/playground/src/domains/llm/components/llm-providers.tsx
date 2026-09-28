@@ -1,8 +1,7 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption, ComboboxProps } from '@mastra/playground-ui/components/Combobox';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
-import { ProviderLogo } from '@mastra/playground-ui/domains/llm';
+import { ProviderLogo, cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Info } from 'lucide-react';

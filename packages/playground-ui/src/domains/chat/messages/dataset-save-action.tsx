@@ -2,6 +2,7 @@ import { useMastraClient } from '@mastra/react';
 import { DatabaseIcon, Save, X } from 'lucide-react';
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useDatasetSaveContext } from '../context/dataset-save-context';
+import type { DatasetSaveContextValue } from '../context/dataset-save-context';
 import { useDatasetMutations, useDatasets } from '@/domains/datasets';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
@@ -214,11 +215,10 @@ function DatasetSaveActionInner({ messageText }: DatasetSaveActionProps) {
 export function SaveFullConversationAction() {
   const ctx = useDatasetSaveContext();
   if (!ctx?.enabled) return null;
-  return <SaveFullConversationInner />;
+  return <SaveFullConversationInner ctx={ctx} />;
 }
 
-function SaveFullConversationInner() {
-  const ctx = useDatasetSaveContext()!;
+function SaveFullConversationInner({ ctx }: { ctx: DatasetSaveContextValue }) {
   const client = useMastraClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [input, setInput] = useState('');
