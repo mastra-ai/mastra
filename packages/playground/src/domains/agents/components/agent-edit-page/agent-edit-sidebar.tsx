@@ -241,7 +241,6 @@ export function AgentEditSidebar({
         </TabContent>
       </Tabs>
 
-      {/* Sticky footer with Create/Update Agent button */}
       {!readOnly && (
         <div className="shrink-0 p-4">
           <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">

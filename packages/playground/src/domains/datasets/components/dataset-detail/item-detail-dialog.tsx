@@ -260,7 +260,6 @@ export function ItemDetailDialog({
         )}
       </SideDialog.Content>
 
-      {/* Delete confirmation - uses portal, renders above SideDialog */}
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <AlertDialog.Content>
           <AlertDialog.Header>

@@ -595,7 +595,6 @@ export function DatasetReview({
   return (
     <PageLayout breadcrumbs={breadcrumbs} actionRow={toolbar}>
       <h1 className="sr-only">Review Queue</h1>
-      {/* Analyze config dialog */}
       <Dialog open={showAnalyzeDialog} onOpenChange={setShowAnalyzeDialog}>
         <DialogContent>
           <DialogHeader>
@@ -639,7 +638,6 @@ export function DatasetReview({
         </DialogContent>
       </Dialog>
 
-      {/* Proposal confirmation dialog */}
       <Dialog open={showProposalDialog} onOpenChange={setShowProposalDialog}>
         <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
@@ -716,7 +714,6 @@ export function DatasetReview({
         </DialogContent>
       </Dialog>
 
-      {/* Main layout: list; the detail opens as a drawer. */}
       <div className="grid h-full min-h-0 w-full grid-cols-1 gap-4 overflow-hidden">
         <div className="min-h-0 w-full overflow-hidden">
           {isLoadingDisplay ? (

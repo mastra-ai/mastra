@@ -136,7 +136,6 @@ export function PromptBlockEditSidebar({
           </Field>
         </div>
 
-        {/* Variables */}
         <div className="flex flex-col gap-4 border-t border-border p-4">
           <SectionHeader
             title="Variables"
@@ -169,7 +168,6 @@ export function PromptBlockEditSidebar({
           </JSONSchemaForm.Root>
         </div>
 
-        {/* Used by */}
         {mode === 'edit' && blockId && (
           <div className="flex flex-col gap-3 border-t border-border p-4">
             <SectionHeader title="Used by" subtitle="Agents that reference this prompt block." />
@@ -197,7 +195,6 @@ export function PromptBlockEditSidebar({
         )}
       </ScrollArea>
 
-      {/* Sticky footer */}
       <div className="shrink-0 p-4">
         {mode === 'edit' && onSaveDraft ? (
           <div className="flex gap-2">

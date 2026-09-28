@@ -82,10 +82,8 @@ export function SearchWorkspacePanel({
 
   return (
     <div className="rounded-lg bg-muted">
-      {/* Search Form */}
       <form onSubmit={handleSearch} className="p-4">
         <div className="flex items-center gap-3">
-          {/* Query Input */}
           <div className="relative flex-1">
             <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -96,7 +94,6 @@ export function SearchWorkspacePanel({
             />
           </div>
 
-          {/* Top K */}
           <div className="flex items-center gap-1.5">
             <span className="text-caption text-muted-foreground">Top</span>
             <Input
@@ -110,13 +107,11 @@ export function SearchWorkspacePanel({
             />
           </div>
 
-          {/* Search Button */}
           <Button type="submit" disabled={isSearching || !query.trim()} size="lg">
             {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
           </Button>
         </div>
 
-        {/* Mode Selection */}
         {availableModes.length > 0 && (
           <div className="mt-3 flex gap-2">
             {availableModes.map(m => {
@@ -138,7 +133,6 @@ export function SearchWorkspacePanel({
         )}
       </form>
 
-      {/* Results */}
       {searchResults && (
         <div className="border-t border-border">
           <div className="flex items-center justify-between px-4 py-2 text-caption">
@@ -236,7 +230,6 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
 
   return (
     <div className="space-y-4">
-      {/* Search Form */}
       <form onSubmit={handleSearch} className="space-y-3">
         <div className="flex gap-2">
           <div className="relative flex-1">
@@ -281,7 +274,6 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
         </div>
       </form>
 
-      {/* Results */}
       {results.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-subheading text-foreground">

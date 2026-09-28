@@ -203,7 +203,6 @@ export function AddSkillDialog({
         </DialogHeader>
 
         <DialogBody className="flex max-h-none flex-1 flex-col gap-4 overflow-hidden">
-          {/* Search Input */}
           <div className="relative">
             <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -215,7 +214,6 @@ export function AddSkillDialog({
           </div>
 
           <div className="flex min-h-0 flex-1 gap-4">
-            {/* Skills List */}
             <div className="flex min-h-0 w-1/2 flex-col">
               <div className="mb-2 text-column tracking-wide text-muted-foreground uppercase">
                 {hasSearchResults ? 'Search Results' : 'Popular Skills'}
@@ -283,7 +281,6 @@ export function AddSkillDialog({
               </ScrollArea>
             </div>
 
-            {/* Preview Panel */}
             <div className="flex min-h-0 w-1/2 flex-col">
               <div className="mb-2 text-column tracking-wide text-muted-foreground uppercase">Preview</div>
               <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-border">
@@ -294,7 +291,6 @@ export function AddSkillDialog({
                   </div>
                 ) : (
                   <>
-                    {/* Skill Header */}
                     <div className="border-b border-border bg-card p-4">
                       <div className="flex items-start gap-3">
                         <div className="rounded-lg bg-muted p-2">
@@ -327,7 +323,6 @@ export function AddSkillDialog({
                       </div>
                     </div>
 
-                    {/* Skill Content */}
                     {isLoadingPreview ? (
                       <div className="flex flex-1 items-center justify-center">
                         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -360,10 +355,8 @@ export function AddSkillDialog({
             </div>
           </div>
 
-          {/* Install Actions */}
           {selectedSkill && (
             <div className="flex flex-col gap-3 border-t border-border pt-4">
-              {/* Mount picker - only shown when multiple writable mounts exist */}
               {writableMounts && writableMounts.length > 1 && (
                 <Field orientation="horizontal" className={cn(raisedSurfaceStyle, 'items-center gap-3 rounded-lg p-3')}>
                   <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />

@@ -195,7 +195,6 @@ const InlineBlockContent = ({
   return (
     <>
       <div className="group relative rounded-md hover:bg-fill-subtle">
-        {/* Left gutter — drag handle (visible on hover/focus-within) */}
         {!readOnly && (
           <div className="absolute top-1 -left-8 flex flex-col items-center opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
             <div
@@ -214,7 +213,6 @@ const InlineBlockContent = ({
           </div>
         )}
 
-        {/* Right toolbar — conditions + save as ref + delete (visible on hover/focus-within) */}
         {!readOnly && (
           <div className="absolute top-1 right-0 z-10 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
             <DisplayConditionsDialog
@@ -243,7 +241,6 @@ const InlineBlockContent = ({
           </div>
         )}
 
-        {/* CodeEditor — seamless, no border */}
         <CodeEditor
           ref={editorRef}
           value={block.content}

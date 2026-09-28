@@ -267,7 +267,6 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                       )}
                     />
 
-                    {/* Observer Configuration */}
                     <Collapsible open={isObserverOpen} onOpenChange={setIsObserverOpen}>
                       <CollapsibleTrigger className="flex w-full items-center gap-1">
                         <ChevronRight
@@ -459,7 +458,6 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                       </CollapsibleContent>
                     </Collapsible>
 
-                    {/* Reflector Configuration */}
                     <Collapsible open={isReflectorOpen} onOpenChange={setIsReflectorOpen}>
                       <CollapsibleTrigger className="flex w-full items-center gap-1">
                         <ChevronRight

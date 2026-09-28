@@ -97,7 +97,6 @@ export function ScorerEditSidebar({
             <FieldError>{errors.model?.name?.message}</FieldError>
           </Field>
 
-          {/* Score Range */}
           <Fieldset className="flex flex-col gap-1.5">
             <FieldsetLegend className="text-foreground">Score Range</FieldsetLegend>
             <div className="flex items-center gap-2">
@@ -129,7 +128,6 @@ export function ScorerEditSidebar({
             </div>
           </Fieldset>
 
-          {/* Default Sampling */}
           <div className="flex flex-col gap-1.5">
             <Controller
               name="defaultSampling.type"
@@ -174,7 +172,6 @@ export function ScorerEditSidebar({
         </div>
       </ScrollArea>
 
-      {/* Sticky footer */}
       <div className="shrink-0 p-4">
         {mode === 'edit' && onSaveDraft ? (
           <div className="flex gap-2">

@@ -332,7 +332,6 @@ export function ObservationDetailView({
 
   return (
     <div className="flex size-full overflow-hidden">
-      {/* Main observation content */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {previousRecord && (
           <div className="border-b border-border px-4 py-2">
@@ -361,7 +360,6 @@ export function ObservationDetailView({
         </div>
       </div>
 
-      {/* History sidebar */}
       <ObservationHistoryPanel records={sorted} selectedRecordId={selected.id} onSelectRecord={onSelectRecord} />
     </div>
   );

@@ -329,7 +329,6 @@ export function TraceDataPanelView({
   const sideColumn =
     traceId && sideView ? (
       <div data-trace-side-column className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-        {/* Same chrome as the trace column's Spans/Timeline header, so the two tab rows line up. */}
         <Tabs<TraceSideView> defaultTab={sideView} value={sideView} onValueChange={handleSideViewChange}>
           <DataPanel.Header className="border-b border-border">
             <TabList variant="pill-ghost" size="sm">
@@ -341,7 +340,6 @@ export function TraceDataPanelView({
             </TabList>
           </DataPanel.Header>
         </Tabs>
-        {/* The turn view brings its own padding; feedback and scores use the panel's. */}
         {sideView === 'messages' && <DataPanel.Content className="p-0">{messagesPanelSlot}</DataPanel.Content>}
         {sideView === 'feedback' && <DataPanel.Content>{feedbackTabSlot?.({ traceId })}</DataPanel.Content>}
         {sideView === 'scores' && (
@@ -556,7 +554,6 @@ function TracePanelColumns({
         {sideColumnSlot}
       </div>
       <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">{children}</div>
-      {/* Searchable: the span detail is where a match hides inside a large payload. */}
       <div
         ref={scrollToMatchRef}
         data-highlight

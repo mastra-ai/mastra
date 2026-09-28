@@ -255,7 +255,6 @@ export const ToolkitFilterPane = ({
 
       <ScrollArea className="min-h-0 flex-1" viewPortClassName="pr-2">
         <div className="flex flex-col gap-3">
-          {/* Built-in group renders immediately; it needs no async fetch. */}
           {filteredBuiltIn.length > 0 && (
             <ul className="flex flex-col gap-0.5">
               {filteredBuiltIn.map(item => (
@@ -270,7 +269,6 @@ export const ToolkitFilterPane = ({
             </ul>
           )}
 
-          {/* Each provider fetches and renders its own toolkits independently. */}
           {providers.map(provider => (
             <ProviderToolkitSection
               key={provider.providerId}

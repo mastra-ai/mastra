@@ -76,7 +76,6 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
   return (
     <Field invalid={Boolean(error)} className="flex flex-col gap-3">
       <FieldLabel className="sr-only">CSV file</FieldLabel>
-      {/* Hidden file input */}
       <Input
         ref={inputRef}
         name="csv-file"
@@ -87,7 +86,6 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
         disabled={isParsing}
       />
 
-      {/* Dropzone */}
       <div
         onClick={handleClick}
         onDragOver={handleDragOver}
@@ -125,7 +123,6 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
         )}
       </div>
 
-      {/* Error message */}
       <FieldError>{error}</FieldError>
     </Field>
   );
