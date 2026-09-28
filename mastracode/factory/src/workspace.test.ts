@@ -88,8 +88,17 @@ const mocks = vi.hoisted(() => ({
   /** Run-binding role resolved for the session; null = no binding found. */
   runBindingRole: null as string | null,
   runBindingStatus: 'active' as 'active' | 'revoked',
-  findActiveRunBindingForSession: vi.fn(async () =>
-    mocks.runBindingRole ? { role: mocks.runBindingRole, status: mocks.runBindingStatus, orgId: 'org-1' } : null,
+  runBindingThreadId: null as string | null,
+  findActiveRunBindingForSession: vi.fn(async ({ sessionId }: { sessionId: string }) =>
+    mocks.runBindingRole
+      ? {
+          role: mocks.runBindingRole,
+          status: mocks.runBindingStatus,
+          orgId: 'org-1',
+          threadId: mocks.runBindingThreadId ?? sessionId,
+          resourceId: sessionId,
+        }
+      : null,
   ),
 }));
 
@@ -164,6 +173,7 @@ afterEach(async () => {
   mocks.githubReviewerPat = null;
   mocks.runBindingRole = null;
   mocks.runBindingStatus = 'active';
+  mocks.runBindingThreadId = null;
   mocks.findActiveRunBindingForSession.mockClear();
 });
 
@@ -349,7 +359,6 @@ describe('bundled Factory skill assets', () => {
       expect(instructions).toContain('source_control_list_change_request_reviews');
       expect(instructions).toContain('source_control_review_change_request');
       expect(instructions).toContain('factory_record_review_verdict');
-      expect(instructions).not.toContain('factory_transition_work_item');
       expect(instructions).not.toMatch(/`gh pr |`glab mr /);
     }
   });
@@ -522,7 +531,8 @@ describe('bundled Factory skill assets', () => {
     expect(review).toContain('Never resolve the conflicts yourself');
     // Terminal ordering: publish the verdict and transition before the final
     // conversation message, so the pass can't stop early with an unpublished review.
-    expect(review).toContain('post the handoff as your final conversation message');
+    expect(review).toContain('post the **session handoff**');
+    expect(review).toContain('as your final conversation message');
     // Rigor: approval requires every gate affirmatively demonstrated, and the
     // reviewer waits for pending bot reviews before forming a verdict.
     expect(review).toContain('Approval gates');
@@ -580,11 +590,12 @@ describe('bundled Factory skill assets', () => {
     // publish the verdict on the PR, request the transition, and only then send
     // the final conversation message.
     inOrder(
-      "don't send it to the conversation yet",
+      "Don't send either to the conversation yet",
       'gh pr review <number> --approve --body-file',
       'gh pr review <number> --request-changes --body-file',
       'Then make your terminal `factory_record_review_verdict` call',
-      'post the handoff as your final conversation message',
+      'post the **session handoff**',
+      'as your final conversation message',
     );
 
     // Every approval gate lives inside the gates block, while issue context and
@@ -733,7 +744,7 @@ describe('bundled Factory skill assets', () => {
     expect(verdict).toContain('The verdict and the requests must tell the same story');
 
     // The handoff carries the approach judgment and unhedged requests.
-    const handoff = section('## Phase 6: Handoff & Transition', '## Behavior Rules');
+    const handoff = section('## Phase 6: Handoff & Verdict', '## Behavior Rules');
     expect(handoff).toContain('- **Approach**');
     expect(handoff).toContain('imperative and present tense');
     expect(handoff).toContain('No softened requests');
@@ -905,7 +916,7 @@ describe('bundled Factory skill assets', () => {
     expect(gates).toContain('neither is an approval gate');
     expect(gates).toContain('If any gate fails, the verdict is request changes');
 
-    const handoff = section('## Phase 7: Handoff & Transition', '## Behavior Rules');
+    const handoff = section('## Phase 7: Handoff & Verdict', '## Behavior Rules');
     expect(handoff).toContain('- **Issue and intent**');
     expect(handoff).toContain('including base-versus-current-head evidence for affected behavior-changing claims');
     expect(handoff).toContain('prior-head-versus-current-head evidence for push regressions');
@@ -1146,6 +1157,45 @@ describe('GitHub session workspace preparation', () => {
     );
   });
 
+  it('hides review skills from a thread that does not own the session binding', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
+    // The session was handed to another item's run; this request still carries the old thread.
+    mocks.runBindingThreadId = 'other-thread';
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    const workspace = (await resolver({ requestContext }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+    expect((await workspace.skills?.get('factory-plan'))?.instructions).toContain('# Factory Plan');
+  });
+
+  it('hides review skills when a thread that does not own the binding reuses a kickoff-built workspace', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
+    // A dispatcher kickoff builds the workspace before the session has a thread.
+    const kickoffContext = createGithubRequestContext('project-1', 'session-a');
+    const controller = kickoffContext.get('controller') as Record<string, unknown>;
+    controller.threadId = null;
+    controller.getState = () => ({});
+    const workspace = (await resolver({ requestContext: kickoffContext }))!;
+    await workspace.skills?.maybeRefresh();
+    expect((await workspace.skills?.get('factory-review'))?.instructions).toBeTruthy();
+
+    // A request on a thread the binding does not belong to reuses it.
+    mocks.runBindingThreadId = 'other-thread';
+    const reused = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    expect(reused).toBe(workspace);
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+    expect((await workspace.skills?.list())?.map(skill => skill.name)).not.toContain('factory-review');
+  });
+
   it('drops cached review skills when a reused workspace leaves the review role', async () => {
     const { resolver } = await createLocalFactory();
     addProject();
@@ -1187,6 +1237,51 @@ describe('GitHub session workspace preparation', () => {
     const reused = (await resolver({ requestContext }))!;
     expect(reused).toBe(workspace);
     expect(await reused.skills?.get('factory-review')).toBeFalsy();
+  });
+
+  it('does not let a reused workspace join a kickoff rescan started for the previous role', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'work';
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    const workspace = (await resolver({ requestContext }))!;
+    await workspace.skills?.maybeRefresh();
+
+    // The kickoff rescan scans for the review role. It pauses on its first role
+    // lookup; while it is paused the session leaves the review role and the
+    // workspace is reused.
+    let scanning = true;
+    let paused = false;
+    let released = false;
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    const lookup = mocks.findActiveRunBindingForSession.getMockImplementation()!;
+    mocks.findActiveRunBindingForSession.mockImplementation(async input => {
+      mocks.runBindingRole = scanning && !paused ? 'review' : 'work';
+      const binding = await lookup(input);
+      if (scanning && !paused && !released) {
+        paused = true;
+        await gate;
+        paused = false;
+      }
+      return binding;
+    });
+    const rescan = rescanFactorySkills(workspace.skills!);
+    void rescan.then(() => (scanning = false));
+    await vi.waitFor(() => expect(paused).toBe(true));
+
+    const reused = resolver({ requestContext });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    released = true;
+    release();
+    await rescan;
+    const result = await reused;
+    mocks.findActiveRunBindingForSession.mockImplementation(lookup);
+    mocks.runBindingRole = 'work';
+
+    expect(result).toBe(workspace);
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
   });
 
   it('does not return a reused workspace to concurrent callers before its skill rescan finishes', async () => {

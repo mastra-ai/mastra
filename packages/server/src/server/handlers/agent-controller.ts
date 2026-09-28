@@ -495,6 +495,7 @@ function toWireDisplayState(displayState: AgentControllerDisplayState): WireDisp
     activeTools: Object.fromEntries(snapshot.activeTools),
     toolInputBuffers: Object.fromEntries(snapshot.toolInputBuffers),
     pendingSuspensions: Object.fromEntries(snapshot.pendingSuspensions),
+    pendingApprovals: Object.fromEntries(snapshot.pendingApprovals),
     activeSubagents: Object.fromEntries(snapshot.activeSubagents),
     modifiedFiles: Object.fromEntries(snapshot.modifiedFiles),
   };
@@ -685,7 +686,7 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
       // Calling approveToolCall/declineToolCall directly would bypass the gate,
       // leaving the run loop hung and duplicating the resumed stream.
       // Pass toolCallId so a stale request cannot resolve a different pending gate.
-      const gated = session.approval.isArmed() && (!toolCallId || session.approval.getToolCallId() === toolCallId);
+      const gated = toolCallId ? session.approval.isArmed({ toolCallId }) : session.approval.isArmed();
       if (gated || !toolCallId) {
         session.respondToToolApproval({ toolCallId, decision: approved ? 'approve' : 'decline', requestContext });
       } else {

@@ -103,7 +103,7 @@ export const REVIEW_ONLY_FACTORY_SKILLS = new Set([
  * which role each cache was last scanned for; a rescan it did not perform makes
  * that record untrustworthy, so the next reuse must rescan again.
  */
-const rescannedOutsideResolver = new WeakSet<object>();
+const rescannedOutsideResolver = new WeakMap<object, Promise<void>>();
 
 /**
  * Rescan a session's skill cache so a role gained after the cache was built
@@ -111,8 +111,14 @@ const rescannedOutsideResolver = new WeakSet<object>();
  * The source still checks the live binding, so this never widens access.
  */
 export async function rescanFactorySkills(skills: NonNullable<Workspace['skills']>): Promise<void> {
-  rescannedOutsideResolver.add(skills);
-  await skills.refresh();
+  // Registered so the resolver waits it out: a refresh started meanwhile would
+  // join this scan (possibly for the old role) instead of starting a fresh one.
+  const pending = skills.refresh();
+  rescannedOutsideResolver.set(
+    skills,
+    pending.catch(() => {}),
+  );
+  await pending;
 }
 
 export class FactorySkillSource implements SkillSource {
@@ -400,6 +406,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   // Review-skill visibility last used to populate each workspace's skill cache.
   const skillCacheReviewState = new Map<string, boolean>();
   const skillCacheRefreshes = new Map<string, Promise<void>>();
+  // The review check of the latest request to resolve each workspace. The skill
+  // source outlives the request that built it, so it must gate on this rather
+  // than on the context it was constructed with.
+  const skillReviewChecks = new Map<string, () => Promise<boolean>>();
 
   return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
@@ -620,13 +630,18 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
 
     // Keyed by the session, not the request's thread: a workspace built for a
     // dispatcher kickoff has no live thread yet, but the session's binding
-    // already says which role it is serving.
-    const findSessionBinding = () =>
-      workItems!.findActiveRunBindingForSession({
+    // already says which role it is serving. When the request does carry a
+    // thread, the binding must belong to it, so a stale thread reusing this
+    // session never inherits another run's role.
+    const findSessionBinding = async () => {
+      const binding = await workItems!.findActiveRunBindingForSession({
         orgId: session.orgId,
         factoryProjectId: connection.factoryProjectId,
         sessionId: session.sessionId,
       });
+      if (!binding || !ctx?.threadId) return binding;
+      return binding.threadId === ctx.threadId && binding.resourceId === ctx.resourceId ? binding : null;
+    };
     // Fails closed: without a readable active review binding, review skills stay hidden.
     const isReviewSession = async (): Promise<boolean> => {
       if (!workItems) return false;
@@ -636,10 +651,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         return false;
       }
     };
-    const effectiveSkillExtension = skillExtension ?? createFactorySkillExtension(isReviewSession);
+    const effectiveSkillExtension =
+      skillExtension ??
+      createFactorySkillExtension((): Promise<boolean> => (skillReviewChecks.get(workspaceId) ?? isReviewSession)());
     const extensionId = effectiveSkillExtension ? `-${effectiveSkillExtension.id}` : '';
-    const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
+    const workspaceId: string = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
     const workspaceGeneration = workspaceRegistry.generation(session.sessionId);
+    if (!skillExtension) skillReviewChecks.set(workspaceId, isReviewSession);
     const configDir = DEFAULT_CONFIG_DIR;
 
     const getRepositoryAccess = () =>
@@ -767,9 +785,19 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // The skill cache does not recheck the source on get(), so rescan when the
       // session's role flips; otherwise a cached review skill outlives the review binding.
       if (!skillExtension) {
-        if (existing.skills && rescannedOutsideResolver.delete(existing.skills)) {
+        // An outside rescan makes the recorded role untrustworthy. Wait for it to
+        // settle first, so the refresh below starts a scan for the current role
+        // rather than joining one started for the previous role.
+        const consumeOutsideRescan = async () => {
+          const outside = existing.skills && rescannedOutsideResolver.get(existing.skills);
+          if (!outside) return false;
+          await outside;
+          if (rescannedOutsideResolver.get(existing.skills!) === outside)
+            rescannedOutsideResolver.delete(existing.skills!);
           skillCacheReviewState.delete(workspaceId);
-        }
+          return true;
+        };
+        await consumeOutsideRescan();
         let isReview = await isReviewSession();
         // Concurrent reuses share one refresh, and the state is recorded only
         // once the rescan succeeds. Wait out any in-flight rescan (it may have
@@ -778,6 +806,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           const inFlight = skillCacheRefreshes.get(workspaceId);
           if (inFlight) {
             await inFlight;
+            isReview = await isReviewSession();
+            continue;
+          }
+          if (await consumeOutsideRescan()) {
             isReview = await isReviewSession();
             continue;
           }
@@ -948,6 +980,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         githubTokenInjectors.delete(workspaceId);
         constructedWorkspaces.delete(workspaceId);
         skillCacheReviewState.delete(workspaceId);
+        skillReviewChecks.delete(workspaceId);
         // Retirement drops the memoized session sandbox so a later re-open
         // constructs (and the provider resolves) fresh instead of reusing an
         // instance whose VM the retirement path may stop or destroy.

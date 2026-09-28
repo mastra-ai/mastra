@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import '@/test/jsdom-polyfills';
 
 import { SpanType } from '@mastra/core/observability';
 import type { TraceRecord } from '@mastra/core/storage';

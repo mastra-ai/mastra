@@ -228,6 +228,7 @@ describe('Factory run binding authority', () => {
         orgId: 'org-1',
         factoryProjectId: PROJECT_ID,
         bindingId: prepared.binding.id,
+        revokedAt: new Date(),
       });
       await expect(find()).resolves.toBeNull();
     });

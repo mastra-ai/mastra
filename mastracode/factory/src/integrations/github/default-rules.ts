@@ -25,6 +25,8 @@ function retriageGithubIssue(context: FactoryGithubRuleContext) {
   // Re-triage would take over a card that is being built or reviewed.
   const stage = context.item.stages?.length === 1 ? context.item.stages[0] : undefined;
   if (stage === 'execute' || stage === 'review') return;
+  // A finished card has nothing left to triage; talk on a closed issue must not park a run on it.
+  if (isTerminalFactoryRuleStage(context.item.stages)) return;
 
   const reason =
     context.event === 'issueEdited'
