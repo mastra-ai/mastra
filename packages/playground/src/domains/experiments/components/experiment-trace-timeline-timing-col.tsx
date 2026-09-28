@@ -1,8 +1,10 @@
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { surfaceGroupStateLayerStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { formatTimestampPrecise } from '@mastra/playground-ui/utils/date-format';
+import { formatDurationPrecise } from '@mastra/playground-ui/utils/duration';
 import * as HoverCard from '@radix-ui/react-hover-card';
-import { format } from 'date-fns/format';
 import { ChevronFirstIcon, ChevronLastIcon, ChevronsLeftRightIcon, ChevronsRightIcon, TimerIcon } from 'lucide-react';
 import type { ExperimentUISpan } from '../types';
 
@@ -43,10 +45,10 @@ export function ExperimentTraceTimelineTimingCol({
           },
         )}
       >
-        <div className={cn('bg-muted w-full min-w-40 rounded-lg p-2.5', surfaceGroupStateLayerStyle)}>
+        <div className={cn('w-full min-w-40 rounded-lg bg-muted p-2.5', surfaceGroupStateLayerStyle)}>
           <div className="relative h-1.5 w-full rounded-sm">
             <div
-              className={cn('bg-placeholder absolute rounded-sm h-1.5 top-0')}
+              className={cn('absolute top-0 h-1.5 rounded-sm bg-placeholder')}
               style={{
                 width: percentageSpanLatency ? `${percentageSpanLatency}%` : '2px',
                 left: `${percentageSpanStartTime || 0}%`,
@@ -56,49 +58,51 @@ export function ExperimentTraceTimelineTimingCol({
           </div>
         </div>
 
-        <div className={cn('flex justify-end text-muted-foreground text-caption')}>
-          {(span.latency / 1000).toFixed(3)}&nbsp;s
+        <div className={cn('flex justify-end text-caption text-muted-foreground')}>
+          <Txt as="span" variant="caption" font="mono">
+            {formatDurationPrecise(span.latency)}
+          </Txt>
         </div>
       </HoverCard.Trigger>
       <HoverCard.Portal>
         <HoverCard.Content
-          className="bg-muted text-caption text-foreground border-border z-50 w-auto max-w-[25rem] rounded-md border p-2 px-4 pr-6 text-center"
+          className="z-50 w-auto max-w-[25rem] rounded-md border border-border bg-muted p-2 px-4 pr-6 text-center text-caption text-foreground"
           sideOffset={5}
           side="top"
         >
           <div
             className={cn(
-              'text-body flex items-center gap-2 mb-4',
-              '[&>svg]:w-[1.25em] [&>svg]:h-[1.25em] [&>svg]:shrink-0 [&>svg]:opacity-50',
+              'mb-4 flex items-center gap-2 text-body',
+              '[&>svg]:h-[1.25em] [&>svg]:w-[1.25em] [&>svg]:shrink-0 [&>svg]:opacity-50',
             )}
           >
             <TimerIcon /> Span Timing
           </div>
           <KeyValueList
-            className="[&>dd]:text-body [&>dt]:text-body [&>dd]:min-h-0 [&>dt]:min-h-0"
+            className="[&>dd]:min-h-0 [&>dd]:text-body [&>dt]:min-h-0 [&>dt]:text-body"
             data={[
               {
                 key: 'Latency',
                 label: 'Latency',
-                value: `${span.latency} ms`,
+                value: formatDurationPrecise(span.latency) ?? '-',
                 icon: <ChevronsLeftRightIcon />,
               },
               {
                 key: 'startTime',
                 label: 'Started at',
-                value: span.startTime ? format(new Date(span.startTime), 'hh:mm:ss:SSS a') : '-',
+                value: formatTimestampPrecise(span.startTime) ?? '-',
                 icon: <ChevronFirstIcon />,
               },
               {
                 key: 'endTime',
                 label: 'Ended at',
-                value: span.endTime ? format(new Date(span.endTime), 'hh:mm:ss:SSS a') : '-',
+                value: formatTimestampPrecise(span.endTime) ?? '-',
                 icon: <ChevronLastIcon />,
               },
               {
                 key: 'startShift',
                 label: 'Start Shift',
-                value: `${spanStartTimeShift}ms`,
+                value: formatDurationPrecise(spanStartTimeShift) ?? '-',
                 icon: <ChevronsRightIcon />,
               },
             ]}

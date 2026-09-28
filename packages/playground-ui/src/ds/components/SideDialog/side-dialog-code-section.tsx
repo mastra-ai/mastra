@@ -110,10 +110,13 @@ export function SideDialogCodeSection({ codeStr = '', title, icon, simplified = 
           {icon}
           {title}
         </Section.Heading>
-        <ButtonsGroup>
+        <ButtonsGroup size="sm">
           <CopyButton content={codeStr || 'No content'} />
           {hasMultilineText && (
-            <Button onClick={() => setShowAsMultilineText(!showAsMultilineText)}>
+            <Button
+              aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
+              onClick={() => setShowAsMultilineText(!showAsMultilineText)}
+            >
               {showAsMultilineText ? <AlignLeftIcon /> : <AlignJustifyIcon />}
             </Button>
           )}
@@ -121,10 +124,10 @@ export function SideDialogCodeSection({ codeStr = '', title, icon, simplified = 
       </Section.Header>
       {codeStr && (
         <div
-          className={`${raisedSurfaceStyle} text-body text-muted-foreground max-h-[30vh] overflow-hidden overflow-y-auto rounded-xl p-3 break-all`}
+          className={`${raisedSurfaceStyle} max-h-[30vh] overflow-hidden overflow-y-auto rounded-xl p-3 text-body break-all text-muted-foreground`}
         >
           {simplified ? (
-            <div className="text-muted-foreground px-2 font-mono break-all">
+            <div className="px-2 font-mono break-all text-muted-foreground">
               <pre className="text-wrap">{codeStr}</pre>
             </div>
           ) : (

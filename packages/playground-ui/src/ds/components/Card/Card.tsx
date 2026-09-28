@@ -6,7 +6,7 @@ import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
 const cardVariants = cva(
-  cn(raisedSurfaceStyle, 'duration-normal rounded-lg transition-all ease-out-custom motion-reduce:transition-none'),
+  cn(raisedSurfaceStyle, 'rounded-xl transition-all duration-normal ease-out-custom motion-reduce:transition-none'),
   {
     variants: {
       elevation: {
@@ -16,7 +16,7 @@ const cardVariants = cva(
       interactive: {
         true: cn(
           surfaceStateLayerStyle,
-          'cursor-pointer focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring active:scale-99',
+          'cursor-pointer focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset active:scale-99',
         ),
         false: '',
       },
@@ -63,7 +63,7 @@ export function CardLink({ className, elevation, LinkComponent: Link = 'a', ...p
 export type CardHeaderProps = React.HTMLAttributes<HTMLDivElement>;
 
 export const CardHeader = React.forwardRef<HTMLDivElement, CardHeaderProps>(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn('flex flex-col space-y-1.5 p-3 pb-0', className)} {...props} />
+  <div ref={ref} className={cn('flex flex-col space-y-1.5 px-3 py-1', className)} {...props} />
 ));
 CardHeader.displayName = 'CardHeader';
 

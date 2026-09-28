@@ -345,7 +345,7 @@ function FilterBarInputImpl({
             className,
           )}
         >
-          <ListFilterIcon aria-hidden className="text-muted-foreground -ml-[.3em] shrink-0" />
+          <ListFilterIcon aria-hidden className="-ml-[.3em] shrink-0 text-muted-foreground" />
           <ComboboxPrimitive.Input
             ref={el => {
               inputRef.current = el;
@@ -407,7 +407,7 @@ function FilterBarInputImpl({
                     <>
                       <FilterBarFieldLabel field={f} />
                       {f.search && query !== '' && (
-                        <span className="text-muted-foreground min-w-0 truncate">
+                        <span className="min-w-0 truncate text-muted-foreground">
                           {ctx.getFieldOperators(f)[0]?.label} "{query}"
                         </span>
                       )}
@@ -456,7 +456,7 @@ function FilterBarInputImpl({
                 </div>
               )}
               {step === 'value' && valueStep.isMany && (
-                <div className="border-border flex items-center justify-end gap-1 border-t p-1">
+                <div className="flex items-center justify-end gap-1 border-t border-border p-1">
                   <Button
                     size="sm"
                     variant="default"

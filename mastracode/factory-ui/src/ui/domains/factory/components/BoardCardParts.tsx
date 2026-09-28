@@ -176,9 +176,7 @@ export function CardActions({
 }
 
 function pillVariant(action: CardAction, main: boolean) {
-  if (!main) return 'outline';
-  if (action.urgent && !action.disabled) return 'primary';
-  return 'default';
+  return main && action.urgent && !action.disabled ? 'primary' : 'default';
 }
 
 function CardActionButton({

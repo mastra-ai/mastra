@@ -48,7 +48,7 @@ export const AgentProfileLibraryStep = ({ agentId }: AgentProfileLibraryStepProp
           <LibraryIcon />
         </Icon>
         {isInLibrary ? (
-          <p className="text-placeholder flex items-center gap-2" data-testid="agent-builder-library-added">
+          <p className="flex items-center gap-2 text-placeholder" data-testid="agent-builder-library-added">
             <Icon>
               <CheckIcon />
             </Icon>
@@ -65,7 +65,7 @@ export const AgentProfileLibraryStep = ({ agentId }: AgentProfileLibraryStepProp
             Add to library
           </Button>
         )}
-        <p className="text-muted-foreground max-w-md">
+        <p className="max-w-md text-muted-foreground">
           You can change this at any time from the agent&apos;s visibility settings — adding to the library now is
           optional.
         </p>

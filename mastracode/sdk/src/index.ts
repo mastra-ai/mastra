@@ -22,6 +22,7 @@ import { defaultNotificationDeliveryDecision } from '@mastra/core/notifications'
 import {
   AgentsMDInjector,
   createBackgroundWorkSignalProcessor,
+  CyberRefusalHandler,
   isBadRequestError,
   PrefillErrorHandler,
   ProviderHistoryCompat,
@@ -359,6 +360,19 @@ export interface MastraCodeConfig {
    * uses the configured PubSub when enabled.
    */
   crossAgentSignals?: boolean;
+  /**
+   * Prepare the request context of a wake: a run on a thread with no inbound
+   * request, such as a notification or cross-agent signal delivered to an idle
+   * thread. Hosts that resolve credentials per tenant use this to attach the
+   * identity that owns `resourceId` before the run starts. Called only when a
+   * session owns `resourceId`, whenever Mastra Code builds a wake's stream
+   * options.
+   */
+  prepareWakeRequestContext?: (args: {
+    requestContext: RequestContext;
+    resourceId: string;
+    threadId: string;
+  }) => void | Promise<void>;
 }
 
 export function createAuthStorage() {
@@ -741,15 +755,19 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // well after controller is constructed (line ~692). Explicit type annotations
   // on githubSignals, codeAgent, modes, and controller break the circular
   // inference chain this forward reference would otherwise create.
+  // Builds the stream options of every wake (a run with no inbound request).
   // Shared by GithubSignals (immediate sends) and the code agent's
-  // notification config (deferred sends re-dispatched by the core notification
-  // dispatch workflow) — both need the target session's request context, or a
-  // woken idle thread has no model to run with ("No model selected").
-  const getNotificationStreamOptions = async ({ resourceId, threadId }: { resourceId: string; threadId: string }) => {
+  // notification delivery policy (notifications and cross-agent signals,
+  // including deferred sends re-dispatched by the core notification dispatch
+  // workflow) — all need the target session's request context, or a woken idle
+  // thread has no model to run with ("No model selected"). New wake paths must
+  // build their options here so `prepareWakeRequestContext` runs for them.
+  const getWakeStreamOptions = async ({ resourceId, threadId }: { resourceId: string; threadId: string }) => {
     // Run the woken notification as the session that owns the target
     // resource so it uses that session's model/mode/state. Fall back to
     // the current session only when no session owns the resource yet.
-    const session = (await controller.getSessionByResource(resourceId)) ?? activeSession;
+    const owningSession = await controller.getSessionByResource(resourceId);
+    const session = owningSession ?? activeSession;
     // No session owns the resource and none is active yet (e.g. a deferred
     // notification comes due before any session boots). Nothing to resolve a
     // model from; return undefined so the dispatcher sends a bare wake
@@ -849,6 +867,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       },
     };
     requestContext.set('controller', agentControllerContext);
+    // Tenant identity/credentials must come from the session that owns the
+    // resource; the active-session fallback is only safe for model selection.
+    if (owningSession) {
+      await config?.prepareWakeRequestContext?.({ requestContext, resourceId, threadId });
+    }
 
     return {
       memory: { thread: threadId, resource: resourceId },
@@ -870,7 +893,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
             process.env.GITCRAWL_BIN ??
             process.env.MASTRACODE_GITCRAWL_COMMAND ??
             process.env.GITCRAWL_COMMAND,
-          getNotificationStreamOptions,
+          getNotificationStreamOptions: getWakeStreamOptions,
         })
       : undefined;
   // Mastra Code's own processors are constructed once, here, rather than inside
@@ -890,6 +913,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         const state = getInjectorSessionState(requestContext);
         return state?.untrustedCheckout !== true || typeof state?.baseRef === 'string';
       },
+      // Resolve relative tool paths against the session checkout (not the host
+      // process cwd) and never surface instruction files from outside it.
+      getBasePath: ({ requestContext }) => getInjectorSessionState(requestContext)?.projectPath ?? project.rootPath,
       getReader: ({ requestContext }) => {
         const state = getInjectorSessionState(requestContext);
         if (state?.untrustedCheckout !== true || typeof state?.baseRef !== 'string') return undefined;
@@ -994,7 +1020,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           // don't fall through to the active session and wake it under an
           // empty resource binding.
           if (!input.record.resourceId) return decision;
-          const streamOptions = await getNotificationStreamOptions({
+          const streamOptions = await getWakeStreamOptions({
             resourceId: input.record.resourceId,
             threadId: input.record.threadId,
           });
@@ -1061,11 +1087,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       ...readPluginProcessors().input.map(entry => entry.value),
       ...(pluginSignalLane?.getInputProcessors() ?? []),
     ],
-    // Mastra Code contributes no output processors of its own; the lane exists
-    // so plugins can. Like the input lane, plugin processors sit last — after
-    // the layers they customize, before the channel and memory layers the
-    // Agent appends.
+    // Like the input lane, plugin processors sit last — after the layers they
+    // customize, before the channel and memory layers the Agent appends.
     outputProcessors: () => [
+      // Anthropic cyber refusals finish a step instead of throwing, so they are
+      // handled here; OpenAI's throw and are handled in the error lane below.
+      new CyberRefusalHandler(),
       ...readPluginProcessors().output.map(entry => entry.value),
       ...(pluginSignalLane?.getOutputProcessors() ?? []),
     ],
@@ -1077,6 +1104,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // short-circuit on the first `retry: true`, so a blind retry first would resend
       // the broken history and fail again.
       new ProviderHistoryCompat(),
+      // Same ordering reason: OpenAI surfaces some cyber refusals as retryable
+      // 5xx errors, and a blind retry would resend the request without the
+      // `continue` nudge and spend the one retry this handler allows.
+      new CyberRefusalHandler(),
       new StreamErrorRetryProcessor({
         matchers: [
           { match: isBadRequestError, maxRetries: 1, delayMs: 2000 },

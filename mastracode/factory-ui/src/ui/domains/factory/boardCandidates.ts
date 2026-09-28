@@ -60,7 +60,13 @@ export function issueCandidate(issue: GithubIssue): BoardCandidate {
     url: issue.url,
     meta: `#${issue.number}${issue.author ? ` · ${issue.author}` : ''} · ${relativeTime(issue.createdAt)}`,
     column: hasLabel(labels, AUTO_TRIAGED_LABEL) ? 'triage' : 'intake',
-    metadata: { number: issue.number, author: issue.author, assignee: issue.assignee, labels },
+    metadata: {
+      number: issue.number,
+      author: issue.author,
+      assignee: issue.assignee,
+      assignees: issue.assignees ?? (issue.assignee ? [issue.assignee] : []),
+      labels,
+    },
   };
 }
 

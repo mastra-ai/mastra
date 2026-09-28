@@ -52,7 +52,7 @@ export function EnvironmentVariablesEditorReadOnlyItem({
     <DataList.RowStatic className={cn('min-h-14', className)} {...props}>
       {showIcon && (
         <DataList.Cell className="justify-items-center overflow-visible">
-          <span className="border-border text-muted-foreground flex size-7 items-center justify-center rounded-full border [&>svg]:size-3.5">
+          <span className="flex size-7 items-center justify-center rounded-full border border-border text-muted-foreground [&>svg]:size-3.5">
             {leadingIcon}
           </span>
         </DataList.Cell>
@@ -101,7 +101,7 @@ export function EnvironmentVariablesEditorReadOnlyItem({
         )}
       </DataList.Cell>
 
-      <DataList.Cell className="text-meta text-muted-foreground min-w-0 justify-items-end">
+      <DataList.Cell className="min-w-0 justify-items-end text-meta text-muted-foreground">
         {(updatedAt || actor) && (
           <span className="flex min-w-0 items-center gap-2">
             <span className="truncate">{updatedAt}</span>

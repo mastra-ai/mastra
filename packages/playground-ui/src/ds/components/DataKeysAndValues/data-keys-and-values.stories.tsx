@@ -11,12 +11,6 @@ const meta: Meta<typeof DataKeysAndValues> = {
   parameters: {
     layout: 'centered',
   },
-  argTypes: {
-    numOfCol: {
-      control: { type: 'inline-radio' },
-      options: [1, 2],
-    },
-  },
   decorators: [
     Story => (
       <div className="w-120">
@@ -30,9 +24,6 @@ export default meta;
 type Story = StoryObj<DataKeysAndValuesProps>;
 
 export const Default: Story = {
-  args: {
-    numOfCol: 1,
-  },
   render: args => (
     <DataKeysAndValues {...args}>
       <DataKeysAndValues.Key>Status</DataKeysAndValues.Key>
@@ -41,32 +32,11 @@ export const Default: Story = {
       <DataKeysAndValues.Value>1.23s</DataKeysAndValues.Value>
       <DataKeysAndValues.Key>Model</DataKeysAndValues.Key>
       <DataKeysAndValues.Value>gpt-4o</DataKeysAndValues.Value>
-    </DataKeysAndValues>
-  ),
-};
-
-export const TwoColumns: Story = {
-  args: {
-    numOfCol: 2,
-  },
-  render: args => (
-    <DataKeysAndValues {...args}>
-      <DataKeysAndValues.Key>Status</DataKeysAndValues.Key>
-      <DataKeysAndValues.Value>Running</DataKeysAndValues.Value>
-      <DataKeysAndValues.Key>Duration</DataKeysAndValues.Key>
-      <DataKeysAndValues.Value>1.23s</DataKeysAndValues.Value>
-      <DataKeysAndValues.Key>Model</DataKeysAndValues.Key>
-      <DataKeysAndValues.Value>gpt-4o</DataKeysAndValues.Value>
-      <DataKeysAndValues.Key>Tokens</DataKeysAndValues.Key>
-      <DataKeysAndValues.Value>2,451</DataKeysAndValues.Value>
     </DataKeysAndValues>
   ),
 };
 
 export const WithHeader: Story = {
-  args: {
-    numOfCol: 1,
-  },
   render: args => (
     <DataKeysAndValues {...args}>
       <DataKeysAndValues.Header>General</DataKeysAndValues.Header>
@@ -83,21 +53,17 @@ export const WithHeader: Story = {
   ),
 };
 
-export const WithHeaderTwoColumns: Story = {
-  args: {
-    numOfCol: 2,
-  },
-  render: args => (
-    <DataKeysAndValues {...args}>
-      <DataKeysAndValues.Header>Span Details</DataKeysAndValues.Header>
-      <DataKeysAndValues.Key>Status</DataKeysAndValues.Key>
-      <DataKeysAndValues.Value>Running</DataKeysAndValues.Value>
-      <DataKeysAndValues.Key>Duration</DataKeysAndValues.Key>
-      <DataKeysAndValues.Value>1.23s</DataKeysAndValues.Value>
-      <DataKeysAndValues.Key>Model</DataKeysAndValues.Key>
-      <DataKeysAndValues.Value>gpt-4o</DataKeysAndValues.Value>
-      <DataKeysAndValues.Key>Tokens</DataKeysAndValues.Key>
-      <DataKeysAndValues.Value>2,451</DataKeysAndValues.Value>
+export const Dense: Story = {
+  render: () => (
+    <DataKeysAndValues density="dense">
+      <DataKeysAndValues.Key>Text</DataKeysAndValues.Key>
+      <DataKeysAndValues.Value className="text-right">3,184</DataKeysAndValues.Value>
+      <DataKeysAndValues.Key>Cache read</DataKeysAndValues.Key>
+      <DataKeysAndValues.Value className="text-right">8,192</DataKeysAndValues.Value>
+      <DataKeysAndValues.Key>Cache write</DataKeysAndValues.Key>
+      <DataKeysAndValues.Value className="text-right">1,024</DataKeysAndValues.Value>
+      <DataKeysAndValues.Key>Reasoning</DataKeysAndValues.Key>
+      <DataKeysAndValues.Value className="text-right">640</DataKeysAndValues.Value>
     </DataKeysAndValues>
   ),
 };

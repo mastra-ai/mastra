@@ -154,7 +154,7 @@ export const ToolCallDisclosure = ({ className, children, ...props }: ComponentP
       <span
         aria-hidden
         className={cn(
-          'text-muted-foreground flex shrink-0 items-center opacity-0 transition duration-150 motion-reduce:transition-none',
+          'flex shrink-0 items-center text-muted-foreground opacity-0 transition duration-150 motion-reduce:transition-none',
           'group-hover/row:opacity-100 group-focus-visible/row:opacity-100',
           open && 'rotate-90 opacity-100',
         )}
@@ -171,6 +171,8 @@ export interface ToolCallPresentedHeaderProps extends Omit<ComponentProps<typeof
   icon: LucideIcon;
   label: string;
   detail?: string;
+  /** Replaces label and detail with plain text saying what the call does. */
+  description?: string;
   disclosure?: boolean;
 }
 
@@ -180,6 +182,7 @@ export const ToolCallPresentedHeader = ({
   icon: Icon,
   label,
   detail,
+  description,
   disclosure = true,
   ...props
 }: ToolCallPresentedHeaderProps) => {
@@ -196,12 +199,18 @@ export const ToolCallPresentedHeader = ({
           className={status === 'error' ? 'text-error/80' : 'text-placeholder'}
         />
       </ToolCallIcon>
-      <ToolCallLabel>{label}</ToolCallLabel>
-      {detail && <ToolCallDetail>{detail}</ToolCallDetail>}
+      {description ? (
+        <ToolCallLabel className="max-w-none min-w-0 shrink">{description}</ToolCallLabel>
+      ) : (
+        <>
+          <ToolCallLabel>{label}</ToolCallLabel>
+          {detail && <ToolCallDetail>{detail}</ToolCallDetail>}
+        </>
+      )}
       <ToolCallSpacer />
       {status === 'error' && (
         <ToolCallTrailing>
-          <X size={13} role="img" aria-label="Failed" className="text-error shrink-0" />
+          <X size={13} role="img" aria-label="Failed" className="shrink-0 text-error" />
         </ToolCallTrailing>
       )}
       {disclosure && <ToolCallDisclosure />}

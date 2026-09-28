@@ -72,12 +72,12 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
     <div className="min-w-0 space-y-6 overflow-hidden">
       {/* Header */}
       <div className="flex items-start gap-4">
-        <div className="bg-card rounded-lg p-3">
-          <SkillIcon className="text-muted-foreground h-6 w-6" />
+        <div className="rounded-lg bg-card p-3">
+          <SkillIcon className="h-6 w-6 text-muted-foreground" />
         </div>
         <div className="flex-1">
-          <h1 className="text-foreground text-heading">{skill.name}</h1>
-          <p className="text-muted-foreground text-body mt-1">{skill.description}</p>
+          <h1 className="text-heading text-foreground">{skill.name}</h1>
+          <p className="mt-1 text-body text-muted-foreground">{skill.description}</p>
         </div>
       </div>
 
@@ -102,7 +102,7 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
               setShowRawInstructions(!showRawInstructions);
             }}
             className={cn(
-              'hover:bg-fill-subtle text-caption flex items-center gap-1.5 rounded px-2 py-1',
+              'flex items-center gap-1.5 rounded px-2 py-1 text-caption hover:bg-fill-subtle',
               quietTextHover,
               controlStateColorTransition,
             )}
@@ -145,10 +145,10 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
               <button
                 key={ref}
                 onClick={() => onReferenceClick?.(ref)}
-                className="hover:bg-fill-subtle flex w-full items-center gap-2 rounded px-3 py-2 text-left"
+                className="flex w-full items-center gap-2 rounded px-3 py-2 text-left hover:bg-fill-subtle"
               >
-                <FileText className="text-muted-foreground h-4 w-4" />
-                <span className="text-foreground text-body">{ref}</span>
+                <FileText className="h-4 w-4 text-muted-foreground" />
+                <span className="text-body text-foreground">{ref}</span>
               </button>
             ))}
           </div>
@@ -164,9 +164,9 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
         >
           <div className="space-y-1">
             {skill.scripts.map(script => (
-              <div key={script} className="bg-card flex items-center gap-2 rounded px-3 py-2">
-                <Code className="text-muted-foreground h-4 w-4" />
-                <span className="text-foreground text-body">{script}</span>
+              <div key={script} className="flex items-center gap-2 rounded bg-card px-3 py-2">
+                <Code className="h-4 w-4 text-muted-foreground" />
+                <span className="text-body text-foreground">{script}</span>
               </div>
             ))}
           </div>
@@ -182,9 +182,9 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
         >
           <div className="space-y-1">
             {skill.assets.map(asset => (
-              <div key={asset} className="bg-card flex items-center gap-2 rounded px-3 py-2">
-                <Image className="text-muted-foreground h-4 w-4" />
-                <span className="text-foreground text-body">{asset}</span>
+              <div key={asset} className="flex items-center gap-2 rounded bg-card px-3 py-2">
+                <Image className="h-4 w-4 text-muted-foreground" />
+                <span className="text-body text-foreground">{asset}</span>
               </div>
             ))}
           </div>
@@ -192,9 +192,9 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
       )}
 
       {/* Path */}
-      <div className="border-border border-t pt-4">
-        <p className="text-muted-foreground text-caption">
-          Path: <code className="bg-muted rounded px-1 py-0.5">{skill.path}</code>
+      <div className="border-t border-border pt-4">
+        <p className="text-caption text-muted-foreground">
+          Path: <code className="rounded bg-muted px-1 py-0.5">{skill.path}</code>
         </p>
       </div>
     </div>
@@ -234,11 +234,11 @@ function formatDisplayValue(value: unknown): string {
 function MetadataCard({ label, value, icon }: { label: string; value: unknown; icon?: React.ReactNode }) {
   const displayValue = formatDisplayValue(value);
   return (
-    <div className="bg-card rounded-lg p-3">
-      <p className="text-muted-foreground text-caption mb-1">{label}</p>
+    <div className="rounded-lg bg-card p-3">
+      <p className="mb-1 text-caption text-muted-foreground">{label}</p>
       <div className="flex items-center gap-1.5">
         {icon && <span className="text-muted-foreground">{icon}</span>}
-        <p className="text-foreground text-subheading truncate" title={displayValue}>
+        <p className="truncate text-subheading text-foreground" title={displayValue}>
           {displayValue}
         </p>
       </div>
@@ -260,19 +260,19 @@ function CollapsibleSection({
   children: React.ReactNode;
 }) {
   return (
-    <div className="border-border min-w-0 overflow-hidden rounded-lg border">
-      <div className="bg-card state-layer flex items-center">
+    <div className="min-w-0 overflow-hidden rounded-lg border border-border">
+      <div className="state-layer flex items-center bg-card">
         <button onClick={onToggle} className="flex flex-1 items-center gap-2 px-4 py-3">
           {isExpanded ? (
-            <ChevronDown className="text-muted-foreground h-4 w-4" />
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
           ) : (
-            <ChevronRight className="text-muted-foreground h-4 w-4" />
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
           )}
-          <span className="text-foreground text-subheading">{title}</span>
+          <span className="text-subheading text-foreground">{title}</span>
         </button>
         {headerAction && <div className="pr-3">{headerAction}</div>}
       </div>
-      {isExpanded && <div className="bg-background w-0 min-w-full overflow-x-auto p-4">{children}</div>}
+      {isExpanded && <div className="w-0 min-w-full overflow-x-auto bg-background p-4">{children}</div>}
     </div>
   );
 }

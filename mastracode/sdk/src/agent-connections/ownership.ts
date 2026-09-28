@@ -3,13 +3,25 @@ export interface ThreadOwnershipClaim {
   unsubscribe(): void;
 }
 
+export interface ThreadClaimContext {
+  /**
+   * Call from the core `yieldOwnership` callback when this claim is released to
+   * another process, so the manager stops tracking it instead of believing it
+   * still owns the thread.
+   */
+  onYield(): void;
+  /** Call when lease renewal proves another live owner took the claim, so the manager retries it. */
+  onLost(): void;
+}
+
 const OWNERSHIP_RETRY_INITIAL_DELAY_MS = 250;
 const OWNERSHIP_RETRY_MAX_DELAY_MS = 5_000;
 
 /**
  * Per-thread claim bookkeeping. One entry per thread this session has bound, so
  * a thread the user has navigated away from stays claimed — and therefore stays
- * addressable by peers — until the session itself is torn down.
+ * addressable by peers — until the session itself is torn down, or until another
+ * process asks for the thread and this session yields it.
  */
 type ThreadClaimState = {
   /** Bumped on every new attempt for this thread; late resolutions are dropped. */
@@ -19,7 +31,13 @@ type ThreadClaimState = {
   retryDelayMs: number;
 };
 
-export function createThreadOwnershipManager(claimThread: (threadId: string) => Promise<ThreadOwnershipClaim>): {
+/**
+ * Keeps one renewable ownership claim per session thread, retries contention,
+ * and discards superseded attempts without creating a release-before-acquire gap.
+ */
+export function createThreadOwnershipManager(
+  claimThread: (threadId: string, context: ThreadClaimContext) => Promise<ThreadOwnershipClaim>,
+): {
   claim(threadId?: string | null): Promise<boolean>;
   release(threadId: string): void;
   close(): void;
@@ -48,9 +66,30 @@ export function createThreadOwnershipManager(claimThread: (threadId: string) => 
     state.retryTimer.unref?.();
   };
 
+  const yieldClaim = (threadId: string, claimGeneration: number) => {
+    const state = states.get(threadId);
+    if (!state || state.generation !== claimGeneration) return;
+    // Core completed the transfer or release before notifying us. Forget the
+    // thread entirely: the user is not on it, and switching back re-claims it.
+    clearRetry(state);
+    states.delete(threadId);
+  };
+
+  const loseClaim = (threadId: string, claimGeneration: number) => {
+    const state = states.get(threadId);
+    if (!state || state.generation !== claimGeneration) return;
+    // Core already stopped the stale claim. Keep the thread tracked and retry:
+    // another process may move away or exit while this session is still alive.
+    state.claim = undefined;
+    scheduleRetry(threadId, claimGeneration);
+  };
+
   const attemptClaim = async (threadId: string, claimGeneration: number, propagateError: boolean): Promise<boolean> => {
     try {
-      const nextClaim = await claimThread(threadId);
+      const nextClaim = await claimThread(threadId, {
+        onYield: () => yieldClaim(threadId, claimGeneration),
+        onLost: () => loseClaim(threadId, claimGeneration),
+      });
       const state = states.get(threadId);
       // The session closed, or a newer attempt superseded this one while the
       // ownership request was in flight — the late claim must not be retained.
@@ -62,8 +101,10 @@ export function createThreadOwnershipManager(claimThread: (threadId: string) => 
         scheduleRetry(threadId, claimGeneration);
         return false;
       }
+      const previousClaim = state.claim;
       state.retryDelayMs = OWNERSHIP_RETRY_INITIAL_DELAY_MS;
       state.claim = nextClaim;
+      previousClaim?.unsubscribe();
       return true;
     } catch (error) {
       scheduleRetry(threadId, claimGeneration);
@@ -81,15 +122,14 @@ export function createThreadOwnershipManager(claimThread: (threadId: string) => 
 
       // Re-claiming the thread supersedes only that thread's previous attempt —
       // the core claim is re-published so title/metadata changes made while the
-      // session was away are picked up. Other threads' claims are untouched.
+      // session was away are picked up. Keep the live claim until its replacement
+      // is ready so lease-backed ownership never has a release-then-acquire gap.
       const existing = states.get(threadId);
-      if (existing) {
-        clearRetry(existing);
-        existing.claim?.unsubscribe();
-      }
+      if (existing) clearRetry(existing);
       const state: ThreadClaimState = {
         generation: ++nextGeneration,
         retryDelayMs: OWNERSHIP_RETRY_INITIAL_DELAY_MS,
+        claim: existing?.claim,
       };
       states.set(threadId, state);
       return attemptClaim(threadId, state.generation, true);

@@ -40,6 +40,7 @@ type StreamObjectChunk<TType extends string> = StreamChunkBase<TType> & { object
 type StreamDataChunk<TType extends `data-${string}`> = StreamChunkBase<TType> & { data?: unknown };
 type StreamIgnoredChunk =
   | StreamPayloadChunk<'start'>
+  | StreamPayloadChunk<'thread-history'>
   | StreamPayloadChunk<'abort'>
   | StreamPayloadChunk<'response-metadata'>
   | StreamPayloadChunk<'reasoning-signature'>
@@ -631,7 +632,15 @@ export class SessionRunEngine {
         const payload = getPayload(chunk);
         const toolCallId = getString(payload.toolCallId) ?? '';
         const toolName = getString(payload.toolName) ?? '';
-        this.#session.emit({ type: 'tool_input_start', threadId: state.threadId, toolCallId, toolName });
+        const title = getString(payload.title);
+        this.#session.emit({
+          type: 'tool_input_start',
+          threadId: state.threadId,
+          toolCallId,
+          toolName,
+          title,
+          messageId: state.currentMessage.id,
+        });
         break;
       }
 
@@ -648,6 +657,7 @@ export class SessionRunEngine {
             toolCallId,
             argsTextDelta: hasTransformedToolPayload(transform) ? transform.transformed : argsTextDelta,
             toolName,
+            messageId: state.currentMessage.id,
           });
         }
         break;
@@ -655,7 +665,12 @@ export class SessionRunEngine {
 
       case 'tool-call-input-streaming-end': {
         const toolCallId = getString(getPayload(chunk).toolCallId) ?? '';
-        this.#session.emit({ type: 'tool_input_end', threadId: state.threadId, toolCallId });
+        this.#session.emit({
+          type: 'tool_input_end',
+          threadId: state.threadId,
+          toolCallId,
+          messageId: state.currentMessage.id,
+        });
         break;
       }
 
@@ -664,6 +679,7 @@ export class SessionRunEngine {
         const toolCallId = getString(toolCall.toolCallId) ?? '';
         const toolName = getString(toolCall.toolName) ?? '';
         const args = getDisplayTransform(chunk.metadata, 'input-available', toolCall.args);
+        const title = getString(toolCall.title);
         const toolIndex = state.currentMessage.content.parts.length;
         state.currentMessage.content.parts.push({
           type: 'tool-invocation',
@@ -673,6 +689,7 @@ export class SessionRunEngine {
             toolName,
             args,
           },
+          title,
         });
         state.toolPartById.set(toolCallId, toolIndex);
         this.emitMessagePart(state, toolIndex);
@@ -682,6 +699,7 @@ export class SessionRunEngine {
           toolCallId,
           toolName,
           args,
+          title,
         });
         break;
       }
@@ -764,14 +782,19 @@ export class SessionRunEngine {
           : getDisplayTransform(chunk.metadata, 'input-available', getPayload(chunk).args);
 
         const policy = this.#session.resolveToolApproval(toolName);
+        const approvalIdentity = {
+          runId: chunk.runId ?? this.#session.run.getRunId() ?? undefined,
+          threadId: state.threadId,
+          resourceId: this.#session.identity.getResourceId(),
+        };
 
         if (policy === 'allow') {
-          await this.#session.approveToolCall({ toolCallId, requestContext });
+          await this.#session.approveToolCall({ toolCallId, requestContext, ...approvalIdentity });
           break;
         }
 
         if (policy === 'deny') {
-          await this.#session.declineToolCall({ toolCallId, requestContext });
+          await this.#session.declineToolCall({ toolCallId, requestContext, ...approvalIdentity });
           break;
         }
 
@@ -793,16 +816,19 @@ export class SessionRunEngine {
         // Once it lands we finish the teardown, which stops the run rather than
         // letting the model continue past the denied call.
         const deferredAbort = this.#session.run.isAbortRequested();
+        const deferredAbortOrigin = deferredAbort ? this.#session.takeDeferredAbortOrigin() : undefined;
 
         if (!deferredAbort && approval.decision === 'approve') {
           await this.#session.approveToolCall({
             toolCallId,
             requestContext: approval.requestContext ?? requestContext,
+            ...approvalIdentity,
           });
         } else {
           await this.#session.declineToolCall({
             toolCallId,
             requestContext: approval.requestContext ?? requestContext,
+            ...approvalIdentity,
             declineContext: deferredAbort
               ? { reason: ABORTED_BY_USER_REASON, message: ABORTED_BY_USER_REASON }
               : approval.declineContext,
@@ -816,7 +842,7 @@ export class SessionRunEngine {
           // display state shows the denied result instead of a call stuck
           // mid-flight.
           this.settleToolCallAsDenied(state, { toolCallId, toolName, args: toolArgs });
-          this.#session.completeDeferredAbort();
+          this.#session.completeDeferredAbort(deferredAbortOrigin);
         }
         break;
       }
@@ -1119,8 +1145,15 @@ export class SessionRunEngine {
             });
           }
 
-          this.abortForOmFailure({ operationType, stage: 'run', error });
-          return { message: state.currentMessage };
+          if (
+            !Object.hasOwn(payload, 'failurePolicy') ||
+            !Object.hasOwn(payload, 'failureKind') ||
+            payload.failurePolicy !== 'continue' ||
+            payload.failureKind !== (operationType === 'reflection' ? 'reflector-model' : 'observer-model')
+          ) {
+            this.abortForOmFailure({ operationType, stage: 'run', error });
+            return { message: state.currentMessage };
+          }
         }
         break;
       }
@@ -1166,8 +1199,15 @@ export class SessionRunEngine {
             error,
           });
 
-          this.abortForOmFailure({ operationType, stage: 'buffering', error });
-          return { message: state.currentMessage };
+          if (
+            !Object.hasOwn(payload, 'failurePolicy') ||
+            !Object.hasOwn(payload, 'failureKind') ||
+            payload.failurePolicy !== 'continue' ||
+            payload.failureKind !== (operationType === 'reflection' ? 'reflector-model' : 'observer-model')
+          ) {
+            this.abortForOmFailure({ operationType, stage: 'buffering', error });
+            return { message: state.currentMessage };
+          }
         }
         break;
       }
@@ -1486,7 +1526,7 @@ export class SessionRunEngine {
     this.#session.run.reset();
   }
 
-  async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk>): Promise<void> {
+  async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk, true>): Promise<void> {
     const threadId = this.#session.thread.getId() ?? undefined;
     const agent = this.#session.stream.getAgent({ subscription }) ?? this.#machinery.getAgent();
     let currentRun: StreamState | undefined;
@@ -1501,6 +1541,8 @@ export class SessionRunEngine {
           subscription.unsubscribe();
           break;
         }
+
+        if (chunk.type === 'thread-history') continue;
 
         const runId = ('runId' in chunk ? chunk.runId : undefined) ?? subscription.activeRunId();
         if (runId && runId === abortedRunId) continue;

@@ -1,9 +1,9 @@
-import { format } from 'date-fns';
 import { BanIcon, ClockIcon } from 'lucide-react';
 import { Badge } from '../Badge/Badge';
 import { ITEM_LIST_VERSION_STATUS_LABELS } from './helpers';
 import { ItemListCell } from './item-list-cell';
 import { cn } from '@/lib/utils';
+import { formatDate } from '@/utils/date-format';
 
 export type ItemListVersionCellProps = {
   version: string | number;
@@ -21,7 +21,7 @@ export function ItemListVersionCell({ version, date, isLatest, isDeleted }: Item
         })}
       >
         <strong className="text-body-sm">v. {version}</strong>
-        <em className="text-caption text-placeholder">{date ? format(new Date(date), 'MMM d, yyyy HH:mm') : null}</em>
+        <em className="text-caption text-placeholder">{formatDate(date, 'date-time')}</em>
       </div>
       {(isLatest || isDeleted) && (
         <div className="flex items-center gap-1">

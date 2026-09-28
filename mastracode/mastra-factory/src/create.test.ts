@@ -497,32 +497,27 @@ describe('create — .env safety before git commit', () => {
     expect(gitignore).toMatch(/^\.env$/m);
   });
 
-  it.runIf(process.platform !== 'win32')(
-    'skips git init when .gitignore cannot be updated so .env secrets are never staged',
-    async () => {
-      // Ship a .gitignore that does NOT cover `.env` — the scaffolder must
-      // append to it. We then make the scaffolded copy read-only so the
-      // append fails and the git init step is aborted.
-      fs.writeFileSync(path.join(templateDir, '.gitignore'), 'node_modules\n');
+  it('skips git init when .gitignore cannot be updated so .env secrets are never staged', async () => {
+    // Make the scaffolded `.gitignore` a directory so it can't be read or
+    // written. A read-only file (chmod 0o444) is not enough: CI may run as
+    // root, which ignores permission bits and lets the append succeed.
+    tinyexec.x.mockImplementation(async (command: string, args: string[]) => {
+      if (command === 'npx' && args[0] === 'degit') {
+        fs.cpSync(templateDir, args[2]!, { recursive: true });
+        fs.mkdirSync(path.join(args[2]!, '.gitignore'));
+      }
+      return { stdout: '', stderr: '', exitCode: 0, killed: false };
+    });
 
-      // Intercept the copy step: after the template lands in the project dir,
-      // lock its .gitignore before ensureEnvGitignored runs. We do this via a
-      // one-shot spy that fires when the create flow calls into runInherit for
-      // the first git command — but simpler: pre-chmod the template's file
-      // itself. The scaffolder copies it into the project dir, preserving the
-      // read-only bit, so the subsequent writeFileSync throws EACCES.
-      fs.chmodSync(path.join(templateDir, '.gitignore'), 0o444);
+    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
 
-      await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+    const runCalls = tinyexec.x.mock.calls as Array<[string, string[]]>;
+    const anyGit = runCalls.some(call => call[0] === 'git');
+    expect(anyGit).toBe(false);
 
-      const runCalls = tinyexec.x.mock.calls as Array<[string, string[]]>;
-      const anyGit = runCalls.some(call => call[0] === 'git');
-      expect(anyGit).toBe(false);
-
-      // User was warned about it.
-      const warns = clack.log.warn.mock.calls.flat().join('\n');
-      expect(warns).toMatch(/\.gitignore/);
-      expect(warns).toMatch(/Skipping git init/i);
-    },
-  );
+    // User was warned about it.
+    const warns = clack.log.warn.mock.calls.flat().join('\n');
+    expect(warns).toMatch(/\.gitignore/);
+    expect(warns).toMatch(/Skipping git init/i);
+  });
 });

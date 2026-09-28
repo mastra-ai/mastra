@@ -177,7 +177,16 @@ export class ChatChannelOutputProcessor {
       state.session = session;
     }
 
-    session.queue.push(part as AgentChunkType<any>);
+    // Skip the approval card when no human decision is pending (e.g. the
+    // controller auto-resolves the tool's policy). The chunk still flows on so
+    // the run itself can resolve the approval.
+    const renderPart =
+      part.type !== 'tool-call-approval' ||
+      !this.#agentChannels ||
+      (await this.#agentChannels.shouldRenderToolApproval(requestContext, (part as any).payload?.toolName));
+    if (renderPart) {
+      session.queue.push(part as AgentChunkType<any>);
+    }
 
     // Agents emit a `finish` chunk per LLM step, plus a `step-finish` per step
     // whose payload carries `isContinued`. Multi-step runs (e.g. tool calls or

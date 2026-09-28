@@ -2,6 +2,21 @@ import type { Preview } from '@storybook/react-vite';
 import { themes } from 'storybook/theming';
 import './tailwind.css';
 
+// A redeploy deletes the hashed chunks an open tab still points at.
+const staleChunkReloadAtKey = 'storybook:stale-chunk-reload-at';
+const staleChunkReloadCooldownMs = 10_000;
+
+window.addEventListener('vite:preloadError', () => {
+  try {
+    const lastReloadAt = Number(sessionStorage.getItem(staleChunkReloadAtKey));
+    if (Date.now() - lastReloadAt < staleChunkReloadCooldownMs) return;
+    sessionStorage.setItem(staleChunkReloadAtKey, String(Date.now()));
+  } catch {
+    return;
+  }
+  window.location.reload();
+});
+
 // The three canvas steps of the product, in the order a screen stacks them:
 // `background-1` is the sidebar rail, `background-2` the page a route renders
 // on, `background-3` the raised material a card or a field is made of. Each

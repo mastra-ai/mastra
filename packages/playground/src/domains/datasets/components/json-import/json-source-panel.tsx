@@ -1,7 +1,8 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
-import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { FileJson, Upload, RefreshCw } from 'lucide-react';
 import { useCallback, useState } from 'react';
@@ -62,14 +63,16 @@ export function JSONSourcePanel({
       </TabContent>
 
       <TabContent value="paste" className={tabContentClassName}>
-        <Textarea
+        <CodeEditor
           aria-label="JSON items"
-          className="text-caption min-h-[200px] flex-1 resize-none font-mono"
+          language="json"
+          lineNumbers={false}
+          showCopyButton={false}
           placeholder={PASTE_PLACEHOLDER}
-          spellCheck={false}
           value={pastedText}
-          onChange={e => onPastedTextChange(e.target.value)}
-          disabled={isImporting}
+          onChange={onPastedTextChange}
+          editable={!isImporting}
+          className="min-h-50 flex-1"
         />
       </TabContent>
     </Tabs>
@@ -125,7 +128,7 @@ function Dropzone({ onFileSelect, disabled }: { onFileSelect: (file: File) => vo
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       className={cn(
-        'border-border bg-card relative flex flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-dashed px-4 py-6 text-center',
+        'relative flex flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-card px-4 py-6 text-center',
         'hover:border-accent1/50 hover:bg-accent1/5',
         isDragOver && 'border-accent1/50 bg-accent1/5',
         disabled && 'cursor-wait opacity-60',
@@ -139,7 +142,7 @@ function Dropzone({ onFileSelect, disabled }: { onFileSelect: (file: File) => vo
         disabled={disabled}
         className="absolute inset-0 cursor-pointer opacity-0"
       />
-      <div className="border-border bg-background text-muted-foreground flex size-9 items-center justify-center rounded-md border">
+      <div className="flex size-9 items-center justify-center rounded-md border border-border bg-background text-muted-foreground">
         <Upload className="size-4" />
       </div>
       <div className="flex flex-col gap-1">
@@ -178,11 +181,13 @@ function FileCard({
   const visibleRows = rows.slice(0, PREVIEW_ROW_COUNT);
 
   return (
-    <div data-testid="json-file-card" className="border-border rounded-lg border">
+    <div data-testid="json-file-card" className="rounded-lg border border-border">
       <div className="flex items-center gap-2 px-3 py-2">
-        <FileJson className="text-muted-foreground size-4 shrink-0" />
-        <span className="text-caption text-foreground min-w-0 flex-1 truncate font-mono">{file.name}</span>
-        <span className="text-meta text-muted-foreground shrink-0">{formatFileSize(file.size)}</span>
+        <FileJson className="size-4 shrink-0 text-muted-foreground" />
+        <Txt as="span" variant="caption" tone="ink" font="mono" className="min-w-0 flex-1 truncate">
+          {file.name}
+        </Txt>
+        <span className="shrink-0 text-meta text-muted-foreground">{formatFileSize(file.size)}</span>
         <Button icon={<RefreshCw />} variant="ghost" size="sm" onClick={onReplace} disabled={isImporting}>
           Replace
         </Button>
@@ -191,10 +196,12 @@ function FileCard({
       {visibleRows.map(row => (
         <div
           key={row.index}
-          className="border-border grid grid-cols-[2rem_1fr_auto] items-center gap-2 border-t px-3 py-1.5"
+          className="grid grid-cols-[2rem_1fr_auto] items-center gap-2 border-t border-border px-3 py-1.5"
         >
           <span className="text-meta text-muted-foreground">{row.index}</span>
-          <span className="text-caption text-foreground truncate font-mono">{formatInput(row.input)}</span>
+          <Txt as="span" variant="caption" tone="ink" font="mono" className="truncate">
+            {formatInput(row.input)}
+          </Txt>
           {!row.hasInput ? (
             <Badge variant="red" size="xs">
               no input
@@ -208,7 +215,7 @@ function FileCard({
       ))}
 
       {total > PREVIEW_ROW_COUNT && (
-        <div className="border-border text-meta text-muted-foreground border-t px-3 py-1.5">
+        <div className="border-t border-border px-3 py-1.5 text-meta text-muted-foreground">
           + {total - PREVIEW_ROW_COUNT} more
         </div>
       )}

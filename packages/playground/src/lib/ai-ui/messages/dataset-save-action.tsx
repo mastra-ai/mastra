@@ -12,6 +12,7 @@ import {
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@mastra/playground-ui/components/Select';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { useDatasetMutations, useDatasets } from '@mastra/playground-ui/domains/datasets';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -21,8 +22,6 @@ import { DatabaseIcon, Save, X } from 'lucide-react';
 import { useState, useCallback, useEffect, useMemo } from 'react';
 
 import { useDatasetSaveContext } from '../context/dataset-save-context';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
-import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 
 function DatasetSaveDialog({
   open,
@@ -116,7 +115,7 @@ function DatasetSaveDialog({
               </SelectTrigger>
               <SelectContent>
                 {datasets.length === 0 ? (
-                  <div className="text-muted-foreground text-body px-2 py-4 text-center">No datasets available</div>
+                  <div className="px-2 py-4 text-center text-body text-muted-foreground">No datasets available</div>
                 ) : (
                   datasets.map(dataset => (
                     <SelectItem key={dataset.id} value={dataset.id}>
@@ -271,7 +270,7 @@ function SaveFullConversationInner() {
         className={cn(
           quietTextHover,
           controlStateColorTransition,
-          'text-meta mx-auto flex cursor-pointer items-center gap-1.5 py-3 disabled:opacity-50',
+          'mx-auto flex cursor-pointer items-center gap-1.5 py-3 text-meta disabled:opacity-50',
         )}
       >
         {isFetching ? <Spinner className="h-3.5 w-3.5" /> : <DatabaseIcon className="h-3.5 w-3.5" />}

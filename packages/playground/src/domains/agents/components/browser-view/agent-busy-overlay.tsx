@@ -37,10 +37,10 @@ export function AgentBusyOverlay({ toolName }: AgentBusyOverlayProps) {
     : 'Working';
 
   return (
-    <div className="bg-sidebar/40 absolute inset-0 z-10 flex cursor-not-allowed items-center justify-center">
-      <div className="bg-surface-panel shadow-overlay flex items-center gap-2 rounded-md px-3 py-1.5">
-        <Loader2 className="text-accent1 h-3.5 w-3.5 animate-spin" />
-        <span className="text-muted-foreground text-column">Agent: {displayName}</span>
+    <div className="absolute inset-0 z-10 flex cursor-not-allowed items-center justify-center bg-sidebar/40">
+      <div className="flex items-center gap-2 rounded-md bg-surface-panel px-3 py-1.5 shadow-overlay">
+        <Loader2 className="h-3.5 w-3.5 animate-spin text-accent1" />
+        <span className="text-column text-muted-foreground">Agent: {displayName}</span>
       </div>
     </div>
   );

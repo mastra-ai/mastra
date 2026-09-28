@@ -56,7 +56,7 @@ export const AgentSelectableCard = ({
       style={containerStyle}
       className={cn(
         'flex w-full flex-col gap-2 rounded-lg border bg-card p-4 transition-colors',
-        'focus-visible:!border-[var(--agent-color-bg)] focus-within:!border-[var(--agent-color-bg)]',
+        'focus-within:!border-[var(--agent-color-bg)] focus-visible:!border-[var(--agent-color-bg)]',
         isSelected ? 'bg-muted' : 'border-border',
         disabled && 'opacity-60',
       )}

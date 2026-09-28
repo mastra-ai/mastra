@@ -730,7 +730,11 @@ describe('factory_transition_work_item', () => {
     });
 
     expect(tools).toHaveProperty('factory_transition_work_item');
-    expect(setState).toHaveBeenCalledWith({ factoryProjectId: PROJECT_ID, factoryOrgId: 'org-1' });
+    expect(setState).toHaveBeenCalledWith({
+      factoryProjectId: PROJECT_ID,
+      factoryOrgId: 'org-1',
+      untrustedCheckout: false,
+    });
   });
 
   it('exposes nothing on crash-resume when no active binding matches the thread', async () => {

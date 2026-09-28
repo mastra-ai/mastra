@@ -696,6 +696,25 @@ export class AIV5Adapter {
             }
             return toolInvocationPart;
           }
+          if (p.state === 'output-error') {
+            const toolInvocationPart: MastraToolInvocationPart = {
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                toolCallId: p.toolCallId,
+                toolName,
+                args: p.input,
+                state: 'output-error' as const,
+                errorText: p.errorText,
+                ...('rawInput' in p && p.rawInput !== undefined ? { rawInput: p.rawInput } : {}),
+              },
+              providerMetadata: callProviderMetadata,
+              createdAt: getMastraCreatedAt(callProviderMetadata),
+            };
+            if (toolProviderExecuted !== undefined) {
+              (toolInvocationPart as { providerExecuted?: boolean }).providerExecuted = toolProviderExecuted;
+            }
+            return toolInvocationPart;
+          }
           const toolInvocationPart: MastraToolInvocationPart = {
             type: 'tool-invocation' as const,
             toolInvocation: {

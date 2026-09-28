@@ -16,7 +16,7 @@ const meta: Meta<typeof Notice> = {
   },
   decorators: [
     Story => (
-      <div className="bg-background mx-auto w-full max-w-200 rounded-lg p-6">
+      <div className="mx-auto w-full max-w-200 rounded-lg bg-background p-6">
         <Story />
       </div>
     ),

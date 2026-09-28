@@ -1719,6 +1719,9 @@ describe('createLLMMappingStep toModelOutput', () => {
       { toolCallId: 'call-1', toolName: 'broken', args: {}, result: { data: 'raw' } },
     ];
 
+    // The default engine's released contract: a toModelOutput failure fails
+    // the run. Only the durable engine supplies an onMappingError handler
+    // (warn-and-continue) — redelivery would re-run the mapper every attempt.
     await expect(llmMappingStep.execute(createExecuteParams(inputData))).rejects.toBe(failure);
 
     expect(childSpans).toHaveLength(1);

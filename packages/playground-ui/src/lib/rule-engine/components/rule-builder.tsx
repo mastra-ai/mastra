@@ -58,7 +58,7 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
     <div className={cn(isRoot ? 'bg-background' : 'bg-card pl-6')}>
       {/* Non-root group header */}
       {!isRoot && (
-        <div className="border-border flex items-center justify-between border-b border-dashed py-1.5 pr-4 pl-3">
+        <div className="flex items-center justify-between border-b border-dashed border-border py-1.5 pr-4 pl-3">
           <span className="text-meta text-muted-foreground">Group</span>
           {onRemove && (
             <Button type="button" onClick={onRemove} tooltip="Remove group" size="icon-sm" variant="ghost">
@@ -69,7 +69,7 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
       )}
 
       {group.conditions.map((condition, index) => (
-        <div key={index} className="border-border border-b border-dashed last:border-b-0">
+        <div key={index} className="border-b border-dashed border-border last:border-b-0">
           <div className={cn('relative', isRule(condition) && 'border-l-4 border-border p-4')}>
             {index > 0 && (
               <button
@@ -153,7 +153,7 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({
         className={cn(
           quietTextHover,
           controlStateColorTransition,
-          'border-border text-caption flex w-full items-center justify-center gap-2 rounded-md border border-dashed p-2',
+          'flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-border p-2 text-caption',
         )}
       >
         <Icon>

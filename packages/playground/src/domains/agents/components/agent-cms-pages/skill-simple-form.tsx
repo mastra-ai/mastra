@@ -46,7 +46,7 @@ export function SkillSimpleForm({
         <FieldBlock.Label name="skill-instructions">Instructions</FieldBlock.Label>
 
         {readOnly ? (
-          <div className="border-border bg-background min-h-0 flex-1 overflow-y-auto rounded-lg border p-4">
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border bg-background p-4">
             {instructions ? (
               <MarkdownRenderer>{instructions}</MarkdownRenderer>
             ) : (

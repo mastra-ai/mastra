@@ -6,6 +6,7 @@ import {
   fsMkdirBodySchema,
   fsWriteBodySchema,
   searchSkillsQuerySchema,
+  skillReferencePathParams,
 } from './workspace';
 
 /**
@@ -79,6 +80,18 @@ describe('workspace boolean flags parse string query params', () => {
     it('fsMkdirBodySchema.recursive parses "false" as false', () => {
       expect(fsMkdirBodySchema.parse({ path: '/dir', recursive: 'false' }).recursive).toBe(false);
     });
+  });
+});
+
+describe('workspace skill path parameters', () => {
+  it('rejects empty skill names and reference paths', () => {
+    expect(
+      skillReferencePathParams.safeParse({ workspaceId: 'workspace-1', skillName: '', referencePath: 'guide.md' })
+        .success,
+    ).toBe(false);
+    expect(
+      skillReferencePathParams.safeParse({ workspaceId: 'workspace-1', skillName: 'docs', referencePath: '' }).success,
+    ).toBe(false);
   });
 });
 

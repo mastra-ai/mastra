@@ -112,21 +112,21 @@ function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) 
   }
 
   return (
-    <div className="bg-background flex h-dvh w-dvw">
-      <SidebarNew className="border-border border-r">
+    <div className="flex h-dvh w-dvw bg-background">
+      <SidebarNew className="border-r border-border">
         {header === 'command' ? (
           <SidebarNew.CommandHeader>
             <a
               href="/projects"
               aria-label="Project list"
-              className="focus-visible:shadow-focus-ring focus-visible:ring-accent1 flex min-w-0 flex-1 rounded-md focus-visible:ring-1 focus-visible:outline-hidden"
+              className="flex min-w-0 flex-1 rounded-md focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden"
             >
               <SidebarNew.Brand
                 logo={<LogoWithoutText className="size-6" />}
                 title={
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="truncate">Mastra</span>
-                    <span className="bg-muted text-meta text-muted-foreground inline-flex h-5 items-center rounded px-1.5">
+                    <span className="inline-flex h-5 items-center rounded bg-muted px-1.5 text-meta text-muted-foreground">
                       Beta
                     </span>
                   </span>
@@ -139,8 +139,8 @@ function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) 
           <SidebarNew.Header>
             {state === 'collapsed' ? (
               <div className="group/brand relative mx-auto grid size-9 place-items-center">
-                <LogoWithoutText className="duration-normal size-6 transition-opacity group-hover/brand:opacity-0 motion-reduce:transition-none" />
-                <div className="duration-normal absolute inset-0 opacity-0 transition-opacity group-hover/brand:opacity-100 focus-within:opacity-100 motion-reduce:transition-none">
+                <LogoWithoutText className="size-6 transition-opacity duration-normal group-hover/brand:opacity-0 motion-reduce:transition-none" />
+                <div className="absolute inset-0 opacity-0 transition-opacity duration-normal group-hover/brand:opacity-100 focus-within:opacity-100 motion-reduce:transition-none">
                   <SidebarNew.Trigger />
                 </div>
               </div>
@@ -149,11 +149,11 @@ function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) 
                 <a
                   href="/projects"
                   aria-label="Project list"
-                  className="focus-visible:shadow-focus-ring focus-visible:ring-accent1 flex min-w-0 flex-1 rounded-md focus-visible:ring-1 focus-visible:outline-hidden"
+                  className="flex min-w-0 flex-1 rounded-md focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden"
                 >
                   <SidebarNew.Brand logo={<LogoWithoutText className="size-6" />} title="Mastra Platform" />
                 </a>
-                <span className="bg-muted text-meta text-muted-foreground inline-flex h-5 items-center rounded-full px-2">
+                <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-meta text-muted-foreground">
                   Staging
                 </span>
                 <SidebarNew.Trigger />
@@ -245,13 +245,13 @@ function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) 
           </SidebarNew.NavStack>
         </SidebarNew.Nav>
 
-        <SidebarNew.Footer className="space-y-1.5 pb-1">
+        <SidebarNew.Footer>
           <SidebarNew.Meter
             label="Credits"
             value="$4"
             status="Credits are low"
             tone="warning"
-            icon={<AlertTriangle className="text-notice-warning size-3 shrink-0" aria-hidden />}
+            icon={<AlertTriangle className="size-3 shrink-0 text-notice-warning" aria-hidden />}
             href="/organization/billing"
             linkLabel="Credit balance"
           />
@@ -273,9 +273,9 @@ function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) 
             <DropdownMenu.Content
               align="start"
               sideOffset={8}
-              className="border-border bg-popover text-foreground w-64"
+              className="w-64 border-border bg-popover text-foreground"
             >
-              <div className="text-meta text-muted-foreground px-2 py-1">justin@mastra.ai</div>
+              <div className="px-2 py-1 text-meta text-muted-foreground">justin@mastra.ai</div>
               <DropdownMenu.Separator />
               <DropdownMenu.Item onSelect={() => openView('gateway')}>
                 <Workflow />
@@ -290,7 +290,7 @@ function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) 
                 Settings
               </DropdownMenu.Item>
               <DropdownMenu.Separator />
-              <div className="text-meta text-muted-foreground px-2 py-1">Mastra</div>
+              <div className="px-2 py-1 text-meta text-muted-foreground">Mastra</div>
               <DropdownMenu.Item>
                 <Users />
                 Organization settings
@@ -312,7 +312,7 @@ function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) 
       <main className="min-w-0 flex-1 p-6">
         <SidebarNew.MobileTrigger className="mb-4" />
         <h1 className="text-heading text-foreground">Main content</h1>
-        <p className="text-body text-muted-foreground mt-2">
+        <p className="mt-2 text-body text-muted-foreground">
           Product navigation stays compact while route-derived views take over the sidebar body.
         </p>
       </main>

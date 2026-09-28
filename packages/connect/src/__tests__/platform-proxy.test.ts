@@ -45,6 +45,20 @@ describe('createPlatformProxy request context binding', () => {
     expect(logSpy).not.toHaveBeenCalled();
   });
 
+  it('validates template inputs through zodValidateInput and returns the parsed data', async () => {
+    const { z } = await import('zod');
+    const proxy = createPlatformProxy({ connectionId: 'conn-1' });
+    const schema = z.object({ project_id: z.number(), name: z.string().optional() });
+
+    await expect(proxy.zodValidateInput({ zodSchema: schema, input: { project_id: 42 } })).resolves.toEqual({
+      data: { project_id: 42 },
+    });
+    await expect(proxy.zodValidateInput({ zodSchema: schema, input: { project_id: 'nope' } })).rejects.toMatchObject({
+      name: 'ToolActionError',
+      payload: { type: 'invalid_input' },
+    });
+  });
+
   it('relays the provider status so templates can branch on async responses', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ statementHandle: 'h-1' }, { status: 202 }));
     const proxy = createPlatformProxy({
@@ -69,6 +83,28 @@ describe('createPlatformProxy request context binding', () => {
 
     expect(fetchMock.mock.calls[0]![0]).toBe('https://example.test/v2/connections/conn-1/proxy/items');
     expect(fetchMock.mock.calls[0]![1].headers['base-url-override']).toBe('https://caller-controlled.example');
+  });
+
+  it('exposes credentials only through getConnectionWithCredentials, mapped to the template wire shape', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation((url: string) =>
+        url.endsWith('/credentials')
+          ? Promise.resolve(Response.json({ type: 'oauth2', accessToken: 'tok-1', expiresAt: null }))
+          : Promise.resolve(Response.json({ connection_config: {}, metadata: null })),
+      );
+    const proxy = createPlatformProxy({
+      connectionId: 'conn-1',
+      client: { accessToken: 'token', baseUrl: 'https://example.test', fetch: fetchMock },
+    }).withRequestContext(new RequestContext());
+
+    await expect(proxy.getConnection()).resolves.not.toHaveProperty('credentials');
+    await expect(proxy.getConnectionWithCredentials()).resolves.toMatchObject({
+      credentials: { type: 'OAUTH2', access_token: 'tok-1' },
+    });
+    // The plain getConnection call never hit the credential endpoint.
+    const urls = fetchMock.mock.calls.map(call => call[0] as string);
+    expect(urls.filter(url => url.endsWith('/credentials'))).toHaveLength(1);
   });
 
   it('fetches connection context once per bound execution and returns metadata', async () => {

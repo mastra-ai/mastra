@@ -60,7 +60,7 @@ export function TimelineNameCol({
       // The whole row selects the span; the name button is the keyboard target and its click bubbles here.
       onClick={() => onSpanClick?.(span.id)}
       className={cn('flex min-h-8 cursor-pointer items-stretch rounded-md opacity-80 hover:bg-fill-subtle', {
-        'opacity-40 [&:hover]:opacity-70 dark:opacity-30 dark:[&:hover]:opacity-60': isFaded,
+        'opacity-40 dark:opacity-30 [&:hover]:opacity-70 dark:[&:hover]:opacity-60': isFaded,
         'bg-fill-hover': isSelected,
       })}
       style={{ paddingLeft: `${depth * 1}rem` }}
@@ -95,7 +95,7 @@ export function TimelineNameCol({
           >
             {span.name}
           </span>
-          {meta && <span className="text-meta text-muted-foreground shrink-0 lg:tabular-nums">{meta}</span>}
+          {meta && <span className="shrink-0 text-meta text-muted-foreground lg:tabular-nums">{meta}</span>}
         </span>
       </button>
 

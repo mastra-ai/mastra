@@ -30,7 +30,7 @@ function LinearPane({ onConnect }: { onConnect: () => void }) {
     return (
       <EmptyState
         className="py-8"
-        iconSlot={<LinearIcon className="text-muted-foreground size-10" />}
+        iconSlot={<LinearIcon />}
         titleSlot="Linear connected"
         descriptionSlot={`Connected to ${linearStatus.data.workspace?.name ?? 'Linear'}.`}
       />
@@ -39,7 +39,7 @@ function LinearPane({ onConnect }: { onConnect: () => void }) {
   return (
     <EmptyState
       className="py-8"
-      iconSlot={<LinearIcon className="text-muted-foreground size-10" />}
+      iconSlot={<LinearIcon />}
       titleSlot="Connect Linear"
       descriptionSlot="Give your Factory the issue context and priorities behind your code."
       actionSlot={
@@ -63,7 +63,7 @@ function JiraPane({ connections, onRetry }: { connections: PlatformProviderConne
     return (
       <EmptyState
         className="py-8"
-        iconSlot={<JiraIcon className="text-muted-foreground" size={40} />}
+        iconSlot={<JiraIcon />}
         titleSlot="Connect Jira"
         descriptionSlot="Couldn't load Jira connections."
         actionSlot={
@@ -78,7 +78,7 @@ function JiraPane({ connections, onRetry }: { connections: PlatformProviderConne
     return (
       <EmptyState
         className="py-8"
-        iconSlot={<JiraIcon className="text-muted-foreground" size={40} />}
+        iconSlot={<JiraIcon />}
         titleSlot="Jira connected"
         descriptionSlot={accountSummary(connections, 'Jira')}
       />
@@ -87,7 +87,7 @@ function JiraPane({ connections, onRetry }: { connections: PlatformProviderConne
   return (
     <EmptyState
       className="py-8"
-      iconSlot={<JiraIcon className="text-muted-foreground" size={40} />}
+      iconSlot={<JiraIcon />}
       titleSlot="Connect Jira"
       descriptionSlot="Give your Factory the issue context and priorities behind your code."
       actionSlot={
@@ -111,7 +111,7 @@ function IncidentIoPane({ connections, onRetry }: { connections: PlatformProvide
     return (
       <EmptyState
         className="py-8"
-        iconSlot={<IncidentIoIcon className="text-muted-foreground" size={40} />}
+        iconSlot={<IncidentIoIcon />}
         titleSlot="Connect incident.io"
         descriptionSlot="Couldn't load incident.io connections."
         actionSlot={
@@ -126,7 +126,7 @@ function IncidentIoPane({ connections, onRetry }: { connections: PlatformProvide
     return (
       <EmptyState
         className="py-8"
-        iconSlot={<IncidentIoIcon className="text-muted-foreground" size={40} />}
+        iconSlot={<IncidentIoIcon />}
         titleSlot="incident.io connected"
         descriptionSlot={accountSummary(connections, 'incident.io')}
       />
@@ -135,7 +135,7 @@ function IncidentIoPane({ connections, onRetry }: { connections: PlatformProvide
   return (
     <EmptyState
       className="py-8"
-      iconSlot={<IncidentIoIcon className="text-muted-foreground" size={40} />}
+      iconSlot={<IncidentIoIcon />}
       titleSlot="Connect incident.io"
       descriptionSlot="Route incident follow-ups into your Factory. Incidents themselves stay out of intake."
       actionSlot={

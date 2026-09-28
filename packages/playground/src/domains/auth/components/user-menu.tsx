@@ -23,7 +23,7 @@ export type UserMenuProps = {
  */
 export function UserMenu({ user }: UserMenuProps) {
   const [open, setOpen] = useState(false);
-  const { mutate: logout, isPending } = useLogout();
+  const { mutate: logout, isPending, error: logoutError } = useLogout();
   const { data: capabilities } = useAuthCapabilities();
   const { isImpersonating, impersonatedRole, startImpersonation, stopImpersonation, isSwitching } =
     useRoleImpersonation();
@@ -31,15 +31,18 @@ export function UserMenu({ user }: UserMenuProps) {
   if (!user) return null;
 
   const handleLogout = () => {
-    logout(undefined, {
-      onSuccess: data => {
-        if (data.redirectTo) {
-          window.location.href = data.redirectTo;
-        } else {
-          window.location.reload();
-        }
+    logout(
+      { userId: user.id },
+      {
+        onSuccess: data => {
+          if (data.redirectTo) {
+            window.location.href = data.redirectTo;
+          } else {
+            window.location.reload();
+          }
+        },
       },
-    });
+    );
   };
 
   const availableRoles = capabilities && isAuthenticated(capabilities) ? capabilities.availableRoles : undefined;
@@ -49,12 +52,12 @@ export function UserMenu({ user }: UserMenuProps) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button type="button" className="hover:bg-fill-subtle flex items-center gap-2 rounded-md p-1">
+        <button type="button" className="flex items-center gap-2 rounded-md p-1 hover:bg-fill-subtle">
           <UserAvatar user={user} size="sm" />
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-64 p-0">
-        <div className="border-border border-b p-3">
+        <div className="border-b border-border p-3">
           <div className="flex items-center gap-3">
             <UserAvatar user={user} size="md" />
             <div className="flex flex-col overflow-hidden">
@@ -72,7 +75,7 @@ export function UserMenu({ user }: UserMenuProps) {
 
         {/* Preview as role section — only for admins with available roles */}
         {availableRoles && availableRoles.length > 0 && (
-          <div className="border-border border-b p-2">
+          <div className="border-b border-border p-2">
             <Txt variant="meta" tone="muted" className="px-2 py-1 tracking-wider uppercase">
               Preview as role
             </Txt>
@@ -91,13 +94,13 @@ export function UserMenu({ user }: UserMenuProps) {
                     }
                     setOpen(false);
                   }}
-                  className={`text-body flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left ${
+                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-body ${
                     isActive ? 'bg-fill-hover' : 'hover:bg-fill-subtle'
                   } ${isSwitching ? 'cursor-not-allowed opacity-50' : ''}`}
                 >
                   {isSwitching && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   <span className="flex-1 capitalize">{role.name}</span>
-                  {isActive && <X className="text-muted-foreground h-3.5 w-3.5" />}
+                  {isActive && <X className="h-3.5 w-3.5 text-muted-foreground" />}
                 </button>
               );
             })}
@@ -105,6 +108,11 @@ export function UserMenu({ user }: UserMenuProps) {
         )}
 
         <div className="flex flex-col gap-1 p-2">
+          {logoutError && (
+            <p role="alert" className="text-ui-sm">
+              {logoutError.message}
+            </p>
+          )}
           <Button
             render={<Link to="/settings" />}
 
@@ -118,7 +126,7 @@ export function UserMenu({ user }: UserMenuProps) {
           <Button
             icon={<LogOut />}
             variant="ghost"
-            onClick={handleLogout}
+            onClick={() => handleLogout()}
             disabled={isPending}
             className="w-full justify-start"
           >

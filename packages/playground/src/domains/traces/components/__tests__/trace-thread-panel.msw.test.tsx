@@ -54,7 +54,14 @@ const mockHeights = (heights: Record<string, number>) => {
 const renderPanel = (props: Partial<TraceThreadPanelProps> = {}) =>
   renderWithProviders(
     <TestLinkProvider>
-      <TraceThreadPanel threadId={THREAD_ID} onBack={() => {}} onClose={() => {}} {...props} />
+      <TraceThreadPanel
+        threadId={THREAD_ID}
+        withQueryTrace
+        withFeedback
+        onBack={() => {}}
+        onClose={() => {}}
+        {...props}
+      />
     </TestLinkProvider>,
     { router: { initialEntries: ['/traces?traceId=trace-a'] } },
   );

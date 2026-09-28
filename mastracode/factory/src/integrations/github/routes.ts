@@ -27,6 +27,7 @@ import type { ExecutableSandbox } from '../../sandbox/materialization.js';
 import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
 import { peekSessionSandbox } from '../../sandbox/session-sandbox.js';
 import { sanitizeSegment } from '../../sandbox/workdir.js';
+import { waitForPendingFilesystemCapture } from '../../session/filesystem-capture.js';
 import { normalizeSessionTitle } from '../../session/session-title.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
@@ -1373,6 +1374,14 @@ function buildProjectGitRoutes({
           return c.json({ error: 'Session not found' }, 404);
         }
         try {
+          // Drain the turn's queued filesystem capture while the thread and sandbox still exist.
+          // A failed drain only costs the snapshot; it must not block teardown.
+          await waitForPendingFilesystemCapture(session.sessionId).catch(error => {
+            console.warn('[GitHub Sessions] Failed to drain filesystem capture before delete', {
+              sessionId: session.sessionId,
+              error,
+            });
+          });
           await controller?.deleteSession({ resourceId: session.sessionId });
         } catch (error) {
           console.error('[GitHub Sessions] Failed to tear down live controller session', {

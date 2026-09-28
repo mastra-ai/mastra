@@ -1,8 +1,10 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
+import { chooseMetricsInterval, formatMetricsBucketLabel } from '../metrics-interval';
+import type { MetricsInterval } from '../metrics-interval';
 import { useMetricsFilters } from './use-metrics-filters';
 
-export type TokenUsageTimeSeriesInterval = '1h' | '1d';
+export type TokenUsageTimeSeriesInterval = MetricsInterval;
 
 export interface TokenTimelinePoint {
   time: string;
@@ -38,19 +40,6 @@ type TokenTimelineAccumulator = {
   costUnits: Set<string>;
   hasUnknownCostUnit: boolean;
 };
-
-function chooseTokenUsageInterval(
-  datePreset: ReturnType<typeof useMetricsFilters>['datePreset'],
-): TokenUsageTimeSeriesInterval {
-  return datePreset === '24h' ? '1h' : '1d';
-}
-
-function formatTime(ts: Date, interval: TokenUsageTimeSeriesInterval): string {
-  if (interval === '1h') {
-    return ts.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-  }
-  return ts.toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
-}
 
 function addSeriesPoints(
   pointMap: Map<number, TokenTimelineAccumulator>,
@@ -92,8 +81,8 @@ function toCostUnit(entry: TokenTimelineAccumulator): string | null {
 
 export function useTokenUsageTimeSeries() {
   const client = useMastraClient();
-  const { datePreset, filters, filterKey } = useMetricsFilters();
-  const interval = chooseTokenUsageInterval(datePreset);
+  const { timestamp, filters, filterKey } = useMetricsFilters();
+  const interval = chooseMetricsInterval(timestamp);
 
   return useQuery({
     queryKey: ['metrics', 'token-usage-timeseries', filterKey, interval],
@@ -122,7 +111,7 @@ export function useTokenUsageTimeSeries() {
         .map(point => {
           const ts = new Date(point.tsMs);
           return {
-            time: formatTime(ts, interval),
+            time: formatMetricsBucketLabel(ts, interval),
             tsMs: point.tsMs,
             input: point.input,
             output: point.output,

@@ -14,7 +14,7 @@ export function DatasetFieldErrors({ name, field, errors }: DatasetFieldErrorsPr
       <span className="space-y-1">
         {errors.map(error => (
           <span key={`${error.path}:${error.message}`} className="block">
-            <code className="bg-destructive/10 rounded px-1">
+            <code className="rounded bg-destructive/10 px-1">
               {field}
               {error.path !== '/' ? error.path : ''}
             </code>

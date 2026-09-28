@@ -46,6 +46,20 @@ function toDate(value: unknown): Date {
   return value instanceof Date ? value : new Date(value as string);
 }
 
+function jsonDataArg(value: unknown): string | null {
+  return value === undefined ? null : JSON.stringify(value);
+}
+
+// Project authored JSON as text, keeping SQL NULL distinct from JSON null.
+const ITEM_SELECT_COLUMNS = Object.keys(TABLE_SCHEMAS[TABLE_DATASET_ITEMS])
+  .map(column => {
+    const name = quoteIdent(column, 'column name');
+    return ['input', 'groundTruth', 'expectedTrajectory'].includes(column)
+      ? `CASE WHEN ${name} IS NULL THEN NULL ELSE TO_JSON_STRING(${name}) END AS ${name}`
+      : name;
+  })
+  .join(', ');
+
 function rowToDataset(row: Record<string, any>): DatasetRecord {
   const t = transformFromSpannerRow<Record<string, any>>({ tableName: TABLE_DATASETS, row });
   return {
@@ -56,10 +70,10 @@ function rowToDataset(row: Record<string, any>): DatasetRecord {
     inputSchema: t.inputSchema ?? undefined,
     groundTruthSchema: t.groundTruthSchema ?? undefined,
     requestContextSchema: t.requestContextSchema ?? undefined,
-    tags: t.tags ?? null,
-    targetType: t.targetType ?? null,
-    targetIds: t.targetIds ?? null,
-    scorerIds: t.scorerIds ?? null,
+    tags: t.tags ?? undefined,
+    targetType: t.targetType ?? undefined,
+    targetIds: t.targetIds ?? undefined,
+    scorerIds: t.scorerIds ?? undefined,
     version: Number(t.version ?? 0),
     organizationId: (t.organizationId as string | null | undefined) ?? null,
     projectId: (t.projectId as string | null | undefined) ?? null,
@@ -81,8 +95,8 @@ function rowToItem(row: Record<string, any>): DatasetItem {
     organizationId: (t.organizationId as string | null | undefined) ?? null,
     projectId: (t.projectId as string | null | undefined) ?? null,
     input: t.input,
-    groundTruth: t.groundTruth ?? emptyValue,
-    expectedTrajectory: t.expectedTrajectory ?? emptyValue,
+    groundTruth: row.groundTruth == null ? emptyValue : t.groundTruth,
+    expectedTrajectory: row.expectedTrajectory == null ? emptyValue : t.expectedTrajectory,
     toolMocks: t.toolMocks ?? emptyValue,
     unmockedToolPolicy: t.unmockedToolPolicy ?? emptyValue,
     scorerIds: t.scorerIds ?? emptyValue,
@@ -245,10 +259,10 @@ export class DatasetsSpanner extends DatasetsStorage {
         inputSchema: input.inputSchema ?? undefined,
         groundTruthSchema: input.groundTruthSchema ?? undefined,
         requestContextSchema: input.requestContextSchema ?? undefined,
-        tags: null,
-        targetType: input.targetType ?? null,
-        targetIds: input.targetIds ?? null,
-        scorerIds: input.scorerIds ?? null,
+        tags: undefined,
+        targetType: input.targetType ?? undefined,
+        targetIds: input.targetIds ?? undefined,
+        scorerIds: input.scorerIds ?? undefined,
         version: 0,
         organizationId: input.organizationId ?? null,
         projectId: input.projectId ?? null,
@@ -628,7 +642,7 @@ export class DatasetsSpanner extends DatasetsStorage {
   /** Reads the current live row for an item (validTo IS NULL, not deleted). */
   private async loadCurrentItemRow(tx: Transaction, itemId: string): Promise<DatasetItemRow | null> {
     const [rows] = await tx.run({
-      sql: `SELECT * FROM ${quoteIdent(TABLE_DATASET_ITEMS, 'table name')}
+      sql: `SELECT ${ITEM_SELECT_COLUMNS} FROM ${quoteIdent(TABLE_DATASET_ITEMS, 'table name')}
             WHERE ${quoteIdent('id', 'column name')} = @id
               AND ${quoteIdent('validTo', 'column name')} IS NULL
               AND ${quoteIdent('isDeleted', 'column name')} = FALSE LIMIT 1`,
@@ -662,9 +676,9 @@ export class DatasetsSpanner extends DatasetsStorage {
                 projectId,
                 validTo: null,
                 isDeleted: false,
-                input: args.input,
-                groundTruth: args.groundTruth ?? null,
-                expectedTrajectory: args.expectedTrajectory ?? null,
+                input: jsonDataArg(args.input),
+                groundTruth: jsonDataArg(args.groundTruth),
+                expectedTrajectory: jsonDataArg(args.expectedTrajectory),
                 toolMocks: args.toolMocks ?? null,
                 unmockedToolPolicy: args.unmockedToolPolicy ?? null,
                 scorerIds: args.scorerIds ?? null,
@@ -781,9 +795,9 @@ export class DatasetsSpanner extends DatasetsStorage {
                 projectId,
                 validTo: null,
                 isDeleted: false,
-                input: merged.input,
-                groundTruth: merged.groundTruth ?? null,
-                expectedTrajectory: merged.expectedTrajectory ?? null,
+                input: jsonDataArg(merged.input),
+                groundTruth: jsonDataArg(merged.groundTruth),
+                expectedTrajectory: jsonDataArg(merged.expectedTrajectory),
                 toolMocks: merged.toolMocks ?? null,
                 unmockedToolPolicy: merged.unmockedToolPolicy ?? null,
                 scorerIds: merged.scorerIds ?? null,
@@ -872,9 +886,9 @@ export class DatasetsSpanner extends DatasetsStorage {
                 projectId,
                 validTo: null,
                 isDeleted: true,
-                input: existing.input,
-                groundTruth: existing.groundTruth ?? null,
-                expectedTrajectory: existing.expectedTrajectory ?? null,
+                input: jsonDataArg(existing.input),
+                groundTruth: jsonDataArg(existing.groundTruth),
+                expectedTrajectory: jsonDataArg(existing.expectedTrajectory),
                 toolMocks: existing.toolMocks ?? null,
                 unmockedToolPolicy: existing.unmockedToolPolicy ?? null,
                 scorerIds: existing.scorerIds ?? null,
@@ -1050,7 +1064,7 @@ export class DatasetsSpanner extends DatasetsStorage {
 
       const limit = perPageInput === false ? total : perPage;
       const [rows] = await this.database.run({
-        sql: `SELECT * FROM ${tableName} ${whereSql}
+        sql: `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableName} ${whereSql}
               ORDER BY ${quoteIdent(orderBy.field, 'column name')} ${orderBy.direction}, ${quoteIdent('id', 'column name')} ASC
               LIMIT @limit OFFSET @offset`,
         params: { ...params, limit, offset },
@@ -1085,7 +1099,7 @@ export class DatasetsSpanner extends DatasetsStorage {
       let sql: string;
       const params: Record<string, any> = { id: args.id };
       if (args.datasetVersion !== undefined) {
-        sql = `SELECT * FROM ${tableName}
+        sql = `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableName}
                WHERE ${quoteIdent('id', 'column name')} = @id
                  AND ${quoteIdent('datasetVersion', 'column name')} <= @datasetVersion
                  AND (${quoteIdent('validTo', 'column name')} IS NULL OR ${quoteIdent('validTo', 'column name')} > @datasetVersion)
@@ -1094,7 +1108,7 @@ export class DatasetsSpanner extends DatasetsStorage {
                LIMIT 1`;
         params.datasetVersion = args.datasetVersion;
       } else {
-        sql = `SELECT * FROM ${tableName}
+        sql = `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableName}
                WHERE ${quoteIdent('id', 'column name')} = @id
                  AND ${quoteIdent('validTo', 'column name')} IS NULL
                  AND ${quoteIdent('isDeleted', 'column name')} = FALSE LIMIT 1`;
@@ -1119,7 +1133,7 @@ export class DatasetsSpanner extends DatasetsStorage {
     try {
       const tableName = quoteIdent(TABLE_DATASET_ITEMS, 'table name');
       const [rows] = await this.database.run({
-        sql: `SELECT * FROM ${tableName}
+        sql: `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableName}
               WHERE ${quoteIdent('datasetId', 'column name')} = @datasetId
                 AND ${quoteIdent('datasetVersion', 'column name')} <= @version
                 AND (${quoteIdent('validTo', 'column name')} IS NULL OR ${quoteIdent('validTo', 'column name')} > @version)
@@ -1146,7 +1160,7 @@ export class DatasetsSpanner extends DatasetsStorage {
     try {
       const tableName = quoteIdent(TABLE_DATASET_ITEMS, 'table name');
       const [rows] = await this.database.run({
-        sql: `SELECT * FROM ${tableName}
+        sql: `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableName}
               WHERE ${quoteIdent('id', 'column name')} = @id
               ORDER BY ${quoteIdent('datasetVersion', 'column name')} DESC`,
         params: { id: itemId },
@@ -1269,7 +1283,7 @@ export class DatasetsSpanner extends DatasetsStorage {
             let historyRows: DatasetItemRow[] = [];
             if (externalIds.length > 0) {
               const [rows] = await tx.run({
-                sql: `SELECT * FROM ${quoteIdent(TABLE_DATASET_ITEMS, 'table name')} WHERE ${quoteIdent('datasetId', 'column name')} = @datasetId AND ${quoteIdent('externalId', 'column name')} IN UNNEST(@externalIds) ORDER BY ${quoteIdent('datasetVersion', 'column name')}`,
+                sql: `SELECT ${ITEM_SELECT_COLUMNS} FROM ${quoteIdent(TABLE_DATASET_ITEMS, 'table name')} WHERE ${quoteIdent('datasetId', 'column name')} = @datasetId AND ${quoteIdent('externalId', 'column name')} IN UNNEST(@externalIds) ORDER BY ${quoteIdent('datasetVersion', 'column name')}`,
                 params: { datasetId: input.datasetId, externalIds },
                 types: { externalIds: { type: 'array', child: 'string' } },
                 json: true,
@@ -1309,7 +1323,14 @@ export class DatasetsSpanner extends DatasetsStorage {
                 };
                 await this.db.insert({
                   tableName: TABLE_DATASET_ITEMS,
-                  record: { ...item, validTo: null, isDeleted: false },
+                  record: {
+                    ...item,
+                    input: jsonDataArg(item.input),
+                    groundTruth: jsonDataArg(item.groundTruth),
+                    expectedTrajectory: jsonDataArg(item.expectedTrajectory),
+                    validTo: null,
+                    isDeleted: false,
+                  },
                   transaction: tx,
                 });
                 resolved.set(item.id, item);
@@ -1372,9 +1393,9 @@ export class DatasetsSpanner extends DatasetsStorage {
                   projectId,
                   validTo: null,
                   isDeleted: true,
-                  input: existing.input,
-                  groundTruth: existing.groundTruth ?? null,
-                  expectedTrajectory: existing.expectedTrajectory ?? null,
+                  input: jsonDataArg(existing.input),
+                  groundTruth: jsonDataArg(existing.groundTruth),
+                  expectedTrajectory: jsonDataArg(existing.expectedTrajectory),
                   toolMocks: existing.toolMocks ?? null,
                   unmockedToolPolicy: existing.unmockedToolPolicy ?? null,
                   scorerIds: existing.scorerIds ?? null,

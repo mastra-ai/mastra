@@ -5,15 +5,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { AlertCircleIcon, GaugeIcon } from 'lucide-react';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
 import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
-import { useLinkComponent } from '@/lib/framework';
 
 /**
  * Minimal shape shared by every surface that lists dataset items
- * (experiment results, review queue, inbox). `DatasetExperimentResult`
+ * (experiment results, review queue). `DatasetExperimentResult`
  * and the review `ReviewItem` both satisfy it.
  */
 export type ExperimentResultsListItem = {
@@ -162,12 +162,12 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
             const rowCells = (
               <>
                 {hasItemIdColumn && (
-                  <DataList.Cell className="text-body-sm text-muted-foreground flex items-center gap-1.5 tracking-wide">
+                  <DataList.Cell className="flex items-center gap-1.5 text-body-sm tracking-wide text-muted-foreground">
                     <span>{result.itemId?.slice(0, 8) ?? ''}</span>
                     {hasError && (
                       <Tooltip>
                         <TooltipTrigger
-                          render={<AlertCircleIcon role="img" aria-label="Error" className="text-error size-3.5" />}
+                          render={<AlertCircleIcon role="img" aria-label="Error" className="size-3.5 text-error" />}
                         />
                         <TooltipContent>{errorMessage(result.error)}</TooltipContent>
                       </Tooltip>
@@ -217,7 +217,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                   const scores = scoresByItemId?.[result.itemId];
                   const score = scores?.find(s => s.scorerId === scorerId);
                   return (
-                    <DataList.Cell key={scorerId} className="text-muted-foreground text-body-sm font-mono">
+                    <DataList.Cell key={scorerId} className="text-body-sm text-muted-foreground tabular-nums">
                       {score != null ? score.score.toFixed(3) : '-'}
                     </DataList.Cell>
                   );
@@ -286,7 +286,7 @@ function ScoresSummary({ scores }: { scores: ExperimentResultsListItem['scores']
       <Icon size="xs" className="text-muted-foreground">
         <GaugeIcon />
       </Icon>
-      <Txt variant="meta" tone="muted" className="font-mono">
+      <Txt variant="meta" tone="muted" font="mono">
         {values[0].toFixed(2)}
       </Txt>
       {values.length > 1 && <Badge>+{values.length - 1}</Badge>}

@@ -166,7 +166,6 @@ export function SoundPicker({ value, onChange }: { value: DoneSound; onChange: (
         }}
       >
         <SelectTrigger
-          variant="outline"
           size="sm"
           aria-label="Completion sound"
           className={cn(
@@ -201,12 +200,11 @@ interface SegmentedProps<T extends string> {
 /** For choices that are alternatives rather than a ramp: policies, modes, delivery. */
 export function Segmented<T extends string>({ value, options, ariaLabel, disabled, onChange }: SegmentedProps<T>) {
   return (
-    <ButtonsGroup role="group" aria-label={ariaLabel}>
+    <ButtonsGroup size="sm" role="group" aria-label={ariaLabel}>
       {options.map(o => (
         <Button
           key={o.value}
-          variant={value === o.value ? 'primary' : 'outline'}
-          size="sm"
+          variant={value === o.value ? 'primary' : 'default'}
           aria-pressed={value === o.value}
           disabled={disabled}
           onClick={() => onChange(o.value)}

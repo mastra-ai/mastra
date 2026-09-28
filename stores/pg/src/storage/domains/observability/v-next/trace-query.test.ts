@@ -3,10 +3,12 @@ import {
   encodeTraceQueryCursor,
   encodeTraceQueryDeltaCursor,
   getTraceQueryDeltaWatermark,
+  parseGetTraceQueryValuesArgs,
   parseQueryThreadsInput,
   parseTraceQueryRequest,
   planThreadQuery,
   planTraceQuery,
+  planTraceQueryValues,
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
@@ -14,7 +16,13 @@ import type { TraceQueryResponse, TrustedThreadQueryPlan, TrustedTraceQueryPlan 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DbClient } from '../../../client';
-import { compilePostgresThreadQuery, compilePostgresTraceQuery, queryThreads, queryTraces } from './trace-query';
+import {
+  compilePostgresThreadQuery,
+  compilePostgresTraceQuery,
+  compilePostgresTraceQueryValues,
+  queryThreads,
+  queryTraces,
+} from './trace-query';
 import { ObservabilityStoragePostgresVNext } from '.';
 
 const TIME_RANGE = { from: '2026-01-01T00:00:00.000Z', to: '2026-01-02T00:00:00.000Z' };
@@ -45,6 +53,18 @@ describe('Postgres advanced trace query', () => {
           traceQueryTimeoutMs: Number.POSITIVE_INFINITY,
         }),
     ).toThrow('traceQueryTimeoutMs must be an integer between');
+  });
+
+  it('compiles root duration predicates from root timestamps', () => {
+    const compiled = compilePostgresTraceQuery(
+      'custom',
+      plan({ where: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } } }),
+    );
+
+    expect(compiled.text).toContain(
+      `EXTRACT(EPOCH FROM (r."endedAt" - r."startedAt"))::numeric * 1000 IS NOT NULL AND EXTRACT(EPOCH FROM (r."endedAt" - r."startedAt"))::numeric * 1000 > $3`,
+    );
+    expect(compiled.values).toContain(5000);
   });
 
   it('parameterizes literals and compiles one correlated existence check per collection clause', () => {
@@ -136,7 +156,7 @@ describe('Postgres advanced trace query', () => {
     expect(compiled.text.match(/FROM current_spans s/g)).toHaveLength(1);
     expect(compiled.text).toContain(`jsonb_typeof(s."attributes" -> 'model') = 'string'`);
     expect(compiled.text).toContain(`jsonb_typeof(s."attributes" -> 'provider') = 'string'`);
-    expect(compiled.text).toContain(`EXTRACT(EPOCH FROM (s."endedAt" - s."startedAt")) * 1000`);
+    expect(compiled.text).toContain(`EXTRACT(EPOCH FROM (s."endedAt" - s."startedAt"))::numeric * 1000`);
     expect(compiled.text).toContain(`CASE WHEN s."error" IS NOT NULL THEN 'error' ELSE 'success' END AS "status"`);
     expect(compiled.text).toContain('s."name" IS NOT DISTINCT FROM');
     expect(compiled.text).toContain('s."model" IS NOT DISTINCT FROM');
@@ -195,6 +215,39 @@ describe('Postgres advanced trace query', () => {
     ]);
   });
 
+  it('compiles tag collection predicates against the text[] column and discovers tags per trace', () => {
+    const compiled = compilePostgresTraceQuery(
+      'public',
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'includes', path: 'tags', value: 'alpha' },
+            { op: 'notIncludes', path: 'tags', value: 'beta' },
+            { op: 'exists', path: 'tags' },
+            { op: 'notExists', path: 'tags' },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.text).toContain(`(r."tags" @> ARRAY[$3]::text[])`);
+    expect(compiled.text).toContain(`(cardinality(r."tags") > 0 AND NOT (r."tags" @> ARRAY[$4]::text[]))`);
+    expect(compiled.text).toContain(`(cardinality(r."tags") > 0)`);
+    expect(compiled.text).toContain(`(cardinality(r."tags") = 0)`);
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'alpha', 'beta', 101]);
+
+    const values = compilePostgresTraceQueryValues(
+      'public',
+      planTraceQueryValues(
+        parseGetTraceQueryValuesArgs({ timeRange: TIME_RANGE, predicateScope: 'trace', path: 'tags', limit: 10 }),
+      ),
+    );
+    expect(values.text).toContain(`SELECT DISTINCT r."traceId", UNNEST(r."tags") AS value FROM root_scope r`);
+    expect(values.text).toContain('GROUP BY value');
+    expect(values.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 11]);
+  });
+
   it('emits only referenced relation scopes and reuses each current-record reconstruction', () => {
     const spanClause = {
       spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } } },
@@ -222,6 +275,53 @@ describe('Postgres advanced trace query', () => {
     expect(repeated.match(/current_scores AS MATERIALIZED/g)).toHaveLength(1);
     expect(repeated.match(/FROM current_spans s/g)).toHaveLength(2);
     expect(repeated.match(/FROM current_scores s/g)).toHaveLength(2);
+  });
+
+  it('ANDs the tenant scope into root_scope and every related scan with parameters numbered before predicates', () => {
+    const scopedPlan = planTraceQuery(
+      parseTraceQueryRequest({
+        timeRange: TIME_RANGE,
+        where: { scores: { some: { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'factuality' } } } },
+      }),
+      { scope: { organizationId: 'org-1', resourceId: 'res-1' } },
+    );
+    const compiled = compilePostgresTraceQuery('public', scopedPlan);
+
+    expect(compiled.values.slice(0, 4)).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'org-1', 'res-1']);
+    expect(compiled.values[4]).toBe('factuality');
+    const rootScope = compiled.text.slice(
+      compiled.text.indexOf('root_scope AS'),
+      compiled.text.indexOf('current_scores AS'),
+    );
+    expect(rootScope).toContain('AND r."organizationId" = $3');
+    expect(rootScope).toContain('AND r."resourceId" = $4');
+    const scores = compiled.text.slice(
+      compiled.text.indexOf('current_scores AS'),
+      compiled.text.indexOf('candidates AS'),
+    );
+    expect(scores).toContain('AND s."organizationId" = $3');
+    expect(scores).toContain('AND s."resourceId" = $4');
+    expect(compiled.text).toContain('s."scorerId" IS NOT DISTINCT FROM $5');
+
+    const orgOnly = compilePostgresTraceQuery(
+      'public',
+      planTraceQuery(parseTraceQueryRequest({ timeRange: TIME_RANGE }), { scope: { organizationId: 'org-1' } }),
+    );
+    expect(orgOnly.values.slice(0, 3)).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'org-1']);
+    expect(orgOnly.text).toContain('AND r."organizationId" = $3');
+    expect(orgOnly.text).not.toContain('"resourceId" = $4');
+  });
+
+  it('emits no tenant conditions for an unscoped plan', () => {
+    const compiled = compilePostgresTraceQuery(
+      'public',
+      plan({ where: { spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } } } } }),
+    );
+
+    expect(compiled.values.slice(0, 2)).toEqual([TIME_RANGE.from, TIME_RANGE.to]);
+    expect(compiled.text).not.toContain('"organizationId" =');
+    expect(compiled.text).not.toContain('"resourceId" =');
+    expect(compiled.text).toContain('s."spanType" IS NOT DISTINCT FROM $3');
   });
 
   it('filters null-ended roots before projection and pagination', () => {

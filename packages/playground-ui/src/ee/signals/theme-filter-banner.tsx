@@ -77,7 +77,7 @@ export function ThemeFilterBanner({
                 ? `Clear ${selection.kind} filter`
                 : `Clear filter ${selectionLabel(signalCatalog, selection)}`
             }
-            className="state-layer border-border bg-background text-column text-foreground flex items-center gap-1.5 rounded-full border py-1 pr-2 pl-2.5"
+            className="state-layer flex items-center gap-1.5 rounded-full border border-border bg-background py-1 pr-2 pl-2.5 text-column text-foreground"
             onClick={() => onRemove(selection.signalName)}
             type="button"
           >

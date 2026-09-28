@@ -1,9 +1,12 @@
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { MASTRA_PROJECTS_URL } from '../auth/client.js';
+import * as credentials from '../auth/credentials.js';
 import type { ProjectDatabase } from '../db/platform-api.js';
 
 const {
@@ -30,6 +33,7 @@ vi.mock('@clack/prompts', () => ({
   isCancel: vi.fn(() => false),
   cancel: vi.fn(),
   log: { warn: vi.fn(), info: vi.fn(), step: vi.fn(), success: vi.fn() },
+  S_BAR: '│',
 }));
 
 vi.mock('../env/platform-api.js', () => ({
@@ -56,10 +60,12 @@ import {
   resolveNonFactoryTarget,
   hasEnabledWorkers,
   hasWorkerManifestCheck,
+  pollEnvironmentDeploy,
   renderDeploymentArchitecture,
   resolveEnvironment,
   resolveProject,
   resolveWorkersDeployMode,
+  uploadToEnvironment,
   WorkersRedisRequirementError,
   zipOutput,
 } from './index.js';
@@ -149,6 +155,99 @@ describe('project creation', () => {
     await createDeployProject('token', 'org-1', 'Factory', { projectType: 'factory', region: 'ap-southeast' });
 
     expect(createServerProjectMock).toHaveBeenCalledWith('token', 'org-1', 'Factory', { factoryEnabled: true });
+  });
+});
+
+describe('environment deploy upload', () => {
+  const fetchMock = vi.fn();
+
+  beforeEach(() => {
+    process.env.MASTRA_PLATFORM_API_URL = 'https://platform.example.com';
+    fetchMock.mockReset();
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  afterEach(() => {
+    delete process.env.MASTRA_PLATFORM_API_URL;
+    vi.unstubAllGlobals();
+  });
+
+  it('enables project workers before uploading a dedicated workers deploy', async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response(JSON.stringify({ workersEnabled: true }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ deploy: { id: 'deploy-1', uploadUrl: 'https://uploads.example.com/deploy-1' } }),
+          {
+            status: 200,
+          },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    await uploadToEnvironment('token', 'org-1', 'project-1', 'environment-1', Buffer.from('zip'), {
+      projectName: 'Worker App',
+      dedicatedWorkersEnabled: true,
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, 'https://platform.example.com/v1/projects/project-1/workers', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token',
+        'x-organization-id': 'org-1',
+      },
+      body: JSON.stringify({ workersEnabled: true }),
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://platform.example.com/v1/projects/project-1/environments/environment-1/deploy',
+      expect.any(Object),
+    );
+  });
+
+  it('does not create the deploy when workers cannot be enabled', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ detail: 'workers setting unavailable' }), {
+        status: 503,
+        statusText: 'Unavailable',
+      }),
+    );
+
+    await expect(
+      uploadToEnvironment('token', 'org-1', 'project-1', 'environment-1', Buffer.from('zip'), {
+        projectName: 'Worker App',
+        dedicatedWorkersEnabled: true,
+      }),
+    ).rejects.toThrow('Failed to enable dedicated workers: workers setting unavailable');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not change the project workers flag for an in-process deploy', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ deploy: { id: 'deploy-1', uploadUrl: 'https://uploads.example.com/deploy-1' } }),
+          {
+            status: 200,
+          },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    await uploadToEnvironment('token', 'org-1', 'project-1', 'environment-1', Buffer.from('zip'), {
+      projectName: 'Worker App',
+      dedicatedWorkersEnabled: false,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      'https://platform.example.com/v1/projects/project-1/workers',
+      expect.anything(),
+    );
   });
 });
 
@@ -737,5 +836,362 @@ describe('resolveWorkersDeployMode', () => {
     const promptConfirm = vi.fn().mockResolvedValue(CANCEL_SYMBOL);
     const mode = await resolveWorkersDeployMode({ ...base, promptConfirm });
     expect(mode).toBe('dedicated');
+  });
+});
+
+describe('pollEnvironmentDeploy', () => {
+  const statusResponse = (status: string) =>
+    new Response(JSON.stringify({ deploy: { id: 'dep-1', status } }), { status: 200 });
+  const errorResponse = (status: number, statusText: string) =>
+    new Response(null, { status, statusText, headers: { 'content-type': 'text/plain' } });
+
+  let fetchMock: ReturnType<typeof vi.fn>;
+  let statusResponses: Array<() => Response | Promise<Response>>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.mocked(p.log.warn).mockClear();
+    vi.mocked(p.log.info).mockClear();
+    vi.spyOn(credentials, 'getToken').mockResolvedValue('refreshed-token');
+    statusResponses = [];
+    fetchMock = vi.fn(async (url: string) => {
+      // The log stream is fetched in parallel; a non-ok response makes it exit quietly.
+      if (url.endsWith('/logs/stream')) return errorResponse(404, 'Not Found');
+      const next = statusResponses.shift();
+      if (!next) throw new Error('unexpected extra poll');
+      return next();
+    });
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  const run = (maxWaitMs?: number) => pollEnvironmentDeploy('tok', 'org-1', 'proj-1', 'env-1', 'dep-1', maxWaitMs);
+  const pollCount = () => fetchMock.mock.calls.filter(([url]) => !url.endsWith('/logs/stream')).length;
+
+  it('retries a transient gateway timeout instead of aborting the wait', async () => {
+    statusResponses.push(
+      () => statusResponse('building'),
+      () => errorResponse(504, 'Gateway Timeout'),
+      () => errorResponse(502, 'Bad Gateway'),
+      () => statusResponse('running'),
+    );
+
+    const promise = run();
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    await expect(promise).resolves.toMatchObject({ status: 'running' });
+  });
+
+  it('announces the first retry, rate-limits reminders and reports recovery once', async () => {
+    statusResponses.push(
+      ...Array.from({ length: 6 }, () => () => errorResponse(504, 'Gateway Timeout')),
+      () => statusResponse('building'),
+      () => statusResponse('running'),
+    );
+    const promise = run();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(p.log.warn).toHaveBeenCalledExactlyOnceWith(
+      'Unable to check deployment status. Retrying in 2s; deployment may still be running.',
+    );
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(p.log.warn).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(p.log.warn).toHaveBeenLastCalledWith(
+      'Still unable to check deployment status. Retrying in 30s; deployment may still be running.',
+    );
+    expect(p.log.warn).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(p.log.warn).toHaveBeenCalledTimes(3);
+    expect(p.log.info).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(32_000);
+    await expect(promise).resolves.toMatchObject({ status: 'running' });
+    expect(p.log.info).toHaveBeenCalledExactlyOnceWith('Deployment status checks resumed.');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('does not report recovery when retrying ends at the deadline', async () => {
+    statusResponses.push(() => errorResponse(504, 'Gateway Timeout'));
+    const assertion = expect(run(1000)).rejects.toThrow('Status polling timed out');
+    await vi.advanceTimersByTimeAsync(1000);
+    await assertion;
+    expect(p.log.warn).toHaveBeenCalledExactlyOnceWith(
+      'Unable to check deployment status. No time remains for another retry; deployment may still be running.',
+    );
+    expect(p.log.info).not.toHaveBeenCalled();
+    expect(pollCount()).toBe(1);
+  });
+
+  it('does not treat a 401 during retries as recovery', async () => {
+    statusResponses.push(
+      () => errorResponse(504, 'Gateway Timeout'),
+      () => errorResponse(401, 'Unauthorized'),
+      () => statusResponse('failed'),
+    );
+    const promise = run();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(p.log.info).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect(promise).resolves.toMatchObject({ status: 'failed' });
+    expect(p.log.info).toHaveBeenCalledExactlyOnceWith('Deployment status checks resumed.');
+  });
+
+  it('retries a network error instead of aborting the wait', async () => {
+    statusResponses.push(
+      () => {
+        throw new TypeError('fetch failed');
+      },
+      () => statusResponse('running'),
+    );
+
+    const promise = run();
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    await expect(promise).resolves.toMatchObject({ status: 'running' });
+  });
+
+  it('backs off mixed failures until the deadline and explains the unknown outcome', async () => {
+    for (let i = 0; i < 6; i++) {
+      statusResponses.push(() => {
+        if (i % 2 === 0) throw new TypeError('fetch failed');
+        return errorResponse(504, 'Gateway Timeout');
+      });
+    }
+    const promise = run(61_000);
+    const assertion = expect(promise).rejects.toThrow(
+      'Unable to confirm deployment status; deployment may still be running. ' +
+        'Status polling timed out: Poll failed: Gateway Timeout\n' +
+        `Check deployment dep-1: ${MASTRA_PROJECTS_URL}/orgs/org-1/projects/proj-1/deploys/dep-1`,
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pollCount()).toBe(1);
+    for (const [index, delay] of [2000, 4000, 8000, 16000, 30000].entries()) {
+      await vi.advanceTimersByTimeAsync(delay - 1);
+      expect(pollCount()).toBe(index + 1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(pollCount()).toBe(index + 2);
+    }
+    await vi.advanceTimersByTimeAsync(1000);
+    await assertion;
+    expect(pollCount()).toBe(6);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('resets backoff after a successful non-terminal poll', async () => {
+    statusResponses.push(
+      () => errorResponse(503, 'Unavailable'),
+      () => errorResponse(503, 'Unavailable'),
+      () => statusResponse('building'),
+      () => errorResponse(503, 'Unavailable'),
+      () => statusResponse('running'),
+    );
+    const promise = run();
+    await vi.advanceTimersByTimeAsync(8000);
+    expect(pollCount()).toBe(4);
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(pollCount()).toBe(4);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(promise).resolves.toMatchObject({ status: 'running' });
+    expect(pollCount()).toBe(5);
+    expect(p.log.warn).toHaveBeenCalledTimes(1);
+    expect(p.log.info).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the notice cooldown across flapping connections', async () => {
+    for (let i = 0; i < 9; i++) {
+      statusResponses.push(
+        () => errorResponse(504, 'Gateway Timeout'),
+        () => statusResponse('building'),
+      );
+    }
+    statusResponses.push(() => statusResponse('running'));
+    const promise = run();
+    await vi.advanceTimersByTimeAsync(31_999);
+    expect(p.log.warn).toHaveBeenCalledTimes(1);
+    expect(p.log.info).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(p.log.warn).toHaveBeenCalledTimes(2);
+    expect(p.log.warn).toHaveBeenLastCalledWith(
+      'Unable to check deployment status. Retrying in 2s; deployment may still be running.',
+    );
+    await vi.advanceTimersByTimeAsync(4000);
+    await expect(promise).resolves.toMatchObject({ status: 'running' });
+    expect(p.log.info).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(['ENETUNREACH', 'EHOSTUNREACH'])('recovers from %s', async code => {
+    statusResponses.push(
+      () => {
+        throw new TypeError('fetch failed', { cause: { code } });
+      },
+      () => statusResponse('running'),
+    );
+    const promise = run();
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect(promise).resolves.toMatchObject({ status: 'running' });
+    expect(pollCount()).toBe(2);
+  });
+
+  it('retries a dropped response body', async () => {
+    statusResponses.push(
+      () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(new TypeError('terminated', { cause: { code: 'UND_ERR_SOCKET' } }));
+            },
+          }),
+        ),
+      () => statusResponse('running'),
+    );
+    const promise = run();
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect(promise).resolves.toMatchObject({ status: 'running' });
+    expect(pollCount()).toBe(2);
+  });
+
+  it.each(['headers', 'body'])('aborts a stalled %s read at the deadline', async phase => {
+    fetchMock.mockImplementation(async (url: string, options: RequestInit) => {
+      if (url.endsWith('/logs/stream')) return errorResponse(404, 'Not Found');
+      if (phase === 'headers') {
+        return new Promise<Response>((_, reject) => {
+          options.signal!.addEventListener('abort', () => reject(new Error('request aborted')), { once: true });
+        });
+      }
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            options.signal!.addEventListener('abort', () => controller.error(new Error('body aborted')), {
+              once: true,
+            });
+          },
+        }),
+      );
+    });
+    const promise = run(1000);
+    const assertion = expect(promise).rejects.toThrow('Status polling timed out');
+    await vi.advanceTimersByTimeAsync(1001);
+    await assertion;
+    expect(pollCount()).toBe(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('retries a request timeout when polling time remains', async () => {
+    let attempts = 0;
+    fetchMock.mockImplementation(async (url: string, options: RequestInit) => {
+      if (url.endsWith('/logs/stream')) return errorResponse(404, 'Not Found');
+      if (++attempts > 1) return statusResponse('running');
+      return new Promise<Response>((_, reject) => {
+        options.signal!.addEventListener('abort', () => reject(new Error('request aborted')), { once: true });
+      });
+    });
+    const promise = run(60_000);
+    await vi.advanceTimersByTimeAsync(31_999);
+    expect(pollCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(promise).resolves.toMatchObject({ status: 'running' });
+    expect(pollCount()).toBe(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('does not retry malformed JSON as a transport failure', async () => {
+    statusResponses.push(
+      () => new Response('invalid json'),
+      () => statusResponse('running'),
+    );
+    await expect(run()).rejects.toThrow('Unable to confirm deployment status');
+    expect(pollCount()).toBe(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('times out while deployment remains non-terminal without claiming deployment failure', async () => {
+    statusResponses.push(() => statusResponse('building'));
+    const assertion = expect(run(1000)).rejects.toThrow(
+      'Unable to confirm deployment status; deployment may still be running. Status polling timed out',
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    await assertion;
+    expect(pollCount()).toBe(1);
+  });
+
+  it.each(['running', 'failed', 'stopped'])('returns an actual %s deployment without retrying', async status => {
+    statusResponses.push(() => statusResponse(status));
+    await expect(run()).resolves.toMatchObject({ status });
+    expect(pollCount()).toBe(1);
+    expect(p.log.warn).not.toHaveBeenCalled();
+    expect(p.log.info).not.toHaveBeenCalled();
+  });
+
+  it('recovers from a 401 using the refreshed token', async () => {
+    statusResponses.push(
+      () => errorResponse(401, 'Unauthorized'),
+      () => statusResponse('running'),
+    );
+    const promise = run();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(credentials.getToken).toHaveBeenCalledWith(expect.any(AbortSignal));
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(pollCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(promise).resolves.toMatchObject({ status: 'running' });
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.not.stringContaining('/logs/stream'),
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer refreshed-token', 'x-organization-id': 'org-1' },
+      }),
+    );
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('cancels pending authentication at the polling deadline', async () => {
+    statusResponses.push(() => errorResponse(401, 'Unauthorized'));
+    vi.mocked(credentials.getToken).mockImplementation(
+      signal =>
+        new Promise((_, reject) => {
+          signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+        }),
+    );
+    const promise = run(1000);
+    const assertion = expect(promise).rejects.toThrow('Status polling timed out');
+    await vi.advanceTimersByTimeAsync(1000);
+    await assertion;
+    expect(credentials.getToken).toHaveBeenCalledWith(expect.objectContaining({ aborted: true }));
+    expect(pollCount()).toBe(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(['ERR_INVALID_URL', 'CERT_HAS_EXPIRED', 'DEPTH_ZERO_SELF_SIGNED_CERT'])(
+    'fails immediately on permanent fetch error %s',
+    async code => {
+      const error = new TypeError('fetch failed', { cause: { code } });
+      statusResponses.push(
+        () => {
+          throw error;
+        },
+        () => statusResponse('running'),
+      );
+      await expect(run()).rejects.toMatchObject({ cause: error });
+      expect(pollCount()).toBe(1);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it('fails immediately on a non-transient client error', async () => {
+    statusResponses.push(
+      () => new Response(JSON.stringify({ detail: 'Deploy not found' }), { status: 404, statusText: 'Not Found' }),
+      () => statusResponse('running'),
+    );
+
+    const promise = run();
+    const assertion = expect(promise).rejects.toThrow('Poll failed: Deploy not found');
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    await assertion;
+    expect(statusResponses).toHaveLength(1);
   });
 });

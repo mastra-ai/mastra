@@ -1,6 +1,12 @@
 import { RequestContext } from '@mastra/core/di';
 import { MastraError } from '@mastra/core/error';
-import { InternalSpans, SpanType, SamplingStrategyType, TracingEventType } from '@mastra/core/observability';
+import {
+  EntityType,
+  InternalSpans,
+  SpanType,
+  SamplingStrategyType,
+  TracingEventType,
+} from '@mastra/core/observability';
 import type {
   AnySpan,
   TracingEvent,
@@ -844,7 +850,7 @@ describe('Tracing', () => {
       rootSpan.end();
     });
 
-    it('should have endTime undefined for event spans', () => {
+    it('should have endTime equal to startTime for event spans', () => {
       const rootSpan = observability.startSpan({
         type: SpanType.AGENT_RUN,
         name: 'test-agent',
@@ -862,9 +868,9 @@ describe('Tracing', () => {
         },
       });
 
-      // Event spans should not have endTime (event occurs at startTime)
-      expect(eventSpan.endTime).toBeUndefined();
+      // Event spans are point-in-time: they end at the instant they start
       expect(eventSpan.startTime).toBeDefined();
+      expect(eventSpan.endTime).toEqual(eventSpan.startTime);
 
       rootSpan.end();
     });
@@ -1087,7 +1093,7 @@ describe('Tracing', () => {
       expect(exportedSpan.name).toBe('exported event span');
       expect(exportedSpan.output).toEqual({ text: 'Hello', chunkSize: 5 });
       expect(exportedSpan.input).toBeUndefined();
-      expect(exportedSpan.endTime).toBeUndefined();
+      expect(exportedSpan.endTime).toEqual(exportedSpan.startTime);
       expect(exportedSpan.attributes?.chunkType).toBe('text-delta');
       expect(exportedSpan.attributes?.sequenceNumber).toBe(42);
       expect(exportedSpan.metadata?.model).toBe('gpt-4');
@@ -1554,6 +1560,75 @@ describe('Tracing', () => {
 
       internalStep.end();
       agentSpan.end();
+    });
+  });
+
+  describe('Root span name override', () => {
+    it('should replace the root span name via tracingOptions.rootSpanName', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const span = observability.startSpan({
+        type: SpanType.WORKFLOW_RUN,
+        name: "workflow run: 'skill-analyze'",
+        entityType: EntityType.WORKFLOW_RUN,
+        entityId: 'skill-analyze',
+        entityName: 'skill-analyze',
+        tracingOptions: { rootSpanName: 'skill-analyze: typescript' },
+      });
+
+      expect(span.name).toBe('skill-analyze: typescript');
+      expect(span.entityName).toBe('skill-analyze');
+      expect(span.exportSpan().name).toBe('skill-analyze: typescript');
+
+      span.end();
+    });
+
+    it('should keep the default name when tracingOptions.rootSpanName is empty', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const span = observability.startSpan({
+        type: SpanType.WORKFLOW_RUN,
+        name: "workflow run: 'skill-analyze'",
+        tracingOptions: { rootSpanName: '' },
+      });
+
+      expect(span.name).toBe("workflow run: 'skill-analyze'");
+
+      span.end();
+    });
+
+    it('should not rename child spans', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.WORKFLOW_RUN,
+        name: "workflow run: 'skill-analyze'",
+        tracingOptions: { rootSpanName: 'skill-analyze: typescript' },
+      });
+
+      const childSpan = observability.startSpan({
+        type: SpanType.WORKFLOW_STEP,
+        name: "workflow step: 'analyze'",
+        parent: rootSpan,
+        tracingOptions: { rootSpanName: 'ignored' },
+      });
+
+      expect(childSpan.name).toBe("workflow step: 'analyze'");
+
+      childSpan.end();
+      rootSpan.end();
     });
   });
 

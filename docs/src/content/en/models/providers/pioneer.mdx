@@ -7,7 +7,7 @@ description: "Browse Pioneer model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/pioneer.svg" alt="Pioneer logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Pioneer
 
-Access 112 Pioneer models through Mastra's model router. Authentication is handled automatically using the `PIONEER_API_KEY` environment variable.
+Access 114 Pioneer models through Mastra's model router. Authentication is handled automatically using the `PIONEER_API_KEY` environment variable.
 
 Learn more in the [Pioneer documentation](https://agent.pioneer.ai/llms.txt).
 
@@ -286,6 +286,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.15
   },
   {
+    "model": "pioneer/fastino/gliguard-PII-multi",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 8192,
+    "maxOutput": 8192,
+    "inputCost": 0.15,
+    "outputCost": 0.15
+  },
+  {
     "model": "pioneer/fastino/gliner2-base-v1",
     "imageInput": false,
     "audioInput": false,
@@ -342,6 +354,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 8192,
     "maxOutput": 8192,
+    "inputCost": 0.15,
+    "outputCost": 0.15
+  },
+  {
+    "model": "pioneer/fastino/gliner2.5-multi-v1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 4096,
+    "maxOutput": 4096,
     "inputCost": 0.15,
     "outputCost": 0.15
   },

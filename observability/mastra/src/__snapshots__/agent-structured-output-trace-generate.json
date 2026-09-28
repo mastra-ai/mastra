@@ -294,7 +294,8 @@
               },
               "hookDurationMs": {
                 "__any__": "number"
-              }
+              },
+              "processorPhase": "outputStream"
             },
             "metadata": {
               "runId": "<runId-1>",
@@ -324,7 +325,8 @@
             "entityId": "structured-output",
             "attributes": {
               "processorExecutor": "legacy",
-              "processorIndex": 0
+              "processorIndex": 0,
+              "processorPhase": "outputStep"
             },
             "metadata": {
               "runId": "<runId-1>",

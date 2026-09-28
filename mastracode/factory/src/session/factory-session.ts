@@ -17,6 +17,8 @@ import { seedSessionOrg } from './org-seed.js';
 
 type FactorySession = Awaited<ReturnType<AgentController<MastraCodeState>['createSession']>>;
 
+export class FactorySourceControlConflictError extends Error {}
+
 /**
  * Read the factory project's default model. Best-effort: a missing project or an
  * uninitialized storage domain means "no default", never a failed run.
@@ -123,7 +125,9 @@ export async function resolveFactorySourceControl(args: {
     if (hasLinkedRepository) linked.push(sourceControl);
   }
   if (linked.length > 1)
-    throw new Error('Factory project has repositories linked through multiple source-control providers.');
+    throw new FactorySourceControlConflictError(
+      'Factory project has repositories linked through multiple source-control providers.',
+    );
   return linked[0];
 }
 
@@ -221,8 +225,9 @@ export async function resolveFactorySourceRepository(args: {
       resolved = resolvedRepositories.find(
         candidate => candidate.repository && (!repositorySlug || candidate.repository.slug === repositorySlug),
       );
-    } catch {
-      // The connection no longer resolves (e.g. its installation was deleted).
+    } catch (error) {
+      // A deleted installation invalidates a stale connection; storage failures must propagate.
+      if (!(error instanceof SourceControlConnectionNotFoundError)) throw error;
       continue;
     }
     if (!resolved?.repository) continue;

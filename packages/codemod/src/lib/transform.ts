@@ -74,17 +74,13 @@ export type TransformErrors = {
 
 function parseErrors(transform: string, output: string): TransformErrors {
   const errors: TransformErrors = [];
-  const errorRegex = /ERR (.+) Transformation error/g;
-  const syntaxErrorRegex = /SyntaxError: .+/g;
+  // jscodeshift prints one line per failure: `ERR <file> Transformation error (<message>)`,
+  // with newlines in the message already replaced, so filename and message come from the same line.
+  const errorRegex = /^\s*ERR (.+?) Transformation error \((.*)\)\s*$/gm;
 
   let match;
   while ((match = errorRegex.exec(output)) !== null) {
-    const filename = match[1]!;
-    const syntaxErrorMatch = syntaxErrorRegex.exec(output);
-    if (syntaxErrorMatch) {
-      const summary = syntaxErrorMatch[0];
-      errors.push({ transform, filename, summary });
-    }
+    errors.push({ transform, filename: match[1]!, summary: match[2]!.trim() });
   }
 
   return errors;
@@ -122,7 +118,11 @@ export async function transform(
   const args = buildArgs(codemodPath, targetPath, transformOptions);
   // execFile with an args array (no shell) so paths can't be used for
   // command injection (CodeQL js/shell-command-injection-from-environment).
-  const { stdout } = await execFile(process.execPath, [getJscodeshiftBin(), ...args], { encoding: 'utf8' });
+  const { stdout } = await execFile(process.execPath, [getJscodeshiftBin(), ...args], {
+    encoding: 'utf8',
+    // --print and --verbose can legitimately emit more than Node's default 1 MiB buffer.
+    maxBuffer: Infinity,
+  });
   const errors = parseErrors(codemod, stdout);
   const notImplementedErrors = parseNotImplementedErrors(codemod, stdout);
   // Keep routine v1 bundle runs quiet while its spinner is active, but always

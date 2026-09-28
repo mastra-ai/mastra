@@ -113,14 +113,21 @@ function fixAnyOfNullable(schema: JSONSchema7): JSONSchema7 {
       // Normalize sibling fields (like properties/items) before returning
       const { anyOf, ...rest } = result;
       const fixedRest = fixAnyOfNullable(rest as JSONSchema7);
-      const fixedOther = fixAnyOfNullable(otherSchema);
-      return {
+      const { const: constValue, ...fixedOther } = fixAnyOfNullable(otherSchema);
+      const merged: JSONSchema7 = {
         ...fixedRest,
         ...fixedOther,
         type: (Array.isArray(fixedOther.type)
           ? [...fixedOther.type, 'null']
           : [fixedOther.type, 'null']) as JSONSchema7['type'],
       };
+      // `type`, `enum` and `const` must all hold, so null has to be an allowed value too.
+      if (constValue !== undefined) {
+        merged.enum = [constValue, null];
+      } else if (Array.isArray(fixedOther.enum) && !fixedOther.enum.includes(null)) {
+        merged.enum = [...fixedOther.enum, null];
+      }
+      return merged;
     }
   }
 

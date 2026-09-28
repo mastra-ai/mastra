@@ -281,6 +281,28 @@ describe('buildMessagesFromChunks', () => {
     });
   });
 
+  it('should copy the tool title from the tools map onto a call part', () => {
+    const result = parts(
+      [{ type: 'tool-call', payload: { toolCallId: 'tc1', toolName: 'search', args: { q: 'test' } } }],
+      { search: { title: 'Search the web' } },
+    );
+    expect(result[0]).toMatchObject({ type: 'tool-invocation', title: 'Search the web' });
+  });
+
+  it('should keep the tool title on a merged call + result part', () => {
+    const result = parts(
+      [
+        { type: 'tool-call', payload: { toolCallId: 'tc1', toolName: 'search', args: { q: 'test' } } },
+        {
+          type: 'tool-result',
+          payload: { toolCallId: 'tc1', toolName: 'search', args: { q: 'test' }, result: { hits: 1 } },
+        },
+      ],
+      { search: { title: 'Search the web' } },
+    );
+    expect(result[0]).toMatchObject({ title: 'Search the web', toolInvocation: { state: 'result' } });
+  });
+
   it('should preserve both call and result itemIds when a Responses provider assigns each side its own id', () => {
     // OpenAI hosted tool_search (Responses API) emits a tool-call chunk carrying
     // the call item id (tsc_…) and a tool-result chunk carrying the output item
@@ -362,6 +384,39 @@ describe('buildMessagesFromChunks', () => {
     ]);
     expect(result).toHaveLength(1);
     expect((result[0] as any).providerMetadata).toBeUndefined();
+  });
+
+  it('should keep providerExecuted from the tool-call chunk when the result chunk omits it (Google server tool shape)', () => {
+    const providerMetadata = {
+      google: { serverToolCallId: 'call_962734', serverToolType: 'GOOGLE_SEARCH_WEB' },
+    };
+    const result = parts(
+      [
+        {
+          type: 'tool-call',
+          payload: {
+            toolCallId: 'call_962734',
+            toolName: 'server:GOOGLE_SEARCH_WEB',
+            args: { queries: ['test'] },
+            providerExecuted: true,
+            providerMetadata,
+          },
+        },
+        {
+          type: 'tool-result',
+          payload: {
+            toolCallId: 'call_962734',
+            toolName: 'server:GOOGLE_SEARCH_WEB',
+            result: { searchResults: [] },
+            providerMetadata,
+          },
+        },
+      ],
+      { google_search: { type: 'provider-defined', id: 'google.google_search', name: 'google_search' } },
+    );
+    expect(result).toHaveLength(1);
+    expect((result[0] as any).toolInvocation.state).toBe('result');
+    expect((result[0] as any).providerExecuted).toBe(true);
   });
 
   it('should merge tool-call + tool-error into a single output-error part', () => {

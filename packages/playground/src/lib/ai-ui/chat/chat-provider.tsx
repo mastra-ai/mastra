@@ -18,6 +18,7 @@ import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/too
 import { memoryStatusQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-status';
 import { memoryThreadMessagesQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
 import { observationalMemoryQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
+import { useTracingSettings } from '@mastra/playground-ui/domains/observability/context/tracing-settings-context';
 import { useChat, useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
@@ -27,7 +28,6 @@ import { useObservationalMemoryContext } from '@/domains/agents/context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { usePlaygroundModelOptional } from '@/domains/agents/context/playground-model-context';
 import { useMemoryConfig } from '@/domains/memory/hooks';
-import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { getCanSendWhileStreaming } from '@/services/mastra-runtime-state';
 import {
   buildGlobalOmPartsByCycleId,

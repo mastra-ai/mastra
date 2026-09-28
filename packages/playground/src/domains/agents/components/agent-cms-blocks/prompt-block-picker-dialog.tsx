@@ -78,29 +78,29 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
         </DialogHeader>
         <DialogBody>
           <div className="flex flex-col gap-3">
-            <div className="border-border bg-background flex items-center gap-2 rounded-md border px-3 py-2">
-              <Search className="text-muted-foreground h-4 w-4" />
+            <div className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2">
+              <Search className="h-4 w-4 text-muted-foreground" />
               <input
                 type="text"
                 value={search}
                 onChange={e => handleSearchChange(e.target.value)}
                 placeholder="Search prompt blocks..."
-                className="text-caption text-foreground placeholder:text-muted-foreground flex-1 bg-transparent outline-hidden"
+                className="flex-1 bg-transparent text-caption text-foreground outline-hidden placeholder:text-muted-foreground"
               />
             </div>
 
             {isLoading ? (
-              <div className="text-muted-foreground flex flex-col items-center justify-center gap-2 py-5">
-                <Spinner className="h-6 w-6" />
+              <div className="flex flex-col items-center justify-center gap-2 py-5 text-muted-foreground">
+                <Spinner />
                 <Txt variant="caption">Loading prompt blocks...</Txt>
               </div>
             ) : filtered.length === 0 ? (
-              <div className="text-muted-foreground flex flex-col items-center justify-center gap-2 py-5">
+              <div className="flex flex-col items-center justify-center gap-2 py-5 text-muted-foreground">
                 <FileText className="h-8 w-8" />
                 <Txt variant="caption">{search ? 'No matching prompt blocks' : 'No prompt blocks available'}</Txt>
               </div>
             ) : (
-              <div className="max-h-dropdown flex flex-col gap-1 overflow-y-auto">
+              <div className="flex max-h-dropdown flex-col gap-1 overflow-y-auto">
                 {filtered.map(block => (
                   <button
                     key={block.id}

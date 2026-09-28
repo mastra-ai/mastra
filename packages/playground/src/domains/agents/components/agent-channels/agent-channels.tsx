@@ -37,7 +37,7 @@ export const AgentChannels = ({ agentId }: AgentChannelsProps) => {
   }
 
   return (
-    <ul className="divide-border divide-y">
+    <ul className="divide-y divide-border">
       {platforms.map(platform => (
         <ChannelRow key={platform.id} platform={platform} agentId={agentId} />
       ))}

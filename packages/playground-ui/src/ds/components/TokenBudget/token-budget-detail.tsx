@@ -36,7 +36,7 @@ export function TokenBudgetDetail({
 
   return (
     <div className={cn('flex flex-col gap-1.5', toneClass[tone])}>
-      <p className="text-meta flex items-center justify-between gap-3">
+      <p className="flex items-center justify-between gap-3 text-meta">
         <span className="inline-flex items-center gap-1.5">
           {icon && (
             <span aria-hidden className="[&_svg]:size-3.5">

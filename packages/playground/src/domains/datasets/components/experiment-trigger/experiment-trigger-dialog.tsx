@@ -17,20 +17,19 @@ import { Label } from '@mastra/playground-ui/components/Label';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { useDatasetMutations, useDataset } from '@mastra/playground-ui/domains/datasets';
+import { DynamicForm } from '@mastra/playground-ui/lib/form/dynamic-form';
+import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronRight, X } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useDatasetItems } from '../../hooks/use-dataset-items';
-import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
-import { useDataset } from '../../hooks/use-datasets';
 import { DatasetCombobox } from '../dataset-combobox';
 import { DatasetVersions } from '../dataset-versions';
 import { ScorerSelector } from './scorer-selector';
 import type { TargetType } from './target-selector';
 import { TargetSelector } from './target-selector';
-import { DynamicForm } from '@/lib/form';
-import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 
 export interface ExperimentTriggerDialogProps {
   initialDatasetId?: string;
@@ -106,7 +105,7 @@ function PipelineStep({
         >
           {index}
         </span>
-        {!isLast && <span aria-hidden="true" className="bg-border mt-2 w-px flex-1" />}
+        {!isLast && <span aria-hidden="true" className="mt-2 w-px flex-1 bg-border" />}
       </div>
       <div className={cn('min-w-0 flex-1 space-y-3', !isLast && 'pb-4')}>{children}</div>
     </li>
@@ -251,9 +250,9 @@ export function ExperimentTriggerDialog({
         className="w-[640px] max-w-[calc(100vw-2rem)] gap-0 p-0"
         onKeyDown={handleKeyDown}
       >
-        <DialogHeader className="border-border border-b px-4 py-4">
+        <DialogHeader className="border-b border-border px-4 py-4">
           <DialogTitle>Run experiment</DialogTitle>
-          <DialogDescription className="text-caption text-muted-foreground not-sr-only">
+          <DialogDescription className="not-sr-only text-caption text-muted-foreground">
             Pick a dataset, choose what to run it against, and optionally score the results.
           </DialogDescription>
         </DialogHeader>
@@ -342,7 +341,7 @@ export function ExperimentTriggerDialog({
           </ol>
 
           <Collapsible>
-            <CollapsibleTrigger className="text-caption flex items-center gap-2">
+            <CollapsibleTrigger className="flex items-center gap-2 text-caption">
               <ChevronRight className="size-4" />
               Request Context (JSON, optional)
               {hasRequestContext && (
@@ -367,7 +366,7 @@ export function ExperimentTriggerDialog({
           </Collapsible>
         </DialogBody>
 
-        <DialogFooter className="border-border items-center border-t px-4 py-4 sm:justify-between">
+        <DialogFooter className="items-center border-t border-border px-4 py-4 sm:justify-between">
           <p data-testid="experiment-run-status" aria-live="polite" className="flex items-center gap-2">
             {missing.length === 0 ? (
               <>

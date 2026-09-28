@@ -12,10 +12,10 @@ export interface ExperimentStatsProps {
 type RunStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 const statusIconMap: Record<RunStatus, { icon: React.ReactNode; label: string }> = {
-  pending: { icon: <ClockIcon className="text-warning1 size-4" />, label: 'Pending' },
+  pending: { icon: <ClockIcon className="size-4 text-warning1" />, label: 'Pending' },
   running: { icon: <Spinner size="sm" />, label: 'Running' },
-  completed: { icon: <CircleCheckIcon className="text-muted-foreground size-4" />, label: 'Completed' },
-  failed: { icon: <CircleXIcon className="text-error size-4" />, label: 'Failed' },
+  completed: { icon: <CircleCheckIcon className="size-4 text-muted-foreground" />, label: 'Completed' },
+  failed: { icon: <CircleXIcon className="size-4 text-error" />, label: 'Failed' },
 };
 
 /** Compact status indicator — a small icon with a tooltip describing the run state. */
@@ -50,8 +50,8 @@ export function ExperimentStats({ experiment, className }: ExperimentStatsProps)
     <div className={cn('grid justify-items-end gap-3', className)}>
       <div
         className={cn(
-          'flex items-center gap-3 text-muted-foreground text-caption',
-          '[&>span]:flex [&>span]:gap-1 [&>span]:items-center',
+          'flex items-center gap-3 text-caption text-muted-foreground',
+          '[&>span]:flex [&>span]:items-center [&>span]:gap-1',
           '[&_b]:text-column [&_b]:text-muted-foreground',
         )}
       >

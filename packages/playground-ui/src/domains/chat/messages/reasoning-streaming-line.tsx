@@ -13,7 +13,7 @@ export const ReasoningStreamingLine = ({ text }: ReasoningStreamingLineProps) =>
     className="flex max-w-[80%] items-center gap-2 leading-relaxed whitespace-pre-wrap"
     as="div"
   >
-    <Loader2 className="text-muted-foreground size-4 motion-safe:animate-spin" />
+    <Loader2 className="size-4 text-muted-foreground motion-safe:animate-spin" />
     <Shimmer>{text}</Shimmer>
   </Txt>
 );

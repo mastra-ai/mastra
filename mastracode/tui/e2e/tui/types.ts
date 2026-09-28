@@ -23,6 +23,10 @@ export type ScenarioName =
   | 'ask-user-advanced-prompts'
   | 'automated-chat'
   | 'automated-chat-unix-pubsub'
+  | 'background-adoption-deferred'
+  | 'background-adoption-awaited'
+  | 'background-adoption-cancel'
+  | 'background-adoption-failure'
   | 'background-placeholder-opt-in'
   | 'background-placeholder-opt-out'
   | 'background-subagents'
@@ -33,6 +37,8 @@ export type ScenarioName =
   | 'browser-profile-provider-mismatch'
   | 'browser-settings-persistence'
   | 'browser-startup-restore'
+  | 'browser-status-model'
+  | 'browser-status-chat-model'
   | 'browser-tool-unavailable'
   | 'browserbase-startup-restore'
   | 'browser-toggle-attach'
@@ -77,6 +83,10 @@ export type ScenarioName =
   | 'goal-survives-new-thread'
   | 'controller-api-config'
   | 'headless-mcp-tool-availability'
+  | 'initial-prompt'
+  | 'initial-prompt-skill'
+  | 'initial-prompt-resume'
+  | 'tui-prompt-resume'
   | 'openai-strict-schema'
   | 'plan-approval-goal-handoff'
   | 'plan-approval-handoff'
@@ -167,6 +177,7 @@ export type ScenarioName =
   | 'skill-tab-autocomplete'
   | 'skills-command-activation'
   | 'skills-symlink-dedupe'
+  | 'status-footer-inline-start'
   | 'storage-fallback-history-reload'
   | 'storage-settings'
   | 'storage-startup-pg-fallback'
@@ -249,7 +260,10 @@ export type McE2eStartMastraCodeAppOptions = {
   setupDebugLogging?: boolean;
   startupWarnings?: string[];
   tui?: Partial<
-    Pick<MastraTUIOptions, 'appName' | 'initialMessage' | 'inlineQuestions' | 'processMemoryDiagnostics' | 'verbose'>
+    Pick<
+      MastraTUIOptions,
+      'appName' | 'initialMessage' | 'resumeSkipNotice' | 'inlineQuestions' | 'processMemoryDiagnostics' | 'verbose'
+    >
   >;
 };
 

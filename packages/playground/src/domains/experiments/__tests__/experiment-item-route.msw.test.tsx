@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   DATASET_ID,
@@ -27,6 +27,7 @@ import {
 import { renamedPostgresWithMetrics } from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
 import ExperimentPage from '@/pages/experiments/experiment';
 import ReviewQueuePage from '@/pages/experiments/review-queue';
+import { legacyTraceCapabilities, traceQueryCapabilities } from '@/pages/traces/__tests__/fixtures/trace-query';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
 import { pickTraceSideView, traceSideViewLabel } from '@/test/trace-side-view';
@@ -97,6 +98,7 @@ beforeEach(() => {
   metricRequests = [];
   server.use(
     http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(renamedPostgresWithMetrics)),
+    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(traceQueryCapabilities)),
     http.post(`${TEST_BASE_URL}/api/observability/metrics/aggregate`, async ({ request }) => {
       const body = (await request.json()) as GetMetricAggregateArgs;
       metricRequests.push(body);
@@ -151,7 +153,7 @@ describe('experiment item sub-route', () => {
       expect(await screen.findByText('Tokens')).toBeDefined();
       expect(await screen.findByText('12.4K')).toBeDefined();
       expect(screen.getByText('Latency (avg)')).toBeDefined();
-      expect(await screen.findByText('1.9s')).toBeDefined();
+      expect(await screen.findByText('1.85s')).toBeDefined();
 
       expect(metricRequests.length).toBeGreaterThanOrEqual(3);
       for (const body of metricRequests) {
@@ -186,8 +188,8 @@ describe('experiment item sub-route', () => {
       fireEvent.click(await screen.findByText('item-2'));
       await findResultDialog('res-2');
 
-      // 'item-2' also appears inside the open panel; the first match is the list row.
-      fireEvent.click(screen.getAllByText('item-2')[0]);
+      // The id also appears in the breadcrumb, the sr-only page heading and the open panel; target the list row.
+      fireEvent.click(screen.getAllByText('item-2').find(el => !el.closest('nav, h1, [role="dialog"]'))!);
 
       await waitFor(() => {
         expect(router.state.location.pathname).toBe(`/experiments/${EXPERIMENT_ID}`);
@@ -358,6 +360,31 @@ describe('experiment item sub-route', () => {
 
       const dialog = await findResultDialog('res-1');
       expect(await within(dialog).findByRole('tab', { name: /^feedback \(1\)/i })).toBeDefined();
+    });
+
+    describe('when the server does not support trace query', () => {
+      it('shows no Feedback tab and never requests feedback', async () => {
+        const onFeedback = vi.fn();
+        const onCapabilities = vi.fn();
+        server.use(
+          http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => {
+            onCapabilities();
+            return HttpResponse.json(legacyTraceCapabilities);
+          }),
+          http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => {
+            onFeedback();
+            return HttpResponse.json(experimentTraceFeedback);
+          }),
+        );
+        renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
+
+        const dialog = await findResultDialog('res-1');
+        await waitFor(() => expect(onCapabilities).toHaveBeenCalled());
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        expect(within(dialog).queryByRole('tab', { name: /feedback/i })).toBeNull();
+        expect(onFeedback).not.toHaveBeenCalled();
+      });
     });
   });
 

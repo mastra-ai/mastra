@@ -141,6 +141,14 @@ describe('FieldBlock error wiring', () => {
     expect(message.id).toBe('error-token');
   });
 
+  it('marks the message with an icon so the error does not rely on color alone', () => {
+    render(<FieldBlock.ErrorMsg name="token">Token is required.</FieldBlock.ErrorMsg>);
+
+    const message = screen.getByRole('alert');
+    expect(message.querySelector('[data-slot="icon"] svg')).not.toBeNull();
+    expect(message.textContent).toBe('Token is required.');
+  });
+
   it('matches the generated error ID for an empty field name', () => {
     render(<FieldBlock.ErrorMsg name="">Required.</FieldBlock.ErrorMsg>);
 

@@ -95,6 +95,40 @@ describe('SessionRunEngine compact message lifecycle', () => {
     for (const event of starts) expect(event.message.threadId).toBe('thread-1');
   });
 
+  it('stamps the assistant message id on tool-input events so consumers can attribute arguments to a step', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const context = new RequestContext();
+
+    // Tool-call chunks arrive before this step's message_start, so the stamped id is the
+    // only thing that tells one step's streamed arguments from the next step's.
+    const toolCallId = 'call-1';
+    const toolName = 'view';
+    const chunks: StreamChunk[] = [
+      chunk({ type: 'tool-call-input-streaming-start', payload: { toolCallId, toolName } }),
+      chunk({ type: 'tool-call-delta', payload: { toolCallId, argsTextDelta: '{"path"' } }),
+      chunk({ type: 'tool-call-delta', payload: { toolCallId, argsTextDelta: ':"a.ts"}' } }),
+      chunk({ type: 'tool-call-input-streaming-end', payload: { toolCallId } }),
+      chunk({ type: 'tool-call', payload: { toolCallId, toolName, args: { path: 'a.ts' } } }),
+    ];
+    for (const item of chunks) await engine.processStreamChunk(state, item, context);
+
+    const toolInputs = events.filter(
+      event =>
+        event.type === 'tool_input_start' || event.type === 'tool_input_delta' || event.type === 'tool_input_end',
+    );
+    expect(toolInputs.map(event => event.type)).toEqual([
+      'tool_input_start',
+      'tool_input_delta',
+      'tool_input_delta',
+      'tool_input_end',
+    ]);
+    for (const event of toolInputs) expect(event).toMatchObject({ messageId: 'msg-1' });
+    // The message the tool call belongs to opens only once the call itself arrives, so the
+    // stamped ids must agree with the assistant message that starts after the arguments.
+    expect(assistantStarts(events).map(event => event.message.id)).toEqual(['msg-1']);
+  });
+
   it('emits one start, ordered text deltas, and one end when assistant text completes', async () => {
     const { engine, events } = createHarness();
     const state = engine.createStreamState();
@@ -261,6 +295,54 @@ describe('SessionRunEngine compact message lifecycle', () => {
         }),
       },
       { type: 'message_end', id: 'signal-1' },
+    ]);
+  });
+
+  it('carries the tool title on tool_input_start, tool_start and the message part', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const context = new RequestContext();
+
+    await engine.processStreamChunk(
+      state,
+      chunk({
+        type: 'tool-call-input-streaming-start',
+        payload: { toolCallId: 'tool-1', toolName: 'search', title: 'Search the web' },
+      }),
+      context,
+    );
+    await engine.processStreamChunk(
+      state,
+      chunk({
+        type: 'tool-call',
+        payload: { toolCallId: 'tool-1', toolName: 'search', args: { q: 'mastra' }, title: 'Search the web' },
+      }),
+      context,
+    );
+
+    expect(events).toContainEqual({
+      type: 'tool_input_start',
+      threadId: 'thread-1',
+      toolCallId: 'tool-1',
+      toolName: 'search',
+      title: 'Search the web',
+      messageId: 'msg-1',
+    });
+    expect(events).toContainEqual({
+      type: 'tool_start',
+      threadId: 'thread-1',
+      toolCallId: 'tool-1',
+      toolName: 'search',
+      args: { q: 'mastra' },
+      title: 'Search the web',
+    });
+    expect(assistantStarts(events)).toHaveLength(1);
+    expect(assistantStarts(events)[0]?.message.content.parts).toEqual([
+      {
+        type: 'tool-invocation',
+        title: 'Search the web',
+        toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'search', args: { q: 'mastra' } },
+      },
     ]);
   });
 

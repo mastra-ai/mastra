@@ -284,6 +284,10 @@ export function TraceDataPanelView({
     onSpanSelect?.(newId);
   };
 
+  const traceSummary = rootSpan && (
+    <TraceSummaryDescription rootSpan={rootSpan} usage={usage} entityHref={entityHref} LinkComponent={LinkComponent} />
+  );
+
   const traceActionsMenu = traceId && (
     <DropdownMenu>
       <DropdownMenu.Trigger
@@ -325,7 +329,7 @@ export function TraceDataPanelView({
       <div data-trace-side-column className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
         {/* Same chrome as the trace column's Spans/Timeline header, so the two tab rows line up. */}
         <Tabs<TraceSideView> defaultTab={sideView} value={sideView} onValueChange={handleSideViewChange}>
-          <DataPanel.Header className="border-border border-b">
+          <DataPanel.Header className="border-b border-border">
             <TabList variant="pill-ghost" size="sm">
               {sideViews.map(view => (
                 <Tab key={view.value} value={view.value}>
@@ -358,7 +362,10 @@ export function TraceDataPanelView({
           <DataPanel.Header>
             {isOnTracePage ? (
               <>
-                <DataPanel.Heading>Trace Timeline</DataPanel.Heading>
+                <DataPanel.HeaderContent>
+                  <DataPanel.Heading>Trace Timeline</DataPanel.Heading>
+                  {traceSummary}
+                </DataPanel.HeaderContent>
                 <DataPanel.HeaderActions>{traceActionsMenu}</DataPanel.HeaderActions>
               </>
             ) : (
@@ -369,14 +376,7 @@ export function TraceDataPanelView({
                     Trace
                     <TraceIdButton id={traceId} />
                   </DataPanel.Heading>
-                  {rootSpan && (
-                    <TraceSummaryDescription
-                      rootSpan={rootSpan}
-                      usage={usage}
-                      entityHref={entityHref}
-                      LinkComponent={LinkComponent}
-                    />
-                  )}
+                  {traceSummary}
                 </DataPanel.HeaderContent>
                 <DataPanel.HeaderActions>
                   {onEvaluateTrace && (
@@ -413,7 +413,7 @@ export function TraceDataPanelView({
                 // filtered `hierarchicalSpans`, so one query drives both.
                 const isTimeline = spanView === 'timeline';
                 const searchHeader = (
-                  <DataPanel.Header className="border-border gap-2 border-b">
+                  <DataPanel.Header className="gap-2 border-b border-border">
                     <SearchFieldBlock
                       name={searchFieldName}
                       label="Search spans"
@@ -425,9 +425,8 @@ export function TraceDataPanelView({
                       size="sm"
                       className="w-full"
                     />
-                    <ButtonsGroup className="shrink-0">
+                    <ButtonsGroup size="sm" className="shrink-0">
                       <Button
-                        size="sm"
                         variant={isTimeline ? 'default' : 'primary'}
                         aria-pressed={!isTimeline}
                         tooltip="Span tree"
@@ -436,7 +435,6 @@ export function TraceDataPanelView({
                         <ListTreeIcon />
                       </Button>
                       <Button
-                        size="sm"
                         variant={isTimeline ? 'primary' : 'default'}
                         aria-pressed={isTimeline}
                         tooltip="Timeline"

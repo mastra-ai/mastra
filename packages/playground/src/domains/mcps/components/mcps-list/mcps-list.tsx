@@ -8,13 +8,13 @@ import type { DataListSort } from '@mastra/playground-ui/components/DataList';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { sortBy } from '@mastra/playground-ui/sort/sort-by';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
 import { useMastraClient } from '@mastra/react';
 import { useMemo } from 'react';
 import { useMCPServerTools } from '../../hooks/useMCPServerTools';
-import { useLinkComponent } from '@/lib/framework';
 
 type McpServer = McpServerListResponse['servers'][number];
 
@@ -37,7 +37,11 @@ function McpServerRow({ server, rowProps }: { server: McpServer; rowProps?: Reco
   const { paths, Link } = useLinkComponent();
   const client = useMastraClient();
   const baseUrl = client.options.baseUrl;
-  const sseUrl = baseUrl ? `${baseUrl}/api/mcp/${server.id}/sse` : '';
+  // MCP v2 servers only serve Streamable HTTP; 1.x servers are listed by their SSE endpoint.
+  // Servers that predate transport reporting are 1.x, so absence means SSE is available.
+  const hasSse = server.transports?.includes('sse') ?? true;
+  const transportPath = hasSse ? 'sse' : 'mcp';
+  const serverUrl = baseUrl ? `${baseUrl}/api/mcp/${server.id}/${transportPath}` : '';
 
   const { data: tools } = useMCPServerTools(server);
   const toolsList = Object.values(tools || {});
@@ -50,7 +54,7 @@ function McpServerRow({ server, rowProps }: { server: McpServer; rowProps?: Reco
   return (
     <EntityList.RowLink to={paths.mcpServerLink(server.id)} LinkComponent={Link} {...rowProps}>
       <EntityList.NameCell>{name}</EntityList.NameCell>
-      <EntityList.DescriptionCell>{sseUrl}</EntityList.DescriptionCell>
+      <EntityList.DescriptionCell>{serverUrl}</EntityList.DescriptionCell>
       <EntityList.TextCell className="text-center">{agentToolsCount || ''}</EntityList.TextCell>
       <EntityList.TextCell className="text-center">{toolsCount || ''}</EntityList.TextCell>
       <EntityList.TextCell className="text-center">{workflowToolsCount || ''}</EntityList.TextCell>

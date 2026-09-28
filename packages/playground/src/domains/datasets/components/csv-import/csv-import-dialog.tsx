@@ -11,6 +11,7 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { useDatasetMutations, useDataset } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { Check, Upload, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useCallback, useState } from 'react';
@@ -18,8 +19,6 @@ import type { ColumnMapping, FieldType } from '../../hooks/use-column-mapping';
 import { useColumnMapping } from '../../hooks/use-column-mapping';
 import type { ParsedCSV } from '../../hooks/use-csv-parser';
 import { useCSVParser } from '../../hooks/use-csv-parser';
-import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
-import { useDataset } from '../../hooks/use-datasets';
 import type { CsvValidationResult } from '../../utils/csv-validation';
 import { validateCsvRows } from '../../utils/csv-validation';
 import { ColumnMappingStep } from './column-mapping-step';
@@ -337,7 +336,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       case 'preview':
         return parsedCSV ? (
           <div className="flex flex-col gap-4">
-            <div className="text-muted-foreground text-body">Preview of your CSV data. Click Next to map columns.</div>
+            <div className="text-body text-muted-foreground">Preview of your CSV data. Click Next to map columns.</div>
             <CSVPreviewTable headers={parsedCSV.headers} data={parsedCSV.data} maxRows={5} />
           </div>
         ) : null;
@@ -354,8 +353,8 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
             {validationErrors.length > 0 && <ValidationSummary errors={validationErrors} />}
 
             {/* Compact preview */}
-            <div className="border-border border-t pt-4">
-              <div className="text-muted-foreground text-caption mb-2">Data Preview</div>
+            <div className="border-t border-border pt-4">
+              <div className="mb-2 text-caption text-muted-foreground">Data Preview</div>
               <CSVPreviewTable headers={parsedCSV.headers} data={parsedCSV.data} maxRows={3} />
             </div>
           </div>
@@ -364,7 +363,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       case 'validation':
         return schemaValidation ? (
           <div className="flex flex-col gap-4">
-            <div className="text-muted-foreground text-body">
+            <div className="text-body text-muted-foreground">
               {dataset?.inputSchema || dataset?.groundTruthSchema
                 ? 'Rows have been validated against the dataset schema.'
                 : 'Ready to import. No schema validation required.'}
@@ -377,7 +376,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
                   <span className="text-heading">⚠</span>
                   {schemaValidation.invalidCount} row{schemaValidation.invalidCount !== 1 ? 's' : ''} will be skipped
                 </div>
-                <p className="text-muted-foreground text-body mt-1">
+                <p className="mt-1 text-body text-muted-foreground">
                   {schemaValidation.validCount} of {schemaValidation.totalRows} rows will be imported
                 </p>
               </div>
@@ -409,8 +408,8 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
           <div className="flex flex-col items-center gap-4 py-5">
             <Spinner />
             <div className="text-center">
-              <div className="text-placeholder text-heading">Importing items...</div>
-              <div className="text-muted-foreground text-body mt-1">
+              <div className="text-heading text-placeholder">Importing items...</div>
+              <div className="mt-1 text-body text-muted-foreground">
                 {importProgress.current} of {importProgress.total}
               </div>
             </div>
@@ -422,8 +421,8 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
           <div className="flex flex-col items-center gap-4 py-5">
             <div className="text-display">{importResult && importResult.errors === 0 ? '✓' : '⚠'}</div>
             <div className="text-center">
-              <div className="text-placeholder text-heading">Import Complete</div>
-              <div className="text-muted-foreground text-body mt-1">
+              <div className="text-heading text-placeholder">Import Complete</div>
+              <div className="mt-1 text-body text-muted-foreground">
                 {importResult?.success ?? 0} item{importResult?.success !== 1 ? 's' : ''} imported
                 {importResult && importResult.errors > 0 && (
                   <span className="text-accent2">

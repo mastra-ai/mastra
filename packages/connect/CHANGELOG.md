@@ -1,5 +1,194 @@
 # @mastra/connect
 
+## 0.5.0-alpha.1
+
+### Patch Changes
+
+- Fixed Discord channel connections failing with `Discord rejected the bot token: 401: Unauthorized`. The Discord bot token is now read from the connection's metadata (`botToken`, following Nango's Discord convention) instead of the OAuth credential — Discord's OAuth exchange only yields a user Bearer token, which can never authenticate as a bot. A Discord connection without `botToken` metadata is skipped with a warning telling you to store the token on the connection. ([#25260](https://github.com/mastra-ai/mastra/pull/25260))
+
+- Updated dependencies [[`43fbe75`](https://github.com/mastra-ai/mastra/commit/43fbe75535650345cf61dee00cf3e7b3f5efaf7f), [`ebd03fd`](https://github.com/mastra-ai/mastra/commit/ebd03fd3bc93fe3930747956724252f7c8834826), [`2c57ba8`](https://github.com/mastra-ai/mastra/commit/2c57ba896b04215fface2a8216b88fe59cfdd041), [`f6effda`](https://github.com/mastra-ai/mastra/commit/f6effdabafa9fc6388478b3e281ad4c457d4200b), [`7f4ce21`](https://github.com/mastra-ai/mastra/commit/7f4ce2190029710851d95f7b75a2fb724782483c), [`1ba1588`](https://github.com/mastra-ai/mastra/commit/1ba158873dadf3d290b111981c3bc7ef95ab1d1c), [`b537ab1`](https://github.com/mastra-ai/mastra/commit/b537ab14714870e058775530bc55b37c9115613f), [`d4e350a`](https://github.com/mastra-ai/mastra/commit/d4e350a5c1e29a7da5a22da52ed1f33431403012)]:
+  - @mastra/core@1.72.0-alpha.5
+
+## 0.5.0-alpha.0
+
+### Minor Changes
+
+- `channels()` now returns a live channel resolver instead of a fixed provider map. Channel connections created or removed on the Mastra platform are picked up by a running server automatically — no redeploy needed. ([#25149](https://github.com/mastra-ai/mastra/pull/25149))
+
+  ```typescript
+  import { Mastra } from '@mastra/core/mastra';
+  import { channels } from '@mastra/connect';
+
+  export const mastra = new Mastra({
+    channels: await channels({ projectId: 'my-project' }),
+  });
+  ```
+
+  The resolver keeps one provider instance per integration, refreshes platform connections on a configurable `ttlMs` cache (30 seconds by default), and re-applies credentials when a connection changes. Slack credentials are fetched fresh from the platform before each app-management call, so tokens refreshed by the platform are always honored.
+
+  If you previously awaited `channels()` and read providers off the result as a plain object, call the resolver instead: `const providers = await resolver()`.
+
+  Requires `@mastra/core` 1.72.0 or later — the first release whose `Mastra` constructor accepts a `ChannelsResolver` (the peer dependency range has been raised to match). Older cores treat the resolver as a static provider record and fail at construction.
+
+- `@mastra/slack`, `@mastra/telegram`, and `@mastra/discord` are now direct dependencies of `@mastra/connect`. Installing `@mastra/connect` is enough to use any channel with `channels()` — no separate channel package installs required. ([#25125](https://github.com/mastra-ai/mastra/pull/25125))
+
+### Patch Changes
+
+- Discord channel connections no longer require `applicationId` and `publicKey` on the platform connection. The bot token stored as the connection credential is enough — the provider resolves the rest from Discord automatically — so the "missing applicationId + publicKey" warning is gone. Connection metadata and `providerOptions` still work as explicit overrides. ([#25125](https://github.com/mastra-ai/mastra/pull/25125))
+
+- Fixed Slack channel connections that failed with "Slack refresh token is invalid" when connecting an agent. The Mastra platform now manages the Slack credential refresh cycle, so `channels()` no longer competes with it over the single-use refresh token. ([#25125](https://github.com/mastra-ai/mastra/pull/25125))
+
+- Updated dependencies [[`c3bc77c`](https://github.com/mastra-ai/mastra/commit/c3bc77ca9e1e665d9e0ad2bfd15a88ad71461f12), [`68cc668`](https://github.com/mastra-ai/mastra/commit/68cc66800e5ce6f5d62189fc7b5ef9d71cf80971), [`c3bc77c`](https://github.com/mastra-ai/mastra/commit/c3bc77ca9e1e665d9e0ad2bfd15a88ad71461f12), [`68cc668`](https://github.com/mastra-ai/mastra/commit/68cc66800e5ce6f5d62189fc7b5ef9d71cf80971), [`781762b`](https://github.com/mastra-ai/mastra/commit/781762b2dcd0c8cc7f9b8ab73824ec45a5225db7), [`cc0da13`](https://github.com/mastra-ai/mastra/commit/cc0da13b826d5f74213c4d8c470acf8698542249), [`f2c3f8c`](https://github.com/mastra-ai/mastra/commit/f2c3f8c74e1d7bc7baca5303b36320b0b361775c), [`1fe1c2b`](https://github.com/mastra-ai/mastra/commit/1fe1c2b6f0b29481dca62a9199af751d594e3ea6), [`279a736`](https://github.com/mastra-ai/mastra/commit/279a736c62495cac0f247ab1402a8c80bccc892a), [`4edc93d`](https://github.com/mastra-ai/mastra/commit/4edc93dedadb89686aad75a4853cb0aa807d256e)]:
+  - @mastra/slack@1.7.0-alpha.0
+  - @mastra/core@1.72.0-alpha.2
+  - @mastra/discord@1.2.0-alpha.0
+
+## 0.4.0
+
+### Minor Changes
+
+- Add `environment()` for sandboxed agents. Materialize provider credentials from your project's Platform connections into a `{ env, onStart }` pair that any sandbox provider (e2b, Modal, Daytona, Docker, subprocess) can consume — so CLI tooling inside the sandbox is authenticated without hand-wiring tokens per agent. ([#24912](https://github.com/mastra-ai/mastra/pull/24912))
+
+  ```ts
+  import { environment } from '@mastra/connect';
+
+  const env = environment({
+    projectId: process.env.MASTRA_PROJECT_ID,
+    client: { accessToken: process.env.MASTRA_PLATFORM_ACCESS_TOKEN },
+  });
+
+  const { env: envVars, onStart } = await env();
+
+  await sandbox.start({ env: envVars, onStart });
+  ```
+
+  `environment()` shares its resolution model with `connect()`: same `projectId`, `client`, and per-provider `integrations` overrides (`connectionId` to pin, `disabled: true` to exclude). GitHub is the first provider with an env contributor — its OAuth token is exported as `GH_TOKEN`/`GITHUB_TOKEN` so both `gh` and `git` HTTPS authenticate as the connected user, and `onStart` installs a git credential helper that reads the token from the environment rather than baking it into git config.
+
+### Patch Changes
+
+- Updated dependencies [[`d47a70d`](https://github.com/mastra-ai/mastra/commit/d47a70d14aa2486089115069416fb0a9cac5eef5), [`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`b757896`](https://github.com/mastra-ai/mastra/commit/b757896872edd74f71ec104be92273c5406265da), [`1640470`](https://github.com/mastra-ai/mastra/commit/1640470792c1138f91f543526b3a516a948cf129), [`7f64865`](https://github.com/mastra-ai/mastra/commit/7f648656d2b24b214a899e8835b8286333c80a19), [`f751e65`](https://github.com/mastra-ai/mastra/commit/f751e659f496e5e53ed38632c59c296fec2ccbe5)]:
+  - @mastra/discord@1.1.0
+  - @mastra/core@1.71.0
+  - @mastra/telegram@0.1.3
+
+## 0.4.0-alpha.0
+
+### Minor Changes
+
+- Add `environment()` for sandboxed agents. Materialize provider credentials from your project's Platform connections into a `{ env, onStart }` pair that any sandbox provider (e2b, Modal, Daytona, Docker, subprocess) can consume — so CLI tooling inside the sandbox is authenticated without hand-wiring tokens per agent. ([#24912](https://github.com/mastra-ai/mastra/pull/24912))
+
+  ```ts
+  import { environment } from '@mastra/connect';
+
+  const env = environment({
+    projectId: process.env.MASTRA_PROJECT_ID,
+    client: { accessToken: process.env.MASTRA_PLATFORM_ACCESS_TOKEN },
+  });
+
+  const { env: envVars, onStart } = await env();
+
+  await sandbox.start({ env: envVars, onStart });
+  ```
+
+  `environment()` shares its resolution model with `connect()`: same `projectId`, `client`, and per-provider `integrations` overrides (`connectionId` to pin, `disabled: true` to exclude). GitHub is the first provider with an env contributor — its OAuth token is exported as `GH_TOKEN`/`GITHUB_TOKEN` so both `gh` and `git` HTTPS authenticate as the connected user, and `onStart` installs a git credential helper that reads the token from the environment rather than baking it into git config.
+
+### Patch Changes
+
+- Updated dependencies [[`d47a70d`](https://github.com/mastra-ai/mastra/commit/d47a70d14aa2486089115069416fb0a9cac5eef5), [`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`1640470`](https://github.com/mastra-ai/mastra/commit/1640470792c1138f91f543526b3a516a948cf129)]:
+  - @mastra/discord@1.1.0-alpha.0
+  - @mastra/core@1.71.0-alpha.1
+  - @mastra/telegram@0.1.3-alpha.0
+
+## 0.3.1
+
+### Patch Changes
+
+- Updated dependencies [[`bfde500`](https://github.com/mastra-ai/mastra/commit/bfde5009d1d9bdbce241132b3df9e638ad805fab), [`04233fd`](https://github.com/mastra-ai/mastra/commit/04233fdc197e1d9a4b13e9d182447df283ea1850), [`574a55c`](https://github.com/mastra-ai/mastra/commit/574a55cd26cc2171f61906e0f090c817032c9603), [`e33a488`](https://github.com/mastra-ai/mastra/commit/e33a488ec308b7742e2bf66528873767f802c957), [`fc0ee2b`](https://github.com/mastra-ai/mastra/commit/fc0ee2b7d6d33bd5dd80f7338a5a90ec615b1235), [`9544a15`](https://github.com/mastra-ai/mastra/commit/9544a158e9bf110b3873b74b2c368616015244ee), [`22ed0d9`](https://github.com/mastra-ai/mastra/commit/22ed0d9f0f399ca29cf66e847795784018e6b79c), [`68fece5`](https://github.com/mastra-ai/mastra/commit/68fece5b724be17ab9bbfaa132468c5afa866b39), [`e7d378f`](https://github.com/mastra-ai/mastra/commit/e7d378f16e68b9ec1268a71960ecf102f86cd437), [`8adceb5`](https://github.com/mastra-ai/mastra/commit/8adceb53a48bb1b628ba839665e736b062b0d58f), [`e675e83`](https://github.com/mastra-ai/mastra/commit/e675e83c29d1c69ee334985725c5ce78ac5dcd6f), [`f9ffd28`](https://github.com/mastra-ai/mastra/commit/f9ffd2825c3cb21145b361f06c96f3c35c07bce2), [`5e4edbe`](https://github.com/mastra-ai/mastra/commit/5e4edbe212a714cc659203964f60e44988c7171f), [`7465c16`](https://github.com/mastra-ai/mastra/commit/7465c166894c5a0628634f564c62a26322654f9e), [`9f349e3`](https://github.com/mastra-ai/mastra/commit/9f349e34a1bc6e1011c471ad305068d95966ae35), [`c593409`](https://github.com/mastra-ai/mastra/commit/c59340998206b7273747d5b5281a09ab26535f81), [`4cb2f12`](https://github.com/mastra-ai/mastra/commit/4cb2f12d05b0de71a22127a76a16c1732bb674ec), [`3601e57`](https://github.com/mastra-ai/mastra/commit/3601e57cd8a4d2ca6f68d460c527c472a19f612d), [`ac426a0`](https://github.com/mastra-ai/mastra/commit/ac426a0f015e0d234f1394505c0b0795dc03ebed), [`cf98812`](https://github.com/mastra-ai/mastra/commit/cf98812b7e9b511bc45a8641047ad7b91fee6abf), [`cf98812`](https://github.com/mastra-ai/mastra/commit/cf98812b7e9b511bc45a8641047ad7b91fee6abf), [`68695fd`](https://github.com/mastra-ai/mastra/commit/68695fdc4b92cdf67c7fcf36603fa3c59e1bc10e), [`c35feed`](https://github.com/mastra-ai/mastra/commit/c35feedf99a55ad404657a1cebf0c298f36ab82e), [`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208), [`9a2db9a`](https://github.com/mastra-ai/mastra/commit/9a2db9ac12c7b5e24a44841d47a7f7ff17d3f504), [`ff6487e`](https://github.com/mastra-ai/mastra/commit/ff6487e163c4e4fcde950352e6598961b037dd1a)]:
+  - @mastra/core@1.70.0
+  - @mastra/mcp@2.1.0
+
+## 0.3.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`bfde500`](https://github.com/mastra-ai/mastra/commit/bfde5009d1d9bdbce241132b3df9e638ad805fab), [`f9ffd28`](https://github.com/mastra-ai/mastra/commit/f9ffd2825c3cb21145b361f06c96f3c35c07bce2), [`c593409`](https://github.com/mastra-ai/mastra/commit/c59340998206b7273747d5b5281a09ab26535f81), [`cf98812`](https://github.com/mastra-ai/mastra/commit/cf98812b7e9b511bc45a8641047ad7b91fee6abf), [`cf98812`](https://github.com/mastra-ai/mastra/commit/cf98812b7e9b511bc45a8641047ad7b91fee6abf), [`68695fd`](https://github.com/mastra-ai/mastra/commit/68695fdc4b92cdf67c7fcf36603fa3c59e1bc10e)]:
+  - @mastra/core@1.70.0-alpha.0
+  - @mastra/mcp@2.1.0-alpha.0
+
+## 0.3.0
+
+### Minor Changes
+
+- Added ten generated tool providers to @mastra/connect: Slack, GitHub, Google Mail, Google Calendar, Fireflies, PostHog, Stripe, Discord, Twitter/X, and HubSpot. Each ships checked-in tools generated from Nango integration templates, including new agent-focused actions (PostHog HogQL queries, Stripe balance/dispute/coupon/account reads, GitHub tags and trees, Slack Connect shared-channel invites, Twitter search and following lookups, HubSpot form submission). Attach a provider connection in Mastra Platform and the tools resolve through connect() with no extra configuration: ([#24606](https://github.com/mastra-ai/mastra/pull/24606))
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { connect } from '@mastra/connect';
+
+  const agent = new Agent({
+    id: 'ops-agent',
+    model: 'anthropic/claude-sonnet-4-6',
+    tools: connect(),
+  });
+  ```
+
+### Patch Changes
+
+- Generated `@mastra/connect` providers now cover more of the upstream template catalog. Actions that authenticate with the raw connection credential — token-introspection endpoints, for example — are generated instead of skipped, and actions that validate their input with the template validation helper are generated too. The credential is fetched from the platform only for the specific actions that read it. Under the hood this extends the platform proxy runtime and the provider generator; agents consume the resulting tools through the normal provider workflow with no API changes: ([#24605](https://github.com/mastra-ai/mastra/pull/24605))
+
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { connect } from '@mastra/connect';
+
+  const assistant = new Agent({
+    id: 'assistant',
+    name: 'Assistant',
+    instructions: 'Help with connected services.',
+    model: 'anthropic/claude-sonnet-4-6',
+    tools: connect(), // tools for every connected provider, resolved per request
+  });
+  ```
+
+- Updated dependencies [[`7fefefd`](https://github.com/mastra-ai/mastra/commit/7fefefdcb91e15f8bf60b5b2148ef27cf1352faf), [`251eb56`](https://github.com/mastra-ai/mastra/commit/251eb5674e8e32855af6925d7fd1cd337aa5ea7d), [`e0fd937`](https://github.com/mastra-ai/mastra/commit/e0fd937e84fa6dd7e82b7b55b039a4191e61aa5c), [`f7180bd`](https://github.com/mastra-ai/mastra/commit/f7180bdd52b4ffaa9f053b8495c6c8b8c530de2a), [`f9ea7b2`](https://github.com/mastra-ai/mastra/commit/f9ea7b2d2f1e925b357fd71fe18ab26d3b00feae), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`26ed7ad`](https://github.com/mastra-ai/mastra/commit/26ed7ad111927211231a995346b9b561d4baa8e2), [`ecc642d`](https://github.com/mastra-ai/mastra/commit/ecc642d0a6ca2e938f92129726a4278471924124), [`1ed77dd`](https://github.com/mastra-ai/mastra/commit/1ed77dd7176e2f41ea2bf74f5ab0e4d1899c38e5), [`18863ae`](https://github.com/mastra-ai/mastra/commit/18863ae95c87218b8163e28d9826883cf4edf02b), [`c61d52c`](https://github.com/mastra-ai/mastra/commit/c61d52c338dbd77f3e8f0e7487f44b1f0a0d1350), [`32a9682`](https://github.com/mastra-ai/mastra/commit/32a96824a9ff31c3596fdb1a2789b946eba152cc), [`9ce6bc9`](https://github.com/mastra-ai/mastra/commit/9ce6bc9107b5fe81dffe8a155dded9b0471013b5), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`725d46b`](https://github.com/mastra-ai/mastra/commit/725d46b4b7eaf5a3f3ef2f3fbbe8ee8909cb2c9b), [`6e21835`](https://github.com/mastra-ai/mastra/commit/6e2183502250ee5325fc834d80f4d0584916f54e), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`70cd0d8`](https://github.com/mastra-ai/mastra/commit/70cd0d80373346b4d04ebf913851ade37aa807ed), [`3802d6f`](https://github.com/mastra-ai/mastra/commit/3802d6f7dbf8c27b1f84b48c6c7c2efa6c4f0d03), [`2a83258`](https://github.com/mastra-ai/mastra/commit/2a832580e3cf3efcdb4be3355eaa9a02929b3a2c), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe)]:
+  - @mastra/core@1.69.0
+
+## 0.3.0-alpha.0
+
+### Minor Changes
+
+- Added ten generated tool providers to @mastra/connect: Slack, GitHub, Google Mail, Google Calendar, Fireflies, PostHog, Stripe, Discord, Twitter/X, and HubSpot. Each ships checked-in tools generated from Nango integration templates, including new agent-focused actions (PostHog HogQL queries, Stripe balance/dispute/coupon/account reads, GitHub tags and trees, Slack Connect shared-channel invites, Twitter search and following lookups, HubSpot form submission). Attach a provider connection in Mastra Platform and the tools resolve through connect() with no extra configuration: ([#24606](https://github.com/mastra-ai/mastra/pull/24606))
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { connect } from '@mastra/connect';
+
+  const agent = new Agent({
+    id: 'ops-agent',
+    model: 'anthropic/claude-sonnet-4-6',
+    tools: connect(),
+  });
+  ```
+
+### Patch Changes
+
+- Generated `@mastra/connect` providers now cover more of the upstream template catalog. Actions that authenticate with the raw connection credential — token-introspection endpoints, for example — are generated instead of skipped, and actions that validate their input with the template validation helper are generated too. The credential is fetched from the platform only for the specific actions that read it. Under the hood this extends the platform proxy runtime and the provider generator; agents consume the resulting tools through the normal provider workflow with no API changes: ([#24605](https://github.com/mastra-ai/mastra/pull/24605))
+
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { connect } from '@mastra/connect';
+
+  const assistant = new Agent({
+    id: 'assistant',
+    name: 'Assistant',
+    instructions: 'Help with connected services.',
+    model: 'anthropic/claude-sonnet-4-6',
+    tools: connect(), // tools for every connected provider, resolved per request
+  });
+  ```
+
+- Updated dependencies:
+  - @mastra/core@1.69.0-alpha.1
+
 ## 0.2.0
 
 ### Minor Changes

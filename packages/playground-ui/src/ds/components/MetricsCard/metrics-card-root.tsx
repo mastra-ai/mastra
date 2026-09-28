@@ -6,7 +6,7 @@ export function MetricsCardRoot({ children, className }: { children: ReactNode; 
   return (
     <Card
       className={cn(
-        '2xl:min-w-120 md:min-w-88 xl:min-w-104 grid min-h-72 min-w-80 flex-1 grid-rows-[4rem_1fr] gap-2 px-4 py-3 lg:min-w-sm',
+        'grid min-h-72 min-w-80 flex-1 grid-rows-[auto_1fr] gap-4 px-4 py-3 2xl:min-w-120 md:min-w-88 lg:min-w-sm xl:min-w-104',
         className,
       )}
     >

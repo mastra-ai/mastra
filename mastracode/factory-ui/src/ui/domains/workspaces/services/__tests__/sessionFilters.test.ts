@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   EMPTY_USER_SESSION_FILTERS,
   MY_SESSIONS,
+  ALL_SESSION_OWNERS,
   activeUserSessionFilterCount,
+  defaultUserSessionFilters,
   filterUserSessions,
   sessionOwnerFilterValue,
 } from '../sessionFilters';
@@ -91,5 +93,18 @@ describe('session filters', () => {
     expect(
       activeUserSessionFilterCount(filters({ search: 'auth', owner: MY_SESSIONS, status: 'working', updated: '7d' })),
     ).toBe(4);
+  });
+
+  it("defaults a known viewer to their own sessions and an unknown viewer to everyone's", () => {
+    expect(defaultUserSessionFilters('user-1')).toEqual(filters({ owner: MY_SESSIONS }));
+    expect(defaultUserSessionFilters(undefined)).toEqual(EMPTY_USER_SESSION_FILTERS);
+  });
+
+  it('counts controls against the defaults, so the resting view is not active', () => {
+    const defaults = defaultUserSessionFilters('user-1');
+
+    expect(activeUserSessionFilterCount(defaults, defaults)).toBe(0);
+    expect(activeUserSessionFilterCount(filters({ owner: ALL_SESSION_OWNERS }), defaults)).toBe(1);
+    expect(activeUserSessionFilterCount({ ...defaults, status: 'working' }, defaults)).toBe(1);
   });
 });

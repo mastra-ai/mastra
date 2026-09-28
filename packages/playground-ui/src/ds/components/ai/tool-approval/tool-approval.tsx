@@ -59,12 +59,12 @@ export interface ToolApprovalProps extends ToolApprovalActionsProps {
 export function ToolApproval({ toolName, children, ...actions }: ToolApprovalProps) {
   return (
     <div
-      className="border-border border-l-warning1 bg-fill my-2 min-w-0 rounded-lg border border-l-4 px-4 py-3"
+      className="my-2 min-w-0 rounded-lg border border-l-4 border-border border-l-warning1 bg-fill px-4 py-3"
       role="group"
       aria-label={`Tool approval for ${toolName}`}
     >
-      <div className="text-foreground text-subheading mb-1.5">
-        Approve <code className="bg-fill-hover text-caption rounded px-1.5 py-px font-mono break-all">{toolName}</code>?
+      <div className="mb-1.5 text-subheading text-foreground">
+        Approve <code className="rounded bg-fill-hover px-1.5 py-px font-mono text-caption break-all">{toolName}</code>?
       </div>
       {children}
       <div className="mt-2">

@@ -1,4 +1,15 @@
-import { ArrowRightLeft, Bot, Braces, CalendarClock, GitFork, Repeat2, Timer, Workflow, Wrench } from 'lucide-react';
+import {
+  ArrowRightLeft,
+  Bot,
+  Braces,
+  CalendarClock,
+  GitBranch,
+  GitFork,
+  Repeat2,
+  Timer,
+  Workflow,
+  Wrench,
+} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { WorkflowStepCardViewProps } from '../types';
 import type { BadgeVariant } from '@/ds/components/Badge';
@@ -27,5 +38,6 @@ export function getWorkflowCardBadge(props: WorkflowTypeBadgeProps): {
     return { label: 'Delay', tone: 'purple', Icon: Timer, indicator: 'sleep' };
   if (props.nodeKind === 'agent') return { label: 'Agent', tone: 'cyan', Icon: Bot };
   if (props.nodeKind === 'tool') return { label: 'Tool', tone: 'pink', Icon: Wrench };
+  if (props.nodeKind === 'classifier') return { label: 'Classifier', tone: 'blue', Icon: GitBranch };
   return { label: 'Step', tone: 'neutral', Icon: Braces };
 }

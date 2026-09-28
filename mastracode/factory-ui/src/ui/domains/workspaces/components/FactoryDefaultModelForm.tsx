@@ -44,7 +44,7 @@ export function FactoryDefaultModelForm({
             {providerDisplayName(provider.provider)}
           </Txt>
         </div>
-        <Button variant="outline" disabled={choice.saving} onClick={onChangeProvider}>
+        <Button disabled={choice.saving} onClick={onChangeProvider}>
           Change provider
         </Button>
       </div>

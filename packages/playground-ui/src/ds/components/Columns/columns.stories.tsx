@@ -3,7 +3,7 @@ import { SlidersHorizontalIcon } from 'lucide-react';
 
 import { Button } from '../Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../Card';
-import { Column, Columns, MultiColumn } from './index';
+import { Column, Columns } from './index';
 
 const meta: Meta<typeof Columns> = {
   title: 'Layout/Columns',
@@ -22,9 +22,9 @@ const columnContent = [
 
 function MetricsColumn({ title }: { title: string }) {
   return (
-    <Column className="p-5" withRightSeparator>
+    <Column className="p-5">
       <Column.Toolbar>
-        <h2 className="text-foreground text-heading">{title}</h2>
+        <h2 className="text-heading text-foreground">{title}</h2>
         <Button size="sm" variant="ghost">
           <SlidersHorizontalIcon />
           Configure
@@ -48,23 +48,11 @@ function MetricsColumn({ title }: { title: string }) {
 
 export const ResponsiveGrid: Story = {
   render: () => (
-    <div className="bg-sidebar h-144 p-4">
+    <div className="h-144 bg-sidebar p-4">
       <Columns className="md:grid-cols-2">
         <MetricsColumn title="Production" />
         <MetricsColumn title="Development" />
       </Columns>
-    </div>
-  ),
-};
-
-export const HorizontallyScrollable: Story = {
-  render: () => (
-    <div className="bg-sidebar h-128 w-full max-w-3xl p-4">
-      <MultiColumn numOfColumns={3} minColumnWidth="18rem">
-        <MetricsColumn title="Agents" />
-        <MetricsColumn title="Workflows" />
-        <MetricsColumn title="Tools" />
-      </MultiColumn>
     </div>
   ),
 };

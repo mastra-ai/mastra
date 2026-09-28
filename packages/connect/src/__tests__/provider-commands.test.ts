@@ -155,6 +155,103 @@ const action = createAction({
 export default action;
 `;
 
+const connectionCredentialsTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ value: z.string() });
+const OutputSchema = z.object({ value: z.string() });
+
+const action = createAction({
+  description: 'Echo a value using the connection token.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const connection = await nango.getConnection();
+    const token = connection.credentials.access_token;
+    const response = await nango.get({ endpoint: \`/echo/\${token}\`, params: { value: input.value } });
+    return OutputSchema.parse(response.data);
+  },
+});
+
+export default action;
+`;
+
+const inputCredentialsTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ credentials: z.object({ user: z.string() }) });
+const OutputSchema = z.object({ value: z.string() });
+
+const action = createAction({
+  description: 'Echo a caller-supplied credentials field without touching connection credentials.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const connection = await nango.getConnection();
+    const response = await nango.post({
+      endpoint: '/echo',
+      data: { user: input.credentials.user, region: connection.connection_config.region },
+    });
+    return OutputSchema.parse(response.data);
+  },
+});
+
+export default action;
+`;
+
+const shadowedCredentialsTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ accounts: z.array(z.object({ credentials: z.string() })) });
+const OutputSchema = z.object({ value: z.string() });
+
+const action = createAction({
+  description: 'Read credentials off a shadowing callback parameter, not the connection.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const connection = await nango.getConnection();
+    const tokens = input.accounts.map(connection => connection.credentials);
+    const response = await nango.post({
+      endpoint: '/echo',
+      data: { tokens, region: connection.connection_config.region },
+    });
+    return OutputSchema.parse(response.data);
+  },
+});
+
+export default action;
+`;
+
+const parenthesizedCredentialsTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ value: z.string() });
+const OutputSchema = z.object({ value: z.string() });
+
+const action = createAction({
+  description: 'Read the connection token through a parenthesized call.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const connection = await (nango.getConnection());
+    const token = connection.credentials.access_token;
+    const response = await nango.get({ endpoint: \`/echo/\${token}\`, params: { value: input.value } });
+    return OutputSchema.parse(response.data);
+  },
+});
+
+export default action;
+`;
+
 const noProxyCallTemplate = `import { z } from 'zod';
 import { createAction } from 'nango';
 
@@ -194,6 +291,10 @@ describe('maintainer provider commands', () => {
         writeFileSync(resolve(actionDir, 'proxy-configuration.ts'), proxyConfigurationTemplate);
         writeFileSync(resolve(actionDir, 'connection-context.ts'), connectionContextTemplate);
         writeFileSync(resolve(actionDir, 'inline-context-helper.ts'), inlineContextHelperTemplate);
+        writeFileSync(resolve(actionDir, 'connection-credentials.ts'), connectionCredentialsTemplate);
+        writeFileSync(resolve(actionDir, 'input-credentials.ts'), inputCredentialsTemplate);
+        writeFileSync(resolve(actionDir, 'shadowed-credentials.ts'), shadowedCredentialsTemplate);
+        writeFileSync(resolve(actionDir, 'parenthesized-credentials.ts'), parenthesizedCredentialsTemplate);
         writeFileSync(resolve(actionDir, 'unsupported-no-proxy.ts'), noProxyCallTemplate);
         writeFileSync(resolve(actionDir, 'unsupported-response-type.ts'), unsupportedResponseTypeTemplate);
       }
@@ -322,6 +423,105 @@ export default createAction({
     ]);
   });
 
+  it('widens response-side enums, cloning schemas the response shares with the input side', async () => {
+    const actionDir = resolve(packageRoot, '.templates/integrations/shared-enum-provider/actions');
+    mkdirSync(actionDir, { recursive: true });
+    writeFileSync(
+      resolve(actionDir, 'round-trip.ts'),
+      `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const StatusSchema = z.object({
+  state: z.enum(['open', 'closed']).optional(),
+});
+
+const InputSchema = z.object({ item: StatusSchema });
+const OutputSchema = z.object({
+  item: StatusSchema.extend({ note: z.string().optional() }),
+  kind: z.enum(['a', 'b']).optional(),
+});
+
+const action = createAction({
+  description: 'Round-trip an item whose status schema is shared with the input side.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const response = await nango.post({ endpoint: '/items', data: input });
+    return OutputSchema.parse(response.data);
+  },
+});
+
+export default action;
+`,
+    );
+    writeFileSync(
+      resolve(actionDir, 'multi-decl.ts'),
+      `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const StatusSchema = z.object({ state: z.enum(['open', 'closed']).optional() }),
+  LabelSchema = z.object({ label: z.string() });
+
+const InputSchema = z.object({ item: StatusSchema, tag: LabelSchema });
+const OutputSchema = z.object({ item: StatusSchema, tag: LabelSchema });
+
+const action = createAction({
+  description: 'Round-trip schemas declared in one multi-declaration statement.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const response = await nango.post({ endpoint: '/items', data: input });
+    return OutputSchema.parse(response.data);
+  },
+});
+
+export default action;
+`,
+    );
+
+    await addProvider({
+      providerId: 'shared-enum-provider',
+      localId: 'shared-enum-provider',
+      yes: true,
+      expectedTemplateSha: templateSha,
+    });
+
+    const generatedTool = readFileSync(
+      resolve(packageRoot, 'src/providers/shared-enum-provider/tools/round-trip.ts'),
+      'utf8',
+    );
+    // The input-side declaration stays strict; the response side references a
+    // widened clone so a new provider value never rejects a valid response.
+    const originalDecl = generatedTool.slice(
+      generatedTool.indexOf('const StatusSchema ='),
+      generatedTool.indexOf('const StatusSchemaWidened'),
+    );
+    expect(originalDecl).toMatch(/z\.enum\(\[["']open["'], ["']closed["']\]\)/);
+    expect(originalDecl).not.toContain('.or(z.string())');
+    const cloneStart = generatedTool.indexOf('const StatusSchemaWidened');
+    const cloneEnd = generatedTool.indexOf('const InputSchema', cloneStart);
+    const cloneDecl = generatedTool.slice(cloneStart, cloneEnd);
+    expect(cloneDecl).toContain('.or(z.string())');
+    expect(generatedTool).toContain('item: StatusSchema ');
+    expect(generatedTool).toContain('StatusSchemaWidened.extend(');
+    expect(generatedTool).toMatch(/kind: z\s*\.enum\(\[["']a["'], ["']b["']\]\)\s*\.or\(z\.string\(\)\)/);
+
+    // A statement declaring several schemas clones as a unit: every
+    // declaration is renamed so the clone never redeclares a sibling.
+    const multiDeclTool = readFileSync(
+      resolve(packageRoot, 'src/providers/shared-enum-provider/tools/multi-decl.ts'),
+      'utf8',
+    );
+    expect(multiDeclTool).toContain('StatusSchemaWidened');
+    expect(multiDeclTool).toContain('LabelSchemaWidened');
+    const labelDeclarations = multiDeclTool.match(/\bLabelSchema\s*=/g) ?? [];
+    expect(labelDeclarations).toHaveLength(1);
+  });
+
   it('adds model-native image output to the OpenAI image generation tool', async () => {
     await addProvider({ providerId: 'openai', localId: 'openai', yes: true, expectedTemplateSha: templateSha });
 
@@ -338,7 +538,9 @@ export default createAction({
     expect(listProviders({ installedOnly: false, search: 'custom' })).toEqual([
       'first-provider (1 action templates) [installed as custom]',
     ]);
-    expect(listProviders({ installedOnly: false, search: 'second' })).toEqual(['second-provider (6 action templates)']);
+    expect(listProviders({ installedOnly: false, search: 'second' })).toEqual([
+      'second-provider (10 action templates)',
+    ]);
   });
 
   it('rewrites proxy request types and skips actions the platform proxy cannot execute', async () => {
@@ -370,6 +572,37 @@ export default createAction({
     );
     expect(inlineContextTool).toContain('platformProxy: PlatformProxy,');
     expect(inlineContextTool).not.toContain('typeof action');
+
+    // Only reads of `credentials` on the getConnection() result opt into the
+    // credential-fetching variant; a `credentials` input field does not.
+    const connectionCredentialsTool = readFileSync(
+      resolve(packageRoot, 'src/providers/second-provider/tools/connection-credentials.ts'),
+      'utf8',
+    );
+    expect(connectionCredentialsTool).toContain('await platformProxy.getConnectionWithCredentials()');
+    expect(connectionCredentialsTool).not.toContain('platformProxy.getConnection()');
+    const inputCredentialsTool = readFileSync(
+      resolve(packageRoot, 'src/providers/second-provider/tools/input-credentials.ts'),
+      'utf8',
+    );
+    expect(inputCredentialsTool).toContain('await platformProxy.getConnection()');
+    expect(inputCredentialsTool).not.toContain('getConnectionWithCredentials');
+    // A shadowing callback parameter named like the connection binding must
+    // not count as a credentials read.
+    const shadowedCredentialsTool = readFileSync(
+      resolve(packageRoot, 'src/providers/second-provider/tools/shadowed-credentials.ts'),
+      'utf8',
+    );
+    expect(shadowedCredentialsTool).toContain('await platformProxy.getConnection()');
+    expect(shadowedCredentialsTool).not.toContain('getConnectionWithCredentials');
+    // A parenthesized `getConnection()` call still counts as a credentials
+    // read and gets the credential-fetching rewrite.
+    const parenthesizedCredentialsTool = readFileSync(
+      resolve(packageRoot, 'src/providers/second-provider/tools/parenthesized-credentials.ts'),
+      'utf8',
+    );
+    expect(parenthesizedCredentialsTool).toContain('platformProxy.getConnectionWithCredentials()');
+    expect(parenthesizedCredentialsTool).not.toMatch(/platformProxy\.getConnection\(\)/);
     expect(existsSync(resolve(packageRoot, 'src/providers/second-provider/tools/unsupported-no-proxy.ts'))).toBe(false);
     expect(existsSync(resolve(packageRoot, 'src/providers/second-provider/tools/unsupported-response-type.ts'))).toBe(
       false,
@@ -378,7 +611,7 @@ export default createAction({
     const manifest = JSON.parse(
       readFileSync(resolve(packageRoot, 'src/providers/second-provider/.manifest.json'), 'utf8'),
     ) as { toolCount: number; skippedActions: { action: string; reason: string }[] };
-    expect(manifest.toolCount).toBe(4);
+    expect(manifest.toolCount).toBe(8);
     expect(manifest.skippedActions).toEqual([
       {
         action: 'unsupported-no-proxy',
@@ -441,7 +674,7 @@ export default createAction({
     expect(providerIndex).not.toContain('.stale.generate-123');
     expect(listProviders({ installedOnly: true })).toEqual([
       'local <- first-provider (1 tools, 0 skipped)',
-      'other <- second-provider (4 tools, 2 skipped)',
+      'other <- second-provider (8 tools, 2 skipped)',
     ]);
   });
 

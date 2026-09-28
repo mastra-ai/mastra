@@ -30,7 +30,7 @@ export const AgentProfileDetails = ({ disabled = false, className, mode = 'defau
   return (
     <div
       className={cn(
-        'flex w-full flex-col items-start gap-0.5 max-w-[44ch]',
+        'flex w-full max-w-[44ch] flex-col items-start gap-0.5',
         isHighlighted && HIGHLIGHTED_CLASSNAME,
         className,
       )}
@@ -43,7 +43,7 @@ export const AgentProfileDetails = ({ disabled = false, className, mode = 'defau
         aria-label="Agent name"
         disabled={disabled}
         data-testid="agent-configure-name"
-        className="text-subheading text-foreground placeholder:text-placeholder hover:bg-fill-subtle focus:bg-fill-subtle w-full max-w-sm rounded-lg px-3 py-1.5 focus:outline-none disabled:cursor-not-allowed"
+        className="w-full max-w-sm rounded-lg px-3 py-1.5 text-subheading text-foreground placeholder:text-placeholder hover:bg-fill-subtle focus:bg-fill-subtle focus:outline-none disabled:cursor-not-allowed"
         style={{ viewTransitionName: 'agent-name' }}
       />
       <textarea
@@ -54,7 +54,7 @@ export const AgentProfileDetails = ({ disabled = false, className, mode = 'defau
         disabled={disabled}
         data-testid="agent-configure-description"
         rows={2}
-        className="text-body text-foreground placeholder:text-placeholder hover:bg-fill-subtle focus:bg-fill-subtle field-sizing-content w-full resize-none rounded-lg px-3 py-2 focus:outline-none disabled:cursor-not-allowed"
+        className="field-sizing-content w-full resize-none rounded-lg px-3 py-2 text-body text-foreground placeholder:text-placeholder hover:bg-fill-subtle focus:bg-fill-subtle focus:outline-none disabled:cursor-not-allowed"
         style={{ viewTransitionName: 'agent-description' }}
       />
     </div>

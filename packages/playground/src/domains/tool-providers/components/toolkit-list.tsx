@@ -35,10 +35,10 @@ export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, sele
           type="button"
           onClick={() => onSelectToolkit(undefined)}
           className={cn(
-            'text-left px-3 py-2 rounded-md text-caption',
+            'rounded-md px-3 py-2 text-left text-caption',
             controlStateColorTransition,
             selectedToolkit === undefined
-              ? 'bg-fill-hover text-foreground font-medium'
+              ? 'bg-fill-hover font-medium text-foreground'
               : cn(quietTextHover, 'hover:bg-fill-subtle'),
           )}
         >
@@ -49,16 +49,16 @@ export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, sele
           type="button"
           onClick={() => onSelectToolkit(SELECTED_TOOLKIT_SENTINEL)}
           className={cn(
-            'text-left px-3 py-2 rounded-md text-caption flex items-center justify-between gap-2',
+            'flex items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-caption',
             controlStateColorTransition,
             selectedToolkit === SELECTED_TOOLKIT_SENTINEL
-              ? 'bg-fill-hover text-foreground font-medium'
+              ? 'bg-fill-hover font-medium text-foreground'
               : cn(quietTextHover, 'hover:bg-fill-subtle'),
           )}
         >
           Selected
           {selectedCount > 0 && (
-            <span className="text-meta bg-card min-w-[1.25rem] rounded-full px-1.5 py-0.5 text-center tabular-nums">
+            <span className="min-w-[1.25rem] rounded-full bg-card px-1.5 py-0.5 text-center text-meta tabular-nums">
               {selectedCount}
             </span>
           )}
@@ -70,10 +70,10 @@ export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, sele
             type="button"
             onClick={() => onSelectToolkit(toolkit.slug)}
             className={cn(
-              'text-left px-3 py-2 rounded-md text-caption truncate',
+              'truncate rounded-md px-3 py-2 text-left text-caption',
               controlStateColorTransition,
               selectedToolkit === toolkit.slug
-                ? 'bg-fill-hover text-foreground font-medium'
+                ? 'bg-fill-hover font-medium text-foreground'
                 : cn(quietTextHover, 'hover:bg-fill-subtle'),
             )}
             title={toolkit.name}

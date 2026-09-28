@@ -196,7 +196,7 @@ export function CustomProvidersSection() {
                 <Button size="sm" disabled={busy} onClick={() => startEdit(p)}>
                   Edit
                 </Button>
-                <Button variant="outline" size="sm" disabled={busy} onClick={() => void remove(p.id)}>
+                <Button size="sm" disabled={busy} onClick={() => void remove(p.id)}>
                   Remove
                 </Button>
               </div>

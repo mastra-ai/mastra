@@ -6,7 +6,7 @@
  * dependencies.
  *
  * Source files:
- *   - src/mastra/index.ts
+ *   - src/mastra/*.ts (excluding tests)
  *   - .env.schema
  *   - docker-compose.yml
  *
@@ -324,7 +324,10 @@ if (fs.existsSync(outDir)) {
   }
 }
 fs.mkdirSync(outDir, { recursive: true });
-copySourceFile('src/mastra/index.ts');
+// Copy every non-test module so local imports from index.ts resolve in the template.
+for (const entry of fs.readdirSync(path.join(webRoot, 'src/mastra'))) {
+  if (entry.endsWith('.ts') && !entry.endsWith('.test.ts')) copySourceFile(`src/mastra/${entry}`);
+}
 copySourceFile('.env.schema');
 copySourceFile('docker-compose.yml');
 writePackageJson();

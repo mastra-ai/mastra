@@ -26,7 +26,7 @@ export function ItemListItemsSkeleton({ columns, numberOfRows = 3 }: ItemListIte
               return (
                 <div
                   key={key}
-                  className="bg-muted h-4 animate-pulse rounded-md text-transparent select-none"
+                  className="h-4 animate-pulse rounded-md bg-muted text-transparent select-none"
                   style={{ width: `${getPseudoRandomWidth(rowIdx, colIdx)}` }}
                 ></div>
               );

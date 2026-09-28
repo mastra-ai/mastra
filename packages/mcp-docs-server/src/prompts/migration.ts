@@ -1,14 +1,12 @@
-import type { MCPServerPrompts, MastraPrompt } from '@mastra/mcp';
-import type { PromptMessage } from '@modelcontextprotocol/sdk/types.js';
+import type { Prompt, PromptMessage } from '@mastra/mcp';
 
 /**
  * Migration prompts provide guided workflows for upgrading Mastra versions.
  * These prompts help users systematically work through breaking changes.
  */
-const migrationPrompts: MastraPrompt[] = [
+const migrationPrompts: Prompt[] = [
   {
     name: 'upgrade-to-v1',
-    version: 'v1',
     description:
       'Get a guided migration plan for upgrading from Mastra v0.x to v1.0. Provides step-by-step instructions for handling all breaking changes.',
     arguments: [
@@ -22,26 +20,36 @@ const migrationPrompts: MastraPrompt[] = [
   },
   {
     name: 'migration-checklist',
-    version: 'v1',
     description:
       'Get a comprehensive checklist for migrating to Mastra v1.0. Lists all breaking changes that need to be addressed.',
   },
 ];
 
 /**
- * Prompt messages callback that generates contextual migration guidance
+ * Prompt callbacks that generate contextual migration guidance.
+ *
+ * Typed by what the callbacks read rather than by one package's
+ * `MCPServerPrompts`, so the same object registers on both the 2026-07-28
+ * server and the legacy 1.x server.
  */
-export const migrationPromptMessages: MCPServerPrompts = {
-  listPrompts: async () => migrationPrompts,
+export const migrationPromptMessages = {
+  listPrompts: async (): Promise<Prompt[]> => migrationPrompts,
 
-  getPromptMessages: async ({ name, args }): Promise<PromptMessage[]> => {
+  getPromptMessages: async ({
+    name,
+    args,
+  }: {
+    name: string;
+    args?: Record<string, unknown>;
+  }): Promise<PromptMessage[]> => {
     const prompt = migrationPrompts.find(p => p.name === name);
     if (!prompt) {
       throw new Error(`Prompt not found: ${name}`);
     }
 
     if (name === 'upgrade-to-v1') {
-      return getUpgradeToV1Messages(args?.area);
+      const area = args?.area;
+      return getUpgradeToV1Messages(typeof area === 'string' ? area : undefined);
     }
 
     if (name === 'migration-checklist') {

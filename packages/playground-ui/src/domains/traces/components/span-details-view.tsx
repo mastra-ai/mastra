@@ -1,7 +1,13 @@
-import { describeSpanInput, describeSpanOutput } from '@mastra/core/observability';
+import { describeProcessorPipeline, describeSpanInput, describeSpanOutput } from '@mastra/core/observability';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { SpanRecord } from '../types';
-import { SpanErrorRenderer, SpanInputRenderer, SpanOutputRenderer, SpanPayloadSection } from './span-payload';
+import {
+  SpanErrorRenderer,
+  SpanInputRenderer,
+  SpanOutputRenderer,
+  SpanPayloadSection,
+  SpanProcessorAttributes,
+} from './span-payload';
 import { asCoreSpan } from './span-payload/span-payload-registry';
 import { SpanSummaryDescription } from './span-summary-description';
 import { TraceIdButton } from './trace-id-button';
@@ -87,10 +93,10 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
             title="Attributes"
             icon={<BracesIcon />}
             raw={span.attributes}
-            hasPreview={false}
+            hasPreview={describeProcessorPipeline(asCoreSpan(span)) !== undefined}
             layout="details"
           >
-            {null}
+            <SpanProcessorAttributes span={span} />
           </SpanPayloadSection>
         </DataDetailsPanel.Content>
       )}

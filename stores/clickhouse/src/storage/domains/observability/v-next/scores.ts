@@ -25,7 +25,7 @@ import { parseFieldKey } from '@mastra/core/utils';
 import { isReplicationConfigured } from '../../../db/replication';
 import type { ClickhouseReplicationConfig } from '../../../db/replication';
 import { TABLE_SCORE_EVENTS, TABLE_SCORE_EVENTS_CURRENT, TABLE_SCORE_EVENTS_DELTA } from './ddl';
-import { recordDeletionRequest } from './deletion-requests';
+import { markDeletionRequestApplied, recordDeletionRequest } from './deletion-requests';
 import { buildPaginationClause, buildScoresFilterConditions, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, rowToScoreRecord, scoreRecordToRow } from './helpers';
@@ -224,9 +224,11 @@ export async function batchCreateScores(client: ClickHouseClient, args: BatchCre
  * `organizationId` and `resourceId` values are ANDed into the predicate to
  * restrict deletion to records with matching scope fields.
  *
- * A durable deletion request is recorded before the lightweight delete. The
- * delete is immediately visible to subsequent reads; physical purge depends on
- * the table's configured retention TTL. The delta table is intentionally not
+ * A durable deletion request is recorded before the lightweight delete and
+ * marked applied once the delete succeeds. If the delete fails, the request
+ * stays unapplied; retry by calling this function again. The delete is
+ * immediately visible to subsequent reads; physical purge depends on the
+ * table's configured retention TTL. The delta table is intentionally not
  * touched and expires through its fixed two-day TTL.
  */
 export async function deleteScores(
@@ -236,7 +238,7 @@ export async function deleteScores(
 ): Promise<void> {
   if (args.scoreIds.length === 0) return;
 
-  await recordDeletionRequest(client, {
+  const request = await recordDeletionRequest(client, {
     requestId: randomUUID(),
     organizationId: args.organizationId,
     resourceId: args.resourceId,
@@ -273,6 +275,8 @@ export async function deleteScores(
       clickhouse_settings,
     });
   }
+
+  await markDeletionRequestApplied(client, request, replication);
 }
 
 // ============================================================================
@@ -350,6 +354,17 @@ type ScoreDeltaRow = Record<string, any> & {
   scoreId: string;
 };
 
+/**
+ * Delta reads join the delta stream to the current-state table by scoreId, so
+ * a poll or replay always returns the latest write of a score (a rewrite may
+ * change traceId or timestamp, which the delta row does not track).
+ *
+ * A score's first delta row is its only cursor: rows after `afterCursor` are
+ * dropped when the same scoreId already has a row at or before it, and
+ * `LIMIT 1 BY` keeps the lowest cursor within the page. Duplicate delta rows
+ * (a concurrent-insert race past the MV check) therefore never surface, in
+ * this poll or a later one.
+ */
 async function queryScoresAfterCursor(
   client: ClickHouseClient,
   whereClause: string,
@@ -367,12 +382,16 @@ async function queryScoresAfterCursor(
         s.scoreId AS scoreId,
         toString(d.cursorId) AS cursorId
       FROM ${TABLE_SCORE_EVENTS_DELTA} d
-      INNER JOIN ${TABLE_SCORE_EVENTS} s
-        ON ((s.traceId = d.traceId) OR (s.traceId IS NULL AND d.traceId IS NULL))
-       AND s.timestamp = d.timestamp
-       AND s.scoreId = d.scoreId
-      ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
+      INNER JOIN ${TABLE_SCORE_EVENTS_CURRENT} s FINAL
+        ON s.scoreId = d.scoreId
+      ${whereClause ? `${whereClause} AND` : 'WHERE'} d.cursorId > {afterCursor:UInt64}
+        AND d.scoreId NOT IN (
+          SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA}
+          WHERE cursorId <= {afterCursor:UInt64}
+            AND scoreId IN (SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA} WHERE cursorId > {afterCursor:UInt64})
+        )
       ORDER BY d.cursorId ASC
+      LIMIT 1 BY s.scoreId
       LIMIT {fetchLimit:UInt32}
     `,
     { ...params, afterCursor: cursorId, fetchLimit: limit + 1 },
@@ -389,10 +408,8 @@ async function getDeltaCursor(
     `
       SELECT toString(max(d.cursorId)) AS cursorId
       FROM ${TABLE_SCORE_EVENTS_DELTA} d
-      INNER JOIN ${TABLE_SCORE_EVENTS} s
-        ON ((s.traceId = d.traceId) OR (s.traceId IS NULL AND d.traceId IS NULL))
-       AND s.timestamp = d.timestamp
-       AND s.scoreId = d.scoreId
+      INNER JOIN ${TABLE_SCORE_EVENTS_CURRENT} s FINAL
+        ON s.scoreId = d.scoreId
       ${whereClause}
     `,
     params,

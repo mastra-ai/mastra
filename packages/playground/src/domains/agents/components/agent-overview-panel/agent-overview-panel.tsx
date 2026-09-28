@@ -38,10 +38,13 @@ export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
   return (
     <div
       data-testid="agent-overview-panel"
-      className={cn('rounded-studio-frame grid h-full min-h-0 grid-rows-[auto_1fr] overflow-hidden', frameSurfaceStyle)}
+      className={cn(
+        'ml-2 grid h-full min-h-0 grid-rows-[auto_1fr] overflow-hidden rounded-studio-frame',
+        frameSurfaceStyle,
+      )}
     >
       {/* The header route action owns the close control (see AgentDetailHeaderActions). */}
-      <div className="border-border flex h-10 min-h-10 items-center border-b px-4">
+      <div className="flex h-10 min-h-10 items-center border-b border-border px-4">
         <Txt as="h2" variant="subheading" tone="ink">
           Config
         </Txt>

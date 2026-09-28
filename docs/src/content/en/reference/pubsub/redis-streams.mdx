@@ -125,7 +125,7 @@ const pubsub = new RedisStreamsPubSub({
     name: 'streamIdleTtlMs',
     type: 'number',
     description:
-      'Idle expiry in milliseconds: a sliding TTL refreshed on every write (publish, nack retry, group re-creation). Each write resets it, so an actively-written stream never expires mid-flight; a stream left idle for the full duration is deleted by Redis automatically. Note that only writes refresh the TTL — a consumer slowly draining a backlog does not — so set it well above the longest expected gap between writes on a live topic. This is a backstop, not the primary cleanup — `clearTopic` handles normal end-of-lifecycle deletion; this only bounds memory for streams that never reach a `clearTopic` call (e.g. a crashed run). Must be a non-negative integer. Defaults to 0 (disabled).',
+      'Idle expiry in milliseconds: a sliding TTL refreshed on every write to a stream (publish, subscribe creating its consumer group, nack retry). Each write resets it, so an actively-written stream never expires mid-flight; a stream left idle for the full duration is deleted by Redis automatically, together with its entries and consumer groups. Only writes refresh the TTL — a consumer slowly draining a backlog does not — so keep it well above the longest expected gap between writes on a live topic, and above the longest a grouped worker may be offline while still expecting to replay its backlog on restart. For topics with a clear end of life (workflow and agent runs), `clearTopic` deletes the stream eagerly and the TTL only covers streams that never reach that call, such as a crashed run. For open-ended topics that are never cleared (for example, per-conversation streams), the TTL is the only mechanism that reclaims their memory — with it disabled they stay in Redis forever, so production deployments should set it (for example, 7 days). Must be a non-negative integer. Defaults to 0 (disabled).',
     isOptional: true,
     defaultValue: '0',
   },
@@ -222,8 +222,18 @@ Deletes a topic's stream and every consumer group on it, freeing the memory a fi
 
 Automatic cleanup requires `@mastra/core` and `@mastra/redis-streams` versions that both support `clearTopic`: the runtime routes the call through its caching layer, so upgrade the two packages together to get end-of-run stream deletion.
 
+Not every topic reaches a `clearTopic` call. Topics without a defined end of life (per-conversation streams, application feeds) are never cleared, and a stream that misses its cleanup (for example, a crashed run) is never retried. Configure the `streamIdleTtlMs` sliding TTL to reclaim those streams once they go idle.
+
 ```typescript
 await pubsub.clearTopic('workflow.events.run-123')
+```
+
+### `trimTopic(topic, { runId, producedBefore? })`
+
+Pages through the stream with `XRANGE` and runs `XDEL` for every entry published with `runId`. With `producedBefore`, only entries produced at or before that time are deleted, skipping approval and suspension prompts. Mastra uses this to trim a long run each time its messages are saved. Mastra calls this once a thread run's messages are persisted, so an idle thread's stream empties instead of growing to `maxLen`. Because entries are matched by `runId`, a run resumed after a restart also removes the entries it published before the restart. Entries from other runs, including those from other processes, are never touched. Best-effort. Failures are logged at warn level.
+
+```typescript
+await pubsub.trimTopic('agent.thread.thread-abc', { runId: 'run-123' })
 ```
 
 ### `close()`

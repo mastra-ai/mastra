@@ -50,7 +50,7 @@ export function AgentProviderDetails({ agentName, provider, modelId }: AgentProv
             </span>
             <span className="overflow-wrap-anywhere min-w-0">{provider}</span>
           </TextAndIcon>
-          <span className="overflow-wrap-anywhere text-caption text-foreground min-w-0">
+          <span className="overflow-wrap-anywhere min-w-0 text-caption text-foreground">
             {modelId || 'No model configured'}
           </span>
         </div>

@@ -373,7 +373,7 @@ describe('TracesListView — usage cells', () => {
 
     expect(screen.getByText('12.4K')).toBeTruthy();
     expect(screen.getByText('800')).toBeTruthy();
-    expect(screen.getByText('0.0123 eur')).toBeTruthy();
+    expect(screen.getByText('0.01 eur')).toBeTruthy();
   });
 
   it('leaves the usage cells blank for a trace with no totals', () => {
@@ -451,7 +451,16 @@ describe('TracesListView — environment and end time cells', () => {
       );
 
       expect(screen.getByText('End')).toBeTruthy();
-      expect(screen.getByText('Jun 10 13:07:47')).toBeTruthy();
+      const endedAt = new Date(2026, 5, 10, 13, 7, 47);
+      const title = new Intl.DateTimeFormat(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+      }).format(endedAt);
+      expect(screen.getByTitle(title).textContent).toBe(title);
     });
   });
 });

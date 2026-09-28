@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { providerDisplayName } from '../../settings/components/provider-display-name';
 import type { ProviderConnection } from '../hooks/useProviderConnection';
-import { isProviderConfigured, matchesProviderQuery } from '../hooks/useProviderConnection';
+import { matchesProviderQuery } from '../hooks/useProviderConnection';
 import { ProviderBrandIcon } from './ProviderBrandIcon';
 
 /** Sign-in buttons for the providers that support it, then an API-key search for the rest. */
@@ -36,11 +36,11 @@ export function ModelProviderPicker({ connection }: { connection: ProviderConnec
                 size="lg"
                 variant={connection.provider?.provider === provider.provider ? 'primary' : 'default'}
                 className="w-full"
-                disabled={connection.pending}
+                disabled={connection.pending || !connection.canConfigure(provider)}
                 onClick={() => connection.chooseSignInProvider(provider)}
               >
                 <ProviderBrandIcon provider={provider.provider} />
-                {isProviderConfigured(provider)
+                {connection.isConfigured(provider)
                   ? `${providerDisplayName(provider.provider)} connected`
                   : `Continue with ${providerDisplayName(provider.provider)}`}
               </Button>
@@ -77,9 +77,9 @@ export function ModelProviderPicker({ connection }: { connection: ProviderConnec
             {visibleKeyProviders.map(provider => (
               <Button
                 key={provider.provider}
-                variant={connection.provider?.provider === provider.provider ? 'primary' : 'outline'}
+                variant={connection.provider?.provider === provider.provider ? 'primary' : 'default'}
                 aria-label={providerDisplayName(provider.provider)}
-                disabled={connection.pending}
+                disabled={connection.pending || !connection.canConfigure(provider)}
                 onClick={() => connection.chooseKeyProvider(provider)}
               >
                 {providerDisplayName(provider.provider)}

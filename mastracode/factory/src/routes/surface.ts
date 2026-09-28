@@ -23,6 +23,7 @@ import {
   resolveFactoryDefaultModelId,
   resolveFactoryProjectForSession,
   resolveFactorySourceControl,
+  resolveFactorySourceRepository,
 } from '../session/factory-session.js';
 import type { EnsuredFactorySourceSession } from '../session/factory-session.js';
 import type { LiveSessions } from '../session/live-sessions.js';
@@ -189,8 +190,9 @@ function guardIntegrationRoutes({
 async function reuseBoundSession(
   sourceControl: SourceControlStorageHandle,
   input: FactoryBindingPreparationInput,
+  role: string = input.role,
 ): Promise<EnsuredFactorySourceSession | undefined> {
-  const ref = input.item.sessions[input.role];
+  const ref = input.item.sessions[role];
   if (!ref) return undefined;
   // At least as strict as the coordinator's resolveSourceSession: a ref it
   // would reject must fall through to minting, not hard-fail the run.
@@ -211,6 +213,49 @@ async function reuseBoundSession(
     branch: session.branch,
     baseBranch: session.baseBranch,
   };
+}
+
+/** Roles whose sessions a later role may continue in, newest stage first. */
+const INHERITABLE_ROLE_FALLBACK = ['plan', 'triage'];
+
+/**
+ * A role running for the first time continues in the card's latest earlier
+ * session on the same branch, so a build approved by someone other than the
+ * plan's owner keeps the plan's context instead of starting empty. Review is
+ * independent by design and never inherits.
+ */
+async function inheritEarlierSession(
+  sourceControl: SourceControlStorageHandle,
+  input: FactoryBindingPreparationInput,
+  board: { roleForPhase(phase: string): string | undefined } | undefined,
+  branch: string,
+  repositorySlug: string | undefined,
+): Promise<EnsuredFactorySourceSession | undefined> {
+  if (input.role === 'review') return undefined;
+  // The card's linked repository can change after an earlier role ran; only
+  // continue in a session on the repository a fresh session would use.
+  const repository = await resolveFactorySourceRepository({
+    sourceControl,
+    orgId: input.record.orgId,
+    factoryProjectId: input.record.factoryProjectId,
+    repositorySlug,
+  });
+  if (!repository.found) return undefined;
+  const candidates: string[] = [];
+  for (const entry of [...(input.item.stageHistory ?? [])].reverse()) {
+    const role = board?.roleForPhase(entry.stage);
+    if (role && role !== input.role && role !== 'review' && !candidates.includes(role)) candidates.push(role);
+  }
+  for (const role of INHERITABLE_ROLE_FALLBACK) {
+    if (role !== input.role && !candidates.includes(role)) candidates.push(role);
+  }
+  for (const role of candidates) {
+    const session = await reuseBoundSession(sourceControl, input, role);
+    if (session && session.branch === branch && session.projectRepositoryId === repository.projectRepositoryId) {
+      return session;
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -262,6 +307,7 @@ export async function prepareFactoryRuleBinding(
     const approver = input.record.approvedBy ?? undefined;
     const preparedSession =
       (await reuseBoundSession(sourceControl, input)) ??
+      (await inheritEarlierSession(sourceControl, input, board, branch, repositorySlug)) ??
       (await ensureFactorySourceSession({
         sourceControl,
         orgId: input.record.orgId,
@@ -339,7 +385,7 @@ export function buildIntegrationContext(
     feed: CommentsDomain;
     domains: Pick<
       FactoryApiRoutesDeps['domains'],
-      'projects' | 'intake' | 'workItems' | 'channelIdentity' | 'memorySettings'
+      'projects' | 'intake' | 'workItems' | 'channelIdentity' | 'memorySettings' | 'modelPacks'
     >;
     /**
      * Stable id of the registered source-control-owning integration (today:
@@ -371,6 +417,7 @@ export function buildIntegrationContext(
       intake: deps.domains.intake,
       channelIdentity: deps.domains.channelIdentity,
       memorySettings: deps.domains.memorySettings,
+      modelPacks: deps.domains.modelPacks,
     },
     ...(deps.factoryReady ? { workItems: deps.domains.workItems, feed: deps.feed } : {}),
     ...(deps.factoryReady

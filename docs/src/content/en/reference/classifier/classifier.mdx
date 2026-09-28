@@ -1,0 +1,409 @@
+---
+title: 'Reference: Classifier | Classifier'
+description: 'API reference for classifying JSON-compatible state with typed choice, score, and boolean questions.'
+slug: '/classifier/classifier'
+packages:
+  - '@mastra/core'
+---
+
+# Classifier
+
+`Classifier` asks an evaluation model one or more fixed-domain questions about shared state. Use it when your application needs a typed choice, numeric score, or boolean probability without parsing generated text.
+
+A classifier only returns evaluation results. Your application decides how to use them, for example by selecting a route or comparing a probability with a safety threshold.
+
+The examples on this page assume `model` is an AI SDK `EvaluationModelV4` implementation. `Classifier` doesn't resolve model IDs or convert a language model into an evaluation model.
+
+## Basic usage
+
+Define questions in the constructor when every evaluation uses the same question set. Keep the question object literal so TypeScript can infer the answer keys and choice values.
+
+```typescript
+import { Classifier } from '@mastra/core/classifier'
+
+const classifier = new Classifier({
+  id: 'request-classifier',
+  model,
+  questions: {
+    route: {
+      type: 'choice',
+      instructions: 'Choose the team that should handle this request.',
+      criteria: {
+        billing: 'Questions about invoices, charges, or refunds',
+        support: 'Questions about using or troubleshooting the product',
+      },
+    },
+    urgent: {
+      type: 'boolean',
+      instructions: 'Does this request require an immediate response?',
+    },
+  },
+})
+
+const result = await classifier.evaluate({
+  state: {
+    subject: 'Duplicate charge',
+    message: 'I was charged twice for the same subscription.',
+  },
+})
+
+result.answers.route.choice // 'billing' | 'support'
+result.answers.urgent.probability // P(true), from 0 to 1
+```
+
+The evaluation model receives every question with the same `state`. When a question omits `instructions`, its question name is used instead.
+
+## Constructor
+
+```typescript
+new Classifier(options)
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'A non-empty identifier used in tracing and error context.',
+    isOptional: false,
+  },
+  {
+    name: 'model',
+    type: 'EvaluationModelV4 | MastraEvaluationModel',
+    description:
+      'An AI SDK evaluation model or a Mastra evaluation model wrapper. The model declares which question types it supports.',
+    isOptional: false,
+  },
+  {
+    name: 'questions',
+    type: 'ClassifierQuestions',
+    description:
+      'A non-empty record of named questions. Omit this field to supply the questions to each evaluate() call instead.',
+    isOptional: true,
+  },
+]}
+/>
+
+Constructor questions and per-call questions are mutually exclusive. If the constructor includes `questions`, `evaluate()` rejects a `questions` option at compile time. If the constructor omits them, every `evaluate()` call must provide them.
+
+## Question types
+
+Question names become keys in `result.answers`. Each question supports an optional `instructions` field containing a JSON-compatible value. Criteria values can also contain JSON-compatible data, not only strings.
+
+### Choice questions
+
+A choice question selects one key from a non-empty `criteria` record.
+
+```typescript
+const questions = {
+  sentiment: {
+    type: 'choice',
+    instructions: 'Classify the customer sentiment.',
+    criteria: {
+      positive: 'The customer is satisfied or complimentary.',
+      neutral: 'The customer has no clear positive or negative sentiment.',
+      negative: 'The customer is dissatisfied or frustrated.',
+    },
+  },
+} as const
+```
+
+The answer contains the selected `choice`. When the provider includes `probabilities`, the record must contain every choice key and sum to `1` within the provider's declared rounding precision.
+
+```typescript
+const answer = {
+  type: 'choice',
+  choice: 'negative',
+  probabilities: {
+    positive: 0.05,
+    neutral: 0.15,
+    negative: 0.8,
+  },
+}
+```
+
+### Score questions
+
+A score question uses an ordered array with at least two levels. Array indexes define the score range. For three criteria, valid scores range from `0` through `2`, including fractional values.
+
+```typescript
+const questions = {
+  quality: {
+    type: 'score',
+    instructions: 'Score the response quality.',
+    criteria: ['Incorrect or unhelpful', 'Partially correct', 'Correct and complete'],
+  },
+} as const
+```
+
+A provider can return a fractional score and an optional probability for each level:
+
+```typescript
+const answer = {
+  type: 'score',
+  score: 1.7,
+  probabilities: {
+    '0': 0.05,
+    '1': 0.2,
+    '2': 0.75,
+  },
+}
+```
+
+### Boolean questions
+
+A boolean question returns the estimated probability that the answer is `true`. The value is always between `0` and `1`. It isn't the confidence of whichever outcome is more likely.
+
+```typescript
+const questions = {
+  unsafe: {
+    type: 'boolean',
+    instructions: 'Does the message contain unsafe content?',
+    criteria: {
+      true: 'The message contains unsafe content.',
+      false: 'The message is safe.',
+    },
+  },
+} as const
+```
+
+The `criteria` field is optional for boolean questions. When present, its `true` and `false` descriptions are also optional.
+
+```typescript
+const answer = {
+  type: 'boolean',
+  probability: 0.92,
+}
+```
+
+## `evaluate(options)`
+
+Evaluates all questions against the supplied state.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'state',
+    type: 'ClassifierState',
+    description: 'The JSON-compatible state evaluated by every question.',
+    isOptional: false,
+  },
+  {
+    name: 'questions',
+    type: 'ClassifierQuestions',
+    description: 'The questions to evaluate. Required when the constructor omitted questions.',
+    isOptional: true,
+  },
+  {
+    name: 'abortSignal',
+    type: 'AbortSignal',
+    description: 'Cancels the active provider request and any wait between retry attempts.',
+    isOptional: true,
+  },
+  {
+    name: 'providerOptions',
+    type: 'SharedV4ProviderOptions',
+    description: 'Provider-specific options forwarded unchanged to the evaluation model.',
+    isOptional: true,
+  },
+  {
+    name: 'maxRetries',
+    type: 'number',
+    description: 'The number of retries allowed after retryable provider API errors. Must be a non-negative integer.',
+    isOptional: true,
+    defaultValue: '2',
+  },
+]}
+/>
+
+### Per-call questions
+
+Omit `questions` from the constructor when the question set changes between evaluations. The answer type is inferred from the questions supplied to that call.
+
+```typescript
+import { Classifier } from '@mastra/core/classifier'
+
+const classifier = new Classifier({
+  id: 'dynamic-classifier',
+  model,
+})
+
+const result = await classifier.evaluate({
+  state: { response: 'Your refund has been processed.' },
+  questions: {
+    tone: {
+      type: 'choice',
+      criteria: {
+        empathetic: 'Acknowledges the customer and responds with care',
+        neutral: 'States the outcome without emotional language',
+      },
+    },
+  },
+})
+
+result.answers.tone.choice // 'empathetic' | 'neutral'
+```
+
+## Return value
+
+`evaluate()` returns `Promise<ClassifierResult<QUESTIONS>>`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'answers',
+    type: 'ClassifierAnswers<QUESTIONS>',
+    description: 'One typed answer for each configured question.',
+    isOptional: false,
+  },
+  {
+    name: 'usage',
+    type: 'ClassifierUsage',
+    description:
+      'Token usage reported by the provider. totalTokens is the sum of inputTokens and outputTokens, with missing values counted as zero.',
+    isOptional: false,
+  },
+  {
+    name: 'warnings',
+    type: 'SharedV4Warning[]',
+    description: 'Warnings returned by the evaluation model.',
+    isOptional: false,
+  },
+  {
+    name: 'rounding',
+    type: '{ probabilityDecimals?: number; scoreDecimals?: number }',
+    description: 'The precision the provider used for probabilities and scores.',
+    isOptional: true,
+  },
+  {
+    name: 'providerMetadata',
+    type: 'SharedV4ProviderMetadata',
+    description: 'Provider-specific metadata returned by the evaluation model.',
+    isOptional: true,
+  },
+  {
+    name: 'response',
+    type: 'ClassifierResult["response"]',
+    description:
+      'Provider response metadata. Mastra supplies the current time and configured model ID when the provider omits them.',
+    isOptional: false,
+  },
+]}
+/>
+
+```typescript
+interface ClassifierUsage {
+  inputTokens?: number
+  outputTokens?: number
+  totalTokens: number
+}
+
+interface ClassifierResponse {
+  id?: string
+  timestamp: Date
+  modelId: string
+  headers?: Record<string, string | undefined>
+  body?: unknown
+}
+```
+
+## Validation and errors
+
+`Classifier` validates inputs before provider input/output and validates provider output before returning it.
+
+Input validation includes:
+
+- `id` must be a non-empty string.
+- `state`, instructions, and criteria must be JSON-compatible.
+- The question record and choice criteria must not be empty.
+- Score criteria must contain at least two defined levels.
+- Every question type must be supported by the evaluation model.
+- `maxRetries` must be a non-negative integer.
+
+Provider responses must contain exactly one matching answer for each question. The classifier also rejects invalid choices, out-of-range scores or probabilities, incomplete probability distributions, non-finite token counts, malformed warnings, and invalid response timestamps.
+
+Only retryable AI SDK `APICallError` failures are retried. Other errors reject immediately. When all retries fail, `evaluate()` rethrows the last provider error. Aborting the supplied signal rejects with the signal's abort reason, including when cancellation occurs during retry backoff.
+
+## Observability
+
+When an active Mastra span exists, `evaluate()` creates a `CLASSIFIER_EVALUATION` child span. It records the classifier and model identifiers, provider, question count and types, attempts, duration, and token usage.
+
+The span doesn't include the evaluated state, question instructions, criteria, answers, probabilities, provider response body, or generated text.
+
+## Customize provider responses
+
+`Classifier` automatically wraps a raw AI SDK evaluation model in `MastraEvaluationModel`. Pass your own wrapper when provider output needs normalization before validation.
+
+```typescript
+import {
+  Classifier,
+  MastraEvaluationModel,
+  type EvaluationModelResult,
+} from '@mastra/core/classifier'
+
+class NormalizedEvaluationModel extends MastraEvaluationModel {
+  protected override transformResult(result: EvaluationModelResult): EvaluationModelResult {
+    return {
+      ...result,
+      answers: normalizeAnswers(result.answers),
+    }
+  }
+}
+
+const classifier = new Classifier({
+  id: 'normalized-classifier',
+  model: new NormalizedEvaluationModel(model),
+})
+```
+
+`transformResult()` runs after the provider call and before `Classifier` validates the response.
+
+## Registering classifiers
+
+Register classifiers on the `Mastra` instance to share them across your application and retrieve them by key or ID. When a registered classifier is evaluated without an active trace, it starts a root `CLASSIFIER_EVALUATION` span through the `Mastra` instance's configured observability provider.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Classifier } from '@mastra/core/classifier'
+
+export const mastra = new Mastra({
+  classifiers: {
+    safety: new Classifier({
+      id: 'safety',
+      model,
+      questions: {
+        unsafe: { type: 'boolean' },
+      },
+    }),
+  },
+})
+
+mastra.getClassifier('safety')
+mastra.getClassifierById('safety')
+mastra.listClassifiers()
+```
+
+## Using classifiers in workflows
+
+A classifier with constructor-configured questions can be added to a workflow with [`createStep(classifier)`](/reference/workflows/step) or [`.classifier()`](/reference/workflows/workflow-methods/classifier). Workflow output contains complete typed `answers` and normalized `usage`.
+
+```typescript
+const workflow = createWorkflow({
+  id: 'ticket-triage',
+  inputSchema: z.object({ message: z.string() }),
+  outputSchema: z.any(),
+})
+  .map({ message: { initData: true, path: 'message' } })
+  .classifier('safety')
+  .commit()
+```
+
+The workflow adapter doesn't include warnings, raw provider responses, headers, or provider metadata in step output. Use direct `evaluate()` calls or classifier observability when you need that provider-level detail.
+
+## Related
+
+- [Workflow.classifier()](/reference/workflows/workflow-methods/classifier)
+- [Step class](/reference/workflows/step)
+- [getClassifier()](/reference/core/getClassifier)
+- [getClassifierById()](/reference/core/getClassifierById)
+- [listClassifiers()](/reference/core/listClassifiers)

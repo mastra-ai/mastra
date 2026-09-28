@@ -14,8 +14,8 @@ export const ToolInformation = ({ toolDescription, toolId, toolType }: ToolInfor
   const ToolIconComponent = ToolIconMap[toolType || 'tool'];
 
   return (
-    <div className="text-foreground flex gap-2">
-      <Icon size="lg" className="bg-muted shrink-0 self-start rounded-md p-1">
+    <div className="flex gap-2 text-foreground">
+      <Icon size="lg" className="shrink-0 self-start rounded-md bg-muted p-1">
         <ToolIconComponent />
       </Icon>
 

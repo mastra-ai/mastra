@@ -10,7 +10,7 @@ import {
   ThreadListItems,
 } from '@mastra/playground-ui/components/ThreadList';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { format } from 'date-fns';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { GitCompareIcon, ArrowRightIcon, ChevronDown, X } from 'lucide-react';
 import { useState } from 'react';
 import { useDatasetVersions } from '../../hooks/use-dataset-versions';
@@ -70,7 +70,7 @@ export function DatasetVersionsPanel({
   };
 
   return (
-    <div className="border-border grid w-64 grid-rows-[auto_1fr] gap-2 overflow-hidden border-l pt-3 pl-3">
+    <div className="grid w-64 grid-rows-[auto_1fr] gap-2 overflow-hidden border-l border-border pt-3 pl-3">
       <div className="flex items-center justify-between gap-2 pr-1 pl-2">
         <Txt as="h2" variant="body" tone="muted">
           Versions
@@ -135,14 +135,14 @@ export function DatasetVersionsPanel({
                           aria-hidden="true"
                         />
                       )}
-                      <span className="text-caption flex min-w-0 flex-1 items-center gap-2">
-                        <span className="text-foreground shrink-0 font-medium">v.{item.version}</span>
+                      <span className="flex min-w-0 flex-1 items-center gap-2 text-caption">
+                        <span className="shrink-0 font-medium text-foreground">v.{item.version}</span>
                         {createdAtDate && (
-                          <span className="text-muted-foreground min-w-0 flex-1 truncate">
-                            {format(createdAtDate, 'MMM d, yyyy HH:mm')}
+                          <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                            {formatDate(createdAtDate, 'date-time')}
                           </span>
                         )}
-                        {item.isCurrent && <span className="text-muted-foreground shrink-0">latest</span>}
+                        {item.isCurrent && <span className="shrink-0 text-muted-foreground">latest</span>}
                       </span>
                     </span>
                   </ThreadListItem>

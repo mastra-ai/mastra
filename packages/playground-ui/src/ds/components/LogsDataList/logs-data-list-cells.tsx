@@ -1,16 +1,19 @@
+import { Badge } from '../Badge';
+import type { BadgeVariant } from '../Badge';
 import { DataListCell, DataListTextCell } from '../DataList/data-list-cells';
-type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { cn } from '@/lib/utils';
 
-const LEVEL_CONFIG: Record<LogLevel, { label: string; color: string }> = {
-  debug: { label: 'DEBUG', color: 'var(--muted-foreground)' },
-  info: { label: 'INFO', color: 'var(--notice-info)' },
-  warn: { label: 'WARN', color: 'var(--notice-warning)' },
-  error: { label: 'ERROR', color: 'var(--notice-destructive)' },
-  fatal: { label: 'FATAL', color: 'var(--destructive)' },
+type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+
+const LEVEL_VARIANT: Record<LogLevel, BadgeVariant> = {
+  debug: 'neutral',
+  info: 'blue',
+  warn: 'yellow',
+  error: 'red',
+  fatal: 'red',
 };
 
 // ---------------------------------------------------------------------------
@@ -22,13 +25,9 @@ export interface LogsDataListLevelCellProps {
 }
 
 export function LogsDataListLevelCell({ level }: LogsDataListLevelCellProps) {
-  const config = LEVEL_CONFIG[level];
-
   return (
     <DataListCell>
-      <span className="text-column uppercase" style={{ color: config.color }}>
-        {config.label}
-      </span>
+      <Badge variant={LEVEL_VARIANT[level]}>{level}</Badge>
     </DataListCell>
   );
 }
@@ -65,7 +64,7 @@ export function LogsDataListEntityCell({ entityType, entityName }: LogsDataListE
   return (
     <DataListCell className="flex min-w-0 items-center gap-2">
       <EntityTypeIcon entityType={type} />
-      {entityName ? <span className="text-body-sm min-w-0 truncate">{entityName}</span> : '-'}
+      {entityName ? <span className="min-w-0 truncate text-body-sm">{entityName}</span> : '-'}
     </DataListCell>
   );
 }
@@ -80,7 +79,7 @@ export interface LogsDataListMessageCellProps {
 
 export function LogsDataListMessageCell({ message }: LogsDataListMessageCellProps) {
   return (
-    <DataListCell className="text-body-sm text-muted-foreground min-w-0 truncate font-mono">{message}</DataListCell>
+    <DataListCell className="min-w-0 truncate font-mono text-body-sm text-muted-foreground">{message}</DataListCell>
   );
 }
 

@@ -10,6 +10,7 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useState } from 'react';
 
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
+import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { candidatePayload } from '../../factory/boardDrag';
 import { cardMoves } from '../../factory/cardPrimaryAction';
 import { useBoardItems } from '../../factory/hooks/useBoardItems';
@@ -35,6 +36,7 @@ import { GlobalSearchWorkItemResults } from './GlobalSearchWorkItemResults';
 import { GlobalSearchWorkItemsStatus } from './GlobalSearchWorkItemsStatus';
 
 export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factoryId: string; closeSearch: () => void }) {
+  const currentUserId = useFactoryAuth().data?.user?.userId;
   const factories = useFactoriesQuery().data ?? [];
   const activeFactory = factories.find(factory => factory.id === factoryId);
   const repositoryIds = activeFactory?.repositories.map(repository => repository.projectRepositoryId) ?? [];
@@ -48,11 +50,13 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const workBoard = useBoardItems({
     factoryProjectId: searchableFactoryId,
     kind: 'work',
+    currentUserId,
     onFailure: message => toast.error(message),
   });
   const reviewBoard = useBoardItems({
     factoryProjectId: searchableFactoryId,
     kind: 'review',
+    currentUserId,
     onFailure: message => toast.error(message),
   });
   const runs = useBoardRuns({ factoryProjectId: factoryId, refetchItems: workItems.refetch });

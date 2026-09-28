@@ -68,14 +68,14 @@ export const ManageConnectionForm = ({
             onClick={onBack}
             aria-label="Back to connections"
             data-testid={`${testIdPrefix}-back`}
-            className="text-muted-foreground -mt-1 -ml-1.5 w-fit"
+            className="-mt-1 -ml-1.5 w-fit text-muted-foreground"
             icon={<ChevronLeft />}
           >
             Connections
           </Button>
         )}
         <div className="flex flex-col items-center gap-4 text-center">
-          <div className="bg-muted grid size-14 place-items-center overflow-hidden rounded-xl" aria-hidden>
+          <div className="grid size-14 place-items-center overflow-hidden rounded-xl bg-muted" aria-hidden>
             {iconUrl ? (
               <img src={iconUrl} alt="" className="size-8 object-contain" />
             ) : (

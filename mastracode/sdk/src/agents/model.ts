@@ -3,6 +3,7 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import type { GatewayLanguageModel, MastraModelGatewayInterface } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import { getRequestAccountSelection, isRequestAccountRoutingExhausted } from '../auth/account-routing-context.js';
+import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import type { CredentialStore, OAuthAccountRecord } from '../auth/types.js';
 import { listBuiltinModePacks, resolveModePackFallbackChain } from '../onboarding/packs.js';
 import {
@@ -231,7 +232,7 @@ export function resolveModel(
   });
 
   if (!auth && credentialStore?.allowEnvironmentFallback === false) {
-    throw new Error(
+    throw new ProviderAuthRequiredError(
       `No usable ${providerId} credential is configured for this signed-in Factory account. Connect the provider or add an organization credential, then try again.`,
     );
   }

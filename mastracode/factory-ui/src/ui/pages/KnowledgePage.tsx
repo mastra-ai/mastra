@@ -6,7 +6,9 @@ import { useSearchParams } from 'react-router';
 
 import { useKnowledgeGraph } from '../../hooks/useKnowledgeGraph';
 import { SkeletonRows } from '../ui/SkeletonRows';
-import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
+import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { KnowledgeGraph } from '../domains/factory/components/knowledge/KnowledgeGraph';
 import { KnowledgeFlyout } from '../domains/factory/components/knowledge/KnowledgeFlyout';
 import type { Arrivals, DiffBaseline } from '../domains/factory/components/knowledge/graphDiff';
@@ -24,7 +26,15 @@ import { useInteractionIdle } from '../domains/factory/components/knowledge/useI
  * the `?thread=` search param so the view is linkable and back-button safe.
  */
 export function KnowledgePage() {
-  return <FactoryPageShell>{project => <KnowledgeContent factoryProjectId={project.id} />}</FactoryPageShell>;
+  const factory = useActiveFactory();
+  const slots = useSidebarHeaderSlots();
+  return (
+    <PageLayout variant="fit" {...slots}>
+      <div className="flex min-h-0 flex-col p-4">
+        <KnowledgeContent factoryProjectId={factory.id} />
+      </div>
+    </PageLayout>
+  );
 }
 
 /** One hop in the node trail (A7): the nodes visited via clicks/wikilinks. */

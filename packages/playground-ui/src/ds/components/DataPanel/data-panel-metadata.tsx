@@ -59,7 +59,7 @@ export function DataPanelMeta({ as, icon, tooltip, children, className, ...props
   );
 
   return (
-    <li className="group h-control-sm flex min-w-0 shrink-0 items-center">
+    <li className="group flex h-control-sm min-w-0 shrink-0 items-center">
       {!hasTooltip ? (
         root
       ) : (

@@ -120,7 +120,7 @@ const SaveAsPromptBlockDialog = ({
             ) : null}
           </DialogBody>
           <DialogFooter className="px-4 pt-4">
-            <Button icon={<X />} type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+            <Button icon={<X />} type="button" size="sm" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button icon={<Check />} type="submit" variant="primary" size="sm" disabled={!name.trim() || isPending}>
@@ -191,7 +191,7 @@ const InlineBlockContent = ({
 
   return (
     <>
-      <div className="group hover:bg-fill-subtle relative rounded-md">
+      <div className="group relative rounded-md hover:bg-fill-subtle">
         {/* Left gutter — drag handle (visible on hover/focus-within) */}
         {!readOnly && (
           <div className="absolute top-1 -left-8 flex flex-col items-center opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">

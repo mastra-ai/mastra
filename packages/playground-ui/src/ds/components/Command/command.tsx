@@ -78,7 +78,7 @@ const CommandDialog = ({
           filter={filter}
           onKeyDown={handleKeyDown}
           className={cn(
-            '**:[[cmdk-group-heading]]:text-column **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:text-muted-foreground',
+            '**:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:text-column **:[[cmdk-group-heading]]:text-muted-foreground',
             '[&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 **:[[cmdk-group]]:px-2',
             '[&_[data-slot=command-input-wrapper]_svg]:size-5',
             '**:[[cmdk-input]]:h-12',
@@ -118,7 +118,7 @@ const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrimitive.I
         {...props}
       />
       {rightSlot && (
-        <div data-slot="command-input-right-slot" className="text-muted-foreground ml-2 flex shrink-0 items-center">
+        <div data-slot="command-input-right-slot" className="ml-2 flex shrink-0 items-center text-muted-foreground">
           {rightSlot}
         </div>
       )}
@@ -187,7 +187,7 @@ const CommandEmpty = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Empty>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.Empty>
 >((props, ref) => (
-  <CommandPrimitive.Empty ref={ref} className="text-body-sm text-muted-foreground py-6 text-center" {...props} />
+  <CommandPrimitive.Empty ref={ref} className="py-6 text-center text-body-sm text-muted-foreground" {...props} />
 ));
 CommandEmpty.displayName = CommandPrimitive.Empty.displayName;
 

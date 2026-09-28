@@ -31,12 +31,24 @@ export function sessionOwnerFilterValue(userId: string): string {
   return `${SESSION_OWNER_PREFIX}${userId}`;
 }
 
-export function activeUserSessionFilterCount(filters: UserSessionFiltersState): number {
+/**
+ * A known viewer starts on their own sessions, matching the work and review lists. An unknown
+ * viewer has no sessions of their own, so they start on everyone's.
+ */
+export function defaultUserSessionFilters(viewerUserId: string | undefined): UserSessionFiltersState {
+  return viewerUserId ? { ...EMPTY_USER_SESSION_FILTERS, owner: MY_SESSIONS } : EMPTY_USER_SESSION_FILTERS;
+}
+
+/** Counts the controls moved away from `defaults`, so the resting view never reads as filtered. */
+export function activeUserSessionFilterCount(
+  filters: UserSessionFiltersState,
+  defaults: UserSessionFiltersState = EMPTY_USER_SESSION_FILTERS,
+): number {
   return (
-    Number(filters.search.trim() !== '') +
-    Number(filters.owner !== ALL_SESSION_OWNERS) +
-    Number(filters.status !== 'all') +
-    Number(filters.updated !== 'all')
+    Number(filters.search.trim() !== defaults.search.trim()) +
+    Number(filters.owner !== defaults.owner) +
+    Number(filters.status !== defaults.status) +
+    Number(filters.updated !== defaults.updated)
   );
 }
 

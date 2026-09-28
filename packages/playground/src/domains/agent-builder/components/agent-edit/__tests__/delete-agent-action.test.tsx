@@ -19,7 +19,7 @@ vi.mock('react-router', async () => {
     useNavigate: () => navigate,
   };
 });
-vi.mock('@mastra/playground-ui/store/playground-store', () => ({
+vi.mock('@/store/playground-store', () => ({
   usePlaygroundStore: () => ({ requestContext: undefined }),
 }));
 

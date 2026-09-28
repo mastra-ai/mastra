@@ -111,15 +111,15 @@ export const SkillBuilderStarter = () => {
   };
 
   return (
-    <div className="starter-aurora bg-sidebar flex min-h-full flex-col items-center justify-center px-4 py-16">
+    <div className="starter-aurora flex min-h-full flex-col items-center justify-center bg-sidebar px-4 py-16">
       <div className="relative z-10 flex w-full max-w-3xl flex-col gap-6">
-        <h1 className="starter-heading text-foreground text-title md:text-display font-display text-center tracking-tight">
+        <h1 className="starter-heading text-center font-display text-title tracking-tight text-foreground md:text-display">
           What skill do you want to build?
         </h1>
 
         <form onSubmit={handleSubmit}>
           <div
-            className="starter-prompt border-border bg-background duration-normal ease-out-custom focus-within:border-muted-foreground rounded-2xl border transition-colors"
+            className="starter-prompt rounded-2xl border border-border bg-background transition-colors duration-normal ease-out-custom focus-within:border-muted-foreground"
             style={{ viewTransitionName: 'skill-chat-composer' }}
           >
             <Textarea
@@ -132,7 +132,7 @@ export const SkillBuilderStarter = () => {
               onChange={e => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={isCreating}
-              className="text-body placeholder:text-muted-foreground min-h-[112px] resize-none px-5 py-4 outline-none focus:outline-none focus-visible:outline-none"
+              className="min-h-[112px] resize-none px-5 py-4 text-body outline-none placeholder:text-muted-foreground focus:outline-none focus-visible:outline-none"
               rows={3}
             />
             <div className="flex items-center justify-end px-3 pb-2.5">
@@ -168,7 +168,7 @@ export const SkillBuilderStarter = () => {
                 data-testid={`skill-builder-starter-example-${example.title.toLowerCase().replace(/\s+/g, '-')}`}
                 style={{ animationDelay: `${280 + i * 40}ms` }}
                 className={cn(
-                  'starter-chip group border-border text-caption hover:border-border-strong hover:bg-fill-subtle inline-flex items-center gap-2 rounded-full border bg-transparent px-4 py-2',
+                  'starter-chip group inline-flex items-center gap-2 rounded-full border border-border bg-transparent px-4 py-2 text-caption hover:border-border-strong hover:bg-fill-subtle',
                   quietTextHover,
                   controlStateColorTransition,
                 )}

@@ -20,15 +20,10 @@ export function TraceInsightView({ traceId, onBack }: TraceInsightViewProps) {
   return (
     <div className="grid content-start gap-6">
       <div className="flex items-center justify-between gap-3">
-        <Button icon={<ChevronLeft />} variant="outline" size="sm" onClick={onBack}>
+        <Button icon={<ChevronLeft />} size="sm" onClick={onBack}>
           Back to examples
         </Button>
-        <Button
-          icon={<TraceIcon />}
-          render={<LinkComponent href={getTraceHref(traceId)} />}
-          variant="outline"
-          size="sm"
-        >
+        <Button icon={<TraceIcon />} render={<LinkComponent href={getTraceHref(traceId)} />} size="sm">
           Open full trace
         </Button>
       </div>
@@ -79,9 +74,9 @@ function ObservationItem({ observation }: { observation: string }) {
   const { severity, kind, text } = parseTraceObservation(observation);
 
   return (
-    <li className={`text-body rounded-md p-3 ${OBSERVATION_SEVERITY_CARD[severity ?? 'info']}`}>
+    <li className={`rounded-md p-3 text-body ${OBSERVATION_SEVERITY_CARD[severity ?? 'info']}`}>
       {kind !== undefined && (
-        <p className="text-meta text-muted-foreground font-mono tracking-wider uppercase">
+        <p className="font-mono text-meta tracking-wider text-muted-foreground uppercase">
           {severity === 'problem' && (
             <>
               <span className="text-red-400">problem</span>
@@ -106,25 +101,25 @@ function TraceInsightBody({ insight }: { insight: TraceInsightResponse }) {
         <section aria-labelledby="trace-insight-summary-heading">
           <h2
             id="trace-insight-summary-heading"
-            className="text-caption text-muted-foreground font-mono tracking-wider uppercase"
+            className="font-mono text-caption tracking-wider text-muted-foreground uppercase"
           >
             Trace summary
           </h2>
-          <p className="text-body text-foreground mt-3">{insight.summary.summary}</p>
+          <p className="mt-3 text-body text-foreground">{insight.summary.summary}</p>
           {insight.summary.currentTask !== undefined && (
-            <dl className="text-body mt-4">
+            <dl className="mt-4 text-body">
               <dt className="text-muted-foreground">Current task</dt>
-              <dd className="text-foreground mt-1">{insight.summary.currentTask}</dd>
+              <dd className="mt-1 text-foreground">{insight.summary.currentTask}</dd>
             </dl>
           )}
           {insight.summary.degenerate === true && (
-            <p className="text-body mt-4 text-red-500">This trace was flagged as degenerate or looping.</p>
+            <p className="mt-4 text-body text-red-500">This trace was flagged as degenerate or looping.</p>
           )}
           {insight.summary.observations.length > 0 && (
             <>
               <h3
                 id="trace-insight-observations-heading"
-                className="text-caption text-muted-foreground mt-4 font-mono tracking-wider uppercase"
+                className="mt-4 font-mono text-caption tracking-wider text-muted-foreground uppercase"
               >
                 Observations
               </h3>
@@ -141,15 +136,15 @@ function TraceInsightBody({ insight }: { insight: TraceInsightResponse }) {
         <section aria-labelledby="trace-insight-signals-heading">
           <h2
             id="trace-insight-signals-heading"
-            className="text-caption text-muted-foreground font-mono tracking-wider uppercase"
+            className="font-mono text-caption tracking-wider text-muted-foreground uppercase"
           >
             Trace signal summaries
           </h2>
           <ul className="mt-3 space-y-3">
             {insight.signals.map(signal => (
-              <li key={signal.signalName} className={cn(raisedSurfaceStyle, 'text-body rounded-md p-3')}>
+              <li key={signal.signalName} className={cn(raisedSurfaceStyle, 'rounded-md p-3 text-body')}>
                 <p className="text-muted-foreground">{signalLabel(signalCatalog, signal.signalName)}</p>
-                <p className="text-foreground mt-1">{signal.signalText}</p>
+                <p className="mt-1 text-foreground">{signal.signalText}</p>
               </li>
             ))}
           </ul>

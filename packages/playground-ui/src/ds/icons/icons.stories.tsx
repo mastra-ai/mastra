@@ -103,11 +103,11 @@ const icons = [
 const IconGrid = ({ size = 'md' }: { size?: IconSize }) => (
   <div className="grid grid-cols-6 gap-4">
     {icons.map(({ name, component: IconComponent }) => (
-      <div key={name} className="state-layer bg-card flex flex-col items-center gap-2 rounded-lg p-3">
+      <div key={name} className="state-layer flex flex-col items-center gap-2 rounded-lg bg-card p-3">
         <Icon size={size} className="text-foreground">
           <IconComponent />
         </Icon>
-        <span className="text-caption text-muted-foreground text-center">{name.replace('Icon', '')}</span>
+        <span className="text-center text-caption text-muted-foreground">{name.replace('Icon', '')}</span>
       </div>
     ))}
   </div>
@@ -182,19 +182,19 @@ export const IconColors: Story = {
 export const AgentIcons: Story = {
   render: () => (
     <div className="flex gap-4">
-      <div className="bg-card flex flex-col items-center gap-2 rounded-lg p-3">
+      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
         <Icon size="lg" className="text-foreground">
           <AgentIcon />
         </Icon>
         <span className="text-caption text-muted-foreground">Agent</span>
       </div>
-      <div className="bg-card flex flex-col items-center gap-2 rounded-lg p-3">
+      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
         <Icon size="lg" className="text-foreground">
           <AgentCoinIcon />
         </Icon>
         <span className="text-caption text-muted-foreground">AgentCoin</span>
       </div>
-      <div className="bg-card flex flex-col items-center gap-2 rounded-lg p-3">
+      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
         <Icon size="lg" className="text-foreground">
           <AgentNetworkCoinIcon />
         </Icon>
@@ -207,13 +207,13 @@ export const AgentIcons: Story = {
 export const WorkflowIcons: Story = {
   render: () => (
     <div className="flex gap-4">
-      <div className="bg-card flex flex-col items-center gap-2 rounded-lg p-3">
+      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
         <Icon size="lg" className="text-foreground">
           <WorkflowIcon />
         </Icon>
         <span className="text-caption text-muted-foreground">Workflow</span>
       </div>
-      <div className="bg-card flex flex-col items-center gap-2 rounded-lg p-3">
+      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
         <Icon size="lg" className="text-foreground">
           <WorkflowCoinIcon />
         </Icon>
@@ -226,13 +226,13 @@ export const WorkflowIcons: Story = {
 export const ToolIcons: Story = {
   render: () => (
     <div className="flex gap-4">
-      <div className="bg-card flex flex-col items-center gap-2 rounded-lg p-3">
+      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
         <Icon size="lg" className="text-foreground">
           <ToolsIcon />
         </Icon>
         <span className="text-caption text-muted-foreground">Tools</span>
       </div>
-      <div className="bg-card flex flex-col items-center gap-2 rounded-lg p-3">
+      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
         <Icon size="lg" className="text-foreground">
           <ToolCoinIcon />
         </Icon>
@@ -245,25 +245,25 @@ export const ToolIcons: Story = {
 export const BrandIcons: Story = {
   render: () => (
     <div className="flex gap-4">
-      <div className="bg-card flex flex-col items-center gap-2 rounded-lg p-3">
+      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
         <Icon size="lg" className="text-foreground">
           <GithubIcon />
         </Icon>
         <span className="text-caption text-muted-foreground">Github</span>
       </div>
-      <div className="bg-card flex flex-col items-center gap-2 rounded-lg p-3">
+      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
         <Icon size="lg" className="text-foreground">
           <GithubCoinIcon />
         </Icon>
         <span className="text-caption text-muted-foreground">GithubCoin</span>
       </div>
-      <div className="bg-card flex flex-col items-center gap-2 rounded-lg p-3">
+      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
         <Icon size="lg" className="text-foreground">
           <GoogleIcon />
         </Icon>
         <span className="text-caption text-muted-foreground">Google</span>
       </div>
-      <div className="bg-card flex flex-col items-center gap-2 rounded-lg p-3">
+      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
         <Icon size="lg" className="text-foreground">
           <OpenAIIcon />
         </Icon>

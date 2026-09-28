@@ -110,6 +110,7 @@ describe('board relevance', () => {
       url: 'https://github.com/acme/app/issues/7',
       author: 'octocat',
       assignee: 'hubot',
+      assignees: ['hubot', 'monalisa'],
       labels: [],
       comments: 0,
       createdAt: '2026-08-01T09:00:00.000Z',
@@ -180,6 +181,7 @@ describe('board relevance', () => {
     });
 
     expect(candidateMatchesRelevance(githubIssue, 'github:hubot', new Set(['assigned']))).toBe(true);
+    expect(candidateMatchesRelevance(githubIssue, 'github:monalisa', new Set(['assigned']))).toBe(true);
     expect(candidateMatchesRelevance(githubPr, 'github:monalisa', new Set(['review-requested']))).toBe(true);
     expect(candidateMatchesRelevance(gitlab, 'gitlab:ada lovelace', new Set(['authored']))).toBe(true);
     expect(candidateMatchesRelevance(gitlab, 'gitlab:katherine johnson', new Set(['assigned']))).toBe(true);

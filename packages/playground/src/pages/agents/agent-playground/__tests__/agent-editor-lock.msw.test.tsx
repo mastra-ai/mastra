@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import type { AgentEditorConfig } from '@mastra/core/agent';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { TracingSettingsProvider } from '@mastra/playground-ui/domains/observability/context/tracing-settings-context';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
@@ -10,7 +11,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import AgentPlayground from '..';
 import { AGENT_ID, makeCodeAgent, versionsList } from './fixtures/agent-editor-lock';
-import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 import { server } from '@/test/msw-server';
 

@@ -188,11 +188,13 @@ export function itemSessionSpec(item: WorkItem): { branch: string; threadTitle: 
  * The card's single conversation. A work item keeps one threadId for its whole
  * lifecycle — every run reuses the worktree's thread — so the card title links
  * to exactly one thread. Items filed while session scoping was broken may
- * still carry divergent role refs; the last-filed ref wins (runs converge them
- * back onto one thread the next time they file).
+ * still carry divergent role refs; prefer the earliest lifecycle role because
+ * JSON object key order is not a stable record of which ref was filed first.
  */
 export function itemThreadSession(sessions: Record<string, WorkItemSessionRef>): WorkItemSessionRef | undefined {
-  return Object.values(sessions).at(-1);
+  return (
+    sessions.triage ?? sessions.plan ?? sessions.work ?? sessions.review ?? sessions.chat ?? Object.values(sessions)[0]
+  );
 }
 
 /** Source keys already materialized as cards, in either workflow — candidates matching one are dropped. */

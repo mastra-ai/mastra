@@ -1,5 +1,5 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
-import { format } from 'date-fns';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 
 export function buildScoreChartData(scores: ClientScoreRowData[]): {
   data: Record<string, unknown>[];
@@ -11,7 +11,7 @@ export function buildScoreChartData(scores: ClientScoreRowData[]): {
   const data = sorted.map(score => {
     const scorerName = String(score.scorer?.name || score.scorer?.id || 'unknown');
     if (!scorerNames.includes(scorerName)) scorerNames.push(scorerName);
-    return { time: format(new Date(score.createdAt), 'h:mm:ss aaa'), [scorerName]: score.score };
+    return { time: formatDate(score.createdAt, 'time') ?? '', [scorerName]: score.score };
   });
 
   return { data, scorerNames };

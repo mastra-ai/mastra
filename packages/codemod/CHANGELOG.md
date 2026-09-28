@@ -1,5 +1,35 @@
 # @mastra/codemod
 
+## 1.1.5-alpha.1
+
+### Patch Changes
+
+- Fixed large codemod previews so printed and verbose output completes without hitting the process buffer limit. ([#25244](https://github.com/mastra-ai/mastra/pull/25244))
+
+## 1.1.5-alpha.0
+
+### Patch Changes
+
+- Fixed the v1 evals codemod to migrate legacy scores imports. ([#25108](https://github.com/mastra-ai/mastra/pull/25108))
+
+- Fixed v1 message type migrations to use valid agent and memory exports. ([#25104](https://github.com/mastra-ai/mastra/pull/25104))
+
+## 1.1.4
+
+### Patch Changes
+
+- Fixed the agent property codemod to migrate tools access to `listTools()`. ([#24785](https://github.com/mastra-ai/mastra/pull/24785))
+
+- Fixed codemod runs reporting success when a transform crashed. Every jscodeshift transformation error (not just syntax errors) is now reported against the correct file, and both individual codemod runs and `v1` exit with a non-zero code when any file fails to transform. ([#24783](https://github.com/mastra-ai/mastra/pull/24783))
+
+## 1.1.4-alpha.0
+
+### Patch Changes
+
+- Fixed the agent property codemod to migrate tools access to `listTools()`. ([#24785](https://github.com/mastra-ai/mastra/pull/24785))
+
+- Fixed codemod runs reporting success when a transform crashed. Every jscodeshift transformation error (not just syntax errors) is now reported against the correct file, and both individual codemod runs and `v1` exit with a non-zero code when any file fails to transform. ([#24783](https://github.com/mastra-ai/mastra/pull/24783))
+
 ## 1.1.3
 
 ### Patch Changes

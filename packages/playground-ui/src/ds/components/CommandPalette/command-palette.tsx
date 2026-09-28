@@ -118,9 +118,9 @@ function CommandPaletteScope({
       type="button"
       className={cn(
         quietTextHover,
-        'text-body-sm hover:border-border hover:bg-fill-subtle data-[active=true]:border-border data-[active=true]:bg-fill-hover data-[active=true]:text-foreground flex h-9 w-full cursor-pointer items-center gap-2 rounded-lg border border-transparent px-2.5 text-left',
+        'flex h-9 w-full cursor-pointer items-center gap-2 rounded-lg border border-transparent px-2.5 text-left text-body-sm hover:border-border hover:bg-fill-subtle data-[active=true]:border-border data-[active=true]:bg-fill-hover data-[active=true]:text-foreground',
         // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- v4 emits nothing for `scale-0.99`
-        'transition-[color,transform] duration-fast ease-out-custom motion-reduce:transition-none active:scale-[0.99]',
+        'transition-[color,transform] duration-fast ease-out-custom active:scale-[0.99] motion-reduce:transition-none',
       )}
       data-active={active}
       aria-pressed={active}
@@ -128,7 +128,7 @@ function CommandPaletteScope({
     >
       <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">{icon}</span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      <span className="border-border bg-muted/70 text-meta text-muted-foreground rounded-md border px-1.5 py-0.5 leading-none">
+      <span className="rounded-md border border-border bg-muted/70 px-1.5 py-0.5 text-meta leading-none text-muted-foreground">
         {count}
       </span>
     </button>
@@ -194,7 +194,7 @@ function CommandPaletteItem({
     >
       <span
         className={cn(
-          'text-muted-foreground group-data-[selected=true]:text-foreground mt-0.5 flex size-4 max-w-4 min-w-4 shrink-0 basis-4 items-center justify-center [&>svg]:!size-4 [&>svg]:shrink-0',
+          'mt-0.5 flex size-4 max-w-4 min-w-4 shrink-0 basis-4 items-center justify-center text-muted-foreground group-data-[selected=true]:text-foreground [&>svg]:!size-4 [&>svg]:shrink-0',
           controlStateColorTransition,
         )}
       >
@@ -202,18 +202,18 @@ function CommandPaletteItem({
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex min-w-0 items-center gap-2">
-          <span className="text-label text-foreground truncate">{title}</span>
+          <span className="truncate text-label text-foreground">{title}</span>
           {badge && (
-            <span className="border-border bg-muted/60 text-meta text-muted-foreground shrink-0 rounded-md border px-1.5 py-0.5 leading-none uppercase">
+            <span className="shrink-0 rounded-md border border-border bg-muted/60 px-1.5 py-0.5 text-meta leading-none text-muted-foreground uppercase">
               {badge}
             </span>
           )}
         </span>
         {(subtitle || path) && (
-          <span className="text-meta text-muted-foreground flex min-w-0 items-center gap-2">
+          <span className="flex min-w-0 items-center gap-2 text-meta text-muted-foreground">
             {subtitle && <span className="truncate">{subtitle}</span>}
             {path && (
-              <span className="border-border bg-muted/70 text-meta text-muted-foreground max-w-52 truncate rounded-md border px-1.5 py-0.5 font-mono leading-none">
+              <span className="max-w-52 truncate rounded-md border border-border bg-muted/70 px-1.5 py-0.5 font-mono text-meta leading-none text-muted-foreground">
                 {path}
               </span>
             )}
@@ -227,7 +227,7 @@ function CommandPaletteItem({
 
 function CommandPaletteFooter({ label }: { label: string }) {
   return (
-    <div className="command-palette-footer text-meta text-muted-foreground pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-end justify-between gap-3 px-3 pt-3 pb-2">
+    <div className="command-palette-footer pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-end justify-between gap-3 px-3 pt-3 pb-2 text-meta text-muted-foreground">
       <span className="truncate">{label}</span>
       <span className="flex shrink-0 items-center gap-1.5">
         <Kbd size="sm">↑</Kbd>

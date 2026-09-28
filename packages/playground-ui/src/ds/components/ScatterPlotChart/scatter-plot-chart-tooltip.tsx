@@ -34,8 +34,8 @@ export function ScatterPlotChartTooltip({
 
   return (
     <ChartTooltip>
-      {label !== undefined && <p className="text-foreground text-column mb-1">{String(label)}</p>}
-      <div className="text-placeholder grid gap-1">
+      {label !== undefined && <p className="mb-1 text-column text-foreground">{String(label)}</p>}
+      <div className="grid gap-1 text-placeholder">
         <p>
           <span className="text-muted-foreground">X:</span>{' '}
           <span className="font-mono">{formatX ? formatX(xValue, point) : String(xValue)}</span>

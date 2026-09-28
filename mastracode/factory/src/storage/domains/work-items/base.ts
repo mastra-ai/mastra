@@ -12,7 +12,8 @@ import { createHash } from 'node:crypto';
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
-import type { FactoryTriageType } from '../../../rules/types.js';
+import { externalSourceForWorkItem } from '../../../rules/types.js';
+import type { FactoryTriageType, WorkItemSource } from '../../../rules/types.js';
 import type { FactoryHealthFinding } from '../../../supervisor/health.js';
 import {
   WORK_ITEM_ACTIVITY_SCHEMA,
@@ -35,6 +36,17 @@ function stableJson(value: unknown): string {
 
 export function factoryDecisionHash(decision: Record<string, unknown>): string {
   return createHash('sha256').update(stableJson(decision)).digest('hex');
+}
+
+function isWorkItemSource(value: unknown): value is WorkItemSource {
+  return (
+    value === 'github-issue' ||
+    value === 'github-pr' ||
+    value === 'linear-issue' ||
+    value === 'jira-issue' ||
+    value === 'incidentio-follow-up' ||
+    value === 'manual'
+  );
 }
 
 export interface ExternalWorkItemSource {
@@ -405,6 +417,11 @@ export interface FactoryLeaseClaimInput {
   now: Date;
   leaseExpiresAt: Date;
   limit: number;
+}
+
+export interface FactoryDeferredDecisionClaimInput extends FactoryLeaseClaimInput {
+  /** Restrict the claim by decision payload; rejected rows are never leased. */
+  decisionFilter?: (decision: Record<string, unknown>) => boolean;
 }
 
 export interface FactoryLeaseIdentity {
@@ -845,6 +862,19 @@ function decisionSourceKey(decision: unknown): string | null {
   const record = decision as Record<string, unknown>;
   if (record.type !== 'upsertLinkedWorkItem' || typeof record.sourceKey !== 'string') return null;
   return record.sourceKey;
+}
+
+function decisionRowPayload(decision: unknown): Record<string, unknown> {
+  const parsed = typeof decision === 'string' ? safeJsonParse(decision) : decision;
+  return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {};
+}
+
+function safeJsonParse(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
 }
 
 function deferredDecisionType(decision: FactoryDeferredDecisionRecord): string | undefined {
@@ -1391,49 +1421,64 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     table: 'factory_deferred_decisions' | 'factory_pending_starts',
     input: FactoryLeaseClaimInput,
     map: (row: GovernanceDbRow) => T,
+    accept?: (row: GovernanceDbRow) => boolean,
   ): Promise<T[]> {
     const claim = () =>
       this.storage.withTransaction(async ops => {
         // Bounded candidate window: only rows in claimable/expirable statuses,
         // oldest first. Terminal rows (sent/succeeded/failed) accumulate over a
         // deployment's lifetime and must never be scanned per dispatch tick.
-        const candidates = await ops.findMany<GovernanceDbRow>(
-          table,
-          { status: { in: ['pending', 'retry', 'leased'] } },
-          { orderBy: [['created_at', 'asc']], limit: Math.max(input.limit * 5, 50) },
-        );
+        const where = { status: { in: ['pending', 'retry', 'leased'] } };
         const claimed: T[] = [];
-        for (const candidate of candidates) {
-          if (claimed.length >= input.limit) break;
-          const availableAt = new Date(candidate.available_at as Date | string).getTime();
-          const leaseExpiresAt = candidate.lease_expires_at
-            ? new Date(candidate.lease_expires_at as Date | string).getTime()
-            : 0;
-          const claimable =
-            (candidate.status === 'pending' || candidate.status === 'retry') && availableAt <= input.now.getTime();
-          const expired = candidate.status === 'leased' && leaseExpiresAt <= input.now.getTime();
-          if (!claimable && !expired) continue;
-          let didClaim = false;
-          const row = await ops.updateAtomic<GovernanceDbRow>(table, { id: candidate.id }, current => {
-            const currentAvailable = new Date(current.available_at as Date | string).getTime();
-            const currentExpiry = current.lease_expires_at
-              ? new Date(current.lease_expires_at as Date | string).getTime()
-              : 0;
-            const currentClaimable =
-              (current.status === 'pending' || current.status === 'retry') && currentAvailable <= input.now.getTime();
-            const currentExpired = current.status === 'leased' && currentExpiry <= input.now.getTime();
-            if (!currentClaimable && !currentExpired) return null;
-            didClaim = true;
-            return {
-              status: 'leased',
-              attempts: Number(current.attempts) + 1,
-              lease_owner: input.ownerId,
-              lease_expires_at: input.leaseExpiresAt,
-              updated_at: input.now,
-            };
+        // A filtered claim widens its window past rows it rejects so matching
+        // rows queued behind any size of filtered-out backlog stay reachable.
+        // Unfiltered claims read one window: the first claimable rows are the
+        // oldest. Ties on created_at keep the store's insertion order.
+        let window = Math.max(input.limit * 5, 50);
+        let scanned = 0;
+        let exhausted = false;
+        do {
+          const page = await ops.findMany<GovernanceDbRow>(table, where, {
+            orderBy: [['created_at', 'asc']],
+            limit: window,
           });
-          if (didClaim && row) claimed.push(map(row));
-        }
+          exhausted = !accept || page.length < window;
+          const candidates = page.slice(scanned);
+          scanned = page.length;
+          window *= 4;
+          for (const candidate of candidates) {
+            if (claimed.length >= input.limit) break;
+            const availableAt = new Date(candidate.available_at as Date | string).getTime();
+            const leaseExpiresAt = candidate.lease_expires_at
+              ? new Date(candidate.lease_expires_at as Date | string).getTime()
+              : 0;
+            const claimable =
+              (candidate.status === 'pending' || candidate.status === 'retry') && availableAt <= input.now.getTime();
+            const expired = candidate.status === 'leased' && leaseExpiresAt <= input.now.getTime();
+            if (!claimable && !expired) continue;
+            if (accept && !accept(candidate)) continue;
+            let didClaim = false;
+            const row = await ops.updateAtomic<GovernanceDbRow>(table, { id: candidate.id }, current => {
+              const currentAvailable = new Date(current.available_at as Date | string).getTime();
+              const currentExpiry = current.lease_expires_at
+                ? new Date(current.lease_expires_at as Date | string).getTime()
+                : 0;
+              const currentClaimable =
+                (current.status === 'pending' || current.status === 'retry') && currentAvailable <= input.now.getTime();
+              const currentExpired = current.status === 'leased' && currentExpiry <= input.now.getTime();
+              if (!currentClaimable && !currentExpired) return null;
+              didClaim = true;
+              return {
+                status: 'leased',
+                attempts: Number(current.attempts) + 1,
+                lease_owner: input.ownerId,
+                lease_expires_at: input.leaseExpiresAt,
+                updated_at: input.now,
+              };
+            });
+            if (didClaim && row) claimed.push(map(row));
+          }
+        } while (!exhausted && claimed.length < input.limit);
         return claimed;
       });
     return claim();
@@ -1863,16 +1908,23 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               !decision ||
               typeof decision !== 'object' ||
               (decision as Record<string, unknown>).type !== 'upsertLinkedWorkItem' ||
+              !isWorkItemSource((decision as Record<string, unknown>).source) ||
               typeof (decision as Record<string, unknown>).sourceKey !== 'string' ||
               typeof (decision as Record<string, unknown>).idempotencyKey !== 'string'
             ) {
               continue;
             }
-            const materialization = decision as Record<string, unknown> & { sourceKey: string; idempotencyKey: string };
+            const materialization = decision as Record<string, unknown> & {
+              source: WorkItemSource;
+              sourceKey: string;
+              idempotencyKey: string;
+            };
             const item = await ops.findOne<WorkItemDbRow>('work_items', {
               org_id: input.orgId,
               factory_project_id: input.factoryProjectId,
-              source_key: materialization.sourceKey,
+              source_key: externalSourceKey(
+                externalSourceForWorkItem(materialization.source, materialization.sourceKey),
+              ),
             });
             if (item) continue;
             await ops.updateAtomic<GovernanceDbRow>(
@@ -2363,8 +2415,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     }
   }
 
-  async claimDeferredDecisions(input: FactoryLeaseClaimInput): Promise<FactoryDeferredDecisionRecord[]> {
-    return this.#claimLeases('factory_deferred_decisions', input, toDeferredDecision);
+  async claimDeferredDecisions(input: FactoryDeferredDecisionClaimInput): Promise<FactoryDeferredDecisionRecord[]> {
+    const filter = input.decisionFilter;
+    const accept = filter ? (row: GovernanceDbRow) => filter(decisionRowPayload(row.decision)) : undefined;
+    return this.#claimLeases('factory_deferred_decisions', input, toDeferredDecision, accept);
   }
 
   async renewDeferredDecisionLease(identity: FactoryLeaseIdentity, leaseExpiresAt: Date): Promise<boolean> {
@@ -2991,6 +3045,19 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           },
           { status: 'revoked', revoked_at: now },
         );
+        // A role continuing in an earlier role's session (e.g. build after plan)
+        // may open a new thread; the earlier role's agent must stop acting.
+        await ops.updateMany(
+          'factory_run_bindings',
+          {
+            org_id: input.orgId,
+            factory_project_id: input.factoryProjectId,
+            work_item_id: item.id,
+            session_id: input.session.sessionId,
+            status: 'active',
+          },
+          { status: 'revoked', revoked_at: now },
+        );
         const bindingRow = await ops.insertOne<GovernanceDbRow>('factory_run_bindings', {
           org_id: input.orgId,
           factory_project_id: input.factoryProjectId,
@@ -3279,12 +3346,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    */
   async #purgeRuleState(
     ops: FactoryStorageOps,
-    { orgId, factoryProjectId, sourceKey }: { orgId: string; factoryProjectId: string; sourceKey: string },
+    { orgId, factoryProjectId, sourceKeys }: { orgId: string; factoryProjectId: string; sourceKeys: string[] },
   ): Promise<void> {
+    const keys = [...new Set(sourceKeys)];
     const decisions = await ops.findMany<GovernanceDbRow>('factory_deferred_decisions', {
       org_id: orgId,
       factory_project_id: factoryProjectId,
-      source_key: sourceKey,
+      source_key: { in: keys },
     });
     if (decisions.length === 0) return;
 
@@ -3308,7 +3376,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     await ops.deleteMany('factory_deferred_decisions', {
       org_id: orgId,
       factory_project_id: factoryProjectId,
-      source_key: sourceKey,
+      source_key: { in: keys },
     });
     for (const evaluationId of evaluationIds) {
       await ops.deleteMany('factory_rule_evaluations', { id: evaluationId });
@@ -3357,7 +3425,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     await ops.deleteMany('work_item_activity', where);
   }
 
-  async delete({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {
+  async delete({
+    orgId,
+    id,
+    purgeRuleState = true,
+  }: {
+    orgId: string;
+    id: string;
+    purgeRuleState?: boolean;
+  }): Promise<WorkItemRow | null> {
     const candidate = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
     if (!candidate) return null;
 
@@ -3367,11 +3443,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       const deleted = await ops.deleteMany('work_items', { org_id: orgId, id });
       if (deleted === 0) return null;
       await this.#purgeFeedState(ops, { orgId, factoryProjectId: existing.factory_project_id, workItemId: id });
-      if (existing.source_key) {
+      if (purgeRuleState && existing.external_source?.externalId) {
         await this.#purgeRuleState(ops, {
           orgId,
           factoryProjectId: existing.factory_project_id,
-          sourceKey: existing.source_key,
+          sourceKeys: [existing.external_source.externalId],
         });
       }
       await ops.updateMany(

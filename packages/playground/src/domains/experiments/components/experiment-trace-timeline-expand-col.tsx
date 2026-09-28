@@ -25,7 +25,7 @@ export function ExperimentTraceTimelineExpandCol({
 }: ExperimentTraceTimelineExpandColProps) {
   return (
     <div
-      className={cn('flex items-center justify-end h-full px-3', {
+      className={cn('flex h-full items-center justify-end px-3', {
         'opacity-30 [&:hover]:opacity-60': isFaded,
         'bg-fill-hover': isSelected,
       })}
@@ -59,10 +59,10 @@ function ExpandButton({ onClick, children, className }: ExpandButtonProps) {
     <button onClick={onClick} className={cn('h-full', className)}>
       <div
         className={cn(
-          'flex items-center gap-[0.1rem] text-caption text-foreground border border-border pl-2 pr-1 rounded-lg',
+          'flex items-center gap-[0.1rem] rounded-lg border border-border pr-1 pl-2 text-caption text-foreground',
           controlStateColorTransition,
           'hover:text-yellow-500',
-          '[&>svg]:shrink-0 [&>svg]:opacity-80 [&>svg]:w-4 [&>svg]:h-4 [&>svg]:transition-all',
+          '[&>svg]:h-4 [&>svg]:w-4 [&>svg]:shrink-0 [&>svg]:opacity-80 [&>svg]:transition-all',
         )}
       >
         {children}

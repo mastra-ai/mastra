@@ -133,6 +133,44 @@ th:has(header) {
   }
 
   /*
+   * One diagonal light sweep across the landing greeting, timed to land once the
+   * suggested prompts have finished staggering in (last chip ≈ 540ms + 420ms).
+   */
+  /* With a 300% image, 100% → 0% moves the centered band once across the box, left to right. */
+  @keyframes starter-shimmer {
+    from {
+      background-position: 100% 0;
+    }
+    to {
+      background-position: 0% 0;
+    }
+  }
+  /*
+   * The gradient is clipped to the glyphs: the text is painted transparent and
+   * the sweep lives in its background. `--shimmer-base` is the resting text tone,
+   * so each tone in the greeting sets it and still gets the same white highlight.
+   */
+  .starter-shimmer {
+    --shimmer-base: var(--color-muted-foreground);
+    color: transparent;
+    background-image: linear-gradient(
+      115deg,
+      var(--shimmer-base) 42%,
+      color-mix(in oklab, var(--shimmer-base) 25%, white) 50%,
+      var(--shimmer-base) 58%
+    );
+    background-size: 300% 100%;
+    background-position: 100% 0;
+    background-repeat: no-repeat;
+    background-clip: text;
+    -webkit-background-clip: text;
+    animation: starter-shimmer 1100ms ease-in-out 1000ms both;
+  }
+  .starter-shimmer-ink {
+    --shimmer-base: var(--color-foreground);
+  }
+
+  /*
    * Agent builder "Your agent is ready" panel — a polished, finite light pass.
    * A soft ambient aurora gently drifts behind the content, while a bright
    * specular highlight sweeps diagonally across the surface once on mount
@@ -202,17 +240,29 @@ th:has(header) {
     animation: starter-enter 560ms var(--ease-out-custom) 200ms both;
   }
 
+  /* Landing → chat: the named composer glides from center to the dock. */
+  ::view-transition-group(agent-chat-composer) {
+    animation-duration: 320ms;
+    animation-timing-function: var(--ease-out-custom);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .starter-aurora::before,
     .starter-heading,
     .starter-prompt,
     .starter-chip,
+    .starter-shimmer,
     .ready-stage::before,
     .ready-stage-content {
       animation: none;
     }
     .ready-stage-sweep {
       opacity: 0;
+    }
+    ::view-transition-group(*),
+    ::view-transition-old(*),
+    ::view-transition-new(*) {
+      animation: none;
     }
   }
 }

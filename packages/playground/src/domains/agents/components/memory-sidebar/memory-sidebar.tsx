@@ -235,7 +235,6 @@ export function MemorySidebarBody({
               />
             ) : (
               <EmptyState
-                iconSlot={null}
                 titleSlot="Memory not enabled"
                 descriptionSlot="Conversations are only saved as threads when the agent has memory configured."
                 actionSlot={
@@ -244,8 +243,6 @@ export function MemorySidebarBody({
                     render={
                       <a href="https://mastra.ai/docs/memory/overview" target="_blank" rel="noopener noreferrer" />
                     }
-
-                    variant="outline"
                   >
                     View documentation
                   </Button>
@@ -263,7 +260,7 @@ export function MemorySidebarBody({
               'memory-sidebar-overlay absolute inset-x-0 bottom-0 z-10 box-border flex min-h-0 flex-col overflow-hidden',
               showMemory
                 ? cn(raisedSurfaceStyle, 'top-1 m-1 rounded-xl')
-                : 'm-1 rounded-xl border border-border/40 bg-muted state-layer',
+                : 'state-layer m-1 rounded-xl border border-border/40 bg-muted',
             )}
             style={{ height: showMemory ? undefined : collapsedCardSize.height || undefined }}
           >
@@ -276,16 +273,16 @@ export function MemorySidebarBody({
               className="group/memory-card w-full shrink-0 cursor-pointer bg-transparent px-3 py-2.5 text-left"
             >
               <span className="flex items-center justify-between gap-2">
-                <span className="text-foreground flex min-w-0 items-center gap-1.5">
+                <span className="flex min-w-0 items-center gap-1.5 text-foreground">
                   <MemoryIcon className="h-4 w-4 shrink-0" />
                   <Txt as="span" variant="column">
                     Memory
                   </Txt>
                 </span>
                 {showMemory ? (
-                  <ChevronDown className="text-muted-foreground h-4 w-4 shrink-0" />
+                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
                 ) : (
-                  <ChevronUp className="text-muted-foreground h-4 w-4 shrink-0" />
+                  <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
                 )}
               </span>
 
@@ -334,7 +331,7 @@ export function MemorySidebarBody({
                 <span
                   data-testid="memory-card-observation-bar"
                   data-percent={observationPercent}
-                  className="bg-fill mt-2 block h-1 w-full overflow-hidden rounded-full"
+                  className="mt-2 block h-1 w-full overflow-hidden rounded-full bg-fill"
                 >
                   <span
                     className={cn(
@@ -348,7 +345,7 @@ export function MemorySidebarBody({
             </button>
 
             {showMemory && (
-              <div className="memory-card-content border-border min-h-0 flex-1 overflow-y-auto border-t">
+              <div className="memory-card-content min-h-0 flex-1 overflow-y-auto border-t border-border">
                 <AgentMemory agentId={agentId} threadId={threadId} memoryType={memoryType} />
               </div>
             )}

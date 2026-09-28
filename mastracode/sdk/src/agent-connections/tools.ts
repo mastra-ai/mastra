@@ -304,7 +304,10 @@ The peer does not need to be currently advertised. Disconnecting is idempotent a
 The target must already be saved and freshly advertise the same exact thread endpoint at send time. Use expectsReply to declare whether the peer owes one signal back to this thread; false removes that obligation but does not prevent or forbid a reply. Signals routed to a notification summary cannot establish a reply obligation until the recipient opens the full notification, so use a priority that routes directly when a reply is required. Reuse messageId when retrying the same logical send, and set replyTo to the request messageId when replying. Use priority to indicate urgency: low, medium, high, or urgent.`,
     inputSchema: z.object({
       targetId: z.string().min(1).describe('Connected peer id.'),
-      summary: z.string().min(1).describe('Short summary to deliver to the peer.'),
+      message: z
+        .string()
+        .min(1)
+        .describe('Full message delivered to the peer. This is the only content the peer receives.'),
       priority: prioritySchema.default('medium'),
       expectsReply: z
         .boolean()
@@ -317,11 +320,10 @@ The target must already be saved and freshly advertise the same exact thread end
           'Stable logical message id. Reuse the same id for a sequential retry; receiver-side notification coalescing also uses it.',
         ),
       replyTo: z.string().min(1).optional().describe('Message id of the peer request this signal replies to.'),
-      payload: z.unknown().optional().describe('Optional structured payload for the peer.'),
     }),
     outputSchema: signalResultSchema,
     execute: async (
-      { targetId, summary, priority = 'medium', expectsReply, messageId: inputMessageId, replyTo, payload },
+      { targetId, message: summary, priority = 'medium', expectsReply, messageId: inputMessageId, replyTo },
       context,
     ): Promise<AgentSignalSendResult> => {
       const agentContext = context as AgentConnectionContext;
@@ -364,7 +366,7 @@ The target must already be saved and freshly advertise the same exact thread end
           threadId: currentAgent.threadId,
         });
         const messageId = inputMessageId ?? randomUUID();
-        const fingerprint = fingerprintAgentSignal({ targetId, summary, priority, expectsReply, replyTo, payload });
+        const fingerprint = fingerprintAgentSignal({ targetId, summary, priority, expectsReply, replyTo });
         const sentSignals = await readSentAgentSignals(agentContext);
         const previousSend = sentSignals.find(signal => signal.messageId === messageId);
         if (previousSend) {
@@ -418,10 +420,7 @@ The target must already be saved and freshly advertise the same exact thread end
               ...(expectsReply ? { returnPeerId } : {}),
             },
             metadata: { crossAgentMessaging },
-            payload: {
-              ...(payload === undefined ? {} : { payload }),
-              ...crossAgentMessaging,
-            },
+            payload: crossAgentMessaging,
           },
           {
             resourceId: target.resourceId,
@@ -506,7 +505,6 @@ The target must already be saved and freshly advertise the same exact thread end
         return {
           content: formatSignalResult({
             target,
-            summary,
             priority: priority as AgentSignalPriority,
             accepted,
           }),
@@ -598,29 +596,27 @@ function formatDisconnectResult(
 
 function formatSignalResult({
   target,
-  summary,
   priority,
   accepted,
 }: {
   target: AgentPeerView;
-  summary: string;
   priority: AgentSignalPriority;
   accepted: SendAgentSignalAccepted;
 }): string {
   const label = untrustedPeerLabel(target);
   switch (accepted?.action) {
     case 'wake':
-      return `Woke ${label} with a ${priority} signal in run ${accepted.runId}: ${summary}`;
+      return `Woke ${label} with a ${priority} signal in run ${accepted.runId}`;
     case 'deliver':
-      return `Delivered ${priority} signal to ${label} in run ${accepted.runId}: ${summary}`;
+      return `Delivered ${priority} signal to ${label} in run ${accepted.runId}`;
     case 'persist':
-      return `Persisted ${priority} signal for ${label} to process later: ${summary}`;
+      return `Persisted ${priority} signal for ${label} to process later`;
     case 'discard':
-      return `The ${priority} signal to ${label} was discarded: ${summary}`;
+      return `The ${priority} signal to ${label} was discarded`;
     case 'blocked':
-      return `The ${priority} signal to ${label} was blocked because thread ${untrustedThreadId(target)} is suspended: ${summary}`;
+      return `The ${priority} signal to ${label} was blocked because thread ${untrustedThreadId(target)} is suspended`;
     default:
-      return `No signal routing outcome was produced for ${label}: ${summary}`;
+      return `No signal routing outcome was produced for ${label}`;
   }
 }
 
@@ -640,7 +636,6 @@ function fingerprintAgentSignal(value: {
   priority: string;
   expectsReply: boolean;
   replyTo?: string;
-  payload?: unknown;
 }): string {
   return createHash('sha256')
     .update(JSON.stringify(sortJsonValue(value)))

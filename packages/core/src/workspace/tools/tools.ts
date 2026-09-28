@@ -32,7 +32,12 @@ import { computerTypeTool } from './computer-type';
 import { computerWaitTool } from './computer-wait';
 import { deleteFileTool } from './delete-file';
 import { editFileTool } from './edit-file';
-import { executeCommandTool, executeCommandWithBackgroundTool } from './execute-command';
+import {
+  executeCommandTool,
+  executeCommandWithBackgroundTool,
+  executeCommandWithDescriptionAndBackgroundTool,
+  executeCommandWithDescriptionTool,
+} from './execute-command';
 import { fileStatTool } from './file-stat';
 import { getProcessOutputTool } from './get-process-output';
 import { createGrepTool, type GrepToolOptions } from './grep';
@@ -584,10 +589,18 @@ export async function createWorkspaceTools(
     await addTool(WORKSPACE_TOOLS.SEARCH.INDEX, indexContentTool, { requireWrite: true });
   }
 
+  const requireCommandDescription = toolsConfig?.[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]?.requireDescription === true;
+  const backgroundExecuteCommandTool = requireCommandDescription
+    ? executeCommandWithDescriptionAndBackgroundTool
+    : executeCommandWithBackgroundTool;
+
   if (workspace.sandbox) {
     if (workspace.sandbox.executeCommand) {
       // Pick the right tool variant based on whether processes are available
-      const baseTool = workspace.sandbox.processes ? executeCommandWithBackgroundTool : executeCommandTool;
+      const foregroundExecuteCommandTool = requireCommandDescription
+        ? executeCommandWithDescriptionTool
+        : executeCommandTool;
+      const baseTool = workspace.sandbox.processes ? backgroundExecuteCommandTool : foregroundExecuteCommandTool;
       await addTool(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND, baseTool, { targets: { sandbox: true } });
     }
 
@@ -616,7 +629,7 @@ export async function createWorkspaceTools(
       await addTool(WORKSPACE_TOOLS.COMPUTER.WAIT, computerWaitTool, { targets: { sandbox: true } });
     }
   } else if (hasSandboxConfig(workspace)) {
-    await addTool(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND, executeCommandWithBackgroundTool, {
+    await addTool(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND, backgroundExecuteCommandTool, {
       targets: { sandbox: true },
     });
     await addTool(WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT, getProcessOutputTool, { targets: { sandbox: true } });

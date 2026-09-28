@@ -207,6 +207,8 @@ export class GithubReconcileWorker extends MastraWorker {
             this.deps?.logger.warn('GitHub issue reconcile sweep completed with failures', { ...context, errors });
           } else if (counts.closed > 0) {
             this.deps?.logger.info('GitHub issue reconcile replayed closed work items', context);
+          } else if (counts.relabeled > 0) {
+            this.deps?.logger.info('GitHub issue reconcile re-applied label routing', context);
           } else if (counts.updated > 0) {
             this.deps?.logger.info('GitHub issue reconcile patched stale metadata', context);
           } else {

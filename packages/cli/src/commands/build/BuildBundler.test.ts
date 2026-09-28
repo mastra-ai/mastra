@@ -157,11 +157,11 @@ describe('BuildBundler', () => {
       });
     });
 
-    it('preserves an explicit externals list and dynamic packages', async () => {
+    it('keeps configured externals as runtime dependencies while preserving externals true', async () => {
       const { Bundler } = await import('@mastra/deployer/bundler');
       vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({
         externals: ['@duckdb/node-bindings', 'existing-package'],
-        dynamicPackages: ['dynamic-package'],
+        dynamicPackages: ['existing-package', 'dynamic-package'],
       });
       const { BuildBundler } = await import('./BuildBundler');
       const bundler = new BuildBundler();
@@ -169,23 +169,8 @@ describe('BuildBundler', () => {
       const options = await (bundler as any).getUserBundlerOptions('/entry.ts', '/output');
 
       expect(options).toEqual({
-        externals: ['@duckdb/node-bindings', 'existing-package'],
-        dynamicPackages: ['dynamic-package'],
-      });
-    });
-
-    it('preserves an explicit workspace external', async () => {
-      const { Bundler } = await import('@mastra/deployer/bundler');
-      vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({
-        externals: ['@repro/database'],
-      });
-      const { BuildBundler } = await import('./BuildBundler');
-      const bundler = new BuildBundler();
-
-      const options = await (bundler as any).getUserBundlerOptions('/entry.ts', '/output');
-
-      expect(options).toEqual({
-        externals: ['@repro/database'],
+        externals: true,
+        dynamicPackages: ['existing-package', 'dynamic-package', '@duckdb/node-bindings'],
       });
     });
 

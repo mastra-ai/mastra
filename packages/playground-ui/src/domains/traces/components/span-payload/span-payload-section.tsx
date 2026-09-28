@@ -29,9 +29,8 @@ export interface SpanPayloadSectionProps {
 
 function ViewToggle({ view, onChange }: { view: SpanPayloadView; onChange: (view: SpanPayloadView) => void }) {
   return (
-    <ButtonsGroup aria-label="Payload view" data-slot="span-payload-view-toggle">
+    <ButtonsGroup size="sm" aria-label="Payload view" data-slot="span-payload-view-toggle">
       <Button
-        size="sm"
         variant={view === 'rich' ? 'primary' : 'default'}
         aria-pressed={view === 'rich'}
         onClick={() => onChange('rich')}
@@ -39,7 +38,6 @@ function ViewToggle({ view, onChange }: { view: SpanPayloadView; onChange: (view
         Preview
       </Button>
       <Button
-        size="sm"
         variant={view === 'raw' ? 'primary' : 'default'}
         aria-pressed={view === 'raw'}
         onClick={() => onChange('raw')}

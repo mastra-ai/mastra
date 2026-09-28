@@ -1,5 +1,154 @@
 # @mastra/observability
 
+## 1.18.2-alpha.0
+
+### Patch Changes
+
+- Fixed cost estimates for Anthropic 1-hour prompt-cache writes. The 5-minute and 1-hour cache-write token counts are now read from the provider's raw usage, so 1-hour writes are priced at their real rate instead of the cheaper 5-minute rate. ([#25011](https://github.com/mastra-ai/mastra/issues/25011)) ([#25089](https://github.com/mastra-ai/mastra/pull/25089))
+
+- Updated dependencies [[`af4aed5`](https://github.com/mastra-ai/mastra/commit/af4aed50ad96b340d82a67c3f01cbf358b156ab2), [`4601dfa`](https://github.com/mastra-ai/mastra/commit/4601dfac7c2bfdf04f041b1725c8ac4ae92a8d7d), [`63927e8`](https://github.com/mastra-ai/mastra/commit/63927e89c1b9db0fc87eef8503e3a03204f24b09), [`ec005d5`](https://github.com/mastra-ai/mastra/commit/ec005d517ea10b7742e67f7e75bf89259d72c37e), [`56fef1c`](https://github.com/mastra-ai/mastra/commit/56fef1cdd92a671c3de2cc5e4a319c637f700cf4), [`4d40bd9`](https://github.com/mastra-ai/mastra/commit/4d40bd91ccb00db163365a319b5d82bfb56a9ace), [`d2f0cd7`](https://github.com/mastra-ai/mastra/commit/d2f0cd7c5d5f5f06cf5b65cf78a9f14ac052dbb1), [`c01f1ad`](https://github.com/mastra-ai/mastra/commit/c01f1ad358db0ab361fdb1b2f4f77c88540c2671), [`676fcbf`](https://github.com/mastra-ai/mastra/commit/676fcbfc5f770ee45560c7b558b17ad5ff25d9e7)]:
+  - @mastra/core@1.72.0-alpha.1
+
+## 1.18.1
+
+### Patch Changes
+
+- Fixed event spans (such as `model_chunk` spans for `tool-result` and `tool-call-approval` chunks) being stored and exported with `endedAt: null` in completed runs, which made them look like they were still running. Event spans are point-in-time, so they now end at the instant they start: `endTime` equals `startTime` and their duration is zero. Event spans no longer emit duration metrics. Fixes [#24233](https://github.com/mastra-ai/mastra/issues/24233). ([#24970](https://github.com/mastra-ai/mastra/pull/24970))
+
+- Updated dependencies [[`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`b757896`](https://github.com/mastra-ai/mastra/commit/b757896872edd74f71ec104be92273c5406265da), [`7f64865`](https://github.com/mastra-ai/mastra/commit/7f648656d2b24b214a899e8835b8286333c80a19), [`f751e65`](https://github.com/mastra-ai/mastra/commit/f751e659f496e5e53ed38632c59c296fec2ccbe5)]:
+  - @mastra/core@1.71.0
+
+## 1.18.1-alpha.0
+
+### Patch Changes
+
+- Fixed event spans (such as `model_chunk` spans for `tool-result` and `tool-call-approval` chunks) being stored and exported with `endedAt: null` in completed runs, which made them look like they were still running. Event spans are point-in-time, so they now end at the instant they start: `endTime` equals `startTime` and their duration is zero. Event spans no longer emit duration metrics. Fixes [#24233](https://github.com/mastra-ai/mastra/issues/24233). ([#24970](https://github.com/mastra-ai/mastra/pull/24970))
+
+- Updated dependencies [[`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1)]:
+  - @mastra/core@1.71.0-alpha.1
+
+## 1.18.0
+
+### Minor Changes
+
+- Honor `tracingOptions.rootSpanName` when creating a root span. The caller-supplied name replaces the default `agent run: '<id>'` or `workflow run: '<id>'` name on the root span only. Works for the default and Inngest workflow engines because the name is applied when the span starts, before any durable snapshot is taken. ([#24564](https://github.com/mastra-ai/mastra/pull/24564))
+
+  ```ts
+  const span = observability.startSpan({
+    type: SpanType.WORKFLOW_RUN,
+    name: "workflow run: 'skill-analyze'",
+    tracingOptions: { rootSpanName: 'skill-analyze: typescript' },
+  });
+
+  span.name; // "skill-analyze: typescript"
+  ```
+
+  Related: https://github.com/mastra-ai/mastra/issues/24518
+
+### Patch Changes
+
+- Fixed internal spans being exported after they are rebuilt with `rebuildSpan()` when `includeInternalSpans` is disabled. Spans created with `tracingPolicy.internal` now keep their internal status through `exportSpan()` and `rebuildSpan()`, so they stay out of exporters by default and remain included when `includeInternalSpans` is enabled. ([#24742](https://github.com/mastra-ai/mastra/pull/24742))
+
+- Added `rootSpanName` to `tracingOptions` so each agent or workflow run can set its own root span name. Runs of the same workflow no longer all show up as `workflow run: 'my-workflow'` in trace lists. ([#24564](https://github.com/mastra-ai/mastra/pull/24564))
+
+  ```ts
+  await run.start({
+    inputData: { skillId: 'typescript' },
+    tracingOptions: { rootSpanName: 'skill-analyze: typescript' },
+  });
+  ```
+
+  The name applies to the root span only. Child spans keep their default names, and entity filters still match on the workflow or agent id. Related: https://github.com/mastra-ai/mastra/issues/24518
+
+- Added `rootSpanName` to the generated `tracingOptions` request types so per-run root span names can be sent from the client. ([#24564](https://github.com/mastra-ai/mastra/pull/24564))
+
+  ```ts
+  const run = await client.getWorkflow('skillAnalyze').createRun();
+
+  await run.startAsync({
+    inputData: { skillId: 'typescript' },
+    tracingOptions: { rootSpanName: 'skill-analyze: typescript' },
+  });
+  ```
+
+  Related: https://github.com/mastra-ai/mastra/issues/24518
+
+- Accept `rootSpanName` in `tracingOptions` on agent and workflow HTTP routes so clients can set a per-run root span name. ([#24564](https://github.com/mastra-ai/mastra/pull/24564))
+
+  ```http
+  POST /api/workflows/skillAnalyze/start-async
+  {
+    "inputData": { "skillId": "typescript" },
+    "tracingOptions": { "rootSpanName": "skill-analyze: typescript" }
+  }
+  ```
+
+  Related: https://github.com/mastra-ai/mastra/issues/24518
+
+- Updated dependencies [[`7fefefd`](https://github.com/mastra-ai/mastra/commit/7fefefdcb91e15f8bf60b5b2148ef27cf1352faf), [`251eb56`](https://github.com/mastra-ai/mastra/commit/251eb5674e8e32855af6925d7fd1cd337aa5ea7d), [`e0fd937`](https://github.com/mastra-ai/mastra/commit/e0fd937e84fa6dd7e82b7b55b039a4191e61aa5c), [`f7180bd`](https://github.com/mastra-ai/mastra/commit/f7180bdd52b4ffaa9f053b8495c6c8b8c530de2a), [`f9ea7b2`](https://github.com/mastra-ai/mastra/commit/f9ea7b2d2f1e925b357fd71fe18ab26d3b00feae), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`26ed7ad`](https://github.com/mastra-ai/mastra/commit/26ed7ad111927211231a995346b9b561d4baa8e2), [`ecc642d`](https://github.com/mastra-ai/mastra/commit/ecc642d0a6ca2e938f92129726a4278471924124), [`1ed77dd`](https://github.com/mastra-ai/mastra/commit/1ed77dd7176e2f41ea2bf74f5ab0e4d1899c38e5), [`18863ae`](https://github.com/mastra-ai/mastra/commit/18863ae95c87218b8163e28d9826883cf4edf02b), [`c61d52c`](https://github.com/mastra-ai/mastra/commit/c61d52c338dbd77f3e8f0e7487f44b1f0a0d1350), [`32a9682`](https://github.com/mastra-ai/mastra/commit/32a96824a9ff31c3596fdb1a2789b946eba152cc), [`9ce6bc9`](https://github.com/mastra-ai/mastra/commit/9ce6bc9107b5fe81dffe8a155dded9b0471013b5), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`725d46b`](https://github.com/mastra-ai/mastra/commit/725d46b4b7eaf5a3f3ef2f3fbbe8ee8909cb2c9b), [`6e21835`](https://github.com/mastra-ai/mastra/commit/6e2183502250ee5325fc834d80f4d0584916f54e), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`70cd0d8`](https://github.com/mastra-ai/mastra/commit/70cd0d80373346b4d04ebf913851ade37aa807ed), [`3802d6f`](https://github.com/mastra-ai/mastra/commit/3802d6f7dbf8c27b1f84b48c6c7c2efa6c4f0d03), [`2a83258`](https://github.com/mastra-ai/mastra/commit/2a832580e3cf3efcdb4be3355eaa9a02929b3a2c), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe)]:
+  - @mastra/core@1.69.0
+
+## 1.18.0-alpha.0
+
+### Minor Changes
+
+- Honor `tracingOptions.rootSpanName` when creating a root span. The caller-supplied name replaces the default `agent run: '<id>'` or `workflow run: '<id>'` name on the root span only. Works for the default and Inngest workflow engines because the name is applied when the span starts, before any durable snapshot is taken. ([#24564](https://github.com/mastra-ai/mastra/pull/24564))
+
+  ```ts
+  const span = observability.startSpan({
+    type: SpanType.WORKFLOW_RUN,
+    name: "workflow run: 'skill-analyze'",
+    tracingOptions: { rootSpanName: 'skill-analyze: typescript' },
+  });
+
+  span.name; // "skill-analyze: typescript"
+  ```
+
+  Related: https://github.com/mastra-ai/mastra/issues/24518
+
+### Patch Changes
+
+- Fixed internal spans being exported after they are rebuilt with `rebuildSpan()` when `includeInternalSpans` is disabled. Spans created with `tracingPolicy.internal` now keep their internal status through `exportSpan()` and `rebuildSpan()`, so they stay out of exporters by default and remain included when `includeInternalSpans` is enabled. ([#24742](https://github.com/mastra-ai/mastra/pull/24742))
+
+- Added `rootSpanName` to `tracingOptions` so each agent or workflow run can set its own root span name. Runs of the same workflow no longer all show up as `workflow run: 'my-workflow'` in trace lists. ([#24564](https://github.com/mastra-ai/mastra/pull/24564))
+
+  ```ts
+  await run.start({
+    inputData: { skillId: 'typescript' },
+    tracingOptions: { rootSpanName: 'skill-analyze: typescript' },
+  });
+  ```
+
+  The name applies to the root span only. Child spans keep their default names, and entity filters still match on the workflow or agent id. Related: https://github.com/mastra-ai/mastra/issues/24518
+
+- Added `rootSpanName` to the generated `tracingOptions` request types so per-run root span names can be sent from the client. ([#24564](https://github.com/mastra-ai/mastra/pull/24564))
+
+  ```ts
+  const run = await client.getWorkflow('skillAnalyze').createRun();
+
+  await run.startAsync({
+    inputData: { skillId: 'typescript' },
+    tracingOptions: { rootSpanName: 'skill-analyze: typescript' },
+  });
+  ```
+
+  Related: https://github.com/mastra-ai/mastra/issues/24518
+
+- Accept `rootSpanName` in `tracingOptions` on agent and workflow HTTP routes so clients can set a per-run root span name. ([#24564](https://github.com/mastra-ai/mastra/pull/24564))
+
+  ```http
+  POST /api/workflows/skillAnalyze/start-async
+  {
+    "inputData": { "skillId": "typescript" },
+    "tracingOptions": { "rootSpanName": "skill-analyze: typescript" }
+  }
+  ```
+
+  Related: https://github.com/mastra-ai/mastra/issues/24518
+
+- Updated dependencies [[`e0fd937`](https://github.com/mastra-ai/mastra/commit/e0fd937e84fa6dd7e82b7b55b039a4191e61aa5c), [`f9ea7b2`](https://github.com/mastra-ai/mastra/commit/f9ea7b2d2f1e925b357fd71fe18ab26d3b00feae), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`26ed7ad`](https://github.com/mastra-ai/mastra/commit/26ed7ad111927211231a995346b9b561d4baa8e2), [`ecc642d`](https://github.com/mastra-ai/mastra/commit/ecc642d0a6ca2e938f92129726a4278471924124), [`18863ae`](https://github.com/mastra-ai/mastra/commit/18863ae95c87218b8163e28d9826883cf4edf02b), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`725d46b`](https://github.com/mastra-ai/mastra/commit/725d46b4b7eaf5a3f3ef2f3fbbe8ee8909cb2c9b), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`3802d6f`](https://github.com/mastra-ai/mastra/commit/3802d6f7dbf8c27b1f84b48c6c7c2efa6c4f0d03), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe)]:
+  - @mastra/core@1.69.0-alpha.4
+
 ## 1.17.9
 
 ### Patch Changes

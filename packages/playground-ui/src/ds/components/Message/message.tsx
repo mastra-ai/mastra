@@ -67,6 +67,6 @@ export function MessageActions({ visibility = 'hover', children, className, ...p
 
 export function MessageMetadata({ className, ...props }: ComponentProps<'span'>) {
   return (
-    <span {...props} className={cn('text-muted-foreground inline-flex items-center gap-1 text-meta', className)} />
+    <span {...props} className={cn('inline-flex items-center gap-1 text-meta text-muted-foreground', className)} />
   );
 }

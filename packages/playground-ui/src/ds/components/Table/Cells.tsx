@@ -2,8 +2,8 @@ import React from 'react';
 
 import { Icon } from '../../icons/Icon';
 import { Txt } from '../Txt';
-import { formatDateCell } from './utils';
 import { cn } from '@/lib/utils';
+import { formatDate } from '@/utils/date-format';
 
 export interface CellProps extends React.TdHTMLAttributes<HTMLTableCellElement> {
   className?: string;
@@ -33,18 +33,11 @@ export interface DateTimeCellProps extends Omit<CellProps, 'children'> {
 }
 
 export const DateTimeCell = ({ dateTime, ...props }: DateTimeCellProps) => {
-  const { day, time } = formatDateCell(dateTime);
-
   return (
     <Cell {...props}>
-      <div className="shrink-0">
-        <Txt as="span" variant="caption" tone="muted">
-          {day}
-        </Txt>{' '}
-        <Txt as="span" variant="body">
-          {time}
-        </Txt>
-      </div>
+      <Txt as="span" variant="body" className="shrink-0">
+        {formatDate(dateTime, 'date-time-seconds')}
+      </Txt>
     </Cell>
   );
 };

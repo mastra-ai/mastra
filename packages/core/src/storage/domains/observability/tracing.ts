@@ -595,7 +595,7 @@ export const lightSpanRecordSchema = z
     // may omit it entirely, and they must still validate.
     status: traceStatusField.nullable().optional(),
 
-    // Entity context (needed by TraceKeysAndValues on root span)
+    // Entity context (needed by TraceSummaryDescription on root span)
     entityType: spanContextFields.entityType,
     entityId: spanContextFields.entityId,
     entityName: spanContextFields.entityName,

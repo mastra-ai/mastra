@@ -169,8 +169,9 @@ describe('ToolCall', () => {
     expect(screen.getByRole('group', { name: 'Tool: custom' }).getAttribute('data-status')).toBe('idle');
     expect(screen.getByTestId('spacer').className).toContain('min-w-2 flex-1');
     expect(screen.getByTestId('custom-disclosure').className).toContain('justify-center');
-    expect(screen.getByText('Toggle').className).toContain(
-      'flex shrink-0 items-center opacity-0 transition duration-150',
+    const toggleClasses = screen.getByText('Toggle').className.split(' ');
+    expect(toggleClasses).toEqual(
+      expect.arrayContaining(['flex', 'shrink-0', 'items-center', 'opacity-0', 'transition', 'duration-150']),
     );
     expect(screen.getByText('Toggle').textContent).toBe('Toggle');
   });
@@ -196,6 +197,25 @@ describe('ToolCallPresentedHeader', () => {
     expect(screen.getByText('Searched files')).toBeTruthy();
     expect(screen.getByText('src/**/*.ts')).toBeTruthy();
     expect(screen.queryByRole('img', { name: 'Failed' })).toBeNull();
+  });
+
+  it('shows a description alone, in place of the label and detail', () => {
+    render(
+      <ToolCall>
+        <ToolCallTrigger>
+          <ToolCallPresentedHeader
+            icon={Search}
+            label="Run"
+            detail="rg -n processor"
+            description="Finding the processor wiring"
+          />
+        </ToolCallTrigger>
+      </ToolCall>,
+    );
+
+    expect(screen.getByText('Finding the processor wiring')).toBeTruthy();
+    expect(screen.queryByText('Run')).toBeNull();
+    expect(screen.queryByText('rg -n processor')).toBeNull();
   });
 
   it('marks a failed call', () => {

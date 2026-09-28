@@ -1,3 +1,4 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup, ButtonsGroupText } from '@mastra/playground-ui/components/ButtonsGroup';
@@ -65,16 +66,16 @@ export function ExperimentsToolbar({
   const canCompare = selection?.selectedCount === 2 && !selection.compareDisabledReason;
 
   return (
-    <div className="min-h-control-md flex flex-wrap items-center gap-2">
-      <div className="max-w-120 min-w-48 flex-1">
-        <ListSearch
-          label="Search experiments"
-          placeholder="Filter by experiment, dataset, or target"
-          value={search}
-          onSearch={onSearchChange}
-        />
-      </div>
-      <div className="flex items-center gap-2">
+    <ActionRow>
+      <ActionRow.Start>
+        <div className="max-w-120 flex-1">
+          <ListSearch
+            label="Search experiments"
+            placeholder="Filter by experiment, dataset, or target"
+            value={search}
+            onSearch={onSearchChange}
+          />
+        </div>
         <SelectFieldBlock
           label="Status"
           labelIsHidden
@@ -104,27 +105,29 @@ export function ExperimentsToolbar({
             Reset
           </Button>
         )}
-      </div>
+      </ActionRow.Start>
       {selection ? (
-        <ButtonsGroup className="ml-auto shrink-0 whitespace-nowrap">
-          <ButtonsGroupText className="gap-2">
-            <Badge size="sm" variant={selection.selectedCount < 2 ? 'red' : 'green'}>
-              {selection.selectedCount} / 2
-            </Badge>
-            selected
-            {selection.compareDisabledReason && (
-              <span className="text-accent2">· {selection.compareDisabledReason}</span>
-            )}
-          </ButtonsGroupText>
-          <Button variant="primary" disabled={!canCompare} onClick={selection.onExecuteCompare} icon={<GitCompare />}>
-            Compare Experiments
-          </Button>
-          <Button icon={<X />} onClick={selection.onCancelSelection}>
-            Cancel
-          </Button>
-        </ButtonsGroup>
+        <ActionRow.End>
+          <ButtonsGroup className="whitespace-nowrap">
+            <ButtonsGroupText className="gap-2">
+              <Badge size="sm" variant={selection.selectedCount < 2 ? 'red' : 'green'}>
+                {selection.selectedCount} / 2
+              </Badge>
+              selected
+              {selection.compareDisabledReason && (
+                <span className="text-accent2">· {selection.compareDisabledReason}</span>
+              )}
+            </ButtonsGroupText>
+            <Button variant="primary" disabled={!canCompare} onClick={selection.onExecuteCompare} icon={<GitCompare />}>
+              Compare Experiments
+            </Button>
+            <Button icon={<X />} onClick={selection.onCancelSelection}>
+              Cancel
+            </Button>
+          </ButtonsGroup>
+        </ActionRow.End>
       ) : (
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+        <ActionRow.End>
           {onCompareClick && (
             <Button
               onClick={onCompareClick}
@@ -139,8 +142,8 @@ export function ExperimentsToolbar({
               Run Experiment
             </Button>
           )}
-        </div>
+        </ActionRow.End>
       )}
-    </div>
+    </ActionRow>
   );
 }

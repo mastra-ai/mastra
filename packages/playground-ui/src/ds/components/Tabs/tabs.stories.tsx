@@ -35,13 +35,13 @@ export const Recommended: Story = {
         <Tab value="tab3">Settings</Tab>
       </TabList>
       <TabContent value="tab1">
-        <div className="text-foreground p-4">Overview content goes here</div>
+        <div className="p-4 text-foreground">Overview content goes here</div>
       </TabContent>
       <TabContent value="tab2">
-        <div className="text-foreground p-4">Details content goes here</div>
+        <div className="p-4 text-foreground">Details content goes here</div>
       </TabContent>
       <TabContent value="tab3">
-        <div className="text-foreground p-4">Settings content goes here</div>
+        <div className="p-4 text-foreground">Settings content goes here</div>
       </TabContent>
     </Tabs>
   ),
@@ -97,7 +97,7 @@ function ContainedExample({
         }
       : undefined;
   return (
-    <main className="bg-sidebar min-h-screen p-4 sm:p-10">
+    <main className="min-h-screen bg-sidebar p-4 sm:p-10">
       <div className="mx-auto w-full max-w-5xl">
         <Tabs defaultTab="activity" value={activeTab} onValueChange={setActiveTab} appearance="contained" frame={frame}>
           <TabList>
@@ -105,14 +105,14 @@ function ContainedExample({
               <Tab value="activity" onClose={closeHandler('activity')}>
                 <Activity aria-hidden="true" className="size-4" />
                 Activity
-                <span className="bg-surface-overlay-strong text-meta rounded-full px-2 py-0.5 tabular-nums">12</span>
+                <span className="rounded-full bg-surface-overlay-strong px-2 py-0.5 text-meta tabular-nums">12</span>
               </Tab>
             )}
             {visibleTabs.includes('traces') && (
               <Tab value="traces" attention={attention} onClose={closeHandler('traces')}>
                 <ChartNoAxesColumnIncreasing aria-hidden="true" className="size-4" />
                 Traces
-                <span className="bg-surface-overlay-strong text-meta rounded-full px-2 py-0.5 tabular-nums">248</span>
+                <span className="rounded-full bg-surface-overlay-strong px-2 py-0.5 text-meta tabular-nums">248</span>
               </Tab>
             )}
             {visibleTabs.includes('settings') && (
@@ -136,7 +136,7 @@ function ContainedExample({
                 <h2 className="text-heading text-foreground">Recent activity</h2>
                 <p className="text-body text-muted-foreground">Runs and deployments from the last seven days.</p>
               </div>
-              <div className="divide-border border-border bg-background divide-y overflow-hidden rounded-lg border">
+              <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-background">
                 <div className="flex items-center justify-between gap-4 p-4">
                   <span className="text-body text-foreground">Production deployment</span>
                   <span className="text-caption text-muted-foreground">2 minutes ago</span>
@@ -182,13 +182,13 @@ export const LegacyLineFallback: Story = {
         <Tab value="tab3">Settings</Tab>
       </TabList>
       <TabContent value="tab1">
-        <div className="text-foreground p-4">Line fallback content goes here</div>
+        <div className="p-4 text-foreground">Line fallback content goes here</div>
       </TabContent>
       <TabContent value="tab2">
-        <div className="text-foreground p-4">Details content goes here</div>
+        <div className="p-4 text-foreground">Details content goes here</div>
       </TabContent>
       <TabContent value="tab3">
-        <div className="text-foreground p-4">Settings content goes here</div>
+        <div className="p-4 text-foreground">Settings content goes here</div>
       </TabContent>
     </Tabs>
   ),
@@ -202,10 +202,10 @@ export const TwoTabs: Story = {
         <Tab value="output">Output</Tab>
       </TabList>
       <TabContent value="input">
-        <div className="text-foreground p-4">Input content</div>
+        <div className="p-4 text-foreground">Input content</div>
       </TabContent>
       <TabContent value="output">
-        <div className="text-foreground p-4">Output content</div>
+        <div className="p-4 text-foreground">Output content</div>
       </TabContent>
     </Tabs>
   ),
@@ -222,19 +222,19 @@ export const ManyTabs: Story = {
         <Tab value="tab5">Advanced Settings</Tab>
       </TabList>
       <TabContent value="tab1">
-        <div className="text-foreground p-4">Content 1</div>
+        <div className="p-4 text-foreground">Content 1</div>
       </TabContent>
       <TabContent value="tab2">
-        <div className="text-foreground p-4">Content 2</div>
+        <div className="p-4 text-foreground">Content 2</div>
       </TabContent>
       <TabContent value="tab3">
-        <div className="text-foreground p-4">Content 3</div>
+        <div className="p-4 text-foreground">Content 3</div>
       </TabContent>
       <TabContent value="tab4">
-        <div className="text-foreground p-4">Content 4</div>
+        <div className="p-4 text-foreground">Content 4</div>
       </TabContent>
       <TabContent value="tab5">
-        <div className="text-foreground p-4">Content 5</div>
+        <div className="p-4 text-foreground">Content 5</div>
       </TabContent>
     </Tabs>
   ),
@@ -249,13 +249,13 @@ export const PillVariant: Story = {
         <Tab value="account">Account</Tab>
       </TabList>
       <TabContent value="overview">
-        <div className="text-foreground p-4">Overview content</div>
+        <div className="p-4 text-foreground">Overview content</div>
       </TabContent>
       <TabContent value="projects">
-        <div className="text-foreground p-4">Projects content</div>
+        <div className="p-4 text-foreground">Projects content</div>
       </TabContent>
       <TabContent value="account">
-        <div className="text-foreground p-4">Account content</div>
+        <div className="p-4 text-foreground">Account content</div>
       </TabContent>
     </Tabs>
   ),
@@ -270,13 +270,13 @@ export const PillGhostVariant: Story = {
         <Tab value="account">Account</Tab>
       </TabList>
       <TabContent value="overview">
-        <div className="text-foreground p-4">Overview content</div>
+        <div className="p-4 text-foreground">Overview content</div>
       </TabContent>
       <TabContent value="projects">
-        <div className="text-foreground p-4">Projects content</div>
+        <div className="p-4 text-foreground">Projects content</div>
       </TabContent>
       <TabContent value="account">
-        <div className="text-foreground p-4">Account content</div>
+        <div className="p-4 text-foreground">Account content</div>
       </TabContent>
     </Tabs>
   ),
@@ -292,13 +292,13 @@ export const CustomIndicatorColor: Story = {
           <Tab value="tab3">Settings</Tab>
         </TabList>
         <TabContent value="tab1">
-          <div className="text-foreground p-4">Line variant with accent indicator</div>
+          <div className="p-4 text-foreground">Line variant with accent indicator</div>
         </TabContent>
         <TabContent value="tab2">
-          <div className="text-foreground p-4">Details content</div>
+          <div className="p-4 text-foreground">Details content</div>
         </TabContent>
         <TabContent value="tab3">
-          <div className="text-foreground p-4">Settings content</div>
+          <div className="p-4 text-foreground">Settings content</div>
         </TabContent>
       </Tabs>
 
@@ -309,13 +309,13 @@ export const CustomIndicatorColor: Story = {
           <Tab value="account">Account</Tab>
         </TabList>
         <TabContent value="overview">
-          <div className="text-foreground p-4">Pill variant with accent indicator</div>
+          <div className="p-4 text-foreground">Pill variant with accent indicator</div>
         </TabContent>
         <TabContent value="projects">
-          <div className="text-foreground p-4">Projects content</div>
+          <div className="p-4 text-foreground">Projects content</div>
         </TabContent>
         <TabContent value="account">
-          <div className="text-foreground p-4">Account content</div>
+          <div className="p-4 text-foreground">Account content</div>
         </TabContent>
       </Tabs>
     </div>
@@ -337,13 +337,13 @@ export const WithClosableTabs: Story = {
         </Tab>
       </TabList>
       <TabContent value="file1">
-        <div className="text-foreground p-4">index.ts content</div>
+        <div className="p-4 text-foreground">index.ts content</div>
       </TabContent>
       <TabContent value="file2">
-        <div className="text-foreground p-4">utils.ts content</div>
+        <div className="p-4 text-foreground">utils.ts content</div>
       </TabContent>
       <TabContent value="file3">
-        <div className="text-foreground p-4">types.ts content</div>
+        <div className="p-4 text-foreground">types.ts content</div>
       </TabContent>
     </Tabs>
   ),

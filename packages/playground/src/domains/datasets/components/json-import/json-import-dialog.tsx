@@ -8,13 +8,14 @@ import {
   DialogBody,
   DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { X } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 
-import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import { MAX_IMPORT_BYTES, MAX_IMPORT_LABEL, validateImportJSON } from '../../utils/json-validation';
 import type { JSONImportValidation } from '../../utils/json-validation';
 import { JSONFormatPanel } from './json-format-panel';
@@ -124,21 +125,16 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="flex max-h-[90vh] w-[960px] max-w-[calc(100vw-2rem)] flex-col gap-0 p-0">
-        <DialogHeader className="border-border border-b px-4 py-4">
+        <DialogHeader className="border-b border-border px-4 py-4">
           <DialogTitle>Import into dataset</DialogTitle>
-          <DialogDescription className="text-caption text-muted-foreground not-sr-only">
-            Add items to{' '}
-            {datasetName ? (
-              <code className="bg-card text-meta text-foreground rounded px-1 font-mono">{datasetName}</code>
-            ) : (
-              'this dataset'
-            )}{' '}
-            from a JSON file or paste them directly.
+          <DialogDescription className="not-sr-only text-caption text-muted-foreground">
+            Add items to {datasetName ? <span className="text-foreground">{datasetName}</span> : 'this dataset'} from a
+            JSON file or paste them directly.
           </DialogDescription>
         </DialogHeader>
 
         <DialogBody className="max-h-none min-h-0 flex-1 overflow-y-auto p-0">
-          <div className="divide-border grid divide-y md:grid-cols-[1.15fr_1fr] md:divide-x md:divide-y-0">
+          <div className="grid divide-y divide-border md:grid-cols-[1.15fr_1fr] md:divide-x md:divide-y-0">
             <div className="flex min-h-[360px] flex-col p-4">
               <JSONSourcePanel
                 tab={tab}
@@ -158,7 +154,7 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
           </div>
         </DialogBody>
 
-        <DialogFooter className="border-border items-center border-t px-4 py-3 sm:justify-between">
+        <DialogFooter className="items-center border-t border-border px-4 py-3 sm:justify-between">
           <JSONImportStatus validation={validation} />
           <div className="flex gap-2">
             <Button icon={<X />} onClick={handleClose} disabled={isImporting}>
@@ -193,7 +189,7 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
     case 'ready':
       message = (
         <>
-          <b className="text-foreground font-medium">{validation.total}</b> item{validation.total !== 1 ? 's' : ''}{' '}
+          <b className="font-medium text-foreground">{validation.total}</b> item{validation.total !== 1 ? 's' : ''}{' '}
           ready
           {validation.missingGroundTruthCount > 0 && ` · ${validation.missingGroundTruthCount} without groundTruth`}
         </>
@@ -216,9 +212,9 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
         case 'missing-input':
           message = (
             <>
-              <b className="text-foreground font-medium">{validation.missingInputCount}</b> of {validation.total} item
+              <b className="font-medium text-foreground">{validation.missingInputCount}</b> of {validation.total} item
               {validation.total !== 1 ? 's' : ''} {validation.missingInputCount !== 1 ? 'have' : 'has'} no{' '}
-              <code className="font-mono">input</code>
+              <InlineCode>input</InlineCode>
             </>
           );
           break;
@@ -227,7 +223,7 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
   }
 
   return (
-    <div role="status" className="text-caption text-muted-foreground flex min-w-0 items-center gap-2">
+    <div role="status" className="flex min-w-0 items-center gap-2 text-caption text-muted-foreground">
       <span className={dotClassName} />
       <span className="truncate">{message}</span>
     </div>

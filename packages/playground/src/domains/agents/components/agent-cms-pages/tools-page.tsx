@@ -153,14 +153,14 @@ export function ToolsPage() {
     return (
       <Entity key={tool.value} className="bg-background">
         <EntityContent>
-          <EntityName className="text-subheading! !">{tool.label}</EntityName>
+          <EntityName className="! text-subheading!">{tool.label}</EntityName>
           <EntityDescription>
             <input
               type="text"
               aria-label={`Description for ${tool.label}`}
               disabled={!canEditToolDescriptions}
               className={cn(
-                'border border-transparent appearance-none block w-full text-muted-foreground bg-transparent rounded px-1 -mx-1 focus:outline-solid focus:outline-1 focus:outline-white focus-visible:outline-solid focus-visible:outline-1 focus-visible:outline-white',
+                '-mx-1 block w-full appearance-none rounded border border-transparent bg-transparent px-1 text-muted-foreground focus:outline-1 focus:outline-white focus:outline-solid focus-visible:outline-1 focus-visible:outline-white focus-visible:outline-solid',
                 canEditToolDescriptions && 'hover:bg-fill-subtle focus:bg-fill-subtle',
               )}
               value={selectedTools?.[tool.value]?.description ?? tool.description}

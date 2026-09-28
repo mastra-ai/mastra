@@ -5,15 +5,13 @@ import type { SpanRowContext } from './span-rows';
 import { SpanTimingHoverCard } from './span-timing-hover-card';
 import { TimelineStructureSign } from './timeline-structure-sign';
 import { HoverCard, HoverCardTrigger } from '@/ds/components/HoverCard';
+import { Txt } from '@/ds/components/Txt/Txt';
 import { cn } from '@/lib/utils';
+import { formatDurationPrecise } from '@/utils/duration';
 
 export type SpanTimelineRowProps = {
   ctx: SpanRowContext;
 };
-
-function formatDuration(ms: number) {
-  return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(2)} s`;
-}
 
 /**
  * One row of `TraceSpanTimeline`: compact single-line name cell plus a bar on the
@@ -60,7 +58,7 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
       className={cn(
         'col-span-2 grid h-7 cursor-pointer grid-cols-subgrid items-stretch rounded-md opacity-80 hover:bg-fill-subtle',
         {
-          'opacity-40 [&:hover]:opacity-70 dark:opacity-30 dark:[&:hover]:opacity-60': isFaded,
+          'opacity-40 dark:opacity-30 [&:hover]:opacity-70 dark:[&:hover]:opacity-60': isFaded,
           'bg-fill-hover': isSelected,
         },
       )}
@@ -121,7 +119,7 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
           render={<div />}
           className="grid min-w-0 cursor-help grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-2"
         >
-          <div className="bg-fill-subtle relative h-4 w-full rounded-sm">
+          <div className="relative h-4 w-full rounded-sm bg-fill-subtle">
             <div
               data-testid="span-timeline-bar"
               className="absolute inset-y-0 rounded-sm"
@@ -132,9 +130,9 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
               }}
             />
           </div>
-          <div className="text-meta text-muted-foreground w-12 text-right tabular-nums">
-            {formatDuration(span.latency)}
-          </div>
+          <Txt as="div" variant="meta" tone="muted" font="mono" className="w-12 text-right">
+            {formatDurationPrecise(span.latency)}
+          </Txt>
         </HoverCardTrigger>
         <SpanTimingHoverCard span={span} startShiftMs={startShiftMs} />
       </HoverCard>

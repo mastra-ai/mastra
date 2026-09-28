@@ -4,10 +4,13 @@ import {
   SettingsDescription,
   SettingsGroup,
   SettingsHeader,
+  SettingsLayout,
   SettingsRow,
   SettingsTitle,
 } from './index';
+import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
+import { fieldErrorId } from '@/ds/components/FormFieldBlocks/block/field-error-id';
 import { Input } from '@/ds/components/Input';
 import { Switch } from '@/ds/components/Switch';
 import { ThemeProvider } from '@/ds/components/ThemeProvider';
@@ -89,5 +92,88 @@ export const Permissions: Story = {
         </SettingsRow>
       </SettingsContainer>
     </SettingsGroup>
+  ),
+};
+
+export const Validation: Story = {
+  render: () => (
+    <SettingsGroup>
+      <SettingsHeader>
+        <SettingsTitle>Agent</SettingsTitle>
+      </SettingsHeader>
+      <SettingsContainer>
+        <SettingsRow label="Model" htmlFor="model" required errorMsg="Choose the model this agent runs on.">
+          <Input
+            id="model"
+            className="w-56"
+            placeholder="openai/gpt-5.2"
+            error
+            aria-describedby={fieldErrorId('model')}
+          />
+        </SettingsRow>
+        <SettingsRow label="Max steps" htmlFor="max-steps" required>
+          <Input id="max-steps" className="w-56" defaultValue="5" />
+        </SettingsRow>
+      </SettingsContainer>
+    </SettingsGroup>
+  ),
+};
+
+export const Page: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: () => (
+    <SettingsLayout
+      title="Preferences"
+      description="Manage your preferences and workspace defaults."
+      action={<Button size="sm">Save changes</Button>}
+    >
+      <SettingsGroup>
+        <SettingsHeader>
+          <SettingsTitle>General</SettingsTitle>
+          <SettingsDescription>Stored in this browser.</SettingsDescription>
+        </SettingsHeader>
+        <SettingsContainer>
+          <SettingsRow label="Theme" description="Color scheme for the interface">
+            <ThemeToggle />
+          </SettingsRow>
+          <SettingsRow label="Completion sound" description="Played when an agent run finishes in a workspace">
+            <Switch aria-label="Play completion sound" defaultChecked />
+          </SettingsRow>
+        </SettingsContainer>
+      </SettingsGroup>
+      <SettingsGroup>
+        <SettingsHeader>
+          <SettingsTitle>Connection</SettingsTitle>
+        </SettingsHeader>
+        <SettingsContainer>
+          <SettingsRow label="Mastra instance URL" htmlFor="page-mastra-url">
+            <Input id="page-mastra-url" defaultValue="http://localhost:4111" className="w-full sm:max-w-96" />
+          </SettingsRow>
+        </SettingsContainer>
+      </SettingsGroup>
+    </SettingsLayout>
+  ),
+};
+
+export const PageHeaderOnly: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: () => (
+    <SettingsLayout
+      title="Deployment"
+      titleAccessory={<Badge size="sm">Studio</Badge>}
+      description="Jan 1, 2025 07:00:00 · abcdef1"
+      variant="header"
+    >
+      <div className="mx-auto w-full max-w-5xl min-w-0 px-4 py-6">
+        <SettingsGroup>
+          <SettingsHeader>
+            <SettingsTitle>Build</SettingsTitle>
+          </SettingsHeader>
+          <SettingsContainer>
+            <SettingsRow label="Status">Ready</SettingsRow>
+          </SettingsContainer>
+        </SettingsGroup>
+      </div>
+    </SettingsLayout>
   ),
 };

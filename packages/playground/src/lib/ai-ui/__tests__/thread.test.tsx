@@ -7,7 +7,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatProvider } from '../chat/chat-provider';
 import { Thread } from '../thread';
@@ -275,8 +275,28 @@ describe('Thread', () => {
         renderThread([]);
       });
 
-      expect(screen.getByText('How can I help you today?')).toBeTruthy();
+      expect(screen.getByTestId('thread-welcome')).toBeTruthy();
       expect(screen.getByRole('textbox')).toBeTruthy();
+    });
+
+    it('renders the greeting with the agent name and the composer inside the landing column', async () => {
+      server.use(...baseHandlers());
+
+      await act(async () => {
+        renderThread([]);
+      });
+
+      const heading = screen.getByRole('heading', { name: /what can .* do for you today\?/i });
+      expect(heading.textContent).toContain('Helper');
+      // Emphasis contract: only the agent name is high-contrast; the surrounding copy is muted and regular weight.
+      expect(heading.classList.contains('font-normal')).toBe(true);
+      const name = screen.getByText('Helper');
+      expect(name.classList.contains('font-medium')).toBe(true);
+      expect(name.classList.contains('starter-shimmer-ink')).toBe(true);
+      const landing = screen.getByTestId('thread-landing');
+      expect(landing.contains(heading)).toBe(true);
+      expect(landing.contains(screen.getByRole('textbox'))).toBe(true);
+      expect(screen.queryByTestId('thread-message-column')).toBeNull();
     });
   });
 
@@ -288,7 +308,7 @@ describe('Thread', () => {
     });
 
     expect(screen.getByText('previous question', { selector: 'p' })).toBeTruthy();
-    expect(screen.queryByText('How can I help you today?')).toBeFalsy();
+    expect(screen.queryByTestId('thread-welcome')).toBeFalsy();
   });
 
   describe('Thread history loading', () => {
@@ -301,7 +321,7 @@ describe('Thread', () => {
         });
 
         expect(screen.getByTestId('thread-history-skeleton')).toBeTruthy();
-        expect(screen.queryByText('How can I help you today?')).toBeNull();
+        expect(screen.queryByTestId('thread-welcome')).toBeNull();
       });
 
       it('keeps the composer available', async () => {
@@ -335,7 +355,7 @@ describe('Thread', () => {
 
         expect(screen.getByText('live question', { selector: 'p' })).toBeTruthy();
         expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
-        expect(screen.queryByText('How can I help you today?')).toBeNull();
+        expect(screen.queryByTestId('thread-welcome')).toBeNull();
       });
     });
 
@@ -348,7 +368,7 @@ describe('Thread', () => {
         });
 
         expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
-        expect(screen.getByText('How can I help you today?')).toBeTruthy();
+        expect(screen.getByTestId('thread-welcome')).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Check the weather' })).toBeTruthy();
       });
     });
@@ -393,6 +413,20 @@ describe('Thread', () => {
       expect(screen.getByRole('button', { name: 'Check the weather' })).toBeTruthy();
       expect(screen.getByRole('button', { name: 'Check a stock' })).toBeTruthy();
       expect(screen.getByRole('button', { name: 'Build a page' })).toBeTruthy();
+    });
+
+    it('renders the prompts as cards with increasing entrance delays', async () => {
+      server.use(...baseHandlers());
+
+      await act(async () => {
+        renderThread([], { suggestedPrompts: ['Check the weather', 'Check a stock', 'Build a page'] });
+      });
+
+      const items = Array.from(screen.getByTestId('suggested-prompt-list').querySelectorAll('li'));
+      const delays = items.map(item => parseInt(item.style.animationDelay, 10));
+      expect(delays).toHaveLength(3);
+      expect(delays[1]).toBeGreaterThan(delays[0]);
+      expect(delays[2]).toBeGreaterThan(delays[1]);
     });
 
     it('sends the selected prompt through the agent stream endpoint', async () => {
@@ -820,6 +854,79 @@ describe('Thread', () => {
     });
   });
 
+  describe.each(['file classification', 'URL inspection'])('when %s is pending', inspection => {
+    it('keeps the attachment until it can be included in the submitted message', async () => {
+      const captured: CapturedBody[] = [];
+      let release = () => {};
+      const pending = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      const url = 'https://files.example.com/report.pdf';
+      server.use(
+        ...baseHandlers(),
+        http.head(url, async () => {
+          await pending;
+          return new HttpResponse(null, { headers: { 'content-type': 'application/pdf' } });
+        }),
+        http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
+          captured.push(await captureBody(request));
+          return sseResponse();
+        }),
+      );
+      const read = FileReader.prototype.readAsArrayBuffer;
+      const probe = vi
+        .spyOn(FileReader.prototype, 'readAsArrayBuffer')
+        .mockImplementation(function (this: FileReader, blob) {
+          void pending.then(() => read.call(this, blob));
+        });
+      try {
+        await act(async () => {
+          renderThread([]);
+        });
+        const textarea = screen.getByPlaceholderText('Enter your message...');
+        fireEvent.change(textarea, { target: { value: 'Read my attachment' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
+        if (inspection === 'file classification') {
+          fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
+          const picker = document.querySelector<HTMLInputElement>('input[type="file"]');
+          if (!picker) throw new Error('File picker is missing');
+          const file = new File(['pending file contents'], 'notes.unknown');
+          Object.defineProperty(file, 'text', { value: async () => 'pending file contents' });
+          fireEvent.change(picker, { target: { files: [file] } });
+          expect(probe).toHaveBeenCalledOnce();
+        } else {
+          const input = await screen.findByLabelText('Public URL');
+          fireEvent.change(input, { target: { value: url } });
+          const form = input.closest('form');
+          if (!form) throw new Error('Attachment form is missing');
+          fireEvent.submit(form);
+        }
+        const composer = textarea.closest('form');
+        if (!composer) throw new Error('Composer form is missing');
+        await act(async () => {
+          fireEvent.keyDown(textarea, { key: 'Enter', code: 'Enter' });
+          fireEvent.submit(composer);
+        });
+        expect(captured).toHaveLength(0);
+        expect(screen.getByRole('button', { name: 'Send', hidden: true }).hasAttribute('disabled')).toBe(true);
+        await act(async () => {
+          release();
+          await pending;
+        });
+        await waitFor(() => expect(screen.queryByLabelText('Public URL')).toBeNull());
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(false));
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(captured).toHaveLength(1));
+        const messages = JSON.stringify(captured[0].messages);
+        expect(messages).toContain('Read my attachment');
+        expect(messages).toContain(inspection === 'file classification' ? 'pending file contents' : url);
+      } finally {
+        release();
+        probe.mockRestore();
+      }
+    });
+  });
+
   describe('when a text attachment is added by URL', () => {
     it('links to the original URL instead of offering an empty file preview', async () => {
       const url = 'https://files.example.com/leads.csv';
@@ -1030,12 +1137,17 @@ describe('TaskPanel', () => {
     await pushTasks([taskPlanMenu, taskShop, taskCook]);
 
     expect(await screen.findByTestId('task-panel')).toBeTruthy();
-    const progress = screen.getByRole('progressbar', { name: 'Task completion' });
-    expect(progress.getAttribute('aria-valuenow')).toBe('0');
-    expect(progress.getAttribute('aria-valuemax')).toBe('3');
+    expect(screen.getByRole('button', { name: 'Collapse tasks' }).getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByLabelText('In progress')).toBeTruthy();
+    expect(screen.getAllByLabelText('Pending')).toHaveLength(2);
     expect(screen.getByText('Planning menu')).toBeTruthy();
     expect(screen.getByText('Create shopping list')).toBeTruthy();
     expect(screen.getByText('Cook meal')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse tasks' }));
+    const progress = screen.getByRole('progressbar', { name: 'Task completion' });
+    expect(progress.getAttribute('aria-valuenow')).toBe('0');
+    expect(progress.getAttribute('aria-valuemax')).toBe('3');
 
     await close();
   });
@@ -1049,34 +1161,45 @@ describe('TaskPanel', () => {
     await pushTasks([completedPlan, activeShop], 'task-list-update');
 
     await waitFor(() => {
-      const progress = screen.getByRole('progressbar', { name: 'Task completion' });
-      expect(progress.getAttribute('aria-valuenow')).toBe('1');
-      expect(progress.getAttribute('aria-valuemax')).toBe('2');
+      expect(screen.getByLabelText('Completed')).toBeTruthy();
+      expect(screen.getByLabelText('In progress')).toBeTruthy();
     });
     expect(screen.getByText('Plan menu')).toBeTruthy();
     expect(screen.getByText('Shopping for ingredients')).toBeTruthy();
-    expect(screen.queryByText('Planning menu')).toBeFalsy();
+    expect(screen.getByText('Planning menu').closest('[aria-hidden="true"]')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse tasks' }));
+    const progress = screen.getByRole('progressbar', { name: 'Task completion' });
+    expect(progress.getAttribute('aria-valuenow')).toBe('1');
+    expect(progress.getAttribute('aria-valuemax')).toBe('2');
 
     await close();
   });
 
   it('scrolls the active task into view when task state updates', async () => {
-    const scrollIntoView = vi.fn();
-    const originalScrollIntoView = Element.prototype.scrollIntoView;
-    Element.prototype.scrollIntoView = scrollIntoView;
-
+    const scrollTo = vi.spyOn(Element.prototype, 'scrollTo');
+    const matchMedia = window.matchMedia;
+    const reducedMotion = vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+      ...matchMedia(query),
+      matches: query === '(prefers-reduced-motion: reduce)',
+    }));
     const { pushTasks, close } = await renderWithControlledSubscription();
 
     try {
-      const activeShop: TaskItem = { ...taskShop, status: 'in_progress', activeForm: 'Shopping for ingredients' };
+      await pushTasks([taskPlanMenu, taskShop, taskCook]);
+      fireEvent.click(screen.getByRole('button', { name: 'Collapse tasks' }));
+      scrollTo.mockClear();
 
-      await pushTasks([taskPlanMenu, activeShop, taskCook], 'task-list-update');
+      const completedPlan: TaskItem = { ...taskPlanMenu, status: 'completed' };
+      const activeShop: TaskItem = { ...taskShop, status: 'in_progress', activeForm: 'Shopping for ingredients' };
+      await pushTasks([completedPlan, activeShop, taskCook], 'task-list-update');
 
       await waitFor(() => {
-        expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+        expect(scrollTo).toHaveBeenCalledWith({ top: 28 });
       });
+      expect(screen.getByRole('listitem').textContent).toContain('Shopping for ingredients');
     } finally {
-      Element.prototype.scrollIntoView = originalScrollIntoView;
+      reducedMotion.mockRestore();
+      scrollTo.mockRestore();
       await close();
     }
   });

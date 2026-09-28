@@ -239,7 +239,7 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
                   </Button>
                 )}
                 {p.custom && (
-                  <Button variant="outline" size="sm" disabled={busy} onClick={() => void remove(p.id)}>
+                  <Button size="sm" disabled={busy} onClick={() => void remove(p.id)}>
                     Remove
                   </Button>
                 )}
@@ -251,7 +251,7 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
 
       {!draft && !loading && (
         <div>
-          <Button variant="outline" size="sm" onClick={() => setDraft({ ...EMPTY_DRAFT })} disabled={busy}>
+          <Button size="sm" onClick={() => setDraft({ ...EMPTY_DRAFT })} disabled={busy}>
             <Plus size={13} /> New pack
           </Button>
         </div>

@@ -34,7 +34,7 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
 
   return (
     <div className="grid h-full grid-rows-[auto_1fr] overflow-hidden">
-      <div className="border-border border-b px-3 py-2.5">
+      <div className="border-b border-border px-3 py-2.5">
         <InputGroup size="sm">
           <InputGroupAddon align="inline-start">
             <SearchIcon />

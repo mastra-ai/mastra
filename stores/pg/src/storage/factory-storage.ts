@@ -15,6 +15,7 @@ import type {
 import pg from 'pg';
 import type { Pool, PoolClient } from 'pg';
 
+import { toPgJson } from './db/sanitize-json';
 import { PostgresStore } from './index';
 
 export type PgFactoryStorageConfig =
@@ -131,7 +132,7 @@ class PgFactoryStorageOps implements FactoryStorageOps {
         return Boolean(value);
       case 'json':
         // Explicit stringify: node-pg would otherwise turn JS arrays into pg arrays.
-        return JSON.stringify(value);
+        return toPgJson(value);
       case 'bigint':
       case 'integer':
         return Number(value);

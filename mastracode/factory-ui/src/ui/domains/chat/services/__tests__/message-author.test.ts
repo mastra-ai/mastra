@@ -60,6 +60,18 @@ describe('messageAuthor', () => {
     expect(messageAuthor(persisted())).toBeUndefined();
     expect(messageAuthor(persisted({ author: { name: 'no id' } }))).toBeUndefined();
   });
+
+  it('reads through a parts array with a hole instead of throwing', () => {
+    const message = persisted({ author: ADA });
+    const parts = message.content.parts as MastraMessagePart[];
+    // A sparse write past the end leaves holes, which `find` visits as
+    // undefined parts — reading `.type` off one must not throw.
+    parts[3] = { type: 'text', text: 'Far ahead' };
+    expect(Object.hasOwn(parts, 1)).toBe(false);
+
+    expect(messageAuthor(message)).toEqual(ADA);
+    expect(channelOrigin(message)).toBeUndefined();
+  });
 });
 
 describe('channelOrigin', () => {

@@ -1,3 +1,4 @@
+import Ajv from 'ajv';
 import type { JSONSchema7 } from 'json-schema';
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
@@ -594,6 +595,35 @@ describe('zodToJsonSchema', () => {
       expect(result).toBeDefined();
       expect(result.type).toBe('object');
       expect(Object.keys(result.properties || {}).length).toBe(4);
+    });
+  });
+
+  // https://github.com/mastra-ai/mastra/issues/24516
+  describe('nullable enum and literal', () => {
+    function compile(schema: z.ZodTypeAny) {
+      const json = zodToJsonSchema(schema) as Record<string, unknown>;
+      delete json.$schema;
+      return new Ajv({ strict: false }).compile(json);
+    }
+
+    it('keeps null valid for a nullable enum', () => {
+      const schema = z.object({ color: z.enum(['red', 'blue']).nullable() });
+      const validate = compile(schema);
+
+      expect(schema.safeParse({ color: null }).success).toBe(true);
+      expect(validate({ color: null })).toBe(true);
+      expect(validate({ color: 'red' })).toBe(true);
+      expect(validate({ color: 'green' })).toBe(false);
+    });
+
+    it('keeps null valid for a nullable literal', () => {
+      const schema = z.object({ speed: z.literal('fast').nullable() });
+      const validate = compile(schema);
+
+      expect(schema.safeParse({ speed: null }).success).toBe(true);
+      expect(validate({ speed: null })).toBe(true);
+      expect(validate({ speed: 'fast' })).toBe(true);
+      expect(validate({ speed: 'slow' })).toBe(false);
     });
   });
 });

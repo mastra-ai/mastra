@@ -1,17 +1,20 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
-import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { FileText, Wand2, Search, ChevronDown, Bot, Server } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { useSearchParams, useParams, useNavigate } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import { isWorkspaceNotSupportedError } from '@/domains/workspace/compatibility';
 import { AddSkillDialog, FileBrowser, FileViewer, SkillsTable } from '@/domains/workspace/components';
 import { NoWorkspacesInfo } from '@/domains/workspace/components/no-workspaces-info';
@@ -32,6 +35,8 @@ import {
 } from '@/domains/workspace/hooks/use-workspace';
 import { useWorkspaceSkills, useSearchWorkspaceSkills } from '@/domains/workspace/hooks/use-workspace-skills';
 import type { WorkspaceItem } from '@/domains/workspace/types';
+
+const crumbs = [navCrumb('/workspaces')];
 
 type TabType = 'files' | 'skills';
 
@@ -304,36 +309,40 @@ export default function Workspace() {
   // Show loading while fetching workspace list
   if (isLoadingWorkspaces) {
     return (
-      <NoDataPageLayout>
-        <Spinner />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
+        <Spinner fill />
+      </PageLayout>
     );
   }
 
   // If session expired (401 error)
   if (isSessionExpired) {
     return (
-      <NoDataPageLayout>
-        <SessionExpired />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
+        <SessionExpired variant="fill" />
+      </PageLayout>
     );
   }
 
   // If permission denied (403 error)
   if (isPermissionDenied) {
     return (
-      <NoDataPageLayout>
-        <PermissionDenied resource="workspaces" />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
+        <PermissionDenied variant="fill" resource="workspaces" />
+      </PageLayout>
     );
   }
 
   // If workspace v1 is not supported by the server's @mastra/core version
   if (isWorkspaceNotSupported) {
     return (
-      <NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
         <WorkspaceNotSupported />
-      </NoDataPageLayout>
+      </PageLayout>
     );
   }
 
@@ -341,18 +350,25 @@ export default function Workspace() {
   const genericError = workspacesError || workspaceInfoError;
   if (genericError) {
     return (
-      <NoDataPageLayout>
-        <ErrorState title="Failed to load workspace" message={(genericError as Error).message} />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
+        <EmptyState
+          tone="error"
+          variant="fill"
+          titleSlot="Failed to load workspace"
+          descriptionSlot={genericError.message}
+        />
+      </PageLayout>
     );
   }
 
   // If the workspace feature is configured but no workspaces exist yet, show empty state
   if (!isLoadingWorkspaces && workspaces.length === 0) {
     return (
-      <NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
         <NoWorkspacesInfo />
-      </NoDataPageLayout>
+      </PageLayout>
     );
   }
 
@@ -360,27 +376,36 @@ export default function Workspace() {
   // Also wait for workspaces list to load to avoid showing this before 403 is detected
   if (!isLoadingInfo && !isLoadingWorkspaces && !isWorkspaceConfigured) {
     return (
-      <NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
         <WorkspaceNotConfigured />
-      </NoDataPageLayout>
+      </PageLayout>
     );
   }
 
   const showSkillsEmptyState = activeTab === 'skills' && hasSkills && !isSkillsConfigured && !isLoadingSkills;
 
   return (
-    <PageLayout className={showSkillsEmptyState ? 'flex min-h-full flex-col' : undefined}>
-      {hasSearchCapability && (
-        <PageLayout.TopArea>
-          <PageLayout.Row className="justify-end">
-            <Button onClick={() => setShowSearch(!showSearch)} tooltip="Search workspace" aria-label="Search workspace">
-              <Search />
-            </Button>
-          </PageLayout.Row>
-        </PageLayout.TopArea>
-      )}
-
-      <PageLayout.MainArea className={showSkillsEmptyState ? 'flex flex-1 flex-col gap-4' : 'grid content-start gap-4'}>
+    <PageLayout
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      actionRow={
+        hasSearchCapability ? (
+          <ActionRow>
+            <ActionRow.End>
+              <Button
+                onClick={() => setShowSearch(!showSearch)}
+                tooltip="Search workspace"
+                aria-label="Search workspace"
+              >
+                <Search />
+              </Button>
+            </ActionRow.End>
+          </ActionRow>
+        ) : undefined
+      }
+    >
+      <h1 className="sr-only">Workspaces</h1>
+      <div className={showSkillsEmptyState ? 'flex flex-1 flex-col gap-4' : 'grid content-start gap-4'}>
         {/* Workspace Selector - shown when multiple workspaces exist */}
         {workspaces.length > 1 && (
           <DropdownMenu>
@@ -394,10 +419,10 @@ export default function Workspace() {
                   <span className="flex-1 truncate text-left">
                     {selectedWorkspace?.name ?? 'Select workspace'}
                     {selectedWorkspace?.source === 'agent' && selectedWorkspace.agentName && (
-                      <span className="text-muted-foreground ml-1">({selectedWorkspace.agentName})</span>
+                      <span className="ml-1 text-muted-foreground">({selectedWorkspace.agentName})</span>
                     )}
                   </span>
-                  <ChevronDown className="text-muted-foreground shrink-0" />
+                  <ChevronDown className="shrink-0 text-muted-foreground" />
                 </Button>
               }
             />
@@ -406,13 +431,13 @@ export default function Workspace() {
                 {workspaces.map(workspace => (
                   <DropdownMenu.RadioItem key={workspace.id} value={workspace.id} className="gap-3">
                     {workspace.source === 'agent' ? (
-                      <Bot className="text-accent1 shrink-0" />
+                      <Bot className="shrink-0 text-accent1" />
                     ) : (
                       <Server className="shrink-0" />
                     )}
                     <div className="min-w-0 flex-1">
-                      <div className="text-foreground text-body-sm truncate">{workspace.name}</div>
-                      <div className="text-muted-foreground text-caption truncate">
+                      <div className="truncate text-body-sm text-foreground">{workspace.name}</div>
+                      <div className="truncate text-caption text-muted-foreground">
                         {workspace.source === 'agent' ? `Agent: ${workspace.agentName}` : 'Global workspace'}
                       </div>
                     </div>
@@ -434,9 +459,9 @@ export default function Workspace() {
         )}
 
         {workspaces.length === 1 && selectedWorkspace && (
-          <div className="text-muted-foreground text-body flex items-center gap-2">
+          <div className="flex items-center gap-2 text-body text-muted-foreground">
             {selectedWorkspace.source === 'agent' ? (
-              <Bot className="text-accent1 h-4 w-4" />
+              <Bot className="h-4 w-4 text-accent1" />
             ) : (
               <Server className="h-4 w-4" />
             )}
@@ -556,11 +581,11 @@ export default function Workspace() {
         )}
 
         {!hasFilesystem && !hasSkills && !isLoadingInfo && (
-          <div className="text-muted-foreground py-8 text-center">
+          <div className="py-8 text-center text-muted-foreground">
             <p>No workspace capabilities are configured.</p>
           </div>
         )}
-      </PageLayout.MainArea>
+      </div>
 
       {/* Add Skill Dialog */}
       {effectiveWorkspaceId && canManageSkills && (
@@ -607,15 +632,15 @@ function WorkspaceSearchPanel({
   const searchSkills = useSearchWorkspaceSkills();
 
   return (
-    <div className="border-border bg-fill-subtle space-y-4 rounded-lg border p-4">
+    <div className="space-y-4 rounded-lg border border-border bg-fill-subtle p-4">
       {canSearchFiles && (
         <div>
-          <h3 className="text-foreground text-subheading mb-3 flex items-center gap-2">
+          <h3 className="mb-3 flex items-center gap-2 text-subheading text-foreground">
             <FileText className="h-4 w-4" />
             Search Indexed Files
           </h3>
           {showInitWarning && (
-            <p className="text-caption mb-3 text-amber-400">
+            <p className="mb-3 text-caption text-amber-400">
               File search requires <code className="text-amber-300">workspace.init()</code> to index files from your
               configured <code className="text-amber-300">autoIndexPaths</code>.
             </p>
@@ -640,7 +665,7 @@ function WorkspaceSearchPanel({
 
       {canSearchSkills && (
         <div>
-          <h3 className="text-foreground text-subheading mb-3 flex items-center gap-2">
+          <h3 className="mb-3 flex items-center gap-2 text-subheading text-foreground">
             <Wand2 className="h-4 w-4" />
             Search Skills
           </h3>

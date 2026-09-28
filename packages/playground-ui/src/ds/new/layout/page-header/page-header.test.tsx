@@ -59,6 +59,20 @@ describe('PageHeader', () => {
     expect(renderToStaticMarkup(<PageHeader />)).toContain('<header');
   });
 
+  it('renders the action outside the title grid, aligned to the top', () => {
+    const markup = renderToStaticMarkup(
+      <PageHeader>
+        <PageHeader.Title>Environment</PageHeader.Title>
+        <PageHeader.Action>Edit</PageHeader.Action>
+      </PageHeader>,
+    );
+
+    // Action is a direct child of <header>, right after the closed title grid.
+    expect(markup).toMatch(
+      /<\/h1><\/div><div data-slot="page-header-action" class="[^"]*self-start[^"]*">Edit<\/div><\/header>$/,
+    );
+  });
+
   it('keeps the title anchored to the top of the row regardless of action height', () => {
     const withTallAction = renderToStaticMarkup(
       <PageHeader>

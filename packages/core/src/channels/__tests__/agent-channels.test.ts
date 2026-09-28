@@ -633,6 +633,164 @@ describe('AgentChannels', () => {
       expect(requestContext.get('channel')).toBeDefined();
     });
 
+    describe('approval requester check', () => {
+      async function setup(record: Record<string, unknown>, mastra = makeMastra()) {
+        const adapter = createMockAdapter('discord');
+        const channels = new AgentChannels({ adapters: { discord: adapter } });
+        channels.__setAgent(mockAgent);
+        const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        channels.__setLogger(logger as any);
+        await channels.initialize(mastra);
+        (channels as any).findThreadMapping = vi
+          .fn()
+          .mockResolvedValue({ thread: { id: 'mastra-thread-1', resourceId: 'resource-1' } });
+        (channels as any).pendingApprovalCards.set('tool-call-1', {
+          runId: 'run-1',
+          toolName: 'lookup',
+          args: {},
+          ...record,
+        });
+        const dispatchApproval = vi.fn().mockResolvedValue(undefined);
+        const dispatchDecline = vi.fn().mockResolvedValue(undefined);
+        (channels as any).dispatchApproval = dispatchApproval;
+        (channels as any).dispatchDecline = dispatchDecline;
+        const click = (actionId: string, userId: string) =>
+          (channels.sdk as any).processAction({
+            ...makeActionEvent(adapter, actionId),
+            user: { userId, userName: userId, fullName: userId },
+            thread: { id: 'channel-1:thread-1', channelId: 'channel-1', isDM: false },
+          });
+        return { adapter, channels, logger, dispatchApproval, dispatchDecline, click };
+      }
+
+      it('ignores approve and decline clicks from a user other than the requester', async () => {
+        const { adapter, logger, dispatchApproval, dispatchDecline, click } = await setup({ requesterId: 'alice' });
+
+        await click('tool_approve:tool-call-1', 'mallory');
+        await click('tool_deny:tool-call-1', 'mallory');
+
+        expect(dispatchApproval).not.toHaveBeenCalled();
+        expect(dispatchDecline).not.toHaveBeenCalled();
+        expect(adapter.editMessage).not.toHaveBeenCalled();
+        expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('only alice may answer'), expect.anything());
+      });
+
+      it('lets the requester approve', async () => {
+        const { dispatchApproval, click } = await setup({ requesterId: 'alice' });
+        await click('tool_approve:tool-call-1', 'alice');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
+      it('checks the requester when the approval is recovered from stored messages', async () => {
+        const messages = [
+          {
+            role: 'assistant',
+            content: {
+              metadata: {
+                pendingToolApprovals: {
+                  lookup: { toolCallId: 'tool-call-1', runId: 'run-1', toolName: 'lookup', args: {} },
+                },
+              },
+            },
+          },
+          {
+            role: 'user',
+            content: {
+              providerMetadata: { mastra: { channels: { discord: { author: { userId: 'alice' } } } } },
+            },
+          },
+        ];
+        const { channels, dispatchApproval, click } = await setup({}, {
+          getStorage: () => ({ getStore: async () => ({ listMessages: async () => ({ messages }) }) }),
+          getServer: () => null,
+        } as any);
+        (channels as any).pendingApprovalCards.clear();
+
+        await click('tool_approve:tool-call-1', 'mallory');
+        expect(dispatchApproval).not.toHaveBeenCalled();
+
+        await click('tool_approve:tool-call-1', 'alice');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
+      it('ignores all clicks when stored messages cannot identify a single requester', async () => {
+        const author = (userId: string) => ({
+          role: 'user',
+          content: { providerMetadata: { mastra: { channels: { discord: { author: { userId } } } } } },
+        });
+        const messages = [
+          {
+            role: 'assistant',
+            content: {
+              metadata: {
+                pendingToolApprovals: {
+                  lookup: { toolCallId: 'tool-call-1', runId: 'run-1', toolName: 'lookup', args: {} },
+                },
+              },
+            },
+          },
+          author('bob'),
+          author('alice'),
+        ];
+        const { channels, dispatchApproval, click } = await setup({}, {
+          getStorage: () => ({ getStore: async () => ({ listMessages: async () => ({ messages }) }) }),
+          getServer: () => null,
+        } as any);
+        (channels as any).pendingApprovalCards.clear();
+
+        await click('tool_approve:tool-call-1', 'bob');
+        await click('tool_approve:tool-call-1', 'alice');
+        expect(dispatchApproval).not.toHaveBeenCalled();
+      });
+
+      it('keeps a stashed requester when the run id is recovered from stored messages', async () => {
+        const author = (userId: string) => ({
+          role: 'user',
+          content: { providerMetadata: { mastra: { channels: { discord: { author: { userId } } } } } },
+        });
+        const messages = [
+          {
+            role: 'assistant',
+            content: {
+              metadata: {
+                pendingToolApprovals: {
+                  lookup: { toolCallId: 'tool-call-1', runId: 'run-1', toolName: 'lookup', args: {} },
+                },
+              },
+            },
+          },
+          author('bob'),
+          author('alice'),
+        ];
+        const { dispatchApproval, click } = await setup({ requesterId: 'alice' }, {
+          getStorage: () => ({ getStore: async () => ({ listMessages: async () => ({ messages }) }) }),
+          getServer: () => null,
+        } as any);
+
+        await click('tool_approve:tool-call-1', 'bob');
+        expect(dispatchApproval).not.toHaveBeenCalled();
+        await click('tool_approve:tool-call-1', 'alice');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
+      it('keeps the permissive behavior when no requester was recorded', async () => {
+        const { dispatchApproval, click } = await setup({});
+        await click('tool_approve:tool-call-1', 'mallory');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
+      it('stamps the requester onto approval records posted through the render context', async () => {
+        const { channels } = await setup({});
+        const ctx = (channels as any)._buildRenderContext(
+          { id: 'channel-1:thread-1', channelId: 'channel-1' },
+          'discord',
+          { requesterId: 'alice' },
+        );
+        ctx.onApprovalPosted('tool-call-2', { displayName: 'x', argsSummary: '', startedAt: 0 });
+        expect((channels as any).pendingApprovalCards.get('tool-call-2').requesterId).toBe('alice');
+      });
+    });
+
     it('does not register action handling when disabled', async () => {
       const chatMod = await getChatModule();
       const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onAction');
@@ -719,6 +877,78 @@ describe('AgentChannels', () => {
           }),
         }),
       );
+    });
+
+    describe('suspended tool auto-resume', () => {
+      async function dispatch(channels: AgentChannels, platform: string) {
+        const memoryStore = new InMemoryMemory({ db: new InMemoryDB() });
+        const mockMastra = {
+          getStorage: () => ({ getStore: () => memoryStore }),
+          getServer: () => null,
+        } as any;
+        await channels.initialize(mockMastra);
+        const chatThread = {
+          id: 'channel-1:thread-1',
+          channelId: 'channel-1',
+          isDM: true,
+          adapter: channels.adapters[platform],
+          isSubscribed: vi.fn().mockResolvedValue(true),
+          subscribe: vi.fn().mockResolvedValue(undefined),
+          mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+          messages: (async function* () {})(),
+        } as any;
+        const message = {
+          id: 'message-1',
+          text: 'hi',
+          author: { userId: 'user-1', userName: 'u', fullName: 'U' },
+          attachments: [],
+        } as any;
+        await (channels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+        return mockAgent.sendMessage.mock.calls[0][1].ifIdle.streamOptions;
+      }
+
+      function channelsWith(platform: string, config: Record<string, unknown>) {
+        const channels = new AgentChannels({
+          adapters: { [platform]: { adapter: createMockAdapter(platform), ...config } },
+        } as any);
+        channels.__setAgent(mockAgent);
+        return channels;
+      }
+
+      it("auto-resumes with toolDisplay 'hidden' on a platform without approval buttons", async () => {
+        const streamOptions = await dispatch(channelsWith('imessage', { toolDisplay: 'hidden' }), 'imessage');
+        expect(streamOptions.autoResumeSuspendedTools).toBe(true);
+      });
+
+      it("keeps approval flow with toolDisplay 'hidden' on Slack", async () => {
+        const streamOptions = await dispatch(channelsWith('slack', { toolDisplay: 'hidden' }), 'slack');
+        expect('autoResumeSuspendedTools' in streamOptions).toBe(false);
+      });
+
+      it('honors an explicit approvalButtons override', async () => {
+        const streamOptions = await dispatch(
+          channelsWith('custom', { toolDisplay: 'hidden', approvalButtons: true }),
+          'custom',
+        );
+        expect('autoResumeSuspendedTools' in streamOptions).toBe(false);
+      });
+
+      it("auto-resumes with toolDisplay 'text'", async () => {
+        const streamOptions = await dispatch(channelsWith('slack', { toolDisplay: 'text' }), 'slack');
+        expect(streamOptions.autoResumeSuspendedTools).toBe(true);
+      });
+
+      it('warns when an inbound message does not wake a run', async () => {
+        const logger = { info: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() } as any;
+        const channels = channelsWith('slack', {});
+        channels.__setLogger(logger);
+        mockAgent.sendMessage.mockReturnValueOnce({ accepted: Promise.resolve({ action: 'persist' }) });
+        await dispatch(channels, 'slack');
+        expect(logger.warn).toHaveBeenCalledWith(
+          expect.stringContaining('did not start a run (action: persist)'),
+          expect.anything(),
+        );
+      });
     });
 
     it('skips messages with no text and no attachments', async () => {
@@ -860,6 +1090,82 @@ describe('AgentChannels', () => {
         (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext()),
       ).resolves.not.toThrow();
       expect(consumeStream).not.toHaveBeenCalled();
+    });
+
+    it('surfaces a stream-setup rejection instead of treating the message as sent', async () => {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+
+      await agentChannels.initialize(mockMastra);
+
+      // `accepted` rejects when the agent throws before the run starts
+      // (workspace, instructions, tools, model resolution).
+      mockAgent.sendMessage.mockReturnValueOnce({
+        accepted: Promise.reject(new Error('instructions resolution failed')),
+      });
+
+      const chatThread = {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: false,
+        adapter: agentChannels.adapters.discord,
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+      } as any;
+      const message = {
+        id: 'message-1',
+        text: 'hello',
+        author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+        attachments: [],
+      } as any;
+
+      await expect(
+        (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext()),
+      ).rejects.toThrow('instructions resolution failed');
+    });
+
+    it('keeps a consume failure on an already-started run at debug', async () => {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+
+      await agentChannels.initialize(mockMastra);
+
+      const consumeStream = vi.fn().mockRejectedValue(new Error('mid-run failure'));
+      mockAgent.sendMessage.mockReturnValueOnce({
+        accepted: Promise.resolve({ action: 'wake', runId: 'run-1', output: { consumeStream } }),
+      });
+
+      const chatThread = {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: false,
+        adapter: agentChannels.adapters.discord,
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+      } as any;
+      const message = {
+        id: 'message-1',
+        text: 'hello',
+        author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+        attachments: [],
+      } as any;
+
+      await expect(
+        (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext()),
+      ).resolves.not.toThrow();
+      expect(consumeStream).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -1545,7 +1851,200 @@ describe('AgentChannels', () => {
         mastra: mockMastra,
         requestContext: expect.any(RequestContext),
         signalMetadata: {},
+        skipped: [],
       });
+
+      spy.mockRestore();
+    });
+
+    it('gives a custom handler the messages batched by the SDK as ctx.skipped', async () => {
+      const chatMod = await getChatModule();
+      let registeredDMWrapper: ((...args: any[]) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const onDirectMessage = vi.fn(async () => {});
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        handlers: { onDirectMessage },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const earlier = { ...message, id: 'msg-earlier', text: 'first part' };
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await registeredDMWrapper!(chatThread, message, {}, { skipped: [earlier], totalSinceLastHandler: 2 });
+
+      const ctx = onDirectMessage.mock.calls[0]![3] as { skipped: unknown[] };
+      expect(ctx.skipped).toEqual([earlier]);
+
+      spy.mockRestore();
+    });
+
+    it('merges batched messages into one agent turn, oldest first', async () => {
+      const chatMod = await getChatModule();
+      let registeredDMWrapper: ((...args: any[]) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const dispatches: any[] = [];
+      vi.spyOn(channels as any, 'dispatchInboundMessage').mockImplementation(async (args: any) => {
+        dispatches.push(args);
+      });
+
+      const first = { ...message, id: 'm1', text: 'first part', formatted: undefined, attachments: [] };
+      const second = { ...message, id: 'm2', text: 'second part', formatted: undefined, attachments: [] };
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await registeredDMWrapper!(chatThread, second, {}, { skipped: [first], totalSinceLastHandler: 2 });
+
+      expect(dispatches).toHaveLength(1);
+      const serialized = JSON.stringify(dispatches[0].signalContents);
+      expect(serialized).toContain('first part');
+      expect(serialized).toContain('second part');
+      expect(serialized.indexOf('first part')).toBeLessThan(serialized.indexOf('second part'));
+
+      spy.mockRestore();
+    });
+
+    it('does not repeat batched messages as thread history on a first mention', async () => {
+      const chatMod = await getChatModule();
+      let registeredMentionWrapper: ((...args: any[]) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onNewMention').mockImplementation((handler: any) => {
+        registeredMentionWrapper = handler;
+      });
+
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const dispatches: any[] = [];
+      vi.spyOn(channels as any, 'dispatchInboundMessage').mockImplementation(async (args: any) => {
+        dispatches.push(args);
+      });
+
+      const first = { ...message, id: 'm1', text: 'first part', formatted: undefined, attachments: [] };
+      const second = { ...message, id: 'm2', text: 'second part', formatted: undefined, attachments: [] };
+      const older = { ...message, id: 'm0', text: 'older chatter', formatted: undefined, attachments: [] };
+      const chatThread = makeChatThread({
+        adapter: channels.adapters.discord,
+        isDM: false,
+        isSubscribed: vi.fn().mockResolvedValue(false),
+        // newest-first, as the SDK yields them
+        messages: (async function* () {
+          yield second;
+          yield first;
+          yield older;
+        })(),
+      });
+      await registeredMentionWrapper!(chatThread, second, { skipped: [first], totalSinceLastHandler: 2 });
+
+      const serialized = JSON.stringify(dispatches[0].signalContents);
+      expect(serialized).toContain('older chatter');
+      expect(serialized.split('first part')).toHaveLength(2);
+
+      spy.mockRestore();
+    });
+
+    it("dispatches another sender's batched messages as their own turn", async () => {
+      const chatMod = await getChatModule();
+      let registeredDMWrapper: ((...args: any[]) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const dispatches: any[] = [];
+      vi.spyOn(channels as any, 'dispatchInboundMessage').mockImplementation(async (args: any) => {
+        dispatches.push(args);
+      });
+
+      const fromOther = {
+        ...message,
+        id: 'm1',
+        text: 'other user text',
+        author: { userId: 'user-2', userName: 'mallory' },
+        attachments: [],
+      };
+      const current = { ...message, id: 'm2', text: 'my text', formatted: undefined, attachments: [] };
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await registeredDMWrapper!(chatThread, current, {}, { skipped: [fromOther], totalSinceLastHandler: 2 });
+
+      expect(dispatches).toHaveLength(2);
+      const firstTurn = JSON.stringify(dispatches[0].signalContents);
+      const secondTurn = JSON.stringify(dispatches[1].signalContents);
+      expect(firstTurn).toContain('other user text');
+      expect(firstTurn).not.toContain('my text');
+      expect(secondTurn).toContain('my text');
+      expect(secondTurn).not.toContain('other user text');
+      expect(dispatches[0].attributes.messageId).toBe('m1');
+      expect(dispatches[1].attributes.messageId).toBe('m2');
+
+      spy.mockRestore();
+    });
+
+    it("isolates each sender's run and keeps going when one run is refused", async () => {
+      const chatMod = await getChatModule();
+      const { ChannelSessionRejectedError } = await import('../errors');
+      let registeredDMWrapper: ((...args: any[]) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const onDirectMessage = vi.fn((thread: any, msg: any, defaultHandler: any, ctx: any) => {
+        ctx.requestContext.set('tenant', 'current-sender');
+        return defaultHandler(thread, msg);
+      });
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        handlers: { onDirectMessage },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const calls: { id: string; tenant: unknown }[] = [];
+      vi.spyOn(channels as any, 'processChatMessage').mockImplementation(async (...args: any[]) => {
+        calls.push({ id: args[1].id, tenant: args[3].get('tenant') });
+        if (args[1].id === 'a') throw new ChannelSessionRejectedError('no');
+      });
+
+      const author = (userId?: string) => ({ userId, userName: userId ?? 'anon' });
+      const skipped = [
+        { ...message, id: 'a', author: author('user-a') },
+        { ...message, id: 'anon1', author: author(undefined) },
+        { ...message, id: 'anon2', author: author(undefined) },
+      ];
+      const current = { ...message, id: 'c', author: author('user-c') };
+      await registeredDMWrapper!(
+        makeChatThread({ adapter: channels.adapters.discord }),
+        current,
+        {},
+        {
+          skipped,
+          totalSinceLastHandler: 4,
+        },
+      );
+
+      expect(calls).toEqual([
+        { id: 'a', tenant: undefined },
+        { id: 'anon1', tenant: undefined },
+        { id: 'anon2', tenant: undefined },
+        { id: 'c', tenant: 'current-sender' },
+      ]);
 
       spy.mockRestore();
     });

@@ -120,10 +120,10 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
         {...{ [FILTER_BAR_SCOPE_ATTR]: 'advanced' }}
         finalFocus={triggerRef}
       >
-        <div className="border-border flex items-center gap-2 border-b px-3 py-2">
-          <BracesIcon className="text-muted-foreground size-3.5" />
+        <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+          <BracesIcon className="size-3.5 text-muted-foreground" />
           <span className="text-label text-foreground">Advanced filter</span>
-          <span className="bg-fill-subtle text-column text-muted-foreground rounded-md px-1.5">{count}</span>
+          <span className="rounded-md bg-fill-subtle px-1.5 text-column text-muted-foreground">{count}</span>
           <Button
             variant="ghost"
             size="icon-sm"

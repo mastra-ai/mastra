@@ -37,7 +37,7 @@ const MAX_KIND_GLYPHS = 4;
 
 export function ToolCallGroup({ steps, leading, children }: ToolCallGroupProps) {
   const running = steps.find(step => step.status === 'running');
-  const liveDetail = running && presentTool(running.toolName, running.args).detail;
+  const live = running && presentTool(running.toolName, running.args);
 
   return (
     <ToolCall status={running ? 'running' : 'idle'} aria-label={`Tool group: ${steps.length} steps`}>
@@ -48,7 +48,11 @@ export function ToolCallGroup({ steps, leading, children }: ToolCallGroupProps) 
             <FoldVertical size={14} strokeWidth={1.75} aria-hidden className="text-placeholder" />
           </ToolCallIcon>
           <ToolCallLabel>{steps.length} steps</ToolCallLabel>
-          {liveDetail && <ToolCallDetail>{liveDetail}</ToolCallDetail>}
+          {live && live.description ? (
+            <ToolCallLabel className="max-w-none min-w-0 shrink">{live.description}</ToolCallLabel>
+          ) : (
+            live && live.detail && <ToolCallDetail>{live.detail}</ToolCallDetail>
+          )}
           <GroupKinds steps={steps} />
           <ToolCallSpacer rule />
           <ToolCallTrailing>
@@ -77,7 +81,7 @@ function GroupProgress({ steps }: { steps: ToolCallGroupStep[] }) {
   }
   const failed = steps.filter(step => step.status === 'error').length;
   const errorIndicator =
-    failed > 0 ? <X size={13} role="img" aria-label="Failed" className="text-error shrink-0" /> : null;
+    failed > 0 ? <X size={13} role="img" aria-label="Failed" className="shrink-0 text-error" /> : null;
   // Older consumers only supply visual status, which cannot distinguish completed from interrupted calls.
   if (steps.some(step => step.hasResult === undefined)) return errorIndicator;
 

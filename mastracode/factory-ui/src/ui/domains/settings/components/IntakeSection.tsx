@@ -7,7 +7,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
-import { useIncidentioSourcesQuery } from '../../../../hooks/useIncidentioData';
+import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
+import { useIncidentioSourcesQuery, useIncidentioStatusQuery } from '../../../../hooks/useIncidentioData';
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
 import { useJiraProjectsQuery, useJiraStatusQuery } from '../../../../hooks/useJiraData';
@@ -23,6 +24,7 @@ import { connectLinear, isLinearReauthError, linearTeamSourceId } from '../../fa
 import type { LinearProject, LinearStatus, LinearTeam } from '../../factory/services/linear';
 import type { IntakeConfig } from '../../factory/services/intake';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
+import type { GithubStatus } from '../../workspaces/services/github';
 import { SourcePicker } from './IntakeSourcePicker';
 import type { SourcePickerGroup } from './IntakeSourcePicker';
 import { GithubLabelRouting } from './GithubLabelRouting';
@@ -42,24 +44,59 @@ interface SourceSectionProps {
   update: (next: IntakeConfig) => void;
 }
 
-function GithubIntakeSection({ config, busy, update, slugs }: SourceSectionProps & { slugs: string[] }) {
+function GithubIntakeSection({
+  config,
+  busy,
+  update,
+  slugs,
+  status,
+  statusPending,
+  statusRefetching,
+  onRetryStatus,
+}: SourceSectionProps & {
+  slugs: string[];
+  status: GithubStatus | undefined;
+  statusPending: boolean;
+  statusRefetching: boolean;
+  onRetryStatus: () => void;
+}) {
+  const connected = status?.connected === true;
+  // 'unavailable' is set by the browser when the status request failed, not
+  // by the server, so it must not read as "not configured".
+  const statusUnavailable = status?.reason === 'unavailable';
+  const description = statusPending
+    ? 'Checking the GitHub connection…'
+    : statusUnavailable
+      ? 'GitHub status could not be loaded.'
+      : status?.reason === 'auth_required'
+        ? 'Sign in again to manage GitHub issue syncing.'
+        : status?.reason === 'organization_required'
+          ? 'Select an organization to manage GitHub issue syncing.'
+          : status?.enabled !== true
+            ? 'GitHub is not configured on this server.'
+            : !connected
+              ? 'Connect GitHub to sync issues from this organization.'
+              : "Open issues from the selected repositories feed every member's board. Pull requests always appear in Review.";
+  const action = statusUnavailable ? (
+    <Button size="sm" variant="ghost" disabled={statusRefetching} onClick={onRetryStatus}>
+      Retry
+    </Button>
+  ) : undefined;
+
   return (
-    <SettingsSubsection
-      scope="org"
-      title="GitHub issues"
-      description="Open issues from the selected repositories feed every member's board. Pull requests always appear in Review."
-    >
+    <SettingsSubsection scope="org" title="GitHub issues" description={description} action={action}>
       <SettingsContainer>
         <SettingsRow label="Sync GitHub issues">
           <Switch
             aria-label="Sync GitHub issues"
             checked={config.github.enabled}
-            disabled={busy}
+            disabled={busy || !connected}
             onCheckedChange={enabled => update({ ...config, github: { ...config.github, enabled } })}
           />
         </SettingsRow>
 
-        {config.github.enabled &&
+        {connected &&
+          config.github.enabled &&
           (slugs.length === 0 ? (
             <Txt as="p" variant="caption" className="text-muted-foreground px-4 py-3">
               No linked repositories yet — link a repository to a factory to add one.
@@ -353,14 +390,23 @@ function IncidentioIntakeSection({
   const provider = 'incident-io';
   const meta = PLATFORM_CONNECT_PROVIDERS[provider];
   const connectionsQuery = usePlatformConnectionsQuery(provider);
+  const statusQuery = useIncidentioStatusQuery();
+  // A deployment-configured API key serves follow-ups without any Platform
+  // connection — the section must stay reachable so the org can still select
+  // and route sources.
+  const directConfigured = Boolean(
+    statusQuery.data?.enabled &&
+    statusQuery.data.configured &&
+    statusQuery.data.mode === 'api-key' &&
+    statusQuery.data.reason === 'ready',
+  );
   const active = connectionsQuery.data?.filter(connection => connection.status === 'active') ?? [];
-  const sourcesQuery = useIncidentioSourcesQuery(active.length > 0);
-  if (connectionsQuery.isPending) return null;
-  if (connectionsQuery.isError) {
-    // 403/404 means the feature isn't offered here — hide the section. A
-    // transient failure must keep the section reachable with a retry, or an
+  const credentialActive = active.length > 0 || directConfigured;
+  const sourcesQuery = useIncidentioSourcesQuery(credentialActive);
+  if (connectionsQuery.isPending || statusQuery.isPending) return null;
+  if (connectionsQuery.isError && !directConfigured && !isPlatformConnectUnavailableError(connectionsQuery.error)) {
+    // A transient failure must keep the section reachable with a retry, or an
     // org with incident.io connected silently loses its sync settings.
-    if (isPlatformConnectUnavailableError(connectionsQuery.error)) return null;
     return (
       <SettingsSubsection
         scope="org"
@@ -374,23 +420,32 @@ function IncidentioIntakeSection({
       />
     );
   }
-  const connections = connectionsQuery.data;
+  // 403/404 means Platform connections aren't offered here — hide the section
+  // unless a deployment API key serves the feature anyway.
+  if (connectionsQuery.isError && !directConfigured) return null;
+  const connections = connectionsQuery.isError ? [] : connectionsQuery.data;
   const needsReauth = connections.some(connection => connection.status === 'needs_reauth');
   const sources = sourcesQuery.data ?? [];
 
-  const action =
-    connections.length === 0 ? (
-      <ProviderConnectControl provider={provider} label={`Connect ${meta.displayName}`} />
-    ) : (
-      <span className="flex items-center gap-2">
-        <Txt as="span" variant="caption" className="text-muted-foreground">
-          {active.length === 1
-            ? (active[0]?.accountLabel ?? `${meta.displayName} connected`)
-            : `${active.length} ${meta.displayName} accounts connected`}
-        </Txt>
-        <ProviderConnectControl provider={provider} label="Connect another" size="sm" variant="ghost" />
-      </span>
-    );
+  // A direct API key takes precedence over Platform connections server-side,
+  // so connect controls are only offered when Platform connections drive the
+  // integration.
+  const action = directConfigured ? (
+    <Txt as="span" variant="caption" className="text-muted-foreground">
+      incident.io API key configured on this server
+    </Txt>
+  ) : connections.length === 0 ? (
+    <ProviderConnectControl provider={provider} label={`Connect ${meta.displayName}`} />
+  ) : (
+    <span className="flex items-center gap-2">
+      <Txt as="span" variant="caption" className="text-muted-foreground">
+        {active.length === 1
+          ? (active[0]?.accountLabel ?? `${meta.displayName} connected`)
+          : `${active.length} ${meta.displayName} accounts connected`}
+      </Txt>
+      <ProviderConnectControl provider={provider} label="Connect another" size="sm" variant="ghost" />
+    </span>
+  );
 
   const sourceIds = config.incidentio.sourceIds ?? [];
   return (
@@ -399,23 +454,25 @@ function IncidentioIntakeSection({
         scope="org"
         title="incident.io follow-ups"
         description={
-          needsReauth
+          needsReauth && !directConfigured
             ? 'An incident.io account needs to be reconnected to keep syncing follow-ups.'
             : 'Choose where outstanding follow-ups from connected incident.io accounts should be routed. Incidents stay out of intake.'
         }
         action={action}
       >
-        {connections.length > 0 && (
+        {(connections.length > 0 || directConfigured) && (
           <SettingsContainer>
             <SettingsRow label="Sync incident.io follow-ups">
               <Switch
                 aria-label="Sync incident.io follow-ups"
                 checked={config.incidentio.enabled}
-                disabled={busy || active.length === 0}
+                disabled={busy || !credentialActive}
                 onCheckedChange={enabled => update({ ...config, incidentio: { ...config.incidentio, enabled } })}
               />
             </SettingsRow>
-            <ProviderConnectionsList provider={provider} connections={connections} />
+            {!directConfigured && connections.length > 0 && (
+              <ProviderConnectionsList provider={provider} connections={connections} />
+            )}
             <SettingsRow
               label="Incident board configuration"
               description="Configure a dedicated board for incident response."
@@ -424,14 +481,14 @@ function IncidentioIntakeSection({
                 Coming soon
               </Badge>
             </SettingsRow>
-            {config.incidentio.enabled && active.length > 0 && sourcesQuery.isError && (
+            {config.incidentio.enabled && credentialActive && sourcesQuery.isError && (
               <SettingsRow label="Follow-up sources" description="Couldn't load follow-up sources.">
                 <Button size="sm" variant="ghost" onClick={() => void sourcesQuery.refetch()}>
                   Retry
                 </Button>
               </SettingsRow>
             )}
-            {config.incidentio.enabled && active.length > 0 && !sourcesQuery.isError && (
+            {config.incidentio.enabled && credentialActive && !sourcesQuery.isError && (
               <SourcePicker
                 label="Follow-up sources"
                 groups={[
@@ -483,6 +540,8 @@ export function IntakeSection() {
   const configQuery = useIntakeConfigQuery();
   const saveMutation = useSaveIntakeConfigMutation();
   const factoriesQuery = useFactoriesQuery();
+  const githubStatusQuery = useGithubStatusQuery();
+  const githubConnected = githubStatusQuery.data?.connected === true;
   const gitlabStatusQuery = useGitLabStatusQuery();
   const gitlabStatus = gitlabStatusQuery.data;
   const gitlabConfigured = Boolean(gitlabStatus?.enabled && gitlabStatus.configured);
@@ -548,8 +607,17 @@ export function IntakeSection() {
 
   return (
     <div className="flex flex-col gap-8">
-      <GithubIntakeSection config={config} busy={busy} update={update} slugs={linkedSlugs} />
-      {config.github.enabled && linkedSlugs.length > 0 && (factoriesQuery.data?.length ?? 0) > 0 && (
+      <GithubIntakeSection
+        config={config}
+        busy={busy}
+        update={update}
+        slugs={linkedSlugs}
+        status={githubStatusQuery.data}
+        statusPending={githubStatusQuery.isPending}
+        statusRefetching={githubStatusQuery.isFetching}
+        onRetryStatus={() => void githubStatusQuery.refetch()}
+      />
+      {githubConnected && config.github.enabled && linkedSlugs.length > 0 && (factoriesQuery.data?.length ?? 0) > 0 && (
         <SettingsSubsection
           scope="org"
           title="GitHub routing"

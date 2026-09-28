@@ -4,6 +4,7 @@ import * as React from 'react';
 
 import { controlSizeClasses } from '@/ds/primitives/control-size';
 import {
+  fieldErrorRim,
   inputSurfaceAndFocusStyle,
   resolveFieldVariant,
   sharedFormElementDisabledStyle,
@@ -66,7 +67,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         type={type}
         className={cn(
           inputVariants({ variant: resolveFieldVariant(variant), size }),
-          error && 'border-destructive focus-visible:border-destructive',
+          error && fieldErrorRim,
           className,
         )}
         data-testid={testId}

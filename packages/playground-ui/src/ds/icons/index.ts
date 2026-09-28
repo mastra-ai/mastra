@@ -21,6 +21,7 @@ export * from './GoogleIcon';
 export * from './RepoIcon';
 export * from './HomeIcon';
 export * from './Icon';
+export * from './icon-size-classes';
 export * from './InfoIcon';
 export * from './JudgeIcon';
 export * from './LogsIcon';

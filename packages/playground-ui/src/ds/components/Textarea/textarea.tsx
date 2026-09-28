@@ -3,6 +3,7 @@ import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
 import {
+  fieldErrorRim,
   inputSurfaceAndFocusStyle,
   resolveFieldVariant,
   sharedFormElementDisabledStyle,
@@ -56,7 +57,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
       <textarea
         className={cn(
           textareaVariants({ variant: resolveFieldVariant(variant), size }),
-          error && 'border-destructive focus-visible:border-destructive',
+          error && fieldErrorRim,
           className,
         )}
         data-testid={testId}

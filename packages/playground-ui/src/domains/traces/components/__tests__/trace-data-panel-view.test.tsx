@@ -246,7 +246,7 @@ describe('TraceDataPanelView — trace summary description', () => {
 
     expect(screen.getByLabelText(/^Started at /)).toBeTruthy();
     // 1s between the fixture's startedAt and endedAt.
-    expect(screen.getAllByText('1.0s').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('1s').length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: /weather-agent/ })).toBeTruthy();
   });
 
@@ -332,6 +332,13 @@ describe('TraceDataPanelView — the header', () => {
     expect(screen.queryByRole('button', { name: /previous trace/i })).toBeNull();
     openTraceActions();
     expect(screen.getByRole('menuitem', { name: 'Download trace JSON' })).toBeTruthy();
+  });
+
+  it('shows the trace summary under the heading on the trace page too', () => {
+    render(<TraceDataPanelView {...baseProps} spans={deepTraceFixture} placement="trace-page" />);
+
+    expect(screen.getByLabelText('Trace status')).toBeTruthy();
+    expect(screen.getByLabelText(/^Started at /)).toBeTruthy();
   });
 
   it('opens as a wide drawer by default and honours a caller-provided size', () => {
@@ -432,17 +439,6 @@ describe('TraceDataPanelView — the body', () => {
     render(<TraceDataPanelView {...baseProps} spans={undefined} />);
 
     expect(screen.getByText('No spans found for this trace.')).toBeTruthy();
-  });
-
-  it('shows the trace summary in the side panel but not on the trace page', () => {
-    const sidePanel = render(<TraceDataPanelView {...baseProps} />);
-    expect(screen.getByLabelText(/^Started at /)).toBeTruthy();
-    expect(sidePanel.container).toBeTruthy();
-
-    cleanup();
-
-    render(<TraceDataPanelView {...baseProps} placement="trace-page" />);
-    expect(screen.queryByLabelText(/^Started at /)).toBeNull();
   });
 });
 

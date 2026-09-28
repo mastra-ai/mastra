@@ -58,7 +58,8 @@
             "entityId": "validator",
             "attributes": {
               "processorExecutor": "workflow",
-              "processorIndex": 0
+              "processorIndex": 0,
+              "processorPhase": "input"
             },
             "metadata": {
               "runId": "<runId-1>",
@@ -526,7 +527,8 @@
             "entityId": "summarizer",
             "attributes": {
               "processorExecutor": "workflow",
-              "processorIndex": 0
+              "processorIndex": 0,
+              "processorPhase": "outputResult"
             },
             "metadata": {
               "runId": "<runId-1>",

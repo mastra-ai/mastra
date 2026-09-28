@@ -11,8 +11,8 @@ const { execFileMock, jscodeshiftOutput } = vi.hoisted(() => {
       (
         _file: string,
         _args: string[],
-        _options: { encoding: string },
-        callback: (error: null, result: { stdout: string; stderr: string }) => void,
+        _options: { encoding: string; maxBuffer?: number },
+        callback: (error: Error | null, result?: { stdout: string; stderr: string }) => void,
       ) => callback(null, { stdout: jscodeshiftOutput, stderr: '' }),
     ),
   };
@@ -73,6 +73,27 @@ describe('transform', () => {
     expect(stdoutWriteSpy).not.toHaveBeenCalled();
   });
 
+  it('supports printed output larger than the execFile default buffer', async () => {
+    const largeOutput = 'x'.repeat(2 * 1024 * 1024);
+    execFileMock.mockImplementationOnce((_file, _args, options, callback) => {
+      if (largeOutput.length > (options.maxBuffer ?? 1024 * 1024)) {
+        const error = Object.assign(new RangeError('stdout maxBuffer length exceeded'), {
+          code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER',
+        });
+        callback(error);
+        return;
+      }
+
+      callback(null, { stdout: largeOutput, stderr: '' });
+    });
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    await expect(transform('v1/runtime-context', '.', { print: true }, { logStatus: false })).resolves.toEqual({
+      errors: [],
+      notImplementedErrors: [],
+    });
+  });
+
   it('anchors the hidden-directory ignore pattern to the target', async () => {
     const source = '/tmp/.worktrees/project';
 
@@ -81,5 +102,57 @@ describe('transform', () => {
     const childArgs = execFileMock.mock.calls[0]![1];
     expect(childArgs).toContain(`--ignore-pattern=${path.join(path.resolve(source), '**/.*/**')}`);
     expect(childArgs).not.toContain('--ignore-pattern=**/.*/**');
+  });
+
+  describe('error parsing', () => {
+    const run = async (stdout: string) => {
+      execFileMock.mockImplementationOnce((_f, _a, _o, callback) => callback(null, { stdout, stderr: '' }));
+      return transform('v1/runtime-context', '.', {}, { logStatus: false });
+    };
+
+    it('reports non-syntax transform failures', async () => {
+      const { errors } = await run(
+        "Processing 1 files...\n ERR /src/boom.ts Transformation error (Cannot read properties of undefined (reading 'x'))\nTypeError: Cannot read properties of undefined (reading 'x')\n    at foo\nResults:\n1 errors\n",
+      );
+      expect(errors).toEqual([
+        {
+          transform: 'v1/runtime-context',
+          filename: '/src/boom.ts',
+          summary: "Cannot read properties of undefined (reading 'x')",
+        },
+      ]);
+    });
+
+    it('reports syntax errors', async () => {
+      const { errors } = await run(
+        ' ERR /src/bad.ts Transformation error (Unexpected token (1:13))\nSyntaxError: Unexpected token (1:13)\n',
+      );
+      expect(errors).toEqual([
+        { transform: 'v1/runtime-context', filename: '/src/bad.ts', summary: 'Unexpected token (1:13)' },
+      ]);
+    });
+
+    it('attributes each error in mixed runs to its own file', async () => {
+      const { errors } = await run(
+        [
+          ' ERR /src/boom.ts Transformation error (boom)',
+          'TypeError: boom',
+          '    at transform',
+          ' ERR /src/bad.ts Transformation error (Unexpected token (1:13))',
+          'SyntaxError: Unexpected token (1:13)',
+          'Results:',
+          '2 errors',
+        ].join('\n'),
+      );
+      expect(errors).toEqual([
+        { transform: 'v1/runtime-context', filename: '/src/boom.ts', summary: 'boom' },
+        { transform: 'v1/runtime-context', filename: '/src/bad.ts', summary: 'Unexpected token (1:13)' },
+      ]);
+    });
+
+    it('returns no errors for successful runs', async () => {
+      const { errors } = await run(jscodeshiftOutput);
+      expect(errors).toEqual([]);
+    });
   });
 });

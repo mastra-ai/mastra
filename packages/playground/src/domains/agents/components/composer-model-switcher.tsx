@@ -1,5 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Lock, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
@@ -15,7 +16,18 @@ export const ComposerModelSwitcher = () => {
 
   const [modelOpen, setModelOpen] = useState(false);
 
-  if (providersLoading || !selection) return null;
+  if (!selection) return null;
+  // Reserve the picker footprint so the action row doesn't collapse then pop in.
+  if (providersLoading) {
+    // Lighter than the default `bg-muted`: the composer surface is already light, so the
+    // skeleton would otherwise read as a dark pill instead of a placeholder.
+    return (
+      <Skeleton
+        className="h-control-md w-40 rounded-full bg-fill-subtle before:via-fill"
+        data-testid="composer-model-switcher-skeleton"
+      />
+    );
+  }
 
   const { provider: selectedProvider, model: selectedModel, setProvider, setModel } = selection;
   const providers = dataProviders?.providers || [];
@@ -55,7 +67,6 @@ export const ComposerModelSwitcher = () => {
       <LLMProviders
         value={currentModelProvider}
         onValueChange={handleProviderSelect}
-        size="md"
         className={cn(
           'w-auto min-w-0 shrink-0 gap-1 px-3',
           // Collapse provider to icon-only in narrow containers.
@@ -68,7 +79,6 @@ export const ComposerModelSwitcher = () => {
         onValueChange={handleModelSelect}
         open={modelOpen}
         onOpenChange={setModelOpen}
-        size="md"
         className="w-auto max-w-[10rem] min-w-0 gap-1 px-3"
       />
     </ButtonsGroup>
@@ -114,7 +124,7 @@ export const ComposerModelWarning = () => {
     <div className="flex flex-col gap-1 px-3 pb-1.5">
       {(modelWarning || stale) && (
         <div
-          className="text-accent6 text-caption flex max-w-full min-w-0 items-start gap-1"
+          className="flex max-w-full min-w-0 items-start gap-1 text-caption text-accent6"
           data-testid="composer-model-stale-warning"
           role="alert"
         >
@@ -122,7 +132,7 @@ export const ComposerModelWarning = () => {
           <span className="min-w-0 break-words">
             {modelWarning || (
               <>
-                <code className="bg-accent6Dark text-accent6 rounded px-1 py-0.5 break-all">
+                <code className="rounded bg-accent6Dark px-1 py-0.5 break-all text-accent6">
                   {provider}/{selectedModel}
                 </code>{' '}
                 is no longer allowed by admin policy. Pick a different model.
@@ -132,10 +142,10 @@ export const ComposerModelWarning = () => {
         </div>
       )}
       {showProviderWarning && (
-        <div className="text-accent6 text-caption flex max-w-full min-w-0 items-start gap-1">
+        <div className="flex max-w-full min-w-0 items-start gap-1 text-caption text-accent6">
           <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />
           <span className="min-w-0 break-words">
-            Set <code className="bg-accent6Dark text-accent6 rounded px-1 py-0.5 break-all">{envVar}</code> to use this
+            Set <code className="rounded bg-accent6Dark px-1 py-0.5 break-all text-accent6">{envVar}</code> to use this
             provider
           </span>
         </div>

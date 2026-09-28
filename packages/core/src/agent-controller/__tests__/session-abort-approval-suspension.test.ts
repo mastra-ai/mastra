@@ -500,3 +500,139 @@ describe.each([false, true])('session.abort() during approval / suspension (#205
     }
   });
 });
+
+describe('deferred abort completion for suspended tool calls (#24735)', () => {
+  async function abortParkedSuspension(id: string, localOnly: boolean) {
+    const { session } = await createHarness(id, false);
+    session.suspensions.register({
+      toolCallId: 'call-a',
+      runId: 'run-a',
+      toolName: 'confirmAccess',
+      threadId: session.thread.requireId(),
+      resourceId: session.identity.getResourceId(),
+    });
+
+    // Run A is in flight and parked on the suspension.
+    session.run.nextOperation();
+    session.run.ensureAbortController();
+
+    let release!: () => void;
+    const barrier = new Promise<void>(resolve => (release = resolve));
+    const settle = vi.spyOn(session.runEngine, 'settleSuspendedToolCallsAsDenied').mockImplementation(async () => {
+      await barrier;
+    });
+    const streamAbort = vi.spyOn(session.stream, 'abort');
+
+    session.abort({ localOnly });
+    expect(session.run.isAbortRequested()).toBe(true);
+    expect(settle).toHaveBeenCalledWith([expect.objectContaining({ toolCallId: 'call-a' })]);
+    expect(streamAbort).not.toHaveBeenCalled();
+
+    const flush = async () => {
+      release();
+      await barrier;
+      await new Promise(resolve => setTimeout(resolve, 0));
+    };
+    return { session, streamAbort, flush };
+  }
+
+  it.each([true, false])(
+    'Given a successor run started before denial settles, When settlement lands, Then the successor is not aborted (localOnly=%s)',
+    async localOnly => {
+      const { session, streamAbort, flush } = await abortParkedSuspension(`deferred-successor-${localOnly}`, localOnly);
+
+      // `/new` resets the run state, then run B starts.
+      await session.thread.create();
+      session.run.nextOperation();
+      const controllerB = session.run.ensureAbortController();
+
+      await flush();
+
+      expect(streamAbort).not.toHaveBeenCalled();
+      expect(session.run.isAbortRequested()).toBe(false);
+      expect(controllerB.signal.aborted).toBe(false);
+      expect(session.run.isRunning()).toBe(true);
+    },
+  );
+
+  it('Given a successor run that is itself aborted, When the stale settlement lands, Then it does not re-run teardown with the old mode', async () => {
+    const { session, streamAbort, flush } = await abortParkedSuspension('deferred-successor-aborted', true);
+
+    await session.thread.create();
+    session.run.nextOperation();
+    session.run.ensureAbortController();
+    session.abort();
+    expect(streamAbort).toHaveBeenCalledTimes(1);
+    expect(streamAbort).toHaveBeenLastCalledWith({ localOnly: false });
+
+    await flush();
+
+    expect(streamAbort).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([true, false])(
+    'Given no successor run, When settlement lands, Then the deferred teardown fires once with the captured mode (localOnly=%s)',
+    async localOnly => {
+      const { session, streamAbort, flush } = await abortParkedSuspension(
+        `deferred-no-successor-${localOnly}`,
+        localOnly,
+      );
+
+      await flush();
+
+      expect(streamAbort).toHaveBeenCalledTimes(1);
+      expect(streamAbort).toHaveBeenCalledWith({ localOnly });
+      expect(session.run.hasAbortController()).toBe(false);
+    },
+  );
+
+  it.each([true, false])(
+    'Given a gated run and a successor started before the decline lands, When the decline lands, Then the successor is not aborted (localOnly=%s)',
+    async localOnly => {
+      const { session, agent } = await createHarness(`deferred-gated-successor-${localOnly}`, false);
+
+      // Hold the decline's persistence open so the rebind lands inside it.
+      let release!: () => void;
+      const barrier = new Promise<void>(resolve => (release = resolve));
+      const sendToolApproval = agent.sendToolApproval.bind(agent);
+      let declined!: () => void;
+      const declineLanded = new Promise<void>(resolve => (declined = resolve));
+      vi.spyOn(agent, 'sendToolApproval').mockImplementation(async (...args: Parameters<typeof sendToolApproval>) => {
+        await barrier;
+        try {
+          return await sendToolApproval(...args);
+        } finally {
+          declined();
+        }
+      });
+
+      const gated = new Promise<void>(resolve =>
+        session.subscribe((event: AgentControllerEvent) => {
+          if (event.type === 'tool_approval_required') resolve();
+        }),
+      );
+      void session.sendMessage({ content: 'find dero' }).catch(() => {});
+      await gated;
+
+      session.abort({ localOnly });
+      expect(session.run.isAbortRequested()).toBe(true);
+      await vi.waitFor(() => expect(agent.sendToolApproval).toHaveBeenCalled());
+
+      // `/new` rebinds the session, then run B starts.
+      await session.thread.create();
+      session.run.nextOperation();
+      const controllerB = session.run.ensureAbortController();
+      const streamAbort = vi.spyOn(session.stream, 'abort');
+
+      release();
+      await declineLanded.catch(() => {});
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(streamAbort).not.toHaveBeenCalled();
+      expect(session.run.isAbortRequested()).toBe(false);
+      expect(controllerB.signal.aborted).toBe(false);
+
+      controllerB.abort();
+    },
+  );
+});

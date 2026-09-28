@@ -9,7 +9,14 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writ
 import { dirname, join } from 'node:path';
 import type { MastraBrowser } from '@mastra/core/browser';
 import type { LSPConfig } from '@mastra/core/workspace';
-import { AuthStorage } from '../auth/storage.js';
+import { AuthStorage, PROVIDER_DEFAULT_MODELS } from '../auth/storage.js';
+import {
+  ANTHROPIC_PREFIX,
+  normalizeAnthropicModelId,
+  OPENAI_PREFIX,
+  remapOpenAIModelForCodexOAuth,
+  stripMastraGatewayPrefix,
+} from '../providers/model-ids.js';
 import { buildCodexStagehandFetch, createCodexMiddleware } from '../providers/openai-codex.js';
 import {
   isThinkingLevelSetting,
@@ -1459,11 +1466,139 @@ function browserRecordingOptions() {
 }
 
 /**
+ * Snapshot of browser settings safe to store in session state (which session clients can read).
+ * Strips credentials; keeps everything `/browser status` needs for drift detection.
+ */
+export function toActiveBrowserSettings(settings: BrowserSettings): BrowserSettings {
+  if (!settings.stagehand) return { ...settings };
+  const { apiKey: _apiKey, ...stagehand } = settings.stagehand;
+  return { ...settings, stagehand };
+}
+
+export type StagehandModelSource =
+  /** `browser.stagehand.model` in settings. */
+  | 'settings'
+  /** No model configured; reusing the chat model that was active when the browser launched. */
+  | 'chat-model'
+  /** No usable model otherwise; the default model for the user's OpenAI Codex (ChatGPT) login. */
+  | 'codex-oauth'
+  /** Nothing else applies; Stagehand picks its own default from env API keys. */
+  | 'stagehand-default';
+
+export interface ResolvedStagehandModel {
+  /** `provider/model` id, or undefined when Stagehand's own default applies. */
+  modelName: string | undefined;
+  source: StagehandModelSource;
+  /** True when requests go through the user's OpenAI Codex OAuth login instead of an API key. */
+  viaCodexOAuth: boolean;
+}
+
+export interface ResolveStagehandModelOptions {
+  /**
+   * Chat model id at the moment the browser launches (`session.model.get()`).
+   * The Stagehand instance is fixed once created and shared across threads, so
+   * later chat-model switches do not affect it.
+   */
+  chatModelId?: string;
+  authStorage?: AuthStorage;
+}
+
+/**
+ * Env vars Stagehand reads for each provider it can route (mirrors
+ * `STAGEHAND_MODEL_PROVIDERS` in `@mastra/stagehand` and Stagehand's own
+ * `providerEnvVarMap`). `null` means the provider needs no API key.
+ * Kept here instead of importing `@mastra/stagehand`, which would eagerly
+ * load the browser stack into every settings consumer.
+ */
+export const STAGEHAND_PROVIDER_ENV_VARS: Record<string, readonly string[] | null> = {
+  openai: ['OPENAI_API_KEY'],
+  anthropic: ['ANTHROPIC_API_KEY'],
+  google: ['GEMINI_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GOOGLE_API_KEY'],
+  vertex: ['GOOGLE_VERTEX_AI_API_KEY'],
+  groq: ['GROQ_API_KEY'],
+  cerebras: ['CEREBRAS_API_KEY'],
+  togetherai: ['TOGETHER_AI_API_KEY'],
+  mistral: ['MISTRAL_API_KEY'],
+  deepseek: ['DEEPSEEK_API_KEY'],
+  perplexity: ['PERPLEXITY_API_KEY'],
+  azure: ['AZURE_API_KEY'],
+  xai: ['XAI_API_KEY'],
+  gateway: ['AI_GATEWAY_API_KEY'],
+  bedrock: null,
+  ollama: null,
+};
+
+function hasCodexOAuthLogin(authStorage: AuthStorage): boolean {
+  return authStorage.get('openai-codex')?.type === 'oauth';
+}
+
+function isOpenAIModel(modelId: string): boolean {
+  return modelId.startsWith(OPENAI_PREFIX);
+}
+
+/**
+ * Stagehand hands the segment after `provider/` straight to the AI SDK provider,
+ * so apply the same id normalization the chat gateway does before it does.
+ */
+function normalizeForStagehand(modelId: string): string {
+  const bare = stripMastraGatewayPrefix(modelId.trim());
+  return bare.startsWith(ANTHROPIC_PREFIX) ? normalizeAnthropicModelId(bare) : bare;
+}
+
+/** Whether Stagehand could run `provider/model` with the credentials available right now. */
+function stagehandCanRoute(modelId: string, codexOAuth: boolean): boolean {
+  const provider = modelId.split('/', 1)[0];
+  if (!provider || provider === modelId) return false;
+  if (provider === 'openai' && codexOAuth) return true;
+  const envVars = STAGEHAND_PROVIDER_ENV_VARS[provider];
+  if (envVars === undefined) return false;
+  if (envVars === null) return true;
+  return envVars.some(name => Boolean(process.env[name]?.trim()));
+}
+
+/**
+ * Resolve which model Stagehand will use and why, without creating a browser.
+ * Order: configured `browser.stagehand.model` → the launch-time chat model when
+ * Stagehand can route it → the Codex login's default model → Stagehand's own
+ * default. Mirrors the selection in `createBrowserFromSettings` so the UI can
+ * show it.
+ */
+export function resolveStagehandModel(
+  settings: Pick<BrowserSettings, 'provider' | 'stagehand'>,
+  { chatModelId, authStorage = new AuthStorage() }: ResolveStagehandModelOptions = {},
+): ResolvedStagehandModel {
+  if (settings.provider !== 'stagehand') {
+    return { modelName: undefined, source: 'stagehand-default', viaCodexOAuth: false };
+  }
+  const codexOAuth = hasCodexOAuthLogin(authStorage);
+  const configured = settings.stagehand?.model ? normalizeForStagehand(settings.stagehand.model) : undefined;
+  if (configured) {
+    return { modelName: configured, source: 'settings', viaCodexOAuth: codexOAuth && isOpenAIModel(configured) };
+  }
+  const chatModel = chatModelId ? normalizeForStagehand(chatModelId) : undefined;
+  if (chatModel && stagehandCanRoute(chatModel, codexOAuth)) {
+    return { modelName: chatModel, source: 'chat-model', viaCodexOAuth: codexOAuth && isOpenAIModel(chatModel) };
+  }
+  if (codexOAuth) {
+    return { modelName: PROVIDER_DEFAULT_MODELS['openai-codex'], source: 'codex-oauth', viaCodexOAuth: true };
+  }
+  return { modelName: undefined, source: 'stagehand-default', viaCodexOAuth: false };
+}
+
+export interface CreateBrowserOptions {
+  /** Chat model id at launch; see `ResolveStagehandModelOptions.chatModelId`. */
+  chatModelId?: string;
+}
+
+/**
  * Create a browser instance from settings.
  * Shared by startup (main.ts) and live reconfiguration (/browser command).
  * Returns undefined if browser is disabled.
  */
-export async function createBrowserFromSettings(settings: BrowserSettings): Promise<MastraBrowser | undefined> {
+export async function createBrowserFromSettings(
+  settings: BrowserSettings,
+  { chatModelId }: CreateBrowserOptions = {},
+): Promise<MastraBrowser | undefined> {
   if (!settings.enabled) {
     return undefined;
   }
@@ -1487,31 +1622,26 @@ export async function createBrowserFromSettings(settings: BrowserSettings): Prom
       recording: browserRecordingOptions(),
     };
 
-    // When the user has an active OpenAI Codex (ChatGPT) subscription, route
-    // Stagehand through the Codex endpoint. We use the AI SDK provider's
-    // standard hooks (baseURL, headers, fetch, and middleware) instead of a
-    // URL-rewriting fetch:
+    // See resolveStagehandModel() for which model is picked. How it is reached
+    // depends on the user's OpenAI auth, not on where the model came from:
+    // any `openai/*` model goes through the Codex (ChatGPT) endpoint when the
+    // user signed in with Codex OAuth, matching the chat agents. Everything
+    // else is passed as a plain `provider/model` string and Stagehand resolves
+    // the provider's API key from the environment.
+    //
+    // The Codex route uses the AI SDK provider's standard hooks:
     //   - baseURL: target Codex's Responses API directly (no URL rewriting).
     //   - headers: static Codex identifiers (originator, UA, account id).
     //   - fetch: a tiny refresher that injects the live OAuth bearer per call,
     //     since AI SDK takes `apiKey` as a static string.
     //   - middleware: createCodexMiddleware() sets `store: false`, which Codex
     //     requires on every request.
-    // Model is `gpt-5.4-mini`, the current ChatGPT-sign-in Codex whitelist
-    // pick suited to Stagehand's vision + structured-output workload.
-    //
-    // An explicitly configured model wins: Codex is a fallback for users who
-    // have no model of their own, not an override of one they chose. Stagehand
-    // resolves the provider's API key from the environment for plain
-    // `provider/model` strings, so no key plumbing is needed here.
     const authStorage = new AuthStorage();
-    const cred = authStorage.get('openai-codex');
-    if (stagehand?.model) {
-      stagehandOpts.model = stagehand.model;
-    } else if (cred?.type === 'oauth') {
-      const accountId = (cred as any).accountId as string | undefined;
+    const resolved = resolveStagehandModel(settings, { chatModelId, authStorage });
+    if (resolved.modelName && resolved.viaCodexOAuth) {
+      const accountId = (authStorage.get('openai-codex') as any)?.accountId as string | undefined;
       stagehandOpts.model = {
-        modelName: 'openai/gpt-5.4-mini',
+        modelName: remapOpenAIModelForCodexOAuth(resolved.modelName),
         apiKey: 'codex-oauth',
         baseURL: 'https://chatgpt.com/backend-api/codex',
         headers: {
@@ -1522,6 +1652,8 @@ export async function createBrowserFromSettings(settings: BrowserSettings): Prom
         fetch: buildCodexStagehandFetch(authStorage),
         middleware: createCodexMiddleware(),
       } as any;
+    } else if (resolved.modelName) {
+      stagehandOpts.model = resolved.modelName;
     }
 
     return cdpUrl

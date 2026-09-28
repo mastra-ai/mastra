@@ -115,7 +115,7 @@ function Demo({
         <FilterBar.Input placeholder="Filter traces…" />
       </FilterBar>
       {children?.(items)}
-      <pre className="bg-card text-meta text-muted-foreground rounded-lg p-3">{JSON.stringify(items, null, 2)}</pre>
+      <pre className="rounded-lg bg-card p-3 text-meta text-muted-foreground">{JSON.stringify(items, null, 2)}</pre>
     </div>
   );
 }
@@ -206,11 +206,11 @@ export const LazyValues: Story = {
     return (
       <Demo fields={fields}>
         {() => (
-          <div className="border-border rounded-lg border p-3">
+          <div className="rounded-lg border border-border p-3">
             <Txt variant="meta" tone="muted">
               Resolver calls ({calls.length}) — none until a field and operator are chosen:
             </Txt>
-            <ul className="text-caption text-foreground mt-1">
+            <ul className="mt-1 text-caption text-foreground">
               {calls.map((c, i) => (
                 <li key={i}>{c}</li>
               ))}
@@ -307,7 +307,7 @@ function ExpressionDemo({ initial }: { initial: FilterBarExpression }) {
         <FilterBar.Chips />
         <FilterBar.Input placeholder="Filter traces…" />
       </FilterBar>
-      <pre className="bg-card text-meta text-muted-foreground rounded-lg p-3">
+      <pre className="rounded-lg bg-card p-3 text-meta text-muted-foreground">
         {JSON.stringify(expression, null, 2)}
       </pre>
     </div>

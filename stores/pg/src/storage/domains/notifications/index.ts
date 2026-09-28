@@ -19,8 +19,10 @@ import type {
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
+import { schemaNamePrefix } from '../../../shared/schema-name';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { runPrune, resolveTargets } from '../../retention';
 import { getSchemaName, getTableName, parseJsonResilient } from '../utils';
 
@@ -155,7 +157,7 @@ export class NotificationsPG extends NotificationsStorage {
    * so its supporting index is not part of the default index set.
    */
   private async ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
-    const prefix = this.#schema && this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const prefix = this.#schema && this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     for (const [key, entry] of Object.entries(NotificationsPG.retentionTables)) {
       if (!entry.indexed || !policies[key]) continue;
       try {
@@ -203,7 +205,7 @@ export class NotificationsPG extends NotificationsStorage {
 
   static getExportDDL(schemaName?: string): string[] {
     const statements: string[] = [];
-    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const parsedSchema = schemaName ? schemaNamePrefix(schemaName) : '';
     const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
 
     statements.push(
@@ -223,7 +225,7 @@ export class NotificationsPG extends NotificationsStorage {
   }
 
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const schemaPrefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     return NotificationsPG.getDefaultIndexDefs(schemaPrefix);
   }
 
@@ -262,7 +264,7 @@ export class NotificationsPG extends NotificationsStorage {
     const setColumns = entries.map(([key], index) => `"${parseSqlIdentifier(key, 'column name')}" = $${index + 1}`);
     const values = entries.map(([key, value]) => {
       const columnSchema = TABLE_SCHEMAS[TABLE_NOTIFICATIONS][key];
-      if (columnSchema?.type === 'jsonb' && value !== null) return JSON.stringify(value);
+      if (columnSchema?.type === 'jsonb' && value !== null) return toPgJson(value);
       return value;
     });
 
