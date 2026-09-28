@@ -697,6 +697,11 @@ async function processOutputStream<OUTPUT = undefined>({
     });
   };
 
+  const hasProcessToolResult = Boolean(
+    outputProcessors?.some(processor =>
+      isProcessorWorkflow(processor) ? processor.__processToolResult !== false : 'processToolResult' in processor,
+    ),
+  );
   for await (let chunk of outputStream._getBaseStream()) {
     // Stop processing chunks if the abort signal has fired.
     // Some LLM providers continue streaming data after abort (e.g. due to buffering),
@@ -726,14 +731,7 @@ async function processOutputStream<OUTPUT = undefined>({
 
     // A tool result that processToolResult will see is transformed after the processors
     // run (in the 'tool-result' case below), so transforms never receive the raw value.
-    const transformAfterProcessors =
-      chunk.type === 'tool-result' &&
-      'result' in chunk.payload &&
-      Boolean(
-        outputProcessors?.some(processor =>
-          isProcessorWorkflow(processor) ? processor.__processToolResult !== false : 'processToolResult' in processor,
-        ),
-      );
+    const transformAfterProcessors = chunk.type === 'tool-result' && 'result' in chunk.payload && hasProcessToolResult;
     if (!transformAfterProcessors) {
       chunk = await addToolPayloadTransformToChunk(chunk, {
         resolveTool,
@@ -1001,7 +999,7 @@ async function processOutputStream<OUTPUT = undefined>({
           // web_search) whose results arrive in a later LLM stream. Client-executed
           // tools take a different path through llm-mapping-step.ts, which has its
           // own processToolResult invocation site.
-          if (outputProcessors && outputProcessors.length > 0) {
+          if (hasProcessToolResult) {
             try {
               await getToolResultProcessorRunner().runProcessToolResult({
                 steps: (toolResultSteps ?? []) as Array<StepResult<any>>,

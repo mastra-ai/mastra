@@ -344,6 +344,63 @@ describe('toModelOutput after processToolResult', () => {
     expect(stored).toContain('T:hits');
   });
 
+  it('default engine transforms a provider-executed result once when no processor implements processToolResult', async () => {
+    const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'r1', modelId: 'mock', timestamp: new Date(0) },
+          {
+            type: 'tool-call',
+            toolCallId: 'call-provider',
+            toolName: 'web_search',
+            input: '{}',
+            providerExecuted: true,
+          },
+          {
+            type: 'tool-result',
+            toolCallId: 'call-provider',
+            toolName: 'web_search',
+            providerExecuted: true,
+            result: 'hits',
+          },
+          { type: 'finish', finishReason: 'stop', usage },
+        ] as any[]),
+      }),
+    });
+    const passthrough = {
+      id: 'passthrough',
+      async processOutputResult({ messages }: any) {
+        return messages;
+      },
+    };
+    const outputs: unknown[] = [];
+    const agent = new Agent({
+      id: 'mo-no-hook',
+      name: 'mo-no-hook',
+      instructions: 'x',
+      model: model as LanguageModelV2,
+      tools: { web_search: { type: 'provider-defined', id: 'openai.web_search', args: {} } as any },
+      outputProcessors: [passthrough as any],
+    });
+    const stream = await agent.stream('go', {
+      maxSteps: 1,
+      transform: {
+        targets: ['transcript'],
+        transformToolPayload: (ctx: any) => {
+          if (ctx.phase === 'output-available') outputs.push(ctx.output);
+          return ctx.input;
+        },
+      },
+    } as any);
+    for await (const _ of stream.fullStream) void _;
+
+    expect(outputs).toEqual(['hits']);
+  });
+
   it('durable engine maps the processor-rewritten result', async () => {
     const prompts: unknown[] = [];
     const baseAgent = new Agent({
