@@ -138,14 +138,15 @@ export abstract class TextTransformer implements Transformer {
             for (let i = currentDoc.length - 1; i >= 0; i--) {
               const piece = currentDoc[i]!;
               const pieceLen = this.lengthFunction(piece);
+              const connectorLen = overlapContent.length > 0 ? lengthOf(currentJoiners[i + 1]) : 0;
 
-              if (overlapSize + pieceLen > this.overlap) {
+              if (overlapSize + pieceLen + connectorLen > this.overlap) {
                 break;
               }
 
               overlapContent.unshift(piece);
               overlapJoiners.unshift(currentJoiners[i]!);
-              overlapSize += pieceLen + (overlapContent.length > 1 ? lengthOf(overlapJoiners[1]) : 0);
+              overlapSize += pieceLen + connectorLen;
             }
 
             // Drop from the front of the overlap window until the incoming

@@ -213,6 +213,38 @@ describe('regex separators are rejoined with the matched text', () => {
     expect(chunks.join('\n')).toContain('bbbb\n### cccc');
   });
 
+  it('keeps overlap within the limit including matched separators', () => {
+    const transformer = new RecursiveCharacterTransformer({
+      separators: ['\n#{1,6} '],
+      isSeparatorRegex: true,
+      maxSize: 20,
+      overlap: 10,
+    });
+    const chunks = transformer.splitText({ text: 'aaaa\n## bbbb\n### cccc\n# dddd\n## eeee' });
+    for (let i = 1; i < chunks.length; i++) {
+      const prev = chunks[i - 1]!;
+      const curr = chunks[i]!;
+      let shared = 0;
+      for (let n = Math.min(prev.length, curr.length); n > 0; n--) {
+        if (prev.endsWith(curr.slice(0, n))) {
+          shared = n;
+          break;
+        }
+      }
+      expect(shared).toBeLessThanOrEqual(10);
+    }
+  });
+
+  it('preserves numbered backreferences in regex separators', () => {
+    const transformer = new RecursiveCharacterTransformer({
+      separators: ['(ab)\\1'],
+      isSeparatorRegex: true,
+      maxSize: 1000,
+      overlap: 0,
+    });
+    expect(transformer.splitText({ text: 'abxxababyy' })).toEqual(['abxxababyy']);
+  });
+
   it('leaves literal separators unchanged', () => {
     const transformer = new RecursiveCharacterTransformer({ separators: ['|'], maxSize: 1000, overlap: 0 });
     expect(transformer.splitText({ text: 'a|b|c' })).toEqual(['a|b|c']);

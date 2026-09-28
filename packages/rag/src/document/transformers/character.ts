@@ -54,24 +54,26 @@ function splitTextWithRegex(text: string, separator: string, separatorPosition?:
  * be rejoined with what was actually in the document rather than the pattern source.
  */
 function splitTextWithMatchedSeparators(text: string, separator: string): { splits: string[]; joiners: string[] } {
-  const groupCount = new RegExp(`(${separator})|`).exec('')!.length - 1;
-  const parts = text.split(new RegExp(`(${separator})`));
   const splits: string[] = [];
   const joiners: string[] = [];
   let pending = '';
+  let lastIndex = 0;
 
-  for (let i = 0; i < parts.length; i += groupCount + 1) {
-    const piece = parts[i] ?? '';
+  const push = (piece: string) => {
     if (piece !== '') {
       splits.push(piece);
       joiners.push(pending);
       pending = '';
     }
-    const match = parts[i + 1];
-    if (match !== undefined) {
-      pending += match;
-    }
+  };
+
+  for (const match of text.matchAll(new RegExp(separator, 'g'))) {
+    if (match[0] === '' && (match.index === 0 || match.index === text.length)) continue;
+    push(text.slice(lastIndex, match.index));
+    pending += match[0];
+    lastIndex = match.index + match[0].length;
   }
+  push(text.slice(lastIndex));
 
   return { splits, joiners };
 }
