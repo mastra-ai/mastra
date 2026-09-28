@@ -2882,6 +2882,53 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.sendSignal).not.toHaveBeenCalled();
   });
 
+  it('delivers a held kickoff once the card is moved into the stage its seat carries', async () => {
+    // Decided while the card sat outside the plan seat's stages, like a held
+    // triage run in Intake that Investigate approves and moves into Triage.
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'plan',
+      skillName: 'understand-issue',
+      arguments: 'Issue 42',
+      idempotencyKey: 'skill-held-then-moved-in',
+    });
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { stages: ['planning'] } });
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['planning'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'plan',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: 'kickoff-null',
+      kickoffMessage: null,
+    });
+    const { controller, session } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(session.sendSignal).toHaveBeenCalledTimes(1);
+  });
+
   it('does not resend a dropped kickoff once its binding is revoked', async () => {
     const { storage, transitionService } = await prepareDeliverScenario('skill-binding-revoked');
     const [binding] = await storage.listActiveRunBindings();
