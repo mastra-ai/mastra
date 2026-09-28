@@ -3158,14 +3158,18 @@ export class Workflow<
           Object.keys(nestedSnapshot.activeStepsPath ?? {}).length === 0 &&
           Object.keys(nestedSnapshot.suspendedPaths ?? {}).length > 0
         ) {
-          await workflowsStore!.persistWorkflowSnapshot({
+          // The resume claim is only written by stores with atomic updates, so a claim-only
+          // snapshot implies one; compare-and-set so a concurrent caller's claim is not re-armed.
+          const released = await workflowsStore!.updateWorkflowState({
             workflowName: this.id,
             runId: run.runId,
-            snapshot: { ...nestedSnapshot, status: 'suspended' },
+            opts: { status: 'suspended', expectedStatus: nestedStatus },
           });
-          nestedStatus = 'suspended';
-          restartNested = false;
-          resumeNested = true;
+          if (released) {
+            nestedStatus = 'suspended';
+            restartNested = false;
+            resumeNested = true;
+          }
         }
         if (isResume && (nestedStatus === 'running' || nestedStatus === 'waiting')) {
           restartNested = true;
