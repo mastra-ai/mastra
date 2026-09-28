@@ -27,7 +27,7 @@ export function FieldNullable({
   );
 
   return (
-    <Field orientation="horizontal" className="gap-2">
+    <Field orientation="horizontal">
       <Checkbox {...props} className={className} checked={field.nullable} onCheckedChange={handleCheckedChange} />
       {label ? (
         <FieldLabel className={cn('cursor-pointer text-caption text-muted-foreground', labelClassName)}>

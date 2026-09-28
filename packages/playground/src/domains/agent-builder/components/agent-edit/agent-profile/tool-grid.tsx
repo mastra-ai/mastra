@@ -60,7 +60,7 @@ export const ToolGrid = ({
           orientation="horizontal"
           data-testid="tools-only-selected-filter"
           className={cn(
-            'inline-flex cursor-pointer gap-2 text-meta text-muted-foreground select-none',
+            'inline-flex cursor-pointer text-meta text-muted-foreground select-none',
             !editable && 'cursor-not-allowed opacity-60',
           )}
         >

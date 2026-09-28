@@ -86,7 +86,7 @@ export function SchemaField({ label, value, onChange, error, sourceSchema, autoP
 
   return (
     <div className="space-y-3">
-      <Field orientation="horizontal" className="gap-2">
+      <Field orientation="horizontal">
         <Switch checked={isEnabled} onCheckedChange={handleToggle} />
         <FieldLabel className="text-column">{label}</FieldLabel>
       </Field>

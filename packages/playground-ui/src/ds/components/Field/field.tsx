@@ -14,8 +14,8 @@ type FieldProps = Omit<FieldPrimitive.Root.Props, 'className'> & {
 
 const orientationClassName = {
   vertical: 'grid gap-2',
-  horizontal: 'flex items-center gap-3 has-[>[data-slot=field-label]:first-child]:justify-between',
-  responsive: 'flex flex-col gap-3 sm:flex-row sm:items-center',
+  horizontal: 'flex items-center gap-2 has-[>[data-slot=field-label]:first-child]:justify-between',
+  responsive: 'flex flex-col gap-2 sm:flex-row sm:items-center',
 } satisfies Record<NonNullable<FieldProps['orientation']>, string>;
 
 function Field({ className, orientation = 'vertical', invalid = false, ...props }: FieldProps) {

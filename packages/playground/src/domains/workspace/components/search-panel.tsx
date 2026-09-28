@@ -251,7 +251,7 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
         </div>
 
         <div className="flex items-center gap-4 text-body">
-          <Field orientation="horizontal" className="gap-2">
+          <Field orientation="horizontal">
             <FieldLabel className="text-caption text-muted-foreground">Results:</FieldLabel>
             <Select value={String(topK)} onValueChange={value => setTopK(Number(value))}>
               <SelectTrigger size="sm" className="w-auto">
@@ -267,7 +267,7 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
             </Select>
           </Field>
 
-          <Field orientation="horizontal" className="gap-2">
+          <Field orientation="horizontal">
             <Checkbox checked={includeReferences} onCheckedChange={checked => setIncludeReferences(checked === true)} />
             <FieldLabel className="cursor-pointer text-caption text-muted-foreground">Include references</FieldLabel>
           </Field>

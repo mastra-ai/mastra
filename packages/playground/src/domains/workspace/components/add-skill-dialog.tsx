@@ -358,7 +358,7 @@ export function AddSkillDialog({
           {selectedSkill && (
             <div className="flex flex-col gap-3 border-t border-border pt-4">
               {writableMounts && writableMounts.length > 1 && (
-                <Field orientation="horizontal" className={cn(raisedSurfaceStyle, 'rounded-lg p-3')}>
+                <Field orientation="horizontal" className={cn(raisedSurfaceStyle, 'gap-3 rounded-lg p-3')}>
                   <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <FieldLabel className="whitespace-nowrap">Install to</FieldLabel>
                   <Select value={selectedMount ?? ''} onValueChange={setSelectedMount}>

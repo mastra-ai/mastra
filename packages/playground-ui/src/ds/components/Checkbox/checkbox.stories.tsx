@@ -144,7 +144,7 @@ export const OnSurfaces: Story = {
 
 export const WithLabel: Story = {
   render: args => (
-    <Field orientation="horizontal" className="gap-2">
+    <Field orientation="horizontal">
       <Checkbox {...args} />
       <FieldLabel>Accept terms and conditions</FieldLabel>
     </Field>
@@ -154,15 +154,15 @@ export const WithLabel: Story = {
 export const CheckboxGroup: Story = {
   render: () => (
     <div className="flex flex-col gap-3">
-      <Field orientation="horizontal" className="gap-2">
+      <Field orientation="horizontal">
         <Checkbox />
         <FieldLabel>Option 1</FieldLabel>
       </Field>
-      <Field orientation="horizontal" className="gap-2">
+      <Field orientation="horizontal">
         <Checkbox defaultChecked />
         <FieldLabel>Option 2</FieldLabel>
       </Field>
-      <Field orientation="horizontal" className="gap-2">
+      <Field orientation="horizontal">
         <Checkbox />
         <FieldLabel>Option 3</FieldLabel>
       </Field>

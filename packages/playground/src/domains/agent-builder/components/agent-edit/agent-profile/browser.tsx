@@ -45,7 +45,7 @@ export const Browser = ({ editable = true }: BrowserProps) => {
           </Txt>
         </div>
 
-        <Field orientation="horizontal" className="mt-1">
+        <Field orientation="horizontal" className="mt-1 gap-3">
           <Switch
             checked={browserEnabled}
             onCheckedChange={handleCheckedChange}

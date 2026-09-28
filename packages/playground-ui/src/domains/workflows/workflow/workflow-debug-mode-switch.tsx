@@ -7,7 +7,7 @@ export function WorkflowDebugModeSwitch() {
   const { debugMode, setDebugMode } = useContext(WorkflowRunContext);
 
   return (
-    <Field orientation="horizontal" className="min-w-0 gap-2">
+    <Field orientation="horizontal" className="min-w-0">
       <Switch checked={debugMode} onCheckedChange={setDebugMode} />
       <FieldContent className="gap-0.5">
         <FieldLabel className="cursor-pointer text-meta text-foreground">Step by step</FieldLabel>

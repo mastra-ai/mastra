@@ -231,7 +231,7 @@ export const OnSurfaces: Story = {
 
 export const WithLabel: Story = {
   render: args => (
-    <Field orientation="horizontal" className="gap-2">
+    <Field orientation="horizontal">
       <Switch {...args} />
       <FieldLabel>Enable notifications</FieldLabel>
     </Field>
