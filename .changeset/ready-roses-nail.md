@@ -22,4 +22,4 @@ Ramp steps now stay inside sRGB, so neighbouring steps no longer flatten togethe
 
 **Breaking:** `@mastra/playground-ui/utils/colors` no longer generates `hsl()` colors. `stringToColor`, `themedHueColor`, and `stringToThemedColor` are replaced by `hueForName` (a stable categorical hue for any name), `hueFillClass`, `hueAccentColor`, and `hueColors`, which resolve to theme-aware badge tokens.
 
-`badge-{hue}-indicator` and the span colors use new even-chroma `--{hue}-soft-300` (dark) and `--{hue}-soft-600` (light) steps, so every hue has the same intensity.
+`badge-{hue}-indicator` uses new even-chroma `--{hue}-soft-300` (dark) and `--{hue}-soft-600` (light) steps, so every hue has the same intensity.
