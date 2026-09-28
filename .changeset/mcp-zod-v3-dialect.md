@@ -2,4 +2,4 @@
 '@mastra/mcp': patch
 ---
 
-Fixed MCP tool calls failing when tools are defined with zod v3 schemas. `MCPServer` now advertises tool schemas as JSON Schema 2020-12 instead of 2019-09 (including tuple schemas), and `MCPClient` converts 2019-09 tool schemas from other servers to 2020-12 instead of rejecting every call.
+Fixed MCP tool calls failing with a schema validation error when tools are defined with zod v3 schemas. `MCPClient` also now accepts tools from other MCP servers that describe their inputs with JSON Schema draft 2019-09.
