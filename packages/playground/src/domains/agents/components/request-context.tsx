@@ -14,6 +14,7 @@ import { toast } from '@mastra/playground-ui/utils/toast';
 import CodeMirror from '@uiw/react-codemirror';
 import { Braces, CopyIcon, X, Check } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { z } from 'zod/v4';
 import type { RequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
 import { useRequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
@@ -23,6 +24,7 @@ interface RequestContextProps {
   onSave: (value: Record<string, any>) => void;
   editorClassName?: string;
   labelTooltip?: string;
+  headerActions?: ReactNode;
 }
 
 const requestContextObjectSchema = z.record(z.string(), z.any());
@@ -50,6 +52,7 @@ export const RequestContext = ({
   onSave,
   editorClassName = 'h-[400px]',
   labelTooltip,
+  headerActions,
 }: RequestContextProps) => {
   const requestContextStr = JSON.stringify(requestContext ?? {});
   const formattedRequestContext = JSON.stringify(requestContext ?? {}, null, 2);
@@ -143,6 +146,7 @@ export const RequestContext = ({
           </RequestContextLabel>
 
           <div className="flex items-center gap-2">
+            {headerActions}
             <Tooltip>
               <TooltipTrigger asChild>
                 <button type="button" onClick={formatRequestContext} className={buttonClass}>

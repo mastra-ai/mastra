@@ -8,8 +8,9 @@ import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-sche
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { FileJson, FormInput } from 'lucide-react';
+import { Check, FileJson, FormInput } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 
 import { RequestContext } from '@/domains/agents/components/request-context';
 import { useOptionalAgentEditFormContext } from '@/domains/agents/context/agent-edit-form-context';
@@ -40,7 +41,9 @@ function VariablesRequestContextForm({
   variablesSchema,
   value: schemaValues,
   onSave,
+  headerActions,
 }: {
+  headerActions?: ReactNode;
   labelTooltip?: string;
   variablesSchema: Record<string, unknown>;
   value: Record<string, any>;
@@ -71,10 +74,19 @@ function VariablesRequestContextForm({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <RequestContextLabel tooltip={labelTooltip}>Request Context</RequestContextLabel>
-        <CopyButton content={localFormValuesStr} />
+        <div className="flex items-center gap-2">
+          {headerActions}
+          <CopyButton content={localFormValuesStr} />
+        </div>
       </div>
 
-      <DynamicForm schema={zodSchema} onSubmit={onSave} submitButtonLabel="Save" defaultValues={schemaValues} />
+      <DynamicForm
+        schema={zodSchema}
+        onSubmit={onSave}
+        submitButtonLabel="Save"
+        submitButtonIcon={<Check />}
+        defaultValues={schemaValues}
+      />
     </div>
   );
 }
@@ -127,50 +139,41 @@ export function RequestContextEditor({
   const variables = formCtx?.form.watch('variables') as Record<string, unknown> | undefined;
   const [mode, setMode] = useState<InputMode>('form');
 
-  const hasVariables = hasSchemaProperties(variables);
-  const hasSchemaForm = Boolean(requestContextSchema) || hasVariables;
+  const hasSchemaForm = Boolean(requestContextSchema) || hasSchemaProperties(variables);
+
+  const modeSwitcher = hasSchemaForm ? <ModeSwitcher mode={mode} onModeChange={setMode} /> : undefined;
+
+  if (mode === 'form' && requestContextSchema) {
+    return (
+      <RequestContextSchemaForm
+        requestContextSchema={requestContextSchema}
+        labelTooltip={requestContextTooltip}
+        values={value}
+        onSave={onSave}
+        headerActions={modeSwitcher}
+      />
+    );
+  }
+
+  if (mode === 'form' && hasSchemaProperties(variables)) {
+    return (
+      <VariablesRequestContextForm
+        variablesSchema={variables}
+        labelTooltip={requestContextTooltip}
+        value={value}
+        onSave={onSave}
+        headerActions={modeSwitcher}
+      />
+    );
+  }
 
   return (
-    <div className="space-y-4">
-      {hasSchemaForm ? (
-        <>
-          <div className="flex items-center justify-end">
-            <ModeSwitcher mode={mode} onModeChange={setMode} />
-          </div>
-
-          {mode === 'form' ? (
-            requestContextSchema ? (
-              <RequestContextSchemaForm
-                requestContextSchema={requestContextSchema}
-                labelTooltip={requestContextTooltip}
-                values={value}
-                onSave={onSave}
-              />
-            ) : hasVariables ? (
-              <VariablesRequestContextForm
-                variablesSchema={variables}
-                labelTooltip={requestContextTooltip}
-                value={value}
-                onSave={onSave}
-              />
-            ) : null
-          ) : (
-            <RequestContext
-              value={value}
-              onSave={onSave}
-              editorClassName={freeformEditorClassName}
-              labelTooltip={requestContextTooltip}
-            />
-          )}
-        </>
-      ) : (
-        <RequestContext
-          value={value}
-          onSave={onSave}
-          editorClassName={freeformEditorClassName}
-          labelTooltip={requestContextTooltip}
-        />
-      )}
-    </div>
+    <RequestContext
+      value={value}
+      onSave={onSave}
+      editorClassName={freeformEditorClassName}
+      labelTooltip={requestContextTooltip}
+      headerActions={modeSwitcher}
+    />
   );
 }

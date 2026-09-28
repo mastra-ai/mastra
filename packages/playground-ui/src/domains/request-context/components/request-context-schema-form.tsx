@@ -1,4 +1,6 @@
+import { Check } from 'lucide-react';
 import { useMemo } from 'react';
+import type { ReactNode } from 'react';
 import { parse } from 'superjson';
 import { RequestContextLabel } from './request-context-label';
 import { CopyButton } from '@/ds/components/CopyButton';
@@ -15,6 +17,8 @@ export interface RequestContextSchemaFormProps {
   labelTooltip?: string;
   values: Record<string, any>;
   onSave: (values: Record<string, any>) => void;
+  /** Extra controls rendered next to the copy button in the header row. */
+  headerActions?: ReactNode;
 }
 
 /**
@@ -29,6 +33,7 @@ export const RequestContextSchemaForm = ({
   requestContextSchema,
   values,
   onSave,
+  headerActions,
 }: RequestContextSchemaFormProps) => {
   const localFormValuesStr = JSON.stringify(values);
 
@@ -55,10 +60,19 @@ export const RequestContextSchemaForm = ({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <RequestContextLabel tooltip={labelTooltip}>Request Context</RequestContextLabel>
-        <CopyButton content={localFormValuesStr} />
+        <div className="flex items-center gap-2">
+          {headerActions}
+          <CopyButton content={localFormValuesStr} />
+        </div>
       </div>
 
-      <DynamicForm schema={zodSchema} onSubmit={onSave} submitButtonLabel="Save" defaultValues={values} />
+      <DynamicForm
+        schema={zodSchema}
+        onSubmit={onSave}
+        submitButtonLabel="Save"
+        submitButtonIcon={<Check />}
+        defaultValues={values}
+      />
     </div>
   );
 };
