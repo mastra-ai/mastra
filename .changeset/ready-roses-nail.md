@@ -19,3 +19,5 @@ Status roles are `{status}-subtle`, `{status}-edge`, `{status}-fg`, and `{status
 Ramp steps now stay inside sRGB, so neighbouring steps no longer flatten together on sRGB screens. Chart, span, and syntax roles point at steps chosen to stay distinguishable under common colour-vision deficiencies and to meet 3:1 against the page in both themes; the sequential chart scale runs light-to-dark in light mode and dark-to-light in dark mode. `scorer` spans are now pink. Status indicators use `400` in dark mode, and light `success-indicator` uses `green-700`.
 
 **Breaking:** `SankeyChart` colors nodes and ribbons from the chart series tokens. `buildSankeyHueMap`, `hashHue`, `nodeColor`, and `nodeColorVivid` are replaced by `buildSankeyColorMap` and `sankeySeriesColors`, and `Sankey`'s `getColumnHue` is now `getColumnColor`, which returns a CSS color.
+
+**Breaking:** `@mastra/playground-ui/utils/colors` no longer generates `hsl()` colors. `stringToColor`, `themedHueColor`, and `stringToThemedColor` are replaced by `hueForName` (a stable categorical hue for any name), `hueFillClass`, `hueAccentColor`, and `hueColors`, which resolve to theme-aware badge tokens.

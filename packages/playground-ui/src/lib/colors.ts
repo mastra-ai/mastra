@@ -1,18 +1,38 @@
-export const stringToColor = (str: string, lightness: number = 90, saturation = 100) => {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
-    hash = hash & hash;
+export const categoricalHues = ['blue', 'green', 'orange', 'purple', 'pink', 'red', 'yellow', 'cyan'] as const;
+
+export type CategoricalHue = (typeof categoricalHues)[number];
+
+export function hashLabel(value: string) {
+  let hash = 2166136261;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
   }
-  return `hsl(${hash % 360}, ${saturation}%, ${lightness}%)`;
+
+  return hash >>> 0;
+}
+
+export const hueForName = (name: string): CategoricalHue =>
+  categoricalHues[hashLabel(name) % categoricalHues.length] ?? 'blue';
+
+export const hueAccentColor = (hue: CategoricalHue) => `var(--badge-${hue}-dot)`;
+
+const HUE_FILL_CLASS: Record<CategoricalHue, string> = {
+  blue: 'bg-badge-blue text-badge-blue-fg',
+  green: 'bg-badge-green text-badge-green-fg',
+  orange: 'bg-badge-orange text-badge-orange-fg',
+  purple: 'bg-badge-purple text-badge-purple-fg',
+  pink: 'bg-badge-pink text-badge-pink-fg',
+  red: 'bg-badge-red text-badge-red-fg',
+  yellow: 'bg-badge-yellow text-badge-yellow-fg',
+  cyan: 'bg-badge-cyan text-badge-cyan-fg',
 };
 
-/** A hue rendered with the theme's lightness for generated accents (see `--generated-accent-lightness`). */
-export const themedHueColor = (hue: number, saturation = 60) =>
-  `hsl(${hue} ${saturation}% var(--generated-accent-lightness, 60%))`;
+export const hueFillClass = (hue: CategoricalHue) => HUE_FILL_CLASS[hue];
 
-/** `stringToColor` counterpart: same stable hue, lightness follows the active theme. */
-export const stringToThemedColor = (str: string, saturation = 60) => {
-  const hue = Number(stringToColor(str).match(/hsl\((-?\d+)/)?.[1] ?? 0);
-  return themedHueColor(hue, saturation);
-};
+export const hueColors = (hue: CategoricalHue) => ({
+  background: `var(--badge-${hue})`,
+  foreground: `var(--badge-${hue}-fg)`,
+  tint: `var(--badge-${hue}-dot)`,
+});

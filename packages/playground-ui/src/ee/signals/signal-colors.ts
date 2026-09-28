@@ -1,4 +1,4 @@
-import { hashLabel } from '@/ds/components/SankeyChart/sankeyColor';
+import { hashLabel } from '@/lib/colors';
 
 type SignalHue = 'green' | 'orange' | 'blue' | 'purple' | 'pink' | 'red' | 'yellow';
 

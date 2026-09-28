@@ -167,13 +167,10 @@ function AreaRow({ label, data, dataKey, color, gradientId, domain, zoomDomain, 
               dataKey={dataKey}
               stroke={color}
               strokeWidth={1}
-              strokeOpacity={0.6}
               fill={`url(#${gradientId})`}
               isAnimationActive={false}
             />
-            {threshold != null && (
-              <ReferenceLine y={threshold} stroke={color} strokeDasharray="4 3" strokeOpacity={0.4} />
-            )}
+            {threshold != null && <ReferenceLine y={threshold} stroke="var(--border-strong)" strokeDasharray="4 3" />}
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -283,7 +280,6 @@ function CombinedRow({
               dataKey={areaDataKey}
               stroke={color}
               strokeWidth={1}
-              strokeOpacity={0.6}
               fill={`url(#${gradientId})`}
               isAnimationActive={false}
               activeDot={{ r: 5, stroke: color, strokeWidth: 2, fill: 'var(--background)' }}
@@ -296,7 +292,7 @@ function CombinedRow({
               }
             />
             {threshold != null && (
-              <ReferenceLine yAxisId="area" y={threshold} stroke={color} strokeDasharray="4 3" strokeOpacity={0.4} />
+              <ReferenceLine yAxisId="area" y={threshold} stroke="var(--border-strong)" strokeDasharray="4 3" />
             )}
           </ComposedChart>
         </ResponsiveContainer>

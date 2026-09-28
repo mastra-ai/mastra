@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildSankeyColorMap, hashLabel, sankeySeriesColors } from './sankeyColor';
+import { buildSankeyColorMap, sankeySeriesColors } from './sankeyColor';
+import { hashLabel } from '@/lib/colors';
 
 describe('buildSankeyColorMap', () => {
   const labels = ['Search', 'Referral', 'Partner', 'Europe', 'North America', 'Asia Pacific', 'Won', 'Lost'];

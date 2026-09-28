@@ -272,12 +272,12 @@ export function StageFunnel({
         >
           <defs>
             <linearGradient id={coreId} x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor={AGENT_COLOR} stopOpacity="0.5" />
-              <stop offset="100%" stopColor={AGENT_COLOR} stopOpacity="0.95" />
+              <stop offset="0%" stopColor="var(--chart-sequential-3)" />
+              <stop offset="100%" stopColor={AGENT_COLOR} />
             </linearGradient>
             <pattern id={hatchId} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <rect width="6" height="6" fill={AGENT_COLOR} fillOpacity="0.1" />
-              <line x1="0" y1="0" x2="0" y2="6" stroke={AGENT_COLOR} strokeOpacity="0.45" strokeWidth="2.25" />
+              <rect width="6" height="6" fill="var(--badge-purple-muted)" />
+              <line x1="0" y1="0" x2="0" y2="6" stroke="var(--chart-sequential-3)" strokeWidth="2.25" />
             </pattern>
             {funnel.map((step, index) => (
               <clipPath key={step.stage} id={`${clipId}-${index}`}>

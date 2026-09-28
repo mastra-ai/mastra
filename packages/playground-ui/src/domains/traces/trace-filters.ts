@@ -67,7 +67,8 @@ export type {
   TraceQueryRelatedScope,
 } from './trace-query-filters';
 export { isTraceFilterGroup } from './trace-query-filters';
-import { stringToThemedColor, themedHueColor } from '@/lib/colors';
+import { hueAccentColor, hueForName } from '@/lib/colors';
+import type { CategoricalHue } from '@/lib/colors';
 
 type EntityTypeValue = `${EntityType}`;
 
@@ -338,35 +339,35 @@ const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
 
 /** Icon and hue for each known trace filter key. Hues are spread by hand — hashing
  *  the ids clusters them (e.g. `environment`/`entityName`/`timeRange` all land on green). */
-const TRACE_FILTER_BAR_FIELD_META: Record<string, { icon: LucideIcon; hue: number }> = {
-  timeRange: { icon: ClockIcon, hue: 30 },
-  rootEntityType: { icon: BoxIcon, hue: 265 },
-  entityName: { icon: TagIcon, hue: 290 },
-  entityId: { icon: FingerprintIcon, hue: 315 },
-  status: { icon: ActivityIcon, hue: 0 },
-  tags: { icon: TagsIcon, hue: 340 },
-  serviceName: { icon: ServerIcon, hue: 175 },
-  environment: { icon: GlobeIcon, hue: 145 },
-  traceId: { icon: WaypointsIcon, hue: 215 },
-  runId: { icon: PlayIcon, hue: 195 },
-  threadId: { icon: MessageSquareIcon, hue: 235 },
-  sessionId: { icon: LayersIcon, hue: 100 },
-  requestId: { icon: RadioIcon, hue: 55 },
-  resourceId: { icon: HashIcon, hue: 80 },
-  userId: { icon: UserIcon, hue: 20 },
-  organizationId: { icon: BuildingIcon, hue: 120 },
-  experimentId: { icon: FlaskConicalIcon, hue: 160 },
-  'spans.name': { icon: GitBranchIcon, hue: 250 },
-  'spans.spanType': { icon: ShapesIcon, hue: 275 },
-  'spans.model': { icon: CpuIcon, hue: 300 },
-  'spans.provider': { icon: CloudIcon, hue: 205 },
-  'spans.durationMs': { icon: TimerIcon, hue: 40 },
-  'spans.error': { icon: TriangleAlertIcon, hue: 10 },
-  'scores.scorerId': { icon: GaugeIcon, hue: 130 },
-  'scores.score': { icon: PercentIcon, hue: 110 },
-  'feedback.feedbackType': { icon: ThumbsUpIcon, hue: 185 },
-  'feedback.value': { icon: StarIcon, hue: 45 },
-  'feedback.comment': { icon: MessageCircleIcon, hue: 225 },
+const TRACE_FILTER_BAR_FIELD_META: Record<string, { icon: LucideIcon; hue: CategoricalHue }> = {
+  timeRange: { icon: ClockIcon, hue: 'orange' },
+  rootEntityType: { icon: BoxIcon, hue: 'purple' },
+  entityName: { icon: TagIcon, hue: 'purple' },
+  entityId: { icon: FingerprintIcon, hue: 'pink' },
+  status: { icon: ActivityIcon, hue: 'red' },
+  tags: { icon: TagsIcon, hue: 'pink' },
+  serviceName: { icon: ServerIcon, hue: 'cyan' },
+  environment: { icon: GlobeIcon, hue: 'green' },
+  traceId: { icon: WaypointsIcon, hue: 'blue' },
+  runId: { icon: PlayIcon, hue: 'blue' },
+  threadId: { icon: MessageSquareIcon, hue: 'blue' },
+  sessionId: { icon: LayersIcon, hue: 'green' },
+  requestId: { icon: RadioIcon, hue: 'yellow' },
+  resourceId: { icon: HashIcon, hue: 'green' },
+  userId: { icon: UserIcon, hue: 'orange' },
+  organizationId: { icon: BuildingIcon, hue: 'green' },
+  experimentId: { icon: FlaskConicalIcon, hue: 'green' },
+  'spans.name': { icon: GitBranchIcon, hue: 'blue' },
+  'spans.spanType': { icon: ShapesIcon, hue: 'purple' },
+  'spans.model': { icon: CpuIcon, hue: 'purple' },
+  'spans.provider': { icon: CloudIcon, hue: 'blue' },
+  'spans.durationMs': { icon: TimerIcon, hue: 'orange' },
+  'spans.error': { icon: TriangleAlertIcon, hue: 'red' },
+  'scores.scorerId': { icon: GaugeIcon, hue: 'green' },
+  'scores.score': { icon: PercentIcon, hue: 'green' },
+  'feedback.feedbackType': { icon: ThumbsUpIcon, hue: 'cyan' },
+  'feedback.value': { icon: StarIcon, hue: 'yellow' },
+  'feedback.comment': { icon: MessageCircleIcon, hue: 'blue' },
 };
 
 export const traceFilterFieldIcon = (fieldId: string) => TRACE_FILTER_BAR_FIELD_META[fieldId]?.icon;
@@ -374,7 +375,7 @@ export const traceFilterFieldIcon = (fieldId: string) => TRACE_FILTER_BAR_FIELD_
 /** Stable per-field accent; known keys use a curated hue, others fall back to a hashed one. */
 export const traceFilterFieldColor = (fieldId: string) => {
   const hue = TRACE_FILTER_BAR_FIELD_META[fieldId]?.hue;
-  return hue === undefined ? stringToThemedColor(fieldId) : themedHueColor(hue);
+  return hueAccentColor(hue ?? hueForName(fieldId));
 };
 
 const traceFieldBase = (id: string) => ({
@@ -509,7 +510,7 @@ export function createTraceFilterBarFields({
       id: path,
       label: path.slice(TRACE_METADATA_FILTER_FIELD_PREFIX.length),
       icon: BracesIcon,
-      color: stringToThemedColor(path),
+      color: hueAccentColor(hueForName(path)),
       operators: TRACE_STRING_OPERATORS,
       suggestions,
     }));

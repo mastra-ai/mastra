@@ -54,6 +54,8 @@ const rawColorExceptions = [
   'mastracode/factory-ui/src/ui/domains/auth/components/FactoryHalftoneField.tsx',
   'mastracode/factory-ui/src/ui/domains/factory/components/cardMorph.css',
 ];
+const generatedColor = /\b(?:hsla?|rgba?|oklch|oklab)\(\s*\$\{/;
+const svgOpacity = /\b(?:fillOpacity|strokeOpacity|fill-opacity|stroke-opacity)\b/;
 const rawColor =
   /(?<![\w&-])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b(?![\w-])|\b(?:rgba?|hsla?)\(\s*\d|\boklch\(\s*[\d.]/;
 
@@ -65,6 +67,16 @@ describe('color usage', () => {
 
   it('limits color-mix() to the theme and a short list of design-system effects', () => {
     expect(findings(/color-mix\(/, path => colorMixEffects.includes(path))).toEqual([]);
+  });
+
+  it('never builds colors at runtime: generated names map to theme hues instead', () => {
+    expect(findings(generatedColor, path => path.endsWith('.stories.tsx'))).toEqual([]);
+  });
+
+  it('keeps SVG fill and stroke opacity inside design-system components', () => {
+    expect(
+      findings(svgOpacity, path => path.startsWith('packages/playground-ui/src/ds/') || path.endsWith('.stories.tsx')),
+    ).toEqual([]);
   });
 
   it('keeps literal colors in the theme, outside masks, brand marks, and stories', () => {
