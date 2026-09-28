@@ -78,7 +78,7 @@ function buildDarkTheme(): Extension {
       backgroundColor: 'var(--background)',
       border: '1px solid var(--border)',
       borderRadius: '6px',
-      boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
+      boxShadow: 'var(--elevation-overlay)',
     },
     '.cm-tooltip-autocomplete > ul': {
       fontFamily: 'var(--font-mono)',
@@ -154,7 +154,7 @@ function buildLightTheme(): Extension {
       backgroundColor: 'var(--background)',
       border: '1px solid var(--border)',
       borderRadius: '6px',
-      boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
+      boxShadow: 'var(--elevation-overlay)',
     },
     '.cm-tooltip-autocomplete > ul': {
       fontFamily: 'var(--font-mono)',

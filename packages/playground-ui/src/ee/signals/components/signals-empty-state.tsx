@@ -242,7 +242,7 @@ export const SignalsEmptyState = ({
             <div aria-hidden="true" className="relative mt-5 flex size-20 items-center justify-center">
               <span className="signals-engine-pulse absolute size-20 rounded-full border border-success-edge" />
               <span className="absolute size-14 rounded-full border border-success-edge" />
-              <span className="absolute size-9 rounded-full border border-success-edge bg-success-subtle shadow-[0_0_24px_var(--color-success-indicator)]" />
+              <span className="absolute size-9 rounded-full border border-success-edge bg-success-subtle" />
               <CpuIcon className="relative size-4 text-success-indicator" />
             </div>
             <p className="mt-3 max-w-40 text-meta text-muted-foreground">
@@ -259,7 +259,7 @@ export const SignalsEmptyState = ({
             <div className="mt-3 flex flex-wrap gap-2">
               {signalDefinitions.map(signal => (
                 <span
-                  className="signals-chip inline-flex items-center gap-2 rounded border border-current/25 bg-card px-2.5 py-1.5 text-column shadow-[0_0_14px_color-mix(in_oklch,currentColor_12%,transparent)]"
+                  className="signals-chip inline-flex items-center gap-2 rounded border border-border bg-card px-2.5 py-1.5 text-column"
                   key={signal.key}
                   style={signalStyle(signal.key)}
                 >

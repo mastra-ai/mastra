@@ -71,7 +71,7 @@
   .mastra-markdown a {
     color: var(--foreground);
     text-decoration: underline;
-    text-decoration-color: color-mix(in oklab, var(--foreground) 30%, transparent);
+    text-decoration-color: var(--border-strong);
     text-underline-offset: 0.15em;
   }
 

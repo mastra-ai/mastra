@@ -14,7 +14,7 @@ const rowCenter = (index: number) => index * TASK_ROW_HEIGHT + TASK_ROW_HEIGHT /
 const ink: Record<TaskStatus, string> = {
   completed: 'var(--success-indicator)',
   in_progress: 'var(--warning-indicator)',
-  pending: 'color-mix(in oklab, var(--muted-foreground) 45%, transparent)',
+  pending: 'var(--border-strong)',
 };
 
 const connectorPathData = (upper: TaskStatus, lower: TaskStatus, index: number, singleLane: boolean) => {

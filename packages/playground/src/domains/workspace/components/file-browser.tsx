@@ -71,18 +71,18 @@ function getMountIcon(mount: FileEntry['mount']) {
     case 'aws-s3':
     case 's3':
       // S3 or S3-compatible storage
-      return <AmazonIcon className="h-4 w-4 text-[#FF9900]" />;
+      return <AmazonIcon className="h-4 w-4 text-orange-400" />;
     case 'google-cloud':
     case 'google-cloud-storage':
     case 'gcs':
       return <GoogleIcon className="h-4 w-4" />;
     case 'azure-blob':
     case 'azure':
-      return <AzureIcon className="h-4 w-4 text-[#0078D4]" />;
+      return <AzureIcon className="h-4 w-4 text-blue-500" />;
     case 'cloudflare':
     case 'cloudflare-r2':
     case 'r2':
-      return <Cloud className="h-4 w-4 text-[#F38020]" />;
+      return <Cloud className="h-4 w-4 text-orange-500" />;
     case 'minio':
       return <HardDrive className="h-4 w-4 text-red-400" />;
     case 'database':

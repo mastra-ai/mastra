@@ -14,7 +14,6 @@ import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 const removed = 'var(--destructive-indicator)';
 const added = 'var(--success-indicator)';
-const tint = (color: string, pct: number) => `color-mix(in oklch, ${color} ${pct}%, transparent)`;
 
 // GitHub-like split diff: red bands for removed lines (left), green bands for
 // added lines (right), with a stronger tint on the exact changed text.
@@ -25,20 +24,20 @@ const diffOverrides = EditorView.theme({
   '&.cm-editor .cm-changeGutter': { width: '3px', paddingLeft: '0' },
 
   '&.cm-merge-a .cm-changedLine': {
-    backgroundColor: tint(removed, 14),
+    backgroundColor: 'var(--destructive-subtle)',
     backgroundImage: 'none',
   },
   '&.cm-merge-b .cm-changedLine': {
-    backgroundColor: tint(added, 14),
+    backgroundColor: 'var(--success-subtle)',
     backgroundImage: 'none',
   },
   '&.cm-merge-a .cm-changedText': {
-    backgroundColor: tint(removed, 35),
+    backgroundColor: 'var(--destructive-edge)',
     backgroundImage: 'none',
     borderRadius: '2px',
   },
   '&.cm-merge-b .cm-changedText': {
-    backgroundColor: tint(added, 35),
+    backgroundColor: 'var(--success-edge)',
     backgroundImage: 'none',
     borderRadius: '2px',
   },
