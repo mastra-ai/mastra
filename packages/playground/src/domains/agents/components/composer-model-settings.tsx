@@ -9,6 +9,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Slider } from '@mastra/playground-ui/components/Slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Info, Sliders, Settings2, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
@@ -19,7 +20,6 @@ import { useSamplingRestriction } from '../hooks/use-sampling-restriction';
 import { AgentAdvancedSettingsBody } from './agent-advanced-settings';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useMemory } from '@/domains/memory/hooks/use-memory';
-import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 
 export interface ComposerModelSettingsProps {
   agentId: string;

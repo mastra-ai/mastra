@@ -1,11 +1,11 @@
+import type { RequestContextEntityType } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { KeyRound } from 'lucide-react';
 import { useState } from 'react';
 
 import { JsonObjectEditor } from './json-object-editor';
 import { RunActionPopover } from './run-action-popover';
-import type { RequestContextEntityType } from '@/domains/request-context/hooks/use-entity-request-context';
-import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 import { useRequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
 
 interface RequestContextPopoverProps {
