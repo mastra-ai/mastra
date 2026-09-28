@@ -311,6 +311,38 @@ describe('getProvidersHandler', () => {
     expect(result.providers.find(p => p.id === 'openai')?.connected).toBe(false);
   });
 
+  it('should pass through a gateway provider label and description, falling back to name and empty', async () => {
+    const describedGateway = {
+      id: 'described-gateway',
+      name: 'Described Gateway',
+      fetchProviders: vi.fn().mockResolvedValue({
+        described: {
+          name: 'Described',
+          label: 'Described LLM',
+          description: 'A provider that describes itself',
+          models: ['model-1'],
+          apiKeyEnvVar: 'DESCRIBED_API_KEY',
+          gateway: 'described-gateway',
+        },
+      }),
+      buildUrl: vi.fn(),
+      getApiKey: vi.fn(),
+      resolveLanguageModel: vi.fn(),
+    };
+    const mastra = new Mastra({ gateways: { 'described-gateway': describedGateway } });
+
+    const result = await GET_PROVIDERS_ROUTE.handler({
+      mastra,
+      requestContext: new RequestContext(),
+      abortSignal: new AbortController().signal,
+    });
+
+    const described = result.providers.find(p => p.id === 'described-gateway/described');
+    expect(described).toMatchObject({ label: 'Described LLM', description: 'A provider that describes itself' });
+    const openai = result.providers.find(p => p.id === 'openai');
+    expect(openai).toMatchObject({ label: openai?.name, description: '' });
+  });
+
   it('should hide registry and default-gateway providers when AUTO_BLOCK_EXTERNAL_PROVIDERS is set, keeping only custom gateways', async () => {
     process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS = 'true';
 
