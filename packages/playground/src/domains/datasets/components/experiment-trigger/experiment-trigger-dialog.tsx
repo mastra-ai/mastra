@@ -345,7 +345,7 @@ export function ExperimentTriggerDialog({
               <ChevronRight className="size-4" />
               Request Context (JSON, optional)
               {hasRequestContext && (
-                <Badge size="xs" variant="info">
+                <Badge size="xs" variant="blue">
                   set
                 </Badge>
               )}

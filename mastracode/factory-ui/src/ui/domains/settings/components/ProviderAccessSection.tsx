@@ -79,14 +79,14 @@ function StatusBadge({ provider, rowScope }: { provider: ProviderInfo; rowScope:
   }
   if (orgCoverage(provider, rowScope)) {
     return (
-      <Badge size="sm" variant="info">
+      <Badge size="sm" variant="blue">
         Covered by org
       </Badge>
     );
   }
   if (provider.source === 'env') {
     return (
-      <Badge size="sm" variant="info">
+      <Badge size="sm" variant="blue">
         From env
       </Badge>
     );

@@ -29,11 +29,11 @@ import { RAIL_ROW_BODY } from './Timeline';
 
 /** What landed: the glyph the rail hangs the row off, and the word the row's badge wears. */
 const KIND = {
-  mention: { glyph: MessageSquare, label: 'mention', tone: 'text-green-400', badge: 'success' },
+  mention: { glyph: MessageSquare, label: 'mention', tone: 'text-green-400', badge: 'green' },
   activity: { glyph: MessagesSquare, label: 'comment', tone: 'text-muted-foreground', badge: 'neutral' },
   'automation-failed': { glyph: TriangleAlert, label: 'failed', tone: 'text-error', badge: 'destructive' },
   'automation-proposed': { glyph: Sparkles, label: 'suggested', tone: 'text-yellow-400', badge: 'orange' },
-  'supervisor-finding': { glyph: Brain, label: 'finding', tone: 'text-green-400', badge: 'info' },
+  'supervisor-finding': { glyph: Brain, label: 'finding', tone: 'text-green-400', badge: 'blue' },
   'agent-waiting': { glyph: Hourglass, label: 'waiting', tone: 'text-yellow-400', badge: 'orange' },
 } satisfies Record<
   FactoryAttentionItem['kind'],

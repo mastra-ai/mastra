@@ -163,7 +163,7 @@ function WorkflowRow({
             {row.depth > 0 ? <TreeConnector guides={row.guides} isLastChild={row.isLastChild} /> : null}
             <span className="truncate">{name}</span>
             {wf.origin === 'dynamic' ? (
-              <Badge size="xs" variant="info" title="Registered via the dynamic-workflows API">
+              <Badge size="xs" variant="blue" title="Registered via the dynamic-workflows API">
                 Dynamic
               </Badge>
             ) : null}

@@ -10,7 +10,7 @@ export type BadgeIndicator = 'dot' | 'pulse';
 
 type BadgeToneStyles = Record<BadgeEmphasis, string> & { indicator: string };
 
-const semanticBadgeToneStyles = {
+const badgeToneStyles = {
   studio: {
     default: productColors['studio'],
     muted: productColors['studio'],
@@ -66,6 +66,26 @@ const semanticBadgeToneStyles = {
     muted: 'bg-warning-bg text-warning-fg',
     indicator: 'bg-warning-indicator',
   },
+  green: {
+    default: 'bg-badge-green-bg inset-ring-badge-green-border text-badge-green-fg',
+    muted: 'bg-badge-green-bg text-badge-green-fg',
+    indicator: 'bg-badge-green',
+  },
+  red: {
+    default: 'bg-badge-red-bg inset-ring-badge-red-border text-badge-red-fg',
+    muted: 'bg-badge-red-bg text-badge-red-fg',
+    indicator: 'bg-badge-red',
+  },
+  yellow: {
+    default: 'bg-badge-yellow-bg inset-ring-badge-yellow-border text-badge-yellow-fg',
+    muted: 'bg-badge-yellow-bg text-badge-yellow-fg',
+    indicator: 'bg-badge-yellow',
+  },
+  blue: {
+    default: 'bg-badge-blue-bg inset-ring-badge-blue-border text-badge-blue-fg',
+    muted: 'bg-badge-blue-bg text-badge-blue-fg',
+    indicator: 'bg-badge-blue',
+  },
   purple: {
     default: 'bg-badge-purple-bg inset-ring-badge-purple-border text-badge-purple-fg',
     muted: 'bg-badge-purple-bg text-badge-purple-fg',
@@ -87,14 +107,6 @@ const semanticBadgeToneStyles = {
     indicator: 'bg-badge-pink',
   },
 } satisfies Record<string, BadgeToneStyles>;
-
-const badgeToneStyles = {
-  ...semanticBadgeToneStyles,
-  green: semanticBadgeToneStyles.success,
-  red: semanticBadgeToneStyles.destructive,
-  yellow: semanticBadgeToneStyles.warning,
-  blue: semanticBadgeToneStyles.info,
-};
 
 export type BadgeVariant = keyof typeof badgeToneStyles;
 

@@ -212,7 +212,7 @@ export function ModelPicker() {
                       <span className="inline-flex items-center gap-1.5">
                         <span className="truncate">{pack.name}</span>
                         {pack.id === defaultModelPackId ? (
-                          <Badge variant="info" size="xs">
+                          <Badge variant="blue" size="xs">
                             Default
                           </Badge>
                         ) : null}

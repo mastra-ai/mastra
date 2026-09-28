@@ -39,7 +39,7 @@ export function WorkflowConditionCardView({
       data-workflow-step-status={previousDisplayStatus ?? 'idle'}
     >
       <div className="flex h-[46px] items-center gap-2 px-2.5 text-meta text-muted-foreground">
-        <Badge size="xs" variant={type === 'else' ? 'neutral' : 'warning'} emphasis="muted" icon={<Icon aria-hidden />}>
+        <Badge size="xs" variant={type === 'else' ? 'neutral' : 'yellow'} emphasis="muted" icon={<Icon aria-hidden />}>
           {label}
         </Badge>
         {hasExpression && (
