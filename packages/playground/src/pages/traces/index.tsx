@@ -418,7 +418,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
           onRemoveMetadataColumn={traceColumns.removeMetadataColumn}
           onReset={traceColumns.resetColumns}
         />
-        <Field orientation="horizontal" className="items-center gap-2">
+        <Field orientation="horizontal" className="gap-2">
           <Checkbox
             checked={autoRefetchTraces}
             onCheckedChange={checked => setAutoRefetchTraces(checked === true)}

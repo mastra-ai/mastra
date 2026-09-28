@@ -34,7 +34,7 @@ function RepositoryVisibilitySwitch() {
   const [isPrivate, setIsPrivate] = useState(true);
 
   return (
- <Field orientation="horizontal" className="items-center justify-between gap-4">
+ <Field orientation="horizontal" className="gap-4">
  <FieldLabel>Repository visibility</FieldLabel>
  <span className="inline-flex items-center gap-2">
  <span>{isPrivate ? 'Private' : 'Public'}</span>
@@ -82,7 +82,7 @@ function RepositoryVisibilitySwitch() {
 
   return (
     <div className="grid gap-4 rounded-lg bg-background p-4">
-      <Field orientation="horizontal" className="items-center justify-between gap-4">
+      <Field orientation="horizontal" className="gap-4">
         <FieldLabel>Repository visibility</FieldLabel>
         <span className="inline-flex items-center gap-2">
           <span className="text-column text-foreground">{isPrivate ? 'Private' : 'Public'}</span>
@@ -231,7 +231,7 @@ export const OnSurfaces: Story = {
 
 export const WithLabel: Story = {
   render: args => (
-    <Field orientation="horizontal" className="items-center gap-2">
+    <Field orientation="horizontal" className="gap-2">
       <Switch {...args} />
       <FieldLabel>Enable notifications</FieldLabel>
     </Field>
@@ -241,15 +241,15 @@ export const WithLabel: Story = {
 export const SettingsList: Story = {
   render: () => (
     <div className="flex w-75 flex-col gap-4">
-      <Field orientation="horizontal" className="items-center justify-between">
+      <Field orientation="horizontal">
         <FieldLabel>Email notifications</FieldLabel>
         <Switch defaultChecked />
       </Field>
-      <Field orientation="horizontal" className="items-center justify-between">
+      <Field orientation="horizontal">
         <FieldLabel>Push notifications</FieldLabel>
         <Switch />
       </Field>
-      <Field orientation="horizontal" className="items-center justify-between" disabled>
+      <Field orientation="horizontal" disabled>
         <FieldLabel>SMS notifications</FieldLabel>
         <Switch />
       </Field>
@@ -259,7 +259,7 @@ export const SettingsList: Story = {
 
 export const WithDescription: Story = {
   render: () => (
-    <Field orientation="horizontal" className="w-[350px] items-start justify-between gap-4">
+    <Field orientation="horizontal" className="w-[350px] items-start gap-4">
       <FieldContent className="gap-1">
         <FieldLabel>Dark mode</FieldLabel>
         <FieldDescription className="mt-0">Switch to a darker color scheme</FieldDescription>

@@ -336,7 +336,7 @@ export function ObservationDetailView({
         {previousRecord && (
           <div className="border-b border-border px-4 py-2">
             <div className="flex items-start justify-end gap-3">
-              <Field orientation="horizontal" className="items-center gap-1.5">
+              <Field orientation="horizontal" className="gap-1.5">
                 <Checkbox checked={showDiff} onCheckedChange={v => setShowDiff(v === true)} />
                 <FieldLabel className="cursor-pointer text-caption text-muted-foreground">Show diff</FieldLabel>
               </Field>

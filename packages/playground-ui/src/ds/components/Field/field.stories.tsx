@@ -51,7 +51,7 @@ export const HiddenLabel: Story = {
 
 export const Horizontal: Story = {
   render: () => (
-    <Field orientation="horizontal">
+    <Field orientation="horizontal" className="items-baseline">
       <FieldLabel className="w-24">Provider</FieldLabel>
       <FieldContent>
         <Select>

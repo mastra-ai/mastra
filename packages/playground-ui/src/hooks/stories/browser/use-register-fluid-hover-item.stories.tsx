@@ -34,7 +34,7 @@ function RegisterFluidHoverItemDemo() {
   const [middleRegistered, setMiddleRegistered] = useState(true);
   return (
     <HookDemo>
-      <Field orientation="horizontal" className="items-center gap-2">
+      <Field orientation="horizontal" className="gap-2">
         <Checkbox checked={middleRegistered} onCheckedChange={checked => setMiddleRegistered(checked === true)} />
         <FieldLabel>Register “{steps[1]}”</FieldLabel>
       </Field>
