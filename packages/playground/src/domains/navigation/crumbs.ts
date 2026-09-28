@@ -17,7 +17,6 @@ interface CrumbBase {
   icon?: CrumbIcon;
   /** Hook-driven control rendered next to the crumb label (e.g. a copy button). */
   Action?: ComponentType;
-  /** Hook-driven icon-only entity switcher; on the current crumb it opens from the whole crumb. */
   Switcher?: ComponentType;
 }
 
@@ -51,7 +50,6 @@ export const truncateItemIdCrumb = (value: string | undefined) => {
   return decoded.length > 8 ? `${decoded.slice(0, 8)}...` : decoded;
 };
 
-// Entity crumbs: name + icon-only switcher in the crumb `switcher` slot.
 export const agentCrumb = {
   id: 'agent',
   Component: AgentCrumb,

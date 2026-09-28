@@ -12,6 +12,7 @@ import { CopyButton } from '../CopyButton';
 import { Header } from '../Header';
 import { Txt } from '../Txt';
 import { Breadcrumb, Crumb } from './Breadcrumb';
+import { crumbSwitcherTriggerProps } from './crumb-switcher';
 
 const meta: Meta<typeof Breadcrumb> = {
   title: 'Navigation/Breadcrumb',
@@ -82,8 +83,14 @@ const agents = [
 ];
 
 /** Icon-only switcher, as used in the `switcher` slot of every entity crumb. */
-const AgentSwitcher = () => (
-  <Combobox options={agents} value="weather" variant="ghost" size="icon-sm" align="end" aria-label="Switch agent" />
+const AgentSwitcher = ({ disabled }: { disabled?: boolean }) => (
+  <Combobox
+    options={agents}
+    value="weather"
+    {...crumbSwitcherTriggerProps}
+    disabled={disabled}
+    aria-label="Switch agent"
+  />
 );
 
 export const WithSwitcher: Story = {
@@ -222,6 +229,13 @@ export const AllAppUsages: Story = {
           Agent list
         </Crumb>
         <Crumb as="span" isCurrent isLoading />
+      </Usage>
+
+      <Usage title="7b. Entity loading — the switcher is disabled, so the crumb stays a plain label">
+        <Crumb as="a" to="/agents" icon={<AgentIcon />}>
+          Agents
+        </Crumb>
+        <Crumb as="span" isCurrent isLoading switcher={<AgentSwitcher disabled />} />
       </Usage>
 
       <Usage title="8. Long labels — built-in truncation (12rem nav / 20rem current), with and without action">

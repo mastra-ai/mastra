@@ -40,7 +40,7 @@ export interface CrumbProps {
    */
   action?: React.ReactNode;
   /**
-   * Icon-only entity switcher (`size="icon-sm"` ghost Combobox) rendered next to the label.
+   * Entity switcher rendered next to the label; spread `crumbSwitcherTriggerProps` on it.
    * On the current crumb there is nowhere to navigate, so its hit area covers the whole crumb.
    */
   switcher?: React.ReactNode;
@@ -70,7 +70,7 @@ export const Crumb = ({
           'group flex h-control-sm min-w-0 items-center',
           isCurrent ? 'shrink' : 'shrink-0',
           switcherCoversCrumb &&
-            'relative rounded-full has-data-popup-open:bg-fill-subtle has-[button:enabled]:hover:bg-fill-subtle has-[button:enabled]:active:bg-fill',
+            'relative rounded-full has-[[data-slot=crumb-switcher]_[data-popup-open]]:bg-fill-subtle has-[[data-slot=crumb-switcher]_button:enabled]:hover:bg-fill-subtle has-[[data-slot=crumb-switcher]_button:enabled]:active:bg-fill',
         )}
       >
         <Root
@@ -110,10 +110,11 @@ export const Crumb = ({
         </Root>
         {switcher && (
           <span
+            data-slot="crumb-switcher"
             className={cn(
               '-ml-1 flex h-control-sm shrink-0 items-center',
               switcherCoversCrumb &&
-                '[&_button]:bg-transparent! [&_button]:after:absolute [&_button]:after:inset-0 [&_button]:after:rounded-full',
+                '[&_button]:bg-transparent! [&_button:enabled]:after:absolute [&_button:enabled]:after:inset-0 [&_button:enabled]:after:rounded-full',
             )}
           >
             {switcher}
