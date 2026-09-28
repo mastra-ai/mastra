@@ -1168,6 +1168,29 @@ describe('GitHub session workspace preparation', () => {
     expect((await workspace.skills?.get('factory-plan'))?.instructions).toContain('# Factory Plan');
   });
 
+  it('hides review skills when a thread that does not own the binding reuses a kickoff-built workspace', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
+    // A dispatcher kickoff builds the workspace before the session has a thread.
+    const kickoffContext = createGithubRequestContext('project-1', 'session-a');
+    const controller = kickoffContext.get('controller') as Record<string, unknown>;
+    controller.threadId = null;
+    controller.getState = () => ({});
+    const workspace = (await resolver({ requestContext: kickoffContext }))!;
+    await workspace.skills?.maybeRefresh();
+    expect((await workspace.skills?.get('factory-review'))?.instructions).toBeTruthy();
+
+    // A request on a thread the binding does not belong to reuses it.
+    mocks.runBindingThreadId = 'other-thread';
+    const reused = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    expect(reused).toBe(workspace);
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+    expect((await workspace.skills?.list())?.map(skill => skill.name)).not.toContain('factory-review');
+  });
+
   it('drops cached review skills when a reused workspace leaves the review role', async () => {
     const { resolver } = await createLocalFactory();
     addProject();

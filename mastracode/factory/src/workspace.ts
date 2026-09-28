@@ -406,6 +406,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   // Review-skill visibility last used to populate each workspace's skill cache.
   const skillCacheReviewState = new Map<string, boolean>();
   const skillCacheRefreshes = new Map<string, Promise<void>>();
+  // The review check of the latest request to resolve each workspace. The skill
+  // source outlives the request that built it, so it must gate on this rather
+  // than on the context it was constructed with.
+  const skillReviewChecks = new Map<string, () => Promise<boolean>>();
 
   return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
@@ -647,10 +651,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         return false;
       }
     };
-    const effectiveSkillExtension = skillExtension ?? createFactorySkillExtension(isReviewSession);
+    const effectiveSkillExtension =
+      skillExtension ??
+      createFactorySkillExtension((): Promise<boolean> => (skillReviewChecks.get(workspaceId) ?? isReviewSession)());
     const extensionId = effectiveSkillExtension ? `-${effectiveSkillExtension.id}` : '';
-    const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
+    const workspaceId: string = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
     const workspaceGeneration = workspaceRegistry.generation(session.sessionId);
+    if (!skillExtension) skillReviewChecks.set(workspaceId, isReviewSession);
     const configDir = DEFAULT_CONFIG_DIR;
 
     const getRepositoryAccess = () =>
@@ -973,6 +980,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         githubTokenInjectors.delete(workspaceId);
         constructedWorkspaces.delete(workspaceId);
         skillCacheReviewState.delete(workspaceId);
+        skillReviewChecks.delete(workspaceId);
         // Retirement drops the memoized session sandbox so a later re-open
         // constructs (and the provider resolves) fresh instead of reusing an
         // instance whose VM the retirement path may stop or destroy.
