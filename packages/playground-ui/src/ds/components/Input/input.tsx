@@ -24,8 +24,7 @@ const inputVariants = cva(
     'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
     'focus:placeholder:opacity-70 motion-reduce:placeholder:transition-none',
     // type="number": hide native browser spinner arrows (they clip the pill).
-    // For incrementable numeric inputs, compose <InputGroup> with +/- buttons
-    // instead — see the NumberWithStepper story. WebKit uses the spin-button
+    // For a stepper, use InputNumber. WebKit uses the spin-button
     // pseudo-elements; Firefox needs `appearance: textfield` on the input.
     '[&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none',
     '[&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none',

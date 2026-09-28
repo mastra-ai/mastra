@@ -53,7 +53,8 @@ const inputGroupRoundedTextareaClassName = cn(
 // one and only ever produced two boundary languages for the same control, which is why
 // four of its call sites had wrapped it in a hand-made `bg-card rounded-full` div to get
 // the material back.
-const inputGroupClassName = cn(
+// eslint-disable-next-line react-refresh/only-export-components -- shared with InputNumber
+export const inputGroupClassName = cn(
   inputGroupBaseClassName,
   'rounded-full',
   inputSurfaceAndFocusWithinStyle,
@@ -147,6 +148,17 @@ const inputGroupControlHeightBySize = cn(
   'group-data-[size=md]/input-group:h-[calc(var(--spacing-control-md)-2px)]',
   'group-data-[size=lg]/input-group:h-[calc(var(--spacing-control-lg)-2px)]',
 );
+
+// eslint-disable-next-line react-refresh/only-export-components -- shared with InputNumber
+export const inputGroupControlClassName = cn(
+  'min-w-0 flex-1 bg-transparent px-3 text-foreground outline-hidden',
+  inputGroupControlHeightBySize,
+  inputGroupControlTextBySize,
+  'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
+  'focus:placeholder:opacity-70',
+  'disabled:cursor-not-allowed',
+);
+
 export type InputGroupInputProps = Omit<React.ComponentProps<'input'>, 'size'> & {
   testId?: string;
 };
@@ -158,16 +170,9 @@ function InputGroupInput({ className, testId, type = 'text', ...props }: InputGr
       data-slot="input-group-control"
       data-testid={testId}
       className={cn(
-        // Height fits the root's content box (see inputGroupControlHeightBySize).
-        'min-w-0 flex-1 bg-transparent px-3 text-foreground outline-hidden',
-        inputGroupControlHeightBySize,
-        inputGroupControlTextBySize,
-        'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
-        'focus:placeholder:opacity-70',
-        'disabled:cursor-not-allowed',
-        // Hide native number-spinner arrows so consumers can compose their own
-        // stepper (see the NumberWithStepper story). WebKit uses the spin-button
-        // pseudo-elements; Firefox needs `appearance: textfield` on the input.
+        inputGroupControlClassName,
+        // Hide native number-spinner arrows; a stepper is `InputNumber`. WebKit uses the
+        // spin-button pseudo-elements; Firefox needs `appearance: textfield` on the input.
         '[&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none',
         '[&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none',
         '[&[type=number]]:[appearance:textfield]',
