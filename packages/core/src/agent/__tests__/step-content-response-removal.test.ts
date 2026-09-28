@@ -244,8 +244,7 @@ describe('step content after processors remove earlier response messages', () =>
     expect(JSON.stringify(seen[1]![0]!.output)).toContain('"B"');
   });
 
-  it('reports a replacement result whose serialisation collides with the previous one under a 32-bit hash', async () => {
-    // "r122789" and "r339192" have the same 32-bit FNV-1a hash once wrapped as text tool output and JSON-serialised.
+  it('reports each successive in-place replacement of a tool result in the step it happens', async () => {
     const replaceSendResult = (result: unknown) => ({
       type: 'tool-invocation' as const,
       toolInvocation: {
@@ -256,8 +255,8 @@ describe('step content after processors remove earlier response messages', () =>
         result,
       },
     });
-    const collidingResults = {
-      id: 'colliding-results',
+    const successiveResults = {
+      id: 'successive-results',
       processInputStep: async ({ stepNumber, messageList, rotateResponseMessageId }) => {
         if (stepNumber > 0) rotateResponseMessageId?.();
         if (stepNumber === 1) expect(messageList.updateToolInvocation(replaceSendResult('r122789'))).toBe(true);
@@ -266,7 +265,7 @@ describe('step content after processors remove earlier response messages', () =>
       },
     } satisfies Processor;
 
-    const seen = await collectStepToolResults(createTwoToolAgent(collidingResults));
+    const seen = await collectStepToolResults(createTwoToolAgent(successiveResults));
 
     expect(ids(seen)).toEqual([
       ['send-1', 'end-1'],
