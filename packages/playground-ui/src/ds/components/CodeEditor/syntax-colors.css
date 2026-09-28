@@ -1,5 +1,5 @@
 .cm-editor {
-  --syntax-string: var(--green-200);
+  --syntax-string: var(--green-300);
   --syntax-keyword: var(--red-400);
   --syntax-literal: var(--yellow-300);
   --syntax-name: var(--cyan-300);

@@ -44,9 +44,9 @@ html.light {
   --span-workflow: var(--cyan-500);
   --span-model: var(--purple-600);
   --span-mcp: var(--green-500);
-  --span-tool: var(--yellow-700);
+  --span-tool: var(--yellow-600);
   --span-provider: var(--orange-500);
-  --span-memory: var(--orange-600);
+  --span-memory: var(--orange-800);
   --span-workspace: var(--red-500);
   --span-skill: var(--green-600);
   --span-scorer: var(--pink-500);

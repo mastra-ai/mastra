@@ -2,20 +2,20 @@
    pairs a surface colour with the on-surface ink that reads on it. */
 
 :root {
-  --destructive-subtle: var(--red-950);
+  --destructive-subtle: var(--red-soft-950);
   --destructive-subtle-active: var(--red-900);
   --destructive-edge: var(--red-700);
   --destructive-indicator: var(--red-400);
   --destructive-fg: var(--red-50);
-  --warning-subtle: var(--yellow-950);
+  --warning-subtle: var(--yellow-soft-950);
   --warning-edge: var(--yellow-700);
   --warning-indicator: var(--yellow-400);
   --warning-fg: var(--yellow-50);
-  --success-subtle: var(--green-950);
+  --success-subtle: var(--green-soft-950);
   --success-edge: var(--green-700);
   --success-indicator: var(--green-400);
   --success-fg: var(--green-50);
-  --info-subtle: var(--blue-950);
+  --info-subtle: var(--blue-soft-950);
   --info-edge: var(--blue-700);
   --info-indicator: var(--blue-400);
   --info-fg: var(--blue-50);
