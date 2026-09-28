@@ -277,14 +277,14 @@ const policy = session.resolveToolApproval('execute_command')
 
 Returns: `PermissionPolicy`
 
-#### `respondToToolApproval({ decision, toolCallId?, requestContext?, declineContext? })`
+#### `respondToToolApproval({ decision, toolCallId, requestContext?, declineContext? })`
 
-Respond to a pending tool approval request, raised by a `tool_approval_required` event. Pass `always_allow_category` to also grant the tool's whole category for the rest of the session.
+Respond to a pending tool approval request, raised by a `tool_approval_required` event. `toolCallId` is required and identifies the parked call — pass the `toolCallId` from the event. Pass `always_allow_category` to also grant the tool's whole category for the gate's thread.
 
 ```typescript
-session.respondToToolApproval({ decision: 'approve' })
-session.respondToToolApproval({ decision: 'decline' })
-session.respondToToolApproval({ decision: 'always_allow_category' })
+session.respondToToolApproval({ decision: 'approve', toolCallId: event.toolCallId })
+session.respondToToolApproval({ decision: 'decline', toolCallId: event.toolCallId })
+session.respondToToolApproval({ decision: 'always_allow_category', toolCallId: event.toolCallId })
 ```
 
 #### `respondToToolSuspension({ resumeData, toolCallId?, requestContext? })`
