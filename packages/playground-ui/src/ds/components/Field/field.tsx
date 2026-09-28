@@ -9,64 +9,64 @@ import { cn } from '@/lib/utils';
 
 type FieldProps = Omit<FieldPrimitive.Root.Props, 'className'> & {
   className?: string;
-  orientation?: 'vertical' | 'horizontal';
+  orientation?: 'vertical' | 'horizontal' | 'responsive';
 };
 
-const Field = React.forwardRef<HTMLDivElement, FieldProps>(
-  ({ className, orientation = 'vertical', invalid = false, ...props }, ref) => {
-    const id = React.useId();
-    const ariaIds = React.useMemo(
-      () => ({ labelId: `${id}-label`, errorId: `${id}-error`, controlId: `${id}-control`, invalid }),
-      [id, invalid],
-    );
+const orientationClassName = {
+  vertical: 'grid gap-2',
+  horizontal: 'flex items-baseline gap-3',
+  responsive: 'flex flex-col gap-3 sm:flex-row sm:items-center',
+} satisfies Record<NonNullable<FieldProps['orientation']>, string>;
 
-    return (
-      <FieldAriaContext.Provider value={ariaIds}>
-        <FieldPrimitive.Root
-          ref={ref}
-          invalid={invalid}
-          data-slot="field"
-          data-orientation={orientation}
-          className={cn(
-            'min-w-0 text-foreground',
-            orientation === 'vertical' ? 'grid gap-2' : 'flex items-baseline gap-3',
-            className,
-          )}
-          {...props}
-        />
-      </FieldAriaContext.Provider>
-    );
-  },
-);
-Field.displayName = 'Field';
+function Field({ className, orientation = 'vertical', invalid = false, ...props }: FieldProps) {
+  const id = React.useId();
+  const [hasDescription, setHasDescription] = React.useState(false);
+  const ariaIds = React.useMemo(
+    () => ({
+      labelId: `${id}-label`,
+      descriptionId: `${id}-description`,
+      errorId: `${id}-error`,
+      controlId: `${id}-control`,
+      invalid,
+      hasDescription,
+      setHasDescription,
+    }),
+    [id, invalid, hasDescription],
+  );
 
-type FieldContentProps = React.ComponentPropsWithoutRef<'div'>;
+  return (
+    <FieldAriaContext.Provider value={ariaIds}>
+      <FieldPrimitive.Root
+        invalid={invalid}
+        data-slot="field"
+        data-orientation={orientation}
+        className={cn('min-w-0 text-foreground', orientationClassName[orientation], className)}
+        {...props}
+      />
+    </FieldAriaContext.Provider>
+  );
+}
 
-const FieldContent = React.forwardRef<HTMLDivElement, FieldContentProps>(({ className, ...props }, ref) => (
-  <div ref={ref} data-slot="field-content" className={cn('grid min-w-0 flex-1 gap-2', className)} {...props} />
-));
-FieldContent.displayName = 'FieldContent';
+type FieldContentProps = React.ComponentProps<'div'>;
+
+function FieldContent({ className, ...props }: FieldContentProps) {
+  return <div data-slot="field-content" className={cn('grid min-w-0 flex-1 gap-2', className)} {...props} />;
+}
 
 type FieldItemProps = Omit<FieldPrimitive.Item.Props, 'className'> & {
   className?: string;
 };
 
-const FieldItem = React.forwardRef<HTMLDivElement, FieldItemProps>(({ className, ...props }, ref) => {
+function FieldItem({ className, ...props }: FieldItemProps) {
   const isInsideField = useFieldAriaIds() !== null;
   const ItemScope = isInsideField ? FieldPrimitive.Item : FieldPrimitive.Root;
 
   return (
     <FieldAriaContext.Provider value={null}>
-      <ItemScope
-        ref={ref}
-        data-slot="field-item"
-        className={cn('flex min-w-0 items-center gap-2', className)}
-        {...props}
-      />
+      <ItemScope data-slot="field-item" className={cn('flex min-w-0 items-center gap-2', className)} {...props} />
     </FieldAriaContext.Provider>
   );
-});
-FieldItem.displayName = 'FieldItem';
+}
 
 type FieldLabelProps = Omit<FieldPrimitive.Label.Props, 'className' | 'id'> & {
   className?: string;
@@ -74,71 +74,74 @@ type FieldLabelProps = Omit<FieldPrimitive.Label.Props, 'className' | 'id'> & {
   size?: 'default' | 'bigger';
 };
 
-const FieldLabel = React.forwardRef<HTMLLabelElement, FieldLabelProps>(
-  ({ className, required = false, size = 'default', children, onClick, ...props }, ref) => {
-    const field = useFieldAriaIds();
+function FieldLabel({ className, required = false, size = 'default', children, onClick, ...props }: FieldLabelProps) {
+  const field = useFieldAriaIds();
 
-    const focusManualControl: FieldLabelProps['onClick'] = event => {
-      onClick?.(event);
-      if (!field || event.defaultPrevented) return;
-      event.currentTarget.ownerDocument.getElementById(field.controlId)?.focus();
-    };
+  const focusManualControl: FieldLabelProps['onClick'] = event => {
+    onClick?.(event);
+    if (!field || event.defaultPrevented) return;
+    event.currentTarget.ownerDocument.getElementById(field.controlId)?.focus();
+  };
 
-    return (
-      <FieldPrimitive.Label
-        ref={ref}
-        id={field?.labelId}
-        data-slot="field-label"
-        className={cn(
-          'inline-flex shrink-0 items-center text-label text-foreground data-disabled:text-muted-foreground',
-          size === 'bigger' && 'text-body',
-          className,
-        )}
-        onClick={focusManualControl}
-        {...props}
-      >
-        {children}
-        {required ? (
-          <>
-            <span aria-hidden className="ml-0.5 text-destructive in-data-disabled:text-muted-foreground">
-              *
-            </span>
-            <span className="sr-only"> (required)</span>
-          </>
-        ) : null}
-      </FieldPrimitive.Label>
-    );
-  },
-);
-FieldLabel.displayName = 'FieldLabel';
+  return (
+    <FieldPrimitive.Label
+      id={field?.labelId}
+      data-slot="field-label"
+      className={cn(
+        'inline-flex shrink-0 items-center text-label text-foreground data-disabled:text-muted-foreground',
+        size === 'bigger' && 'text-body',
+        className,
+      )}
+      onClick={focusManualControl}
+      {...props}
+    >
+      {children}
+      {required ? (
+        <>
+          <span aria-hidden className="ml-0.5 text-destructive in-data-disabled:text-muted-foreground">
+            *
+          </span>
+          <span className="sr-only"> (required)</span>
+        </>
+      ) : null}
+    </FieldPrimitive.Label>
+  );
+}
 
-type FieldDescriptionProps = Omit<FieldPrimitive.Description.Props, 'className'> & {
+type FieldDescriptionProps = Omit<FieldPrimitive.Description.Props, 'className' | 'id'> & {
   className?: string;
 };
 
-const FieldDescription = React.forwardRef<HTMLParagraphElement, FieldDescriptionProps>(
-  ({ className, ...props }, ref) => (
+function FieldDescription({ className, ...props }: FieldDescriptionProps) {
+  const field = useFieldAriaIds();
+  const setHasDescription = field?.setHasDescription;
+
+  React.useEffect(() => {
+    if (!setHasDescription) return;
+    setHasDescription(true);
+    return () => setHasDescription(false);
+  }, [setHasDescription]);
+
+  return (
     <FieldPrimitive.Description
-      ref={ref}
+      id={field?.descriptionId}
       data-slot="field-description"
       className={cn('-mt-1 text-caption text-muted-foreground', className)}
       {...props}
     />
-  ),
-);
-FieldDescription.displayName = 'FieldDescription';
+  );
+}
 
 type FieldErrorProps = Omit<FieldPrimitive.Error.Props, 'className' | 'match' | 'id'> & {
   className?: string;
 };
 
-const FieldError = React.forwardRef<HTMLDivElement, FieldErrorProps>(({ className, children, ...props }, ref) => {
+function FieldError({ className, children, ...props }: FieldErrorProps) {
   const field = useFieldAriaIds();
   if (!children) return null;
 
   return (
     <FieldPrimitive.Error
-      ref={ref}
       id={field?.errorId}
       match
       role="alert"
@@ -152,36 +155,35 @@ const FieldError = React.forwardRef<HTMLDivElement, FieldErrorProps>(({ classNam
       <span className="min-w-0">{children}</span>
     </FieldPrimitive.Error>
   );
-});
-FieldError.displayName = 'FieldError';
+}
 
 type FieldsetProps = Omit<FieldsetPrimitive.Root.Props, 'className'> & {
   className?: string;
 };
 
-const Fieldset = React.forwardRef<HTMLFieldSetElement, FieldsetProps>(({ className, ...props }, ref) => (
-  <FieldsetPrimitive.Root
-    ref={ref}
-    data-slot="fieldset"
-    className={cn('m-0 grid min-w-0 gap-3 border-0 p-0', className)}
-    {...props}
-  />
-));
-Fieldset.displayName = 'Fieldset';
+function Fieldset({ className, ...props }: FieldsetProps) {
+  return (
+    <FieldsetPrimitive.Root
+      data-slot="fieldset"
+      className={cn('m-0 grid min-w-0 gap-3 border-0 p-0', className)}
+      {...props}
+    />
+  );
+}
 
 type FieldsetLegendProps = Omit<FieldsetPrimitive.Legend.Props, 'className'> & {
   className?: string;
 };
 
-const FieldsetLegend = React.forwardRef<HTMLDivElement, FieldsetLegendProps>(({ className, ...props }, ref) => (
-  <FieldsetPrimitive.Legend
-    ref={ref}
-    data-slot="fieldset-legend"
-    className={cn('text-label text-foreground data-disabled:text-muted-foreground', className)}
-    {...props}
-  />
-));
-FieldsetLegend.displayName = 'FieldsetLegend';
+function FieldsetLegend({ className, ...props }: FieldsetLegendProps) {
+  return (
+    <FieldsetPrimitive.Legend
+      data-slot="fieldset-legend"
+      className={cn('text-label text-foreground data-disabled:text-muted-foreground', className)}
+      {...props}
+    />
+  );
+}
 
 export { Field, FieldContent, FieldItem, FieldLabel, FieldDescription, FieldError, Fieldset, FieldsetLegend };
 export type {

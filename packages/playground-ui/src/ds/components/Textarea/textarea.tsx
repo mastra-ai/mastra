@@ -44,25 +44,21 @@ const textareaVariants = cva(
   },
 );
 
-export type TextareaProps = Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'size'> &
+export type TextareaProps = Omit<React.ComponentProps<'textarea'>, 'size'> &
   Omit<VariantProps<typeof textareaVariants>, 'variant'> & {
     /** `filled` is a deprecated alias for `default`; both render the filled surface. */
     variant?: VariantProps<typeof textareaVariants>['variant'] | DeprecatedFilledVariant;
     testId?: string;
   };
 
-const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ className, size, testId, variant, ...props }, ref) => {
-    return (
-      <TextareaControl
-        className={cn(textareaVariants({ variant: resolveFieldVariant(variant), size }), fieldErrorRim, className)}
-        data-testid={testId}
-        ref={ref}
-        {...props}
-      />
-    );
-  },
-);
-Textarea.displayName = 'Textarea';
+function Textarea({ className, size, testId, variant, ...props }: TextareaProps) {
+  return (
+    <TextareaControl
+      className={cn(textareaVariants({ variant: resolveFieldVariant(variant), size }), fieldErrorRim, className)}
+      data-testid={testId}
+      {...props}
+    />
+  );
+}
 
 export { Textarea };

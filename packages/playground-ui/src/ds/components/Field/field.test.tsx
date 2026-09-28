@@ -151,6 +151,21 @@ describe('Field', () => {
     expect(editor.getAttribute('aria-describedby')).toBe(screen.getByRole('alert').id);
   });
 
+  it('describes the code editor with the help text and the error', () => {
+    render(
+      <Field invalid>
+        <FieldLabel>Payload</FieldLabel>
+        <CodeEditor value="{}" />
+        <FieldDescription>Sent as the request body.</FieldDescription>
+        <FieldError>Invalid JSON</FieldError>
+      </Field>,
+    );
+
+    const describedByIds = screen.getByRole('textbox', { name: 'Payload' }).getAttribute('aria-describedby') ?? '';
+    const description = describedByIds.split(' ').map(id => document.getElementById(id)?.textContent);
+    expect(description).toEqual(['Sent as the request body.', 'Invalid JSON']);
+  });
+
   it('focuses the code editor when its label is clicked', () => {
     render(
       <Field>

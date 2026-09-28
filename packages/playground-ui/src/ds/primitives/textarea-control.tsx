@@ -1,11 +1,11 @@
 import { Field as FieldPrimitive } from '@base-ui/react/field';
 import { mergeProps } from '@base-ui/react/merge-props';
-import * as React from 'react';
+import type * as React from 'react';
 
-export type TextareaControlProps = React.ComponentPropsWithoutRef<'textarea'>;
+export type TextareaControlProps = React.ComponentProps<'textarea'>;
 
-export const TextareaControl = React.forwardRef<HTMLTextAreaElement, TextareaControlProps>(
-  ({ id, name, disabled, ...props }, ref) => (
+export function TextareaControl({ id, name, disabled, ref, ...props }: TextareaControlProps) {
+  return (
     <FieldPrimitive.Control
       ref={ref}
       id={id}
@@ -13,6 +13,5 @@ export const TextareaControl = React.forwardRef<HTMLTextAreaElement, TextareaCon
       disabled={disabled}
       render={controlProps => <textarea {...mergeProps<'textarea'>(controlProps, props)} />}
     />
-  ),
-);
-TextareaControl.displayName = 'TextareaControl';
+  );
+}

@@ -53,23 +53,21 @@ const inputVariants = cva(
   },
 );
 
-export type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> &
+export type InputProps = Omit<React.ComponentProps<'input'>, 'size'> &
   Omit<VariantProps<typeof inputVariants>, 'variant'> & {
     /** `filled` is a deprecated alias for `default`; both render the filled surface. */
     variant?: VariantProps<typeof inputVariants>['variant'] | DeprecatedFilledVariant;
     testId?: string;
   };
 
-const Input = React.forwardRef<HTMLInputElement, InputProps>(({ className, size, testId, variant, ...props }, ref) => {
+function Input({ className, size, testId, variant, ...props }: InputProps) {
   return (
     <InputPrimitive
       className={cn(inputVariants({ variant: resolveFieldVariant(variant), size }), fieldErrorRim, className)}
       data-testid={testId}
-      ref={ref}
       {...props}
     />
   );
-});
-Input.displayName = 'Input';
+}
 
 export { Input };

@@ -17,7 +17,7 @@ Added `Field` components for building form fields: `Field`, `FieldLabel`, `Field
 </Field>
 ```
 
-This works for `Input`, `Textarea`, `InputGroupInput`, `InputGroupTextarea`, `Select`, `Combobox`, `Checkbox`, `Switch`, `RadioGroup` and `CodeEditor`. To hide a label and keep it for screen readers, use `<FieldLabel className="sr-only">`. To put the label beside the control, use `<Field orientation="horizontal">`. For a radio group, use `<Fieldset render={<RadioGroup />}>` with a `FieldsetLegend`, and wrap each option in a `FieldItem`.
+This works for `Input`, `Textarea`, `InputGroupInput`, `InputGroupTextarea`, `Select`, `Combobox`, `Checkbox`, `Switch`, `RadioGroup` and `CodeEditor`. To hide a label and keep it for screen readers, use `<FieldLabel className="sr-only">`. To put the label beside the control, use `<Field orientation="horizontal">`, or `orientation="responsive"` to stack it on small screens. For a radio group, use `<Fieldset render={<RadioGroup />}>` with a `FieldsetLegend`, and wrap each option in a `FieldItem`.
 
 **Why**
 
