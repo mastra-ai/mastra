@@ -463,6 +463,30 @@ describe('IntakeSection', () => {
       expect(screen.queryByRole('combobox', { name: 'Repository for Design refresh' })).not.toBeInTheDocument();
     });
 
+    it('maps projects included through a team source to that team’s routed Factory', async () => {
+      seedGithubProject();
+      const saved = useIntakeHandlers({
+        config: { ...baseConfig(), linear: { enabled: true, sourceIds: [engTeam.sourceId] } },
+      });
+      server.use(
+        http.get(BINDINGS_URL, () =>
+          HttpResponse.json({
+            bindings: [
+              { integrationId: 'linear', sourceId: engTeam.sourceId, factoryProjectId: 'fp-1', board: 'work' },
+            ],
+          }),
+        ),
+      );
+
+      renderIntakeSection();
+
+      await userEvent.click(await screen.findByRole('combobox', { name: 'Repository for Q3 Roadmap' }));
+      await userEvent.click(await screen.findByRole('option', { name: 'mastra' }));
+      await waitFor(() => expect(saved.at(-1)?.linear.repositoryByLinearProject).toEqual({ 'lproj-1': 'mastra' }));
+      expect(screen.getByRole('combobox', { name: 'Repository for Shared initiative' })).toBeInTheDocument();
+      expect(screen.queryByRole('combobox', { name: 'Repository for Design refresh' })).not.toBeInTheDocument();
+    });
+
     it('shows how many items are selected', async () => {
       seedGithubProject();
       useIntakeHandlers({

@@ -22,6 +22,7 @@ function issueToIngress(issue: import('../../capabilities/intake.js').IntakeIssu
     team: issue.source ?? null,
     labels: [...(issue.labels ?? [])],
     sourceId: issue.sourceId,
+    projectId: issue.projectId,
     createdAt: issue.createdAt,
     updatedAt: issue.updatedAt,
   };
@@ -54,7 +55,7 @@ export function attachLinearIssueReconciler(
     },
     metadata: (_item, issue) => ({
       linearIssueId: issue.id,
-      ...(issue.sourceId ? { linearProjectId: issue.sourceId } : {}),
+      ...(issue.projectId ? { linearProjectId: issue.projectId } : {}),
       identifier: issue.identifier,
       linearState: issue.state,
       linearStateType: issue.stateType,

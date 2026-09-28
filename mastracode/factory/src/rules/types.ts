@@ -425,6 +425,7 @@ export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
     createdAt: string;
     updatedAt: string;
     sourceId?: string | null;
+    projectId?: string | null;
   };
 }
 

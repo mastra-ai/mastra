@@ -227,11 +227,25 @@ function LinearIntakeSection({
   bindings: IntakeSourceBinding[];
 }) {
   const routedProjects = projects.flatMap(project => {
-    if (!config.linear.sourceIds?.includes(project.id)) return [];
-    const binding = bindings.find(
-      candidate => candidate.integrationId === 'linear' && candidate.sourceId === project.id,
-    );
-    const factory = factories.find(candidate => candidate.id === binding?.factoryProjectId);
+    const sourceIds = config.linear.sourceIds?.includes(project.id)
+      ? [project.id]
+      : teams
+          .filter(team =>
+            project.teams.some(
+              member => member.id === team.id && config.linear.sourceIds?.includes(linearTeamSourceId(team)),
+            ),
+          )
+          .map(linearTeamSourceId);
+    const factoryIds = [
+      ...new Set(
+        bindings
+          .filter(binding => binding.integrationId === 'linear' && sourceIds.includes(binding.sourceId))
+          .map(binding => binding.factoryProjectId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    if (factoryIds.length !== 1) return [];
+    const factory = factories.find(candidate => candidate.id === factoryIds[0]);
     const repositorySlugs = [...new Set(factory?.repositories.map(repository => repository.slug) ?? [])];
     return repositorySlugs.length ? [{ project, repositorySlugs }] : [];
   });
