@@ -46,34 +46,32 @@ const ToolkitFilterRow = memo(
 
     return (
       <li className="flex items-center gap-1">
-        <Field
-          orientation="horizontal"
-          data-testid={`${TEST_ID_PREFIX}-filter-item-${item.id}`}
-          data-checked={checked ? 'true' : 'false'}
-          className={cn(
-            'flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-caption text-foreground select-none hover:bg-fill-subtle',
-            disabled && 'cursor-not-allowed opacity-60',
-          )}
-        >
-          <Checkbox
-            checked={checked}
-            disabled={disabled}
-            onCheckedChange={() => onToggle(item.id)}
-            style={checkboxStyle}
-            data-testid={`${TEST_ID_PREFIX}-filter-checkbox-${item.id}`}
-            className="h-3.5 w-3.5 shrink-0 shadow-none data-[state=checked]:shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5"
-          />
-          {item.icon && (
-            <img
-              src={item.icon}
-              alt=""
-              aria-hidden
-              data-testid={`${TEST_ID_PREFIX}-filter-icon-${item.id}`}
-              className="h-4 w-4 shrink-0 rounded object-contain"
+        <Field disabled={disabled} className="min-w-0 flex-1">
+          <FieldLabel
+            data-testid={`${TEST_ID_PREFIX}-filter-item-${item.id}`}
+            data-checked={checked ? 'true' : 'false'}
+            className={cn(
+              'flex shrink cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-caption text-foreground select-none hover:bg-fill-subtle',
+              disabled && 'cursor-not-allowed opacity-60',
+            )}
+          >
+            <Checkbox
+              checked={checked}
+              onCheckedChange={() => onToggle(item.id)}
+              style={checkboxStyle}
+              data-testid={`${TEST_ID_PREFIX}-filter-checkbox-${item.id}`}
+              className="h-3.5 w-3.5 shrink-0 shadow-none data-[state=checked]:shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5"
             />
-          )}
-          <FieldLabel className="min-w-0 flex-1 cursor-pointer text-caption">
-            <span className="truncate">{item.label}</span>
+            {item.icon && (
+              <img
+                src={item.icon}
+                alt=""
+                aria-hidden
+                data-testid={`${TEST_ID_PREFIX}-filter-icon-${item.id}`}
+                className="h-4 w-4 shrink-0 rounded object-contain"
+              />
+            )}
+            <span className="min-w-0 flex-1 truncate">{item.label}</span>
           </FieldLabel>
         </Field>
         {providerId && (

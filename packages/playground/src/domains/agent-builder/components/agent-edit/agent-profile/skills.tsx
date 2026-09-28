@@ -49,26 +49,22 @@ interface SkillItemProps {
 
 const SkillItem = ({ skill, editable, onToggle, isChecked }: SkillItemProps) => {
   return (
-    <Field orientation="horizontal" className="items-start gap-3 px-4 py-4 hover:bg-fill-subtle" disabled={!editable}>
-      <div className="mt-0.5">
-        <Checkbox
-          checked={isChecked}
-          onCheckedChange={next => onToggle(skill.id, next === true)}
-          disabled={!editable}
-        />
-      </div>
-      <div className="flex min-w-0 flex-col">
-        <FieldLabel className="cursor-pointer">
+    <Field disabled={!editable}>
+      <FieldLabel className="flex shrink cursor-pointer items-start gap-3 px-4 py-4 hover:bg-fill-subtle">
+        <span className="mt-0.5 flex">
+          <Checkbox checked={isChecked} onCheckedChange={next => onToggle(skill.id, next === true)} />
+        </span>
+        <span className="flex min-w-0 flex-col">
           <Txt as="span" variant="column" tone="ink">
             {skill.name}
           </Txt>
-        </FieldLabel>
-        {skill.description && (
-          <Txt variant="meta" tone="muted" className="mt-0.5 truncate" title={skill.description}>
-            {skill.description}
-          </Txt>
-        )}
-      </div>
+          {skill.description && (
+            <Txt as="span" variant="meta" tone="muted" className="mt-0.5 truncate" title={skill.description}>
+              {skill.description}
+            </Txt>
+          )}
+        </span>
+      </FieldLabel>
     </Field>
   );
 };

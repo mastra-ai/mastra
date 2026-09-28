@@ -113,26 +113,24 @@ export const FilterableList = ({
 
               return (
                 <li key={item.id}>
-                  <Field
-                    orientation="horizontal"
-                    data-testid={`${testIdPrefix}-filter-item-${item.id}`}
-                    data-checked={checked ? 'true' : 'false'}
-                    className={cn(
-                      'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-caption text-foreground select-none hover:bg-fill-subtle',
-                      disabled && 'cursor-not-allowed opacity-60',
-                    )}
-                  >
-                    <Checkbox
-                      checked={checked}
-                      disabled={disabled}
-                      onCheckedChange={() => onToggle(item.id)}
-                      style={checkboxStyle}
-                      data-testid={`${testIdPrefix}-filter-checkbox-${item.id}`}
-                      className="h-3.5 w-3.5 shrink-0 shadow-none data-[state=checked]:shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5"
-                    />
-                    {item.icon && <span className="flex shrink-0 items-center">{item.icon}</span>}
-                    <FieldLabel className="min-w-0 flex-1 cursor-pointer text-caption">
-                      <span className="truncate">{item.label}</span>
+                  <Field disabled={disabled}>
+                    <FieldLabel
+                      data-testid={`${testIdPrefix}-filter-item-${item.id}`}
+                      data-checked={checked ? 'true' : 'false'}
+                      className={cn(
+                        'flex shrink cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-caption text-foreground select-none hover:bg-fill-subtle',
+                        disabled && 'cursor-not-allowed opacity-60',
+                      )}
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={() => onToggle(item.id)}
+                        style={checkboxStyle}
+                        data-testid={`${testIdPrefix}-filter-checkbox-${item.id}`}
+                        className="h-3.5 w-3.5 shrink-0 shadow-none data-[state=checked]:shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5"
+                      />
+                      {item.icon && <span className="flex shrink-0 items-center">{item.icon}</span>}
+                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
                     </FieldLabel>
                   </Field>
                 </li>
