@@ -50,7 +50,7 @@ interface SkillItemProps {
 const SkillItem = ({ skill, editable, onToggle, isChecked }: SkillItemProps) => {
   return (
     <Field disabled={!editable}>
-      <FieldLabel className="flex shrink cursor-pointer items-start gap-3 px-4 py-4 hover:bg-fill-subtle">
+      <FieldLabel className="flex shrink items-start gap-3 px-4 py-4 hover:bg-fill-subtle">
         <span className="mt-0.5 flex">
           <Checkbox checked={isChecked} onCheckedChange={next => onToggle(skill.id, next === true)} />
         </span>

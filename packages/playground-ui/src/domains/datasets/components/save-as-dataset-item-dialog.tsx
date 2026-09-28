@@ -9,6 +9,7 @@ import { useDatasets } from '../hooks/use-datasets';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Field, FieldLabel } from '@/ds/components/Field';
+import { Form } from '@/ds/components/Form';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ds/components/Select';
 import { SideDialog } from '@/ds/components/SideDialog';
 import type { SideDialogRootProps } from '@/ds/components/SideDialog';
@@ -226,7 +227,7 @@ export function SaveAsDatasetItemDialog({
           </SideDialog.Heading>
         </SideDialog.Header>
 
-        <form onSubmit={handleSubmit} className="grid gap-4">
+        <Form onSubmit={handleSubmit}>
           <Field>
             <FieldLabel required>Dataset</FieldLabel>
             <Select
@@ -299,7 +300,7 @@ export function SaveAsDatasetItemDialog({
               {addItem.isPending ? 'Saving...' : trajectoryLoading ? 'Loading...' : 'Save Item'}
             </Button>
           </div>
-        </form>
+        </Form>
       </SideDialog.Content>
     </SideDialog>
   );

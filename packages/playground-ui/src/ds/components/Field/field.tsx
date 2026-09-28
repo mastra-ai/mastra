@@ -71,7 +71,7 @@ function FieldItem({ className, ...props }: FieldItemProps) {
 type FieldLabelProps = Omit<FieldPrimitive.Label.Props, 'className' | 'id'> & {
   className?: string;
   required?: boolean;
-  size?: 'default' | 'bigger';
+  size?: 'smaller' | 'default' | 'bigger';
 };
 
 function FieldLabel({ className, required = false, size = 'default', children, onClick, ...props }: FieldLabelProps) {
@@ -89,6 +89,10 @@ function FieldLabel({ className, required = false, size = 'default', children, o
       data-slot="field-label"
       className={cn(
         'inline-flex shrink-0 items-center text-label text-foreground data-disabled:text-muted-foreground',
+        'not-data-disabled:has-[[role=checkbox],[role=switch],[role=radio]]:cursor-pointer',
+        'not-data-disabled:[:is([data-slot=field],[data-slot=field-item]):has(>[role=checkbox],>[role=switch],>[role=radio])_&]:cursor-pointer',
+        'data-disabled:cursor-not-allowed',
+        size === 'smaller' && 'text-column',
         size === 'bigger' && 'text-body',
         className,
       )}
@@ -132,28 +136,55 @@ function FieldDescription({ className, ...props }: FieldDescriptionProps) {
   );
 }
 
-type FieldErrorProps = Omit<FieldPrimitive.Error.Props, 'className' | 'match' | 'id'> & {
+type FieldErrorProps = Omit<FieldPrimitive.Error.Props, 'className' | 'match' | 'id' | 'render'> & {
   className?: string;
 };
 
+const fieldErrorClassName = '-mt-1 flex gap-1 text-caption text-destructive';
+
+function FieldErrorIcon() {
+  return (
+    <Icon size="xs" className="mt-0.75 shrink-0" aria-hidden>
+      <CircleAlertIcon />
+    </Icon>
+  );
+}
+
 function FieldError({ className, children, ...props }: FieldErrorProps) {
   const field = useFieldAriaIds();
-  if (!children) return null;
+
+  if (children) {
+    return (
+      <FieldPrimitive.Error
+        key="external"
+        id={field?.errorId}
+        match
+        role="alert"
+        data-slot="field-error"
+        className={cn(fieldErrorClassName, className)}
+        {...props}
+      >
+        <FieldErrorIcon />
+        <span className="min-w-0">{children}</span>
+      </FieldPrimitive.Error>
+    );
+  }
 
   return (
     <FieldPrimitive.Error
+      key="native"
       id={field?.errorId}
-      match
       role="alert"
       data-slot="field-error"
-      className={cn('-mt-1 flex gap-1 text-caption text-destructive', className)}
+      className={cn(fieldErrorClassName, className)}
       {...props}
-    >
-      <Icon size="xs" className="mt-0.75 shrink-0" aria-hidden>
-        <CircleAlertIcon />
-      </Icon>
-      <span className="min-w-0">{children}</span>
-    </FieldPrimitive.Error>
+      render={({ children: message, ...errorProps }) => (
+        <div {...errorProps}>
+          <FieldErrorIcon />
+          <span className="min-w-0">{message}</span>
+        </div>
+      )}
+    />
   );
 }
 

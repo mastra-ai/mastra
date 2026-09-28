@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
-import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -82,7 +83,7 @@ export function SearchWorkspacePanel({
 
   return (
     <div className="rounded-lg bg-muted">
-      <form onSubmit={handleSearch} className="p-4">
+      <Form onSubmit={handleSearch} className="p-4">
         <div className="flex items-center gap-3">
           <div className="relative flex-1">
             <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -94,18 +95,21 @@ export function SearchWorkspacePanel({
             />
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <span className="text-caption text-muted-foreground">Top</span>
-            <Input
-              type="number"
-              min={1}
-              max={50}
-              value={topK}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTopK(parseInt(e.target.value) || 5)}
-              className="w-14 border-border bg-background text-center"
-              title="Number of results"
-            />
-          </div>
+          <Field className="gap-1">
+            <div className="flex items-center gap-1.5">
+              <FieldLabel size="smaller">Top</FieldLabel>
+              <Input
+                type="number"
+                min={1}
+                max={50}
+                value={topK}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTopK(parseInt(e.target.value) || 5)}
+                className="w-14 border-border bg-background text-center"
+                title="Number of results"
+              />
+            </div>
+            <FieldError />
+          </Field>
 
           <Button type="submit" disabled={isSearching || !query.trim()} size="lg">
             {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
@@ -113,7 +117,7 @@ export function SearchWorkspacePanel({
         </div>
 
         {availableModes.length > 0 && (
-          <div className="mt-3 flex gap-2">
+          <div className="flex gap-2">
             {availableModes.map(m => {
               const config = modeConfig[m];
               const isActive = mode === m;
@@ -131,7 +135,7 @@ export function SearchWorkspacePanel({
             })}
           </div>
         )}
-      </form>
+      </Form>
 
       {searchResults && (
         <div className="border-t border-border">
@@ -230,7 +234,7 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
 
   return (
     <div className="space-y-4">
-      <form onSubmit={handleSearch} className="space-y-3">
+      <Form onSubmit={handleSearch}>
         <div className="flex gap-2">
           <div className="relative flex-1">
             <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -252,7 +256,7 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
 
         <div className="flex items-center gap-4 text-body">
           <Field orientation="horizontal">
-            <FieldLabel className="text-caption text-muted-foreground">Results:</FieldLabel>
+            <FieldLabel size="smaller">Results:</FieldLabel>
             <Select value={String(topK)} onValueChange={value => setTopK(Number(value))}>
               <SelectTrigger size="sm" className="w-auto">
                 <SelectValue />
@@ -269,10 +273,10 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
 
           <Field orientation="horizontal">
             <Checkbox checked={includeReferences} onCheckedChange={checked => setIncludeReferences(checked === true)} />
-            <FieldLabel className="cursor-pointer text-caption text-muted-foreground">Include references</FieldLabel>
+            <FieldLabel size="smaller">Include references</FieldLabel>
           </Field>
         </div>
-      </form>
+      </Form>
 
       {results.length > 0 && (
         <div className="space-y-2">

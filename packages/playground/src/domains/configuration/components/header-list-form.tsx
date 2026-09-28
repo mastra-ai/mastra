@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Plus, Trash } from 'lucide-react';
@@ -63,11 +63,13 @@ const HeaderListFormItem = ({ index, header, onRemove }: HeaderListFormItemProps
     <Field>
       <FieldLabel required>Name</FieldLabel>
       <Input name={`headers.${index}.name`} placeholder="e.g. Authorization" required defaultValue={header.name} />
+      <FieldError />
     </Field>
 
     <Field>
       <FieldLabel required>Value</FieldLabel>
       <Input name={`headers.${index}.value`} placeholder="e.g. Bearer <token>" required defaultValue={header.value} />
+      <FieldError />
     </Field>
 
     <Button type="button" onClick={onRemove} aria-label="Remove header" tooltip="Remove header">

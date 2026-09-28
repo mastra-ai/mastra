@@ -10,6 +10,7 @@ import {
   SettingsRow,
   SettingsTitle,
 } from './index';
+import { Form } from '@/ds/components/Form';
 import { Input } from '@/ds/components/Input';
 
 afterEach(cleanup);
@@ -67,13 +68,13 @@ describe('Settings', () => {
   describe('when a row labels an editable setting', () => {
     it('keeps the control accessible and includes its edited value in form data', () => {
       render(
-        <form aria-label="Connection settings">
+        <Form aria-label="Connection settings">
           <SettingsContainer>
             <SettingsRow label="API prefix" description="Applied to API requests.">
               <Input name="apiPrefix" defaultValue="/api" />
             </SettingsRow>
           </SettingsContainer>
-        </form>,
+        </Form>,
       );
 
       fireEvent.change(screen.getByRole('textbox', { name: 'API prefix' }), { target: { value: '/custom-api' } });

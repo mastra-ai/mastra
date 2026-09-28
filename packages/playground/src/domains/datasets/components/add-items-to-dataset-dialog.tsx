@@ -4,6 +4,7 @@ import type { DatasetItem } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@mastra/playground-ui/components/Select';
 import { useDatasetMutations, useDatasets } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
@@ -90,7 +91,7 @@ export function AddItemsToDatasetDialog({
           <DialogTitle>Add Items to Dataset</DialogTitle>
         </DialogHeader>
         <DialogBody>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <Form onSubmit={handleSubmit}>
             <Field>
               <FieldLabel required>Target Dataset</FieldLabel>
               <Select
@@ -148,7 +149,7 @@ export function AddItemsToDatasetDialog({
                 {isAdding ? `Adding... (${progress}/${items.length})` : 'Add Items'}
               </Button>
             </div>
-          </form>
+          </Form>
         </DialogBody>
       </DialogContent>
     </Dialog>

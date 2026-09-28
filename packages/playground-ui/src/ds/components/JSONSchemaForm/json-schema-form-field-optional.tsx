@@ -30,7 +30,7 @@ export function FieldOptional({
     <Field orientation="horizontal">
       <Checkbox {...props} className={className} checked={field.optional} onCheckedChange={handleCheckedChange} />
       {label ? (
-        <FieldLabel className={cn('cursor-pointer text-caption text-muted-foreground', labelClassName)}>
+        <FieldLabel size="smaller" className={labelClassName}>
           {label}
         </FieldLabel>
       ) : null}

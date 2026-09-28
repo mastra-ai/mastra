@@ -4,6 +4,7 @@ import type { DatasetItemToolMock, AddDatasetItemParams } from '@mastra/client-j
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
@@ -201,7 +202,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
           <SideDialog.Heading>Add Item</SideDialog.Heading>
         </SideDialog.Header>
 
-        <form onSubmit={handleSubmit} className="grid gap-4">
+        <Form onSubmit={handleSubmit}>
           <Field invalid={validationErrors?.field === 'input'}>
             <FieldLabel required>Input (JSON)</FieldLabel>
             <CodeEditor value={input} onChange={handleInputChange} showCopyButton={false} className="min-h-[240px]" />
@@ -272,7 +273,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
               {addItem.isPending ? 'Adding...' : 'Add Item'}
             </Button>
           </div>
-        </form>
+        </Form>
       </SideDialog.Content>
     </SideDialog>
   );

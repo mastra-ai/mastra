@@ -65,7 +65,7 @@ function UserLandControls() {
                     onCheckedChange={() => toggleColumn(column.id)}
                     aria-label={`Include ${column.label}`}
                   />
-                  <FieldLabel className="text-caption">{column.label}</FieldLabel>
+                  <FieldLabel size="smaller">{column.label}</FieldLabel>
                 </Field>
               );
 

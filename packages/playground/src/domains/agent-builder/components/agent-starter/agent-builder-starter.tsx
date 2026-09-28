@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { toast } from '@mastra/playground-ui/utils/toast';
@@ -84,9 +85,9 @@ export const AgentBuilderStarter = () => {
           What should we build today?
         </h1>
 
-        <form
+        <Form
           onSubmit={handleSubmit}
-          className="starter-prompt rounded-2xl border border-border bg-background transition-colors duration-normal ease-out-custom focus-within:border-muted-foreground"
+          className="starter-prompt gap-0 rounded-2xl border border-border bg-background transition-colors duration-normal ease-out-custom focus-within:border-muted-foreground"
           style={{ viewTransitionName: 'chat-composer' }}
         >
           <Textarea
@@ -122,7 +123,7 @@ export const AgentBuilderStarter = () => {
               )}
             </Button>
           </div>
-        </form>
+        </Form>
 
         <ExampleList onExampleClick={handleExampleClick} />
       </div>

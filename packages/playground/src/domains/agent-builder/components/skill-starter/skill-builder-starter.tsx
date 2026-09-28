@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
@@ -63,8 +64,7 @@ export const SkillBuilderStarter = () => {
 
   const builderDefaultWorkspaceId = useMemo(() => {
     const ws = (builderSettings?.configuration?.agent as Record<string, unknown> | undefined)?.workspace as
-      | { type: string; workspaceId?: string }
-      | undefined;
+      { type: string; workspaceId?: string } | undefined;
     return ws?.type === 'id' ? ws.workspaceId : undefined;
   }, [builderSettings]);
 
@@ -117,7 +117,7 @@ export const SkillBuilderStarter = () => {
           What skill do you want to build?
         </h1>
 
-        <form onSubmit={handleSubmit}>
+        <Form onSubmit={handleSubmit}>
           <div
             className="starter-prompt rounded-2xl border border-border bg-background transition-colors duration-normal ease-out-custom focus-within:border-muted-foreground"
             style={{ viewTransitionName: 'skill-chat-composer' }}
@@ -155,7 +155,7 @@ export const SkillBuilderStarter = () => {
               </Button>
             </div>
           </div>
-        </form>
+        </Form>
 
         <div className="flex flex-wrap justify-center gap-2">
           {EXAMPLES.map((example, i) => {

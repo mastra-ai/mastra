@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
@@ -82,7 +83,7 @@ export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }:
 
   return (
     <TooltipProvider delayDuration={0}>
-      <form onSubmit={handleSubmit} className={isFactoryLayout ? 'flex flex-col gap-4' : 'space-y-6'}>
+      <Form onSubmit={handleSubmit}>
         <FieldsContainer>
           {connectionFields.map(({ label, ...field }) => {
             if (isFactoryLayout) {
@@ -97,6 +98,7 @@ export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }:
               <Field key={field.name}>
                 <FieldLabel required={field.required}>{label}</FieldLabel>
                 <Input {...field} />
+                <FieldError />
               </Field>
             );
           })}
@@ -112,7 +114,7 @@ export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }:
         <Button type="submit" className={isFactoryLayout ? 'ml-auto' : 'mt-10! ml-auto'} icon={<SaveIcon />}>
           Save Configuration
         </Button>
-      </form>
+      </Form>
     </TooltipProvider>
   );
 };

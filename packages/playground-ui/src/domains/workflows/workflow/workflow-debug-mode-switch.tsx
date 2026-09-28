@@ -10,7 +10,7 @@ export function WorkflowDebugModeSwitch() {
     <Field orientation="horizontal" className="min-w-0">
       <Switch checked={debugMode} onCheckedChange={setDebugMode} />
       <FieldContent className="gap-0.5">
-        <FieldLabel className="cursor-pointer text-meta">Step by step</FieldLabel>
+        <FieldLabel size="smaller">Step by step</FieldLabel>
         <FieldDescription className="text-meta text-muted-foreground">Pause to inspect outputs</FieldDescription>
       </FieldContent>
     </Field>

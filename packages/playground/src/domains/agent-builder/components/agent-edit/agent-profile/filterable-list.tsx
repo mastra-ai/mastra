@@ -118,8 +118,8 @@ export const FilterableList = ({
                       data-testid={`${testIdPrefix}-filter-item-${item.id}`}
                       data-checked={checked ? 'true' : 'false'}
                       className={cn(
-                        'flex shrink cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-caption text-foreground select-none hover:bg-fill-subtle',
-                        disabled && 'cursor-not-allowed opacity-60',
+                        'flex shrink items-center gap-2 rounded-md px-2 py-1.5 text-caption select-none hover:bg-fill-subtle',
+                        disabled && 'opacity-60',
                       )}
                     >
                       <Checkbox

@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Lock, LogIn } from 'lucide-react';
@@ -129,7 +130,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
       errorBanner={errorBanner}
     >
       {hasCredentials && (
-        <form onSubmit={handleCredentialsSubmit} className="space-y-4">
+        <Form onSubmit={handleCredentialsSubmit}>
           {!isSignIn && (
             <Field>
               <FieldLabel>Name</FieldLabel>
@@ -157,6 +158,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
               variant="default"
               size="lg"
             />
+            <FieldError />
           </Field>
 
           <Field>
@@ -171,6 +173,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
               variant="default"
               size="lg"
             />
+            <FieldError />
           </Field>
 
           {error ? (
@@ -193,7 +196,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
               </button>
             </div>
           )}
-        </form>
+        </Form>
       )}
 
       {hasSSO && hasCredentials && (

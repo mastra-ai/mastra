@@ -12,6 +12,7 @@ import {
   DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
@@ -97,7 +98,7 @@ const SaveAsPromptBlockDialog = ({
           <DialogTitle>Save as prompt block</DialogTitle>
           <DialogDescription>Create a reusable prompt block from this content.</DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
+        <Form onSubmit={handleSubmit} className="gap-0">
           <DialogBody className="space-y-3">
             <Field>
               <FieldLabel>Name</FieldLabel>
@@ -130,7 +131,7 @@ const SaveAsPromptBlockDialog = ({
               {isPending ? 'Saving...' : 'Save'}
             </Button>
           </DialogFooter>
-        </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );

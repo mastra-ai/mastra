@@ -223,18 +223,18 @@ function ScorerConfigPanel({ samplingConfig, onSamplingChange, readOnly = false 
             <FieldsetLegend className="text-muted-foreground">Sampling</FieldsetLegend>
             <FieldItem>
               <RadioGroupItem value="none" disabled={readOnly} />
-              <FieldLabel className="cursor-pointer">None (evaluate all)</FieldLabel>
+              <FieldLabel>None (evaluate all)</FieldLabel>
             </FieldItem>
             <FieldItem>
               <RadioGroupItem value="ratio" disabled={readOnly} />
-              <FieldLabel className="cursor-pointer">Ratio (percentage)</FieldLabel>
+              <FieldLabel>Ratio (percentage)</FieldLabel>
             </FieldItem>
           </Fieldset>
         </Field>
 
         {samplingType === 'ratio' && (
           <Field className="mt-2 gap-1.5">
-            <FieldLabel className="text-muted-foreground">Sample Rate (0-1)</FieldLabel>
+            <FieldLabel>Sample Rate (0-1)</FieldLabel>
             <Input
               type="number"
               min="0"

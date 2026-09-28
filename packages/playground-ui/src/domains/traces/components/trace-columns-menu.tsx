@@ -15,6 +15,7 @@ import {
 } from '@/ds/components/Dialog';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
+import { Form } from '@/ds/components/Form';
 
 const EMPTY_KEYS: readonly string[] = [];
 
@@ -181,7 +182,7 @@ export function TraceColumnsMenu({
       {withQueryTrace && (
         <Dialog open={isMetadataDialogOpen} onOpenChange={handleDialogOpenChange}>
           <DialogContent>
-            <form onSubmit={handleAddMetadata}>
+            <Form onSubmit={handleAddMetadata} className="gap-0">
               <DialogHeader>
                 <DialogTitle>Add metadata column</DialogTitle>
                 <DialogDescription>
@@ -215,7 +216,7 @@ export function TraceColumnsMenu({
                   Add column
                 </Button>
               </DialogFooter>
-            </form>
+            </Form>
           </DialogContent>
         </Dialog>
       )}

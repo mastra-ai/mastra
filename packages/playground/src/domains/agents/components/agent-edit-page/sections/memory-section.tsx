@@ -70,7 +70,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                   control={control}
                   render={({ field }) => (
                     <Field className="gap-1.5">
-                      <FieldLabel className="text-muted-foreground">Last Messages</FieldLabel>
+                      <FieldLabel>Last Messages</FieldLabel>
                       <FieldDescription className="mt-0">
                         Number of recent messages to include in context
                       </FieldDescription>
@@ -112,7 +112,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                       control={control}
                       render={({ field }) => (
                         <Field className="gap-1.5">
-                          <FieldLabel className="text-muted-foreground">Vector Store</FieldLabel>
+                          <FieldLabel>Vector Store</FieldLabel>
                           <FieldDescription className="mt-0">
                             Select a vector store for semantic search
                           </FieldDescription>
@@ -137,7 +137,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                       control={control}
                       render={({ field }) => (
                         <Field className="gap-1.5">
-                          <FieldLabel className="text-muted-foreground">Embedder Model</FieldLabel>
+                          <FieldLabel>Embedder Model</FieldLabel>
                           <FieldDescription className="mt-0">
                             Select an embedding model for semantic search
                           </FieldDescription>
@@ -194,7 +194,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                 {observationalMemoryEnabled && (
                   <div className="ml-2 flex flex-col gap-4 border-l-2 border-border pl-3">
                     <Field className="gap-1.5">
-                      <FieldLabel className="text-muted-foreground">Provider</FieldLabel>
+                      <FieldLabel>Provider</FieldLabel>
                       <FieldDescription className="mt-0">
                         Provider for the observer and reflector agents
                       </FieldDescription>
@@ -216,7 +216,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                     </Field>
 
                     <Field className="gap-1.5">
-                      <FieldLabel className="text-muted-foreground">Model</FieldLabel>
+                      <FieldLabel>Model</FieldLabel>
                       <FieldDescription className="mt-0">Model for the observer and reflector agents</FieldDescription>
                       <Controller
                         name="memory.observationalMemory.model.name"
@@ -234,7 +234,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                       control={control}
                       render={({ field }) => (
                         <Field className="gap-1.5">
-                          <FieldLabel className="text-muted-foreground">Scope</FieldLabel>
+                          <FieldLabel>Scope</FieldLabel>
                           <FieldDescription className="mt-0">
                             Whether observations are scoped per thread or shared across all threads for a resource
                           </FieldDescription>
@@ -277,7 +277,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                       <CollapsibleContent>
                         <div className="mt-2 ml-2 flex flex-col gap-4 border-l-2 border-border pl-3">
                           <Field className="gap-1.5">
-                            <FieldLabel className="text-muted-foreground">Provider Override</FieldLabel>
+                            <FieldLabel>Provider Override</FieldLabel>
                             <FieldDescription className="mt-0">
                               Override the default model provider for the observer
                             </FieldDescription>
@@ -299,7 +299,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                           </Field>
 
                           <Field className="gap-1.5">
-                            <FieldLabel className="text-muted-foreground">Model Override</FieldLabel>
+                            <FieldLabel>Model Override</FieldLabel>
                             <FieldDescription className="mt-0">
                               Override the default model for the observer
                             </FieldDescription>
@@ -323,7 +323,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                             control={control}
                             render={({ field }) => (
                               <Field className="gap-1.5">
-                                <FieldLabel className="text-muted-foreground">Message Tokens</FieldLabel>
+                                <FieldLabel>Message Tokens</FieldLabel>
                                 <FieldDescription className="mt-0">
                                   Token count of unobserved messages that triggers observation (default: 30000)
                                 </FieldDescription>
@@ -349,7 +349,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                             control={control}
                             render={({ field }) => (
                               <Field className="gap-1.5">
-                                <FieldLabel className="text-muted-foreground">Max Tokens Per Batch</FieldLabel>
+                                <FieldLabel>Max Tokens Per Batch</FieldLabel>
                                 <FieldDescription className="mt-0">
                                   Maximum tokens per batch when observing multiple threads (default: 10000)
                                 </FieldDescription>
@@ -375,7 +375,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                             control={control}
                             render={({ field }) => (
                               <Field className="gap-1.5">
-                                <FieldLabel className="text-muted-foreground">Buffer Tokens</FieldLabel>
+                                <FieldLabel>Buffer Tokens</FieldLabel>
                                 <FieldDescription className="mt-0">
                                   Token interval for async buffering (fraction of messageTokens or absolute count, empty
                                   to use default 0.2, set 0 to disable)
@@ -407,7 +407,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                             control={control}
                             render={({ field }) => (
                               <Field className="gap-1.5">
-                                <FieldLabel className="text-muted-foreground">Buffer Activation</FieldLabel>
+                                <FieldLabel>Buffer Activation</FieldLabel>
                                 <FieldDescription className="mt-0">
                                   Ratio (0-1) of buffered observations to activate (default: 0.8)
                                 </FieldDescription>
@@ -434,7 +434,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                             control={control}
                             render={({ field }) => (
                               <Field className="gap-1.5">
-                                <FieldLabel className="text-muted-foreground">Block After</FieldLabel>
+                                <FieldLabel>Block After</FieldLabel>
                                 <FieldDescription className="mt-0">
                                   Multiplier or absolute token count for synchronous blocking (default: 1.2)
                                 </FieldDescription>
@@ -468,7 +468,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                       <CollapsibleContent>
                         <div className="mt-2 ml-2 flex flex-col gap-4 border-l-2 border-border pl-3">
                           <Field className="gap-1.5">
-                            <FieldLabel className="text-muted-foreground">Provider Override</FieldLabel>
+                            <FieldLabel>Provider Override</FieldLabel>
                             <FieldDescription className="mt-0">
                               Override the default model provider for the reflector
                             </FieldDescription>
@@ -490,7 +490,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                           </Field>
 
                           <Field className="gap-1.5">
-                            <FieldLabel className="text-muted-foreground">Model Override</FieldLabel>
+                            <FieldLabel>Model Override</FieldLabel>
                             <FieldDescription className="mt-0">
                               Override the default model for the reflector
                             </FieldDescription>
@@ -514,7 +514,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                             control={control}
                             render={({ field }) => (
                               <Field className="gap-1.5">
-                                <FieldLabel className="text-muted-foreground">Observation Tokens</FieldLabel>
+                                <FieldLabel>Observation Tokens</FieldLabel>
                                 <FieldDescription className="mt-0">
                                   Token count of observations that triggers reflection (default: 40000)
                                 </FieldDescription>
@@ -540,7 +540,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                             control={control}
                             render={({ field }) => (
                               <Field className="gap-1.5">
-                                <FieldLabel className="text-muted-foreground">Block After</FieldLabel>
+                                <FieldLabel>Block After</FieldLabel>
                                 <FieldDescription className="mt-0">
                                   Multiplier or absolute token count for synchronous blocking (default: 1.2)
                                 </FieldDescription>
@@ -566,7 +566,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                             control={control}
                             render={({ field }) => (
                               <Field className="gap-1.5">
-                                <FieldLabel className="text-muted-foreground">Buffer Activation</FieldLabel>
+                                <FieldLabel>Buffer Activation</FieldLabel>
                                 <FieldDescription className="mt-0">
                                   Ratio (0-1) controlling when async reflection buffering starts
                                 </FieldDescription>

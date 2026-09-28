@@ -15,6 +15,7 @@ import {
 import { Button } from '@/ds/components/Button';
 import type { TextButtonSize } from '@/ds/components/Button';
 import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
+import { Form } from '@/ds/components/Form';
 import { Input } from '@/ds/components/Input';
 import { Notice } from '@/ds/components/Notice';
 
@@ -210,8 +211,8 @@ function FactoryForm() {
       <Dialog variant="new" open={open} onOpenChange={setOpen}>
         <DialogTrigger render={<Button>Rename Factory</Button>} />
         <DialogContent>
-          <form
-            noValidate
+          <Form
+            className="gap-0"
             onSubmit={event => {
               event.preventDefault();
               setSubmitted(true);
@@ -238,7 +239,7 @@ function FactoryForm() {
                 Save name
               </Button>
             </DialogFooter>
-          </form>
+          </Form>
         </DialogContent>
       </Dialog>
       <p role="status" className="text-caption text-muted-foreground">

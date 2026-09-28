@@ -5,6 +5,7 @@ import type { FormEvent } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { Field, FieldError, FieldLabel } from '../Field';
+import { Form } from '../Form';
 import { Combobox } from './combobox';
 
 beforeAll(() => {
@@ -140,7 +141,7 @@ describe('Combobox', () => {
       const formRef = useRef<HTMLFormElement>(null);
 
       return (
-        <form ref={formRef} onSubmit={onSubmit}>
+        <Form ref={formRef} onSubmit={onSubmit}>
           <Combobox
             multiple
             container={formRef}
@@ -149,7 +150,7 @@ describe('Combobox', () => {
             onValueChange={onValueChange}
             clearLabel="Clear"
           />
-        </form>
+        </Form>
       );
     }
 

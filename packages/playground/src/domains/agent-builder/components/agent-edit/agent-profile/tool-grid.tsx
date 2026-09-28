@@ -72,7 +72,7 @@ export const ToolGrid = ({
             style={filterCheckboxStyle}
             className="h-3 w-3 shadow-none data-[state=checked]:shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5"
           />
-          <FieldLabel className="cursor-pointer text-meta text-muted-foreground">Show only selected</FieldLabel>
+          <FieldLabel size="smaller">Show only selected</FieldLabel>
         </Field>
       </div>
 

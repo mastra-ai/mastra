@@ -1,6 +1,7 @@
 'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
@@ -70,7 +71,7 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <Form onSubmit={handleSubmit}>
       <Field>
         <FieldLabel required>Name</FieldLabel>
         <Input
@@ -80,6 +81,7 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
           placeholder="Enter dataset name"
           autoFocus
         />
+        <FieldError />
       </Field>
 
       <Field>
@@ -102,7 +104,10 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
       {targetType && !showCustomSchema ? (
         <button
           type="button"
-          className={cn('text-caption text-muted-foreground hover:text-accent1', controlStateColorTransition)}
+          className={cn(
+            'self-start text-caption text-muted-foreground hover:text-accent1',
+            controlStateColorTransition,
+          )}
           onClick={() => setShowCustomSchema(true)}
         >
           + Custom schema
@@ -130,6 +135,6 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
           {createDataset.isPending ? 'Creating...' : 'Create Dataset'}
         </Button>
       </div>
-    </form>
+    </Form>
   );
 }

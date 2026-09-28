@@ -11,6 +11,7 @@ import { useDatasetItem, useDatasetItems } from '@/domains/datasets/hooks/use-da
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Field, FieldDescription, FieldLabel } from '@/ds/components/Field';
+import { Form } from '@/ds/components/Form';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ds/components/Select';
 import { SideDialog } from '@/ds/components/SideDialog';
 import type { SideDialogRootProps } from '@/ds/components/SideDialog';
@@ -170,7 +171,7 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
   };
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-4">
+    <Form onSubmit={handleSubmit}>
       <Field>
         <FieldLabel required>Dataset</FieldLabel>
         <Select value={selectedDatasetId} onValueChange={handleDatasetChange} disabled={isDatasetsLoading}>
@@ -247,6 +248,6 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
           {updateItem.isPending ? 'Adding...' : 'Append Tool Mocks'}
         </Button>
       </div>
-    </form>
+    </Form>
   );
 }

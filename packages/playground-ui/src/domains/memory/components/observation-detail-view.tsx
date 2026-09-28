@@ -338,7 +338,7 @@ export function ObservationDetailView({
             <div className="flex items-start justify-end gap-3">
               <Field orientation="horizontal" className="gap-1.5">
                 <Checkbox checked={showDiff} onCheckedChange={v => setShowDiff(v === true)} />
-                <FieldLabel className="cursor-pointer text-caption text-muted-foreground">Show diff</FieldLabel>
+                <FieldLabel size="smaller">Show diff</FieldLabel>
               </Field>
             </div>
           </div>

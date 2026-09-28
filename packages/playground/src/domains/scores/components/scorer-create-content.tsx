@@ -1,4 +1,5 @@
 import type { CreateStoredScorerParams } from '@mastra/client-js';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useRef } from 'react';
 
@@ -59,9 +60,9 @@ export function ScorerCreateContent({ onSuccess }: ScorerCreateContentProps) {
         />
       }
     >
-      <form ref={formRef} className="h-full">
+      <Form ref={formRef} className="h-full">
         <ScorerEditMain form={form} />
-      </form>
+      </Form>
     </AgentEditLayout>
   );
 }

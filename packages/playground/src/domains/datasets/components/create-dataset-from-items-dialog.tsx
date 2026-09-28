@@ -4,6 +4,7 @@ import type { AddDatasetItemParams, DatasetItem } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
@@ -151,7 +152,7 @@ export function CreateDatasetFromItemsDialog({
           <DialogTitle>Create Dataset from Items</DialogTitle>
         </DialogHeader>
         <DialogBody>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <Form onSubmit={handleSubmit}>
             <Field>
               <FieldLabel required>Name</FieldLabel>
               <Input
@@ -199,7 +200,7 @@ export function CreateDatasetFromItemsDialog({
                 {isCreating ? `Creating... (${progress}/${items.length})` : 'Create Dataset'}
               </Button>
             </div>
-          </form>
+          </Form>
         </DialogBody>
       </DialogContent>
     </Dialog>

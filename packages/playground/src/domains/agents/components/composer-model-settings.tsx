@@ -10,7 +10,6 @@ import { Slider } from '@mastra/playground-ui/components/Slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { Info, Sliders, Settings2, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 
@@ -36,9 +35,9 @@ const NetworkRadio = ({ hasMemory, hasSubAgents, disabled }: NetworkRadioProps) 
   const itemDisabled = disabled || !isNetworkAvailable;
 
   const radio = (
-    <FieldItem>
-      <RadioGroupItem value="network" className="text-foreground" disabled={itemDisabled} />
-      <FieldLabel className={cn(!isNetworkAvailable && 'cursor-not-allowed text-muted-foreground')}>Network</FieldLabel>
+    <FieldItem disabled={itemDisabled}>
+      <RadioGroupItem value="network" className="text-foreground" />
+      <FieldLabel>Network</FieldLabel>
     </FieldItem>
   );
 
@@ -73,11 +72,9 @@ const StreamSubscriptionRadio = ({ supported, disabled }: StreamSubscriptionRadi
   const itemDisabled = disabled || !supported;
 
   const radio = (
-    <FieldItem>
-      <RadioGroupItem value="streamSubscription" className="text-foreground" disabled={itemDisabled} />
-      <FieldLabel className={cn(!supported && 'cursor-not-allowed text-muted-foreground')}>
-        Stream subscription (default)
-      </FieldLabel>
+    <FieldItem disabled={itemDisabled}>
+      <RadioGroupItem value="streamSubscription" className="text-foreground" />
+      <FieldLabel>Stream subscription (default)</FieldLabel>
     </FieldItem>
   );
 

@@ -53,7 +53,7 @@ export const Browser = ({ editable = true }: BrowserProps) => {
             data-testid={TOGGLE_ID}
             style={switchStyle}
           />
-          <FieldLabel className="cursor-pointer text-column">Enable browser</FieldLabel>
+          <FieldLabel size="smaller">Enable browser</FieldLabel>
           <Badge variant={browserEnabled ? 'green' : 'neutral'} size="sm" indicator="dot">
             {browserEnabled ? 'Enabled' : 'Disabled'}
           </Badge>

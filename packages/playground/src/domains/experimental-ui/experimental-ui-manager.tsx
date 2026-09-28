@@ -47,9 +47,7 @@ export function ExperimentalUIManager({ pathname }: { pathname?: string }) {
                 {experiment.variants.map(option => (
                   <FieldItem key={option.value}>
                     <RadioGroupItem value={option.value} />
-                    <FieldLabel className="cursor-pointer text-caption text-muted-foreground">
-                      {option.label}
-                    </FieldLabel>
+                    <FieldLabel size="smaller">{option.label}</FieldLabel>
                   </FieldItem>
                 ))}
               </Fieldset>

@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from '@/ds/components/Dialog';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/ds/components/Field';
+import { Form } from '@/ds/components/Form';
 import { Input } from '@/ds/components/Input';
 import { Notice } from '@/ds/components/Notice';
 import { Spinner } from '@/ds/components/Spinner';
@@ -104,9 +105,8 @@ export function SignalDefinitionFormDialog({
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
-          <form
+          <Form
             id={formId}
-            className="space-y-4"
             onSubmit={event => {
               event.preventDefault();
               const errors = validate(value, editing);
@@ -177,7 +177,7 @@ export function SignalDefinitionFormDialog({
                 <Notice variant="destructive">{error}</Notice>
               </div>
             ) : null}
-          </form>
+          </Form>
         </DialogBody>
         <DialogFooter>
           <Button icon={<X />} type="button" variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>

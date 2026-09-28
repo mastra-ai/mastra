@@ -1,6 +1,7 @@
 'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
@@ -134,7 +135,7 @@ export function EditDatasetForm({ dataset, onSuccess, onCancel }: EditDatasetFor
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <Form onSubmit={handleSubmit}>
       <Field>
         <FieldLabel required>Name</FieldLabel>
         <Input
@@ -144,6 +145,7 @@ export function EditDatasetForm({ dataset, onSuccess, onCancel }: EditDatasetFor
           placeholder="Enter dataset name"
           autoFocus
         />
+        <FieldError />
       </Field>
 
       <Field>
@@ -191,6 +193,6 @@ export function EditDatasetForm({ dataset, onSuccess, onCancel }: EditDatasetFor
           {updateDataset.isPending ? 'Saving...' : 'Save Changes'}
         </Button>
       </div>
-    </form>
+    </Form>
   );
 }

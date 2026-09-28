@@ -2,6 +2,7 @@ import type { DatasetExperiment } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
@@ -50,7 +51,7 @@ export function RenameExperimentDialog({ experiment, open, onOpenChange }: Renam
           <DialogTitle>Rename Experiment</DialogTitle>
         </DialogHeader>
         <DialogBody>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <Form onSubmit={handleSubmit}>
             <Field>
               <FieldLabel required>Name</FieldLabel>
               <Input
@@ -83,7 +84,7 @@ export function RenameExperimentDialog({ experiment, open, onOpenChange }: Renam
                 {updateExperiment.isPending ? 'Saving...' : 'Save'}
               </Button>
             </div>
-          </form>
+          </Form>
         </DialogBody>
       </DialogContent>
     </Dialog>
