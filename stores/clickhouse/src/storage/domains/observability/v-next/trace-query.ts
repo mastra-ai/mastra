@@ -340,7 +340,7 @@ function compileClickHouseTraceScope(
         SELECT traceId
         FROM ${TABLE_TRACE_ROOTS}
         WHERE startedAt >= ${from}
-          AND startedAt < ${to}
+          AND startedAt < ${to}${tenant}
       )
       ORDER BY dedupeKey
       LIMIT 1 BY dedupeKey

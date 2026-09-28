@@ -412,6 +412,13 @@ describe('ClickHouse advanced trace query', () => {
     expect(rootStart).toBeGreaterThan(-1);
     expect(scoresStart).toBeGreaterThan(rootStart);
     const rootScope = compiled.query.slice(rootStart, scoresStart);
+    // The range prefilter is a root scan too, so it carries the tenant conditions.
+    const prefilterStart = compiled.query.indexOf('WHERE traceId IN (');
+    expect(prefilterStart).toBeGreaterThan(-1);
+    expect(prefilterStart).toBeLessThan(rootStart);
+    const prefilter = compiled.query.slice(prefilterStart, rootStart);
+    expect(prefilter).toMatch(/AND organizationId = \{trace_query_\d+:String\}/);
+    expect(prefilter).toMatch(/AND resourceId = \{trace_query_\d+:String\}/);
     const scores = compiled.query.slice(scoresStart);
     for (const cte of [rootScope, scores]) {
       expect(cte).toMatch(/AND organizationId = \{trace_query_\d+:String\}/);
