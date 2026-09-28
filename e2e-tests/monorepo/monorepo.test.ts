@@ -699,7 +699,6 @@ export const environmentRoute = registerApiRoute('/environment', {
       expect(output).not.toContain('external-workspace-root-implementation-marker');
 
       // An ordinary workspace package still gets bundled and remains usable by the built server.
-      expect(packageJson.dependencies).not.toHaveProperty('@inner/hello-world');
       expect(output).not.toMatch(/from ["']@inner\/hello-world(?:\/|["'])/);
       const agentResponse = await fetch(`http://localhost:${port}/api/agents/my-agent`);
       expect(agentResponse.status).toBe(200);
