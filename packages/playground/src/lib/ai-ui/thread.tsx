@@ -35,6 +35,7 @@ import { ComposerAttachmentsProvider, useComposerAttachments } from './attachmen
 import { ComposerFileDrop } from './attachments/composer-file-drop';
 import { useReadAloud } from './chat/use-read-aloud';
 import { BracketOverlay } from './components/bracket-overlay';
+import { useComposerAutofocus } from './hooks/use-composer-autofocus';
 import { MessageRow } from './messages/message-row';
 import { SuggestedPromptList } from './suggested-prompt-list';
 import { TaskPanel } from './task-panel';
@@ -361,6 +362,8 @@ const AgentComposer = ({
   const [sendPulseKey, setSendPulseKey] = useState(0);
   const { canExecute } = usePermissions();
   const canExecuteAgent = canExecute('agents');
+  const inputDisabled = !canExecuteAgent || Boolean(draftStatus?.restoring);
+  useComposerAutofocus(textareaRef, { threadId, disabled: inputDisabled });
   // On a brand-new chat, starting the call must transition the page out of its
   // new-thread state (same as the first text send) or the chat never loads messages.
   const voiceCall = useVoiceCall({ agentId, threadId, onCallStarted: refreshThreadList });
@@ -436,7 +439,6 @@ const AgentComposer = ({
               <ComposerInput
                 ref={textareaRef}
                 value={text}
-                autoFocus={false}
                 placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
                 onChange={event => {
                   setThreadInput(event.target.value);
@@ -453,7 +455,7 @@ const AgentComposer = ({
                     void submit();
                   }
                 }}
-                disabled={!canExecuteAgent || draftStatus?.restoring}
+                disabled={inputDisabled}
               />
               {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning />}
               <ComposerActions>
