@@ -1,0 +1,59 @@
+---
+title: "Reference: ToolResultTokenLimiter | Processors"
+description: "Use ToolResultTokenLimiter to truncate large tool results before they are stored or sent to the language model."
+packages:
+  - "@mastra/core"
+---
+
+# ToolResultTokenLimiter
+
+The `ToolResultTokenLimiter` is an **output processor** that truncates tool results over a token limit. It runs after a tool returns and before the result is stored in the message list, streamed to clients, or sent to the model on the next step.
+
+## Usage example
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { ToolResultTokenLimiter } from '@mastra/core/processors'
+
+const agent = new Agent({
+  id: 'research-agent',
+  name: 'Research Agent',
+  instructions: 'You research topics using the available tools.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: { fetchPage },
+  outputProcessors: [new ToolResultTokenLimiter({ limit: 2000 })],
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'number | ToolResultTokenLimiterOptions',
+    description: 'The token limit, or an options object.',
+    isOptional: false,
+    properties: [
+      {
+        type: 'ToolResultTokenLimiterOptions',
+        parameters: [
+          {
+            name: 'limit',
+            type: 'number',
+            description:
+              'Maximum number of tokens a single tool result may use, including the truncation marker. Must be a positive integer.',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Behavior
+
+- Results at or under the limit pass through unchanged.
+- Larger results are converted to text (objects become JSON strings), cut to fit the limit, and end with a `[truncated: ~N tokens]` marker giving the original size. A tool's `toModelOutput` receives the truncated value, and its output is not limited again. If the marker doesn't fit in the limit, it's left out. Token counts are estimates.
+- Tool errors, background-task results, results from provider-executed tools, and results that can't be serialized to JSON, pass through unchanged.
+- Each tool result is limited on its own. Use [`TokenLimiterProcessor`](/reference/processors/token-limiter-processor) to limit the total size of the prompt.
