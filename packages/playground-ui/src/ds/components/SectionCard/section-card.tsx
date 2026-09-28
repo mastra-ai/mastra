@@ -33,14 +33,14 @@ export function SectionCard({
       className={cn(
         'overflow-hidden rounded-2xl border',
         fillHeight && 'flex h-full flex-col',
-        danger ? 'border-destructive-border' : 'border-border',
+        danger ? 'border-destructive-edge' : 'border-border',
         className,
       )}
     >
       <div
         className={cn(
           'flex flex-col gap-3 px-4 pt-4 pb-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4',
-          danger ? 'bg-destructive-bg' : 'bg-surface-overlay-soft',
+          danger ? 'bg-destructive-subtle' : 'bg-surface-overlay-soft',
         )}
       >
         <div className="min-w-0">
@@ -52,7 +52,7 @@ export function SectionCard({
         className={cn(
           'min-w-0 px-4 pt-3 pb-4',
           fillHeight && 'flex-1',
-          danger ? 'bg-destructive-bg' : null,
+          danger ? 'bg-destructive-subtle' : null,
           contentClassName,
         )}
       >

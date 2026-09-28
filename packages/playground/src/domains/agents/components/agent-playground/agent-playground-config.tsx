@@ -186,8 +186,8 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
             key={idx}
             className={cn(
               'px-3 py-0.5 wrap-break-word whitespace-pre-wrap',
-              line.type === 'removed' && 'bg-destructive-bg text-destructive-fg',
-              line.type === 'added' && 'bg-success-bg text-success-fg',
+              line.type === 'removed' && 'bg-destructive-subtle text-destructive-fg',
+              line.type === 'added' && 'bg-success-subtle text-success-fg',
               line.type === 'equal' && 'text-muted-foreground',
             )}
           >
@@ -213,7 +213,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
         if (!prevBlock && currBlock) {
           return (
-            <div key={idx} className="rounded-md border border-success-border bg-success-bg p-3 text-body">
+            <div key={idx} className="rounded-md border border-success-edge bg-success-subtle p-3 text-body">
               <Txt variant="meta" className="mb-1 text-success-fg">
                 + Added block
               </Txt>
@@ -228,7 +228,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
           return (
             <div
               key={idx}
-              className="relative rounded-md border border-destructive-border bg-destructive-bg p-3 text-body"
+              className="relative rounded-md border border-destructive-edge bg-destructive-subtle p-3 text-body"
             >
               <div className="absolute top-2 right-2">
                 <BlockCopyButton block={prevBlock} />
@@ -271,8 +271,8 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
                 key={lidx}
                 className={cn(
                   'px-3 py-0.5 wrap-break-word whitespace-pre-wrap',
-                  line.type === 'removed' && 'bg-destructive-bg text-destructive-fg',
-                  line.type === 'added' && 'bg-success-bg text-success-fg',
+                  line.type === 'removed' && 'bg-destructive-subtle text-destructive-fg',
+                  line.type === 'added' && 'bg-success-subtle text-success-fg',
                   line.type === 'equal' && 'text-muted-foreground',
                 )}
               >
@@ -385,8 +385,8 @@ function ToolsDiffView({
             key={tool}
             className={cn(
               'flex items-center gap-2 rounded-md border px-3 py-1.5',
-              status === 'removed' && 'border-destructive-border bg-destructive-bg',
-              status === 'added' && 'border-success-border bg-success-bg',
+              status === 'removed' && 'border-destructive-edge bg-destructive-subtle',
+              status === 'added' && 'border-success-edge bg-success-subtle',
               status === 'same' && 'border-border bg-background',
             )}
           >
@@ -484,8 +484,8 @@ function VariablesDiffView({
             key={name}
             className={cn(
               'flex items-center gap-2 rounded-md border px-3 py-1.5',
-              status === 'removed' && 'border-destructive-border bg-destructive-bg',
-              status === 'added' && 'border-success-border bg-success-bg',
+              status === 'removed' && 'border-destructive-edge bg-destructive-subtle',
+              status === 'added' && 'border-success-edge bg-success-subtle',
               status === 'same' && 'border-border bg-background',
             )}
           >

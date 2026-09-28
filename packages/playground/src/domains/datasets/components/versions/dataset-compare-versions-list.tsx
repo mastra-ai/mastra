@@ -18,19 +18,19 @@ export interface DatasetCompareVersionsListProps {
 const versionInfoConfig = {
   added: {
     badgeVariant: 'info' as const,
-    borderColor: 'border-info-border',
+    borderColor: 'border-info-edge',
     icon: <PlusIcon />,
     tooltip: 'Added in this version',
   },
   changed: {
     badgeVariant: 'warning' as const,
-    borderColor: 'border-warning-border',
+    borderColor: 'border-warning-edge',
     icon: <PenIcon />,
     tooltip: 'Changed in this version',
   },
   same: {
     badgeVariant: 'success' as const,
-    borderColor: 'border-success-border',
+    borderColor: 'border-success-edge',
     icon: <EqualIcon />,
     tooltip: 'Same in both versions',
   },

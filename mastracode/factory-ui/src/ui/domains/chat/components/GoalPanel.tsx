@@ -10,7 +10,7 @@ import {
 } from '../../../../hooks/useAgentControllerGoalMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
-const goalBar = 'flex shrink-0 items-center gap-2.5 border-b border-border bg-destructive-bg px-4 py-2 text-xs';
+const goalBar = 'flex shrink-0 items-center gap-2.5 border-b border-border bg-destructive-subtle px-4 py-2 text-xs';
 
 export function GoalPanel() {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();

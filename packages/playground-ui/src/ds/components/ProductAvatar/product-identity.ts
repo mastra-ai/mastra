@@ -10,10 +10,10 @@ export const productNames = {
 export type Product = keyof typeof productNames;
 
 export const productColors: Record<Product, string> = {
-  studio: 'bg-product-studio-bg text-product-studio-fg',
-  server: 'bg-product-server-bg text-product-server-fg',
-  observability: 'bg-product-observability-bg text-product-observability-fg',
-  factory: 'bg-product-factory-bg text-product-factory-fg',
-  workers: 'bg-product-workers-bg text-product-workers-fg',
-  'persistent-server': 'bg-product-persistent-server-bg text-product-persistent-server-fg',
+  studio: 'bg-product-studio text-product-studio-fg',
+  server: 'bg-product-server text-product-server-fg',
+  observability: 'bg-product-observability text-product-observability-fg',
+  factory: 'bg-product-factory text-product-factory-fg',
+  workers: 'bg-product-workers text-product-workers-fg',
+  'persistent-server': 'bg-product-persistent-server text-product-persistent-server-fg',
 };

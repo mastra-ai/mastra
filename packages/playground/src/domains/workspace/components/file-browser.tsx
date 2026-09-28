@@ -314,7 +314,7 @@ export function FileBrowser({
           </div>
         ) : error ? (
           <div className="px-4 py-8 text-center">
-            <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-destructive-bg">
+            <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-destructive-subtle">
               <AlertCircle className="h-6 w-6 text-destructive-indicator" />
             </div>
             <p className="mb-1 text-subheading text-foreground">Failed to load directory</p>
@@ -376,7 +376,7 @@ export function FileBrowser({
                               <TooltipTrigger asChild>
                                 <span
                                   tabIndex={0}
-                                  className={`rounded px-1.5 py-0.5 text-caption ${isError ? 'bg-destructive-bg text-destructive-fg' : 'bg-muted text-muted-foreground'}`}
+                                  className={`rounded px-1.5 py-0.5 text-caption ${isError ? 'bg-destructive-subtle text-destructive-fg' : 'bg-muted text-muted-foreground'}`}
                                 >
                                   {mountLabel}
                                 </span>
@@ -385,7 +385,7 @@ export function FileBrowser({
                             </Tooltip>
                           ) : (
                             <span
-                              className={`rounded px-1.5 py-0.5 text-caption ${isError ? 'bg-destructive-bg text-destructive-fg' : 'bg-muted text-muted-foreground'}`}
+                              className={`rounded px-1.5 py-0.5 text-caption ${isError ? 'bg-destructive-subtle text-destructive-fg' : 'bg-muted text-muted-foreground'}`}
                             >
                               {mountLabel}
                             </span>

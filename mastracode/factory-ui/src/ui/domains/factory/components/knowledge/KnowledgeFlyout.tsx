@@ -34,7 +34,7 @@ function SectionHeader({ title, count }: { title: string; count?: number }) {
 
 function RungBadge({ rung }: { rung: KnowledgeRung }) {
   return (
-    <span className="bg-badge-purple-bg text-badge-purple-fg rounded px-1.5 py-0.5 text-[10px] font-medium">
+    <span className="bg-badge-purple text-badge-purple-fg rounded px-1.5 py-0.5 text-[10px] font-medium">
       {RUNG_LABELS[rung].toLowerCase()}
     </span>
   );
@@ -48,7 +48,7 @@ function RecordText({ text, onNodeRef }: { text: string; onNodeRef?: (name: stri
           <button
             key={index}
             type="button"
-            className="bg-badge-purple-bg-muted text-badge-purple-fg hover:bg-badge-purple-bg rounded px-1 font-medium"
+            className="bg-badge-purple-muted text-badge-purple-fg hover:bg-badge-purple rounded px-1 font-medium"
             onClick={event => {
               event.stopPropagation();
               onNodeRef?.(segment.value);
@@ -112,13 +112,13 @@ function RecordCard({
         'rounded-lg border transition-colors',
         // A10: pinned knowledge records stand out — the same amber accent the graph
         // uses, with a faint amber wash behind the card.
-        record.pinned ? 'bg-badge-yellow-bg-muted' : 'bg-card',
+        record.pinned ? 'bg-badge-yellow-muted' : 'bg-card',
         expanded
           ? record.pinned
             ? 'border-yellow-400'
-            : 'border-badge-purple-border'
+            : 'border-badge-purple-edge'
           : record.pinned
-            ? 'border-badge-yellow-border'
+            ? 'border-badge-yellow-edge'
             : 'border-border',
       ].join(' ')}
     >
@@ -180,7 +180,7 @@ function RecordCard({
           {reason ? (
             <div
               data-testid="knowledge-record-reason"
-              className="border-badge-yellow-border bg-badge-yellow-bg-muted mt-2 rounded-md border p-2"
+              className="border-badge-yellow-edge bg-badge-yellow-muted mt-2 rounded-md border p-2"
             >
               <div className="text-badge-yellow-fg mb-1 flex items-center gap-1 text-[10px] font-semibold tracking-wide uppercase">
                 <Sparkles size={10} /> Reasoning

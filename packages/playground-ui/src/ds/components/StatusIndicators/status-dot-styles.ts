@@ -38,7 +38,7 @@ const TONE_RING: Record<StatusTone, string> = {
 };
 
 const PROGRESS_DECORATION =
-  "relative motion-safe:animate-pulse before:absolute before:-inset-1 before:rounded-full before:border before:border-warning-border before:border-t-warning-indicator before:content-[''] motion-safe:before:animate-spin motion-reduce:before:animate-none";
+  "relative motion-safe:animate-pulse before:absolute before:-inset-1 before:rounded-full before:border before:border-warning-edge before:border-t-warning-indicator before:content-[''] motion-safe:before:animate-spin motion-reduce:before:animate-none";
 
 export function statusToneFill(tone: StatusTone): string {
   return TONE_FILL[tone];

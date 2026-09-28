@@ -129,8 +129,8 @@ function Dropzone({ onFileSelect, disabled }: { onFileSelect: (file: File) => vo
       onDrop={handleDrop}
       className={cn(
         'relative flex flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-card px-4 py-6 text-center',
-        'hover:border-success-border hover:bg-success-bg',
-        isDragOver && 'border-success-border bg-success-bg',
+        'hover:border-success-edge hover:bg-success-subtle',
+        isDragOver && 'border-success-edge bg-success-subtle',
         disabled && 'cursor-wait opacity-60',
       )}
     >

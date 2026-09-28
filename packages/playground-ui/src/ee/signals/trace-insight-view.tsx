@@ -66,8 +66,8 @@ function parseTraceObservation(observation: string): ParsedObservation {
 
 const OBSERVATION_SEVERITY_CARD: Record<ObservationSeverity, string> = {
   info: raisedSurfaceStyle,
-  success: 'border border-success-border bg-success-bg',
-  problem: 'border border-destructive-border bg-destructive-bg',
+  success: 'border border-success-edge bg-success-subtle',
+  problem: 'border border-destructive-edge bg-destructive-subtle',
 };
 
 function ObservationItem({ observation }: { observation: string }) {

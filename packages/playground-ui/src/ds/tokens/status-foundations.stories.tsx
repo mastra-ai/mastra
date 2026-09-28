@@ -57,6 +57,12 @@ const noticeVariants: { variant: NoticeVariant; title: string; message: string; 
 ];
 
 const badgeHues: BadgeVariant[] = ['success', 'destructive', 'info', 'warning', 'purple', 'orange', 'cyan', 'pink'];
+const badgeTokenHue: Partial<Record<BadgeVariant, string>> = {
+  success: 'green',
+  destructive: 'red',
+  info: 'blue',
+  warning: 'yellow',
+};
 
 const greenSteps = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950] as const;
 
@@ -82,7 +88,7 @@ export const StatusFoundations: Story = {
         </Txt>
       }
       note="Light is not the dark value dimmed: the base keeps its saturation while the foreground flips to a deep tint, because ink has to darken when the surface turns white."
-      noteAside="Utilities: bg-{status}-bg, text-{status}-fg, bg-badge-*-bg, text-badge-*-fg."
+      noteAside="Utilities: bg-{status}-subtle, border-{status}-edge, text-{status}-fg, bg-badge-*, text-badge-*-fg."
     >
       <FoundationSection
         label="Notice"
@@ -95,7 +101,7 @@ export const StatusFoundations: Story = {
               name={
                 entry.variant === 'note'
                   ? '--notice-note / --notice-note-fg'
-                  : `--${entry.variant}-bg / --${entry.variant}-fg`
+                  : `--${entry.variant}-subtle / --${entry.variant}-fg`
               }
               note={entry.note}
             >
@@ -128,7 +134,7 @@ export const StatusFoundations: Story = {
             {badgeHues.map(hue => (
               <Specimen
                 key={hue}
-                name={`--${['success', 'destructive', 'info', 'warning'].includes(hue) ? hue : `badge-${hue}`}-bg / --${['success', 'destructive', 'info', 'warning'].includes(hue) ? hue : `badge-${hue}`}-fg`}
+                name={`--badge-${badgeTokenHue[hue] ?? hue} / --badge-${badgeTokenHue[hue] ?? hue}-fg`}
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant={hue}>{hue}</Badge>

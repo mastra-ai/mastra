@@ -235,7 +235,7 @@ export function BuilderAddSkillDialog({
                               <div className="flex items-center gap-2">
                                 <span className="truncate text-subheading text-foreground">{skill.name}</span>
                                 {isInstalled && (
-                                  <span className="inline-flex items-center gap-1 rounded bg-info-bg px-1.5 py-0.5 text-meta text-info-fg">
+                                  <span className="inline-flex items-center gap-1 rounded bg-info-subtle px-1.5 py-0.5 text-meta text-info-fg">
                                     <Check className="h-2.5 w-2.5" />
                                     Installed
                                   </span>
@@ -321,7 +321,7 @@ export function BuilderAddSkillDialog({
           {selectedSkill && (
             <div className="flex flex-col gap-3 border-t border-border pt-4">
               {installError && (
-                <div className="rounded-md border border-destructive-border bg-destructive-bg px-3 py-2 text-body text-destructive-fg">
+                <div className="rounded-md border border-destructive-edge bg-destructive-subtle px-3 py-2 text-body text-destructive-fg">
                   {installError}
                 </div>
               )}

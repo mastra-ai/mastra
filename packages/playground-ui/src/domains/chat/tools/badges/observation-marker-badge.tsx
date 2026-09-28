@@ -165,7 +165,7 @@ const ExtractedValuesPanel = ({
           {failures.map(failure => (
             <div
               key={failure.slug}
-              className="rounded border border-destructive-border bg-destructive-bg p-2 text-destructive-fg"
+              className="rounded border border-destructive-edge bg-destructive-subtle p-2 text-destructive-fg"
             >
               <div className="text-meta tracking-wide uppercase">{failure.slug}</div>
               <div className="mt-1 text-caption">{failure.error}</div>
@@ -227,14 +227,14 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
   const [isExtractedExpanded, setIsExtractedExpanded] = useState(false);
 
   // Colors - same scheme for both observation and reflection
-  const bgColor = 'bg-info-bg';
+  const bgColor = 'bg-info-subtle';
   const textColor = 'text-info-fg';
-  const completeBgColor = 'bg-success-bg';
+  const completeBgColor = 'bg-success-subtle';
   const completeTextColor = 'text-success-fg';
   const completeHoverBgColor = 'hover:opacity-80';
   // Same colors for expanded state
-  const expandedBgColor = 'bg-success-bg';
-  const expandedBorderColor = 'border-success-border';
+  const expandedBgColor = 'bg-success-subtle';
+  const expandedBorderColor = 'border-success-edge';
   const labelColor = 'text-success-fg';
   const bufferExpandedBgColor = 'bg-background';
   const bufferExpandedBorderColor = 'border-border-1';
@@ -412,7 +412,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
         data-om-state={state}
         data-om-type={isReflection ? 'reflection' : 'observation'}
       >
-        <div className="my-1 inline-flex items-center gap-1.5 rounded-md bg-warning-bg px-2 py-1 text-column text-warning-fg">
+        <div className="my-1 inline-flex items-center gap-1.5 rounded-md bg-warning-subtle px-2 py-1 text-column text-warning-fg">
           <Unplug className="size-3" />
           <span>
             {disconnectedLabel}
@@ -436,7 +436,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
         <div className="my-1">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-destructive-bg px-2 py-1 text-column text-destructive-fg hover:opacity-80"
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-destructive-subtle px-2 py-1 text-column text-destructive-fg hover:opacity-80"
           >
             {isExpanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
             <XCircle className="size-3" />
@@ -444,7 +444,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
           </button>
 
           {isExpanded && error && (
-            <div className="mt-1 ml-4 rounded-md border border-destructive-border bg-destructive-bg p-2 text-caption text-destructive-fg">
+            <div className="mt-1 ml-4 rounded-md border border-destructive-edge bg-destructive-subtle p-2 text-caption text-destructive-fg">
               <span className="text-column">Error:</span> {error}
             </div>
           )}
@@ -538,7 +538,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
         <div className="my-1">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-dashed border-destructive-border bg-destructive-bg px-2 py-1 text-column text-destructive-fg hover:opacity-80"
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-dashed border-destructive-edge bg-destructive-subtle px-2 py-1 text-column text-destructive-fg hover:opacity-80"
           >
             {isExpanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
             <XCircle className="size-3" />
@@ -546,7 +546,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
           </button>
 
           {isExpanded && error && (
-            <div className="mt-1 ml-4 rounded-md border border-destructive-border bg-destructive-bg p-2 text-caption text-destructive-fg">
+            <div className="mt-1 ml-4 rounded-md border border-destructive-edge bg-destructive-subtle p-2 text-caption text-destructive-fg">
               <span className="text-column">Error:</span> {error}
             </div>
           )}

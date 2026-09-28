@@ -19,7 +19,7 @@ export function ProcessStepProgressBar({ steps }: ProcessStepProgressBarProps) {
             <div
               key={step.id}
               className={cn('relative flex h-8 items-center justify-end', transitions.colors, {
-                'bg-success-bg': step.status === 'success' && steps?.[idx - 1]?.status === 'success',
+                'bg-success-subtle': step.status === 'success' && steps?.[idx - 1]?.status === 'success',
               })}
             >
               <div
@@ -29,8 +29,8 @@ export function ProcessStepProgressBar({ steps }: ProcessStepProgressBarProps) {
                   transitions.transform,
                   {
                     'border border-dashed border-placeholder': step.status === 'pending',
-                    'scale-110 bg-success-bg text-success-fg': step.status === 'success',
-                    'scale-110 bg-destructive-bg text-destructive-fg': step.status === 'failed',
+                    'scale-110 bg-success-subtle text-success-fg': step.status === 'success',
+                    'scale-110 bg-destructive-subtle text-destructive-fg': step.status === 'failed',
                   },
                 )}
               >

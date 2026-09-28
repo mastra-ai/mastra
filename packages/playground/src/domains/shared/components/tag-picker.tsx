@@ -44,7 +44,7 @@ export function TagPicker({
       {tags.map(tag => (
         <span
           key={tag}
-          className="inline-flex items-center gap-0.5 rounded-md bg-info-bg px-1.5 py-0.5 text-meta text-info-fg"
+          className="inline-flex items-center gap-0.5 rounded-md bg-info-subtle px-1.5 py-0.5 text-meta text-info-fg"
         >
           {tag}
           <button type="button" onClick={() => removeTag(tag)} className="hover:text-info-fg">

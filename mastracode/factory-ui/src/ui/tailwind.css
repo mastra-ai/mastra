@@ -56,18 +56,18 @@
     66% {
       opacity: 1;
       transform: translateX(calc(100% + 2.25rem));
-      background-color: var(--badge-green-bg);
+      background-color: var(--badge-green);
     }
     78%,
     92% {
       opacity: 1;
       transform: translateX(calc(200% + 4.5rem));
-      background-color: var(--badge-blue-bg);
+      background-color: var(--badge-blue);
     }
     100% {
       opacity: 0;
       transform: translateX(calc(200% + 4.5rem));
-      background-color: var(--badge-blue-bg);
+      background-color: var(--badge-blue);
     }
   }
 

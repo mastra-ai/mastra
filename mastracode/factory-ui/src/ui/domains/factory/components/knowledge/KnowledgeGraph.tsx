@@ -66,7 +66,7 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
           RUNG_RING[node.rung],
           selected ? 'ring-2 ring-purple-300' : '',
         ].join(' ')}
-        style={{ background: 'var(--badge-purple-bg)' }}
+        style={{ background: 'var(--badge-purple)' }}
       >
         {labeled ? (
           <span
@@ -138,7 +138,7 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
               ? { stroke: 'var(--yellow-500)', strokeWidth: 2 }
               : source.startsWith('record:') || target.startsWith('record:')
                 ? { stroke: 'var(--muted-foreground)', strokeWidth: 1.2 }
-                : { stroke: 'var(--badge-purple-border)', strokeWidth: 1.4 }
+                : { stroke: 'var(--badge-purple-edge)', strokeWidth: 1.4 }
         }
       />
       {pinned && !source.startsWith('record:') && !target.startsWith('record:') ? (
@@ -261,8 +261,8 @@ function FilterChip({
         'flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors',
         active
           ? accent
-            ? 'border-badge-yellow-border bg-badge-yellow-bg text-badge-yellow-fg'
-            : 'border-badge-purple-border bg-badge-purple-bg text-badge-purple-fg'
+            ? 'border-badge-yellow-edge bg-badge-yellow text-badge-yellow-fg'
+            : 'border-badge-purple-edge bg-badge-purple text-badge-purple-fg'
           : 'border-border bg-card text-muted-foreground hover:text-foreground',
       ].join(' ')}
     >

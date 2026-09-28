@@ -298,7 +298,7 @@ export const Txtmessage = ({
 export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onRetry: (() => void) | null }) => {
   return (
     <Card
-      className="flex max-w-[80%] flex-col gap-3 border-warning-border bg-warning-bg p-4"
+      className="flex max-w-[80%] flex-col gap-3 border-warning-edge bg-warning-subtle p-4"
       role="alert"
       data-testid="agent-builder-chat-error"
     >

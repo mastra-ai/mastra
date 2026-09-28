@@ -213,10 +213,10 @@ describe('theme.css export', () => {
       'text-positive1',
       'bg-notice-success',
       'text-badge-green-fg',
-      'bg-success-bg',
+      'bg-success-subtle',
     ]);
     for (const name of ['bg-accent1', 'text-positive1', 'bg-notice-success']) expect(css).not.toContain(`.${name}`);
-    for (const name of ['text-badge-green-fg', 'bg-success-bg']) expect(css).toContain(`.${name}`);
+    for (const name of ['text-badge-green-fg', 'bg-success-subtle']) expect(css).toContain(`.${name}`);
   });
 
   it('generates named chromatic utilities from the shared palette', async () => {
@@ -591,7 +591,7 @@ describe('theme.css export', () => {
   it('resolves chromatic roles to opaque ramp values in both themes', () => {
     const { darkVariables, lightVariables } = getThemeVariables(themeCss);
     const roles =
-      /^(?:destructive|warning|success|info)-(?:bg|border|indicator|fg)$|^product-|^chart-(?:blue|blue-deep|yellow|green|purple|orange|pink|red|sequential-[1-5])$|^span-(?!type-)/;
+      /^(?:destructive|warning|success|info)-(?:subtle|edge|indicator|fg)$|^product-|^chart-(?:blue|blue-deep|yellow|green|purple|orange|pink|red|sequential-[1-5])$|^span-(?!type-)/;
 
     for (const variables of [darkVariables, lightVariables]) {
       const tokens = [...variables.keys()].filter(name => roles.test(name));
@@ -602,7 +602,7 @@ describe('theme.css export', () => {
         expect(oklchAlpha(value)).toBe(1);
       }
     }
-    expect(resolveToken('success-bg', darkVariables)).not.toBe(resolveToken('success-bg', lightVariables));
+    expect(resolveToken('success-subtle', darkVariables)).not.toBe(resolveToken('success-subtle', lightVariables));
     expect(resolveToken('chart-blue', darkVariables)).not.toBe(resolveToken('chart-blue', lightVariables));
   });
 

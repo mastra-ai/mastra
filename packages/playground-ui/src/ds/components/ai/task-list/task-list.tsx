@@ -72,7 +72,7 @@ const statusLabels: Record<TaskListItem['status'], string> = {
 
 const ringClasses: Record<TaskListItem['status'], string> = {
   completed: 'size-[7px] border-success-indicator bg-card',
-  in_progress: 'size-2 border-warning-indicator bg-warning-bg',
+  in_progress: 'size-2 border-warning-indicator bg-warning-subtle',
   pending: 'size-1.5 border-muted-foreground/45 bg-card',
 };
 

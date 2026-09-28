@@ -3,14 +3,14 @@
    so the single :root declaration computes correctly under `html.light` too. Only the shadow
    needs an explicit per-theme override (light gets a gloss highlight, dark stays elevation-only). */
 :root {
-  --toast-success-bg: var(--success-bg);
-  --toast-success-border: var(--success-border);
-  --toast-destructive-bg: var(--destructive-bg);
-  --toast-destructive-border: var(--destructive-border);
-  --toast-warning-bg: var(--warning-bg);
-  --toast-warning-border: var(--warning-border);
-  --toast-info-bg: var(--info-bg);
-  --toast-info-border: var(--info-border);
+  --toast-success-bg: var(--success-subtle);
+  --toast-success-border: var(--success-edge);
+  --toast-destructive-bg: var(--destructive-subtle);
+  --toast-destructive-border: var(--destructive-edge);
+  --toast-warning-bg: var(--warning-subtle);
+  --toast-warning-border: var(--warning-edge);
+  --toast-info-bg: var(--info-subtle);
+  --toast-info-border: var(--info-edge);
   --toast-shadow: 0 1px 2px oklch(0 0 0 / 0.4), 0 12px 32px -12px oklch(0 0 0 / 0.55);
 }
 html.light {

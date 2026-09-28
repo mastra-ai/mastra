@@ -101,9 +101,9 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
           // Default state
           'border-border bg-background',
           // Drag over state
-          isDragOver && 'border-success-border bg-success-bg',
+          isDragOver && 'border-success-edge bg-success-subtle',
           // Error state
-          error && 'border-destructive-border bg-destructive-bg',
+          error && 'border-destructive-edge bg-destructive-subtle',
           // Disabled during parsing
           isParsing && 'cursor-wait opacity-60',
         )}

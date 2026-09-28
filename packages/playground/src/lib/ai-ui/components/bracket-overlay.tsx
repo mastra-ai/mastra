@@ -229,24 +229,24 @@ function HighlightBlock({ highlight, visible }: { highlight: HighlightPosition; 
 function getStateColor(state: HighlightPosition['state']): string {
   switch (state) {
     case 'complete':
-      return 'var(--success-border)';
+      return 'var(--success-edge)';
     case 'loading':
-      return 'var(--info-border)';
+      return 'var(--info-edge)';
     case 'failed':
-      return 'var(--destructive-border)';
+      return 'var(--destructive-edge)';
     case 'disconnected':
-      return 'var(--warning-border)';
+      return 'var(--warning-edge)';
     // Buffering states use a neutral bracket so they don't overpower the message content.
     case 'buffering':
       return 'var(--border-strong)';
     case 'buffering-complete':
       return 'var(--border-strong)';
     case 'buffering-failed':
-      return 'var(--destructive-border)';
+      return 'var(--destructive-edge)';
     // Activation state uses green — same as sync observation/reflection 'complete'
     case 'activated':
-      return 'var(--success-border)';
+      return 'var(--success-edge)';
     default:
-      return 'var(--success-border)';
+      return 'var(--success-edge)';
   }
 }

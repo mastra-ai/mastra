@@ -86,9 +86,9 @@ export function ToolMockReportSection({ report }: ToolMockReportSectionProps) {
 function outcomeClass(outcome: ReportRow['outcome']): string {
   switch (outcome) {
     case 'served':
-      return 'bg-success-bg text-success-fg';
+      return 'bg-success-subtle text-success-fg';
     case 'live':
-      return 'bg-badge-orange-bg text-badge-orange-fg';
+      return 'bg-badge-orange text-badge-orange-fg';
     case 'unconsumed':
       return 'bg-muted-foreground/10 text-muted-foreground';
   }

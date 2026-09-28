@@ -77,10 +77,10 @@ const ProgressBar = ({
   const showAdaptiveLabel = isAdaptive && percentage >= 100 && !isProcessing && baseThreshold && value < baseThreshold;
 
   const containerBg = isProcessing ? 'bg-transparent' : 'bg-muted';
-  const fillColor = isProcessing ? 'bg-info-bg' : barColor;
+  const fillColor = isProcessing ? 'bg-info-subtle' : barColor;
   const textColor = isProcessing ? 'text-info-fg' : 'text-muted-foreground';
   const textColorFilled = isProcessing ? 'text-info-fg' : 'text-white';
-  const tokenBg = isProcessing ? 'bg-info-bg' : 'bg-fill';
+  const tokenBg = isProcessing ? 'bg-info-subtle' : 'bg-fill';
   const tokenTextColor = isProcessing ? 'text-info-fg' : 'text-muted-foreground';
 
   return (
@@ -200,7 +200,7 @@ const ProgressBar = ({
 
 const ObservationalMemoryHeader = () => (
   <div className="mb-3 flex items-center gap-2">
-    <Brain className="h-4 w-4 text-badge-purple" />
+    <Brain className="h-4 w-4 text-badge-purple-dot" />
     <h3 className="text-subheading text-foreground">Observational Memory</h3>
   </div>
 );

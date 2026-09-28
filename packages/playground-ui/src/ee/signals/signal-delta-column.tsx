@@ -84,7 +84,7 @@ export function SignalDeltaColumn({
             <li
               key={delta.label}
               className={`rounded-lg border border-border ${
-                delta.delta > 0 ? 'bg-success-bg' : delta.delta < 0 ? 'bg-destructive-bg' : 'bg-card'
+                delta.delta > 0 ? 'bg-success-subtle' : delta.delta < 0 ? 'bg-destructive-subtle' : 'bg-card'
               }`}
             >
               {themeId === undefined ? (

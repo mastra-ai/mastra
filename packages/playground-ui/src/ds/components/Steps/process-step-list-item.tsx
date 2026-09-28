@@ -49,8 +49,8 @@ function StepStatusMarker({ status, variant }: { status: string; variant: Proces
           '[&>svg]:text-destructive-indicator': status === 'failed',
           'border border-dashed border-placeholder': status === 'pending',
           '[&>svg]:size-4': status !== 'running',
-          'bg-success-bg': status === 'success',
-          'bg-destructive-bg': status === 'failed',
+          'bg-success-subtle': status === 'success',
+          'bg-destructive-subtle': status === 'failed',
           'scale-110': status === 'success' || status === 'failed',
         },
       )}

@@ -70,7 +70,7 @@ export const buttonVariants = cva(
           'disabled:bg-fill-destructive-disabled disabled:text-destructive-foreground/75 aria-disabled:bg-fill-destructive-disabled aria-disabled:text-destructive-foreground/75',
         ),
         'destructive-ghost': cn(
-          'border border-transparent bg-transparent text-destructive not-disabled:hover:bg-destructive-bg not-disabled:hover:text-destructive not-disabled:active:bg-destructive-bg-active',
+          'border border-transparent bg-transparent text-destructive not-disabled:hover:bg-destructive-subtle not-disabled:hover:text-destructive not-disabled:active:bg-destructive-subtle-active',
           'disabled:bg-transparent disabled:text-placeholder aria-disabled:bg-transparent aria-disabled:text-placeholder',
         ),
         ghost: cn(

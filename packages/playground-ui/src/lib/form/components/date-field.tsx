@@ -46,7 +46,7 @@ export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, field, err
           id={id}
           variant="default"
           size="lg"
-          className={cn('w-full', error ? 'border-destructive-border' : '')}
+          className={cn('w-full', error ? 'border-destructive-edge' : '')}
           icon={<CalendarIcon />}
         >
           {value ? (

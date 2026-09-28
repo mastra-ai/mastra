@@ -304,7 +304,7 @@ const ScopedOverrideDemo = () => {
         </label>
         {agentPageMounted && (
           <KeyboardScope>
-            <div className="rounded-lg border border-dashed border-success-border p-3 text-caption text-muted-foreground">
+            <div className="rounded-lg border border-dashed border-success-edge p-3 text-caption text-muted-foreground">
               agent page mounted — <Keys keys="g then t" /> now targets the agent's traces
             </div>
             <AgentPageShortcuts log={out.log} />

@@ -20,12 +20,12 @@ import { formatDuration } from '@/utils/duration';
 
 const statusPresentation = {
   success: { label: 'Completed', icon: Check, color: 'text-success-fg', bar: 'bg-muted-foreground/60' },
-  failed: { label: 'Failed', icon: CircleX, color: 'text-destructive-fg', bar: 'bg-destructive-bg' },
-  suspended: { label: 'Needs input', icon: Pause, color: 'text-info-fg', bar: 'bg-info-bg' },
+  failed: { label: 'Failed', icon: CircleX, color: 'text-destructive-fg', bar: 'bg-destructive-subtle' },
+  suspended: { label: 'Needs input', icon: Pause, color: 'text-info-fg', bar: 'bg-info-subtle' },
   waiting: { label: 'Waiting', icon: Timer, color: 'text-muted-foreground', bar: 'bg-muted-foreground/40' },
   paused: { label: 'Paused', icon: Pause, color: 'text-muted-foreground', bar: 'bg-muted-foreground/40' },
   skipped: { label: 'Skipped', icon: SkipForward, color: 'text-muted-foreground', bar: 'bg-muted-foreground/25' },
-  running: { label: 'Running', icon: Loader2, color: 'text-warning-fg', bar: 'bg-warning-bg' },
+  running: { label: 'Running', icon: Loader2, color: 'text-warning-fg', bar: 'bg-warning-subtle' },
   canceled: { label: 'Canceled', icon: CircleSlash, color: 'text-muted-foreground', bar: 'bg-muted-foreground/40' },
 } satisfies Record<Step['status'], { label: string; icon: typeof Check; color: string; bar: string }>;
 

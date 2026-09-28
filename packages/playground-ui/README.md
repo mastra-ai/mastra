@@ -64,8 +64,8 @@ Eight shared ramps (`red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `purple`
 
 ```css
 .status {
-  background: var(--success-bg);
-  border: 1px solid var(--success-border);
+  background: var(--success-subtle);
+  border: 1px solid var(--success-edge);
   color: var(--success-fg);
 }
 
@@ -76,7 +76,7 @@ Eight shared ramps (`red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `purple`
 
 The same four suffixes apply to `destructive`, `warning`, and `info`. Backgrounds are opaque. Indicators are for dots and small marks, not filled-button backgrounds.
 
-Product roles use `--product-{name}-bg` and `--product-{name}-fg`. Names are `studio`, `server`, `observability`, `factory`, `workers`, and `persistent-server`. Use `ProductAvatar` for the round icon and `ProductBadge` for the icon with its label. Both take a `product` prop and use the matching semantic colors.
+Product roles use `--product-{name}` and `--product-{name}-fg`. Names are `studio`, `server`, `observability`, `factory`, `workers`, and `persistent-server`. Use `ProductAvatar` for the round icon and `ProductBadge` for the icon with its label. Both take a `product` prop and use the matching semantic colors.
 
 ```tsx
 import { ProductAvatar } from '@mastra/playground-ui/components/ProductAvatar';
@@ -90,7 +90,7 @@ Charts use hue-named roles for categories (`--chart-blue`, `--chart-blue-deep`, 
 
 Numbered `accent*` tokens, `positive1`, `negative1`, `warning1`, `notice-success/destructive/warning/info`, and `--brand-green-*` are removed. Status consumers use the existing `success`, `destructive`, `warning`, or `info` roles. Focus styling uses `border-focus`; categorical charts and span icons use their own roles. CodeMirror uses five local `--syntax-*` properties scoped to `.cm-editor`, not a global palette.
 
-`badge-green/red/yellow/blue` are now categorical badge tones built from the ramps, with `-bg`, `-border` and `-fg` like `badge-purple`. Badge backgrounds are solid: in dark mode they use the low-chroma `--{hue}-soft-900` / `--{hue}-soft-950` steps, in light mode `--{hue}-100` / `--{hue}-50`. Use the status role with `-bg`, `-border`, `-fg`, or `-indicator` for its intended job. Notice variants are unchanged. Badge status variants are `success`, `destructive`, `warning`, and `info`, for states. `green`, `red`, `yellow`, and `blue` are categorical tones like `purple` and `orange`, for labels that are not states. Use `--green-*` for the shared chromatic ramp.
+`badge-green/red/yellow/blue` are now categorical badge tones built from the ramps, with a fill (`--badge-purple`), `-muted`, `-edge`, `-fg`, and `-dot` like `badge-purple`. Badge backgrounds are solid: in dark mode they use the low-chroma `--{hue}-soft-900` / `--{hue}-soft-950` steps, in light mode `--{hue}-100` / `--{hue}-50`. Use the status role with `-bg`, `-border`, `-fg`, or `-indicator` for its intended job. Notice variants are unchanged. Badge status variants are `success`, `destructive`, `warning`, and `info`, for states. `green`, `red`, `yellow`, and `blue` are categorical tones like `purple` and `orange`, for labels that are not states. Use `--green-*` for the shared chromatic ramp.
 
 To migrate removed tokens:
 
@@ -103,7 +103,7 @@ To migrate removed tokens:
 | `accent6`, `warning1`  | `warning-*`                               |
 | `accent3`, `accent5`   | `info-*`                                  |
 | `error`                | `destructive-fg`, `destructive-indicator` |
-| `notice-STATUS`        | `STATUS-bg`, `STATUS-fg`                  |
+| `notice-STATUS`        | `STATUS-subtle`, `STATUS-fg`              |
 | `--brand-green-N`      | `--green-N`                               |
 
 `SankeyChart` accepts `getNodeColor` and `getLinkColor` callbacks returning CSS colors. Explicit link colors keep the default link transparency and hover emphasis:

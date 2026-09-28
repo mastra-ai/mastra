@@ -121,7 +121,7 @@ const RefBlockContent = ({
       )}
 
       {/* Content area with left accent border */}
-      <div className="border-l-2 border-info-border pl-3">
+      <div className="border-l-2 border-info-edge pl-3">
         {isLoading ? (
           <div className="flex items-center gap-2 py-3 text-muted-foreground">
             <Spinner className="h-4 w-4" />

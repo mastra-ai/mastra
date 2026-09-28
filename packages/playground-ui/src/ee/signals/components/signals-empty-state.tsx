@@ -240,9 +240,9 @@ export const SignalsEmptyState = ({
             <h2 className="text-heading text-foreground">Trace Intelligence</h2>
             <p className="mt-0.5 text-caption text-muted-foreground">Finds recurring themes</p>
             <div aria-hidden="true" className="relative mt-5 flex size-20 items-center justify-center">
-              <span className="signals-engine-pulse absolute size-20 rounded-full border border-success-border" />
-              <span className="absolute size-14 rounded-full border border-success-border" />
-              <span className="absolute size-9 rounded-full border border-success-border bg-success-bg shadow-[0_0_24px_var(--color-success-indicator)]" />
+              <span className="signals-engine-pulse absolute size-20 rounded-full border border-success-edge" />
+              <span className="absolute size-14 rounded-full border border-success-edge" />
+              <span className="absolute size-9 rounded-full border border-success-edge bg-success-subtle shadow-[0_0_24px_var(--color-success-indicator)]" />
               <CpuIcon className="relative size-4 text-success-indicator" />
             </div>
             <p className="mt-3 max-w-40 text-meta text-muted-foreground">

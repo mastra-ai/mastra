@@ -89,7 +89,7 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
       {error && phase === 'error' && (
         <div
           className={cn(
-            'flex items-center gap-3 rounded-lg bg-destructive-bg p-4 text-body text-foreground',
+            'flex items-center gap-3 rounded-lg bg-destructive-subtle p-4 text-body text-foreground',
             '[&>svg]:h-6 [&>svg]:w-6 [&>svg]:text-destructive-indicator [&>svg]:opacity-70',
           )}
         >

@@ -261,7 +261,7 @@ export function AddSkillDialog({
                               <div className="flex items-center gap-2">
                                 <span className="truncate text-subheading text-foreground">{skill.name}</span>
                                 {isInstalled && (
-                                  <span className="inline-flex items-center gap-1 rounded bg-info-bg px-1.5 py-0.5 text-meta text-info-fg">
+                                  <span className="inline-flex items-center gap-1 rounded bg-info-subtle px-1.5 py-0.5 text-meta text-info-fg">
                                     <Check className="h-2.5 w-2.5" />
                                     Installed
                                   </span>

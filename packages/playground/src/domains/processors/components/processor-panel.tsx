@@ -212,7 +212,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
                 {result.tripwire?.triggered && <Badge variant="info">Tripwire Triggered</Badge>}
               </div>
               {result.tripwire?.triggered && result.tripwire.reason && (
-                <div className="mt-2 rounded-md border border-warning-border bg-warning-bg p-3">
+                <div className="mt-2 rounded-md border border-warning-edge bg-warning-subtle p-3">
                   <Txt variant="column" className="text-warning-fg">
                     Tripwire Reason
                   </Txt>
