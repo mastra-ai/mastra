@@ -89,7 +89,7 @@ describe('createTraceFilterBarFields', () => {
   });
 
   it('omits fields the query API cannot filter on', () => {
-    expect(byId('requestId')).toBeUndefined();
+    expect(byId('runId')).toBeUndefined();
     expect(byId('serviceName')).toBeUndefined();
     expect(byId('tags')).toBeUndefined();
   });
@@ -189,16 +189,7 @@ describe('createTraceFilterBarFields', () => {
 
   describe('when a field is an identifier', () => {
     it('stays free text with no value list', () => {
-      for (const id of [
-        'traceId',
-        'threadId',
-        'resourceId',
-        'entityId',
-        'runId',
-        'sessionId',
-        'userId',
-        'organizationId',
-      ]) {
+      for (const id of ['traceId', 'threadId', 'resourceId', 'entityId']) {
         expect(byId(id)?.strict, id).toBeUndefined();
         expect(byId(id)?.suggestions, id).toBeUndefined();
       }
@@ -216,14 +207,10 @@ describe('createTraceFilterBarFields', () => {
       'entityName',
       'rootEntityType',
       'status',
-      'organizationId',
       'entityId',
       'resourceId',
-      'runId',
-      'sessionId',
       'threadId',
       'traceId',
-      'userId',
       'spans.model',
       'spans.provider',
       'spans.durationMs',
