@@ -420,7 +420,7 @@ const AgentComposer = ({
           Restoring draft…
         </p>
       )}
-      <ComposerFileDrop disabled={!canExecuteAgent}>
+      <ComposerFileDrop disabled={!canExecuteAgent || draftStatus?.restoring}>
         <Composer
           className="relative"
           onSubmit={event => {
