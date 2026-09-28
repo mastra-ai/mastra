@@ -21,3 +21,5 @@ Ramp steps now stay inside sRGB, so neighbouring steps no longer flatten togethe
 **Breaking:** `SankeyChart` colors nodes and ribbons from the chart series tokens. `buildSankeyHueMap`, `hashHue`, `nodeColor`, and `nodeColorVivid` are replaced by `buildSankeyColorMap` and `sankeySeriesColors`, and `Sankey`'s `getColumnHue` is now `getColumnColor`, which returns a CSS color.
 
 **Breaking:** `@mastra/playground-ui/utils/colors` no longer generates `hsl()` colors. `stringToColor`, `themedHueColor`, and `stringToThemedColor` are replaced by `hueForName` (a stable categorical hue for any name), `hueFillClass`, `hueAccentColor`, and `hueColors`, which resolve to theme-aware badge tokens.
+
+`badge-{hue}-dot` now uses new even-chroma `--{hue}-soft-300` (dark) and `--{hue}-soft-600` (light) steps, so category dots, icons, and labels have the same intensity across hues.
