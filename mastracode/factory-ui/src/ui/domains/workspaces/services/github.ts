@@ -30,7 +30,12 @@ export interface GithubInstallation {
  * feature.
  */
 export type GithubStatusReason =
-  'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready' | 'unavailable';
+  | 'missing_config'
+  | 'auth_required'
+  | 'organization_required'
+  | 'not_connected'
+  | 'ready'
+  | 'unavailable';
 
 /** Non-secret diagnostic snapshot of every GitHub feature gate. */
 export interface GithubFeatureDiagnostics {
