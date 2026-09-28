@@ -3,7 +3,7 @@ import { buttonVariants, isIconButtonSize } from '../Button/Button';
 import type { ButtonSize } from '../Button/Button';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import type { ControlTriggerVisualVariant } from '@/ds/primitives/control-size';
-import { fieldTriggerStyle } from '@/ds/primitives/form-element';
+import { fieldTriggerErrorBorder, fieldTriggerStyle } from '@/ds/primitives/form-element';
 import {
   menuItemCheckClass,
   menuItemClass,
@@ -56,7 +56,7 @@ export function comboboxTriggerClass({
     // Read as "active" while the popup is open, per variant (see map above).
     controlTriggerOpenState[visualVariant],
     'data-[placeholder]:text-muted-foreground',
-    'aria-invalid:border-destructive aria-invalid:hover:border-destructive aria-invalid:focus-visible:border-destructive',
+    fieldTriggerErrorBorder,
     className,
   );
 }

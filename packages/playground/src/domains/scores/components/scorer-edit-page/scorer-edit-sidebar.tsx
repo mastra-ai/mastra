@@ -141,11 +141,11 @@ export function ScorerEditSidebar({
                     <FieldsetLegend className="text-foreground">Default Sampling</FieldsetLegend>
                     <FieldItem>
                       <RadioGroupItem value="none" />
-                      <FieldLabel className="text-foreground">None</FieldLabel>
+                      <FieldLabel>None</FieldLabel>
                     </FieldItem>
                     <FieldItem>
                       <RadioGroupItem value="ratio" />
-                      <FieldLabel className="text-foreground">Ratio</FieldLabel>
+                      <FieldLabel>Ratio</FieldLabel>
                     </FieldItem>
                   </Fieldset>
                 </Field>

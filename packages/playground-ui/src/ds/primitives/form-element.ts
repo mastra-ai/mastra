@@ -58,6 +58,8 @@ export const fieldErrorRim =
   'aria-invalid:[--field-rim:var(--destructive)] aria-invalid:[--field-rim-focus:var(--destructive)]';
 export const fieldErrorRimWithin =
   'has-[[aria-invalid=true]]:[--field-rim:var(--destructive)] has-[[aria-invalid=true]]:[--field-rim-focus:var(--destructive)]';
+export const fieldTriggerErrorBorder =
+  'aria-invalid:border-destructive aria-invalid:hover:border-destructive aria-invalid:focus-visible:border-destructive';
 export const fieldTriggerStyle =
   'bg-field shadow-input ' +
   fieldRimFocus +

@@ -8,7 +8,7 @@ import type { TextButtonSize } from '../Button/Button';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
-import { fieldTriggerStyle } from '@/ds/primitives/form-element';
+import { fieldTriggerErrorBorder, fieldTriggerStyle } from '@/ds/primitives/form-element';
 import { menuItemCheckClass, menuItemClass, menuPopupClass, menuPositionerClass } from '@/ds/primitives/menu-item';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { transitions } from '@/ds/primitives/transitions';
@@ -145,7 +145,7 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
           // Read as "active" while the menu is open, per variant (see map above).
           controlTriggerOpenState[visualVariant],
           'data-[placeholder]:text-muted-foreground',
-          'aria-invalid:border-destructive aria-invalid:focus-visible:border-destructive',
+          fieldTriggerErrorBorder,
           '[&>span]:truncate',
           className,
         )}

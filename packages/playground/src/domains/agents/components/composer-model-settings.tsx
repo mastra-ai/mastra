@@ -38,9 +38,7 @@ const NetworkRadio = ({ hasMemory, hasSubAgents, disabled }: NetworkRadioProps) 
   const radio = (
     <FieldItem>
       <RadioGroupItem value="network" className="text-foreground" disabled={itemDisabled} />
-      <FieldLabel className={cn('text-foreground', !isNetworkAvailable && 'cursor-not-allowed text-muted-foreground!')}>
-        Network
-      </FieldLabel>
+      <FieldLabel className={cn(!isNetworkAvailable && 'cursor-not-allowed text-muted-foreground')}>Network</FieldLabel>
     </FieldItem>
   );
 
@@ -77,7 +75,7 @@ const StreamSubscriptionRadio = ({ supported, disabled }: StreamSubscriptionRadi
   const radio = (
     <FieldItem>
       <RadioGroupItem value="streamSubscription" className="text-foreground" disabled={itemDisabled} />
-      <FieldLabel className={cn('text-foreground', !supported && 'cursor-not-allowed text-muted-foreground!')}>
+      <FieldLabel className={cn(!supported && 'cursor-not-allowed text-muted-foreground')}>
         Stream subscription (default)
       </FieldLabel>
     </FieldItem>
@@ -200,19 +198,19 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                   {!isSupportedModel && (
                     <FieldItem>
                       <RadioGroupItem value="generateLegacy" className="text-foreground" disabled={!canEditSettings} />
-                      <FieldLabel className="text-foreground">Generate (Legacy)</FieldLabel>
+                      <FieldLabel>Generate (Legacy)</FieldLabel>
                     </FieldItem>
                   )}
                   {isSupportedModel && (
                     <FieldItem>
                       <RadioGroupItem value="generate" className="text-foreground" disabled={!canEditSettings} />
-                      <FieldLabel className="text-foreground">Generate</FieldLabel>
+                      <FieldLabel>Generate</FieldLabel>
                     </FieldItem>
                   )}
                   {!isSupportedModel && (
                     <FieldItem>
                       <RadioGroupItem value="streamLegacy" className="text-foreground" disabled={!canEditSettings} />
-                      <FieldLabel className="text-foreground">Stream (Legacy)</FieldLabel>
+                      <FieldLabel>Stream (Legacy)</FieldLabel>
                     </FieldItem>
                   )}
                   {isSupportedModel && (
@@ -221,7 +219,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                   {isSupportedModel && (
                     <FieldItem>
                       <RadioGroupItem value="stream" className="text-foreground" disabled={!canEditSettings} />
-                      <FieldLabel className="text-foreground">Stream</FieldLabel>
+                      <FieldLabel>Stream</FieldLabel>
                     </FieldItem>
                   )}
                   {isSupportedModel && (
