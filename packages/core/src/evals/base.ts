@@ -1032,6 +1032,7 @@ class MastraScorer<
       name: `scorer run: '${this.id}'`,
       entityType: EntityType.SCORER,
       entityId: this.id,
+      entityName: this.name,
       input: {
         input: prepared.input,
         output: prepared.output,
@@ -1264,6 +1265,7 @@ class MastraScorer<
             name: `scorer step: '${scorerStep.name}'`,
             entityType: EntityType.SCORER,
             entityId: this.config.id ?? this.config.name,
+            entityName: this.name,
             input: context,
             attributes: {
               step: scorerStep.name,

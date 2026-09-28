@@ -1676,6 +1676,47 @@ describe('createScorer', () => {
       });
     });
 
+    it('names the scorer-run span after the scorer like agent and workflow spans', async () => {
+      const captured: { options?: any } = {};
+      const mockMastra = createMockMastra({
+        startSpan: (options: any) => {
+          captured.options = options;
+          return createMockSpan('named-trace', SpanType.SCORER_RUN);
+        },
+      });
+      const scorer = createScorer({
+        id: 'chef-scorer',
+        name: 'Chef Scorer',
+        description: 'Named scorer',
+      }).generateScore(() => 1);
+      scorer.__registerMastra(mockMastra as any);
+
+      await scorer.run(testData.scoringInput);
+
+      expect(captured.options).toMatchObject({
+        type: SpanType.SCORER_RUN,
+        entityType: 'scorer',
+        entityId: 'chef-scorer',
+        entityName: 'Chef Scorer',
+      });
+    });
+
+    it('falls back to the scorer id as the span entityName when no name is set', async () => {
+      const captured: { options?: any } = {};
+      const mockMastra = createMockMastra({
+        startSpan: (options: any) => {
+          captured.options = options;
+          return createMockSpan('unnamed-trace', SpanType.SCORER_RUN);
+        },
+      });
+      const scorer = createScorer({ id: 'plain-scorer', description: 'Unnamed scorer' }).generateScore(() => 1);
+      scorer.__registerMastra(mockMastra as any);
+
+      await scorer.run(testData.scoringInput);
+
+      expect(captured.options).toMatchObject({ entityId: 'plain-scorer', entityName: 'plain-scorer' });
+    });
+
     describe('requestContext persistence on the scorer-run input', () => {
       function captureScorerRun() {
         const captured: { input?: any } = {};
