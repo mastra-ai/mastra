@@ -2,8 +2,10 @@ import { ErrorBoundary } from '@mastra/playground-ui/components/ErrorBoundary';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { WorkflowInformation } from '@mastra/playground-ui/domains/workflows/components/workflow-information';
 import { WorkflowLayout as WorkflowLayoutUI } from '@mastra/playground-ui/domains/workflows/components/workflow-layout';
+import { PlaygroundWorkflowRunProvider } from '@mastra/playground-ui/domains/workflows/context/playground-workflow-run-provider';
 import { WorkflowSelectedStepProvider } from '@mastra/playground-ui/domains/workflows/context/workflow-selected-step-context';
 import { WorkflowStepDetailProvider } from '@mastra/playground-ui/domains/workflows/context/workflow-step-detail-provider';
 import { useWorkflow } from '@mastra/playground-ui/domains/workflows/hooks/use-workflow';
@@ -16,10 +18,8 @@ import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
 import { navCrumb, workflowCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
-import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 import { WorkflowRunActions } from '@/domains/run-options/components/workflow-run-actions';
 import { WorkflowPageTabs, type WorkflowPageTab } from '@/domains/workflows/components/workflow-page-tabs';
-import { PlaygroundWorkflowRunProvider } from '@/domains/workflows/playground-workflow-run-provider';
 
 export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflowId, runId } = useParams();

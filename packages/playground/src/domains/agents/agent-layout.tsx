@@ -1,6 +1,8 @@
 import { coreFeatures } from '@mastra/core/features';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
 import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { KeyboardScope } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { useParams, useLocation, useNavigate } from 'react-router';
@@ -10,13 +12,11 @@ import { AgentOverviewPanel } from '@/domains/agents/components/agent-overview-p
 import { AgentPageTabs } from '@/domains/agents/components/agent-page-tabs';
 import type { AgentPageTab } from '@/domains/agents/components/agent-page-tabs';
 import { OverviewPanelShortcuts } from '@/domains/agents/components/overview-panel-shortcuts';
-import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { PlaygroundModelProvider } from '@/domains/agents/context/playground-model-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
 import { agentCrumb, navCrumb } from '@/domains/navigation/crumbs';
-import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 import { RouteSidePanel } from '@/lib/route-side-panel';
 
 const crumbs = [navCrumb('/agents'), agentCrumb];

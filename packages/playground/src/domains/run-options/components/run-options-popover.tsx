@@ -1,10 +1,10 @@
+import type { TracingOptionsEntityType } from '@mastra/playground-ui/domains/run-options/hooks/use-entity-tracing-options';
+import { useEntityTracingOptions } from '@mastra/playground-ui/domains/run-options/hooks/use-entity-tracing-options';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
-import type { TracingOptionsEntityType } from '../hooks/use-entity-tracing-options';
-import { useEntityTracingOptions } from '../hooks/use-entity-tracing-options';
 import { JsonObjectEditor } from './json-object-editor';
 import { RunActionPopover } from './run-action-popover';
 

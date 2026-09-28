@@ -1,4 +1,5 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useEffect } from 'react';
@@ -7,7 +8,6 @@ import { z } from 'zod';
 import { useAgent } from '../hooks/use-agent';
 import { useExecuteAgentTool } from '../hooks/use-execute-agent-tool';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 import ToolExecutor from '@/domains/tools/components/ToolExecutor';
 
 export interface AgentToolPanelProps {

@@ -1,3 +1,5 @@
+import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
+import { BrowserToolCallsProvider } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -14,8 +16,6 @@ import {
   traceASpans,
   traceBSpans,
 } from './fixtures/thread-traces';
-import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
-import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
 import { emptyMcpServers } from '@/lib/ai-ui/__tests__/fixtures/agent';
 import { emptyTraceSpanScores } from '@/pages/traces/__tests__/fixtures/traces';
 import { TestLinkProvider } from '@/test/link-provider';

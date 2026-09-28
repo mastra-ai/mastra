@@ -5,6 +5,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -25,7 +26,6 @@ import { useMemoryTimeline, useObservationalMemoryContext } from '@/domains/agen
 
 import { useMemoryConfig, useThread } from '@/domains/memory/hooks';
 import { useMemory } from '@/domains/memory/hooks/use-memory';
-import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 
 export interface MemorySidebarProps {
   agentId: string;

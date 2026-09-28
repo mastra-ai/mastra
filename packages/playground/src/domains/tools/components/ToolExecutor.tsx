@@ -1,12 +1,12 @@
 import type { MCPToolType } from '@mastra/core/mcp';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import type { RequestContextEntityType } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { DynamicForm } from '@mastra/playground-ui/lib/form/dynamic-form';
 import { isEmptyZodObject } from '@mastra/playground-ui/lib/form/is-empty-zod-object';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ZodType } from 'zod';
-import type { RequestContextEntityType } from '@/domains/request-context/hooks/use-entity-request-context';
-import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 import { RequestContextPopover } from '@/domains/run-options/components/request-context-popover';
 import { ToolInformation } from '@/domains/tools/components/ToolInformation';
 

@@ -1,6 +1,6 @@
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { getRecentMessagesSettings } from './lib/recent-messages';
 import { useMemoryConfig } from '@/domains/memory/hooks';
-import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 
 export interface MemoryFeatureFlags {
   recentMessages: ReturnType<typeof getRecentMessagesSettings>;

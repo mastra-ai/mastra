@@ -60,7 +60,6 @@
     "@mastra/playground-ui": "workspace:^",
     "@mastra/react": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
-    "@mcp-ui/client": "^7.1.0",
     "@posthog/react": "^1.10.3",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
@@ -98,7 +97,6 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@mastra/memory": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.29.0",
     "@playwright/test": "^1.61.1",
     "@stryker-mutator/core": "catalog:",
     "@stryker-mutator/vitest-runner": "catalog:",

@@ -15,9 +15,20 @@ import type {
   TasksContextValue,
 } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
+import {
+  buildGlobalOmPartsByCycleId,
+  convertOmPartsInMastraMessage,
+  hasInProgressBufferingMarkers,
+  injectBufferingEnds,
+  markOmMarkersAsDisconnected,
+  scanOmInitialState,
+} from '@mastra/playground-ui/domains/chat/om/om-parts-converter';
+import type { OmTerminalExtractionCache } from '@mastra/playground-ui/domains/chat/om/om-parts-converter';
 import { memoryStatusQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-status';
 import { memoryThreadMessagesQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
 import { observationalMemoryQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { useEntityTracingOptions } from '@mastra/playground-ui/domains/run-options/hooks/use-entity-tracing-options';
 import { useChat, useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
@@ -27,18 +38,7 @@ import { useObservationalMemoryContext } from '@/domains/agents/context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { usePlaygroundModelOptional } from '@/domains/agents/context/playground-model-context';
 import { useMemoryConfig } from '@/domains/memory/hooks';
-import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
-import { useEntityTracingOptions } from '@/domains/run-options/hooks/use-entity-tracing-options';
 import { getCanSendWhileStreaming } from '@/services/mastra-runtime-state';
-import {
-  buildGlobalOmPartsByCycleId,
-  convertOmPartsInMastraMessage,
-  hasInProgressBufferingMarkers,
-  injectBufferingEnds,
-  markOmMarkersAsDisconnected,
-  scanOmInitialState,
-} from '@/services/om-parts-converter';
-import type { OmTerminalExtractionCache } from '@/services/om-parts-converter';
 import type { ChatProps } from '@/types';
 
 /**
