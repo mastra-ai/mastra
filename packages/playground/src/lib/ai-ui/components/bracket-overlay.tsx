@@ -238,9 +238,9 @@ function getStateColor(state: HighlightPosition['state']): string {
       return 'color-mix(in oklab, var(--warning-indicator) 40%, transparent)';
     // Buffering states use a neutral bracket so they don't overpower the message content.
     case 'buffering':
-      return 'rgba(156, 163, 175, 0.45)';
+      return 'color-mix(in oklab, var(--muted-foreground) 45%, transparent)';
     case 'buffering-complete':
-      return 'rgba(156, 163, 175, 0.45)';
+      return 'color-mix(in oklab, var(--muted-foreground) 45%, transparent)';
     case 'buffering-failed':
       return 'color-mix(in oklab, var(--destructive-indicator) 40%, transparent)';
     // Activation state uses green — same as sync observation/reflection 'complete'

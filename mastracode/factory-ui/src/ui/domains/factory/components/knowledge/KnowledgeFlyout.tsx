@@ -236,7 +236,7 @@ export function KnowledgeFlyout({
   return (
     <aside
       data-testid="knowledge-flyout"
-      className="border-border bg-background/95 absolute inset-y-0 right-0 z-20 flex w-[380px] flex-col overflow-hidden rounded-l-xl border-l shadow-[var(--elevation-overlay)] backdrop-blur transition-transform duration-300"
+      className="border-border bg-background/95 absolute inset-y-0 right-0 z-20 flex w-[380px] flex-col overflow-hidden rounded-l-xl border-l shadow-overlay backdrop-blur transition-transform duration-300"
       aria-label="Knowledge node details"
     >
       {nodeQuery.isPending ? (

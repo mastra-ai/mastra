@@ -161,10 +161,7 @@ function AreaRow({ label, data, dataKey, color, gradientId, domain, zoomDomain, 
             </defs>
             <XAxis dataKey="t" type="number" domain={zoomDomain} allowDataOverflow hide />
             <YAxis type="number" domain={yMax != null ? [0, yMax] : undefined} hide />
-            <Tooltip
-              content={<FlameTooltip domain={domain} showValue />}
-              cursor={{ stroke: 'rgba(255,255,255,0.08)' }}
-            />
+            <Tooltip content={<FlameTooltip domain={domain} showValue />} cursor={{ stroke: 'var(--border)' }} />
             <Area
               type="linear"
               dataKey={dataKey}
@@ -289,7 +286,7 @@ function CombinedRow({
               strokeOpacity={0.6}
               fill={`url(#${gradientId})`}
               isAnimationActive={false}
-              activeDot={{ r: 5, stroke: color, strokeWidth: 2, fill: '#0a0a0a' }}
+              activeDot={{ r: 5, stroke: color, strokeWidth: 2, fill: 'var(--background)' }}
               dot={(props: Record<string, unknown>) =>
                 isEventPoint(props.payload) ? (
                   <circle cx={props.cx as number} cy={props.cy as number} r={4} fill={color} />

@@ -70,7 +70,7 @@ function buildDiffDarkTheme(): Extension {
       fontSize: 'var(--text-body-sm)',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
-      gutterForeground: '#939393',
+      gutterForeground: 'var(--muted-foreground)',
       background: 'transparent',
     },
     styles: [{ tag: [t.className, t.propertyName] }],
