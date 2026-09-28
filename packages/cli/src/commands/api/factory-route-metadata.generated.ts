@@ -480,6 +480,7 @@ export const FACTORY_API_ROUTE_METADATA = {
       "board",
       "cause",
       "expectedRevision",
+      "preapprovePlans",
       "reenter",
       "requestId",
       "stage"
@@ -2236,7 +2237,11 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 256
         },
-        "reenter": {}
+        "reenter": {},
+        "preapprovePlans": {
+          "type": "boolean",
+          "const": true
+        }
       },
       "required": [
         "board",

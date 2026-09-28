@@ -61,6 +61,8 @@ export interface FactoryTransitionRequest {
   reenter?: boolean;
   /** Structured verdict required from a bound triage-agent terminal request. */
   triageType?: FactoryTriageType;
+  /** Human gesture that approves parked plans for this autonomous run. */
+  preapprovePlans?: true;
 }
 
 export interface FactoryTransitionServiceOptions {
@@ -159,6 +161,7 @@ interface TransitionConsentOptions {
   consentedBy?: string;
   accept?: boolean;
   triageType?: FactoryTriageType;
+  plansPreapproval?: 'grant' | 'clear';
 }
 
 // Entering a resting lane disarms whoever rests it; only a person's move into a working lane arms.
@@ -372,6 +375,9 @@ export class FactoryTransitionService {
         `Board "${request.board}" is not installed.`,
       );
     }
+    if (request.preapprovePlans && !isHumanTransition(request)) {
+      return this.#commitRejection(request, transitionId, 'forbidden', 'Only a person can start a hands-off run.');
+    }
     const fromStage = item.stages.length === 1 ? item.stages[0] : undefined;
     if (!fromStage || !Object.prototype.hasOwnProperty.call(board.phases, fromStage)) {
       return this.#commitRejection(
@@ -400,6 +406,11 @@ export class FactoryTransitionService {
 
     // The coordinator's own self-move at run start would otherwise inject a second run's kickoff.
     const humanMove = request.actor.type === 'human' && fromStage !== request.stage && request.cause !== 'run_start';
+    const plansPreapproval: TransitionConsentOptions['plansPreapproval'] = request.preapprovePlans
+      ? 'grant'
+      : isHumanTransition(request) || board.isTerminal(request.stage) || request.stage === board.initialPhase
+        ? 'clear'
+        : undefined;
     // The board, not the phase name, says whether a seat is engaged on either side of this move.
     const entersWorking = board.isWorking(request.stage);
     const seatRole = board.roleForPhase(request.stage);
@@ -549,7 +560,7 @@ export class FactoryTransitionService {
       transitionId,
       evaluation,
       evaluation.outcome === 'accepted'
-        ? { ...consentEffect(request, entersWorking, humanMove), ...evaluation.intents }
+        ? { ...consentEffect(request, entersWorking, humanMove), plansPreapproval, ...evaluation.intents }
         : {},
     );
   }
@@ -578,6 +589,7 @@ export class FactoryTransitionService {
     const committed = await this.#storage.commitTransition({
       autonomy: options.autonomy,
       consentedBy: options.consentedBy,
+      plansPreapproval: options.plansPreapproval,
       ...(options.accept ? { accept: true } : {}),
       orgId: request.orgId,
       factoryProjectId: request.factoryProjectId,

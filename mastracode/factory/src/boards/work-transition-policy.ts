@@ -17,13 +17,11 @@ export const workTransitionPolicy: BoardTransitionPolicy = context => {
       reason: 'The persisted triage classification cannot be changed by a later transition.',
     };
   }
-  // The stock planning handoff has a plan agent drive planning -> execute directly,
-  // which queues the build. With plans not auto-approved (no per-item preapproval and
-  // the project's Auto-approve plans off), that agent move must not stand in for the
-  // human review: the item rests in Planning with the produced plan as the handoff
-  // until a maintainer moves it into Building from the Factory UI.
-  const planAgent = actor.type === 'agent' && actor.role === 'plan';
-  if (planAgent && fromStage === 'planning' && toStage === 'execute' && !plansAutoApproved) {
+  // Any agent can inherit a session that is currently parked in Planning. With plans
+  // not auto-approved (no run-scoped preapproval and the project's switch off), an
+  // agent move must not stand in for human review: the item rests in Planning until a
+  // maintainer moves it into Building from the Factory UI.
+  if (actor.type === 'agent' && fromStage === 'planning' && toStage === 'execute' && !plansAutoApproved) {
     return {
       type: 'reject',
       code: 'approval_required',

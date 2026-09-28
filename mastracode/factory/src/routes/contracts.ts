@@ -138,6 +138,7 @@ export const transitionBodySchema = z
     requestId: trimmedUuidSchema,
     cause: nonEmptyTrimmed(256),
     reenter: z.unknown().optional(),
+    preapprovePlans: z.literal(true).optional(),
   })
   .transform(input => ({
     board: input.board,
@@ -146,6 +147,7 @@ export const transitionBodySchema = z
     ingress: { type: 'human' as const, identity: input.requestId },
     cause: input.cause,
     ...(input.reenter === true ? { reenter: true } : {}),
+    ...(input.preapprovePlans ? { preapprovePlans: true as const } : {}),
   }));
 
 export const startWorkItemBodySchema = z.object({

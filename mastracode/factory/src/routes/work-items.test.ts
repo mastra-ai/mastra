@@ -749,6 +749,16 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
     expect((await listItems())[0]?.stages).toEqual(['canceled']);
   });
 
+  it('persists a hands-off grant atomically with the transition', async () => {
+    const item = await createItem();
+
+    const res = await transition(item, { stage: 'planning', preapprovePlans: true });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).result).toMatchObject({ status: 'accepted', stage: 'planning' });
+    expect((await listItems())[0]?.plansPreapprovedAt).toBeInstanceOf(Date);
+  });
+
   it('returns typed stale without overwriting the winner', async () => {
     const item = await createItem();
     expect((await transition(item)).status).toBe(200);

@@ -60,6 +60,8 @@ export interface WorkItem {
   triageType: FactoryTriageType | null;
   /** When a person first moved the card into Planning/Build, which is the approval agents then honor. */
   acceptedAt: string | null;
+  /** This card's current autonomous run may approve parked plans without another human gesture. */
+  plansPreapprovedAt?: string | null;
   commentCount: number;
   /** Bumped server-side on every feed mutation; clients refetch comments when it moves. */
   feedActivityAt: string | null;
@@ -206,7 +208,7 @@ export interface UpdateWorkItemInput {
   title?: string;
   sessions?: Record<string, WorkItemSessionInput>;
   metadata?: Record<string, unknown>;
-  /** Hands-off: every plan this card parks is approved from here on. Stamped once. */
+  /** Legacy metadata patch for granting hands-off approval until the next human or resting transition. */
   plansPreapproved?: true;
 }
 
@@ -265,6 +267,8 @@ export async function transitionWorkItem(
     cause: string;
     /** Re-enter the lane the card is already in, so its rule runs again. */
     reenter?: boolean;
+    /** Approve parked plans for the autonomous run started by this transition. */
+    preapprovePlans?: true;
   },
 ): Promise<FactoryTransitionResult> {
   const res = await fetch(

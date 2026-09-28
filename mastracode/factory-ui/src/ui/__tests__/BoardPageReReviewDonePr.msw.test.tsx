@@ -160,7 +160,7 @@ describe('Re-review action for open PRs in Done', () => {
     ]);
   });
 
-  it('re-reviews hands-off, stamping the card before the move that queues the run', async () => {
+  it('re-reviews hands-off with the grant carried on the transition', async () => {
     const { transitions, patches } = stubReviewBoard();
     const user = userEvent.setup();
     const { client } = renderReviewBoard();
@@ -169,9 +169,15 @@ describe('Re-review action for open PRs in Done', () => {
     await user.click(await screen.findByRole('menuitem', { name: 'Re-review hands-off' }));
 
     await waitForMutationsIdle(client);
-    expect(patches).toEqual([{ plansPreapproved: true }]);
+    expect(patches).toEqual([]);
     expect(transitions).toEqual([
-      expect.objectContaining({ board: 'review', stage: 'review', cause: 'card_action', expectedRevision: 4 }),
+      expect.objectContaining({
+        board: 'review',
+        stage: 'review',
+        cause: 'card_action',
+        expectedRevision: 1,
+        preapprovePlans: true,
+      }),
     ]);
   });
 

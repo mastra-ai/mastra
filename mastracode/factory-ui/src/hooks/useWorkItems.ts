@@ -146,6 +146,7 @@ type TransitionWorkItemVariables = {
   stage: string;
   cause?: string;
   reenter?: boolean;
+  preapprovePlans?: true;
 };
 
 function optimisticStageHistory(
@@ -178,7 +179,7 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
   const mutationKey = ['factory', 'transition-work-item', factoryProjectId] as const;
   const mutation = useMutation({
     mutationKey,
-    mutationFn: ({ item, board, stage, cause = 'board_drag', reenter }: TransitionWorkItemVariables) =>
+    mutationFn: ({ item, board, stage, cause = 'board_drag', reenter, preapprovePlans }: TransitionWorkItemVariables) =>
       transitionWorkItem(baseUrl, requireFactoryProjectId(factoryProjectId), item.id, {
         board,
         stage,
@@ -186,6 +187,7 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
         requestId: crypto.randomUUID(),
         cause,
         ...(reenter ? { reenter } : {}),
+        ...(preapprovePlans ? { preapprovePlans } : {}),
       }),
     onMutate: async ({ item, stage, reenter = false }) => {
       await queryClient.cancelQueries({ queryKey: listKey });
