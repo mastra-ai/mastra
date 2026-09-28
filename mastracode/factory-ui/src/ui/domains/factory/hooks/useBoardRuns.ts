@@ -93,7 +93,7 @@ export function useBoardRuns({
       const hasLinkedTarget = targetSlug ? repositories.some(repository => repository.slug === targetSlug) : false;
       if (!targetSlug && repositories.length > 1) {
         setRepositorySelection({ item: refreshed, ...spec });
-        return;
+        return 'repository-selection-required' as const;
       }
       if (targetSlug && !hasLinkedTarget) {
         toast.error(`Repository ${targetSlug} is not linked to this Factory`);

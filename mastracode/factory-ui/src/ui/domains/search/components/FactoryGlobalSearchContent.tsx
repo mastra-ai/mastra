@@ -96,7 +96,10 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
         <RepositoryPickerDialog
           repositories={runs.repositories}
           onClose={runs.closeRepositorySelection}
-          onSelect={runs.selectRepository}
+          onSelect={async repository => {
+            await runs.selectRepository(repository);
+            closeSearch();
+          }}
         />
       )}
       <CommandPaletteBody>
@@ -116,9 +119,9 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
             <GlobalSearchWorkItemResults
               results={unstartedItems}
               onSelect={result => {
-                closeSearch();
                 const target = result.target;
                 if (target.kind === 'candidate') {
+                  closeSearch();
                   const [move] = cardMoves(target.candidate, target.candidate.column);
                   const board =
                     target.candidate.source === 'github-pr' || target.candidate.source === 'gitlab-pr'
@@ -129,12 +132,16 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
                 }
                 const [move] = cardMoves(target.item, 'intake');
                 if (move) {
+                  closeSearch();
                   const board = target.item.board === 'review' ? reviewBoard : workBoard;
                   board.move(target.item.id, move.stage);
                   return;
                 }
                 void runs
                   .openOrCreateSession(target.item)
+                  .then(result => {
+                    if (result !== 'repository-selection-required') closeSearch();
+                  })
                   .catch(error =>
                     toast.error(error instanceof Error ? error.message : 'The session could not be started.'),
                   );
