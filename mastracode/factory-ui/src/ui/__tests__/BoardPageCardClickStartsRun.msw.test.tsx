@@ -374,6 +374,7 @@ describe('Board card buttons move the card', () => {
           assignee: null,
           team: 'Engineering',
           sourceId: 'linear-project-1',
+          projectId: 'linear-project-1',
           labels: [],
           createdAt: '2026-07-01T00:00:00Z',
           updatedAt: '2026-07-02T00:00:00Z',
