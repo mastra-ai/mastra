@@ -41,6 +41,8 @@ function createSettings() {
     preferences: { thinkingLevel: 'off', quietMode: false, quietModeMaxToolPreviewLines: 2, webSearchProvider: 'auto' },
     storage: { backend: 'libsql', libsql: {}, pg: {} },
     signals: { experimentalGithubSignals: false, experimentalCrossAgentSignals: false },
+    experimentalAgent: null,
+    backgroundTools: { enabled: false },
   };
 }
 
@@ -117,6 +119,16 @@ describe('/settings quiet mode callbacks', () => {
     expect(restored).toContain('high · ci-status · delivered');
     expect(restored).toContain('line four');
     expect(stripAnsi(summary.render(80).join('\n'))).toContain('notification_inbox');
+  });
+
+  it('persists the experimental agent selection', () => {
+    const { ctx } = createCtx();
+    void handleSettingsCommand(ctx);
+
+    mocks.callbacks.onExperimentalAgentChange('evented');
+
+    expect(mocks.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ experimentalAgent: 'evented' }));
+    expect(ctx.showInfo).toHaveBeenCalledWith('Experimental agent: evented (restart required)');
   });
 
   it('applies the preview line limit to rendered notifications', async () => {

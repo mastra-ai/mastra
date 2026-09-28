@@ -107,6 +107,7 @@ function createConfig(overrides: Partial<SettingsConfig> = {}): SettingsConfig {
     libsqlUrl: '',
     experimentalGithubSignals: false,
     experimentalCrossAgentSignals: false,
+    experimentalAgent: null,
     backgroundToolsEnabled: false,
     webSearchProvider: 'auto',
     tavilyKeyAvailable: false,
@@ -126,6 +127,7 @@ function createCallbacks(overrides: Partial<SettingsCallbacks> = {}): SettingsCa
     onStorageBackendChange: vi.fn(),
     onExperimentalGithubSignalsChange: vi.fn(),
     onExperimentalCrossAgentSignalsChange: vi.fn(),
+    onExperimentalAgentChange: vi.fn(),
     onBackgroundToolsChange: vi.fn(),
     onWebSearchProviderChange: vi.fn(),
     onClose: vi.fn(),
@@ -199,6 +201,44 @@ describe('SettingsComponent storage backend submenu', () => {
     expect(callbacks.onStorageBackendChange).not.toHaveBeenCalled();
     expect(config.storageBackend).toBe('libsql');
     expect(config.pgConnectionString).toBe('');
+    expect(done).toHaveBeenCalledWith();
+  });
+});
+
+describe('SettingsComponent experimental agent submenu', () => {
+  it.each([
+    [null, 'Off', 0, 'durable', 'Durable'],
+    ['durable', 'Durable', 1, 'evented', 'Evented'],
+    ['evented', 'Evented', 2, 'off', 'Off'],
+  ] as const)(
+    'displays and changes the saved setting from %s',
+    async (agent, label, selectedIndex, next, nextLabel) => {
+      const config = createConfig({ experimentalAgent: agent });
+      const callbacks = createCallbacks();
+      new SettingsComponent(config, callbacks);
+      const item = mocks.lastSettingsList.items.find((setting: { id: string }) => setting.id === 'experimentalAgent');
+      expect(item.label).toBe('Experimental agent');
+      expect(item.currentValue).toBe(label);
+      expect(item.description).toContain('restart required');
+      const done = vi.fn();
+      item.submenu('', done);
+      const select = mocks.selectLists.at(-1);
+      expect(select.selectedIndex).toBe(selectedIndex);
+      await select.onSelect({ value: next });
+      expect(callbacks.onExperimentalAgentChange).toHaveBeenCalledWith(next === 'off' ? null : next);
+      expect(config.experimentalAgent).toBe(next === 'off' ? null : next);
+      expect(done).toHaveBeenCalledWith(nextLabel);
+    },
+  );
+
+  it('does not change the setting when the submenu is cancelled', () => {
+    const callbacks = createCallbacks();
+    new SettingsComponent(createConfig(), callbacks);
+    const item = mocks.lastSettingsList.items.find((setting: { id: string }) => setting.id === 'experimentalAgent');
+    const done = vi.fn();
+    item.submenu('', done);
+    mocks.selectLists.at(-1).onCancel();
+    expect(callbacks.onExperimentalAgentChange).not.toHaveBeenCalled();
     expect(done).toHaveBeenCalledWith();
   });
 });

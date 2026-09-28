@@ -87,6 +87,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
     },
     shellPassthrough: { mode: 'default' },
     voice: { enabled: false, engine: 'cloud', provider: 'openai', model: 'whisper-1' },
+    experimentalAgent: null,
     backgroundTools: { enabled: false },
     signals: {
       unixSocketPubSub: false,
@@ -1462,6 +1463,34 @@ describe('createBrowserFromSettings — recording tools gating', () => {
     for (const name of RECORDING_TOOL_NAMES) {
       expect(tools[name], `expected tool ${name} to be absent on direct AgentBrowser`).toBeUndefined();
     }
+  });
+});
+
+describe('experimental agent settings', () => {
+  it.each([
+    [{}, null],
+    [{ experimentalAgent: null }, null],
+    [{ experimentalAgent: 'durable' }, 'durable'],
+    [{ experimentalAgent: 'evented' }, 'evented'],
+  ] as const)('loads %j as %s', (raw, expected) => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify(raw), 'utf-8');
+      expect(loadSettings(filePath).experimentalAgent).toBe(expected);
+    });
+  });
+
+  it('round-trips the persisted selection', () => {
+    withTempSettingsFile(filePath => {
+      saveSettings(createSettings({ experimentalAgent: 'evented' }), filePath);
+      expect(loadSettings(filePath).experimentalAgent).toBe('evented');
+    });
+  });
+
+  it('rejects invalid persisted values instead of silently disabling the experiment', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ experimentalAgent: 'default' }), 'utf-8');
+      expect(() => loadSettings(filePath)).toThrow('Invalid experimentalAgent setting "default"');
+    });
   });
 });
 
