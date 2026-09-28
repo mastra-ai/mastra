@@ -192,7 +192,10 @@ function WorkspaceSearchResultItem({ result, rank, onClick }: WorkspaceSearchRes
             </Txt>
             <div className="flex shrink-0 items-center gap-1.5">
               <div className="h-1 w-12 overflow-hidden rounded-full bg-background">
-                <div className="h-full rounded-full bg-green-400" style={{ width: `${scorePercent}%` }} />
+                <div
+                  className="h-full rounded-full bg-green-600 dark:bg-green-400"
+                  style={{ width: `${scorePercent}%` }}
+                />
               </div>
               <span className="text-meta text-muted-foreground tabular-nums">{result.score.toFixed(2)}</span>
             </div>

@@ -22,12 +22,12 @@ import { IntakeIcon } from './IntakeIcon';
 // GitHub keeps issue vs PR distinct — card meta shows #N for both
 const SOURCE_ICONS: Record<WorkItemSource, { icon: ComponentType<SVGProps<SVGSVGElement>>; className: string }> = {
   'github-issue': { icon: GithubIcon, className: 'text-foreground' },
-  'github-pr': { icon: GitPullRequest, className: 'text-green-400' },
-  'gitlab-issue': { icon: GitLabIcon, className: 'text-red-400' },
-  'gitlab-pr': { icon: GitLabIcon, className: 'text-red-400' },
-  'linear-issue': { icon: LinearIcon, className: 'text-blue-400' },
-  'jira-issue': { icon: JiraIcon, className: 'text-blue-400' },
-  'incidentio-follow-up': { icon: IncidentIoIcon, className: 'text-red-400' },
+  'github-pr': { icon: GitPullRequest, className: 'text-green-700 dark:text-green-400' },
+  'gitlab-issue': { icon: GitLabIcon, className: 'text-red-700 dark:text-red-400' },
+  'gitlab-pr': { icon: GitLabIcon, className: 'text-red-700 dark:text-red-400' },
+  'linear-issue': { icon: LinearIcon, className: 'text-blue-700 dark:text-blue-400' },
+  'jira-issue': { icon: JiraIcon, className: 'text-blue-700 dark:text-blue-400' },
+  'incidentio-follow-up': { icon: IncidentIoIcon, className: 'text-red-700 dark:text-red-400' },
   'slack-thread': { icon: SlackIcon, className: '' },
   manual: { icon: CircleDot, className: 'text-muted-foreground' },
 };

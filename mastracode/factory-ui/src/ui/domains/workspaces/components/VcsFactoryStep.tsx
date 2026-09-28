@@ -319,7 +319,7 @@ function RepositoryRows({
               </span>
             </span>
             {isConnecting ? (
-              <Spinner size="sm" aria-label={`Connecting ${repo.fullName}`} className="shrink-0 text-green-400" />
+              <Spinner size="sm" aria-label={`Connecting ${repo.fullName}`} className="shrink-0 text-green-700 dark:text-green-400" />
             ) : (
               <span className="text-meta text-placeholder opacity-0 transition-opacity group-hover:opacity-100">
                 Select

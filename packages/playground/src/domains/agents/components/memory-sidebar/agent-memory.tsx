@@ -181,7 +181,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
                 target="_blank"
                 rel="noopener noreferrer"
                 className={cn(
-                  'inline-flex items-center gap-2 text-body text-blue-400 hover:text-blue-300',
+                  'inline-flex items-center gap-2 text-body text-blue-700 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300',
                   controlStateColorTransition,
                 )}
               >

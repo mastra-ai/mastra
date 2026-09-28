@@ -17,3 +17,5 @@ Status roles are `{status}-subtle`, `{status}-edge`, `{status}-fg`, and `{status
 **Breaking:** `Badge` `emphasis` values are now `strong` and `subtle` instead of `default` and `muted`. `strong` is the default when `emphasis` is omitted. Replace `emphasis="muted"` with `emphasis="subtle"` and `emphasis="default"` with `emphasis="strong"` (or drop it). `subtle` badges use a quieter tinted fill.
 
 Ramp steps now stay inside sRGB, so neighbouring steps no longer flatten together on sRGB screens. Chart, span, and syntax roles point at steps chosen to stay distinguishable under common colour-vision deficiencies and to meet 3:1 against the page in both themes; the sequential chart scale runs light-to-dark in light mode and dark-to-light in dark mode. `scorer` spans are now pink. Status indicators use `400` in dark mode, and light `success-indicator` uses `green-700`.
+
+**Breaking:** `SankeyChart` colors nodes and ribbons from the chart series tokens. `buildSankeyHueMap`, `hashHue`, `nodeColor`, and `nodeColorVivid` are replaced by `buildSankeyColorMap` and `sankeySeriesColors`, and `Sankey`'s `getColumnHue` is now `getColumnColor`, which returns a CSS color.

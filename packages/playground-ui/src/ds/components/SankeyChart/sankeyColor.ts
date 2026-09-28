@@ -1,10 +1,15 @@
-const MIN_HUE_DISTANCE = 26;
+export const sankeySeriesColors: readonly string[] = [
+  'var(--chart-blue)',
+  'var(--chart-orange)',
+  'var(--chart-green)',
+  'var(--chart-purple)',
+  'var(--chart-pink)',
+  'var(--chart-red)',
+  'var(--chart-yellow)',
+  'var(--chart-blue-deep)',
+];
 
-function normalizeHue(hue: number) {
-  return ((hue % 360) + 360) % 360;
-}
-
-export function hashHue(value: string) {
+export function hashLabel(value: string) {
   let hash = 2166136261;
 
   for (let index = 0; index < value.length; index += 1) {
@@ -12,49 +17,16 @@ export function hashHue(value: string) {
     hash = Math.imul(hash, 16777619);
   }
 
-  return normalizeHue(hash);
+  return hash >>> 0;
 }
 
-function supportsOklch() {
-  return typeof CSS !== 'undefined' && CSS.supports?.('color', 'oklch(62% 0.14 180)') === true;
-}
-
-export function nodeColor(hue: number) {
-  const normalizedHue = normalizeHue(hue);
-  return supportsOklch() ? `oklch(68% 0.13 ${normalizedHue})` : `hsl(${normalizedHue} 42% 62%)`;
-}
-
-export function nodeColorVivid(hue: number) {
-  const normalizedHue = normalizeHue(hue);
-  return supportsOklch() ? `oklch(74% 0.18 ${normalizedHue})` : `hsl(${normalizedHue} 55% 68%)`;
-}
-
-export function buildSankeyHueMap(names: string[]) {
-  // Not pre-sorted: the relaxation loop below re-sorts on every iteration.
-  const entries = [...new Set(names)].map(name => ({ name, hue: hashHue(name) }));
-
-  for (let pass = 0; pass < 3; pass += 1) {
-    for (let iteration = 0; iteration < entries.length * 8; iteration += 1) {
-      entries.sort((left, right) => left.hue - right.hue || left.name.localeCompare(right.name));
-      let adjusted = false;
-
-      for (let index = 0; index < entries.length; index += 1) {
-        const current = entries[index];
-        const next = entries[(index + 1) % entries.length];
-        if (!current || !next) continue;
-
-        const distance = normalizeHue(next.hue - current.hue);
-        if (distance >= MIN_HUE_DISTANCE - Number.EPSILON) continue;
-
-        const adjustment = (MIN_HUE_DISTANCE - distance) / 2;
-        current.hue = normalizeHue(current.hue - adjustment);
-        next.hue = normalizeHue(next.hue + adjustment);
-        adjusted = true;
-      }
-
-      if (!adjusted) break;
-    }
-  }
-
-  return Object.fromEntries(entries.map(({ name, hue }) => [name, normalizeHue(hue)]));
+export function buildSankeyColorMap(names: string[]) {
+  const ordered = [...new Set(names)].sort(
+    (left, right) => hashLabel(left) - hashLabel(right) || left.localeCompare(right),
+  );
+  const colors: Record<string, string> = {};
+  ordered.forEach((name, index) => {
+    colors[name] = sankeySeriesColors[index % sankeySeriesColors.length] ?? 'var(--chart-blue)';
+  });
+  return colors;
 }

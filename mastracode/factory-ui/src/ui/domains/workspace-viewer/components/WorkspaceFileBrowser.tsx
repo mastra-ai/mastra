@@ -25,9 +25,9 @@ function getFileIcon(path: string): ReactNode {
     case 'tsx':
     case 'js':
     case 'jsx':
-      return <FileCode className="text-blue-500" />;
+      return <FileCode className="text-blue-700 dark:text-blue-500" />;
     case 'json':
-      return <FileJson className="text-yellow-500" />;
+      return <FileJson className="text-yellow-700 dark:text-yellow-500" />;
     case 'md':
     case 'mdx':
       return <FileText className="text-muted-foreground" />;
@@ -44,7 +44,7 @@ function getFileIcon(path: string): ReactNode {
 }
 
 function getFolderIcon(isOpen: boolean): ReactNode {
-  return isOpen ? <FolderOpen className="text-yellow-500" /> : <Folder className="text-yellow-500" />;
+  return isOpen ? <FolderOpen className="text-yellow-700 dark:text-yellow-500" /> : <Folder className="text-yellow-700 dark:text-yellow-500" />;
 }
 
 interface WorkspaceTreeNode {

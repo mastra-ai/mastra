@@ -1,7 +1,7 @@
 import type { SignalCatalogEntry } from '@mastra/client-js';
 import { describe, expect, it } from 'vitest';
 
-import { getSignalHue } from '../signal-colors';
+import { getSignalAreaClass, getSignalColor } from '../signal-colors';
 import {
   SIGNAL_DESCRIPTIONS,
   SIGNAL_PROCESSING_ORDER,
@@ -194,18 +194,22 @@ describe('signal catalog formatting', () => {
   });
 });
 
-describe('getSignalHue', () => {
+describe('getSignalColor', () => {
+  it('gives the built-in signals fixed chart colors', () => {
+    expect(getSignalColor('goal')).toBe('var(--chart-green)');
+    expect(getSignalColor('Outcome')).toBe('var(--chart-orange)');
+    expect(getSignalColor('behavior')).toBe('var(--chart-blue)');
+    expect(getSignalColor('sentiment')).toBe('var(--chart-purple)');
+  });
+
   describe('when a custom signal name is supplied', () => {
-    it('returns stable hues separated from red and built-in hues', () => {
-      const names = Array.from({ length: 100 }, (_, index) => `custom_signal_${index}`);
-      const assignments = names.map(name => ({ name, hue: getSignalHue(name) }));
-      expect(new Set(assignments.map(({ hue }) => hue)).size).toBeGreaterThanOrEqual(50);
-      for (const { name, hue } of assignments) {
-        expect(getSignalHue(name)).toBe(hue);
-        for (const reservedHue of [0, 145, 35, 225, 300]) {
-          const distance = Math.abs(hue - reservedHue);
-          expect(Math.min(distance, 360 - distance)).toBeGreaterThanOrEqual(30);
-        }
+    it('returns a stable chart color the built-in signals do not use', () => {
+      const builtIn = ['goal', 'outcome', 'behavior', 'sentiment'].map(getSignalColor);
+      for (let index = 0; index < 50; index += 1) {
+        const name = `custom_signal_${index}`;
+        expect(getSignalColor(name)).toBe(getSignalColor(name));
+        expect(builtIn).not.toContain(getSignalColor(name));
+        expect(getSignalAreaClass(name)).toMatch(/^fill-[a-z]+-100 dark:fill-[a-z]+-soft-950$/);
       }
     });
   });

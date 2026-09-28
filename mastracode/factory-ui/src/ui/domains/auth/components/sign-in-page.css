@@ -1,11 +1,18 @@
 .factory-halftone-field {
+  --factory-intake: var(--blue-600);
+  --factory-build: var(--green-600);
+  --factory-review: var(--purple-600);
+  --factory-ship: var(--orange-600);
+  --factory-dot: var(--muted-foreground);
+  --factory-lane-line: var(--border);
+  --factory-rail-line: var(--border-strong);
+}
+
+.dark .factory-halftone-field {
   --factory-intake: var(--blue-400);
   --factory-build: var(--green-400);
   --factory-review: var(--purple-400);
   --factory-ship: var(--orange-300);
-  --factory-dot: var(--muted-foreground);
-  --factory-lane-line: var(--border);
-  --factory-rail-line: var(--border-strong);
 }
 
 .factory-stage-label {

@@ -110,11 +110,11 @@ export function CardStatus({ status }: { status: BoardCardStatus }) {
 
 function labelDotClass(label: string): string {
   const normalized = label.toLowerCase();
-  if (normalized.includes('bug') || normalized.includes('error')) return 'bg-red-400';
-  if (normalized.includes('approval') || normalized.includes('priority')) return 'bg-yellow-400';
-  if (normalized.includes('triage') || normalized.includes('ready')) return 'bg-green-400';
-  if (normalized.includes('cli') || normalized.includes('linear')) return 'bg-blue-400';
-  if (normalized.includes('work') || normalized.includes('trio')) return 'bg-yellow-400';
+  if (normalized.includes('bug') || normalized.includes('error')) return 'bg-red-600 dark:bg-red-400';
+  if (normalized.includes('approval') || normalized.includes('priority')) return 'bg-yellow-600 dark:bg-yellow-400';
+  if (normalized.includes('triage') || normalized.includes('ready')) return 'bg-green-600 dark:bg-green-400';
+  if (normalized.includes('cli') || normalized.includes('linear')) return 'bg-blue-600 dark:bg-blue-400';
+  if (normalized.includes('work') || normalized.includes('trio')) return 'bg-yellow-600 dark:bg-yellow-400';
   return 'bg-muted-foreground';
 }
 

@@ -5,9 +5,8 @@ import type { CSSProperties, ReactNode } from 'react';
 import './signals-empty-state.css';
 import { Button } from '../../../ds/components/Button';
 import { Card } from '../../../ds/components/Card';
-import { nodeColor } from '../../../ds/components/SankeyChart/sankeyColor';
 import type { LinkComponent } from '../../../ds/types/link-component';
-import { getSignalHue } from '../signal-colors';
+import { getSignalColor } from '../signal-colors';
 import { BUILT_IN_SIGNAL_CATALOG, orderedSignals, signalDescription, signalLabel } from '../signal-formatting';
 import { TraceIcon } from '@/ds/icons/TraceIcon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -20,7 +19,7 @@ const traceRows = [
 ];
 
 const signalStyle = (label: string): CSSProperties => ({
-  color: nodeColor(getSignalHue(label)),
+  color: getSignalColor(label),
 });
 
 const PipelineConnector = () => (

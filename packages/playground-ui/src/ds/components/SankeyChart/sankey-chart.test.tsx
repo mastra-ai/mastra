@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SankeyChart } from './sankey-chart';
 import type { SankeyChartNodeSelection } from './sankey-chart-utils';
 import { Sankey, useSankey } from './sankey-context';
-import { buildSankeyHueMap, nodeColor, nodeColorVivid } from './sankeyColor';
+import { buildSankeyColorMap } from './sankeyColor';
 
 afterEach(() => {
   cleanup();
@@ -56,7 +56,7 @@ function Example({
   onColumnOrderChange,
   visibleColumnIds,
   onVisibleColumnIdsChange,
-  getColumnHue,
+  getColumnColor,
 }: {
   onCurveClick?: (selection: unknown) => void;
   onNodeClick?: (selection: unknown) => void;
@@ -65,7 +65,7 @@ function Example({
   onColumnOrderChange?: (columnOrder: Array<string>) => void;
   visibleColumnIds?: Array<string>;
   onVisibleColumnIdsChange?: (columnIds: Array<string>) => void;
-  getColumnHue?: (column: (typeof columns)[number]) => number;
+  getColumnColor?: (column: (typeof columns)[number]) => string;
 }) {
   return (
     <Sankey
@@ -75,7 +75,7 @@ function Example({
       onColumnOrderChange={onColumnOrderChange}
       visibleColumnIds={visibleColumnIds}
       onVisibleColumnIdsChange={onVisibleColumnIdsChange}
-      getColumnHue={getColumnHue}
+      getColumnColor={getColumnColor}
     >
       <TestControls />
       <SankeyChart onCurveClick={onCurveClick} onNodeClick={onNodeClick} isNodeClickable={isNodeClickable} />
@@ -597,34 +597,39 @@ describe('SankeyChart', () => {
     });
   });
 
-  it('uses one repelled hue map for colored nodes and gradient ribbon links', async () => {
+  it('colors nodes and gradient ribbon endpoints from the chart series tokens', async () => {
     const { container } = render(<Example onCurveClick={() => {}} />);
-    const hueMap = buildSankeyHueMap(['Search', 'Referral', 'EU', 'US', 'Won', 'Lost']);
+    const colorMap = buildSankeyColorMap(['Search', 'Referral', 'EU', 'US', 'Won', 'Lost']);
 
     await screen.findAllByRole('button', { name: 'Select Sankey curve' });
 
-    expect(container.querySelector(`rect[fill="${nodeColor(hueMap.Search ?? 0)}"]`)).not.toBeNull();
-    expect(container.querySelector(`stop[stop-color="${nodeColor(hueMap.Search ?? 0)}"]`)).not.toBeNull();
-    expect(container.querySelector(`stop[stop-color="${nodeColorVivid(hueMap.EU ?? 0)}"]`)).not.toBeNull();
+    expect(colorMap.Search).toMatch(/^var\(--chart-[a-z-]+\)$/);
+    expect(container.querySelector(`rect[fill="${colorMap.Search}"]`)).not.toBeNull();
+    expect(container.querySelector(`stop[stop-color="${colorMap.Search}"]`)).not.toBeNull();
+    expect(container.querySelector(`stop[stop-color="${colorMap.EU}"]`)).not.toBeNull();
   });
 
-  describe('when the caller provides column hues', () => {
-    it('uses one hue for every node and ribbon endpoint in each column', async () => {
-      const columnHues: Record<string, number> = { channel: 24, region: 144, outcome: 264 };
+  describe('when the caller provides column colors', () => {
+    it('uses one color for every node and ribbon endpoint in each column', async () => {
+      const columnColors: Record<string, string> = {
+        channel: 'var(--chart-orange)',
+        region: 'var(--chart-green)',
+        outcome: 'var(--chart-purple)',
+      };
       const { container } = render(
-        <Example onCurveClick={() => {}} getColumnHue={column => columnHues[column.id] ?? 0} />,
+        <Example onCurveClick={() => {}} getColumnColor={column => columnColors[column.id] ?? 'var(--chart-blue)'} />,
       );
 
       await screen.findAllByRole('button', { name: 'Select Sankey curve' });
 
-      expect(container.querySelectorAll(`rect[fill="${nodeColor(columnHues.channel)}"]`)).toHaveLength(2);
-      expect(container.querySelectorAll(`rect[fill="${nodeColor(columnHues.region)}"]`)).toHaveLength(2);
-      expect(container.querySelectorAll(`rect[fill="${nodeColor(columnHues.outcome)}"]`)).toHaveLength(2);
-      expect(screen.getByText('Channel').getAttribute('fill')).toBe(nodeColor(columnHues.channel));
-      expect(screen.getByText('Region').getAttribute('fill')).toBe(nodeColor(columnHues.region));
-      expect(screen.getByText('Outcome').getAttribute('fill')).toBe(nodeColor(columnHues.outcome));
-      expect(container.querySelector(`stop[stop-color="${nodeColor(columnHues.channel)}"]`)).not.toBeNull();
-      expect(container.querySelector(`stop[stop-color="${nodeColorVivid(columnHues.region)}"]`)).not.toBeNull();
+      expect(container.querySelectorAll(`rect[fill="${columnColors.channel}"]`)).toHaveLength(2);
+      expect(container.querySelectorAll(`rect[fill="${columnColors.region}"]`)).toHaveLength(2);
+      expect(container.querySelectorAll(`rect[fill="${columnColors.outcome}"]`)).toHaveLength(2);
+      expect(screen.getByText('Channel').getAttribute('fill')).toBe(columnColors.channel);
+      expect(screen.getByText('Region').getAttribute('fill')).toBe(columnColors.region);
+      expect(screen.getByText('Outcome').getAttribute('fill')).toBe(columnColors.outcome);
+      expect(container.querySelector(`stop[stop-color="${columnColors.channel}"]`)).not.toBeNull();
+      expect(container.querySelector(`stop[stop-color="${columnColors.region}"]`)).not.toBeNull();
     });
   });
 
@@ -812,14 +817,12 @@ describe('semantic Sankey colors', () => {
     await waitFor(() => expect(container.querySelector('linearGradient')).not.toBeNull());
     const link = container.querySelector('path[fill="url(#sankey-grad-0)"]');
     if (!link) throw new Error('Missing gradient link');
-    for (const id of ['sankey-grad-0', 'sankey-grad-0-vivid']) {
-      const stops = container.querySelectorAll(`#${id} stop`);
-      expect(stops[0]?.getAttribute('stop-color')).toBe('var(--chart-blue)');
-      expect(stops[1]?.getAttribute('stop-color')).toBe('var(--chart-purple)');
-    }
+    const stops = container.querySelectorAll('#sankey-grad-0 stop');
+    expect(stops[0]?.getAttribute('stop-color')).toBe('var(--chart-blue)');
+    expect(stops[1]?.getAttribute('stop-color')).toBe('var(--chart-purple)');
     expect(link.getAttribute('fill-opacity')).toBe('0.32');
     fireEvent.mouseEnter(link);
-    expect(link.getAttribute('fill')).toBe('url(#sankey-grad-0-vivid)');
+    expect(link.getAttribute('fill')).toBe('url(#sankey-grad-0)');
     expect(link.getAttribute('fill-opacity')).toBe('0.75');
   });
 

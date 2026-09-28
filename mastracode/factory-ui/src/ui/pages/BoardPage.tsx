@@ -610,7 +610,7 @@ function IntakeSourceSwitch({
           className={cn(
             'rounded-full border px-2.5 py-0.5 text-meta transition',
             active === source.id
-              ? 'border-green-400 bg-fill text-foreground'
+              ? 'border-green-600 dark:border-green-400 bg-fill text-foreground'
               : 'border-border bg-transparent text-muted-foreground hover:text-foreground',
           )}
         >

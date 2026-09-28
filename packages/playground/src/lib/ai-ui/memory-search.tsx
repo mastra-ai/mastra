@@ -265,7 +265,7 @@ export const MemorySearch = ({
                   onClick={() => handleResultClick(result.id, result.threadId)}
                   className={cn(
                     'w-full border-b border-border px-4 py-3 text-left last:border-b-0 hover:bg-fill-subtle',
-                    result.threadId !== currentThreadId && 'border-l-2 border-l-blue-400',
+                    result.threadId !== currentThreadId && 'border-l-2 border-l-blue-600 dark:border-l-blue-400',
                   )}
                 >
                   <div className="flex flex-col gap-2">
@@ -305,14 +305,14 @@ export const MemorySearch = ({
                                 tone={result.threadId !== currentThreadId ? undefined : 'muted'}
                                 className={cn(
                                   'max-w-[150px] truncate',
-                                  result.threadId !== currentThreadId && 'text-blue-400',
+                                  result.threadId !== currentThreadId && 'text-blue-700 dark:text-blue-400',
                                 )}
                                 title={result.threadTitle}
                               >
                                 • {result.threadTitle}
                               </Txt>
                               {result.threadId !== currentThreadId && (
-                                <ExternalLink className="h-3 w-3 text-blue-400" />
+                                <ExternalLink className="h-3 w-3 text-blue-700 dark:text-blue-400" />
                               )}
                             </div>
                           )}

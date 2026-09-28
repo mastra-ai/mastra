@@ -68,7 +68,7 @@ export const SkillFavoriteButton = ({
     >
       <Star
         size={iconSizes[size]}
-        className={cn('shrink-0', isFavorited && 'fill-current text-yellow-300')}
+        className={cn('shrink-0', isFavorited && 'fill-current text-yellow-700 dark:text-yellow-300')}
         aria-hidden
       />
       {showCount && (

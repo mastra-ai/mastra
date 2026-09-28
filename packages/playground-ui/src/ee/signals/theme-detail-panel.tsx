@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 import { EXAMPLES_PAGE_SIZE, ExamplesPager } from './examples-pager';
 import { useThemeDetail, useThemeExamples, useThemeHistory } from './hooks';
-import { getSignalHue } from './signal-colors';
+import { getSignalColor } from './signal-colors';
 import { formatSnapshotDate, shareSentence, signalDescription, signalLabel } from './signal-formatting';
 import type { SelectedTheme, ThemeSelection, ThemeSelectionStats } from './theme-drilldown-data';
 import { chronologicalHistoryPoints, themeTrendDirection } from './theme-trend';
@@ -17,7 +17,6 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from '@/ds/components/Drawer';
-import { nodeColor } from '@/ds/components/SankeyChart';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
@@ -98,10 +97,7 @@ export function ThemeDetailPanel({
       <DrawerContent>
         <DrawerHeader className="border-b border-border">
           {signalName !== undefined && (
-            <span
-              className="font-mono text-column tracking-widest"
-              style={{ color: nodeColor(getSignalHue(signalName)) }}
-            >
+            <span className="font-mono text-column tracking-widest" style={{ color: getSignalColor(signalName) }}>
               {signalDisplayDescription ? (
                 <Tooltip>
                   <TooltipTrigger aria-label={signalDisplayLabel} className="cursor-default uppercase">
@@ -225,10 +221,7 @@ export function ThemeDetailPanel({
                             · {themeTrendDirection(historyPoints)}
                           </p>
                           {historyPoints.length >= 2 && (
-                            <ThemeTrendChart
-                              points={historyPoints}
-                              color={nodeColor(getSignalHue(signalName ?? 'goal'))}
-                            />
+                            <ThemeTrendChart points={historyPoints} signalName={signalName ?? 'goal'} />
                           )}
                         </>
                       )}
