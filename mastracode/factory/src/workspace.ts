@@ -103,7 +103,7 @@ export const REVIEW_ONLY_FACTORY_SKILLS = new Set([
  * which role each cache was last scanned for; a rescan it did not perform makes
  * that record untrustworthy, so the next reuse must rescan again.
  */
-const rescannedOutsideResolver = new WeakSet<object>();
+const rescannedOutsideResolver = new WeakMap<object, Promise<void>>();
 
 /**
  * Rescan a session's skill cache so a role gained after the cache was built
@@ -111,8 +111,14 @@ const rescannedOutsideResolver = new WeakSet<object>();
  * The source still checks the live binding, so this never widens access.
  */
 export async function rescanFactorySkills(skills: NonNullable<Workspace['skills']>): Promise<void> {
-  rescannedOutsideResolver.add(skills);
-  await skills.refresh();
+  // Registered so the resolver waits it out: a refresh started meanwhile would
+  // join this scan (possibly for the old role) instead of starting a fresh one.
+  const pending = skills.refresh();
+  rescannedOutsideResolver.set(
+    skills,
+    pending.catch(() => {}),
+  );
+  await pending;
 }
 
 export class FactorySkillSource implements SkillSource {
@@ -772,9 +778,19 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // The skill cache does not recheck the source on get(), so rescan when the
       // session's role flips; otherwise a cached review skill outlives the review binding.
       if (!skillExtension) {
-        if (existing.skills && rescannedOutsideResolver.delete(existing.skills)) {
+        // An outside rescan makes the recorded role untrustworthy. Wait for it to
+        // settle first, so the refresh below starts a scan for the current role
+        // rather than joining one started for the previous role.
+        const consumeOutsideRescan = async () => {
+          const outside = existing.skills && rescannedOutsideResolver.get(existing.skills);
+          if (!outside) return false;
+          await outside;
+          if (rescannedOutsideResolver.get(existing.skills!) === outside)
+            rescannedOutsideResolver.delete(existing.skills!);
           skillCacheReviewState.delete(workspaceId);
-        }
+          return true;
+        };
+        await consumeOutsideRescan();
         let isReview = await isReviewSession();
         // Concurrent reuses share one refresh, and the state is recorded only
         // once the rescan succeeds. Wait out any in-flight rescan (it may have
@@ -783,6 +799,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           const inFlight = skillCacheRefreshes.get(workspaceId);
           if (inFlight) {
             await inFlight;
+            isReview = await isReviewSession();
+            continue;
+          }
+          if (await consumeOutsideRescan()) {
             isReview = await isReviewSession();
             continue;
           }

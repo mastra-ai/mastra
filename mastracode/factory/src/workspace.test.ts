@@ -1211,6 +1211,51 @@ describe('GitHub session workspace preparation', () => {
     expect(await reused.skills?.get('factory-review')).toBeFalsy();
   });
 
+  it('does not let a reused workspace join a kickoff rescan started for the previous role', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'work';
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    const workspace = (await resolver({ requestContext }))!;
+    await workspace.skills?.maybeRefresh();
+
+    // The kickoff rescan scans for the review role. It pauses on its first role
+    // lookup; while it is paused the session leaves the review role and the
+    // workspace is reused.
+    let scanning = true;
+    let paused = false;
+    let released = false;
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    const lookup = mocks.findActiveRunBindingForSession.getMockImplementation()!;
+    mocks.findActiveRunBindingForSession.mockImplementation(async input => {
+      mocks.runBindingRole = scanning && !paused ? 'review' : 'work';
+      const binding = await lookup(input);
+      if (scanning && !paused && !released) {
+        paused = true;
+        await gate;
+        paused = false;
+      }
+      return binding;
+    });
+    const rescan = rescanFactorySkills(workspace.skills!);
+    void rescan.then(() => (scanning = false));
+    await vi.waitFor(() => expect(paused).toBe(true));
+
+    const reused = resolver({ requestContext });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    released = true;
+    release();
+    await rescan;
+    const result = await reused;
+    mocks.findActiveRunBindingForSession.mockImplementation(lookup);
+    mocks.runBindingRole = 'work';
+
+    expect(result).toBe(workspace);
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+  });
+
   it('does not return a reused workspace to concurrent callers before its skill rescan finishes', async () => {
     const { resolver } = await createLocalFactory();
     addProject();
