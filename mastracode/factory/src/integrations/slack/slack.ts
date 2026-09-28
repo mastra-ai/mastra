@@ -84,9 +84,9 @@ interface SlackChannelDeps {
    * Factory projects domain. When provided (alongside `accountLinks`), a
    * linked sender's run must also resolve to a Factory project before it
    * dispatches: their link's default factory, else their tenant's only
-   * factory (stamped back onto the link), else an ephemeral "pick a default
-   * factory" card and no run. Unset → no factory routing (runs dispatch as
-   * before).
+   * factory (stamped back onto the link), else a "pick a default factory"
+   * card posted in the thread and no run. Unset → no factory routing (runs
+   * dispatch as before).
    */
   projects?: FactoryProjectsStorage;
   /**
@@ -211,21 +211,23 @@ export async function resolveLinkedSender({
   // web app authenticates the visitor, then Slack's OIDC flow proves which
   // Slack account they control. Without an origin, still block, just no card.
   if (publicUrl) {
-    await thread.postEphemeral(message.author, buildConnectCard(publicUrl), { fallbackToDM: true });
+    await thread.postEphemeral(message.author, buildConnectCard(publicUrl, thread), { fallbackToDM: true });
   }
   return { status: 'blocked' };
 }
+
+const retryHint = (thread: HandlerThread) => (thread.isDM ? 'message me again' : 'mention me again');
 
 /**
  * The "connect your account" card. The link is deliberately identity-free —
  * `/connect/slack` sends the visitor to Connections, where "Connect Slack"
  * runs the OIDC flow and Slack itself asserts the (team, user) pair.
  */
-function buildConnectCard(publicUrl: string) {
+function buildConnectCard(publicUrl: string, thread: HandlerThread) {
   return Card({
     title: 'Connect your account',
     children: [
-      CardText('Connect your account to use this agent.'),
+      CardText(`Connect your account to use this agent, then ${retryHint(thread)}.`),
       Actions([
         LinkButton({
           url: `${publicUrl}/connect/slack`,
@@ -304,8 +306,8 @@ export async function resolveFactoryForLink({
         children: [
           CardText(
             factories.length === 0
-              ? 'Your account has no factory yet. Create one in the web app, then message me again.'
-              : 'Your account has several factories. Pick which one Slack sessions should go to, then message me again.',
+              ? `Your account has no factory yet. Create one in the web app, then ${retryHint(thread)}.`
+              : `Your account has several factories. Pick which one Slack sessions should go to, then ${retryHint(thread)}.`,
           ),
           Actions([
             LinkButton({
