@@ -69,8 +69,11 @@ export class GoalManager {
   private threadId: string | undefined;
   private agentId: string | undefined;
   private persistGoalOnNextThreadCreate = false;
-  /** Set by {@link clear}: the next save with an empty mirror deletes the goal. */
-  private pendingDelete = false;
+  /**
+   * Set by {@link clear} to the thread the goal was cleared on: the next save
+   * with an empty mirror on that same thread deletes the goal.
+   */
+  private pendingDelete: { threadId: string | undefined } | null = null;
 
   // ---------------------------------------------------------------------------
   // Synchronous TUI surface
@@ -133,7 +136,7 @@ export class GoalManager {
     const agent = this.getAgent(state);
     const now = Date.now();
     const id = randomUUID();
-    this.pendingDelete = false;
+    this.pendingDelete = null;
     this.threadId = threadId ?? undefined;
     this.agentId = agent?.id;
 
@@ -206,8 +209,8 @@ export class GoalManager {
   }
 
   clear(): void {
+    this.pendingDelete = { threadId: this.threadId };
     this.record = null;
-    this.pendingDelete = true;
     this.threadId = undefined;
     this.agentId = undefined;
     this.persistGoalOnNextThreadCreate = false;
@@ -250,8 +253,11 @@ export class GoalManager {
     const threadId = state.session.thread.getId();
     const agent = this.getAgent(state);
     if (!this.record && this.pendingDelete) {
-      this.pendingDelete = false;
-      await this.deleteFromThread(state);
+      const clearedThreadId = this.pendingDelete.threadId;
+      this.pendingDelete = null;
+      if (clearedThreadId === undefined || clearedThreadId === threadId) {
+        await this.deleteFromThread(state);
+      }
       return;
     }
     try {
@@ -314,7 +320,7 @@ export class GoalManager {
    * legacy wipe.
    */
   async deleteFromThread(state: GoalManagerState): Promise<void> {
-    this.pendingDelete = false;
+    this.pendingDelete = null;
     const threadId = state.session.thread.getId();
     const agent = this.getAgent(state);
     try {
@@ -333,7 +339,7 @@ export class GoalManager {
    */
   async loadFromThread(state: GoalManagerState): Promise<void> {
     this.persistGoalOnNextThreadCreate = false;
-    this.pendingDelete = false;
+    this.pendingDelete = null;
 
     const threadId = state.session.thread.getId();
     const agent = this.getAgent(state);
@@ -364,7 +370,7 @@ export class GoalManager {
   loadFromThreadMetadata(metadata: Record<string, unknown> | undefined): void {
     const saved = metadata?.[THREAD_GOAL_KEY] as Partial<GoalState> | undefined;
     this.persistGoalOnNextThreadCreate = false;
-    this.pendingDelete = false;
+    this.pendingDelete = null;
     this.threadId = undefined;
     this.agentId = undefined;
     if (saved && saved.objective && saved.status) {

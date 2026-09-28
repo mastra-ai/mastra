@@ -54,6 +54,8 @@ export const goalMaxRunsEndsGoalScenario: McE2eScenario = {
 
     terminal.submit('/goal status');
     await runtime.waitForScreenText(/Goal \((\w+)\): "Complete the max-runs goal e2e objective\."/i, terminal, 8_000);
+    // The pause cause travels with the paused goal and is shown in /goal status.
+    await runtime.waitForScreenText(/— paused: Ran\b/i, terminal, 8_000);
 
     const view = stripAnsi(terminal.serialize().view);
     const continueBoxes = view.match(/Goal\s+○\s+continue\s+\(1\/1\)/g)?.length ?? 0;

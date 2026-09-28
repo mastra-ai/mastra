@@ -391,8 +391,24 @@ describe('GoalManager adapter', () => {
 
     // The delete intent is consumed: a later empty save is a no-op again.
     agent.clearObjective.mockClear();
+    state.session.thread.setSetting.mockClear();
     await manager.saveToThread(state);
     expect(agent.clearObjective).not.toHaveBeenCalled();
+    expect(state.session.thread.setSetting).not.toHaveBeenCalled();
+  });
+
+  it('does not carry a clear onto another thread', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+
+    manager.clear();
+    state.session.thread.getId.mockReturnValue('other-thread');
+    await manager.saveToThread(state);
+
+    expect(agent.clearObjective).not.toHaveBeenCalled();
+    expect(state.session.thread.setSetting).not.toHaveBeenCalled();
   });
 
   it('does not delete on a save after clear() when a new goal was set in between', async () => {
