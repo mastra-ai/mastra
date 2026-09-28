@@ -1486,10 +1486,13 @@ describe('experimental agent settings', () => {
     });
   });
 
-  it('rejects invalid persisted values instead of silently disabling the experiment', () => {
+  it('rejects invalid persisted values with instructions for repairing the settings file', () => {
     withTempSettingsFile(filePath => {
       writeFileSync(filePath, JSON.stringify({ experimentalAgent: 'default' }), 'utf-8');
-      expect(() => loadSettings(filePath)).toThrow('Invalid experimentalAgent setting "default"');
+      expect(() => loadSettings(filePath)).toThrow(
+        `Invalid "experimentalAgent" setting in ${filePath}: "default". ` +
+          `Remove the "experimentalAgent" key or set it to "durable", "evented", or null.`,
+      );
     });
   });
 });

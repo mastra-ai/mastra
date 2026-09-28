@@ -52,8 +52,11 @@ export type StorageBackend = 'libsql' | 'pg';
 export type ExperimentalAgent = 'durable' | 'evented';
 
 export class ExperimentalAgentSettingsError extends Error {
-  constructor(value: unknown) {
-    super(`Invalid experimentalAgent setting ${JSON.stringify(value)}. Expected "durable", "evented", or null.`);
+  constructor(value: unknown, settingsPath?: string) {
+    super(
+      `Invalid "experimentalAgent" setting${settingsPath ? ` in ${settingsPath}` : ''}: ${JSON.stringify(value)}. ` +
+        `Remove the "experimentalAgent" key or set it to "durable", "evented", or null.`,
+    );
     this.name = 'ExperimentalAgentSettingsError';
   }
 }
@@ -644,10 +647,10 @@ function parseGithubPollIntervalMs(value: unknown): number {
   return Math.min(intervalMs, GITHUB_POLL_INTERVAL_MAX_MS);
 }
 
-export function parseExperimentalAgentSetting(value: unknown): ExperimentalAgent | null {
+export function parseExperimentalAgentSetting(value: unknown, settingsPath?: string): ExperimentalAgent | null {
   if (value === undefined || value === null) return null;
   if (value === 'durable' || value === 'evented') return value;
-  throw new ExperimentalAgentSettingsError(value);
+  throw new ExperimentalAgentSettingsError(value, settingsPath);
 }
 
 function parseBackgroundToolSettings(rawBackgroundTools: unknown): BackgroundToolSettings {
@@ -1016,7 +1019,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         browser: parseBrowserSettings(raw.browser),
         shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
         voice: parseVoiceSettings(raw.voice),
-        experimentalAgent: parseExperimentalAgentSetting(raw.experimentalAgent),
+        experimentalAgent: parseExperimentalAgentSetting(raw.experimentalAgent, settingsPath),
         backgroundTools: parseBackgroundToolSettings(raw.backgroundTools),
         signals: parseSignalSettings(raw.signals),
         mcp: parseMcpDiscoverySettings(raw.mcp),
@@ -1156,7 +1159,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       browser: parseBrowserSettings(raw.browser),
       shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
       voice: parseVoiceSettings(raw.voice),
-      experimentalAgent: parseExperimentalAgentSetting(raw.experimentalAgent),
+      experimentalAgent: parseExperimentalAgentSetting(raw.experimentalAgent, filePath),
       backgroundTools: parseBackgroundToolSettings(raw.backgroundTools),
       signals: parseSignalSettings(raw.signals),
       mcp: parseMcpDiscoverySettings(raw.mcp),
