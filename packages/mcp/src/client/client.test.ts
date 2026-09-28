@@ -683,6 +683,69 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     expect(tools.deep_tool).toBeUndefined();
   });
 
+  it('should terminate on a self-referencing schema instead of recursing forever', async () => {
+    const sdkClient = (client as any).client as Client;
+    // A hostile server can return an object that points back at itself. Only an
+    // in-memory object can do this (JSON on the wire cannot encode a cycle), but
+    // cached tool definitions are re-hydrated from stored objects, so the walk
+    // must not assume the catalogue is acyclic.
+    const cyclic: Record<string, unknown> = { type: 'object' };
+    cyclic.properties = { self: cyclic };
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'cyclic_tool', inputSchema: cyclic as any }],
+    });
+
+    const tools = await client.tools();
+    // The schema is structurally acceptable apart from the cycle, so the tool
+    // is kept — the point is that discovery returns at all instead of hanging.
+    expect(tools.cyclic_tool).toBeDefined();
+  });
+
+  it('should keep discovery fast on a schema that reuses sub-schemas exponentially', async () => {
+    const sdkClient = (client as any).client as Client;
+    // Diamond sharing: every node points at the *same* child twice, so a walk
+    // without a visited set does 2^depth work even though only `depth` distinct
+    // objects exist. The complexity check counts distinct objects, so it passes
+    // this schema and the shape walk is the only remaining bound.
+    let shared: Record<string, unknown> = { type: 'string' };
+    for (let i = 0; i < 30; i++) {
+      shared = { type: 'object', properties: { a: shared, b: shared } };
+    }
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'diamond_tool', inputSchema: shared as any }],
+    });
+
+    const start = performance.now();
+    const tools = await client.tools();
+    const elapsed = performance.now() - start;
+
+    expect(tools.diamond_tool).toBeDefined();
+    // 2^30 visits is minutes of CPU; with the visited set it is 30. A generous
+    // ceiling keeps this stable on a loaded CI box while still being ~10^6x
+    // below the unbounded cost.
+    expect(elapsed).toBeLessThan(2000);
+  });
+
+  it('should not run the shape walk on a schema the complexity check already rejected', async () => {
+    const sdkClient = (client as any).client as Client;
+    // A wide schema of distinct sub-schemas. The complexity walk reports the
+    // node-count overflow first, so the shape walk is skipped for this tool
+    // instead of paying for a second traversal of the same data. Over-complexity
+    // is reported by the validator at execution time, so the tool is built rather
+    // than skipped and no shape warning is logged.
+    const properties: Record<string, unknown> = {};
+    for (let i = 0; i < 20_000; i++) properties[`p${i}`] = { type: 'string' };
+    const warnSpy = vi.spyOn((client as any).logger, 'warn');
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'wide_tool', inputSchema: { type: 'object', properties } as any }],
+    });
+
+    const tools = await client.tools();
+
+    expect(tools.wide_tool).toBeDefined();
+    expect(warnSpy.mock.calls.map(call => call[0]).join('\n')).not.toContain('wide_tool');
+  });
+
   it('should reject invalid type arrays before conversion', async () => {
     const sdkClient = (client as any).client as Client;
     const warnSpy = vi.spyOn((client as any).logger, 'warn');
