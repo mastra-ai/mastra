@@ -85,11 +85,11 @@ import {
   TRANSPORT_REF_KEY,
 } from '../../run-scope-keys';
 import { applyAutoResumeSystemMessage } from '../../shared/auto-resume-system-message';
-import { readToolResultFromMessageList } from '../../shared/read-tool-result';
 import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
 import { composeStepInput } from '../../shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-call-headers';
+import { readToolResultFromMessageList } from '../../shared/read-tool-result';
 import { recordTerminalErrorMessage } from '../../shared/record-terminal-error-message';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../shared/step-content-chunk-types';
 import { TERMINAL_FINISH_REASONS } from '../../shared/terminal-finish-reasons';
