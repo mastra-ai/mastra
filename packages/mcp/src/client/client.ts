@@ -154,8 +154,8 @@ const SUPPORTED_DIALECTS = new Set([
 
 /**
  * MCP 2026-07-28 schemas default to JSON Schema 2020-12 when they declare no dialect.
- * Dialects the validator cannot load (e.g. 2019-09 from zod v3 servers) are treated as
- * 2020-12 (tuples rewritten) so tool calls are not rejected before they run.
+ * 2019-09 schemas (e.g. from zod v3 servers) are converted to 2020-12 when that can be done
+ * faithfully, so tool calls are not rejected before they run.
  */
 function withDefaultDialect(schema: JSONSchema7): JSONSchema7 {
   if (!schema.$schema) return { ...schema, $schema: JSON_SCHEMA_2020_12 };
