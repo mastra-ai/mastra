@@ -109,7 +109,7 @@ export const StatusFoundations: Story = {
 
       <FoundationSection
         label="Badge"
-        description="One row's worth of status. Default uses the solid background and muted softens it; the indicator has its own stronger color."
+        description="One row's worth of status. Badges tint their color ramp and muted softens the tint; the indicator has its own stronger color."
         surface="sidebar"
       >
         <SpecimenGroup label="Neutral">

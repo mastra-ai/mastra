@@ -47,23 +47,23 @@ const badgeToneStyles = {
     indicator: 'bg-muted-foreground',
   },
   success: {
-    default: 'bg-success-bg text-success-fg',
-    muted: 'bg-success-bg/60 text-success-fg',
+    default: 'bg-badge-green-bg text-badge-green-fg',
+    muted: 'bg-badge-green-bg/60 text-badge-green-fg',
     indicator: 'bg-success-indicator',
   },
   destructive: {
-    default: 'bg-destructive-bg text-destructive-fg',
-    muted: 'bg-destructive-bg/60 text-destructive-fg',
+    default: 'bg-badge-red-bg text-badge-red-fg',
+    muted: 'bg-badge-red-bg/60 text-badge-red-fg',
     indicator: 'bg-destructive-indicator',
   },
   info: {
-    default: 'bg-info-bg text-info-fg',
-    muted: 'bg-info-bg/60 text-info-fg',
+    default: 'bg-badge-blue-bg text-badge-blue-fg',
+    muted: 'bg-badge-blue-bg/60 text-badge-blue-fg',
     indicator: 'bg-info-indicator',
   },
   warning: {
-    default: 'bg-warning-bg text-warning-fg',
-    muted: 'bg-warning-bg/60 text-warning-fg',
+    default: 'bg-badge-yellow-bg text-badge-yellow-fg',
+    muted: 'bg-badge-yellow-bg/60 text-badge-yellow-fg',
     indicator: 'bg-warning-indicator',
   },
   green: {
