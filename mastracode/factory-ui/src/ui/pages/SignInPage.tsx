@@ -1,7 +1,4 @@
-import {
-  CUSTOM_DOMAIN_UNSUPPORTED_ERROR,
-  isPlatformAuthSupportedHost,
-} from '@mastra/factory/platform-auth-host';
+import { CUSTOM_DOMAIN_UNSUPPORTED_ERROR, isPlatformAuthSupportedHost } from '@mastra/factory/platform-auth-host';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
@@ -42,8 +39,8 @@ function CustomDomainAuthError({ hostname }: { hostname: string }) {
       </Txt>
       <Txt as="p" variant="caption" tone="muted" className="mt-2 leading-5">
         This Factory is served from {hostname}. Mastra Platform authentication only works on Mastra-hosted domains
-        (*.mastra.cloud). To use a custom domain, configure your own auth provider — for example WorkOS
-        (WORKOS_API_KEY + WORKOS_CLIENT_ID) or Better Auth — and redeploy.
+        (*.mastra.cloud). To use a custom domain, configure your own auth provider — for example WorkOS (WORKOS_API_KEY
+        + WORKOS_CLIENT_ID) or Better Auth — and redeploy.
       </Txt>
       <Txt as="p" variant="caption" tone="muted" className="mt-3 flex flex-wrap gap-x-3 gap-y-1 leading-5">
         <a
