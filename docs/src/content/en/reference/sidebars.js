@@ -142,6 +142,7 @@ const sidebars = {
         { type: 'doc', id: 'channels/channel-provider', label: 'ChannelProvider' },
         { type: 'doc', id: 'channels/slack-provider', label: 'SlackProvider' },
         { type: 'doc', id: 'channels/telegram-provider', label: 'TelegramProvider' },
+        { type: 'doc', id: 'channels/teams-provider', label: 'TeamsProvider' },
       ],
     },
     {
