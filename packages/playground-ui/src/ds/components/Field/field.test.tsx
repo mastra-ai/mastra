@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import type { ReactElement } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { Checkbox } from '../Checkbox';
 import { CodeEditor } from '../CodeEditor';
@@ -289,6 +289,10 @@ describe.each([
   { kind: 'Switch', role: 'switch', control: <Switch /> },
   { kind: 'Checkbox', role: 'checkbox', control: <Checkbox /> },
 ])('$kind in a horizontal Field', ({ role, control }) => {
+  beforeAll(() => {
+    if (!('PointerEvent' in window)) Object.defineProperty(window, 'PointerEvent', { value: window.MouseEvent });
+  });
+
   it('is named by the label beside it', () => {
     render(
       <Field orientation="horizontal">
@@ -298,5 +302,31 @@ describe.each([
     );
 
     expect(screen.getByRole(role, { name: 'Stream responses' })).toBeTruthy();
+  });
+
+  it('toggles when the label beside it is clicked', () => {
+    render(
+      <Field orientation="horizontal">
+        {control}
+        <FieldLabel>Stream responses</FieldLabel>
+      </Field>,
+    );
+
+    fireEvent.click(screen.getByText('Stream responses'));
+
+    expect(screen.getByRole(role, { name: 'Stream responses' }).getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('ignores label clicks when the Field is disabled', () => {
+    render(
+      <Field orientation="horizontal" disabled>
+        {control}
+        <FieldLabel>Stream responses</FieldLabel>
+      </Field>,
+    );
+
+    fireEvent.click(screen.getByText('Stream responses'));
+
+    expect(screen.getByRole(role, { name: 'Stream responses' }).getAttribute('aria-checked')).toBe('false');
   });
 });
