@@ -5,6 +5,8 @@ import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import { Message, MessageActions, MessageCopyButton } from '@mastra/playground-ui/components/Message';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { AssistantMessageActions } from '@mastra/playground-ui/domains/chat';
+import { DatasetSaveAction } from '@mastra/playground-ui/domains/chat';
 import { ChatRunningContext, useChatRunning } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { AssistantTextPartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/assistant-text-part-renderer';
 import { DataPartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/data-part-renderer';
@@ -32,8 +34,6 @@ import type { ReactNode } from 'react';
 import { ToolCallEffects } from '../tools/tool-call-effects';
 import { ToolCard } from '../tools/tool-card';
 import type { DataMessagePart } from '../tools/tool-card';
-import { AssistantMessageActions } from './assistant-message-actions';
-import { DatasetSaveAction } from './dataset-save-action';
 import { useMcpAppTools } from '@/domains/mcps/hooks';
 
 export interface MessageRowProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> {

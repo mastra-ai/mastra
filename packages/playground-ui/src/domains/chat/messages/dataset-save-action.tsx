@@ -1,5 +1,10 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { useMastraClient } from '@mastra/react';
+import { DatabaseIcon, Save, X } from 'lucide-react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useDatasetSaveContext } from '../context/dataset-save-context';
+import { useDatasetMutations, useDatasets } from '@/domains/datasets';
+import { Button } from '@/ds/components/Button';
+import { CodeEditor } from '@/ds/components/CodeEditor';
 import {
   Dialog,
   DialogContent,
@@ -8,20 +13,14 @@ import {
   DialogDescription,
   DialogBody,
   DialogFooter,
-} from '@mastra/playground-ui/components/Dialog';
-import { Label } from '@mastra/playground-ui/components/Label';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@mastra/playground-ui/components/Select';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { useDatasetMutations, useDatasets } from '@mastra/playground-ui/domains/datasets';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
-import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { toast } from '@mastra/playground-ui/utils/toast';
-import { useMastraClient } from '@mastra/react';
-import { DatabaseIcon, Save, X } from 'lucide-react';
-import { useState, useCallback, useEffect, useMemo } from 'react';
-
-import { useDatasetSaveContext } from '../context/dataset-save-context';
+} from '@/ds/components/Dialog';
+import { Label } from '@/ds/components/Label';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ds/components/Select';
+import { Spinner } from '@/ds/components/Spinner';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
+import { cn } from '@/utils/cn';
+import { toast } from '@/utils/toast';
 
 function DatasetSaveDialog({
   open,
@@ -129,12 +128,7 @@ function DatasetSaveDialog({
 
           <div className="grid gap-2">
             <Label>Input (JSON)</Label>
-            <CodeEditor
-              value={input}
-              onChange={onInputChange}
-              showCopyButton={false}
-              className="max-h-[240px] min-h-[120px]"
-            />
+            <CodeEditor value={input} onChange={onInputChange} showCopyButton={false} className="max-h-60 min-h-30" />
           </div>
 
           <div className="grid gap-2">
@@ -143,7 +137,7 @@ function DatasetSaveDialog({
               value={groundTruth}
               onChange={setGroundTruth}
               showCopyButton={false}
-              className="max-h-[160px] min-h-[80px]"
+              className="max-h-40 min-h-20"
             />
           </div>
         </DialogBody>
@@ -200,7 +194,7 @@ function DatasetSaveActionInner({ messageText }: DatasetSaveActionProps) {
         className={cn(quietTextHover, 'bg-transparent')}
         onClick={handleClick}
       >
-        <DatabaseIcon className="h-4 w-4" />
+        <DatabaseIcon className="size-4" />
       </Button>
       <DatasetSaveDialog
         open={dialogOpen}
@@ -273,7 +267,7 @@ function SaveFullConversationInner() {
           'mx-auto flex cursor-pointer items-center gap-1.5 py-3 text-meta disabled:opacity-50',
         )}
       >
-        {isFetching ? <Spinner className="h-3.5 w-3.5" /> : <DatabaseIcon className="h-3.5 w-3.5" />}
+        {isFetching ? <Spinner className="size-3.5" /> : <DatabaseIcon className="size-3.5" />}
         Save full conversation to dataset
       </button>
       <DatasetSaveDialog

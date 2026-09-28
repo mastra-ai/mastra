@@ -1,7 +1,7 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { MessageCopyButton, MessageMetadata } from '@mastra/playground-ui/components/Message';
 import { AudioLinesIcon, StopCircleIcon } from 'lucide-react';
-import { ProviderLogo } from '@/domains/llm/components/provider-logo';
+import { ProviderLogo } from '@/domains/llm';
+import { Button } from '@/ds/components/Button';
+import { MessageCopyButton, MessageMetadata } from '@/ds/components/Message';
 
 export function AssistantMessageActions({
   text,

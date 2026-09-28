@@ -1,9 +1,9 @@
-import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
-import { cleanProviderId as cleanProviderIdUtil } from '../utils';
-import { providerMapToIcon } from '@/domains/agents/components/provider-map-icon';
+import { cleanProviderId as cleanProviderIdUtil } from './clean-provider-id';
+import { providerMapToIcon } from './provider-map-icon';
+import { Icon } from '@/ds/icons/Icon';
+import { cn } from '@/utils/cn';
 
 interface ProviderLogoProps {
   providerId: string;

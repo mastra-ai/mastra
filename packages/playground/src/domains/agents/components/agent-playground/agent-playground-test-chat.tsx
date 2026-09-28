@@ -1,6 +1,7 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { DatasetSaveProvider } from '@mastra/playground-ui/domains/chat';
 import { Save } from 'lucide-react';
 import { useMemo } from 'react';
 import { useFormState } from 'react-hook-form';
@@ -17,7 +18,6 @@ import { BrowserViewPanel } from '../browser-view/browser-view-panel';
 import { ComposerRunOptions } from '../composer-run-options';
 import { ThreadInputProvider } from '@/domains/conversation';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
-import { DatasetSaveProvider } from '@/lib/ai-ui/context/dataset-save-context';
 
 interface AgentPlaygroundTestChatProps {
   agentId: string;
