@@ -17,6 +17,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { createInngestAgent } from '../durable-agent';
+import { InngestDurableStepIds } from '../durable-agent/create-inngest-agentic-workflow';
 import {
   getSharedInngest,
   getSharedMastra,
@@ -77,7 +78,11 @@ async function drain(stream: AsyncIterable<any>, timeoutMs: number, stopOnSuspen
         for await (const chunk of stream) {
           types.push(chunk?.type);
           if (chunk?.type === 'error') errors.push(chunk.payload?.error ?? chunk);
-          if (chunk?.type === 'finish' || (stopOnSuspension && chunk?.type === 'tool-call-suspended')) return;
+          if (
+            chunk?.type === 'finish' ||
+            (stopOnSuspension && (chunk?.type === 'tool-call-suspended' || chunk?.type === 'tool-call-approval'))
+          )
+            return;
         }
       } catch (e) {
         errors.push(e);
@@ -259,5 +264,202 @@ describe('durable agent resume after a suspend in a later loop iteration (#24749
       { timeout: 30_000, interval: 250 },
     );
     expect(lookups).toEqual(['123', '456']);
+  });
+
+  it('replaces the suspended snapshot on finish and rejects resuming the finished run (#24796)', async () => {
+    const agentId = `resume-finished-${Date.now()}`;
+    const approvalId = `request-approval-${agentId}`;
+    const executions: boolean[] = [];
+
+    const script = [toolCallChunks('0', approvalId, { action: 'delete' })];
+    let call = 0;
+    const model: any = {
+      specificationVersion: 'v2',
+      provider: 'mock',
+      modelId: 'mock-model',
+      supportedUrls: {},
+      async doStream() {
+        const chunks = script[call++] ?? [
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-final', modelId: 'mock-model', timestamp: new Date(0) },
+          { type: 'text-start', id: 't1' },
+          { type: 'text-delta', id: 't1', delta: 'Declined.' },
+          { type: 'text-end', id: 't1' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+        ];
+        return {
+          stream: simulateReadableStream({ chunks: chunks as any }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      },
+    };
+    const approval = createTool({
+      id: approvalId,
+      description: 'Ask a human to approve the action',
+      inputSchema: z.object({ action: z.string() }),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async ({ action }, context: any) => {
+        if (!context?.agent?.resumeData) {
+          return context.agent.suspend({ action });
+        }
+        executions.push(context.agent.resumeData.approved);
+        return { approved: context.agent.resumeData.approved };
+      },
+    });
+
+    const storage = new DefaultStorage({ id: agentId, url: dbUrl });
+    const agent = new Agent({
+      id: agentId,
+      name: 'Resume Finished Agent',
+      instructions: 'Request approval, then answer.',
+      model,
+      tools: { [approvalId]: approval },
+      memory: new Memory({ storage }),
+    });
+    const inngestAgent = createInngestAgent({ agent, inngest: getSharedInngest() });
+    getSharedMastra().addAgent(inngestAgent);
+
+    const first = await inngestAgent.stream([{ role: 'user', content: 'Delete everything' }], {
+      memory: { thread: `thread-${agentId}`, resource: `resource-${agentId}` },
+    });
+    const firstResult = await drain(first.output.fullStream, 60_000);
+    first.cleanup();
+    expect(firstResult.types).toContain('tool-call-suspended');
+
+    const declined = await inngestAgent.resume(first.runId, { approved: false });
+    const declinedResult = await drain(declined.output.fullStream, 60_000, false);
+    declined.cleanup();
+    expect(declinedResult.errors).toEqual([]);
+    expect(declinedResult.types).toContain('finish');
+
+    // The loop's own terminal write must replace the suspended snapshot; nothing here seeds it.
+    const workflowsStore = await getSharedMastra().getStorage()!.getStore('workflows');
+    await vi.waitFor(
+      async () => {
+        const snapshot: any = await workflowsStore!.loadWorkflowSnapshot({
+          workflowName: InngestDurableStepIds.AGENTIC_LOOP,
+          runId: first.runId,
+        });
+        expect(snapshot?.status).toBe('success');
+      },
+      { timeout: 30_000, interval: 250 },
+    );
+
+    await expect(inngestAgent.resume(first.runId, { approved: true })).rejects.toThrow(/not suspended/);
+    // Give a wrongly dispatched resume time to run the tool before asserting it did not.
+    await new Promise(r => setTimeout(r, 3000));
+    expect(executions).toEqual([false]);
+  });
+
+  // #25158: one turn with two approval-gated tool calls runs them sequentially, so resuming the
+  // first suspends the run again on the second. The second approval chunk is streamed before the
+  // new suspended snapshot is persisted, so resuming it right away by its own toolCallId must wait
+  // for its label instead of failing against the previous suspension's stale labels.
+  it('resumes the second sequential approval in one turn by its own toolCallId', async () => {
+    const agentId = `resume-seq-approval-${Date.now()}`;
+    const toolId = `echo-${agentId}`;
+    const executions: string[] = [];
+
+    let call = 0;
+    const model: any = {
+      specificationVersion: 'v2',
+      provider: 'mock',
+      modelId: 'mock-model',
+      supportedUrls: {},
+      async doStream() {
+        const chunks =
+          call++ === 0
+            ? [
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-0', modelId: 'mock-model', timestamp: new Date(0) },
+                { type: 'tool-call', toolCallId: 'call-a', toolName: toolId, input: '{"value":"a"}' },
+                { type: 'tool-call', toolCallId: 'call-b', toolName: toolId, input: '{"value":"b"}' },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
+                },
+              ]
+            : [
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-final', modelId: 'mock-model', timestamp: new Date(0) },
+                { type: 'text-start', id: 't1' },
+                { type: 'text-delta', id: 't1', delta: 'Both done.' },
+                { type: 'text-end', id: 't1' },
+                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+              ];
+        return {
+          stream: simulateReadableStream({ chunks: chunks as any }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      },
+    };
+
+    const echo = createTool({
+      id: toolId,
+      description: 'Approval-gated echo tool',
+      inputSchema: z.object({ value: z.string() }),
+      requireApproval: true,
+      execute: async ({ value }) => {
+        executions.push(value);
+        return { value };
+      },
+    });
+
+    const agent = new Agent({
+      id: agentId,
+      name: 'Sequential Approval Agent',
+      instructions: 'Echo each value.',
+      model,
+      tools: { [toolId]: echo },
+    });
+    const inngestAgent = createInngestAgent({ agent, inngest: getSharedInngest() });
+    getSharedMastra().addAgent(inngestAgent);
+
+    const loadLoopResumeLabels = async (runId: string) => {
+      const workflowsStore = await getSharedMastra().getStorage()?.getStore('workflows');
+      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: InngestDurableStepIds.AGENTIC_LOOP,
+        runId,
+      });
+      return Object.keys(snapshot?.resumeLabels ?? {});
+    };
+
+    const first = await inngestAgent.stream([{ role: 'user', content: 'Echo a and b' }], {
+      closeOnSuspend: true,
+    });
+    const firstResult = await drain(first.output.fullStream, 60_000);
+    first.cleanup();
+    expect(firstResult.errors).toEqual([]);
+    expect(firstResult.types).toContain('tool-call-approval');
+    await vi.waitFor(async () => expect(await loadLoopResumeLabels(first.runId)).toEqual(['call-a']), {
+      timeout: 30_000,
+      interval: 250,
+    });
+
+    const second = await inngestAgent.resume(
+      first.runId,
+      { approved: true },
+      { toolCallId: 'call-a', closeOnSuspend: true },
+    );
+    const secondResult = await drain(second.output.fullStream, 60_000);
+    second.cleanup();
+    expect(secondResult.errors).toEqual([]);
+    expect(secondResult.types).toContain('tool-call-approval');
+    expect(secondResult.types).not.toContain('finish');
+    expect(executions).toEqual(['a']);
+
+    // Resume the second approval immediately after its chunk is streamed, like an
+    // HTTP client would, without waiting for the re-suspended snapshot to land.
+    const third = await inngestAgent.resume(
+      first.runId,
+      { approved: true },
+      { toolCallId: 'call-b', closeOnSuspend: true },
+    );
+    const thirdResult = await drain(third.output.fullStream, 60_000, false);
+    third.cleanup();
+    expect(thirdResult.errors).toEqual([]);
+    expect(thirdResult.types).toContain('finish');
+    await vi.waitFor(() => expect(executions).toEqual(['a', 'b']), { timeout: 30_000, interval: 250 });
   });
 });

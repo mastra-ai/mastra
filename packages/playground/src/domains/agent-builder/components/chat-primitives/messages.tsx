@@ -20,6 +20,7 @@ import {
   isUserSignalType,
   toReactiveSignalData,
 } from '@mastra/playground-ui/domains/chat/messages/signal-data';
+import { ProviderLogo } from '@mastra/playground-ui/domains/llm';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
@@ -60,7 +61,6 @@ import {
   SET_AGENT_TOOLS_TOOL_NAME,
   SET_AGENT_WORKSPACE_ID_TOOL_NAME,
 } from '@/domains/agent-builder/services/tool-constants';
-import { ProviderLogo } from '@/domains/llm';
 
 interface MessageRowProps {
   message: MastraDBMessage;

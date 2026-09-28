@@ -18,29 +18,24 @@ import { inferredParentWorkItemId } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 
-/**
- * Column order, stated here rather than inherited from the list endpoint: a
- * card must keep its place when a sync or a run touches it, and the board is
- * the surface that decides what "first" means.
- */
-const byNewest = (left: WorkItem, right: WorkItem) =>
-  right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id);
-
 interface MoveOptions {
   /** What the server records as the reason for the move; a drag says so, a card button does not. */
   cause?: string;
   /** Hands-off: stamp the card as pre-approving its plans before the move queues a run. */
   preapprovePlans?: boolean;
+  repositorySlug?: string;
 }
 
 /** The board's persisted cards: the query behind them and the moves that rewrite them. */
 export function useBoardItems({
   factoryProjectId,
   kind,
+  currentUserId,
   onFailure,
 }: {
   factoryProjectId: string | undefined;
   kind: BoardKind;
+  currentUserId?: string;
   /** Where a failure goes when no card is on screen to carry it, e.g. the search palette. */
   onFailure?: (message: string) => void;
 }) {
@@ -49,7 +44,7 @@ export function useBoardItems({
   const catalog = useBoardCatalog(factoryProjectId);
   const upsert = useUpsertWorkItemMutation(factoryProjectId);
   const update = useUpdateWorkItemMutation(factoryProjectId);
-  const transition = useTransitionWorkItemMutation(factoryProjectId);
+  const transition = useTransitionWorkItemMutation(factoryProjectId, currentUserId);
   const remove = useDeleteWorkItemMutation(factoryProjectId);
   const [transitionReasons, setTransitionReasons] = useState<Record<string, string>>({});
   const [dropError, setDropError] = useState<Error>();
@@ -59,7 +54,7 @@ export function useBoardItems({
   const knownSourceKeys = useMemo(() => persistedSourceKeys(all), [all]);
   // Sources whose card sits on another board: the only withheld feed items worth explaining.
   const elsewhereSourceKeys = persistedSourceKeys(all.filter(item => !belongsToBoard(item, kind)));
-  const visible = all.filter(item => belongsToBoard(item, kind)).sort(byNewest);
+  const visible = all.filter(item => belongsToBoard(item, kind));
 
   const requestTransition = (item: WorkItem, toStage: string, options: MoveOptions = {}, onSettled?: () => void) => {
     setTransitionReasons(current => {
@@ -103,17 +98,23 @@ export function useBoardItems({
     }
     movingRef.current.add(id);
     const release = () => movingRef.current.delete(id);
-    if (!options.preapprovePlans) {
+    if (!options.preapprovePlans && !options.repositorySlug) {
       requestTransition(item, toStage, options, release);
       return;
     }
     // The patch bumps the revision, so the move has to ride the item it returned.
     void update
-      .mutateAsync({ id, patch: { plansPreapproved: true } })
+      .mutateAsync({
+        id,
+        patch: {
+          ...(options.preapprovePlans ? { plansPreapproved: true } : {}),
+          ...(options.repositorySlug ? { metadata: { ...item.metadata, repository: options.repositorySlug } } : {}),
+        },
+      })
       .then(patched => requestTransition(patched, toStage, options, release))
       .catch(error => {
         release();
-        onFailure?.(error instanceof Error ? error.message : 'The card could not be stamped hands-off.');
+        onFailure?.(error instanceof Error ? error.message : 'The card could not be updated.');
       });
   };
 

@@ -9,7 +9,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import AgentBuilderSkillsView from '../view';
 import type { CurrentUser } from '@/domains/auth/types';
-import { usePlaygroundStore } from '@/store/playground-store';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -59,7 +58,6 @@ const renderPage = (skillId: string) => {
 };
 
 beforeEach(() => {
-  usePlaygroundStore.setState({ requestContext: {} });
   setCurrentUser({ id: 'viewer-1' });
   server.use(
     http.get(`${BASE_URL}/api/stored/skills`, () =>

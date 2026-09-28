@@ -1,9 +1,7 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
-import { usePlaygroundStore } from '@/store/playground-store';
 
-export const useTools = (options?: { enabled?: boolean }) => {
-  const { requestContext } = usePlaygroundStore();
+export const useTools = (options?: { enabled?: boolean }, requestContext?: Record<string, any>) => {
   const client = useMastraClient();
   return useQuery({
     queryKey: ['tools', requestContext],
@@ -12,9 +10,8 @@ export const useTools = (options?: { enabled?: boolean }) => {
   });
 };
 
-export const useTool = (toolId: string, options?: { enabled?: boolean }) => {
+export const useTool = (toolId: string, options?: { enabled?: boolean }, requestContext?: Record<string, any>) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useQuery({
     queryKey: ['tool', toolId, requestContext],

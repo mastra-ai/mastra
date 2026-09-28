@@ -4,6 +4,7 @@ import type {
   TaskFilter,
   TaskListResult,
   UpdateBackgroundTask,
+  UpdateBackgroundTaskOptions,
 } from '@mastra/core/background-tasks';
 import type { CreateIndexOptions } from '@mastra/core/storage';
 import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS, TABLE_SCHEMAS } from '@mastra/core/storage';
@@ -58,6 +59,12 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
         ? row.completedAt
         : new Date(row.completedAt)
       : undefined,
+    ownerId: row.ownerId ?? undefined,
+    leaseExpiresAt: row.leaseExpiresAt
+      ? row.leaseExpiresAt instanceof Date
+        ? row.leaseExpiresAt
+        : new Date(row.leaseExpiresAt)
+      : undefined,
   };
 }
 
@@ -97,7 +104,7 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
     await this.db.alterTable({
       tableName: TABLE_BACKGROUND_TASKS,
       schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
-      ifNotExists: ['suspend_payload', 'suspendedAt'],
+      ifNotExists: ['suspend_payload', 'suspendedAt', 'ownerId', 'leaseExpiresAt'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -182,6 +189,8 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
         startedAt: task.startedAt?.toISOString() ?? null,
         suspendedAt: task.suspendedAt?.toISOString() ?? null,
         completedAt: task.completedAt?.toISOString() ?? null,
+        ownerId: task.ownerId ?? null,
+        leaseExpiresAt: task.leaseExpiresAt?.toISOString() ?? null,
       },
     });
   }
@@ -189,7 +198,7 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
   async updateTask(
     taskId: string,
     update: UpdateBackgroundTask,
-    options?: { expectedStatus?: BackgroundTask['status'] },
+    options?: UpdateBackgroundTaskOptions,
   ): Promise<boolean> {
     const setClauses: string[] = [];
     const params: Record<string, any> = {};
@@ -227,17 +236,42 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
       setClauses.push(`[completedAt] = @p${idx}`);
       params[`p${idx++}`] = update.completedAt?.toISOString() ?? null;
     }
+    if ('ownerId' in update) {
+      setClauses.push(`[ownerId] = @p${idx}`);
+      params[`p${idx++}`] = update.ownerId ?? null;
+    }
+    if ('leaseExpiresAt' in update) {
+      setClauses.push(`[leaseExpiresAt] = @p${idx}`);
+      params[`p${idx++}`] = update.leaseExpiresAt?.toISOString() ?? null;
+    }
 
     if (setClauses.length === 0) return false;
 
     setClauses.push(`[id] = [id]`); // no-op to ensure valid SET
     params[`p${idx}`] = taskId;
     const taskIdParam = `p${idx++}`;
-    let statusPredicate = '';
+    const predicates: string[] = [];
     if (options?.expectedStatus) {
       params[`p${idx}`] = options.expectedStatus;
-      statusPredicate = ` AND [status] = @p${idx}`;
+      predicates.push(`[status] = @p${idx++}`);
     }
+    if (options?.expectedOwnerId !== undefined) {
+      if (options.expectedOwnerId === null) {
+        predicates.push(`[ownerId] IS NULL`);
+      } else {
+        params[`p${idx}`] = options.expectedOwnerId;
+        predicates.push(`[ownerId] = @p${idx++}`);
+      }
+    }
+    if (options?.expectedLeaseExpiresAt !== undefined) {
+      if (options.expectedLeaseExpiresAt === null) {
+        predicates.push(`[leaseExpiresAt] IS NULL`);
+      } else {
+        params[`p${idx}`] = options.expectedLeaseExpiresAt.toISOString();
+        predicates.push(`[leaseExpiresAt] = @p${idx++}`);
+      }
+    }
+    const predicateSql = predicates.length > 0 ? ` AND ${predicates.join(' AND ')}` : '';
 
     const request = this.pool.request();
     for (const [name, value] of Object.entries(params)) {
@@ -245,7 +279,7 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
     }
 
     const result = await request.query(
-      `UPDATE ${this.tableName()} SET ${setClauses.join(', ')} WHERE [id] = @${taskIdParam}${statusPredicate}`,
+      `UPDATE ${this.tableName()} SET ${setClauses.join(', ')} WHERE [id] = @${taskIdParam}${predicateSql}`,
     );
     return (result.rowsAffected[0] ?? 0) > 0;
   }

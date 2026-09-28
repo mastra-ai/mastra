@@ -853,6 +853,32 @@ describe('ObservabilityStorageDuckDB', () => {
       });
       expect(branchIds).toEqual(['tool-dup-4', 'tool-dup-3', 'tool-dup-2', 'tool-dup-1', 'tool-dup-0']);
 
+      // Empty and past-the-end pages must short-circuit before the page query:
+      // an empty page_roots makes the reconstruction bound NULL, forcing a
+      // full scan of span_events.
+      const querySpy = vi.spyOn(DuckDBConnection.prototype, 'query');
+      const pageQueries = () =>
+        querySpy.mock.calls.filter(([sql]) => /page_(roots|anchors) AS/.test(String(sql))).length;
+      const empty = await storage.listTraces({ filters: { startedAt: { end: new Date(0) } } });
+      expect(empty.pagination).toMatchObject({ total: 0, hasMore: false });
+      expect(empty.spans).toEqual([]);
+      const emptyLight = await storage.listTracesLight({ filters: { startedAt: { end: new Date(0) } } });
+      expect(emptyLight.spans).toEqual([]);
+      const pastEnd = await storage.listTraces({ pagination: { page: 2, perPage: 3 } });
+      expect(pastEnd.pagination).toEqual({ total: 5, page: 2, perPage: 3, hasMore: false });
+      expect(pastEnd.spans).toEqual([]);
+      const pastEndSlow = await storage.listTraces({
+        pagination: { page: 2, perPage: 3 },
+        orderBy: { field: 'endedAt', direction: 'DESC' },
+      });
+      expect(pastEndSlow.pagination).toEqual({ total: 5, page: 2, perPage: 3, hasMore: false });
+      expect(pastEndSlow.spans).toEqual([]);
+      const pastEndBranches = await storage.listBranches({ pagination: { page: 2, perPage: 3 } });
+      expect(pastEndBranches.pagination).toEqual({ total: 5, page: 2, perPage: 3, hasMore: false });
+      expect(pastEndBranches.branches).toEqual([]);
+      expect(pageQueries()).toBe(0);
+      querySpy.mockRestore();
+
       const delta = await storage.listTraces({ mode: 'delta', after: bootstrap.deltaCursor!, limit: 3 });
       expect(delta.spans.map(span => span.traceId)).toEqual(['trace-dup-0', 'trace-dup-1', 'trace-dup-2']);
       expect(delta.delta).toEqual({ limit: 3, hasMore: true });
@@ -1385,6 +1411,68 @@ describe('ObservabilityStorageDuckDB', () => {
         after: page.deltaCursor!,
       });
       expect(afterPageCursor.spans.map(span => span.traceId)).toEqual(['trace-delta-new']);
+    });
+
+    it('computes branch page deltaCursor with post-aggregation filters', async () => {
+      const originalFeatures = new Set(coreFeatures);
+      coreFeatures.add('observability-delta-polling');
+      const toolSpan = (id: string, tags: string[], second: number) => ({
+        traceId: `trace-${id}`,
+        spanId: `tool-${id}`,
+        parentSpanId: null,
+        name: `tool-${id}`,
+        spanType: SpanType.TOOL_CALL,
+        isEvent: false,
+        entityType: null,
+        entityId: null,
+        entityName: null,
+        userId: null,
+        organizationId: null,
+        resourceId: null,
+        runId: null,
+        sessionId: null,
+        threadId: null,
+        requestId: null,
+        environment: null,
+        source: null,
+        serviceName: null,
+        scope: null,
+        attributes: null,
+        metadata: null,
+        tags,
+        links: null,
+        input: null,
+        output: null,
+        error: null,
+        startedAt: new Date(`2026-03-01T00:00:0${second}Z`),
+        endedAt: new Date(`2026-03-01T00:00:0${second + 1}Z`),
+      });
+
+      try {
+        await storage.createSpan({ span: toolSpan('keep-1', ['keep'], 0) });
+        await storage.createSpan({ span: toolSpan('skip-1', ['skip'], 2) });
+
+        const page = await storage.listBranches({ filters: { tags: ['keep'] } });
+        expect(page.branches.map(branch => branch.spanId)).toEqual(['tool-keep-1']);
+        expect(page.deltaCursor).toBeTruthy();
+
+        const none = await storage.listBranches({ filters: { tags: ['missing'] } });
+        expect(none.branches).toEqual([]);
+        expect(none.deltaCursor).toBeTruthy();
+
+        await storage.createSpan({ span: toolSpan('keep-2', ['keep'], 4) });
+        await storage.createSpan({ span: toolSpan('skip-2', ['skip'], 6) });
+
+        const delta = await storage.listBranches({
+          mode: 'delta',
+          filters: { tags: ['keep'] },
+          after: page.deltaCursor!,
+        });
+        expect(delta.branches.map(branch => branch.spanId)).toEqual(['tool-keep-2']);
+      } finally {
+        coreFeatures.clear();
+        for (const feature of originalFeatures) coreFeatures.add(feature);
+      }
     });
 
     it('batch deletes traces', async () => {
