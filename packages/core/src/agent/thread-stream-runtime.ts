@@ -208,6 +208,16 @@ function releaseReplyTopic(pubsub: PubSub, replyTopic: string, cb: EventCallback
     .catch(() => {});
 }
 
+/**
+ * `DurableAgent.stream()` resolves to a wrapper holding its `MastraModelOutput`,
+ * while `Agent.stream()` resolves to the output itself.
+ */
+function unwrapStreamOutput<OUTPUT>(
+  result: MastraModelOutput<OUTPUT> | { output: MastraModelOutput<OUTPUT> },
+): MastraModelOutput<OUTPUT> {
+  return 'output' in result ? result.output : result;
+}
+
 function withThreadMemory(memory: unknown, resourceId: string, threadId: string) {
   return {
     ...((memory && typeof memory === 'object' ? memory : {}) as Record<string, unknown>),
@@ -1719,7 +1729,7 @@ export class AgentThreadStreamRuntime {
         });
         // The run started, so the admission a duplicate is waiting on succeeded.
         settleMessageIdentity?.({ runId });
-        return { runId, output };
+        return { runId, output: unwrapStreamOutput(output) };
       } catch (error) {
         const message = getErrorFromUnknown(error).message;
         // The run did start, so keep the identity instead of releasing it: a sender
@@ -5177,7 +5187,7 @@ export class AgentThreadStreamRuntime {
           runId: reservedRunId,
           memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
         });
-        return { action: 'wake' as const, runId: reservedRunId, output };
+        return { action: 'wake' as const, runId: reservedRunId, output: unwrapStreamOutput(output) };
       } catch (error) {
         state.threadKeysByRunId.delete(reservedRunId);
         this.#cleanupPreparedRun(state, reservedRunId);
