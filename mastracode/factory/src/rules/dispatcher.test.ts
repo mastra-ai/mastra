@@ -3970,6 +3970,46 @@ describe('FactoryDecisionDispatcher', () => {
     expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
   });
 
+  it('queues the transition message exactly once when the card changes before it commits', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'transition',
+      board: 'work',
+      stage: 'done',
+      idempotencyKey: 'raced-message',
+      message: { text: 'Card moved.' },
+    });
+    const commit = storage.commitRuleEvaluation.bind(storage);
+    let raced = false;
+    vi.spyOn(storage, 'commitRuleEvaluation').mockImplementation(async input => {
+      if (input.ingress.triggerType === 'transition.message' && !raced) {
+        raced = true;
+        await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { plansPreapproved: true } });
+      }
+      return commit(input);
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+    const find = async (key: string) =>
+      (await storage.listDeferredDecisions('org-1', PROJECT_ID)).filter(d => d.idempotencyKey === key);
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    expect(raced).toBe(true);
+    expect((await find('raced-message'))[0]?.status).toBe('retry');
+    expect(await find('raced-message:message')).toHaveLength(0);
+
+    await dispatcher.runOnce(new Date('2030-01-01T01:00:00Z'));
+    expect((await find('raced-message'))[0]?.status).toBe('succeeded');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['done']);
+    expect(await find('raced-message:message')).toHaveLength(1);
+  });
+
   it('retries the skill kickoff when the signal is persisted without starting a run', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
