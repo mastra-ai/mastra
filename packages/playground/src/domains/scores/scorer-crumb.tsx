@@ -13,7 +13,7 @@ export function ScorerCrumb() {
   return scorers?.[scorerId]?.scorer.config.name || scorerId;
 }
 
-export function ScorerSwitcherAction() {
+export function ScorerSwitcher() {
   const { scorerId } = useParams<{ scorerId: string }>();
   if (!scorerId) return null;
 

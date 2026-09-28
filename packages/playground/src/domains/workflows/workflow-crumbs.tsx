@@ -14,7 +14,7 @@ export function WorkflowCrumb() {
   return workflows?.[workflowId]?.name || workflowId;
 }
 
-export function WorkflowSwitcherAction() {
+export function WorkflowSwitcher() {
   const { workflowId } = useParams<{ workflowId: string }>();
   const { requestContext } = usePlaygroundStore();
   if (!workflowId) return null;

@@ -13,7 +13,7 @@ export function McpServerCrumb() {
   return mcpServers?.find(server => server.id === serverId)?.name || serverId;
 }
 
-export function McpServerSwitcherAction() {
+export function McpServerSwitcher() {
   const { serverId } = useParams<{ serverId: string }>();
   if (!serverId) return null;
 

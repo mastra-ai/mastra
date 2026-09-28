@@ -12,7 +12,7 @@ export function ProcessorCrumb() {
   return processors?.[processorId]?.name || processorId;
 }
 
-export function ProcessorSwitcherAction() {
+export function ProcessorSwitcher() {
   const { processorId } = useParams<{ processorId: string }>();
   if (!processorId) return null;
 

@@ -5,7 +5,7 @@ import { DatasetCombobox } from './components/dataset-combobox';
 
 /**
  * Dataset breadcrumb label. The route `to` makes it a link on nested routes;
- * the switcher lives in `DatasetSwitcherAction` (crumb `action` slot).
+ * the switcher lives in `DatasetSwitcher` (crumb `switcher` slot).
  */
 export function DatasetCrumb() {
   const { datasetId } = useParams<{ datasetId: string }>();
@@ -17,7 +17,7 @@ export function DatasetCrumb() {
   return data?.datasets?.find(d => d.id === datasetId)?.name ?? datasetId;
 }
 
-export function DatasetSwitcherAction() {
+export function DatasetSwitcher() {
   const { datasetId } = useParams<{ datasetId: string }>();
   if (!datasetId) return null;
 

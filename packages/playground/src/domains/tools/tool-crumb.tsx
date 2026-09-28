@@ -6,7 +6,7 @@ export function ToolCrumb() {
   return toolId ?? null;
 }
 
-export function ToolSwitcherAction() {
+export function ToolSwitcher() {
   const { toolId } = useParams<{ toolId: string }>();
   if (!toolId) return null;
 
