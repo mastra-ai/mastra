@@ -182,17 +182,19 @@ describe('Agent browser integration', () => {
       );
       browser.getInputProcessors = getInputProcessors;
 
+      const model = createMockModel();
       const agent = new Agent({
         id: 'stateless-browser-agent' as const,
         name: 'stateless-browser-agent',
         instructions: 'test',
-        model: createMockModel(),
+        model,
         browser,
       });
 
       // Previously threw: computeStateSignal requires Mastra memory
       const result = await agent.generate('Hello');
       expect(result.text).toBe('OK');
+      expect(JSON.stringify(model.doGenerateCalls[0]!.prompt)).toContain('You have access to a browser (mock).');
 
       const [browserProcessor] = getInputProcessors.mock.results[0]!.value;
       expect(browserProcessor.id).toBe('browser-context');
