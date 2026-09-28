@@ -426,16 +426,19 @@ describe('pre-dispatch error feedback', () => {
     };
     const projects = makeProjects([{ id: 'fp-1' }]);
     const defaultHandler = vi.fn().mockResolvedValue(undefined);
-    const output = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const output = vi.fn();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const mastra = { getLogger: () => ({ error: output }) };
     const handlers = createHandlers({ accountLinks: accountLinks as any, projects });
-    const run = (mastra?: unknown) => handlers[slot]!(thread, message, defaultHandler, handlerCtx(mastra));
+    const run = (overrides?: Record<string, unknown>) =>
+      handlers[slot]!(thread, message, defaultHandler, handlerCtx({ ...mastra, ...overrides }));
     const record = (index = 0) => {
       const [line, ...extra] = output.mock.calls[index]!;
       expect(extra).toEqual([]);
       expect(line).not.toContain('\n');
       return JSON.parse(line.slice(line.indexOf('{')));
     };
-    return { thread, message, accountLinks, projects, defaultHandler, output, run, record };
+    return { thread, message, accountLinks, projects, defaultHandler, output, consoleError, handlers, run, record };
   }
 
   describe.each(slots)('%s', slot => {
@@ -449,6 +452,7 @@ describe('pre-dispatch error feedback', () => {
       expect(f.defaultHandler).not.toHaveBeenCalled();
       expect(f.thread.post).toHaveBeenCalledExactlyOnceWith(reply);
       expect(f.output).toHaveBeenCalledTimes(1);
+      expect(f.consoleError).not.toHaveBeenCalled();
       expect(f.record()).toEqual({
         platform: 'slack',
         threadId: f.thread.id,
@@ -617,11 +621,23 @@ describe('pre-dispatch error feedback', () => {
     const listThreads = vi.fn().mockResolvedValue({ threads: [{ id: 'thread-1', resourceId: 'session-1' }] });
     if (source === 'lookup') listThreads.mockRejectedValue(error);
     else f.thread.post.mockRejectedValue(error);
-    const mastra = { getStorage: () => ({ getStore: async () => ({ listThreads }) }) };
-    await expect(f.run(mastra)).rejects.toBe(error);
+    const getStorage = () => ({ getStore: async () => ({ listThreads }) });
+    await expect(f.run({ getStorage })).rejects.toBe(error);
     expect(f.defaultHandler).toHaveBeenCalledTimes(1);
     expect(f.thread.post.mock.calls.filter(([text]: [unknown]) => text === reply)).toHaveLength(0);
     expect(f.output).not.toHaveBeenCalled();
+  });
+
+  it('falls back to console.error when the handler context has no Mastra instance', async () => {
+    const f = fixture();
+    f.accountLinks.getAccountLink.mockRejectedValue(new Error('lookup unavailable'));
+    await f.handlers.onMention!(f.thread, f.message, f.defaultHandler, handlerCtx());
+    expect(f.output).not.toHaveBeenCalled();
+    expect(f.consoleError).toHaveBeenCalledTimes(1);
+    const [line, ...extra] = f.consoleError.mock.calls[0]!;
+    expect(extra).toEqual([]);
+    expect(JSON.parse(line.slice(line.indexOf('{')))).toMatchObject({ error: { message: 'lookup unavailable' } });
+    expect(f.thread.post).toHaveBeenCalledExactlyOnceWith(reply);
   });
 });
 

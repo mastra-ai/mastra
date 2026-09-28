@@ -833,7 +833,12 @@ function preDispatchErrorDetails(error: unknown): { message: string; cause?: { m
   }
 }
 
-async function reportPreDispatchError(thread: HandlerThread, message: HandlerMessage, error: unknown): Promise<void> {
+async function reportPreDispatchError(
+  thread: HandlerThread,
+  message: HandlerMessage,
+  ctx: ChannelHandlerContext,
+  error: unknown,
+): Promise<void> {
   try {
     if (error instanceof ChannelSessionRejectedError) return;
   } catch {
@@ -845,13 +850,13 @@ async function reportPreDispatchError(thread: HandlerThread, message: HandlerMes
     messageId: message.id,
     authorId: message.author.userId,
   };
-  console.error(
-    `[slack] Pre-dispatch failure ${JSON.stringify({ ...correlation, error: preDispatchErrorDetails(error) })}`,
-  );
+  const logger = ctx.mastra?.getLogger();
+  const logError = (line: string) => (logger ? logger.error(line) : console.error(line));
+  logError(`[slack] Pre-dispatch failure ${JSON.stringify({ ...correlation, error: preDispatchErrorDetails(error) })}`);
   try {
     await thread.post('Couldn’t start processing your message. Please try again.');
   } catch (deliveryError) {
-    console.error(
+    logError(
       `[slack] Failed to deliver pre-dispatch error reply ${JSON.stringify({ ...correlation, error: preDispatchErrorDetails(deliveryError) })}`,
     );
   }
@@ -876,7 +881,7 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
       // follow-up mention — don't re-announce.
       isNewSession = !(await thread.isSubscribed());
     } catch (error) {
-      await reportPreDispatchError(thread, message, error);
+      await reportPreDispatchError(thread, message, ctx, error);
       return;
     }
 
@@ -1032,7 +1037,7 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
         const gate = await gateDispatch(thread, message, deps, ctx);
         if (!gate) return;
       } catch (error) {
-        await reportPreDispatchError(thread, message, error);
+        await reportPreDispatchError(thread, message, ctx, error);
         return;
       }
       await defaultHandler(thread, message);
