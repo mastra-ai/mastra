@@ -86,7 +86,7 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
   const page = (content: React.ReactNode) => (
     <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={<WorkflowHeader />}>
       <h1 className="sr-only">{workflowId}</h1>
-      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+      <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)]">
         <WorkflowPageTabs workflowId={workflowId} activeTab={activeTab} showObservability={hasObservability} />
         {content}
       </div>

@@ -67,7 +67,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
           headerActions={<AgentDetailHeaderActions agentId={agentId!} />}
         >
           <h1 className="sr-only">{agentId}</h1>
-          <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+          <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)]">
             <AgentPageTabs
               agentId={agentId!}
               activeTab={activeTab}
