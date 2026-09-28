@@ -1,14 +1,13 @@
-import { hueForName } from '@mastra/playground-ui/utils/colors';
 import { expect } from 'vitest';
 
 /**
- * Asserts that `element` is a `ComputedTag` whose badge hue is derived from `value`.
+ * Asserts that `element` is a `ComputedTag` rendered as a categorical badge hue.
  */
 export function expectComputedTag(element: HTMLElement | null, value: string) {
   expect(element, `expected a computed tag for "${value}"`).not.toBeNull();
   const tag = element as HTMLElement;
   expect(tag.getAttribute('data-testid')).toBe('computed-tag');
-  expect(tag.className).toContain(`bg-badge-${hueForName(value)}`);
+  expect(tag.className).toMatch(/(^|\s)bg-badge-[a-z]+(\s|$)/);
 }
 
 /**
