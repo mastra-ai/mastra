@@ -15,7 +15,10 @@ type FieldProps = Omit<FieldPrimitive.Root.Props, 'className'> & {
 const Field = React.forwardRef<HTMLDivElement, FieldProps>(
   ({ className, orientation = 'vertical', invalid = false, ...props }, ref) => {
     const id = React.useId();
-    const ariaIds = React.useMemo(() => ({ labelId: `${id}-label`, errorId: `${id}-error`, invalid }), [id, invalid]);
+    const ariaIds = React.useMemo(
+      () => ({ labelId: `${id}-label`, errorId: `${id}-error`, controlId: `${id}-control`, invalid }),
+      [id, invalid],
+    );
 
     return (
       <FieldAriaContext.Provider value={ariaIds}>
@@ -72,8 +75,14 @@ type FieldLabelProps = Omit<FieldPrimitive.Label.Props, 'className' | 'id'> & {
 };
 
 const FieldLabel = React.forwardRef<HTMLLabelElement, FieldLabelProps>(
-  ({ className, required = false, size = 'default', children, ...props }, ref) => {
+  ({ className, required = false, size = 'default', children, onClick, ...props }, ref) => {
     const field = useFieldAriaIds();
+
+    const focusManualControl: FieldLabelProps['onClick'] = event => {
+      onClick?.(event);
+      if (!field || event.defaultPrevented) return;
+      event.currentTarget.ownerDocument.getElementById(field.controlId)?.focus();
+    };
 
     return (
       <FieldPrimitive.Label
@@ -85,6 +94,7 @@ const FieldLabel = React.forwardRef<HTMLLabelElement, FieldLabelProps>(
           size === 'bigger' && 'text-body',
           className,
         )}
+        onClick={focusManualControl}
         {...props}
       >
         {children}

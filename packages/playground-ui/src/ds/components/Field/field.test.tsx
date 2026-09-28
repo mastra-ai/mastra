@@ -151,6 +151,19 @@ describe('Field', () => {
     expect(editor.getAttribute('aria-describedby')).toBe(screen.getByRole('alert').id);
   });
 
+  it('focuses the code editor when its label is clicked', () => {
+    render(
+      <Field>
+        <FieldLabel>Payload</FieldLabel>
+        <CodeEditor value="{}" />
+      </Field>,
+    );
+
+    fireEvent.click(screen.getByText('Payload'));
+
+    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Payload' }));
+  });
+
   it('marks the label required for sighted users and screen readers', () => {
     render(
       <Field>

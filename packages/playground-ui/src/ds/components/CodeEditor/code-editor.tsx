@@ -328,6 +328,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     ref,
   ) => {
     const fieldAria = useFieldControlAria();
+    const controlId = id ?? fieldAria.id;
     const ariaLabelledBy = ariaLabelledByProp ?? fieldAria['aria-labelledby'];
     const ariaDescribedBy = ariaDescribedByProp ?? fieldAria['aria-describedby'];
     const ariaInvalid = ariaInvalidProp ?? fieldAria['aria-invalid'];
@@ -336,7 +337,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
 
     const extensions = useMemo(() => {
       const contentAttributes: CodeEditorContentAttributes = { 'aria-label': ariaLabel };
-      if (id) contentAttributes.id = id;
+      if (controlId) contentAttributes.id = controlId;
       if (ariaLabelledBy) contentAttributes['aria-labelledby'] = ariaLabelledBy;
       if (ariaDescribedBy) contentAttributes['aria-describedby'] = ariaDescribedBy;
       if (ariaInvalid !== undefined) contentAttributes['aria-invalid'] = String(ariaInvalid);
@@ -372,7 +373,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       schema,
       editable,
       lineWrapping,
-      id,
+      controlId,
       ariaLabel,
       ariaLabelledBy,
       ariaDescribedBy,

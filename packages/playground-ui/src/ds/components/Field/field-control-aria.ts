@@ -3,6 +3,7 @@ import { createContext, useContext } from 'react';
 export type FieldAriaIds = {
   labelId: string;
   errorId: string;
+  controlId: string;
   invalid: boolean;
 };
 
@@ -17,6 +18,7 @@ export function useFieldControlAria() {
   const field = useFieldAriaIds();
   if (!field) return {};
   return {
+    id: field.controlId,
     'aria-labelledby': field.labelId,
     'aria-describedby': field.invalid ? field.errorId : undefined,
     'aria-invalid': field.invalid || undefined,
