@@ -12,18 +12,29 @@ packages:
 
 A classifier only returns evaluation results. Your application decides how to use them, for example by selecting a route or comparing a probability with a safety threshold.
 
-The examples on this page assume `model` is an AI SDK `EvaluationModelV4` implementation. `Classifier` doesn't resolve model IDs or convert a language model into an evaluation model.
+`Classifier` requires an AI SDK evaluation model (`EvaluationModelV4`). It doesn't resolve `'provider/model'` strings or convert a language model into an evaluation model.
 
 ## Basic usage
+
+This example uses the [TypeSafe AI provider](https://ai-sdk.dev/providers/ai-sdk-providers/typesafe-ai). To use another provider, see [Evaluation models](#evaluation-models).
+
+Install the provider package:
+
+```bash npm2yarn
+npm install @ai-sdk/typesafe-ai
+```
 
 Define questions in the constructor when every evaluation uses the same question set. Keep the question object literal so TypeScript can infer the answer keys and choice values.
 
 ```typescript
 import { Classifier } from '@mastra/core/classifier'
+import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
+
+const typeSafeAi = createTypeSafeAi({ apiKey: process.env.TYPESAFE_AI_API_KEY })
 
 const classifier = new Classifier({
   id: 'request-classifier',
-  model,
+  model: typeSafeAi.evaluationModel('jev-latest'),
   questions: {
     route: {
       type: 'choice',
@@ -52,6 +63,21 @@ result.answers.urgent.probability // P(true), from 0 to 1
 ```
 
 The evaluation model receives every question with the same `state`. When a question omits `instructions`, its question name is used instead.
+
+The remaining examples on this page use `model` to refer to an evaluation model created this way.
+
+## Evaluation models
+
+The following AI SDK providers expose an `evaluationModel()` factory. When you omit `apiKey`, each provider reads its key from the listed environment variable.
+
+| Provider | Package | Factory | Default API key |
+| - | - | - | - |
+| [TypeSafe AI](https://ai-sdk.dev/providers/ai-sdk-providers/typesafe-ai) | `@ai-sdk/typesafe-ai` | `createTypeSafeAi({ apiKey }).evaluationModel(modelId)` | `TYPESAFE_AI_API_KEY` |
+| [OpenAI](https://ai-sdk.dev/providers/ai-sdk-providers/openai) | `@ai-sdk/openai` | `createOpenAI({ apiKey }).evaluationModel(modelId)` | `OPENAI_API_KEY` |
+| [Anthropic](https://ai-sdk.dev/providers/ai-sdk-providers/anthropic) | `@ai-sdk/anthropic` | `createAnthropic({ apiKey }).evaluationModel(modelId)` | `ANTHROPIC_API_KEY` |
+| [Google](https://ai-sdk.dev/providers/ai-sdk-providers/google) | `@ai-sdk/google` | `createGoogleGenerativeAI({ apiKey }).evaluationModel(modelId)` | `GOOGLE_GENERATIVE_AI_API_KEY` |
+
+TypeSafe AI answers choice, score, and boolean questions natively. OpenAI, Anthropic, and Google adapt structured language-model output, so their choice and score answers don't include `probabilities`. See [provider models](https://ai-sdk.dev/docs/ai-sdk-core/evaluation#provider-models) in the AI SDK documentation for supported model IDs and provider behavior.
 
 ## Constructor
 
