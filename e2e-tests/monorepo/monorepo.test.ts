@@ -702,7 +702,7 @@ export const environmentRoute = registerApiRoute('/environment', {
       expect(output).not.toMatch(/from ["']@inner\/hello-world(?:\/|["'])/);
       const agentResponse = await fetch(`http://localhost:${port}/api/agents/my-agent`);
       expect(agentResponse.status).toBe(200);
-      expect((await agentResponse.json()).id).toBe('my-agent');
+      expect((await agentResponse.json()).name).toBe('My Agent');
     });
 
     it('should exclude imports from dead NODE_ENV branches', async () => {
