@@ -115,7 +115,7 @@ export function ScatterPlotChart({
             />
             <Scatter
               data={data}
-              fill={'var(--chart-1)'}
+              fill={'var(--chart-blue)'}
               shape={(props: unknown) => {
                 const point = (props as { payload?: Record<string, unknown> }).payload ?? {};
                 const cx = (props as { cx?: number }).cx;

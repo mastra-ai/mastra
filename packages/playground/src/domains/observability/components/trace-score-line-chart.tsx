@@ -5,12 +5,12 @@ import { useMemo } from 'react';
 import { buildScoreChartData } from './trace-score-line-chart.utils';
 
 const SERIES_COLORS = [
-  'var(--chart-4)',
-  'var(--chart-1)',
-  'var(--chart-5)',
-  'var(--chart-6)',
-  'var(--chart-7)',
-  'var(--chart-3)',
+  'var(--chart-green)',
+  'var(--chart-blue)',
+  'var(--chart-purple)',
+  'var(--chart-orange)',
+  'var(--chart-pink)',
+  'var(--chart-yellow)',
 ];
 
 export function TraceScoreLineChart({

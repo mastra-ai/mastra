@@ -805,7 +805,7 @@ describe('semantic Sankey colors', () => {
     const { container } = render(
       <Sankey data={data} columns={columns}>
         <SankeyChart
-          getNodeColor={({ column }) => (column.id === columns[0].id ? 'var(--chart-1)' : 'var(--chart-5)')}
+          getNodeColor={({ column }) => (column.id === columns[0].id ? 'var(--chart-blue)' : 'var(--chart-purple)')}
         />
       </Sankey>,
     );
@@ -814,8 +814,8 @@ describe('semantic Sankey colors', () => {
     if (!link) throw new Error('Missing gradient link');
     for (const id of ['sankey-grad-0', 'sankey-grad-0-vivid']) {
       const stops = container.querySelectorAll(`#${id} stop`);
-      expect(stops[0]?.getAttribute('stop-color')).toBe('var(--chart-1)');
-      expect(stops[1]?.getAttribute('stop-color')).toBe('var(--chart-5)');
+      expect(stops[0]?.getAttribute('stop-color')).toBe('var(--chart-blue)');
+      expect(stops[1]?.getAttribute('stop-color')).toBe('var(--chart-purple)');
     }
     expect(link.getAttribute('fill-opacity')).toBe('0.32');
     fireEvent.mouseEnter(link);
@@ -826,16 +826,16 @@ describe('semantic Sankey colors', () => {
   it('preserves link transparency and hover emphasis with semantic tokens', async () => {
     const { container } = render(
       <Sankey data={data} columns={columns}>
-        <SankeyChart getNodeColor={() => 'var(--span-agent)'} getLinkColor={() => 'var(--chart-1)'} />
+        <SankeyChart getNodeColor={() => 'var(--span-agent)'} getLinkColor={() => 'var(--chart-blue)'} />
       </Sankey>,
     );
     await waitFor(() => expect(container.querySelector('rect[fill="var(--span-agent)"]')).not.toBeNull());
-    const link = container.querySelector('path[fill="var(--chart-1)"]');
+    const link = container.querySelector('path[fill="var(--chart-blue)"]');
     expect(link).not.toBeNull();
     expect(link?.getAttribute('fill-opacity')).toBe('0.32');
     if (!link) throw new Error('Missing semantic Sankey link');
     fireEvent.mouseEnter(link);
-    expect(link?.getAttribute('fill')).toBe('var(--chart-1)');
+    expect(link?.getAttribute('fill')).toBe('var(--chart-blue)');
     expect(link?.getAttribute('fill-opacity')).toBe('0.75');
   });
 });

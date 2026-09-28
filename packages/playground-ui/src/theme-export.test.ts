@@ -203,14 +203,7 @@ describe('theme.css export', () => {
     expect(readFileSync(resolve(pkgRoot, 'theme.css'), 'utf8')).not.toContain('legacy-theme');
     const { darkVariables, lightVariables } = getThemeVariables(themeCss);
     for (const variables of [darkVariables, lightVariables]) {
-      for (const name of [
-        'accent1',
-        'positive1',
-        'notice-success',
-        'brand-green-500',
-        'chart-blue',
-        'span-type-agent',
-      ]) {
+      for (const name of ['accent1', 'positive1', 'notice-success', 'brand-green-500', 'chart-1', 'span-type-agent']) {
         expect(variables.has(name)).toBe(false);
       }
     }
@@ -228,11 +221,17 @@ describe('theme.css export', () => {
 
   it('generates named chromatic utilities from the shared palette', async () => {
     const compiler = await compileStylesheet("@import 'tailwindcss'; @import './theme.css';", pkgRoot);
-    const css = compiler.build(['text-span-agent', 'bg-chart-1', 'stroke-chart-6', 'fill-span-tool', 'bg-purple-300']);
+    const css = compiler.build([
+      'text-span-agent',
+      'bg-chart-blue',
+      'stroke-chart-orange',
+      'fill-span-tool',
+      'bg-purple-300',
+    ]);
     for (const [utility, property, token] of [
       ['text-span-agent', 'color', 'span-agent'],
-      ['bg-chart-1', 'background-color', 'chart-1'],
-      ['stroke-chart-6', 'stroke', 'chart-6'],
+      ['bg-chart-blue', 'background-color', 'chart-blue'],
+      ['stroke-chart-orange', 'stroke', 'chart-orange'],
       ['fill-span-tool', 'fill', 'span-tool'],
       ['bg-purple-300', 'background-color', 'purple-300'],
     ]) {
@@ -592,7 +591,7 @@ describe('theme.css export', () => {
   it('resolves chromatic roles to opaque ramp values in both themes', () => {
     const { darkVariables, lightVariables } = getThemeVariables(themeCss);
     const roles =
-      /^(?:destructive|warning|success|info)-(?:bg|border|indicator|fg)$|^product-|^chart-(?:[1-8]|sequential-[1-5])$|^span-(?!type-)/;
+      /^(?:destructive|warning|success|info)-(?:bg|border|indicator|fg)$|^product-|^chart-(?:blue|blue-deep|yellow|green|purple|orange|pink|red|sequential-[1-5])$|^span-(?!type-)/;
 
     for (const variables of [darkVariables, lightVariables]) {
       const tokens = [...variables.keys()].filter(name => roles.test(name));
@@ -604,7 +603,7 @@ describe('theme.css export', () => {
       }
     }
     expect(resolveToken('success-bg', darkVariables)).not.toBe(resolveToken('success-bg', lightVariables));
-    expect(resolveToken('chart-1', darkVariables)).not.toBe(resolveToken('chart-1', lightVariables));
+    expect(resolveToken('chart-blue', darkVariables)).not.toBe(resolveToken('chart-blue', lightVariables));
   });
 
   it('registers every @theme color with tailwind-merge, so cn() can resolve a conflict between two of them', () => {

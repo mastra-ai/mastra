@@ -2,7 +2,7 @@ import type { ScatterPlotChartFormatter } from './scatter-plot-chart';
 
 export function getScatterPlotPointColor(point: Record<string, unknown>, colorKey?: string) {
   const color = colorKey ? point[colorKey] : undefined;
-  return typeof color === 'string' && color.length > 0 ? color : 'var(--chart-1)';
+  return typeof color === 'string' && color.length > 0 ? color : 'var(--chart-blue)';
 }
 
 export function getScatterPlotClickedPoint(payload: unknown) {

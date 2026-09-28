@@ -2,14 +2,14 @@
    timelines that pick a colour at runtime, so they generate no utility. */
 
 :root {
-  --chart-1: var(--blue-400);
-  --chart-2: var(--blue-600);
-  --chart-3: var(--yellow-300);
-  --chart-4: var(--green-400);
-  --chart-5: var(--purple-400);
-  --chart-6: var(--orange-300);
-  --chart-7: var(--pink-400);
-  --chart-8: var(--red-400);
+  --chart-blue: var(--blue-400);
+  --chart-blue-deep: var(--blue-600);
+  --chart-yellow: var(--yellow-300);
+  --chart-green: var(--green-400);
+  --chart-purple: var(--purple-400);
+  --chart-orange: var(--orange-300);
+  --chart-pink: var(--pink-400);
+  --chart-red: var(--red-400);
 
   --chart-sequential-1: var(--purple-400);
   --chart-sequential-2: var(--purple-300);
@@ -31,14 +31,14 @@
 }
 
 html.light {
-  --chart-1: var(--blue-300);
-  --chart-2: var(--blue-400);
-  --chart-3: var(--yellow-300);
-  --chart-4: var(--green-300);
-  --chart-5: var(--purple-300);
-  --chart-6: var(--orange-300);
-  --chart-7: var(--pink-300);
-  --chart-8: var(--red-300);
+  --chart-blue: var(--blue-300);
+  --chart-blue-deep: var(--blue-400);
+  --chart-yellow: var(--yellow-300);
+  --chart-green: var(--green-300);
+  --chart-purple: var(--purple-300);
+  --chart-orange: var(--orange-300);
+  --chart-pink: var(--pink-300);
+  --chart-red: var(--red-300);
 
   --span-agent: var(--blue-300);
   --span-workflow: var(--cyan-300);
@@ -53,14 +53,14 @@ html.light {
 }
 
 @theme inline {
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --color-chart-6: var(--chart-6);
-  --color-chart-7: var(--chart-7);
-  --color-chart-8: var(--chart-8);
+  --color-chart-blue: var(--chart-blue);
+  --color-chart-blue-deep: var(--chart-blue-deep);
+  --color-chart-yellow: var(--chart-yellow);
+  --color-chart-green: var(--chart-green);
+  --color-chart-purple: var(--chart-purple);
+  --color-chart-orange: var(--chart-orange);
+  --color-chart-pink: var(--chart-pink);
+  --color-chart-red: var(--chart-red);
   --color-chart-sequential-1: var(--chart-sequential-1);
   --color-chart-sequential-2: var(--chart-sequential-2);
   --color-chart-sequential-3: var(--chart-sequential-3);

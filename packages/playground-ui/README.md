@@ -86,7 +86,7 @@ import { ProductBadge } from '@mastra/playground-ui/components/ProductBadge';
 <ProductBadge product="persistent-server" />
 ```
 
-Charts use `--chart-1` through `--chart-8` for categories and `--chart-sequential-1` through `--chart-sequential-5` for ordered values. Span colors use `--span-agent`, `--span-workflow`, and the other span names. Pastel chart colors are fills, not text colors; keep labels on `--foreground` or `--muted-foreground`.
+Charts use hue-named roles for categories (`--chart-blue`, `--chart-blue-deep`, `--chart-yellow`, `--chart-green`, `--chart-purple`, `--chart-orange`, `--chart-pink`, `--chart-red`) and `--chart-sequential-1` through `--chart-sequential-5` for ordered values. Span colors use `--span-agent`, `--span-workflow`, and the other span names. Pastel chart colors are fills, not text colors; keep labels on `--foreground` or `--muted-foreground`.
 
 Numbered `accent*` tokens, `positive1`, `negative1`, `warning1`, `notice-success/destructive/warning/info`, and `--brand-green-*` are removed. Status consumers use the existing `success`, `destructive`, `warning`, or `info` roles. Focus styling uses `border-focus`; categorical charts and span icons use their own roles. CodeMirror uses five local `--syntax-*` properties scoped to `.cm-editor`, not a global palette.
 
@@ -96,14 +96,6 @@ To migrate removed tokens:
 
 | Removed token          | Replacement              |
 | ---------------------- | ------------------------ |
-| `--chart-blue`         | `--chart-1`              |
-| `--chart-blue-deep`    | `--chart-2`              |
-| `--chart-yellow`       | `--chart-3`              |
-| `--chart-green`        | `--chart-4`              |
-| `--chart-purple`       | `--chart-5`              |
-| `--chart-orange`       | `--chart-6`              |
-| `--chart-pink`         | `--chart-7`              |
-| `--chart-red`          | `--chart-8`              |
 | `--chart-soft-N`       | `--chart-sequential-N`   |
 | `--span-type-NAME`     | `--span-NAME`            |
 | `accent1`, `positive1` | `success-*`              |
@@ -116,7 +108,7 @@ To migrate removed tokens:
 `SankeyChart` accepts `getNodeColor` and `getLinkColor` callbacks returning CSS colors. Explicit link colors keep the default link transparency and hover emphasis:
 
 ```tsx
-<SankeyChart getNodeColor={() => 'var(--span-agent)'} getLinkColor={() => 'var(--chart-1)'} />
+<SankeyChart getNodeColor={() => 'var(--span-agent)'} getLinkColor={() => 'var(--chart-blue)'} />
 ```
 
 Foundations/Color has separate stories for ramps, semantic colors, product colors, charts, span types, and brand colors. Badge and avatar examples live in Elements/Products; the semantic Sankey example lives in Metrics/SankeyChart.

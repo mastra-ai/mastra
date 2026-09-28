@@ -75,14 +75,14 @@ const products = [
 ] as const;
 
 const chartSeriesTokens = [
-  { token: 'chart-1', note: 'Primary series: p50 latency, input tokens, completed runs' },
-  { token: 'chart-2', note: 'Lower segment of a stack topped by --chart-1' },
-  { token: 'chart-3', note: 'Second series beside blue: p95 latency, output tokens' },
-  { token: 'chart-4', note: 'First scorer series' },
-  { token: 'chart-5', note: 'Cost, in tokens and in currency' },
-  { token: 'chart-6', note: 'Scorer datasets, fourth scorer series' },
-  { token: 'chart-7', note: 'Errors, stacked on --chart-2' },
-  { token: 'chart-8', note: 'Errors, stacked on --chart-1' },
+  { token: 'chart-blue', note: 'Primary series: p50 latency, input tokens, completed runs' },
+  { token: 'chart-blue-deep', note: 'Lower segment of a stack topped by --chart-blue' },
+  { token: 'chart-yellow', note: 'Second series beside blue: p95 latency, output tokens' },
+  { token: 'chart-green', note: 'First scorer series' },
+  { token: 'chart-purple', note: 'Cost, in tokens and in currency' },
+  { token: 'chart-orange', note: 'Scorer datasets, fourth scorer series' },
+  { token: 'chart-pink', note: 'Errors, stacked on --chart-blue-deep' },
+  { token: 'chart-red', note: 'Errors, stacked on --chart-blue' },
 ];
 
 const chartSoftSteps = [1, 2, 3, 4, 5];

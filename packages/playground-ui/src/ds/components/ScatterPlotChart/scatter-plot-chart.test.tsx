@@ -42,12 +42,14 @@ describe('ScatterPlotChart', () => {
   });
 
   it('uses design tokens as the default point color', () => {
-    expect(getScatterPlotPointColor({ id: 'trace-a' })).toBe('var(--chart-1)');
+    expect(getScatterPlotPointColor({ id: 'trace-a' })).toBe('var(--chart-blue)');
   });
 
   it('supports render-only color overrides from each datum', () => {
-    expect(getScatterPlotPointColor({ id: 'trace-a', color: 'var(--chart-2)' }, 'color')).toBe('var(--chart-2)');
-    expect(getScatterPlotPointColor({ id: 'trace-a', color: 12 }, 'color')).toBe('var(--chart-1)');
+    expect(getScatterPlotPointColor({ id: 'trace-a', color: 'var(--chart-blue-deep)' }, 'color')).toBe(
+      'var(--chart-blue-deep)',
+    );
+    expect(getScatterPlotPointColor({ id: 'trace-a', color: 12 }, 'color')).toBe('var(--chart-blue)');
   });
 
   it('extracts clicked point payloads from Recharts event payloads', () => {
