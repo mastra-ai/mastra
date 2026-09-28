@@ -34,8 +34,8 @@ class Unconvertible extends Error {}
  *
  * Returns `undefined` when the schema does not declare 2019-09, or relies on
  * features this conversion cannot preserve (`$recursiveRef`/`$recursiveAnchor`,
- * `$ref` pointers into tuple members, embedded `$schema` declarations, or
- * `contains` combined with `unevaluatedItems`), or exceeds the depth/node limits.
+ * `$ref` pointers into tuple members, embedded `$schema` declarations,
+ * `unevaluatedItems`, `prefixItems`, or `contentSchema`), or exceeds the depth/node limits.
  * Callers should then keep the original.
  */
 export function toJsonSchema2020<T extends { $schema?: string }>(schema: T): T | undefined {
@@ -58,10 +58,12 @@ function rewrite(schema: unknown, depth: number, budget: { nodes: number }, isRo
   checkBudget(depth, budget);
 
   const out: Record<string, unknown> = { ...schema };
-  // Embedded resources may declare their own dialect; unevaluatedItems interacts with contains differently in 2020-12.
+  // Embedded resources may declare their own dialect. unevaluatedItems interacts with contains (including via
+  // in-place applicators) differently in 2020-12, prefixItems is an annotation in 2019-09 but an assertion in
+  // 2020-12, and contentSchema is not walked. zod v3 emits none of these, so decline rather than risk a change.
   if (!isRoot && '$schema' in out) throw new Unconvertible();
   if ('$recursiveRef' in out || '$recursiveAnchor' in out) throw new Unconvertible();
-  if ('contains' in out && 'unevaluatedItems' in out) throw new Unconvertible();
+  if ('unevaluatedItems' in out || 'prefixItems' in out || 'contentSchema' in out) throw new Unconvertible();
   if (typeof out.$ref === 'string' && /\/(items\/\d+|additionalItems)(\/|$)/.test(out.$ref)) {
     throw new Unconvertible();
   }

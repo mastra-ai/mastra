@@ -97,4 +97,23 @@ describe('toJsonSchema2020', () => {
       }),
     ).toBeUndefined();
   });
+
+  it('does not convert keywords whose meaning changes or that are not walked', () => {
+    const $schema = 'https://json-schema.org/draft/2019-09/schema#';
+    // contains reached via an in-place applicator
+    expect(
+      toJsonSchema2020({
+        $schema,
+        type: 'array',
+        allOf: [{ contains: { type: 'number' } }],
+        unevaluatedItems: false,
+      }),
+    ).toBeUndefined();
+    // prefixItems is an annotation in 2019-09 but an assertion in 2020-12
+    expect(toJsonSchema2020({ $schema, type: 'array', prefixItems: [{ type: 'string' }] })).toBeUndefined();
+    // contentSchema may hide tuple-form items
+    expect(
+      toJsonSchema2020({ $schema, type: 'string', contentSchema: { type: 'array', items: [{ type: 'string' }] } }),
+    ).toBeUndefined();
+  });
 });
