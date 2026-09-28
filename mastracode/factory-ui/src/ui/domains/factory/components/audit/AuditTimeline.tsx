@@ -147,7 +147,7 @@ export function AuditTimeline({
               strokeDasharray="2 3"
               strokeLinecap="round"
               vectorEffect="non-scaling-stroke"
-              className="stroke-blue-400/60"
+              className="stroke-blue-500"
             />
           ))
         : null}

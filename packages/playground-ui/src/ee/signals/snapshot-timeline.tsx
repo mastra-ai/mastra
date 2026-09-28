@@ -49,7 +49,7 @@ export function TimelineTrack({
             aria-pressed={marker === 'compare-point' ? grabbed : undefined}
             className={`absolute top-4 size-3.5 -translate-1/2 rounded-full border-2 ${
               marker ? MARKER_TICK_CLASSES[marker] : 'border-background bg-muted hover:bg-info-bg'
-            } ${grabbed ? 'ring-2 ring-info-indicator/70' : ''}`}
+            } ${grabbed ? 'ring-2 ring-info-indicator' : ''}`}
             data-marker={marker}
             onClick={() => onTickSelect(index)}
             style={{ left: `${positions[index]}%` }}

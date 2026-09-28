@@ -132,6 +132,7 @@ export const Colors = {
   'ds-yellow': 'var(--color-ds-yellow)',
 
   'destructive-bg': 'var(--destructive-bg)',
+  'destructive-bg-active': 'var(--destructive-bg-active)',
   'destructive-border': 'var(--destructive-border)',
   'destructive-indicator': 'var(--destructive-indicator)',
   'destructive-fg': 'var(--destructive-fg)',

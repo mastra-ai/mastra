@@ -61,8 +61,8 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
               className={cn(
                 'rounded px-2 py-0.5 text-column',
                 workingMemorySource === 'resource'
-                  ? 'bg-purple-500/20 text-purple-400'
-                  : 'bg-blue-500/20 text-blue-400',
+                  ? 'bg-badge-purple-bg text-badge-purple-fg'
+                  : 'bg-badge-blue-bg text-badge-blue-fg',
               )}
               title={
                 workingMemorySource === 'resource'

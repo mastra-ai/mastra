@@ -3,6 +3,7 @@
 
 :root {
   --destructive-bg: var(--red-950);
+  --destructive-bg-active: var(--red-900);
   --destructive-border: var(--red-700);
   --destructive-indicator: var(--red-500);
   --destructive-fg: var(--red-50);
@@ -64,22 +65,23 @@
   --badge-pink: var(--pink-500);
   --badge-pink-fg: var(--pink-50);
 
-  --product-studio-bg: var(--cyan-950);
-  --product-studio-fg: var(--cyan-300);
-  --product-server-bg: var(--blue-950);
-  --product-server-fg: var(--blue-300);
-  --product-observability-bg: var(--green-950);
-  --product-observability-fg: var(--green-300);
-  --product-factory-bg: var(--orange-950);
-  --product-factory-fg: var(--orange-300);
-  --product-workers-bg: var(--yellow-950);
-  --product-workers-fg: var(--yellow-300);
-  --product-persistent-server-bg: var(--purple-950);
-  --product-persistent-server-fg: var(--purple-300);
+  --product-studio-bg: var(--cyan-soft-900);
+  --product-studio-fg: var(--cyan-50);
+  --product-server-bg: var(--blue-soft-900);
+  --product-server-fg: var(--blue-50);
+  --product-observability-bg: var(--green-soft-900);
+  --product-observability-fg: var(--green-50);
+  --product-factory-bg: var(--orange-soft-900);
+  --product-factory-fg: var(--orange-50);
+  --product-workers-bg: var(--yellow-soft-900);
+  --product-workers-fg: var(--yellow-50);
+  --product-persistent-server-bg: var(--purple-soft-900);
+  --product-persistent-server-fg: var(--purple-50);
 }
 
 html.light {
   --destructive-bg: var(--red-100);
+  --destructive-bg-active: var(--red-200);
   --destructive-border: var(--red-300);
   --destructive-indicator: var(--red-600);
   --destructive-fg: var(--red-950);
@@ -156,6 +158,7 @@ html.light {
 
 @theme inline {
   --color-destructive-bg: var(--destructive-bg);
+  --color-destructive-bg-active: var(--destructive-bg-active);
   --color-destructive-border: var(--destructive-border);
   --color-destructive-indicator: var(--destructive-indicator);
   --color-destructive-fg: var(--destructive-fg);

@@ -72,7 +72,7 @@ function buildDarkTheme(): Extension {
       borderLeftColor: 'var(--foreground)',
     },
     '.cm-selectionBackground, .cm-content ::selection': {
-      backgroundColor: 'color-mix(in srgb, var(--info-indicator) 22%, transparent)',
+      backgroundColor: 'var(--info-bg)',
     },
     '.cm-tooltip-autocomplete': {
       backgroundColor: 'var(--background)',
@@ -148,7 +148,7 @@ function buildLightTheme(): Extension {
     },
     '&.cm-focused .cm-selectionBackground, & .cm-line::selection, & .cm-selectionLayer .cm-selectionBackground, .cm-content ::selection':
       {
-        background: 'color-mix(in srgb, var(--info-indicator) 22%, transparent) !important',
+        background: 'var(--info-bg) !important',
       },
     '.cm-tooltip-autocomplete': {
       backgroundColor: 'var(--background)',

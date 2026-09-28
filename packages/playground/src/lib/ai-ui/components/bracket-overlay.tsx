@@ -229,24 +229,24 @@ function HighlightBlock({ highlight, visible }: { highlight: HighlightPosition; 
 function getStateColor(state: HighlightPosition['state']): string {
   switch (state) {
     case 'complete':
-      return 'color-mix(in oklab, var(--success-indicator) 40%, transparent)';
+      return 'var(--success-border)';
     case 'loading':
-      return 'color-mix(in oklab, var(--info-indicator) 40%, transparent)';
+      return 'var(--info-border)';
     case 'failed':
-      return 'color-mix(in oklab, var(--destructive-indicator) 40%, transparent)';
+      return 'var(--destructive-border)';
     case 'disconnected':
-      return 'color-mix(in oklab, var(--warning-indicator) 40%, transparent)';
+      return 'var(--warning-border)';
     // Buffering states use a neutral bracket so they don't overpower the message content.
     case 'buffering':
-      return 'color-mix(in oklab, var(--muted-foreground) 45%, transparent)';
+      return 'var(--border-strong)';
     case 'buffering-complete':
-      return 'color-mix(in oklab, var(--muted-foreground) 45%, transparent)';
+      return 'var(--border-strong)';
     case 'buffering-failed':
-      return 'color-mix(in oklab, var(--destructive-indicator) 40%, transparent)';
+      return 'var(--destructive-border)';
     // Activation state uses green — same as sync observation/reflection 'complete'
     case 'activated':
-      return 'color-mix(in oklab, var(--success-indicator) 40%, transparent)';
+      return 'var(--success-border)';
     default:
-      return 'color-mix(in oklab, var(--success-indicator) 40%, transparent)';
+      return 'var(--success-border)';
   }
 }

@@ -231,7 +231,7 @@ const RefBlockContent = ({
             </div>
 
             {(isDraft || hasUnpublishedEdits) && (
-              <div className="text-warning flex items-start gap-1.5 px-1 pb-1 text-meta">
+              <div className="flex items-start gap-1.5 px-1 pb-1 text-meta text-warning-fg">
                 <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
                 <span>
                   {isDraft
@@ -257,7 +257,7 @@ const RefBlockContent = ({
             />
           </>
         ) : (
-          <div className="text-warning flex items-center gap-2 py-3">
+          <div className="flex items-center gap-2 py-3 text-warning-fg">
             <Txt variant="caption">Prompt block not found (ID: {block.promptBlockId})</Txt>
           </div>
         )}

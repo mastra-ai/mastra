@@ -27,7 +27,7 @@ export function FactoryManagementSection() {
             <AlertDialog.Trigger asChild>
               <Button
                 size="sm"
-                className="text-destructive-fg border-destructive-indicator/25 hover:bg-destructive-bg hover:text-destructive-fg"
+                className="text-destructive-fg border-destructive-border hover:bg-destructive-bg hover:text-destructive-fg"
                 disabled={deleteMutation.isPending}
                 aria-label={`Delete ${factory.name}`}
               >

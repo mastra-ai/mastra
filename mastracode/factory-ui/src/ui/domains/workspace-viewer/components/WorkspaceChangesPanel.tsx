@@ -23,13 +23,13 @@ const STATUS_LABELS: Record<WorkspaceChangeStatus, string> = {
 };
 
 const STATUS_CLASSES: Record<WorkspaceChangeStatus, string> = {
-  modified: 'text-info-fg/70!',
-  added: 'text-success-fg/70!',
-  deleted: 'text-destructive-fg/70!',
-  renamed: 'text-info-fg/70!',
-  copied: 'text-success-fg/70!',
-  untracked: 'text-success-fg/70!',
-  conflicted: 'text-destructive-fg/70!',
+  modified: 'text-info-indicator!',
+  added: 'text-success-indicator!',
+  deleted: 'text-destructive-indicator!',
+  renamed: 'text-info-indicator!',
+  copied: 'text-success-indicator!',
+  untracked: 'text-success-indicator!',
+  conflicted: 'text-destructive-indicator!',
 };
 const FOLDER_CLASS = 'text-muted-foreground!';
 
@@ -46,8 +46,8 @@ function ChangeCounts({ additions, deletions, binary }: Pick<WorkspaceChange, 'a
         deletions === 1 ? 'deletion' : 'deletions'
       }`}
     >
-      <span className="text-success-fg/70">+{additions}</span>
-      <span className="text-destructive-fg/70">−{deletions}</span>
+      <span className="text-success-indicator">+{additions}</span>
+      <span className="text-destructive-indicator">−{deletions}</span>
     </span>
   );
 }

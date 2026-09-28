@@ -33,7 +33,7 @@ export function safeReturnTo(raw?: string): string {
 
 function CustomDomainAuthError({ hostname }: { hostname: string }) {
   return (
-    <div role="alert" className="border-destructive/30 bg-card rounded-lg border px-4 py-3">
+    <div role="alert" className="border-destructive-border bg-card rounded-lg border px-4 py-3">
       <Txt as="h2" variant="subheading" className="text-destructive">
         Mastra Platform sign-in isn&apos;t available on custom domains
       </Txt>
@@ -202,7 +202,7 @@ export function SignInPage() {
 
           <section aria-label="Authentication" className="mt-10 w-full max-w-md lg:mt-12">
             {authError && !customDomainBlocked ? (
-              <div role="alert" className="border-destructive/30 bg-card mb-6 rounded-lg border px-4 py-3">
+              <div role="alert" className="border-destructive-border bg-card mb-6 rounded-lg border px-4 py-3">
                 <Txt as="p" variant="subheading" className="text-destructive">
                   {accessDenied ? 'Access denied' : 'Sign-in failed'}
                 </Txt>

@@ -27,17 +27,17 @@ const modeConfig: Record<SearchMode, { label: string; icon: React.ReactNode; col
   bm25: {
     label: 'Keyword',
     icon: <FileText className="h-3.5 w-3.5" />,
-    color: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+    color: 'bg-badge-blue-bg text-badge-blue-fg border-badge-blue-border',
   },
   vector: {
     label: 'Semantic',
     icon: <Sparkles className="h-3.5 w-3.5" />,
-    color: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
+    color: 'bg-badge-purple-bg text-badge-purple-fg border-badge-purple-border',
   },
   hybrid: {
     label: 'Hybrid',
     icon: <Zap className="h-3.5 w-3.5" />,
-    color: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
+    color: 'bg-badge-yellow-bg text-badge-yellow-fg border-badge-yellow-border',
   },
 };
 
