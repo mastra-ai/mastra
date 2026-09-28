@@ -1067,10 +1067,10 @@ describe('built-in board and integration handlers', () => {
     });
   });
 
-  it('files the pull request card only on the arrival, not on the item that authored it', async () => {
+  it('files the pull request card only on the arrival and moves the authoring Work item to Review', async () => {
     // Opening a pull request is evaluated once per card it concerns. Only the
     // arrival — flagged `pullRequestIntake` — files the card; the authoring
-    // item's own evaluation must leave the card alone.
+    // item's own evaluation hands its build to Review.
     const authored = {
       ...githubContext('pullRequestOpened'),
       item: {
@@ -1088,13 +1088,41 @@ describe('built-in board and integration handlers', () => {
       itemRevision: 1,
     };
 
-    expect(await defaultGithubRules.pullRequestOpened?.(authored)).toBeUndefined();
+    expect(await defaultGithubRules.pullRequestOpened?.(authored)).toEqual({
+      type: 'transition',
+      idempotencyKey: 'delivery-1:work-pull-request-opened',
+      board: 'work',
+      stage: 'review',
+    });
     expect(await defaultGithubRules.pullRequestOpened?.({ ...authored, pullRequestIntake: true })).toMatchObject({
       type: 'upsertLinkedWorkItem',
       source: 'github-pr',
       sourceKey: 'github-pr:17',
     });
   });
+
+  it.each([['planning'], ['review'], ['done'], ['canceled']])(
+    'leaves an authoring Work item in %s where it is when its pull request opens',
+    async stage => {
+      const authored = {
+        ...githubContext('pullRequestOpened'),
+        item: {
+          id: 'item-1',
+          source: 'github-issue' as const,
+          sourceKey: 'github-issue:42',
+          parentWorkItemId: null,
+          title: 'Issue 42',
+          url: 'https://github.test/acme/repo/issues/42',
+          stages: [stage],
+          acceptedAt: null,
+          metadata: {},
+        },
+        board: 'work',
+        itemRevision: 1,
+      };
+      expect(await defaultGithubRules.pullRequestOpened?.(authored)).toBeUndefined();
+    },
+  );
 
   it('records PR branches, status, assignments, and review requests on Review intake', async () => {
     const context = githubContext('pullRequestOpened');
