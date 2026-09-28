@@ -669,8 +669,8 @@ export class DurableAgent<
       name: agentName,
       // Delegate to wrapped agent's instructions
       instructions: ({ requestContext }) => agent.getInstructions({ requestContext }),
-      // We need to provide model to satisfy the base class, but we'll delegate to wrapped agent
-      model: (agent as any).__model ?? agent.getModel(),
+      // Preserve dynamic model resolution until a request context is available.
+      model: ({ requestContext }) => agent.getModel({ requestContext }),
     });
 
     this.#wrappedAgent = agent;

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 
 import { Box, Spacer, Text, matchesKey } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
-import type { StorageBackend, ThinkingLevelSetting } from '@mastra/code-sdk/onboarding/settings';
+import type { ExperimentalAgent, StorageBackend, ThinkingLevelSetting } from '@mastra/code-sdk/onboarding/settings';
 import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import { SettingsComponent } from '../components/settings.js';
 import { askModalQuestion } from '../modal-question.js';
@@ -196,6 +196,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     libsqlUrl: globalSettings.storage.libsql?.url ?? '',
     experimentalGithubSignals: globalSettings.signals.experimentalGithubSignals,
     experimentalCrossAgentSignals: globalSettings.signals.experimentalCrossAgentSignals,
+    experimentalAgent: globalSettings.experimentalAgent,
     backgroundToolsEnabled: globalSettings.backgroundTools?.enabled ?? false,
     // Display an explicit provider choice as Auto while its API key is missing,
     // matching the runtime resolver's fallback. The saved preference is kept so
@@ -277,6 +278,12 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         saveSettings(current);
         ctx.showInfo(`Experimental cross-agent communication: ${enabled ? 'on' : 'off'} (restart required)`);
         return true;
+      },
+      onExperimentalAgentChange: (agent: ExperimentalAgent | null) => {
+        const current = loadSettings();
+        current.experimentalAgent = agent;
+        saveSettings(current);
+        ctx.showInfo(`Experimental agent: ${agent ?? 'off'} (restart required)`);
       },
       onBackgroundToolsChange: enabled => {
         const current = loadSettings();

@@ -34,7 +34,7 @@ export const backgroundToolsSettingsScenario: McE2eScenario = {
 
     terminal.submit('/settings');
     await runtime.waitForScreenText(/Experimental background tools\s+Off/i, terminal);
-    terminal.write('\x1b[B'.repeat(8));
+    terminal.write('\x1b[B'.repeat(9));
     terminal.write('\r');
     await runtime.waitForScreenText(/Enable background tools and the activity center/i, terminal);
     terminal.write('\x1b[A');
@@ -46,7 +46,7 @@ export const backgroundToolsSettingsScenario: McE2eScenario = {
 
     terminal.submit('/settings');
     await runtime.waitForScreenText(/Experimental background tools\s+On/i, terminal);
-    terminal.write('\x1b[B'.repeat(8));
+    terminal.write('\x1b[B'.repeat(9));
     terminal.write('\r');
     await runtime.waitForScreenText(/Enable background tools and the activity center/i, terminal);
     terminal.write('\x1b[B');

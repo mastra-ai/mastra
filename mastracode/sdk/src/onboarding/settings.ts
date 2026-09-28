@@ -48,6 +48,16 @@ export interface CustomProviderSetting {
 /** Storage backend type. */
 export type StorageBackend = 'libsql' | 'pg';
 
+/** Experimental agent implementation used by MastraCode. */
+export type ExperimentalAgent = 'durable' | 'evented';
+
+export class ExperimentalAgentSettingsError extends Error {
+  constructor(value: unknown) {
+    super(`Invalid experimentalAgent setting ${JSON.stringify(value)}. Expected "durable", "evented", or null.`);
+    this.name = 'ExperimentalAgentSettingsError';
+  }
+}
+
 /** LibSQL-specific storage settings. */
 export interface LibSQLStorageSettings {
   url?: string;
@@ -350,6 +360,8 @@ export interface GlobalSettings {
   shellPassthrough: ShellPassthroughSettings;
   // Hold-space voice input configuration
   voice: VoiceSettings;
+  // Experimental coding agent implementation. Null keeps the plain Agent.
+  experimentalAgent: ExperimentalAgent | null;
   // Native background execution for eligible Mastra Code tools
   backgroundTools: BackgroundToolSettings;
   // Signal routing configuration
@@ -468,6 +480,7 @@ const DEFAULTS: GlobalSettings = {
   },
   shellPassthrough: { mode: 'default' },
   voice: { enabled: false, engine: defaultVoiceEngine(), provider: DEFAULT_STT_PROVIDER },
+  experimentalAgent: null,
   backgroundTools: { enabled: false },
   signals: {
     unixSocketPubSub: false,
@@ -629,6 +642,12 @@ function parseGithubPollIntervalMs(value: unknown): number {
   const intervalMs = Math.floor(value);
   if (intervalMs < GITHUB_POLL_INTERVAL_MIN_MS) return DEFAULTS.signals.githubPollIntervalMs;
   return Math.min(intervalMs, GITHUB_POLL_INTERVAL_MAX_MS);
+}
+
+export function parseExperimentalAgentSetting(value: unknown): ExperimentalAgent | null {
+  if (value === undefined || value === null) return null;
+  if (value === 'durable' || value === 'evented') return value;
+  throw new ExperimentalAgentSettingsError(value);
 }
 
 function parseBackgroundToolSettings(rawBackgroundTools: unknown): BackgroundToolSettings {
@@ -997,13 +1016,15 @@ function migrateFromAuth(settingsPath: string): boolean {
         browser: parseBrowserSettings(raw.browser),
         shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
         voice: parseVoiceSettings(raw.voice),
+        experimentalAgent: parseExperimentalAgentSetting(raw.experimentalAgent),
         backgroundTools: parseBackgroundToolSettings(raw.backgroundTools),
         signals: parseSignalSettings(raw.signals),
         mcp: parseMcpDiscoverySettings(raw.mcp),
         observability: parseObservabilitySettings(raw.observability),
       };
       applyQuietModePreferenceRollout(settings, raw.onboarding);
-    } catch {
+    } catch (error) {
+      if (error instanceof ExperimentalAgentSettingsError) throw error;
       settings = structuredClone(DEFAULTS);
     }
   } else {
@@ -1135,6 +1156,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       browser: parseBrowserSettings(raw.browser),
       shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
       voice: parseVoiceSettings(raw.voice),
+      experimentalAgent: parseExperimentalAgentSetting(raw.experimentalAgent),
       backgroundTools: parseBackgroundToolSettings(raw.backgroundTools),
       signals: parseSignalSettings(raw.signals),
       mcp: parseMcpDiscoverySettings(raw.mcp),
@@ -1161,7 +1183,8 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
     }
 
     return rememberLoadedSettings(settings);
-  } catch {
+  } catch (error) {
+    if (error instanceof ExperimentalAgentSettingsError) throw error;
     return rememberLoadedSettings(structuredClone(DEFAULTS));
   }
 }
