@@ -152,7 +152,11 @@ export function SidebarAttention() {
                       className="animate-in fade-in slide-in-from-bottom-1"
                       style={{ animationDelay: `${index * 40}ms`, animationFillMode: 'backwards' }}
                     >
-                      <AttentionItemRow factoryId={factoryId} {...actions.rowProps(item)} onOpen={() => setOpen(false)} />
+                      <AttentionItemRow
+                        factoryId={factoryId}
+                        {...actions.rowProps(item)}
+                        onOpen={() => setOpen(false)}
+                      />
                     </li>
                   ))}
                 </ul>
