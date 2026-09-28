@@ -1,6 +1,5 @@
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode } from 'react';
 
 interface RunActionPopoverProps {
@@ -30,12 +29,7 @@ export function RunActionPopover({ label, icon, open, onOpenChange, children }: 
             form submissions from reaching an enclosing form (e.g. the workflow trigger). */}
         <div onSubmit={event => event.stopPropagation()}>
           <ScrollArea className="w-full" maxHeight="min(600px, calc(100dvh - 8rem))">
-            <div className="space-y-4 p-4">
-              <Txt as="h3" variant="body" tone="muted">
-                {label}
-              </Txt>
-              {children}
-            </div>
+            <div className="space-y-4 p-4">{children}</div>
           </ScrollArea>
         </div>
       </PopoverContent>
