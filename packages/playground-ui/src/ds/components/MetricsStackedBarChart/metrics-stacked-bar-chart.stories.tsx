@@ -53,3 +53,23 @@ export const AllZero: Story = {
     yDomain: [0, 1],
   },
 };
+
+const included = 100;
+const egress = data.map(({ time }, i) => ({ time, total: Math.round(9 * (i + 1) ** 1.05) }));
+
+export const OverIncluded: Story = {
+  args: {
+    data: egress.map(({ time, total }) => ({
+      time,
+      included: Math.min(total, included),
+      over: Math.max(total - included, 0),
+    })),
+    series: [
+      { dataKey: 'included', label: 'Included', color: 'var(--gray-6)' },
+      { dataKey: 'over', label: 'Over', color: 'var(--badge-red)' },
+    ],
+    valueFormatter: value => `${value} GB`,
+    referenceLine: { value: included, label: `${included} GB included`, color: 'var(--badge-red)' },
+    showLegend: false,
+  },
+};
