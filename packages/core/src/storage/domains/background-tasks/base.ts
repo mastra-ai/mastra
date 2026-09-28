@@ -1,9 +1,9 @@
 import type {
   BackgroundTask,
-  BackgroundTaskStatus,
   TaskFilter,
   TaskListResult,
   UpdateBackgroundTask,
+  UpdateBackgroundTaskOptions,
 } from '../../../background-tasks/types';
 import { StorageDomain } from '../base';
 
@@ -28,14 +28,20 @@ export abstract class BackgroundTasksStorage extends StorageDomain {
 
   /**
    * Partial update of a task record.
-   * Only the provided fields are updated; others are left unchanged.
-   * When `expectedStatus` is provided, the update is applied only if the task
-   * still has that status. Returns whether the update was applied.
+   * Only the provided fields are updated; others are left unchanged. Field
+   * presence is significant: passing `ownerId: undefined` clears the column,
+   * it does not skip it.
+   *
+   * The optional conditions in `options` make the write a compare-and-set —
+   * it is applied only if the stored row still matches every supplied
+   * condition. `expectedOwnerId` / `expectedLeaseExpiresAt` fence writes from
+   * superseded owners so a worker that lost its lease cannot commit results.
+   * Returns whether the update was applied.
    */
   abstract updateTask(
     taskId: string,
     update: UpdateBackgroundTask,
-    options?: { expectedStatus?: BackgroundTaskStatus },
+    options?: UpdateBackgroundTaskOptions,
   ): Promise<boolean>;
 
   /** Get a single task by ID. Returns null if not found. */

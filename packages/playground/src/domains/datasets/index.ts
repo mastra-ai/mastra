@@ -1,6 +1,5 @@
 // Query hooks
 export * from '@mastra/playground-ui/domains/datasets';
-export * from './hooks/use-dataset-items';
 export * from './hooks/use-dataset-item-versions';
 export * from './hooks/use-dataset-experiments';
 export * from './hooks/use-experiments';

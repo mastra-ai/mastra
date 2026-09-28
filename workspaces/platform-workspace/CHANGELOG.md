@@ -1,5 +1,14 @@
 # @mastra/platform
 
+## 1.6.2-alpha.0
+
+### Patch Changes
+
+- Fixed nested folders in `PlatformFilesystem` workspaces so they open in Studio. Folders created by writing a file under them are now reported by `stat` and `exists`, and can be listed with `readdir`. ([#25184](https://github.com/mastra-ai/mastra/pull/25184))
+
+- Updated dependencies [[`9773cb2`](https://github.com/mastra-ai/mastra/commit/9773cb2f22f307c8017f887af4a6728c4cb875c9)]:
+  - @mastra/core@1.72.0-alpha.4
+
 ## 1.6.1
 
 ### Patch Changes

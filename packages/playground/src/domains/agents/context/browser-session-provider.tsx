@@ -1,6 +1,6 @@
+import { useBrowserSessionProbe } from '@mastra/playground-ui/domains/agents/hooks/use-browser-session-probe';
 import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { useBrowserSessionProbe } from '../hooks/use-browser-session-probe';
 import type { StreamStatus } from '../hooks/use-browser-stream';
 import { useCloseBrowser } from '../hooks/use-close-browser';
 import { createBrowserFrameStore } from './browser-frame-store';

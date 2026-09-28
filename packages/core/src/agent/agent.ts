@@ -223,6 +223,7 @@ import type {
   DiscoverAgentThreadPeersOptions,
   CancelQueuedAgentMessagesOptions,
   CancelQueuedAgentMessagesResult,
+  DurableAgentLike,
   AgentThreadEventListener,
   SubscribeAgentThreadEventsOptions,
   PublicStructuredOutputOptions,
@@ -2063,7 +2064,9 @@ export class Agent<
     const channelProcessors = this.#agentChannels ? this.#agentChannels.getInputProcessors(configuredProcessors) : [];
 
     // Get browser context processors (with deduplication)
-    const browserProcessors = this.#browser ? this.#browser.getInputProcessors(configuredProcessors) : [];
+    const browserProcessors = this.#browser
+      ? this.#browser.getInputProcessors(configuredProcessors, { stateSignal: Boolean(memory) })
+      : [];
 
     // Memory processors should run first (to fetch history, semantic recall, working memory)
     // Workspace instructions run after memory
@@ -7132,6 +7135,14 @@ export class Agent<
           args: payload.requireToolApproval.args,
           requiresApproval: true,
         });
+      } else if (payload.type === 'approval' && payload.toolCallId) {
+        // Durable tool-call step suspending a directly approval-gated tool.
+        toolCalls.push({
+          toolCallId: payload.toolCallId,
+          toolName: payload.toolName,
+          args: payload.args,
+          requiresApproval: true,
+        });
       } else if (payload.toolCallSuspended || payload.toolName || payload.toolCallId) {
         toolCalls.push({
           toolCallId: payload.toolCallId ?? this.#findResumeLabelForStep(existingSnapshot, stepKey),
@@ -8662,7 +8673,8 @@ export class Agent<
     // before the resourceId column was populated carry the resource only in
     // the snapshot. Durable agents persist their agentic loop under a separate
     // workflow name, so query both — otherwise suspended durable runs are
-    // never discoverable.
+    // never discoverable. Durable wrappers from other engines (e.g. Inngest)
+    // namespace that name and advertise it on the runtime agent.
     const storagePageSize = 100;
     const isPaginated = perPage !== undefined && page !== undefined;
     const firstRequestedMatch = isPaginated ? page * perPage : 0;
@@ -8670,7 +8682,13 @@ export class Agent<
     const matchedRuns: AgentRun[] = [];
     let total = 0;
 
-    for (const workflowName of ['agentic-loop', DurableStepIds.AGENTIC_LOOP]) {
+    const runtimeLoopWorkflowName = (
+      this.#threadRuntimeAgent as Partial<Pick<DurableAgentLike, 'durableLoopWorkflowName'>> | undefined
+    )?.durableLoopWorkflowName;
+    const workflowNames = new Set(['agentic-loop', DurableStepIds.AGENTIC_LOOP]);
+    if (typeof runtimeLoopWorkflowName === 'string') workflowNames.add(runtimeLoopWorkflowName);
+
+    for (const workflowName of workflowNames) {
       for (let storagePage = 0; ; storagePage++) {
         const { runs: workflowRuns } = await workflowsStore.listWorkflowRuns({
           workflowName,

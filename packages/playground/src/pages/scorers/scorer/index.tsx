@@ -6,6 +6,7 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useScorer, useScoresByScorerId } from '@mastra/playground-ui/domains/scores';
+import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
 import { sortBy } from '@mastra/playground-ui/sort/sort-by';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
@@ -24,7 +25,6 @@ import type { ScoresSortKey } from '@/domains/scores/components/scores-list';
 import { ScoresTools } from '@/domains/scores/components/scores-tools';
 import type { ScoreEntityOption as EntityOptions } from '@/domains/scores/components/scores-tools';
 import { useScoresColumns } from '@/domains/scores/hooks/use-scores-columns';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
 const crumbs = [navCrumb('/scorers'), scorerCrumb];
 const SCORES_SORT_KEYS: readonly ScoresSortKey[] = ['date', 'score'];
@@ -46,7 +46,7 @@ export default function Scorer() {
   const columnsState = useScoresColumns();
 
   const { data: agents = {}, isLoading: isLoadingAgents, error: agentsError } = useAgents();
-  const { isLoading: isLoadingWorkflows, error: workflowsError } = useWorkflows();
+  const { isLoading: isLoadingWorkflows, error: workflowsError } = useWorkflows({});
   const { sort, onSortChange } = useUrlSort({ searchParams, setSearchParams, allowedKeys: SCORES_SORT_KEYS });
   const {
     data: loadedScores = [],

@@ -3,7 +3,6 @@ import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useStoredAgent } from './use-stored-agents';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 /**
  * Hook to read and mutate the skills config for a stored agent.
@@ -12,10 +11,9 @@ import { usePlaygroundStore } from '@/store/playground-store';
  * snapshot. Each key is a stored skill ID and the value holds per-skill
  * overrides (description, instructions, pin, strategy).
  */
-export function useAgentSkills(agentId?: string) {
+export function useAgentSkills(agentId?: string, requestContext?: Record<string, any>) {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
 
   const { data: agent } = useStoredAgent(agentId, { status: 'draft' });
 

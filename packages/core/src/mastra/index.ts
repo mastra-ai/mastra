@@ -11,7 +11,7 @@ import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
 import { AgentChannels } from '../channels';
-import type { ChannelProvider } from '../channels';
+import type { ChannelProvider, ChannelsResolver } from '../channels';
 import type { Classifier, ClassifierQuestions } from '../classifier';
 import { DatasetsManager } from '../datasets/manager.js';
 import type { MastraDeployer } from '../deployer';
@@ -561,10 +561,18 @@ export interface Config<
    * Platform channels for messaging integrations (Slack, Discord, etc.).
    * Routes are automatically registered and agents can reference channel configs.
    *
+   * Accepts either a static provider record or a {@link ChannelsResolver} —
+   * a callable that returns the current provider map. With a resolver, routes
+   * for every possible channel are mounted up front (via
+   * `resolver.getRoutes()`) and the live provider set is re-resolved at
+   * runtime, so channels added or removed in an external system of record
+   * (e.g. the Mastra platform) take effect without redeploying.
+   *
    * @example
    * ```typescript
    * import { SlackProvider } from '@mastra/slack';
    *
+   * // Static record
    * new Mastra({
    *   channels: {
    *     slack: new SlackProvider({
@@ -573,9 +581,16 @@ export interface Config<
    *     }),
    *   },
    * });
+   *
+   * // Live resolver (platform-managed connections)
+   * import { channels } from '@mastra/connect';
+   *
+   * new Mastra({
+   *   channels: await channels({ projectId }),
+   * });
    * ```
    */
-  channels?: TChannels;
+  channels?: TChannels | ChannelsResolver<TChannels>;
 
   /**
    * Deployment environment name (e.g. `'production'`, `'staging'`, `'development'`).
@@ -849,6 +864,12 @@ export class Mastra<
   #fsScheduleSyncRerun = false;
   #gateways?: Record<string, MastraModelGatewayInterface>;
   #channels?: TChannels;
+  /** Live channel-provider source; when set, `#channels` holds the latest resolved snapshot. */
+  #channelsResolver?: ChannelsResolver<TChannels>;
+  /** In-flight resolver invocation, shared so concurrent `resolveChannels()` calls coalesce. */
+  #channelsResolvePromise?: Promise<TChannels>;
+  /** Providers already attached/initialized, so resolver refreshes touch each instance once. */
+  #attachedChannelProviders = new WeakSet<ChannelProvider>();
   #schedules?: Schedules;
   #schedulesConfig?: SchedulesConfig<Mastra>;
   #environment?: string;
@@ -1165,9 +1186,58 @@ export class Mastra<
 
   /**
    * Gets all registered channel providers.
+   *
+   * When channels were configured with a {@link ChannelsResolver}, this
+   * returns the latest resolved snapshot (possibly `undefined` before the
+   * first resolution completes). Use {@link resolveChannels} to get the
+   * current provider map.
    */
   public getChannelProviders(): Record<string, ChannelProvider> | undefined {
     return this.#channels;
+  }
+
+  /**
+   * Resolves the current channel provider map.
+   *
+   * For a static `channels` record this returns it directly. For a
+   * {@link ChannelsResolver} it invokes the resolver (the resolver owns
+   * freshness via its own cache/TTL), attaches and initializes any providers
+   * not seen before, and updates the synchronous snapshot served by
+   * {@link getChannelProviders} / {@link channels}.
+   *
+   * Server handlers that act on channels (webhooks, connect/disconnect,
+   * listings) should await this instead of reading the snapshot so
+   * connections added after boot are picked up.
+   */
+  public async resolveChannels(): Promise<Record<string, ChannelProvider>> {
+    const resolver = this.#channelsResolver;
+    if (!resolver) {
+      return this.#channels ?? {};
+    }
+    if (this.#channelsResolvePromise) {
+      return this.#channelsResolvePromise;
+    }
+    const promise = (async () => {
+      const resolved = await resolver({ mastra: this as unknown as Mastra });
+      for (const [key, provider] of Object.entries<ChannelProvider>(resolved)) {
+        if (provider == null || this.#attachedChannelProviders.has(provider)) continue;
+        this.#attachedChannelProviders.add(provider);
+        provider.__attach?.(this as unknown as Mastra);
+        if (provider.initialize) {
+          // Fire-and-forget, matching the static-config init path: resolution
+          // consumers shouldn't block on installation restores.
+          void provider.initialize().catch(err => {
+            this.#logger?.error(`[Mastra] Failed to initialize channel "${key}":`, err);
+          });
+        }
+      }
+      this.#channels = resolved;
+      return resolved;
+    })().finally(() => {
+      this.#channelsResolvePromise = undefined;
+    });
+    this.#channelsResolvePromise = promise;
+    return promise;
   }
 
   /**
@@ -1819,20 +1889,30 @@ export class Mastra<
 
     // Register channels and merge their routes into server config
     if (config?.channels) {
-      this.#channels = config.channels;
       const channelRoutes: ApiRoute[] = [];
 
-      for (const [, channel] of Object.entries(config.channels)) {
-        if (channel == null) continue;
+      if (typeof config.channels === 'function') {
+        // Live resolver (e.g. `channels()` from @mastra/connect): routes for
+        // every possible channel mount up front; provider instances late-bind
+        // via `resolveChannels()` so connections added or removed at runtime
+        // take effect without a restart.
+        this.#channelsResolver = config.channels;
+        channelRoutes.push(...config.channels.getRoutes());
+      } else {
+        this.#channels = config.channels;
 
-        // Attach the channel to this Mastra instance
-        if (channel.__attach) {
-          channel.__attach(this);
+        for (const [, channel] of Object.entries<ChannelProvider>(config.channels)) {
+          if (channel == null) continue;
+
+          // Attach the channel to this Mastra instance
+          if (channel.__attach) {
+            channel.__attach(this);
+          }
+
+          // Collect routes from the channel
+          const routes = channel.getRoutes();
+          channelRoutes.push(...routes);
         }
-
-        // Collect routes from the channel
-        const routes = channel.getRoutes();
-        channelRoutes.push(...routes);
       }
 
       // Merge channel routes into server config
@@ -1901,6 +1981,15 @@ export class Mastra<
     this.#observability.setMastraContext({ mastra: this });
 
     this.setLogger({ logger });
+
+    // Warm the first channels resolution so webhook routes have live
+    // providers before the first inbound request. Non-fatal: any
+    // resolveChannels() call retries.
+    if (this.#channelsResolver) {
+      void this.resolveChannels().catch(err => {
+        this.#logger?.warn(`[Mastra] Initial channels resolution failed (will retry on next access):`, err);
+      });
+    }
 
     // Initialize channels asynchronously (auto-provision apps, etc.)
     // This runs after all agents are registered so configs are available

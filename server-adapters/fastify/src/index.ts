@@ -391,8 +391,23 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     } else if (route.responseType === 'datastream-response') {
       // Handle AI SDK Response objects - pipe Response.body to Fastify response
       const fetchResponse = result as globalThis.Response;
-      fetchResponse.headers.forEach((value, key) => reply.header(key, value));
-      reply.status(fetchResponse.status);
+      // Writing to reply.raw bypasses Fastify's header map, so merge plugin-set
+      // headers (e.g. CORS) with the upstream headers and flush them via writeHead.
+      const headers: Record<string, string | number | string[]> = {};
+      for (const [key, value] of Object.entries(reply.getHeaders())) {
+        if (value === undefined) continue;
+        const lowerKey = key.toLowerCase();
+        if (lowerKey === 'content-length' || lowerKey === 'transfer-encoding') continue;
+        headers[lowerKey] = value;
+      }
+      fetchResponse.headers.forEach((value, key) => {
+        if (key.toLowerCase() !== 'set-cookie') headers[key.toLowerCase()] = value;
+      });
+      const setCookies = fetchResponse.headers.getSetCookie();
+      if (setCookies.length > 0) headers['set-cookie'] = setCookies;
+
+      reply.hijack();
+      reply.raw.writeHead(fetchResponse.status, headers);
       if (fetchResponse.body) {
         const reader = fetchResponse.body.getReader();
         let readerCanceled = false;

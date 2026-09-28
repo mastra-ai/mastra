@@ -17,6 +17,7 @@ export {
   durableAgenticOutputSchema,
   baseDurableAgenticInputSchema,
   baseIterationStateSchema,
+  durableOptionsSchema,
 } from './schemas';
 export type { BaseIterationState, AccumulatedUsage } from './schemas';
 

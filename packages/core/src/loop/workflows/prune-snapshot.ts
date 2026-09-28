@@ -1,4 +1,5 @@
 import type { WorkflowRunState } from '../../workflows/types';
+import { isEntryFinished } from '../../workflows/utils';
 
 /**
  * Snapshot pruning for the internal agent-loop workflows (issue #18647).
@@ -319,11 +320,10 @@ function stripRunningHistoryFields<T>(value: T): T {
  * copies of the conversation per write, times one write per step: the O(N^2)
  * curve behind 135 MB on disk for a 57-step run.
  *
- * Recovery re-drives a running snapshot from `activePaths[0]`, re-running that
- * entry even when it already completed, and reads back a handful of persisted
- * copies to do so (see `getRestartReads`). Keep exactly those and remove
- * conversation state from every other terminal step, bounding duplication
- * independently of run length.
+ * Recovery re-drives a running snapshot through `restart()`, which reads back
+ * a handful of persisted copies (see `getRestartReads`). Keep exactly those and
+ * remove conversation state from every other terminal step, bounding
+ * duplication independently of run length.
  *
  * Suspended/paused snapshots are untouched — they are the resume path and keep
  * exactly the bytes they keep today.
@@ -366,15 +366,17 @@ const NO_RESTART_READS: RestartReads = { payloads: new Set(), outputs: new Set()
 
 /**
  * The persisted step copies `restart()` reads back when it re-drives this
- * running snapshot. Restart re-runs the entry at `activePaths[0]` (the target)
- * even if it already completed — every persist after a step finishes still
- * points there — and feeds it:
+ * running snapshot. Every persist after an entry finishes still points at that
+ * entry (the target). When nothing is running and the target saved only
+ * successful results, restart skips it (issue #24615) and reads its output as
+ * the next entry's input, or as the run result when the target was last.
+ * Otherwise restart re-runs the target and feeds it:
  *  - its own payload, when the target is an active single step (already kept
  *    via `activeStepIds`);
  *  - the loop body's last payload, when the target is a loop that has run;
  *  - otherwise the previous entry's output (what `getStepOutput` reads).
- * Declared `stepResultReads` add a source's output while the source has
- * already run and its reader has not (or is the target being re-run).
+ * Declared `stepResultReads` add a source's output when restart runs the
+ * reader but not the source.
  */
 function getRestartReads(
   snapshot: WorkflowRunState,
@@ -388,12 +390,26 @@ function getRestartReads(
   const payloads = new Set<string>();
   const outputs = new Set<string>();
   const target = graph[targetIdx];
-  const [targetStepId = ''] = getEntryStepIds(target);
+  const targetStepIds = getEntryStepIds(target);
+  const [targetStepId = ''] = targetStepIds;
   const targetResult = (snapshot.context as Record<string, unknown> | undefined)?.[targetStepId];
+
+  // Same decision as the default engine's `getRestartStartIndex`; if they
+  // disagree, restart reads a copy pruned here.
+  const skipsTarget =
+    snapshot.activePaths.length === 1 &&
+    Object.keys(snapshot.activeStepsPath ?? {}).length === 0 &&
+    isEntryFinished(
+      target.type,
+      targetStepIds.map(id => snapshot.context?.[id]),
+    );
+  const restartIdx = skipsTarget ? targetIdx + 1 : targetIdx;
 
   const restartsFromOwnPayload = SINGLE_STEP_ENTRY_TYPES.has(target.type) && activeStepIds.has(targetStepId);
   const restartsLoopBody = target.type === 'loop' && isPlainObject(targetResult) && 'payload' in targetResult;
-  if (restartsLoopBody) {
+  if (skipsTarget) {
+    for (const stepId of targetStepIds) outputs.add(stepId);
+  } else if (restartsLoopBody) {
     payloads.add(targetStepId);
   } else if (!restartsFromOwnPayload) {
     for (const stepId of getEntryStepIds(graph[targetIdx - 1])) outputs.add(stepId);
@@ -401,10 +417,10 @@ function getRestartReads(
 
   const indexOf = (stepId: string) => graph.findIndex(entry => getEntryStepIds(entry).includes(stepId));
   for (const [readerId, sourceIds] of Object.entries(stepResultReads)) {
-    if (indexOf(readerId) < targetIdx) continue;
+    if (indexOf(readerId) < restartIdx) continue;
     for (const sourceId of sourceIds) {
       const sourceIdx = indexOf(sourceId);
-      if (sourceIdx !== -1 && sourceIdx < targetIdx) outputs.add(sourceId);
+      if (sourceIdx !== -1 && sourceIdx < restartIdx) outputs.add(sourceId);
     }
   }
 

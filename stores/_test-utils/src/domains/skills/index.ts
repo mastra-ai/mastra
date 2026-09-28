@@ -56,6 +56,54 @@ export function createSkillsTests({ storage }: { storage: MastraStorage }) {
       expect(updatedList.skills.map(s => s.id).sort()).toEqual([privateInput.id, publicSkill.id].sort());
     });
 
+    it('list filters by status and entityIds, with filtered totals', async () => {
+      const draft = createSkill(`skill-draft-${Date.now()}`);
+      const published = createSkill(`skill-pub-${Date.now()}`);
+      await skillsStorage.create({ skill: draft });
+      await skillsStorage.create({ skill: published });
+      const latest = await skillsStorage.getLatestVersion(published.id);
+      await skillsStorage.update({ id: published.id, activeVersionId: latest!.id, status: 'published' });
+
+      const byStatus = await skillsStorage.list({ status: 'published' });
+      expect(byStatus.skills.map(s => s.id)).toEqual([published.id]);
+      expect(byStatus.total).toBe(1);
+
+      const empty = await skillsStorage.list({ entityIds: [] });
+      expect(empty.skills).toEqual([]);
+      expect(empty.total).toBe(0);
+
+      const byIds = await skillsStorage.list({ entityIds: [draft.id] });
+      expect(byIds.skills.map(s => s.id)).toEqual([draft.id]);
+      expect(byIds.total).toBe(1);
+
+      const combined = await skillsStorage.list({ entityIds: [draft.id], status: 'published' });
+      expect(combined.skills).toEqual([]);
+      expect(combined.total).toBe(0);
+    });
+
+    it('round-trips files on create, update, and resolve', async () => {
+      const files = [
+        {
+          name: 'scripts',
+          type: 'folder' as const,
+          children: [{ name: 'setup.sh', type: 'file' as const, content: 'echo hi' }],
+        },
+      ];
+      const skill = { ...createSkill(`skill-files-${Date.now()}`), files };
+      await skillsStorage.create({ skill });
+
+      expect((await skillsStorage.getLatestVersion(skill.id))?.files).toEqual(files);
+      expect((await skillsStorage.getByIdResolved(skill.id))?.files).toEqual(files);
+
+      const updatedFiles = [{ name: 'README.md', type: 'file' as const, content: '# hi' }];
+      await skillsStorage.update({ id: skill.id, files: updatedFiles });
+
+      expect(await skillsStorage.countVersions(skill.id)).toBe(2);
+      const latest = await skillsStorage.getLatestVersion(skill.id);
+      expect(latest?.files).toEqual(updatedFiles);
+      expect(latest?.changedFields).toContain('files');
+    });
+
     it('does not create duplicate versions for semantically unchanged snapshots', async () => {
       const skill = createSkill(`skill-${Date.now()}`);
       await skillsStorage.create({ skill });

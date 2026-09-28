@@ -20,6 +20,7 @@ import {
 import type { VersionOverrides } from '../../request-context';
 import { getRequestContextInputValues } from '../../request-context/input-source';
 import { toStandardSchema } from '../../schema';
+import { asJsonSchema } from '../../stream/base/schema';
 import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
 import type { CoreTool, ToolHooks, ToolPayloadTransformPolicy } from '../../tools/types';
 import { boundedStringify, deepMerge } from '../../utils';
@@ -643,9 +644,12 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 10. Serialize structured output if provided
   let serializedStructuredOutput: SerializableStructuredOutput | undefined;
+  const structuredOutputSchema = execOptions?.structuredOutput?.schema
+    ? toStandardSchema(execOptions.structuredOutput.schema)
+    : undefined;
   if (execOptions?.structuredOutput) {
     const so = execOptions.structuredOutput as any;
-    if (so.schema) {
+    if (structuredOutputSchema) {
       serializedStructuredOutput = {
         jsonPromptInjection: so.jsonPromptInjection,
         // `instructions` means two different things depending on `model`: structuring-agent
@@ -656,13 +660,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         // only output guidance. Withhold it there and let the generated schema instruction stand.
         instructions: so.model ? undefined : so.instructions,
         useAgent: so.useAgent,
+        // Always convert to plain JSON Schema: this crosses step boundaries as JSON, and a
+        // live Zod/standard-schema instance does not survive that round trip.
+        schema: asJsonSchema(structuredOutputSchema),
       };
-      // Convert Zod schema to JSON Schema if possible
-      if (typeof so.schema === 'object' && 'type' in so.schema) {
-        serializedStructuredOutput.schema = so.schema;
-      } else if (typeof so.schema === 'object' && 'jsonSchema' in so.schema) {
-        serializedStructuredOutput.schema = so.schema.jsonSchema;
-      }
     }
   }
 
@@ -851,10 +852,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // text through `createObjectStreamTransformer`, producing `object-result`
     // chunks. Cross-process engines lose this slot and structured output
     // degrades to raw text.
-    structuredOutput: execOptions?.structuredOutput?.schema
+    structuredOutput: structuredOutputSchema
       ? {
-          ...execOptions.structuredOutput,
-          schema: toStandardSchema(execOptions.structuredOutput.schema),
+          ...execOptions!.structuredOutput,
+          schema: structuredOutputSchema,
         }
       : undefined,
     // Call-time returnScorerData flag. Also serialized into the workflow
