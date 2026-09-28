@@ -1,5 +1,56 @@
 # @mastra/core
 
+## 1.72.0-alpha.7
+
+### Patch Changes
+
+- Fixed cancellation during session startup so cancelled requests do not reach the model or interrupt a newer turn. Added the provider finish reason to AgentController error events so clients can distinguish token limits and refusals from execution failures. ([#24321](https://github.com/mastra-ai/mastra/pull/24321))
+
+  Added a distinct session startup cancellation error so clients can handle interruptions without hiding provider or transport failures.
+
+  ```ts
+  import { isSessionStartupCancelledError } from '@mastra/core/agent-controller';
+
+  try {
+    await session.sendMessage({ content: 'Hello' });
+  } catch (error) {
+    if (!isSessionStartupCancelledError(error)) throw error;
+    console.log('Interrupted');
+  }
+  ```
+
+- Fixed an unhandled EPIPE error that crashed processes using UnixSocketPubSub when the broker process exited before stream teardown. Unsubscribing after the broker is gone now completes cleanly, and a publish that races `close()` now rejects with a clear "UnixSocketPubSub is closed" error instead of a raw socket error. ([#25126](https://github.com/mastra-ai/mastra/pull/25126))
+
+- Fixed a claimed thread owner running an idle wake twice when a sender retried the same cross-agent message after its acceptance acknowledgement was lost. Such a retry now resolves to the outcome the first attempt already accepted — its run, or the reason it failed or was cancelled before it ran — instead of starting a second turn that repeats the turn's tool side effects. ([#24774](https://github.com/mastra-ai/mastra/pull/24774))
+
+- Fixed durable agents to reject invalid fallback timeout settings before preparation side effects. ([#25188](https://github.com/mastra-ai/mastra/pull/25188))
+
+- Fixed tool result objects with a `value` key dropping sibling fields. ([#25191](https://github.com/mastra-ai/mastra/pull/25191))
+
+- Fixed `<PROVIDER>_BASE_URL` being ignored for providers such as Google, xAI, Perplexity, Cerebras, DeepInfra, Together AI, and Vercel. Setting `GOOGLE_BASE_URL` (or the equivalent for other providers) now routes requests and API keys through your proxy or gateway instead of the public provider host. ([#25354](https://github.com/mastra-ai/mastra/pull/25354))
+
+- **Approval prompts are now independent per thread and run.** Concurrent and detached approvals stop overwriting, stranding, or answering each other's gates: gates are keyed by tool call and tagged with the thread and run that opened them, abort and user-message interjection release only the current thread's gates, detached-thread approvals no longer fire notifications or permission hooks, and an approved run resumes against the thread, run, resource, agent, and cancellation signal that actually parked it — so a mode switch, resource re-scope, or a successor run cannot redirect or cancel the parked continuation. ([#24776](https://github.com/mastra-ai/mastra/pull/24776))
+
+  **Approval responses now require the gate's `toolCallId`.** Without the id, a response could release whichever gate happened to be parked — another thread's or another run's — so an id-less response is rejected instead of silently applied. Every caller inside the repo already passes the id; this only affects external callers of the session API.
+
+  Before:
+
+  ```ts
+  session.respondToToolApproval({ decision: 'approve' });
+  ```
+
+  After:
+
+  ```ts
+  session.respondToToolApproval({ decision: 'approve', toolCallId });
+  ```
+
+  Similarly, `SessionApproval.arm()` now requires a `toolCallId`, and `getToolCallId()` is replaced by `getToolCallIds()` (which accepts an optional thread/run filter).
+
+  **"Always allow" grants are now scoped to the gate's thread.** Approving with `always_allow_category` grants the tool's category to the thread that owns the gate rather than the whole session, so a background thread's approval cannot widen what the current thread may run without prompting. `grantCategory`, `grantTool`, `hasCategoryGrant`, `hasToolGrant`, and `getGrants` accept an optional `threadId`; passing one scopes the grant to that thread, omitting it keeps the existing session-wide behavior for embedders that grant explicitly.
+
+- Fixed channel handler logs to preserve serialized error details and correlation. ([#25349](https://github.com/mastra-ai/mastra/pull/25349))
+
 ## 1.72.0-alpha.6
 
 ## 1.72.0-alpha.5
