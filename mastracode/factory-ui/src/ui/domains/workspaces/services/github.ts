@@ -30,12 +30,7 @@ export interface GithubInstallation {
  * feature.
  */
 export type GithubStatusReason =
-  | 'missing_config'
-  | 'auth_required'
-  | 'organization_required'
-  | 'not_connected'
-  | 'ready'
-  | 'unavailable';
+  'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready' | 'unavailable';
 
 /** Non-secret diagnostic snapshot of every GitHub feature gate. */
 export interface GithubFeatureDiagnostics {
@@ -359,6 +354,31 @@ export async function updateFactoryDefaultModel(
     'Failed to update Factory default model',
   );
   return project;
+}
+
+export interface ApplyFactoryDefaultModelResult {
+  modelId: string;
+  applied: string[];
+  skipped: Array<{
+    threadId: string;
+    reason: 'not-running' | 'work-item-missing' | 'stage-inactive' | 'thread-missing' | 'mode-unknown';
+  }>;
+}
+
+/** Apply the Factory default model to currently running work and review sessions. */
+export async function applyFactoryDefaultModelToSessions(
+  baseUrl: string,
+  factoryProjectId: string,
+): Promise<ApplyFactoryDefaultModelResult> {
+  const res = await fetch(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/apply-default-model`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    },
+  );
+  return readJsonOrThrow<ApplyFactoryDefaultModelResult>(res, 'Failed to switch running sessions');
 }
 
 /** Toggle a Factory's automation settings: rule-started runs, plan approval. */
