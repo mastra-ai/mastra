@@ -24,12 +24,12 @@ Append one JSON line per event to `<cwd>/debug-token-rate.jsonl` (or a similarly
 
 Useful hook points, from outermost to innermost:
 
-| Layer | Where | What to log |
-| --- | --- | --- |
-| Network | The provider's `fetch` wrapper, e.g. `buildAnthropicOAuthFetch` in `mastracode/sdk/src/providers/claude-max.ts` | request start; headers arrival (status, `content-encoding`); each body chunk via a pass-through `TransformStream` (bytes, SSE `event:` names). Re-wrap the body with `new Response(body, { status, statusText, headers })`. |
-| Provider stream | `convertFullStreamChunkToMastra` in `packages/core/src/stream/aisdk/v5/transform.ts` | raw chunk type and delta length as the AI SDK hands it over |
-| Run engine | `processStreamChunk` in `packages/core/src/agent-controller/session-run-engine.ts` | chunk type, `getChunkProducedAt(chunk)`, current message id, step-start `startedAt`, usage. Skip per-delta chunks here if the provider layer already logs them. |
-| TUI | `mastracode/tui/src/tui/event-dispatch.ts` (web mirror: `mastracode/factory-ui/src/ui/domains/chat/services/runtime.ts`) | event type, ids, relevant state before and after, and any computed value (e.g. `usage.computed` with tokens, window, instantaneous and displayed rate) |
+| Layer           | Where                                                                                                                    | What to log                                                                                                                                                                                                                 |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Network         | The provider's `fetch` wrapper, e.g. `buildAnthropicOAuthFetch` in `mastracode/sdk/src/providers/claude-max.ts`          | request start; headers arrival (status, `content-encoding`); each body chunk via a pass-through `TransformStream` (bytes, SSE `event:` names). Re-wrap the body with `new Response(body, { status, statusText, headers })`. |
+| Provider stream | `convertFullStreamChunkToMastra` in `packages/core/src/stream/aisdk/v5/transform.ts`                                     | raw chunk type and delta length as the AI SDK hands it over                                                                                                                                                                 |
+| Run engine      | `processStreamChunk` in `packages/core/src/agent-controller/session-run-engine.ts`                                       | chunk type, `getChunkProducedAt(chunk)`, current message id, step-start `startedAt`, usage. Skip per-delta chunks here if the provider layer already logs them.                                                             |
+| TUI             | `mastracode/tui/src/tui/event-dispatch.ts` (web mirror: `mastracode/factory-ui/src/ui/domains/chat/services/runtime.ts`) | event type, ids, relevant state before and after, and any computed value (e.g. `usage.computed` with tokens, window, instantaneous and displayed rate)                                                                      |
 
 For other providers, find the equivalent `fetch` option or wrapper in `mastracode/sdk/src/providers/`.
 
