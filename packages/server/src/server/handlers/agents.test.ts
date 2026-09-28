@@ -287,6 +287,30 @@ describe('getProvidersHandler', () => {
     expect(result.providers.find(p => p.id === 'anthropic')?.connected).toBe(false);
   });
 
+  it('should ignore a disabled gateway that claims a provider', async () => {
+    delete process.env.OPENAI_API_KEY;
+
+    const disabledGateway = {
+      id: 'disabled-gateway',
+      name: 'Disabled Gateway',
+      shouldEnable: () => false,
+      fetchProviders: vi.fn().mockResolvedValue({}),
+      handlesModel: (modelId: string) => modelId.startsWith('openai/'),
+      buildUrl: vi.fn(),
+      getApiKey: vi.fn(),
+      resolveLanguageModel: vi.fn(),
+    };
+    const mastra = new Mastra({ gateways: { 'disabled-gateway': disabledGateway } });
+
+    const result = await GET_PROVIDERS_ROUTE.handler({
+      mastra,
+      requestContext: new RequestContext(),
+      abortSignal: new AbortController().signal,
+    });
+
+    expect(result.providers.find(p => p.id === 'openai')?.connected).toBe(false);
+  });
+
   it('should hide registry and default-gateway providers when AUTO_BLOCK_EXTERNAL_PROVIDERS is set, keeping only custom gateways', async () => {
     process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS = 'true';
 
