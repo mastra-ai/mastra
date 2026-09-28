@@ -68,16 +68,9 @@ The remaining examples on this page use `model` to refer to an evaluation model 
 
 ## Evaluation models
 
-The following AI SDK providers expose an `evaluationModel()` factory. When you omit `apiKey`, each provider reads its key from the listed environment variable.
+The Basic usage example follows the [TypeSafe AI provider setup](https://ai-sdk.dev/providers/ai-sdk-providers/typesafe-ai#setup) in the AI SDK documentation. Other AI SDK providers, including OpenAI, Anthropic, and Google, also expose an `evaluationModel()` factory. See [provider models](https://ai-sdk.dev/docs/ai-sdk-core/evaluation#provider-models) for the full list, supported model IDs, and how each provider answers questions.
 
-| Provider | Package | Factory | Default API key |
-| - | - | - | - |
-| [TypeSafe AI](https://ai-sdk.dev/providers/ai-sdk-providers/typesafe-ai) | `@ai-sdk/typesafe-ai` | `createTypeSafeAi({ apiKey }).evaluationModel(modelId)` | `TYPESAFE_AI_API_KEY` |
-| [OpenAI](https://ai-sdk.dev/providers/ai-sdk-providers/openai) | `@ai-sdk/openai` | `createOpenAI({ apiKey }).evaluationModel(modelId)` | `OPENAI_API_KEY` |
-| [Anthropic](https://ai-sdk.dev/providers/ai-sdk-providers/anthropic) | `@ai-sdk/anthropic` | `createAnthropic({ apiKey }).evaluationModel(modelId)` | `ANTHROPIC_API_KEY` |
-| [Google](https://ai-sdk.dev/providers/ai-sdk-providers/google) | `@ai-sdk/google` | `createGoogleGenerativeAI({ apiKey }).evaluationModel(modelId)` | `GOOGLE_GENERATIVE_AI_API_KEY` |
-
-TypeSafe AI answers choice, score, and boolean questions natively. OpenAI, Anthropic, and Google adapt structured language-model output, so their choice and score answers don't include `probabilities`. See [provider models](https://ai-sdk.dev/docs/ai-sdk-core/evaluation#provider-models) in the AI SDK documentation for supported model IDs and provider behavior.
+Each provider requires an API key. Pass it with the `apiKey` option when you create the provider instance, or set the provider's default environment variable. To find the variable name, open the provider's page under [AI SDK providers](https://ai-sdk.dev/providers/ai-sdk-providers) and look for the `apiKey` setting.
 
 ## Constructor
 
