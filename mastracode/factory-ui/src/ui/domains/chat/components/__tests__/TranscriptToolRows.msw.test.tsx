@@ -451,8 +451,6 @@ describe('TranscriptEntries tool rows', () => {
       assistantMessage('msg-text', [{ type: 'text', text: 'All 36 tests passed.' }]),
     ]);
 
-    // The transcript container no longer adds gaps between entries, so prose
-    // content must own its breathing room via explicit margins.
     const userBubbleWrapper = screen.getByText('Please run the tests').closest('.ml-auto');
     expect(userBubbleWrapper).toHaveClass('my-3');
 
