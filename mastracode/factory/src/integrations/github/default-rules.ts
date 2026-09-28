@@ -106,7 +106,11 @@ function issueClosed(context: FactoryGithubRuleContext) {
 
 function materializePullRequestIntake(
   context: FactoryGithubRuleContext,
-  { idempotencyKey, autoStartCandidate, stage = 'intake' }: { idempotencyKey: string; autoStartCandidate: boolean; stage?: 'intake' | 'review' },
+  {
+    idempotencyKey,
+    autoStartCandidate,
+    stage = 'intake',
+  }: { idempotencyKey: string; autoStartCandidate: boolean; stage?: 'intake' | 'review' },
 ) {
   if (!context.pullRequest) return;
   return {
@@ -140,11 +144,19 @@ function materializePullRequestIntake(
 
 function pullRequestOpened(context: FactoryGithubRuleContext) {
   if (!context.pullRequest) return;
-  // Opening a pull request is evaluated once per card it concerns. This rule
-  // files the pull request's own Review card, which is the arrival — the
-  // evaluation carrying `pullRequestIntake` — so the authoring Work item's own
-  // evaluation has nothing to file.
-  if (context.item && context.pullRequestIntake !== true) return;
+  // Opening a pull request is evaluated once per card it concerns. The arrival
+  // — the evaluation carrying `pullRequestIntake` — files the pull request's own
+  // Review card. The authoring Work item's evaluation hands a finished build to
+  // Review, so the move no longer depends on the agent calling the tool itself.
+  if (context.item && context.pullRequestIntake !== true) {
+    if (context.board !== 'work' || context.item.stages.length !== 1 || context.item.stages[0] !== 'execute') return;
+    return {
+      type: 'transition',
+      idempotencyKey: `${context.ingress.id}:work-pull-request-opened`,
+      board: 'work',
+      stage: 'review',
+    } as const;
+  }
   // A GitHub App bot is never a collaborator, so Factory's own PRs score
   // untrusted; their authorship is the trust signal.
   const autoStartCandidate =
