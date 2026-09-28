@@ -30,9 +30,9 @@ import {
   preferenceThread,
 } from './fixtures/thread-preferences';
 import { emptyHistory, liveChunks, staleHistory } from './fixtures/thread-recovery';
+import { emptyThreadTracesList } from './fixtures/thread-traces';
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import { readThreadDraft } from '@/domains/conversation/context/thread-draft-storage';
-import { emptyThreadTracesList } from '@/domains/traces/components/__tests__/fixtures/thread-traces';
 import { agentIndexLoader, agentThreadsIndexLoader, legacyAgentChatLoader, paths } from '@/lib/app-routing';
 import { Link } from '@/lib/link';
 import { server } from '@/test/msw-server';
@@ -581,6 +581,20 @@ describe('Standalone thread page', () => {
       cleanup();
       renderAt(path);
       expect((await composerInput()).value).toBe('Keep my current edits');
+    });
+  });
+
+  describe('when a saved draft is still being restored', () => {
+    it('ignores files dragged over the page', async () => {
+      installHandlers();
+      renderAt(`/agents/${AGENT_ID}/threads/new`);
+      await screen.findByText('Restoring draft…');
+      const event = new Event('dragenter', { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'dataTransfer', { value: { types: ['Files'], files: [] } });
+      act(() => {
+        fireEvent(window, event);
+      });
+      expect(screen.queryByText('Drop to attach')).toBeNull();
     });
   });
 
