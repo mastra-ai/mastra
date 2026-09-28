@@ -239,6 +239,7 @@ type StreamState = {
    * into an explicit terminal error state instead of silently completing.
    */
   terminalError?: string;
+  terminalFinishReason?: string;
 };
 
 /**
@@ -516,7 +517,11 @@ export class SessionRunEngine {
     // silently stops without a visible terminal state.
     if (state.terminalError && !error && !aborted && !this.#session.run.isAbortRequested() && !result.suspended) {
       error = true;
-      this.#session.emit({ type: 'error', error: new Error(state.terminalError) });
+      this.#session.emit({
+        type: 'error',
+        error: new Error(state.terminalError),
+        finishReason: state.terminalFinishReason,
+      });
     }
 
     await this.#session.finishAgentRun(
@@ -633,7 +638,14 @@ export class SessionRunEngine {
         const toolCallId = getString(payload.toolCallId) ?? '';
         const toolName = getString(payload.toolName) ?? '';
         const title = getString(payload.title);
-        this.#session.emit({ type: 'tool_input_start', threadId: state.threadId, toolCallId, toolName, title });
+        this.#session.emit({
+          type: 'tool_input_start',
+          threadId: state.threadId,
+          toolCallId,
+          toolName,
+          title,
+          messageId: state.currentMessage.id,
+        });
         break;
       }
 
@@ -650,6 +662,7 @@ export class SessionRunEngine {
             toolCallId,
             argsTextDelta: hasTransformedToolPayload(transform) ? transform.transformed : argsTextDelta,
             toolName,
+            messageId: state.currentMessage.id,
           });
         }
         break;
@@ -657,7 +670,12 @@ export class SessionRunEngine {
 
       case 'tool-call-input-streaming-end': {
         const toolCallId = getString(getPayload(chunk).toolCallId) ?? '';
-        this.#session.emit({ type: 'tool_input_end', threadId: state.threadId, toolCallId });
+        this.#session.emit({
+          type: 'tool_input_end',
+          threadId: state.threadId,
+          toolCallId,
+          messageId: state.currentMessage.id,
+        });
         break;
       }
 
@@ -1028,6 +1046,7 @@ export class SessionRunEngine {
             this.setStopReason(state.currentMessage, 'error', true);
             this.setErrorMessage(state.currentMessage, errorMessage);
             state.terminalError = errorMessage;
+            state.terminalFinishReason = finishReason;
           } else {
             this.setStopReason(state.currentMessage, 'complete', true);
           }
@@ -1164,8 +1183,15 @@ export class SessionRunEngine {
             });
           }
 
-          this.abortForOmFailure({ operationType, stage: 'run', error });
-          return { message: state.currentMessage };
+          if (
+            !Object.hasOwn(payload, 'failurePolicy') ||
+            !Object.hasOwn(payload, 'failureKind') ||
+            payload.failurePolicy !== 'continue' ||
+            payload.failureKind !== (operationType === 'reflection' ? 'reflector-model' : 'observer-model')
+          ) {
+            this.abortForOmFailure({ operationType, stage: 'run', error });
+            return { message: state.currentMessage };
+          }
         }
         break;
       }
@@ -1211,8 +1237,15 @@ export class SessionRunEngine {
             error,
           });
 
-          this.abortForOmFailure({ operationType, stage: 'buffering', error });
-          return { message: state.currentMessage };
+          if (
+            !Object.hasOwn(payload, 'failurePolicy') ||
+            !Object.hasOwn(payload, 'failureKind') ||
+            payload.failurePolicy !== 'continue' ||
+            payload.failureKind !== (operationType === 'reflection' ? 'reflector-model' : 'observer-model')
+          ) {
+            this.abortForOmFailure({ operationType, stage: 'buffering', error });
+            return { message: state.currentMessage };
+          }
         }
         break;
       }
@@ -1593,7 +1626,11 @@ export class SessionRunEngine {
               !suspended
             ) {
               isError = true;
-              this.#session.emit({ type: 'error', error: new Error(currentRun.terminalError) });
+              this.#session.emit({
+                type: 'error',
+                error: new Error(currentRun.terminalError),
+                finishReason: currentRun.terminalFinishReason,
+              });
             }
             await this.finishSubscribedStreamRun({
               suspended,

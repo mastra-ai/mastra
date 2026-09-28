@@ -871,6 +871,12 @@ export type GithubIssueFetcher = (input: {
   number: number;
 }) => Promise<ReconcileIssueState | undefined>;
 
+/** Lists a repository's open issues (pull requests excluded) for missed-open discovery. */
+export type GithubOpenIssueLister = (input: {
+  installationId: number;
+  repository: string;
+}) => Promise<Array<ReconcileIssueState & { number: number }>>;
+
 export interface ReconcileRepository {
   id: number;
   fullName: string;
@@ -1003,7 +1009,10 @@ export function reconciledIssueRelabeledEvent(
   // of one observed issue version idempotent while allowing A → B → A to replay
   // its final A placement as a new version. Synthetic callers without it retain
   // the legacy label-only identity.
-  const digest = createHash('sha256').update([...labels].sort().join('\n')).digest('hex').slice(0, 16);
+  const digest = createHash('sha256')
+    .update([...labels].sort().join('\n'))
+    .digest('hex')
+    .slice(0, 16);
   const version = state.updatedAt ? `:${createHash('sha256').update(state.updatedAt).digest('hex').slice(0, 16)}` : '';
   return {
     event: 'issues',
@@ -1027,6 +1036,22 @@ export function reconciledIssueRelabeledEvent(
       },
     },
   };
+}
+
+/**
+ * The missed-open replay: an open issue with no Work card, because its
+ * `opened` delivery never reached the rules ingress. Synthesized as the same
+ * `opened` delivery so the deployment's `issueOpened` rule decides whether and
+ * where it lands, exactly as it would have at arrival. The delivery id is
+ * stable per issue so repeat sweeps dedupe at the ingress.
+ */
+export function reconciledIssueOpenedEvent(
+  repository: ReconcileRepository,
+  issueNumber: number,
+  state: ReconcileIssueState,
+): ParsedGithubWebhook {
+  const event = reconciledIssueRelabeledEvent(repository, issueNumber, state);
+  return { ...event, deliveryId: `reconcile:${repository.id}:issue:${issueNumber}:opened` };
 }
 
 export function reconciledClosedEvent(

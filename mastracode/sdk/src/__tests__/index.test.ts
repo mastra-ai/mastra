@@ -265,6 +265,9 @@ vi.mock('@mastra/core/processors', () => ({
     }
   },
   createBackgroundWorkSignalProcessor: () => ({ id: 'background-work-signals' }),
+  CyberRefusalHandler: class {
+    readonly id = 'cyber-refusal-handler';
+  },
   isBadRequestError: (error: unknown) =>
     typeof error === 'object' &&
     error !== null &&
@@ -1304,6 +1307,7 @@ describe('createMastraCode', () => {
     expect(agentConfig?.maxProcessorRetries).toBe(64);
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toEqual([
       'provider-history-compat',
+      'cyber-refusal-handler',
       'stream-error-retry-processor',
       'prefill-error-handler',
       'mastracode-account-rotation',
@@ -1459,7 +1463,7 @@ describe('createMastraCode', () => {
       'provider-history-compat',
       'mastracode-account-start-notice',
     ]);
-    expect(resolveOutputProcessors()).toEqual([]);
+    expect(resolveOutputProcessors().map(processor => processor.id)).toEqual(['cyber-refusal-handler']);
   });
 
   it('hands Mastra to configured input processors, which the function lane takes out of the Agent path', async () => {
@@ -1518,7 +1522,7 @@ describe('createMastraCode', () => {
       'mastracode-account-start-notice',
       'acme-input',
     ]);
-    expect(resolveOutputProcessors()).toEqual([pluginOutput]);
+    expect(resolveOutputProcessors()).toEqual([expect.objectContaining({ id: 'cyber-refusal-handler' }), pluginOutput]);
 
     // A plugin disabled or updated mid-session changes what the manager reports;
     // the next request picks it up through the same agent.
@@ -1530,7 +1534,7 @@ describe('createMastraCode', () => {
       'provider-history-compat',
       'mastracode-account-start-notice',
     ]);
-    expect(resolveOutputProcessors()).toEqual([]);
+    expect(resolveOutputProcessors().map(processor => processor.id)).toEqual(['cyber-refusal-handler']);
   });
 
   it('runs plugin signal providers through the lane, never the agent signals array', async () => {
@@ -1575,7 +1579,10 @@ describe('createMastraCode', () => {
       'mastracode-account-start-notice',
       'acme-provider-input',
     ]);
-    expect(resolveOutputProcessors()).toEqual([outputProcessor]);
+    expect(resolveOutputProcessors()).toEqual([
+      expect.objectContaining({ id: 'cyber-refusal-handler' }),
+      outputProcessor,
+    ]);
     expect(built.controller).toBeDefined();
   });
 
@@ -1640,7 +1647,7 @@ describe('createMastraCode', () => {
       'provider-history-compat',
       'mastracode-account-start-notice',
     ]);
-    expect(resolveOutputProcessors()).toEqual([]);
+    expect(resolveOutputProcessors().map(processor => processor.id)).toEqual(['cyber-refusal-handler']);
     // Warned once, not once per request: this is the hot path.
     expect(warn).toHaveBeenCalledTimes(1);
     warn.mockRestore();

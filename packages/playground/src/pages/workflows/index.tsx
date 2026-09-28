@@ -15,13 +15,11 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 const crumbs = [navCrumb('/workflows')];
 
 function Workflows() {
-  const { requestContext } = usePlaygroundStore();
-  const { data: workflows, isLoading, error } = useWorkflows({ requestContext });
+  const { data: workflows, isLoading, error } = useWorkflows();
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<WorkflowsSort>();
 
@@ -86,7 +84,6 @@ function Workflows() {
         search={search}
         sort={sort}
         onSortChange={(direction, key) => setSort({ key, direction })}
-        requestContext={requestContext}
       />
     </PageLayout>
   );

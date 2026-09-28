@@ -18,6 +18,9 @@ function githubActorLogin(context: Pick<FactoryGithubRuleContext, 'actor'>): str
 function retriageGithubIssue(context: FactoryGithubRuleContext) {
   if (!context.item || context.item.source !== 'github-issue' || !context.item.url) return;
   if (context.actor.type === 'github' && context.actor.factoryAuthored) return;
+  // Re-triage would take over a card that is being built or reviewed.
+  const stage = context.item.stages?.length === 1 ? context.item.stages[0] : undefined;
+  if (stage === 'execute' || stage === 'review') return;
 
   const reason =
     context.event === 'issueEdited'
