@@ -118,6 +118,7 @@ import {
   FactorySkillSource,
   REVIEW_ONLY_FACTORY_SKILLS,
   FactoryWorkspaceRegistry,
+  rescanFactorySkills,
   resolveLocalFactorySkillsPath,
 } from './workspace.js';
 
@@ -1142,6 +1143,29 @@ describe('GitHub session workspace preparation', () => {
     expect(await workWorkspace.skills?.get('factory-review')).toBeFalsy();
     expect(await workWorkspace.skills?.get('factory-rereview')).toBeFalsy();
     expect((await workWorkspace.skills?.get('factory-plan'))?.instructions).toContain('# Factory Plan');
+  });
+
+  it('drops review skills a kickoff rescan loaded once the session leaves the review role', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'work';
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    const workspace = (await resolver({ requestContext }))!;
+    await workspace.skills?.maybeRefresh();
+    await resolver({ requestContext });
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+
+    // The review binding lands after the cache was built; kickoff rescans outside the resolver.
+    mocks.runBindingRole = 'review';
+    await rescanFactorySkills(workspace.skills!);
+    expect(await workspace.skills?.get('factory-review')).toBeTruthy();
+
+    mocks.runBindingRole = 'work';
+    const reused = (await resolver({ requestContext }))!;
+    expect(reused).toBe(workspace);
+    expect(await reused.skills?.get('factory-review')).toBeFalsy();
   });
 
   it('does not return a reused workspace to concurrent callers before its skill rescan finishes', async () => {
