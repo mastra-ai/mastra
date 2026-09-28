@@ -122,7 +122,6 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
 
 function PlaygroundWorkflowInformation({ workflowId, initialRunId }: { workflowId: string; initialRunId?: string }) {
   const [requestContext] = useEntityRequestContext('workflow', workflowId);
-  const { data: workflow } = useWorkflow(workflowId, requestContext);
   const { canExecute, canDelete } = usePermissions();
 
   return (
@@ -130,13 +129,7 @@ function PlaygroundWorkflowInformation({ workflowId, initialRunId }: { workflowI
       workflowId={workflowId}
       initialRunId={initialRunId}
       requestContext={requestContext}
-      runActionsSlot={ctx => (
-        <WorkflowRunActions
-          workflowId={workflowId}
-          requestContextSchema={workflow?.requestContextSchema ?? undefined}
-          {...ctx}
-        />
-      )}
+      runActionsSlot={ctx => <WorkflowRunActions workflowId={workflowId} {...ctx} />}
       canExecute={canExecute('workflows')}
       canDelete={canDelete('workflows')}
     />

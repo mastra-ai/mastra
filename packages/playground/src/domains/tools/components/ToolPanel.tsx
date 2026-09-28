@@ -97,7 +97,6 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
       handleExecuteTool={handleExecuteTool}
       toolDescription={tool.description}
       toolId={tool.id}
-      requestContextSchema={tool.requestContextSchema}
       requestContextEntityType="tool"
       requestContextEntityId={tool.id}
     />

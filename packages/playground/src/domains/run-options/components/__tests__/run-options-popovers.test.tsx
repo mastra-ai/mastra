@@ -81,26 +81,6 @@ describe('RequestContextPopover', () => {
       await waitFor(() => expect(screen.queryByText('Request Context (JSON)')).toBeNull());
     }, 15_000);
   });
-
-  describe('when the entity defines a request context schema', () => {
-    it('renders the schema-driven form', async () => {
-      const requestContextSchema = stringify({
-        type: 'object',
-        properties: { userId: { type: 'string' } },
-        required: [],
-      });
-      renderWithProviders(
-        <RequestContextPopover entityType="agent" entityId={AGENT_ID} requestContextSchema={requestContextSchema} />,
-        'agent',
-        AGENT_ID,
-      );
-
-      await open('Request context');
-
-      expect(await screen.findByText('Request Context')).not.toBeNull();
-      expect(await screen.findByRole('button', { name: /save/i })).not.toBeNull();
-    });
-  });
 });
 
 function WorkflowTriggerHarness({ onSubmit }: { onSubmit: () => void }) {

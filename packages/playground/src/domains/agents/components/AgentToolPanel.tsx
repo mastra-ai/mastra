@@ -77,7 +77,6 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
       handleExecuteTool={handleExecuteTool}
       toolDescription={tool.description ?? ''}
       toolId={tool.id}
-      requestContextSchema={tool.requestContextSchema}
       requestContextEntityType="agent-tool"
       requestContextEntityId={`${agentId}:${tool.id}`}
     />

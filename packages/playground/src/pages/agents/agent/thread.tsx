@@ -228,9 +228,7 @@ function AgentThread() {
                             messageId={messageId}
                             suggestedPrompts={suggestedPrompts}
                             isNewThread={isNewThread}
-                            runOptionsSlot={
-                              <AgentRunActions agentId={agentId!} requestContextSchema={agent?.requestContextSchema} />
-                            }
+                            runOptionsSlot={<AgentRunActions agentId={agentId!} />}
                           />
                         </div>
                       </div>

@@ -113,9 +113,7 @@ export function AgentPlaygroundTestChat({
                       memory={hasMemory}
                       modelList={agent?.modelList}
                       isNewThread
-                      runOptionsSlot={
-                        <AgentRunActions agentId={agentId} requestContextSchema={agent?.requestContextSchema} />
-                      }
+                      runOptionsSlot={<AgentRunActions agentId={agentId} />}
                     />
                   </div>
                 </div>

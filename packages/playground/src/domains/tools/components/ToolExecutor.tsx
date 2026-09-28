@@ -19,7 +19,6 @@ interface ToolExecutorProps {
   toolDescription: string;
   toolId: string;
   toolType?: MCPToolType;
-  requestContextSchema?: string;
   requestContextEntityType: RequestContextEntityType;
   requestContextEntityId: string;
 }
@@ -32,7 +31,6 @@ const ToolExecutor = ({
   toolDescription,
   toolId,
   toolType,
-  requestContextSchema,
   requestContextEntityType,
   requestContextEntityId,
   executionResult: result,
@@ -56,11 +54,7 @@ const ToolExecutor = ({
               }}
               className="space-y-4"
               submitActions={
-                <RequestContextPopover
-                  entityType={requestContextEntityType}
-                  entityId={requestContextEntityId}
-                  requestContextSchema={requestContextSchema}
-                />
+                <RequestContextPopover entityType={requestContextEntityType} entityId={requestContextEntityId} />
               }
             >
               {!hasInputFields && <Notice variant="info">No input is required to run this tool.</Notice>}

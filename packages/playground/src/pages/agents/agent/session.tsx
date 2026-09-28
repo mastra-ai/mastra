@@ -127,9 +127,7 @@ function AgentSession() {
                           messageId={messageId}
                           isNewThread={isNewThread}
                           hideModelSwitcher
-                          runOptionsSlot={
-                            <AgentRunActions agentId={agentId!} requestContextSchema={agent?.requestContextSchema} />
-                          }
+                          runOptionsSlot={<AgentRunActions agentId={agentId!} />}
                         />
                       </div>
                     </PageLayout>

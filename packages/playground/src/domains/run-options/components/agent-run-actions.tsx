@@ -3,14 +3,13 @@ import { RunOptionsPopover } from './run-options-popover';
 
 interface AgentRunActionsProps {
   agentId: string;
-  requestContextSchema?: string;
 }
 
 /** Composer controls for an agent chat. Requires a `TracingSettingsProvider` for the agent. */
-export function AgentRunActions({ agentId, requestContextSchema }: AgentRunActionsProps) {
+export function AgentRunActions({ agentId }: AgentRunActionsProps) {
   return (
     <>
-      <RequestContextPopover entityType="agent" entityId={agentId} requestContextSchema={requestContextSchema} />
+      <RequestContextPopover entityType="agent" entityId={agentId} />
       <RunOptionsPopover />
     </>
   );

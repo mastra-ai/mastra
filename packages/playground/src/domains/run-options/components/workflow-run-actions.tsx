@@ -7,21 +7,15 @@ import { RunOptionsPopover } from './run-options-popover';
 
 interface WorkflowRunActionsProps extends WorkflowRunActionsContext {
   workflowId: string;
-  requestContextSchema?: string;
 }
 
 /** Trigger-form controls for a workflow. Requires a `TracingSettingsProvider` for the workflow. */
-export function WorkflowRunActions({
-  workflowId,
-  requestContextSchema,
-  resourceId,
-  setResourceId,
-}: WorkflowRunActionsProps) {
+export function WorkflowRunActions({ workflowId, resourceId, setResourceId }: WorkflowRunActionsProps) {
   const [resourceIdDraft, setResourceIdDraft] = useState(resourceId);
 
   return (
     <>
-      <RequestContextPopover entityType="workflow" entityId={workflowId} requestContextSchema={requestContextSchema} />
+      <RequestContextPopover entityType="workflow" entityId={workflowId} />
       <RunOptionsPopover
         onOpenChange={open => {
           if (open) setResourceIdDraft(resourceId);
