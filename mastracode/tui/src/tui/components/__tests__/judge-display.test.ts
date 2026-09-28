@@ -65,6 +65,23 @@ describe('JudgeDisplayComponent', () => {
     expect(rendered).toContain('(1/20)');
   });
 
+  it('strips terminal control sequences from a judge-failure reason', () => {
+    const component = new JudgeDisplayComponent(
+      { decision: 'paused', reason: 'Scorer failed\x1b[2J\x1b]0;pwned\x07\nboom' },
+      1,
+      20,
+    );
+
+    const raw = component.render(WIDTH).join('\n');
+    const lines = renderPlain(component).filter(line => line.trim().length > 0);
+
+    expect(raw).not.toContain('\x1b[2J');
+    expect(raw).not.toContain('\x1b]0;');
+    expect(lines.join('\n')).toContain('Scorer failed');
+    expect(lines.join('\n')).toContain('boom');
+    expect(new Set(lines.map(line => line.length)).size).toBe(1);
+  });
+
   it('renders user-blocked goals as waiting instead of continue', () => {
     const component = new JudgeDisplayComponent(
       {

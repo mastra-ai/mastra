@@ -596,6 +596,42 @@ describe('handleGoalCommand', () => {
     expect(armed).toBe(true);
   });
 
+  it('strips terminal control sequences from the failed-start error', async () => {
+    const goalManager = {
+      setGoal: vi.fn().mockResolvedValue({
+        id: 'goal-1',
+        objective: 'finish',
+        status: 'active' as const,
+        turnsUsed: 0,
+        maxTurns: 50,
+        judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+      }),
+      persistOnNextThreadCreate: vi.fn(),
+      saveToThread: vi.fn().mockResolvedValue(undefined),
+      pause: vi.fn(),
+    };
+    const sendSignal = vi.fn(() => ({
+      accepted: Promise.reject(new Error('provider down\x1b[2J\x1b]0;pwned\x07\nboom')),
+    }));
+    const ctx = {
+      state: createMockState({
+        threadId: 'thread-1',
+        session: { sendSignal },
+        extra: { pendingNewThread: false, goalManager },
+      }),
+      addUserMessage: vi.fn(),
+      showError: vi.fn(),
+      updateStatusLine: vi.fn(),
+    } as any;
+
+    await startGoalWithDefaults(ctx, 'finish');
+
+    const shown = ctx.showError.mock.calls[0][0] as string;
+    expect(shown).toContain('provider down');
+    expect(shown).toContain('boom');
+    expect(shown).not.toMatch(/[\u0000-\u001f\u007f-\u009f]/);
+  });
+
   it('starts a goal from a plan-approval-style title+plan with only the goal reminder XML', async () => {
     // Regression: plan approval "Use as /goal" must enter the same goal
     // lifecycle as `/goal <text>` and send only the goal reminder. Sending an

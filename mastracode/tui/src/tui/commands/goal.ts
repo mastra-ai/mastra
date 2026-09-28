@@ -21,6 +21,7 @@ import { DEFAULT_MAX_TURNS } from '../goal-manager.js';
 import type { GoalState } from '../goal-manager.js';
 import { showModalOverlay } from '../overlay.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
+import { stripControlChars } from '../sanitize-ansi.js';
 import { getSelectListTheme, theme } from '../theme.js';
 
 import type { SlashCommandContext } from './types.js';
@@ -123,11 +124,6 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
   // /goal <text> — set a new goal using saved judge defaults, asking only once if needed.
   const objective = args.join(' ');
   await startGoalWithDefaults(ctx, objective);
-}
-
-// Goal fields can come from the SDK or provider/scorer error text; drop control characters so they can't drive the terminal.
-function stripControlChars(text: string): string {
-  return text.replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ').trim();
 }
 
 function formatGoalStatus(goal: GoalState): string {
@@ -374,7 +370,9 @@ async function startGoal(
   } catch (err) {
     goalManager.pause();
     await goalManager.saveToThread(state);
-    ctx.showError(`Goal paused — failed to start: ${err instanceof Error ? err.message : String(err)}`);
+    ctx.showError(
+      `Goal paused — failed to start: ${stripControlChars(err instanceof Error ? err.message : String(err))}`,
+    );
   }
 }
 
