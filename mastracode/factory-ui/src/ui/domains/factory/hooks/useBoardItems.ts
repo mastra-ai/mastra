@@ -84,8 +84,8 @@ export function useBoardItems({
 
   const move = (id: string, toStage: string, options: MoveOptions = {}) => {
     const item = all.find(candidate => candidate.id === id);
-    // Held in a ref, not in mutation state: two clicks land in the same render
-    // and both read the pre-click state, so they would queue two runs.
+    // Held in a ref, not in mutation state: two clicks can land in the same render
+    // and otherwise queue the same move twice.
     if (!item || movingRef.current.has(id)) return;
     const boardId = itemBoard(item);
     if (boardId !== 'work' && boardId !== 'review') {

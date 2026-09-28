@@ -2,7 +2,7 @@ import { knownExternalAuthor } from '@mastra/factory/rules/types';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { FastForward, MessageSquare } from 'lucide-react';
+import { MessageSquare } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { BoardCardStatus } from '../boardCardStatus';
@@ -90,29 +90,14 @@ export function WorkItemCardRows({
           ))}
         </div>
       )}
-      {(status.kind !== 'idle' || external || item.plansPreapprovedAt) && (
+      {(status.kind !== 'idle' || external) && (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
           <CardStatus status={status} />
-          {item.plansPreapprovedAt && (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Badge size="xs" tabIndex={0} className="relative z-10 ml-auto gap-1">
-                    <FastForward size={10} aria-hidden />
-                    Hands-off
-                  </Badge>
-                }
-              />
-              <TooltipContent side="bottom" className="max-w-64">
-                Plans on this card are approved automatically for the current run.
-              </TooltipContent>
-            </Tooltip>
-          )}
           {external && (
             <Tooltip>
               <TooltipTrigger
                 render={
-                  <Badge size="xs" tabIndex={0} className={cn('relative z-10', !item.plansPreapprovedAt && 'ml-auto')}>
+                  <Badge size="xs" tabIndex={0} className="relative z-10 ml-auto">
                     External
                   </Badge>
                 }

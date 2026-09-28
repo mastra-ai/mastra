@@ -61,8 +61,8 @@ export interface FactoryTransitionRequest {
   reenter?: boolean;
   /** Structured verdict required from a bound triage-agent terminal request. */
   triageType?: FactoryTriageType;
-  /** Human gesture that approves parked plans for this autonomous run. */
-  preapprovePlans?: true;
+  /** Internal proof that this move consumes an approved `submit_plan` result. */
+  planApproved?: true;
 }
 
 export interface FactoryTransitionServiceOptions {
@@ -105,10 +105,8 @@ export interface FactoryTransitionServiceOptions {
     item: WorkItemRow;
   }) => Promise<void> | void;
   /**
-   * Resolves whether a project auto-approves produced plans. Mirrors the
-   * dispatcher's resolver so the two share a single authoritative predicate
-   * (`plansPreapprovedAt` on the item, or this per-project setting). Unset means
-   * off: a plan nobody armed for auto-advance is a plan a person must review.
+   * Resolves whether a project auto-approves produced plans. Unset means off:
+   * a plan without explicit approval is a plan a person must review.
    */
   autoApprovePlans?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
 }
@@ -161,7 +159,6 @@ interface TransitionConsentOptions {
   consentedBy?: string;
   accept?: boolean;
   triageType?: FactoryTriageType;
-  plansPreapproval?: 'grant' | 'clear';
 }
 
 // Entering a resting lane disarms whoever rests it; only a person's move into a working lane arms.
@@ -375,9 +372,6 @@ export class FactoryTransitionService {
         `Board "${request.board}" is not installed.`,
       );
     }
-    if (request.preapprovePlans && !isHumanTransition(request)) {
-      return this.#commitRejection(request, transitionId, 'forbidden', 'Only a person can start a hands-off run.');
-    }
     const fromStage = item.stages.length === 1 ? item.stages[0] : undefined;
     if (!fromStage || !Object.prototype.hasOwnProperty.call(board.phases, fromStage)) {
       return this.#commitRejection(
@@ -406,11 +400,6 @@ export class FactoryTransitionService {
 
     // The coordinator's own self-move at run start would otherwise inject a second run's kickoff.
     const humanMove = request.actor.type === 'human' && fromStage !== request.stage && request.cause !== 'run_start';
-    const plansPreapproval: TransitionConsentOptions['plansPreapproval'] = request.preapprovePlans
-      ? 'grant'
-      : isHumanTransition(request) || board.isTerminal(request.stage) || request.stage === board.initialPhase
-        ? 'clear'
-        : undefined;
     // The board, not the phase name, says whether a seat is engaged on either side of this move.
     const entersWorking = board.isWorking(request.stage);
     const seatRole = board.roleForPhase(request.stage);
@@ -448,15 +437,11 @@ export class FactoryTransitionService {
     try {
       evaluation = await withRuleTimeout(
         (async () => {
-          // Single authoritative plan-approval predicate, shared with the dispatcher's
-          // `#plansAreAutoApproved`: a per-item preapproval, or the project setting.
-          // Resolved inside the timed block so a resolver rejection surfaces as a
-          // committed rule_error and a slow lookup is bounded by RULE_TIMEOUT_MS.
-          const plansAutoApproved =
-            item.plansPreapprovedAt != null ||
-            (this.#autoApprovePlans
-              ? await this.#autoApprovePlans({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
-              : false);
+          // Resolve the project switch inside the timed block so a resolver rejection
+          // surfaces as a committed rule_error and a slow lookup is bounded.
+          const plansAutoApproved = this.#autoApprovePlans
+            ? await this.#autoApprovePlans({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
+            : false;
           const policy = boardTransitionPolicyResultSchema.parse(
             await board.transitionPolicy?.(
               immutablePolicySnapshot({
@@ -466,6 +451,7 @@ export class FactoryTransitionService {
                 reenter: request.reenter ?? false,
                 isHumanTransition: isHumanTransition(request),
                 plansAutoApproved,
+                planApproved: request.planApproved === true,
                 requestedTriageType: request.triageType,
               }),
             ),
@@ -560,7 +546,7 @@ export class FactoryTransitionService {
       transitionId,
       evaluation,
       evaluation.outcome === 'accepted'
-        ? { ...consentEffect(request, entersWorking, humanMove), plansPreapproval, ...evaluation.intents }
+        ? { ...consentEffect(request, entersWorking, humanMove), ...evaluation.intents }
         : {},
     );
   }
@@ -589,7 +575,6 @@ export class FactoryTransitionService {
     const committed = await this.#storage.commitTransition({
       autonomy: options.autonomy,
       consentedBy: options.consentedBy,
-      plansPreapproval: options.plansPreapproval,
       ...(options.accept ? { accept: true } : {}),
       orgId: request.orgId,
       factoryProjectId: request.factoryProjectId,

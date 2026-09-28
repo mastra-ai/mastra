@@ -462,8 +462,6 @@ export interface CommitFactoryTransitionInput {
   triageType?: FactoryTriageType;
   /** Record the person's acceptance of this item in the same revision-checked update; a no-op once set. */
   accept?: boolean;
-  /** Set or clear the run-scoped hands-off plan approval in the transition commit. */
-  plansPreapproval?: 'grant' | 'clear';
 }
 
 export type CommitFactoryTransitionResult =
@@ -716,7 +714,6 @@ function patchColumns(changes: Partial<WorkItemRow>): Partial<WorkItemDbRow> {
     ...(changes.metadata !== undefined ? { metadata: changes.metadata } : {}),
     ...(changes.triageType !== undefined ? { triage_type: changes.triageType } : {}),
     ...(changes.autonomyArmedAt !== undefined ? { autonomy_armed_at: changes.autonomyArmedAt } : {}),
-    ...(changes.plansPreapprovedAt !== undefined ? { plans_preapproved_at: changes.plansPreapprovedAt } : {}),
     ...(changes.acceptedAt !== undefined ? { accepted_at: changes.acceptedAt } : {}),
     ...(changes.revision !== undefined ? { revision: changes.revision } : {}),
     ...(changes.updatedAt !== undefined ? { updated_at: changes.updatedAt } : {}),
@@ -1777,20 +1774,16 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             }
             const arm = input.autonomy === 'arm' && !existing.autonomyArmedAt;
             const disarm = input.autonomy === 'disarm' && existing.autonomyArmedAt !== null;
-            const grantPlanPreapproval = input.plansPreapproval === 'grant' && !existing.plansPreapprovedAt;
-            const clearPlanPreapproval = input.plansPreapproval === 'clear' && existing.plansPreapprovedAt !== null;
             const accept = input.accept === true && !existing.acceptedAt;
             const triageType = existing.triageType ?? input.triageType ?? null;
             const classified = triageType !== existing.triageType;
             if (existing.stages.length === 1 && existing.stages[0] === input.destinationStage) {
-              // Classification is part of a terminal handoff, so unlike consent
-              // and hands-off flips alone it is a revisioned work-item change.
-              return arm || disarm || grantPlanPreapproval || clearPlanPreapproval || accept || classified
+              // Classification is part of a terminal handoff, so unlike an
+              // autonomy flip alone it is a revisioned work-item change.
+              return arm || disarm || accept || classified
                 ? patchColumns({
                     ...(arm ? { autonomyArmedAt: now } : {}),
                     ...(disarm ? { autonomyArmedAt: null } : {}),
-                    ...(grantPlanPreapproval ? { plansPreapprovedAt: now } : {}),
-                    ...(clearPlanPreapproval ? { plansPreapprovedAt: null } : {}),
                     ...(accept ? { acceptedAt: now } : {}),
                     ...(classified ? { triageType, revision: existing.revision + 1, updatedAt: now } : {}),
                   })
@@ -1799,8 +1792,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             return patchColumns({
               ...(arm ? { autonomyArmedAt: now } : {}),
               ...(disarm ? { autonomyArmedAt: null } : {}),
-              ...(grantPlanPreapproval ? { plansPreapprovedAt: now } : {}),
-              ...(clearPlanPreapproval ? { plansPreapprovedAt: null } : {}),
               ...(accept ? { acceptedAt: now } : {}),
               ...(classified ? { triageType } : {}),
               // A finished card gives up its org-wide claim so the record can be

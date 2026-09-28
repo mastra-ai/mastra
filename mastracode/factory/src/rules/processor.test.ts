@@ -597,7 +597,9 @@ describe('FactoryPhaseStateProcessor', () => {
     const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage, transitionService });
     const context = requestContext();
 
-    await processor.processInputStep(inputArgs(context, [toolMessage()]));
+    await processor.processInputStep(
+      inputArgs(context, [toolMessage({ result: { content: 'Plan approved. Proceed with implementation.' } })]),
+    );
     const signal = await processor.computeStateSignal(stateArgs(context));
 
     expect(signal).toMatchObject({ attributes: { stage: 'execute', revision: 2 } });
