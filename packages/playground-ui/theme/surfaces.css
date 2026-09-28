@@ -136,7 +136,7 @@
    */
   --elevation-lip: inset 0 1px 0 oklch(100% 0 0deg / 3%);
   --inset-highlight: oklch(100% 0 0deg / 7%);
-  --focus-halo: var(--green-soft-950);
+  --focus-halo: var(--green-950);
   --inset-rim: oklch(100% 0 0deg / 7%);
   --surface-rim: oklch(100% 0 0deg / 5%);
   --surface-rim-focus: oklch(100% 0 0deg / 14%);
