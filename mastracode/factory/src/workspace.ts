@@ -99,6 +99,23 @@ export const REVIEW_ONLY_FACTORY_SKILLS = new Set([
   'factory-review',
 ]);
 
+/**
+ * Skill caches rescanned outside the workspace resolver. The resolver records
+ * which role each cache was last scanned for; a rescan it did not perform makes
+ * that record untrustworthy, so the next reuse must rescan again.
+ */
+const rescannedOutsideResolver = new WeakSet<object>();
+
+/**
+ * Rescan a session's skill cache so a role gained after the cache was built
+ * (a review binding minted after the session's workspace resolved) takes effect.
+ * The source still checks the live binding, so this never widens access.
+ */
+export async function rescanFactorySkills(skills: NonNullable<Workspace['skills']>): Promise<void> {
+  rescannedOutsideResolver.add(skills);
+  await skills.refresh();
+}
+
 export class FactorySkillSource implements SkillSource {
   readonly #bundledSource = new LocalSkillSource({ basePath: BUNDLED_FACTORY_SKILLS_PATH });
   readonly #localSource: LocalSkillSource | undefined;
@@ -746,6 +763,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // The skill cache does not recheck the source on get(), so rescan when the
       // session's role flips; otherwise a cached review skill outlives the review binding.
       if (!skillExtension) {
+        if (existing.skills && rescannedOutsideResolver.delete(existing.skills)) {
+          skillCacheReviewState.delete(workspaceId);
+        }
         let isReview = await isReviewSession();
         // Concurrent reuses share one refresh, and the state is recorded only
         // once the rescan succeeds. Wait out any in-flight rescan (it may have
