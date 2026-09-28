@@ -12,7 +12,7 @@ import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY, parseModelString, defaultGateways } from '@mastra/core/llm';
-import type { ProviderConfig, SystemMessage } from '@mastra/core/llm';
+import type { MastraModelGatewayInterface, ProviderConfig, SystemMessage } from '@mastra/core/llm';
 import type {
   InputProcessor,
   OutputProcessor,
@@ -452,8 +452,7 @@ export async function getSerializedAgentTools(
 
         const outputSchema = schemaToJsonSchema(
           resolveLazySchema('outputSchema' in tool ? tool.outputSchema : undefined) as
-            | PublicSchema<unknown>
-            | undefined,
+            PublicSchema<unknown> | undefined,
         );
         if (outputSchema !== undefined) {
           outputSchemaForReturn = stringify(outputSchema);
@@ -461,8 +460,7 @@ export async function getSerializedAgentTools(
 
         const requestContextSchema = schemaToJsonSchema(
           resolveLazySchema('requestContextSchema' in tool ? tool.requestContextSchema : undefined) as
-            | PublicSchema<unknown>
-            | undefined,
+            PublicSchema<unknown> | undefined,
         );
         if (requestContextSchema !== undefined) {
           requestContextSchemaForReturn = stringify(requestContextSchema);
@@ -1721,35 +1719,30 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
     }
   }
 
-  // Include gateway providers (defaults + user-registered)
-  if (mastra) {
-    const allGateways = mastra.listGateways();
-    if (allGateways) {
-      for (const gateway of Object.values(allGateways)) {
-        // Skip models.dev gateway (already covered by PROVIDER_REGISTRY)
-        if (gateway.id === 'models.dev') continue;
-        // When blocking external providers, skip the built-in default gateways
-        // so only user-registered custom gateways remain.
-        if (blockExternalProviders && defaultGatewayIds.has(gateway.id)) continue;
-        try {
-          const gatewayProviders = await gateway.fetchProviders();
-          for (const [providerId, config] of Object.entries(gatewayProviders)) {
-            // Apply the same prefixing logic as registry-generator to avoid
-            // creating duplicate entries alongside PROVIDER_REGISTRY data.
-            // If providerId matches gateway.id, it's a unified gateway — use just the gateway ID.
-            // Otherwise, prefix with gateway.id (e.g., "netlify/anthropic").
-            const prefixedId = providerId === gateway.id ? gateway.id : `${gateway.id}/${providerId}`;
-            // Only add if not already present from PROVIDER_REGISTRY to prevent
-            // duplicates when PROVIDER_REGISTRY already has the prefixed key
-            // (e.g. dev mode where GatewayRegistry includes custom gateways).
-            if (!(prefixedId in allProviders)) {
-              allProviders[prefixedId] = config;
-            }
-          }
-        } catch (error) {
-          console.warn(`Failed to fetch providers from gateway "${gateway.id}":`, error);
+  const gateways = mastra ? Object.values(mastra.listGateways() ?? {}) : [];
+  for (const gateway of gateways) {
+    // Skip models.dev gateway (already covered by PROVIDER_REGISTRY)
+    if (gateway.id === 'models.dev') continue;
+    // When blocking external providers, skip the built-in default gateways
+    // so only user-registered custom gateways remain.
+    if (blockExternalProviders && defaultGatewayIds.has(gateway.id)) continue;
+    try {
+      const gatewayProviders = await gateway.fetchProviders();
+      for (const [providerId, config] of Object.entries(gatewayProviders)) {
+        // Apply the same prefixing logic as registry-generator to avoid
+        // creating duplicate entries alongside PROVIDER_REGISTRY data.
+        // If providerId matches gateway.id, it's a unified gateway — use just the gateway ID.
+        // Otherwise, prefix with gateway.id (e.g., "netlify/anthropic").
+        const prefixedId = providerId === gateway.id ? gateway.id : `${gateway.id}/${providerId}`;
+        // Only add if not already present from PROVIDER_REGISTRY to prevent
+        // duplicates when PROVIDER_REGISTRY already has the prefixed key
+        // (e.g. dev mode where GatewayRegistry includes custom gateways).
+        if (!(prefixedId in allProviders)) {
+          allProviders[prefixedId] = config;
         }
       }
+    } catch (error) {
+      console.warn(`Failed to fetch providers from gateway "${gateway.id}":`, error);
     }
   }
 
@@ -1760,11 +1753,22 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
       label: (provider as any).label || provider.name,
       description: (provider as any).description || '',
       envVar: provider.apiKeyEnvVar,
-      connected: isProviderConnected(id, allProviders),
+      connected: isProviderConnected(id, allProviders) || isClaimedByGateway(id, provider.models, gateways),
       docUrl: provider.docUrl,
       models: [...provider.models],
     };
   });
+}
+
+function isClaimedByGateway(
+  providerId: string,
+  models: readonly string[],
+  gateways: MastraModelGatewayInterface[],
+): boolean {
+  const [firstModel] = models;
+  if (!firstModel) return false;
+  const routerId = `${providerId}/${firstModel}`;
+  return gateways.some(gateway => gateway.shouldEnable?.() !== false && gateway.handlesModel?.(routerId) === true);
 }
 
 export const GET_PROVIDERS_ROUTE = createRoute({

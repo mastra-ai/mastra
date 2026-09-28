@@ -262,6 +262,31 @@ describe('getProvidersHandler', () => {
     delete process.env.CUSTOM_LLM_API_KEY;
   });
 
+  it('should show a provider as connected when a registered gateway claims its models without an env var', async () => {
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+
+    const oauthGateway = {
+      id: 'oauth-gateway',
+      name: 'OAuth Gateway',
+      fetchProviders: vi.fn().mockResolvedValue({}),
+      handlesModel: (modelId: string) => modelId.startsWith('openai/'),
+      buildUrl: vi.fn(),
+      getApiKey: vi.fn(),
+      resolveLanguageModel: vi.fn(),
+    };
+    const mastra = new Mastra({ gateways: { 'oauth-gateway': oauthGateway } });
+
+    const result = await GET_PROVIDERS_ROUTE.handler({
+      mastra,
+      requestContext: new RequestContext(),
+      abortSignal: new AbortController().signal,
+    });
+
+    expect(result.providers.find(p => p.id === 'openai')?.connected).toBe(true);
+    expect(result.providers.find(p => p.id === 'anthropic')?.connected).toBe(false);
+  });
+
   it('should hide registry and default-gateway providers when AUTO_BLOCK_EXTERNAL_PROVIDERS is set, keeping only custom gateways', async () => {
     process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS = 'true';
 
