@@ -177,6 +177,10 @@ function hasSuspendedToolCall(snapshot: Record<string, any>, toolCallId: string)
   return visit(snapshot.context);
 }
 
+function getDurableLoopWorkflowName(agent: DurableAgentLike): string {
+  return agent.durableLoopWorkflowName ?? DurableStepIds.AGENTIC_LOOP;
+}
+
 async function validateDurableToolCallAccess({
   mastra,
   agent,
@@ -194,7 +198,7 @@ async function validateDurableToolCallAccess({
 
   const workflowsStore = await mastra.getStorage()?.getStore('workflows');
   const workflowRun = await workflowsStore?.getWorkflowRunById({
-    workflowName: DurableStepIds.AGENTIC_LOOP,
+    workflowName: getDurableLoopWorkflowName(agent),
     runId,
   });
   if (!workflowRun) {
@@ -3060,7 +3064,7 @@ export const RECOVER_ROUTE = createRoute({
 
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
       const workflowRun = await workflowsStore?.getWorkflowRunById({
-        workflowName: DurableStepIds.AGENTIC_LOOP,
+        workflowName: getDurableLoopWorkflowName(agent),
         runId,
       });
       await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined));

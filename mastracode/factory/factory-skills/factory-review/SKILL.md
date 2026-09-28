@@ -5,6 +5,8 @@ description: Review a pull request for a Factory work item — history and conte
 
 # Factory Review
 
+**Role guard:** only run this skill when the `factory-phase` signal shows `role="review"`. Under any other role, stop immediately: do not review, comment, label, approve, or transition the work item, and report that review skills are not available to this role.
+
 Review the pull request behind this Factory work item — build its history and context first, then judge correctness, tests, scope, and pattern-consistency — and finish by publishing the verdict on the PR, posting a verdict handoff, and recording the verdict on the card.
 
 You are working in a bound Factory session. Complete the full review in one pass, then make `factory_record_review_verdict` your terminal step — one call, repeated only if it fails and only with the failure addressed. Never wait for or solicit human input mid-run; every judgment call is yours to resolve.

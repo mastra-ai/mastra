@@ -613,6 +613,7 @@ export const API_ROUTE_METADATA = {
       "perPage",
       "resourceId",
       "status",
+      "summary",
       "toDate"
     ],
     "bodyParams": [],
@@ -5886,6 +5887,7 @@ export const API_ROUTE_METADATA = {
       "perPage",
       "resourceId",
       "status",
+      "summary",
       "toDate"
     ],
     "bodyParams": [],

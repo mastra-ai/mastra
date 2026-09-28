@@ -116,6 +116,7 @@ import {
 import {
   createWorkspaceFactory,
   FactorySkillSource,
+  REVIEW_ONLY_FACTORY_SKILLS,
   FactoryWorkspaceRegistry,
   resolveLocalFactorySkillsPath,
 } from './workspace.js';
@@ -1109,10 +1110,127 @@ describe('GitHub session workspace preparation', () => {
     expect(exec2.mock.calls.filter(([command]) => String(command).includes("printf '%s' 'sha256:")).length).toBe(1);
   });
 
+  it('does not expose review skills to a work-role session workspace', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'work';
+
+    const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+    expect(await workspace.skills?.get('factory-rereview')).toBeFalsy();
+    expect((await workspace.skills?.get('factory-plan'))?.instructions).toContain('# Factory Plan');
+  });
+
+  it('drops cached review skills when a reused workspace leaves the review role', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    const reviewWorkspace = (await resolver({ requestContext }))!;
+    await reviewWorkspace.skills?.maybeRefresh();
+    expect((await reviewWorkspace.skills?.get('factory-review'))?.instructions).toContain('# Factory Review');
+
+    mocks.runBindingRole = 'work';
+    const workWorkspace = (await resolver({ requestContext }))!;
+
+    expect(workWorkspace).toBe(reviewWorkspace);
+    expect(await workWorkspace.skills?.get('factory-review')).toBeFalsy();
+    expect(await workWorkspace.skills?.get('factory-rereview')).toBeFalsy();
+    expect((await workWorkspace.skills?.get('factory-plan'))?.instructions).toContain('# Factory Plan');
+  });
+
+  it('does not return a reused workspace to concurrent callers before its skill rescan finishes', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    const workspace = (await resolver({ requestContext }))!;
+    await workspace.skills?.maybeRefresh();
+    expect(await workspace.skills?.get('factory-review')).toBeTruthy();
+    await resolver({ requestContext });
+
+    mocks.runBindingRole = 'work';
+    const readReview = async () => (await resolver({ requestContext }))!.skills?.get('factory-review');
+    const [first, second] = await Promise.all([readReview(), readReview()]);
+
+    expect(first).toBeFalsy();
+    expect(second).toBeFalsy();
+  });
+
+  it('does not hand a work-role caller the cache from an in-flight review rescan', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    const workspace = (await resolver({ requestContext }))!;
+    await workspace.skills?.maybeRefresh();
+    mocks.runBindingRole = 'work';
+    await resolver({ requestContext });
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+
+    const skills = workspace.skills!;
+    const originalRefresh = skills.refresh.bind(skills);
+    let scanned!: () => void;
+    const scanDone = new Promise<void>(resolve => (scanned = resolve));
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    vi.spyOn(skills, 'refresh').mockImplementationOnce(async () => {
+      await originalRefresh();
+      scanned();
+      await gate;
+    });
+
+    mocks.runBindingRole = 'review';
+    const reviewCaller = resolver({ requestContext });
+    await scanDone;
+    mocks.runBindingRole = 'work';
+    let workSettled = false;
+    const workCaller = resolver({ requestContext }).then(ws => {
+      workSettled = true;
+      return ws;
+    });
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(workSettled).toBe(false);
+    release();
+
+    await reviewCaller;
+    expect(await (await workCaller)!.skills?.get('factory-review')).toBeFalsy();
+  });
+
+  it('retries the skill rescan on the next reuse when a role-change refresh fails', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    const workspace = (await resolver({ requestContext }))!;
+    await workspace.skills?.maybeRefresh();
+    expect(await workspace.skills?.get('factory-review')).toBeTruthy();
+    await resolver({ requestContext });
+
+    mocks.runBindingRole = 'work';
+    vi.spyOn(workspace.skills!, 'refresh').mockRejectedValueOnce(new Error('rescan failed'));
+    await expect(resolver({ requestContext })).rejects.toThrow('rescan failed');
+
+    const retried = (await resolver({ requestContext }))!;
+    expect(await retried.skills?.get('factory-review')).toBeFalsy();
+  });
+
   it('resolves bundled Factory skills without waiting on sandbox materialization (kickoff path stays lazy)', async () => {
     const { resolver } = await createLocalFactory();
     addProject();
     addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
     // Resolution is fully lazy (no warm-up), and kickoff skill resolution
     // must never force materialization: provisioning never starts at all.
 
@@ -2553,6 +2671,34 @@ describe('FactorySkillSource layering', () => {
     ]);
     expect(await source.exists(path.join(mount, 'my-custom-skill', 'SKILL.md'))).toBe(false);
     await expect(source.readdir(path.join(mount, 'missing-skill'))).rejects.toThrow('ENOENT');
+  });
+
+  it('hides review-only skills from sessions without an active review binding', async () => {
+    let isReview = false;
+    const source = new FactorySkillSource(fallbackStub, [], undefined, async () => isReview);
+    const reviewSkill = path.join(mount, 'factory-review', 'SKILL.md');
+
+    const hiddenNames = (await source.readdir(mount)).map(entry => entry.name).sort();
+    expect(hiddenNames).toEqual([
+      'configure-factory-rules',
+      'factory-complete-issue',
+      'factory-plan',
+      'factory-triage',
+    ]);
+    for (const name of REVIEW_ONLY_FACTORY_SKILLS) {
+      expect(await source.exists(path.join(mount, name, 'SKILL.md'))).toBe(false);
+      await expect(source.readdir(path.join(mount, name))).rejects.toThrow('ENOENT');
+    }
+    await expect(source.readFile(reviewSkill)).rejects.toThrow('ENOENT');
+    await expect(source.stat(reviewSkill)).rejects.toThrow('ENOENT');
+    expect(String(await source.readFile(path.join(mount, 'factory-plan', 'SKILL.md')))).toContain('# Factory Plan');
+
+    // The role is re-evaluated per call, so the same source follows a role change.
+    isReview = true;
+    const visibleNames = (await source.readdir(mount)).map(entry => entry.name);
+    expect(visibleNames).toEqual(expect.arrayContaining([...REVIEW_ONLY_FACTORY_SKILLS]));
+    expect(await source.exists(reviewSkill)).toBe(true);
+    expect((await source.stat(reviewSkill)).type).toBe('file');
   });
 
   it('resolveLocalFactorySkillsPath handles the dev-server cwd variants', async () => {

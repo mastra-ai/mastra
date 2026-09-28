@@ -108,6 +108,11 @@ export interface LocalSandboxOptions extends Omit<MastraSandboxOptions, 'process
    * ```
    */
   env?: NodeJS.ProcessEnv;
+  /**
+   * Encoding used to decode command stdout/stderr (any WHATWG encoding label, e.g. 'gbk').
+   * Useful on Windows systems whose native commands emit a legacy code page. Default: 'utf-8'.
+   */
+  outputEncoding?: string;
   /** Default timeout for operations in ms (default: 30000) */
   timeout?: number;
   /**
@@ -189,6 +194,7 @@ export class LocalSandbox extends MastraSandbox<string> {
   declare readonly processes: LocalProcessManager;
   declare readonly mounts: MountManager;
   private readonly env: NodeJS.ProcessEnv;
+  private readonly _outputEncoding?: string;
   private _nativeSandboxConfig: NativeSandboxConfig;
   /**
    * SBPL the user wrote, read from `seatbeltProfilePath` at start. Set only when that file
@@ -241,13 +247,14 @@ export class LocalSandbox extends MastraSandbox<string> {
     super({
       ...options,
       name: 'LocalSandbox',
-      processes: new LocalProcessManager({ env: options.env ?? {} }),
+      processes: new LocalProcessManager({ env: options.env ?? {}, outputEncoding: options.outputEncoding }),
     });
 
     this.id = options.id ?? this.generateId();
     this._createdAt = new Date();
     this.setWorkingDirectory(expandTilde(options.workingDirectory ?? path.join(process.cwd(), '.sandbox')));
     this.env = options.env ?? {};
+    this._outputEncoding = options.outputEncoding;
     this._nativeSandboxConfig = {
       ...options.nativeSandbox,
       readWritePaths: [...(options.nativeSandbox?.readWritePaths ?? [])],
@@ -283,6 +290,7 @@ export class LocalSandbox extends MastraSandbox<string> {
       workingDirectory: options.workingDirectory ?? this.workingDirectory,
       env: options.env ?? this.env,
       isolation: this.isolation,
+      outputEncoding: this._outputEncoding,
       nativeSandbox: {
         ...this._nativeSandboxConfig,
         readWritePaths: [...this._initialReadWritePaths],
