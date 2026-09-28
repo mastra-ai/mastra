@@ -62,7 +62,7 @@ function getPlanDocument(content: string): PlanDocument {
   const headingIndex = headingMatch.index;
   const body = `${content.slice(0, headingIndex)}${content.slice(headingIndex + heading.length)}`.trimStart();
 
-  return { title: headingMatch[1].trim(), body };
+  return { title: (headingMatch[1] ?? '').trim(), body };
 }
 
 function getSubmittedPlan(output: unknown): SubmittedPlan | undefined {

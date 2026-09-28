@@ -59,7 +59,11 @@ const BackgroundTaskMetadata = ({
   let argSlot = null;
 
   try {
-    const { __mastraMetadata: _, _background, ...formattedArgs } = typeof args === 'object' ? args : JSON.parse(args);
+    const {
+      __mastraMetadata: _,
+      _background,
+      ...formattedArgs
+    } = typeof args === 'object' ? args : JSON.parse(args ?? '');
     argSlot = <CodeEditor data={formattedArgs} />;
   } catch {
     argSlot = <pre className="overflow-x-auto rounded-md bg-muted p-4 whitespace-pre">{args as unknown as string}</pre>;
