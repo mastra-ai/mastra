@@ -188,6 +188,51 @@ describe('MastraModelOutput', () => {
     }
   });
 
+  describe('array structured output with elements completed in place', () => {
+    const createArrayOutput = () => {
+      const runId = 'array-run';
+      return new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([
+          createTextDeltaChunk(runId, '{"elements":'),
+          createTextDeltaChunk(runId, '[{"a":1'),
+          createTextDeltaChunk(runId, ',"b":2}'),
+          createTextDeltaChunk(runId, ',{"a":2,"b":4}'),
+          createTextDeltaChunk(runId, ']}'),
+          { type: 'text-end', runId, from: ChunkFrom.AGENT, payload: { id: 'text-1' } },
+          createStepFinishChunk(runId),
+          createFinishChunk(runId),
+        ]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: {
+          runId,
+          isLLMExecutionStep: true,
+          structuredOutput: { schema: z.array(z.object({ a: z.number(), b: z.number() })) },
+        },
+      });
+    };
+    const expected = [
+      { a: 1, b: 2 },
+      { a: 2, b: 4 },
+    ];
+
+    it('textStream matches the final object', async () => {
+      const output = createArrayOutput();
+      let text = '';
+      for await (const chunk of output.textStream) text += chunk;
+      expect(text).toBe(JSON.stringify(expected));
+      expect(await output.object).toEqual(expected);
+    });
+
+    it('elementStream publishes only completed elements', async () => {
+      const output = createArrayOutput();
+      const elements = [];
+      for await (const element of output.elementStream) elements.push(element);
+      expect(elements).toEqual(expected);
+    });
+  });
+
   describe('writer in output processors (outer context)', () => {
     it('should pass a defined writer to processOutputResult', async () => {
       let receivedWriter: ProcessorStreamWriter | undefined;

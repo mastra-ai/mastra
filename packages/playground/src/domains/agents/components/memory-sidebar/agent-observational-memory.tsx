@@ -2,6 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useElapsedTime } from '@mastra/playground-ui/hooks/use-elapsed-time';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
@@ -306,7 +307,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   // The provider retains progress across thread switches.
   const liveProgress = streamProgress?.threadId === threadId ? streamProgress : null;
 
-  const { data: configData } = useMemoryConfig(agentId);
+  const { data: configData } = useMemoryConfig(agentId, useEntityRequestContext('agent', agentId)[0]);
 
   const { data: statusData, isLoading: isStatusLoading } = useMemoryWithOMStatus({
     agentId,

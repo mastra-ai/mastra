@@ -1,10 +1,8 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
-import { useMergedRequestContext } from '@/domains/request-context';
 
-export const useAgent = (agentId?: string) => {
+export const useAgent = (agentId?: string, requestContext?: Record<string, any>) => {
   const client = useMastraClient();
-  const requestContext = useMergedRequestContext();
 
   return useQuery({
     queryKey: ['agent', agentId, requestContext],

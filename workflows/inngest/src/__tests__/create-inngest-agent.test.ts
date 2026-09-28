@@ -1219,16 +1219,52 @@ describe('InngestAgent parity surface', () => {
     });
 
     it('rejects an unknown toolCallId instead of resuming the wrong leaf', async () => {
+      // An unknown id waits for the snapshot window (the label may still be landing,
+      // #25158) before rejecting.
+      vi.useFakeTimers();
       const durableAgent = makeAgentWithSnapshot('resume-unknown-tool-call-id', twoSuspendedSteps);
       const sendSpy = stubInngestSend();
 
-      await expect(
-        durableAgent.resume('resume-unknown-run', { answer: 'yes' }, { toolCallId: 'tool-call-z' }),
-      ).rejects.toThrow(/no suspended tool call with id "tool-call-z"/);
-      expect(sendSpy).not.toHaveBeenCalled();
-      expect(globalRunRegistry.get('resume-unknown-run')).toBeUndefined();
+      try {
+        const assertion = expect(
+          durableAgent.resume('resume-unknown-run', { answer: 'yes' }, { toolCallId: 'tool-call-z' }),
+        ).rejects.toThrow(/no suspended tool call with id "tool-call-z"/);
+        await vi.advanceTimersByTimeAsync(11_000);
+        await assertion;
+        expect(sendSpy).not.toHaveBeenCalled();
+        expect(globalRunRegistry.get('resume-unknown-run')).toBeUndefined();
+      } finally {
+        vi.useRealTimers();
+        sendSpy.mockRestore();
+      }
+    });
 
-      sendSpy.mockRestore();
+    it('waits for a named tool call label that lands after the previous suspended snapshot (#25158)', async () => {
+      const staleSnapshot = {
+        value: {},
+        context: {},
+        status: 'suspended',
+        suspendedPaths: { 'agentic-loop': [0] },
+        resumeLabels: { 'tool-call-a': { stepId: 'agentic-loop' } },
+      };
+      const freshSnapshot = { ...staleSnapshot, resumeLabels: { 'tool-call-b': { stepId: 'agentic-loop' } } };
+      const durableAgent = makeIsolatedAgent('resume-label-lands-late');
+      const loadSpy = vi.fn().mockResolvedValueOnce(staleSnapshot).mockResolvedValue(freshSnapshot);
+      (durableAgent as any).__setMastra({
+        getStorage: () => ({ getStore: async () => ({ loadWorkflowSnapshot: loadSpy }) }),
+      });
+      const sendSpy = stubInngestSend();
+      const runId = 'resume-label-lands-late-run';
+
+      const result = await durableAgent.resume(runId, { answer: 'yes' }, { toolCallId: 'tool-call-b' });
+      try {
+        expect(loadSpy.mock.calls.length).toBeGreaterThan(1);
+        expect(sendSpy).toHaveBeenCalledTimes(1);
+        expect(sendSpy.mock.calls[0]?.[0]?.data.resume.steps).toEqual(['agentic-loop']);
+      } finally {
+        result.cleanup();
+        sendSpy.mockRestore();
+      }
     });
 
     it('rejects an ambiguous resume when multiple tool calls are suspended', async () => {
@@ -1827,6 +1863,52 @@ describe('InngestAgent fork and resume overrides (#24736)', () => {
   it('resumeStream throws without a runId', async () => {
     const durableAgent = makeDurable('resume-stream-no-run');
     await expect(durableAgent.resumeStream({ approved: true })).rejects.toThrow(/requires a runId/);
+  });
+
+  // #25159: the /stream-until-idle routes call these deprecated shims; they must
+  // not fall through the Proxy to the wrapped Agent's in-process idle loop.
+  it('streamUntilIdle routes through durable stream() with untilIdle', async () => {
+    const durableAgent = makeDurable('stream-until-idle-route');
+    const result = { marker: 'result' };
+    const streamSpy = vi.spyOn(durableAgent, 'stream').mockResolvedValue(result as any);
+    const wrappedSpy = vi.spyOn(durableAgent.agent, 'streamUntilIdle');
+
+    expect(durableAgent.streamUntilIdle).not.toBe(durableAgent.agent.streamUntilIdle);
+
+    await expect(durableAgent.streamUntilIdle('hi', { maxSteps: 2 })).resolves.toBe(result);
+    await durableAgent.streamUntilIdle('hi', { maxSteps: 2, maxIdleMs: 1234 });
+
+    expect(streamSpy).toHaveBeenNthCalledWith(1, 'hi', { maxSteps: 2, untilIdle: true });
+    expect(streamSpy).toHaveBeenNthCalledWith(2, 'hi', { maxSteps: 2, untilIdle: { maxIdleMs: 1234 } });
+    expect(wrappedSpy).not.toHaveBeenCalled();
+  });
+
+  it('resumeStreamUntilIdle routes through durable resume() with untilIdle', async () => {
+    const durableAgent = makeDurable('resume-stream-until-idle-route');
+    const { output, resumeSpy } = spyResume(durableAgent);
+    const wrappedSpy = vi.spyOn(durableAgent.agent, 'resumeStreamUntilIdle');
+
+    const result = await durableAgent.resumeStreamUntilIdle(
+      { approved: true },
+      { runId: 'r1', toolCallId: 't1', maxIdleMs: 50 },
+    );
+
+    expect(result).toBe(output);
+    const [runId, data, opts] = resumeSpy.mock.calls[0]!;
+    expect(runId).toBe('r1');
+    expect(data).toEqual({ approved: true });
+    expect(opts).toMatchObject({ toolCallId: 't1', untilIdle: { maxIdleMs: 50 } });
+    expect(opts).not.toHaveProperty('runId');
+    expect(opts).not.toHaveProperty('maxIdleMs');
+    expect(wrappedSpy).not.toHaveBeenCalled();
+
+    await durableAgent.resumeStreamUntilIdle({ approved: true }, { runId: 'r2' });
+    expect(resumeSpy.mock.calls[1]![2]).toMatchObject({ untilIdle: true });
+  });
+
+  it('resumeStreamUntilIdle throws without a runId', async () => {
+    const durableAgent = makeDurable('resume-stream-until-idle-no-run');
+    await expect(durableAgent.resumeStreamUntilIdle({ approved: true })).rejects.toThrow(/requires a runId/);
   });
 
   it('approveToolCall / declineToolCall resume the durable run', async () => {

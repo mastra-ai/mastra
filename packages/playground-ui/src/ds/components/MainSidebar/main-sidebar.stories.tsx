@@ -40,7 +40,6 @@ import {
   MetricsIcon,
   ProcessorIcon,
   PromptIcon,
-  RequestContextIcon,
   ScorersIcon,
   SettingsIcon,
   ToolsIcon,
@@ -192,7 +191,6 @@ const studioSections: NavSection[] = [
       { name: 'MCP Servers', url: '/mcps', icon: <McpServerIcon /> },
       { name: 'Tools', url: '/tools', icon: <ToolsIcon /> },
       { name: 'Workspaces', url: '/workspaces', icon: <WorkspacesIcon /> },
-      { name: 'Request Context', url: '/request-context', icon: <RequestContextIcon /> },
     ],
   },
   {

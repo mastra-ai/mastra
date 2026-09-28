@@ -62,6 +62,12 @@ describe('formatDate', () => {
       ).toBe('Sep 23, 2026, 10:14:12 AM');
     });
 
+    it('drops the year for compact list timestamps', () => {
+      expect(formatDate('2026-09-23T10:14:12Z', 'day-time-seconds', { locale: 'en-US', timeZone: 'UTC' })).toBe(
+        'Sep 23, 10:14:12 AM',
+      );
+    });
+
     it('distinguishes timeline events within one minute', () => {
       const options = { locale: 'en-GB', timeZone: 'UTC' };
       expect(formatDate('2026-09-24T10:00:00Z', 'date-time-seconds', options)).toBe('24 Sept 2026, 10:00:00');
