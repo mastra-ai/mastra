@@ -1584,7 +1584,7 @@ export function createDurableToolCallStep() {
         // Maps `value` into providerMetadata.mastra.modelOutput, replacing any earlier mapping.
         const mapModelOutput = async (value: unknown) => {
           providerMetadata = typedInput.providerMetadata;
-          if (!toModelOutput) return;
+          if (!toModelOutput || value == null) return;
           const mappingSpan = stepSpan?.createChildSpan({
             type: SpanType.MAPPING,
             name: `tool output mapping: '${toolName}'`,
@@ -1674,7 +1674,9 @@ export function createDurableToolCallStep() {
             // Sync any processor mutation back so the emitted chunk and the
             // serialized step output both carry the post-processor value.
             const postProcessorResult = readToolResultFromMessageList(messageList, toolCallId);
-            if (postProcessorResult !== undefined && postProcessorResult !== result) {
+            // Any result-state value here was written by a processor (the commit
+            // comes later), including an object mutated in place.
+            if (postProcessorResult !== undefined) {
               result = postProcessorResult;
               // The mapping above ran on the raw result; map the rewritten one instead.
               if (toModelOutput) await mapModelOutput(result);

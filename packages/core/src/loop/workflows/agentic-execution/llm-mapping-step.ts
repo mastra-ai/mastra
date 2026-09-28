@@ -115,8 +115,11 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
 
       // Sync any processor mutation back into the chunk so streaming clients see
       // the post-processor value, not the raw tool return.
+      // A result-state invocation exists here only if a processor wrote one (the
+      // commit comes later), so any value is a rewrite, including an object
+      // mutated in place and written back under the same reference.
       const postProcessorResult = readToolResultFromMessageList(rest.messageList, chunk.payload.toolCallId);
-      if (postProcessorResult !== undefined && postProcessorResult !== chunk.payload.result) {
+      if (postProcessorResult !== undefined) {
         (chunk.payload as { result: unknown }).result = postProcessorResult;
         return { ok: true, rewritten: true };
       }
@@ -306,7 +309,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
               | ProviderMetadata
               | undefined;
 
-            const chunk = await transformToolChunk(
+            let chunk = await transformToolChunk(
               {
                 type: 'tool-result',
                 runId: rest.runId,
@@ -352,6 +355,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
               const result = (chunk as { payload: { result: unknown } }).payload.result;
               providerMetadata = await getProviderMetadataWithModelOutput({ ...toolCall, result });
               (chunk as { payload: { providerMetadata?: unknown } }).payload.providerMetadata = providerMetadata;
+              // The payload transform also ran on the raw result; redo it on the rewritten one.
+              chunk = await transformToolChunk(chunk, toolCall);
             }
 
             if (!toolCall.providerExecuted) {
@@ -470,7 +475,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             : undefined;
           const chunkProviderMetadata = (providerMetadata ?? toolCall.providerMetadata) as ProviderMetadata | undefined;
 
-          const chunk = await transformToolChunk(
+          let chunk = await transformToolChunk(
             {
               type: 'tool-result',
               runId: rest.runId,
@@ -516,6 +521,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             const result = (chunk as { payload: { result: unknown } }).payload.result;
             providerMetadata = await getProviderMetadataWithModelOutput({ ...toolCall, result });
             (chunk as { payload: { providerMetadata?: unknown } }).payload.providerMetadata = providerMetadata;
+            // The payload transform also ran on the raw result; redo it on the rewritten one.
+            chunk = await transformToolChunk(chunk, toolCall);
           }
 
           // Provider-executed tools are handled by llm-execution-step; for client-executed
