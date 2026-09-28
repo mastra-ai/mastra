@@ -88,8 +88,17 @@ const mocks = vi.hoisted(() => ({
   /** Run-binding role resolved for the session; null = no binding found. */
   runBindingRole: null as string | null,
   runBindingStatus: 'active' as 'active' | 'revoked',
-  findActiveRunBindingForSession: vi.fn(async () =>
-    mocks.runBindingRole ? { role: mocks.runBindingRole, status: mocks.runBindingStatus, orgId: 'org-1' } : null,
+  runBindingThreadId: null as string | null,
+  findActiveRunBindingForSession: vi.fn(async ({ sessionId }: { sessionId: string }) =>
+    mocks.runBindingRole
+      ? {
+          role: mocks.runBindingRole,
+          status: mocks.runBindingStatus,
+          orgId: 'org-1',
+          threadId: mocks.runBindingThreadId ?? sessionId,
+          resourceId: sessionId,
+        }
+      : null,
   ),
 }));
 
@@ -164,6 +173,7 @@ afterEach(async () => {
   mocks.githubReviewerPat = null;
   mocks.runBindingRole = null;
   mocks.runBindingStatus = 'active';
+  mocks.runBindingThreadId = null;
   mocks.findActiveRunBindingForSession.mockClear();
 });
 
@@ -1140,6 +1150,22 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.findActiveRunBindingForSession).toHaveBeenCalledWith(
       expect.objectContaining({ orgId: 'org-1', sessionId: 'session-a' }),
     );
+  });
+
+  it('hides review skills from a thread that does not own the session binding', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
+    // The session was handed to another item's run; this request still carries the old thread.
+    mocks.runBindingThreadId = 'other-thread';
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    const workspace = (await resolver({ requestContext }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+    expect((await workspace.skills?.get('factory-plan'))?.instructions).toContain('# Factory Plan');
   });
 
   it('drops cached review skills when a reused workspace leaves the review role', async () => {

@@ -52,7 +52,11 @@ async function findSkill(session: SkillSession, name: string) {
   const skill = await skills.get(name);
   if (skill || !REVIEW_ONLY_FACTORY_SKILLS.has(name)) return skill;
   // The cache may predate the review binding this run was just given.
-  await rescanFactorySkills(skills);
+  try {
+    await rescanFactorySkills(skills);
+  } catch {
+    return undefined;
+  }
   return skills.get(name);
 }
 

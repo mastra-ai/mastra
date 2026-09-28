@@ -620,13 +620,18 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
 
     // Keyed by the session, not the request's thread: a workspace built for a
     // dispatcher kickoff has no live thread yet, but the session's binding
-    // already says which role it is serving.
-    const findSessionBinding = () =>
-      workItems!.findActiveRunBindingForSession({
+    // already says which role it is serving. When the request does carry a
+    // thread, the binding must belong to it, so a stale thread reusing this
+    // session never inherits another run's role.
+    const findSessionBinding = async () => {
+      const binding = await workItems!.findActiveRunBindingForSession({
         orgId: session.orgId,
         factoryProjectId: connection.factoryProjectId,
         sessionId: session.sessionId,
       });
+      if (!binding || !ctx?.threadId) return binding;
+      return binding.threadId === ctx.threadId && binding.resourceId === ctx.resourceId ? binding : null;
+    };
     // Fails closed: without a readable active review binding, review skills stay hidden.
     const isReviewSession = async (): Promise<boolean> => {
       if (!workItems) return false;
