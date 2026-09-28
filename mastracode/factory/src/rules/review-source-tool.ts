@@ -39,7 +39,8 @@ export interface ReviewSourceOutput {
    * Repository identity stamped on the review card at intake — the
    * binding-side value for the null-`url` cross-check fallback. The skill must
    * compare this against an identity resolved independently of the card (e.g.
-   * `gh repo view --json databaseId` for the session checkout's repository);
+   * `gh api repos/<owner>/<repo> --jq .id` — the numeric REST id — for the
+   * session checkout's repository);
    * comparing two values derived from the same checkout proves nothing.
    * `null` when intake recorded no repository identity — in that case there
    * is no verifiable bound repository and the fallback must not publish.
