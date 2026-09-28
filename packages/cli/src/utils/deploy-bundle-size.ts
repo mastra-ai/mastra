@@ -63,8 +63,9 @@ export async function checkBundleSize(opts: {
   warn: (message: string) => void;
 }): Promise<void> {
   if (opts.artifactBytes <= BUNDLE_WARN_BYTES) return;
-  const listing = await describeLargestEntries(opts.outputDir);
-  opts.warn(`Deploy bundle is ${formatBytes(opts.artifactBytes)}, which is unusually large.\n${listing}`);
+  const summary = `Deploy bundle is ${formatBytes(opts.artifactBytes)}, which is unusually large.`;
+  const listing = await describeLargestEntries(opts.outputDir).catch(() => null);
+  opts.warn(listing ? `${summary}\n${listing}` : summary);
 }
 
 /**
@@ -102,7 +103,7 @@ export async function uploadArtifact(uploadUrl: string, zipBuffer: Buffer): Prom
     resp = await fetch(uploadUrl, {
       method: 'PUT',
       headers: artifactUploadHeaders(uploadUrl, zipBuffer.byteLength),
-      body: new Uint8Array(zipBuffer),
+      body: new Uint8Array(zipBuffer.buffer, zipBuffer.byteOffset, zipBuffer.byteLength),
     });
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -52,6 +52,17 @@ describe('checkBundleSize', () => {
     expect(message.indexOf('public')).toBeLessThan(message.indexOf('index.mjs'));
     expect(message).not.toContain('node_modules/');
     expect(message).toContain('stray repo clone');
+  });
+
+  it('still warns without the listing when the output cannot be inspected', async () => {
+    const warn = vi.fn();
+    await chmod(join(outputDir, 'public', 'clone'), 0o000);
+    try {
+      await checkBundleSize({ artifactBytes: BUNDLE_WARN_BYTES + 1, outputDir, warn });
+    } finally {
+      await chmod(join(outputDir, 'public', 'clone'), 0o755);
+    }
+    expect(warn).toHaveBeenCalledWith('Deploy bundle is 100.0 MB, which is unusually large.');
   });
 
   it('only warns, even far above the platform limit', async () => {
