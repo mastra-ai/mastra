@@ -724,11 +724,17 @@ async function processOutputStream<OUTPUT = undefined>({
       continue;
     }
 
-    chunk = await addToolPayloadTransformToChunk(chunk, {
-      resolveTool,
-      policy: toolPayloadTransform,
-      logger,
-    });
+    // A tool result that processToolResult will see is transformed after the processors
+    // run (in the 'tool-result' case below), so transforms never receive the raw value.
+    const transformAfterProcessors =
+      chunk.type === 'tool-result' && 'result' in chunk.payload && !!outputProcessors?.length;
+    if (!transformAfterProcessors) {
+      chunk = await addToolPayloadTransformToChunk(chunk, {
+        resolveTool,
+        policy: toolPayloadTransform,
+        logger,
+      });
+    }
 
     let toolInputStartToolDef: ToolSet[string] | undefined;
     if (chunk.type === 'tool-call-input-streaming-start') {
@@ -1012,17 +1018,15 @@ async function processOutputStream<OUTPUT = undefined>({
               const postProcessorResult = readToolResultFromMessageList(messageList, chunk.payload.toolCallId);
               if (postProcessorResult !== undefined) {
                 (chunk.payload as { result: unknown }).result = postProcessorResult;
-                // The payload transform ran on the raw result upstream; redo it so
-                // persisted transcript and emitted display state never carry the raw value.
-                const retransformed = await addToolPayloadTransformToChunk(chunk, {
-                  resolveTool,
-                  policy: toolPayloadTransform,
-                  logger,
-                });
-                // Copy only the metadata: rebinding `chunk` would lose the tool-result
-                // narrowing, and the title the helper also adds is already on this chunk.
-                chunk.metadata = retransformed.metadata;
               }
+              // Deferred from the top of the loop. Copy only the metadata: rebinding `chunk`
+              // would lose the tool-result narrowing, and titles only apply to tool-call chunks.
+              const transformed = await addToolPayloadTransformToChunk(chunk, {
+                resolveTool,
+                policy: toolPayloadTransform,
+                logger,
+              });
+              chunk.metadata = transformed.metadata;
             } catch (error) {
               if (error instanceof TripWire) {
                 toolResultTripwire = error;

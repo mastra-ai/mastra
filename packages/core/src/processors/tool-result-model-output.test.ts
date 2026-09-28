@@ -147,7 +147,7 @@ describe('toModelOutput after processToolResult', () => {
     expect(secondPrompt(prompts)).toContain('mapped: SECRET-TOKEN body');
   });
 
-  it('default engine remaps a result the processor mutated in place, keeping the original object', async () => {
+  it('default engine maps a result the processor mutated in place, keeping the original object', async () => {
     const prompts: unknown[] = [];
     const { tool, mutator, seen } = inPlaceSetup();
     const agent = new Agent({
@@ -164,8 +164,7 @@ describe('toModelOutput after processToolResult', () => {
     const prompt = secondPrompt(prompts);
     expect(prompt).toContain('mapped: [REDACTED] symbol:yes');
     expect(prompt).not.toContain('SECRET-TOKEN');
-    expect(seen).toHaveLength(2);
-    expect(seen[1]).toBe(seen[0]);
+    expect(seen).toHaveLength(1);
   });
 
   it('default engine applies the transcript payload transform to the rewritten result', async () => {
@@ -262,16 +261,23 @@ describe('toModelOutput after processToolResult', () => {
       },
       outputProcessors: [redactor as any, capture as any],
     });
+    const seenOutputs: unknown[] = [];
     const stream = await agent.stream('go', {
       maxSteps: 3,
       transform: {
         targets: ['display', 'transcript'],
-        transformToolPayload: (ctx: any) => (ctx.phase === 'output-available' ? `T:${String(ctx.output)}` : ctx.input),
+        transformToolPayload: (ctx: any) => {
+          if (ctx.phase !== 'output-available') return ctx.input;
+          if (ctx.toolCallId === 'call-provider') seenOutputs.push(ctx.output);
+          return `T:${String(ctx.output)}`;
+        },
       },
     } as any);
     const chunks: any[] = [];
     for await (const c of stream.fullStream) chunks.push(c);
 
+    // One call per target, all on the rewritten value.
+    expect(seenOutputs).toEqual(['[REDACTED]', '[REDACTED]']);
     const meta = chunks.find(c => c.type === 'tool-result' && c.payload.toolCallId === 'call-provider')?.metadata
       ?.mastra?.toolPayloadTransform;
     expect(meta?.transcript?.['output-available']?.transformed).toBe('T:[REDACTED]');
@@ -358,5 +364,75 @@ describe('toModelOutput after processToolResult', () => {
 
     expect(secondPrompt(prompts)).toContain('mapped: SECRET-TOKEN body');
     expect(mapper).toHaveBeenCalledTimes(1);
+  });
+
+  it('default engine never hands the raw result of a rewritten tool to toModelOutput or payload transforms', async () => {
+    const prompts: unknown[] = [];
+    const mapper = vi.fn((output: unknown) => ({ type: 'text' as const, value: `mapped: ${String(output)}` }));
+    const outputs: unknown[] = [];
+    const agent = new Agent({
+      id: 'mo-once',
+      name: 'mo-once',
+      instructions: 'x',
+      model: recordingModel(prompts) as LanguageModelV2,
+      tools: {
+        getSecret: createTool({
+          id: 'getSecret',
+          description: 'Get secret',
+          inputSchema: z.object({ q: z.string() }),
+          execute: async () => 'SECRET-TOKEN body',
+          toModelOutput: mapper,
+        }),
+      },
+      outputProcessors: [redactor as any],
+    });
+    const stream = await agent.stream('go', {
+      maxSteps: 3,
+      transform: {
+        targets: ['display', 'transcript'],
+        transformToolPayload: (ctx: any) => {
+          if (ctx.phase === 'output-available') outputs.push(ctx.output);
+          return ctx.phase === 'output-available' ? `T:${String(ctx.output)}` : ctx.input;
+        },
+      },
+    } as any);
+    for await (const _ of stream.fullStream) void _;
+
+    expect(secondPrompt(prompts)).toContain('mapped: [REDACTED]');
+    expect(mapper.mock.calls.map(c => c[0])).toEqual(['[REDACTED]']);
+    expect(outputs).not.toContain('SECRET-TOKEN body');
+  });
+
+  it('durable engine never hands the raw result of a rewritten tool to toModelOutput', async () => {
+    const prompts: unknown[] = [];
+    const mapper = vi.fn((output: unknown) => ({ type: 'text' as const, value: `mapped: ${String(output)}` }));
+    const baseAgent = new Agent({
+      id: 'mo-durable-once',
+      name: 'mo-durable-once',
+      instructions: 'x',
+      model: recordingModel(prompts) as LanguageModelV2,
+      tools: {
+        getSecret: createTool({
+          id: 'getSecret',
+          description: 'Get secret',
+          inputSchema: z.object({ q: z.string() }),
+          execute: async () => 'SECRET-TOKEN body',
+          toModelOutput: mapper,
+        }),
+      },
+      outputProcessors: [redactor as any],
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    new Mastra({
+      agents: { 'mo-durable-once': durableAgent as any },
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub,
+    });
+    const result = await durableAgent.stream('go', { maxSteps: 3 });
+    for await (const _ of result.fullStream) void _;
+
+    expect(secondPrompt(prompts)).toContain('mapped: [REDACTED]');
+    expect(mapper.mock.calls.map(c => c[0])).toEqual(['[REDACTED]']);
   });
 });

@@ -90,9 +90,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
     };
     stepNumber: number;
     steps: Array<StepResult<ToolSet>>;
-  }): Promise<{ ok: true; rewritten: boolean } | { ok: false; tripwire: TripWire }> {
+  }): Promise<{ ok: true } | { ok: false; tripwire: TripWire }> {
     if (!processorRunner || !rest.outputProcessors?.length) {
-      return { ok: true, rewritten: false };
+      return { ok: true };
     }
     const { chunk, stepNumber, steps } = args;
     try {
@@ -121,9 +121,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
       const postProcessorResult = readToolResultFromMessageList(rest.messageList, chunk.payload.toolCallId);
       if (postProcessorResult !== undefined) {
         (chunk.payload as { result: unknown }).result = postProcessorResult;
-        return { ok: true, rewritten: true };
       }
-      return { ok: true, rewritten: false };
+      return { ok: true };
     } catch (error) {
       if (error instanceof TripWire) {
         return { ok: false, tripwire: error };
@@ -299,67 +298,40 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           const stepNumber = (initialResult?.output?.steps?.length ?? 0) as number;
           const steps = (initialResult?.output?.steps ?? []) as Array<StepResult<ToolSet>>;
           for (const toolCall of successfulResults) {
-            // Compute modelOutput before emitting the chunk so consumers (e.g. harness)
-            // can access it on the chunk's providerMetadata.mastra.modelOutput.
-            // getProviderMetadataWithModelOutput already returns the fully-merged providerMetadata.
-            let providerMetadata = !toolCall.providerExecuted
-              ? await getProviderMetadataWithModelOutput(toolCall)
-              : undefined;
-            const chunkProviderMetadata = (providerMetadata ?? toolCall.providerMetadata) as
-              | ProviderMetadata
-              | undefined;
-
-            let chunk = await transformToolChunk(
-              {
-                type: 'tool-result',
-                runId: rest.runId,
-                from: ChunkFrom.AGENT,
-                payload: {
-                  args: toolCall.args,
-                  toolCallId: toolCall.toolCallId,
-                  toolName: toolCall.toolName,
-                  result: toolCall.result,
-                  providerMetadata: chunkProviderMetadata,
-                  providerExecuted: toolCall.providerExecuted,
-                },
+            // Run processToolResult BEFORE mapping, transforming, or committing, so
+            // toModelOutput and payload transforms only ever see the final value.
+            const rawChunk = {
+              type: 'tool-result',
+              runId: rest.runId,
+              from: ChunkFrom.AGENT,
+              payload: {
+                args: toolCall.args,
+                toolCallId: toolCall.toolCallId,
+                toolName: toolCall.toolName,
+                result: toolCall.result,
+                providerExecuted: toolCall.providerExecuted,
               },
-              toolCall,
-            );
-
-            // Run processToolResult BEFORE the raw result is committed to messageList.
-            // This honors the documented "before the result is added to the message
-            // list" guarantee — on tripwire the raw value never reaches history.
-            // A processor that redacts via messageList.updateToolInvocation has its
-            // value synced back into chunk.payload.result, which the commit below uses.
-            const trResult = await runToolResultProcessors({
-              chunk: chunk as ChunkType<OUTPUT> & {
-                payload: {
-                  toolCallId: string;
-                  toolName: string;
-                  args?: unknown;
-                  result?: unknown;
-                  providerExecuted?: boolean;
-                };
-              },
-              stepNumber,
-              steps,
-            });
+            } as ChunkType<OUTPUT> & {
+              payload: {
+                toolCallId: string;
+                toolName: string;
+                args?: unknown;
+                result?: unknown;
+                providerExecuted?: boolean;
+              };
+            };
+            const trResult = await runToolResultProcessors({ chunk: rawChunk, stepNumber, steps });
             if (!trResult.ok) {
               emitTripwireChunk(trResult.tripwire);
               continue;
             }
-
-            // toModelOutput ran on the raw result above. If a processor rewrote the
-            // result, map the rewritten value instead so the model never sees the raw one.
-            if (trResult.rewritten) {
-              if (!toolCall.providerExecuted) {
-                const result = (chunk as { payload: { result: unknown } }).payload.result;
-                providerMetadata = await getProviderMetadataWithModelOutput({ ...toolCall, result });
-                (chunk as { payload: { providerMetadata?: unknown } }).payload.providerMetadata = providerMetadata;
-              }
-              // The payload transform also ran on the raw result; redo it on the rewritten one.
-              chunk = await transformToolChunk(chunk, toolCall);
-            }
+            const result = rawChunk.payload.result;
+            const providerMetadata = !toolCall.providerExecuted
+              ? await getProviderMetadataWithModelOutput({ ...toolCall, result })
+              : undefined;
+            (rawChunk.payload as { providerMetadata?: unknown }).providerMetadata = (providerMetadata ??
+              toolCall.providerMetadata) as ProviderMetadata | undefined;
+            const chunk = await transformToolChunk(rawChunk, toolCall);
 
             if (!toolCall.providerExecuted) {
               // Update tool invocations from state:'call' to state:'result' for successful client tools.
@@ -469,46 +441,30 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           // by processOutputStream's 'tool-result' case in llm-execution-step.
           if (toolCall.result === undefined) continue;
 
-          // Compute modelOutput before emitting the chunk so consumers (e.g. harness)
-          // can access it on the chunk's providerMetadata.mastra.modelOutput.
-          // getProviderMetadataWithModelOutput already returns the fully-merged providerMetadata.
-          let providerMetadata = !toolCall.providerExecuted
-            ? await getProviderMetadataWithModelOutput(toolCall)
-            : undefined;
-          const chunkProviderMetadata = (providerMetadata ?? toolCall.providerMetadata) as ProviderMetadata | undefined;
-
-          let chunk = await transformToolChunk(
-            {
-              type: 'tool-result',
-              runId: rest.runId,
-              from: ChunkFrom.AGENT,
-              payload: {
-                args: toolCall.args,
-                toolCallId: toolCall.toolCallId,
-                toolName: toolCall.toolName,
-                result: toolCall.result,
-                providerMetadata: chunkProviderMetadata,
-                providerExecuted: toolCall.providerExecuted,
-              },
+          // Run processToolResult BEFORE mapping, transforming, or committing, so
+          // toModelOutput and payload transforms only ever see the final value.
+          const rawChunk = {
+            type: 'tool-result',
+            runId: rest.runId,
+            from: ChunkFrom.AGENT,
+            payload: {
+              args: toolCall.args,
+              toolCallId: toolCall.toolCallId,
+              toolName: toolCall.toolName,
+              result: toolCall.result,
+              providerExecuted: toolCall.providerExecuted,
             },
-            toolCall,
-          );
-
-          // Run processToolResult BEFORE the raw result is committed to messageList.
-          // This honors the documented "before the result is added to the message list"
-          // guarantee — on tripwire the raw value never reaches history. A processor
-          // that redacts via messageList.updateToolInvocation has its value synced
-          // back into chunk.payload.result, which the commit below uses.
+          } as ChunkType<OUTPUT> & {
+            payload: {
+              toolCallId: string;
+              toolName: string;
+              args?: unknown;
+              result?: unknown;
+              providerExecuted?: boolean;
+            };
+          };
           const trResult = await runToolResultProcessors({
-            chunk: chunk as ChunkType<OUTPUT> & {
-              payload: {
-                toolCallId: string;
-                toolName: string;
-                args?: unknown;
-                result?: unknown;
-                providerExecuted?: boolean;
-              };
-            },
+            chunk: rawChunk,
             stepNumber: stepNumberForToolResults,
             steps: stepsForToolResults,
           });
@@ -516,18 +472,15 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             emitTripwireChunk(trResult.tripwire);
             continue;
           }
-
-          // toModelOutput ran on the raw result above. If a processor rewrote the
-          // result, map the rewritten value instead so the model never sees the raw one.
-          if (trResult.rewritten) {
-            if (!toolCall.providerExecuted) {
-              const result = (chunk as { payload: { result: unknown } }).payload.result;
-              providerMetadata = await getProviderMetadataWithModelOutput({ ...toolCall, result });
-              (chunk as { payload: { providerMetadata?: unknown } }).payload.providerMetadata = providerMetadata;
-            }
-            // The payload transform also ran on the raw result; redo it on the rewritten one.
-            chunk = await transformToolChunk(chunk, toolCall);
-          }
+          const result = rawChunk.payload.result;
+          // Compute modelOutput before emitting the chunk so consumers (e.g. harness)
+          // can access it on the chunk's providerMetadata.mastra.modelOutput.
+          const providerMetadata = !toolCall.providerExecuted
+            ? await getProviderMetadataWithModelOutput({ ...toolCall, result })
+            : undefined;
+          (rawChunk.payload as { providerMetadata?: unknown }).providerMetadata = (providerMetadata ??
+            toolCall.providerMetadata) as ProviderMetadata | undefined;
+          const chunk = await transformToolChunk(rawChunk, toolCall);
 
           // Provider-executed tools are handled by llm-execution-step; for client-executed
           // tools we patch state:'call' -> state:'result' here after processors have run.
