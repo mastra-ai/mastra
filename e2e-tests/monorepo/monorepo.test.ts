@@ -677,7 +677,6 @@ export const environmentRoute = registerApiRoute('/environment', {
     it('should keep configured workspace externals out of bundles without inlining default externals', async () => {
       const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
       const packageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
-      const outputFiles = await readdir(outputDir);
       const bundleFiles = await glob('**/*.mjs', { cwd: outputDir, ignore: ['node_modules/**'] });
       const output = (await Promise.all(bundleFiles.map(file => readFile(join(outputDir, file), 'utf-8')))).join('\n');
 
@@ -688,20 +687,23 @@ export const environmentRoute = registerApiRoute('/environment', {
           zod: expect.any(String),
           bcrypt: expect.any(String),
           typescript: expect.any(String),
+          '@inner/subpath-only': expect.any(String),
         }),
       );
-      expect(outputFiles).not.toContain('@mastra__core.mjs');
-      expect(outputFiles).not.toContain('@mastra__mcp.mjs');
-      expect(outputFiles).not.toContain('zod.mjs');
+      // Bare imports and runtime dependencies, not optimized chunk filenames, define externalization.
       expect(output).toMatch(/from ["']@mastra\/core\//);
       expect(output).toMatch(/from ["']@mastra\/mcp["']/);
       expect(output).toMatch(/from ["']zod["']/);
-      expect(packageJson.dependencies?.['@inner/subpath-only']).toBeTruthy();
       expect(output).toMatch(/from ["']@inner\/subpath-only["']/);
       expect(output).toMatch(/from ["']@inner\/subpath-only\/value["']/);
       expect(output).not.toContain('external-workspace-root-implementation-marker');
-      expect(output).toContain('My Agent');
+
+      // An ordinary workspace package still gets bundled and remains usable by the built server.
+      expect(packageJson.dependencies).not.toHaveProperty('@inner/hello-world');
       expect(output).not.toMatch(/from ["']@inner\/hello-world(?:\/|["'])/);
+      const agentResponse = await fetch(`http://localhost:${port}/api/agents/my-agent`);
+      expect(agentResponse.status).toBe(200);
+      expect((await agentResponse.json()).id).toBe('my-agent');
     });
 
     it('should exclude imports from dead NODE_ENV branches', async () => {
