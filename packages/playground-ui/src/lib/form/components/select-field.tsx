@@ -1,6 +1,7 @@
 import type { AutoFormFieldProps } from '@autoform/react';
 import React from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
+import { cn } from '@/utils/cn';
 
 export const SelectField: React.FC<AutoFormFieldProps> = ({ field, inputProps, error, id, value }) => {
   const {
@@ -27,7 +28,7 @@ export const SelectField: React.FC<AutoFormFieldProps> = ({ field, inputProps, e
     >
       <SelectTrigger
         id={id}
-        className={error ? 'border-accent2' : ''}
+        className={cn('w-full', error && 'border-accent2')}
         aria-invalid={ariaInvalid}
         aria-describedby={ariaDescribedBy}
       >
