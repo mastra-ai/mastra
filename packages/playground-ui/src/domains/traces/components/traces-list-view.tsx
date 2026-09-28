@@ -176,8 +176,8 @@ export function TracesListView({
         ) : (
           <TracesDataList.TopCell>Start</TracesDataList.TopCell>
         )}
-        {hasTraceColumn(columnPreferences, 'type') && <TracesDataList.TopCell>Type</TracesDataList.TopCell>}
-        <TracesDataList.TopCell>Name</TracesDataList.TopCell>
+        {hasTraceColumn(columnPreferences, 'type') && <TracesDataList.TopCell>Primitive type</TracesDataList.TopCell>}
+        <TracesDataList.TopCell>Primitive name</TracesDataList.TopCell>
         {hasTraceColumn(columnPreferences, 'input') && <TracesDataList.TopCell>Input</TracesDataList.TopCell>}
         <TracesDataList.TopCell>Status</TracesDataList.TopCell>
         {hasTraceColumn(columnPreferences, 'duration') && (
@@ -271,7 +271,7 @@ export function TracesListView({
                 <TracesDataList.CreatedCell timestamp={displayDate} />
                 {hasTraceColumn(columnPreferences, 'type') && <TracesDataList.TypeCell entityType={trace.entityType} />}
                 <TracesDataList.NameCell
-                  name={trace.name}
+                  name={trace.entityName || trace.name}
                   parentSpanId={trace.parentSpanId}
                   showLevelTooltip={isBranchesMode}
                 />

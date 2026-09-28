@@ -28,7 +28,7 @@ export const TRACE_CUSTOM_COLUMN_LABELS: Record<TraceCustomColumn, string> = {
   traceId: 'Trace ID',
   threadId: 'Thread ID',
   resourceId: 'Resource ID',
-  entityId: 'Entity ID',
+  entityId: 'Primitive ID',
 };
 
 export type TraceColumnPreferences = {
@@ -149,7 +149,7 @@ export function buildTraceListColumns(preferences: TraceColumnPreferences): stri
 
 const RUN_PREFIX_PATTERN = /^(?:agent|workflow|scorer) run: '(.+?)'(.*)$/;
 
-/** Core names root spans `agent run: 'id'` (+ optional ` (resumed)`); the Type column already carries
+/** Core names root spans `agent run: 'id'` (+ optional ` (resumed)`); the Primitive type column already carries
  *  the kind, so the list shows just the id and any suffix. Core names are untouched for exporters. */
 export function displayTraceName<T extends string | null | undefined>(name: T): T {
   if (!name) return name;
