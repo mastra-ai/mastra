@@ -290,6 +290,7 @@ export class ConvexDB extends MastraBase {
       requestContext: JSON.stringify(requestContext),
       executionClaim: executionClaim?.key,
       preserveResult: executionClaim?.preserveResult,
+      requireRunningStepId: executionClaim?.requireRunningStepId,
     });
     if (!context) {
       if (executionClaim) {

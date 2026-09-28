@@ -229,7 +229,18 @@ describe('evented suspended-record redelivery guard', () => {
       );
       expect(step1End).toBeTruthy();
 
+      // A transport redelivery keeps the event id.
       pubsub.redeliver(step1End!.topic, step1End!.event);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(step1Execute).toHaveBeenCalledTimes(1);
+      expect(step2Execute).toHaveBeenCalledTimes(1);
+
+      // A superseded worker republishes the same completion under a fresh
+      // event id. Successor identity is derived from the `step.run` event that
+      // scheduled step1, so both workers schedule the same successor and
+      // storage drops the second one.
+      pubsub.redeliver(step1End!.topic, { ...step1End!.event, id: `${step1End!.event.id}-superseded` });
       await new Promise(resolve => setTimeout(resolve, 50));
 
       expect(step1Execute).toHaveBeenCalledTimes(1);

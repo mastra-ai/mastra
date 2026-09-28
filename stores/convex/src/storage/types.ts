@@ -142,6 +142,7 @@ export type StorageRequest =
       requestContext: string;
       executionClaim?: string;
       preserveResult?: boolean;
+      requireRunningStepId?: string;
     }
   | {
       op: 'mergeWorkflowState';

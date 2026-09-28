@@ -18,6 +18,29 @@ describe('claimWorkflowExecution', () => {
     expect(claimWorkflowExecution(snapshot)).toBe(true);
     expect(snapshot.eventedExecutionClaims).toBeUndefined();
   });
+
+  it('guards a claim on the stored step status instead of the claim ledger', () => {
+    const snapshot = createEmptyWorkflowSnapshot('run-1');
+    snapshot.context.slow = { status: 'running', payload: {}, startedAt: 1 } as any;
+
+    const claim = { key: 'step1:[0]', preserveResult: true, requireRunningStepId: 'slow' };
+
+    expect(claimWorkflowExecution(snapshot, claim)).toBe(true);
+    expect(snapshot.eventedExecutionClaims).toBeUndefined();
+
+    // Guarded claims stay retryable: another crash must be able to recover again.
+    expect(claimWorkflowExecution(snapshot, claim)).toBe(true);
+    expect(snapshot.eventedExecutionClaims).toBeUndefined();
+  });
+
+  it('rejects a guarded claim once the step has a completed result', () => {
+    const snapshot = createEmptyWorkflowSnapshot('run-1');
+    snapshot.context.slow = { status: 'success', output: { value: 'once' }, startedAt: 1 } as any;
+
+    expect(claimWorkflowExecution(snapshot, { key: 'step1:[0]', requireRunningStepId: 'slow' })).toBe(false);
+    expect(claimWorkflowExecution(snapshot, { key: 'step1:[0]', requireRunningStepId: 'missing' })).toBe(false);
+    expect(snapshot.eventedExecutionClaims).toBeUndefined();
+  });
 });
 
 describe('mergeWorkflowStepResult', () => {

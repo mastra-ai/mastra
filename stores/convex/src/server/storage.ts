@@ -836,7 +836,7 @@ export async function handleTypedOperation(
         return { ok: false, error: `Snapshot for runId ${request.runId} is missing or has invalid context` };
       }
 
-      if (!claimWorkflowExecution(snapshot, request.executionClaim)) {
+      if (!claimWorkflowExecution(snapshot, request.executionClaim, request.requireRunningStepId)) {
         return { ok: true };
       }
 

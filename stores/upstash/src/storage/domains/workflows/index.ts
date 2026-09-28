@@ -150,6 +150,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         local timestamp = tonumber(ARGV[8])
         local executionClaim = ARGV[9]
         local preserveResult = ARGV[10] == 'true'
+        local requireRunningStepId = ARGV[11]
 
         -- Get existing data
         local existing = redis.call('GET', key)
@@ -187,7 +188,19 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           }
         end
 
-        if executionClaim ~= '' then
+        if requireRunningStepId ~= '' then
+          -- Guarded recovery: accept the update only while the stored step is
+          -- still running, and leave the claim ledger untouched. This is a
+          -- compare-and-set so a step that completed before the recovery cannot
+          -- be resurrected.
+          if type(snapshot.context) ~= 'table' then
+            return false
+          end
+          local guardedStep = snapshot.context[requireRunningStepId]
+          if type(guardedStep) ~= 'table' or guardedStep.status ~= 'running' then
+            return false
+          end
+        elseif executionClaim ~= '' then
           if snapshot.eventedExecutionClaims == nil then
             snapshot.eventedExecutionClaims = {}
           end
@@ -244,6 +257,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           String(Date.now()),
           executionClaim?.key ?? '',
           String(executionClaim?.preserveResult ?? false),
+          executionClaim?.requireRunningStepId ?? '',
         ],
       );
 

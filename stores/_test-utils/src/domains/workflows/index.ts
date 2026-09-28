@@ -890,6 +890,62 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
       expect(snapshot?.eventedExecutionClaims).toEqual(['step-1:[0]:attempt-0']);
     });
 
+    it('should guard a workflow execution claim on the stored step status', async () => {
+      if (!supportsConcurrentUpdates) {
+        console.log('Skipping guarded workflow execution claim test');
+        return;
+      }
+
+      const workflowName = 'test-workflow';
+      const runId = `run-${randomUUID()}`;
+      const runningResult = { status: 'running' as const, payload: { data: 'resume-input' }, startedAt: Date.now() };
+      const completedResult = { status: 'success' as const, output: { data: 'completed' } };
+
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: { status: 'running', context: { 'step-1': runningResult } } as any,
+      });
+
+      // The guard compares the stored step status instead of the claim ledger,
+      // so a recovery stays possible after the recovering worker also crashes.
+      const recovered = await workflowsStorage.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'step-1',
+        result: { status: 'running', payload: undefined, startedAt: Date.now() },
+        requestContext: {},
+        executionClaim: { key: 'step-1:[0]:attempt-0', preserveResult: true, requireRunningStepId: 'step-1' },
+      });
+
+      expect(recovered).toBeDefined();
+      let snapshot = await workflowsStorage.loadWorkflowSnapshot({ workflowName, runId });
+      expect(snapshot?.context['step-1']).toEqual(runningResult);
+      expect(snapshot?.eventedExecutionClaims).toBeUndefined();
+
+      // A step that already completed is never resurrected by a late recovery.
+      await workflowsStorage.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'step-1',
+        result: completedResult as any,
+        requestContext: {},
+      });
+
+      const rejected = await workflowsStorage.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'step-1',
+        result: { status: 'running', payload: undefined, startedAt: Date.now() },
+        requestContext: {},
+        executionClaim: { key: 'step-1:[0]:attempt-0', preserveResult: true, requireRunningStepId: 'step-1' },
+      });
+
+      expect(rejected).toBeUndefined();
+      snapshot = await workflowsStorage.loadWorkflowSnapshot({ workflowName, runId });
+      expect(snapshot?.context['step-1']).toMatchObject(completedResult);
+    });
+
     it('should update workflow state sequentially', async () => {
       if (!supportsConcurrentUpdates) {
         console.log('Skipping workflow state updates sequentially test');

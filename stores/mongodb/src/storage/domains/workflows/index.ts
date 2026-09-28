@@ -166,11 +166,45 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
 
       // Use findOneAndUpdate with aggregation pipeline for atomic read-modify-write
       // This ensures concurrent updates don't overwrite each other
+      // A guarded claim recovers a claimed step whose owner disappeared: it
+      // compares the stored step status instead of the claim ledger, making the
+      // update a compare-and-set that cannot resurrect a completed step. Step
+      // ids are user data and may contain dots, hence $getField rather than a
+      // dotted filter path.
+      const requiresRunningStep = executionClaim?.requireRunningStepId;
+      const claimFilter = requiresRunningStep
+        ? {
+            $expr: {
+              $eq: [
+                {
+                  $getField: {
+                    field: 'status',
+                    input: {
+                      $ifNull: [
+                        {
+                          $getField: {
+                            field: requiresRunningStep,
+                            input: { $ifNull: ['$snapshot.context', {}] },
+                          },
+                        },
+                        {},
+                      ],
+                    },
+                  },
+                },
+                'running',
+              ],
+            },
+          }
+        : executionClaim
+          ? { 'snapshot.eventedExecutionClaims': { $ne: executionClaim.key } }
+          : {};
+
       const updatedDoc = await collection.findOneAndUpdate(
         {
           workflow_name: workflowName,
           run_id: runId,
-          ...(executionClaim ? { 'snapshot.eventedExecutionClaims': { $ne: executionClaim.key } } : {}),
+          ...claimFilter,
         },
         [
           {
@@ -204,7 +238,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
                           },
                         },
                       ]),
-                  ...(executionClaim
+                  ...(executionClaim && !requiresRunningStep
                     ? [
                         {
                           eventedExecutionClaims: {

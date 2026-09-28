@@ -116,4 +116,62 @@ describe('WorkflowEventProcessor step.run fence', () => {
     expect(await processor.handle(stepRunEvent(2))).toEqual({ ok: true });
     expect(execute).toHaveBeenCalledTimes(1);
   });
+
+  it('stops renewing and reports a lost fence when renewal is rejected', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const { mastra } = makeMastra(pubsub);
+    const logger = { debug: vi.fn(), warn: vi.fn() };
+    vi.spyOn(mastra, 'getLogger').mockReturnValue(logger as any);
+    const renewLease = vi.spyOn(pubsub, 'renewLease').mockResolvedValue(false);
+    const ttl = WorkflowEventProcessor.STEP_FENCE_TTL_MS;
+    WorkflowEventProcessor.STEP_FENCE_TTL_MS = 30;
+
+    try {
+      const processor = new SlowStepProcessor({ mastra });
+      expect(await processor.handle(stepRunEvent(1))).toEqual({ ok: true });
+
+      // A `false` renewal means the lease is gone: renewal stops instead of
+      // retrying for the rest of the handler, and the loss is reported.
+      expect(renewLease).toHaveBeenCalledTimes(1);
+      expect(logger.warn).toHaveBeenCalledWith(
+        'WorkflowEventProcessor.handle: lost step fence',
+        expect.objectContaining({ runId: 'run-1', executionClaimKey: 'step-run-event-1' }),
+      );
+      expect(processor.executions).toBe(1);
+    } finally {
+      WorkflowEventProcessor.STEP_FENCE_TTL_MS = ttl;
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('does not recover a claim whose step already produced a result', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const storage = new MockStore();
+    const execute = vi.fn(async () => ({}));
+    const workflow = makeWorkflow(execute);
+    const { mastra } = makeMastra(pubsub, storage, workflow);
+    const workflowsStore = (await storage.getStore('workflows'))!;
+    const snapshot = createEmptyWorkflowSnapshot('run-1');
+    snapshot.status = 'running';
+    snapshot.activePaths = [0];
+    snapshot.activeStepsPath = { slow: [0] };
+    snapshot.context = {
+      input: { status: 'success', output: {} },
+      slow: { status: 'success', output: { value: 'once' }, startedAt: 1, endedAt: 2 },
+    } as any;
+    snapshot.eventedExecutionClaims = ['step-run-event-1'];
+    await workflowsStore.persistWorkflowSnapshot({ workflowName: 'wf', runId: 'run-1', snapshot });
+
+    const processor = new WorkflowEventProcessor({ mastra });
+    expect(await processor.handle(stepRunEvent(2))).toEqual({ ok: true });
+    expect(execute).not.toHaveBeenCalled();
+
+    const afterSnapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: 'wf', runId: 'run-1' });
+    expect((afterSnapshot!.context as any).slow).toEqual({
+      status: 'success',
+      output: { value: 'once' },
+      startedAt: 1,
+      endedAt: 2,
+    });
+  });
 });
