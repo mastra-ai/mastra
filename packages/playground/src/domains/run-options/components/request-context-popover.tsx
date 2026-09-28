@@ -2,10 +2,11 @@ import { toast } from '@mastra/playground-ui/utils/toast';
 import { KeyRound } from 'lucide-react';
 import { useState } from 'react';
 
+import { JsonObjectEditor } from './json-object-editor';
 import { RunActionPopover } from './run-action-popover';
-import { RequestContext } from '@/domains/agents/components/request-context';
 import type { RequestContextEntityType } from '@/domains/request-context/hooks/use-entity-request-context';
 import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
+import { useRequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
 
 interface RequestContextPopoverProps {
   entityType: RequestContextEntityType;
@@ -15,6 +16,7 @@ interface RequestContextPopoverProps {
 export function RequestContextPopover({ entityType, entityId }: RequestContextPopoverProps) {
   const [open, setOpen] = useState(false);
   const [requestContext, setRequestContext] = useEntityRequestContext(entityType, entityId);
+  const presets = useRequestContextPresets();
 
   const handleSave = (value: Record<string, any>) => {
     setRequestContext(value);
@@ -24,7 +26,13 @@ export function RequestContextPopover({ entityType, entityId }: RequestContextPo
 
   return (
     <RunActionPopover label="Request context" icon={<KeyRound />} open={open} onOpenChange={setOpen}>
-      <RequestContext value={requestContext} onSave={handleSave} editorClassName="h-[260px]" />
+      <JsonObjectEditor
+        label="Request Context"
+        presets={presets}
+        value={requestContext}
+        onSave={handleSave}
+        editorClassName="h-[260px]"
+      />
     </RunActionPopover>
   );
 }

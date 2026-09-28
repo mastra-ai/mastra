@@ -3,7 +3,6 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
-import { TracingSettingsProvider } from '@mastra/playground-ui/domains/observability/context/tracing-settings-context';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
@@ -97,48 +96,46 @@ function AgentSession() {
   };
 
   return (
-    <TracingSettingsProvider entityId={agentId!} entityType="agent">
-      <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
-        <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId} resourceId={agentId!}>
-          <BrowserToolCallsProvider key={`browser-${agentId}-${actualThreadId}`}>
-            <BrowserSessionProvider
-              key={`session-${agentId}-${actualThreadId}`}
-              agentId={agentId!}
-              threadId={actualThreadId}
-              enabled={Boolean(agent?.hasBrowser ?? agent?.browserTools?.length)}
-            >
-              <ThreadInputProvider>
-                <ObservationalMemoryProvider>
-                  <ActivatedSkillsProvider>
-                    <PageLayout variant="fit">
-                      <h1 className="sr-only">{agentId}</h1>
-                      <SessionHeader />
-                      <div className="relative grid h-full min-h-0">
-                        <AgentChat
-                          key={actualThreadId}
-                          agentId={agentId!}
-                          agentName={agent?.name}
-                          modelVersion={agent?.modelVersion}
-                          supportsMemory={agent?.supportsMemory}
-                          threadId={actualThreadId}
-                          memory={hasMemory}
-                          refreshThreadList={handleRefreshThreadList}
-                          modelList={agent?.modelList}
-                          messageId={messageId}
-                          isNewThread={isNewThread}
-                          hideModelSwitcher
-                          runOptionsSlot={<AgentRunActions agentId={agentId!} />}
-                        />
-                      </div>
-                    </PageLayout>
-                  </ActivatedSkillsProvider>
-                </ObservationalMemoryProvider>
-              </ThreadInputProvider>
-            </BrowserSessionProvider>
-          </BrowserToolCallsProvider>
-        </WorkingMemoryProvider>
-      </AgentSettingsProvider>
-    </TracingSettingsProvider>
+    <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
+      <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId} resourceId={agentId!}>
+        <BrowserToolCallsProvider key={`browser-${agentId}-${actualThreadId}`}>
+          <BrowserSessionProvider
+            key={`session-${agentId}-${actualThreadId}`}
+            agentId={agentId!}
+            threadId={actualThreadId}
+            enabled={Boolean(agent?.hasBrowser ?? agent?.browserTools?.length)}
+          >
+            <ThreadInputProvider>
+              <ObservationalMemoryProvider>
+                <ActivatedSkillsProvider>
+                  <PageLayout variant="fit">
+                    <h1 className="sr-only">{agentId}</h1>
+                    <SessionHeader />
+                    <div className="relative grid h-full min-h-0">
+                      <AgentChat
+                        key={actualThreadId}
+                        agentId={agentId!}
+                        agentName={agent?.name}
+                        modelVersion={agent?.modelVersion}
+                        supportsMemory={agent?.supportsMemory}
+                        threadId={actualThreadId}
+                        memory={hasMemory}
+                        refreshThreadList={handleRefreshThreadList}
+                        modelList={agent?.modelList}
+                        messageId={messageId}
+                        isNewThread={isNewThread}
+                        hideModelSwitcher
+                        runOptionsSlot={<AgentRunActions agentId={agentId!} />}
+                      />
+                    </div>
+                  </PageLayout>
+                </ActivatedSkillsProvider>
+              </ObservationalMemoryProvider>
+            </ThreadInputProvider>
+          </BrowserSessionProvider>
+        </BrowserToolCallsProvider>
+      </WorkingMemoryProvider>
+    </AgentSettingsProvider>
   );
 }
 

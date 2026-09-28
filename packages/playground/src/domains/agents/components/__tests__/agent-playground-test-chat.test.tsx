@@ -1,5 +1,4 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
-import { TracingSettingsProvider } from '@mastra/playground-ui/domains/observability/context/tracing-settings-context';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -24,9 +23,7 @@ const renderEditorTestChat = () => {
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
           <TooltipProvider>
-            <TracingSettingsProvider entityId={AGENT_ID} entityType="agent">
-              <AgentPlaygroundTestChat agentId={AGENT_ID} agentName="Test Agent" modelVersion="v2" hasMemory={false} />
-            </TracingSettingsProvider>
+            <AgentPlaygroundTestChat agentId={AGENT_ID} agentName="Test Agent" modelVersion="v2" hasMemory={false} />
           </TooltipProvider>
         </MemoryRouter>
       </QueryClientProvider>

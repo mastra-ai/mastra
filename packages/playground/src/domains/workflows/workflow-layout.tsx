@@ -2,7 +2,6 @@ import { ErrorBoundary } from '@mastra/playground-ui/components/ErrorBoundary';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { TracingSettingsProvider } from '@mastra/playground-ui/domains/observability/context/tracing-settings-context';
 import { WorkflowInformation } from '@mastra/playground-ui/domains/workflows/components/workflow-information';
 import { WorkflowLayout as WorkflowLayoutUI } from '@mastra/playground-ui/domains/workflows/components/workflow-layout';
 import { WorkflowSelectedStepProvider } from '@mastra/playground-ui/domains/workflows/context/workflow-selected-step-context';
@@ -95,28 +94,26 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <TracingSettingsProvider entityId={workflowId} entityType="workflow">
-      <KeyboardScope>
-        <WorkflowShortcuts workflowId={workflowId} />
-        {activeTab === 'graph' ? (
-          <WorkflowStepDetailProvider key={workflowId}>
-            <PlaygroundWorkflowRunProvider workflowId={workflowId} initialRunId={runId}>
-              <WorkflowSelectedStepProvider>
-                {page(
-                  <WorkflowLayoutUI
-                    leftSlot={<PlaygroundWorkflowInformation workflowId={workflowId} initialRunId={runId} />}
-                  >
-                    {children}
-                  </WorkflowLayoutUI>,
-                )}
-              </WorkflowSelectedStepProvider>
-            </PlaygroundWorkflowRunProvider>
-          </WorkflowStepDetailProvider>
-        ) : (
-          page(children)
-        )}
-      </KeyboardScope>
-    </TracingSettingsProvider>
+    <KeyboardScope>
+      <WorkflowShortcuts workflowId={workflowId} />
+      {activeTab === 'graph' ? (
+        <WorkflowStepDetailProvider key={workflowId}>
+          <PlaygroundWorkflowRunProvider workflowId={workflowId} initialRunId={runId}>
+            <WorkflowSelectedStepProvider>
+              {page(
+                <WorkflowLayoutUI
+                  leftSlot={<PlaygroundWorkflowInformation workflowId={workflowId} initialRunId={runId} />}
+                >
+                  {children}
+                </WorkflowLayoutUI>,
+              )}
+            </WorkflowSelectedStepProvider>
+          </PlaygroundWorkflowRunProvider>
+        </WorkflowStepDetailProvider>
+      ) : (
+        page(children)
+      )}
+    </KeyboardScope>
   );
 }
 

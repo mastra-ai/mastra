@@ -1,5 +1,4 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
-import { TracingSettingsProvider } from '@mastra/playground-ui/domains/observability/context/tracing-settings-context';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -39,11 +38,7 @@ const renderWithProviders = (ui: React.ReactNode, entityType: 'agent' | 'workflo
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
-          <TooltipProvider>
-            <TracingSettingsProvider entityId={entityId} entityType={entityType}>
-              {ui}
-            </TracingSettingsProvider>
-          </TooltipProvider>
+          <TooltipProvider>{ui}</TooltipProvider>
         </MemoryRouter>
       </QueryClientProvider>
     </MastraReactProvider>,

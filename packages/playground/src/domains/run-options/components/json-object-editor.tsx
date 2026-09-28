@@ -16,10 +16,13 @@ import { Braces, CopyIcon, X, Check } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { z } from 'zod/v4';
-import type { RequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
-import { useRequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
 
-interface RequestContextProps {
+type Presets = Record<string, Record<string, unknown>>;
+
+interface JsonObjectEditorProps {
+  /** Label shown above the editor, e.g. "Request Context". */
+  label: string;
+  presets?: Presets | null;
   value: Record<string, any>;
   onSave: (value: Record<string, any>) => void;
   editorClassName?: string;
@@ -27,13 +30,13 @@ interface RequestContextProps {
   headerActions?: ReactNode;
 }
 
-const requestContextObjectSchema = z.record(z.string(), z.any());
+const jsonObjectSchema = z.record(z.string(), z.any());
 
-function getMatchingPresetKey(presets: RequestContextPresets | null, requestContextStr: string) {
+function getMatchingPresetKey(presets: Presets | null | undefined, valueStr: string) {
   if (!presets) return '__custom__';
 
   for (const [key, value] of Object.entries(presets)) {
-    if (JSON.stringify(value) === requestContextStr) return key;
+    if (JSON.stringify(value) === valueStr) return key;
   }
 
   return '__custom__';
@@ -47,76 +50,77 @@ function normalizeJsonString(value: string) {
   }
 }
 
-export const RequestContext = ({
-  value: requestContext,
+export const JsonObjectEditor = ({
+  label,
+  presets,
+  value,
   onSave,
   editorClassName = 'h-[400px]',
   labelTooltip,
   headerActions,
-}: RequestContextProps) => {
-  const requestContextStr = JSON.stringify(requestContext ?? {});
-  const formattedRequestContext = JSON.stringify(requestContext ?? {}, null, 2);
-  const [requestContextValue, setRequestContextValue] = useState<string>(formattedRequestContext);
-  const [savedRequestContextValue, setSavedRequestContextValue] = useState<string>(formattedRequestContext);
+}: JsonObjectEditorProps) => {
+  const valueStr = JSON.stringify(value ?? {});
+  const formattedValue = JSON.stringify(value ?? {}, null, 2);
+  const [draft, setDraft] = useState<string>(formattedValue);
+  const [savedDraft, setSavedDraft] = useState<string>(formattedValue);
   const theme = useCodemirrorTheme();
-  const presets = useRequestContextPresets();
 
   const [selectedPreset, setSelectedPreset] = useState<string>(() => {
-    return getMatchingPresetKey(presets, requestContextStr);
+    return getMatchingPresetKey(presets, valueStr);
   });
 
-  const { handleCopy } = useCopyToClipboard({ text: requestContextValue });
+  const { handleCopy } = useCopyToClipboard({ text: draft });
 
   // Re-seed synchronously when the stored value changes, so the editor never flashes empty.
-  const [seededFrom, setSeededFrom] = useState(requestContextStr);
-  if (seededFrom !== requestContextStr) {
-    setSeededFrom(requestContextStr);
-    setRequestContextValue(formattedRequestContext);
-    setSavedRequestContextValue(formattedRequestContext);
-    setSelectedPreset(getMatchingPresetKey(presets, requestContextStr));
+  const [seededFrom, setSeededFrom] = useState(valueStr);
+  if (seededFrom !== valueStr) {
+    setSeededFrom(valueStr);
+    setDraft(formattedValue);
+    setSavedDraft(formattedValue);
+    setSelectedPreset(getMatchingPresetKey(presets, valueStr));
   }
 
-  const isRequestContextDirty = useMemo(() => {
-    const normalizedDraftValue = normalizeJsonString(requestContextValue);
+  const isDirty = useMemo(() => {
+    const normalizedDraftValue = normalizeJsonString(draft);
 
     if (normalizedDraftValue) {
-      return normalizedDraftValue !== requestContextStr;
+      return normalizedDraftValue !== valueStr;
     }
 
-    return requestContextValue !== savedRequestContextValue;
-  }, [requestContextStr, requestContextValue, savedRequestContextValue]);
+    return draft !== savedDraft;
+  }, [valueStr, draft, savedDraft]);
 
-  const handleSaveRequestContext = () => {
+  const handleSave = () => {
     let parsedContext: unknown;
     try {
-      parsedContext = JSON.parse(requestContextValue);
+      parsedContext = JSON.parse(draft);
     } catch {
       toast.error('Invalid JSON');
       return;
     }
-    const result = requestContextObjectSchema.safeParse(parsedContext);
+    const result = jsonObjectSchema.safeParse(parsedContext);
     if (!result.success) {
-      toast.error('Request context must be a JSON object');
+      toast.error(`${label} must be a JSON object`);
       return;
     }
     onSave(result.data);
   };
 
-  const handleRevertRequestContext = () => {
-    setRequestContextValue(savedRequestContextValue);
-    setSelectedPreset(getMatchingPresetKey(presets, requestContextStr));
+  const handleRevert = () => {
+    setDraft(savedDraft);
+    setSelectedPreset(getMatchingPresetKey(presets, valueStr));
   };
 
   const buttonClass = cn(quietTextHover, controlStateColorTransition);
 
-  const formatRequestContext = async () => {
-    if (!isValidJson(requestContextValue)) {
+  const handleFormat = async () => {
+    if (!isValidJson(draft)) {
       toast.error('Invalid JSON');
       return;
     }
 
-    const formatted = await formatJSON(requestContextValue);
-    setRequestContextValue(formatted);
+    const formatted = await formatJSON(draft);
+    setDraft(formatted);
   };
 
   const handlePresetChange = async (presetKey: string) => {
@@ -126,12 +130,12 @@ export const RequestContext = ({
     const presetValue = presets[presetKey];
     if (presetValue) {
       const formatted = await formatJSON(JSON.stringify(presetValue));
-      setRequestContextValue(formatted);
+      setDraft(formatted);
     }
   };
 
   const handleEditorChange = (value: string) => {
-    setRequestContextValue(value);
+    setDraft(value);
     if (selectedPreset !== '__custom__') {
       setSelectedPreset('__custom__');
     }
@@ -142,20 +146,20 @@ export const RequestContext = ({
       <div>
         <div className="flex items-center justify-between pb-2">
           <RequestContextLabel as="label" tooltip={labelTooltip}>
-            Request Context (JSON)
+            {label} (JSON)
           </RequestContextLabel>
 
           <div className="flex items-center gap-2">
             {headerActions}
             <Tooltip>
               <TooltipTrigger asChild>
-                <button type="button" onClick={formatRequestContext} className={buttonClass}>
+                <button type="button" onClick={handleFormat} className={buttonClass}>
                   <Icon>
                     <Braces />
                   </Icon>
                 </button>
               </TooltipTrigger>
-              <TooltipContent>Format the Request Context JSON</TooltipContent>
+              <TooltipContent>Format the {label} JSON</TooltipContent>
             </Tooltip>
 
             <Tooltip>
@@ -166,7 +170,7 @@ export const RequestContext = ({
                   </Icon>
                 </button>
               </TooltipTrigger>
-              <TooltipContent>Copy Request Context</TooltipContent>
+              <TooltipContent>Copy {label}</TooltipContent>
             </Tooltip>
           </div>
         </div>
@@ -190,7 +194,7 @@ export const RequestContext = ({
         )}
 
         <CodeMirror
-          value={requestContextValue}
+          value={draft}
           onChange={handleEditorChange}
           theme={theme}
           extensions={[jsonLanguage]}
@@ -202,18 +206,18 @@ export const RequestContext = ({
         />
 
         <div className="flex justify-end gap-2 pt-2">
-          {isRequestContextDirty && (
+          {isDirty && (
             <Button
               variant="default"
               size="icon-md"
               type="button"
-              tooltip="Revert request context changes"
-              onClick={handleRevertRequestContext}
+              tooltip={`Revert ${label} changes`}
+              onClick={handleRevert}
             >
               <X />
             </Button>
           )}
-          <Button icon={<Check />} type="button" onClick={handleSaveRequestContext}>
+          <Button icon={<Check />} type="button" onClick={handleSave}>
             Save
           </Button>
         </div>

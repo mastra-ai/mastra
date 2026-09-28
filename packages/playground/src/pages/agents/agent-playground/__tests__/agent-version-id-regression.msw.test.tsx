@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
-import { TracingSettingsProvider } from '@mastra/playground-ui/domains/observability/context/tracing-settings-context';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -31,11 +30,9 @@ const renderAgentPlayground = () => {
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={[`/agents/${AGENT_ID}/editor`]}>
           <TooltipProvider>
-            <TracingSettingsProvider entityId={AGENT_ID} entityType="agent">
-              <Routes>
-                <Route path="/agents/:agentId/editor" element={<AgentPlayground />} />
-              </Routes>
-            </TracingSettingsProvider>
+            <Routes>
+              <Route path="/agents/:agentId/editor" element={<AgentPlayground />} />
+            </Routes>
           </TooltipProvider>
         </MemoryRouter>
       </QueryClientProvider>

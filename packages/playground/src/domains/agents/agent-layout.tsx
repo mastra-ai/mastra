@@ -1,7 +1,6 @@
 import { coreFeatures } from '@mastra/core/features';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
-import { TracingSettingsProvider } from '@mastra/playground-ui/domains/observability/context/tracing-settings-context';
 import { KeyboardScope } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { useParams, useLocation, useNavigate } from 'react-router';
@@ -53,40 +52,38 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
         : 'none';
 
   return (
-    <TracingSettingsProvider entityId={agentId!} entityType="agent">
-      <PlaygroundModelProvider
-        key={`${agentId}:${defaultProvider}/${defaultModel}`}
-        defaultProvider={defaultProvider}
-        defaultModel={defaultModel}
-      >
-        <KeyboardScope>
-          <AgentShortcuts agentId={agentId!} />
-          <OverviewPanelShortcuts />
+    <PlaygroundModelProvider
+      key={`${agentId}:${defaultProvider}/${defaultModel}`}
+      defaultProvider={defaultProvider}
+      defaultModel={defaultModel}
+    >
+      <KeyboardScope>
+        <AgentShortcuts agentId={agentId!} />
+        <OverviewPanelShortcuts />
 
-          <PageLayout
-            variant="fit"
-            breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-            headerActions={<AgentDetailHeaderActions agentId={agentId!} />}
-          >
-            <h1 className="sr-only">{agentId}</h1>
-            <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
-              <AgentPageTabs
-                agentId={agentId!}
-                activeTab={activeTab}
-                showPlayground={showPlayground}
-                showObservability={showObservability}
-              />
-              {children}
-            </div>
-          </PageLayout>
+        <PageLayout
+          variant="fit"
+          breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+          headerActions={<AgentDetailHeaderActions agentId={agentId!} />}
+        >
+          <h1 className="sr-only">{agentId}</h1>
+          <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+            <AgentPageTabs
+              agentId={agentId!}
+              activeTab={activeTab}
+              showPlayground={showPlayground}
+              showObservability={showObservability}
+            />
+            {children}
+          </div>
+        </PageLayout>
 
-          <RouteSidePanel owner="agent-detail">
-            <ActivatedSkillsProvider key={agentId}>
-              <AgentOverviewPanel agentId={agentId!} />
-            </ActivatedSkillsProvider>
-          </RouteSidePanel>
-        </KeyboardScope>
-      </PlaygroundModelProvider>
-    </TracingSettingsProvider>
+        <RouteSidePanel owner="agent-detail">
+          <ActivatedSkillsProvider key={agentId}>
+            <AgentOverviewPanel agentId={agentId!} />
+          </ActivatedSkillsProvider>
+        </RouteSidePanel>
+      </KeyboardScope>
+    </PlaygroundModelProvider>
   );
 };
