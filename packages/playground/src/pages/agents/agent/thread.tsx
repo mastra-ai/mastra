@@ -2,6 +2,7 @@ import { v4 as uuid } from '@lukeed/uuid';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
@@ -32,7 +33,6 @@ import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities'
 import { isAuthenticated } from '@/domains/auth/types';
 import type { ThreadDraftHandle } from '@/domains/conversation/context/ThreadInputContext';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
-import { cleanProviderId } from '@/domains/llm/utils';
 import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
 
 function AgentThread() {

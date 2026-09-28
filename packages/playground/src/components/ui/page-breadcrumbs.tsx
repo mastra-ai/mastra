@@ -28,6 +28,7 @@ export function PageBreadcrumbs({ crumbs }: PageBreadcrumbsProps) {
         const linkable = !isCurrent && def.to;
         const IconComponent = def.icon;
         const Action = def.Action;
+        const Switcher = def.Switcher;
         return (
           <Crumb
             key={def.id}
@@ -36,6 +37,7 @@ export function PageBreadcrumbs({ crumbs }: PageBreadcrumbsProps) {
             isCurrent={isCurrent}
             icon={IconComponent ? <IconComponent /> : undefined}
             action={Action ? <Action /> : undefined}
+            switcher={Switcher ? <Switcher /> : undefined}
           >
             {crumbContent(def)}
           </Crumb>

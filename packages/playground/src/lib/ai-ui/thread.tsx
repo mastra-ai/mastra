@@ -21,6 +21,7 @@ import {
 } from '@mastra/playground-ui/components/ThreadRail';
 import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SaveFullConversationAction } from '@mastra/playground-ui/domains/chat';
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { useSpeechRecognition } from '@mastra/react';
@@ -31,9 +32,9 @@ import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 import { AttachFilePopover } from './attachments/attach-file-popover';
 import { ComposerAttachments as ChatComposerAttachments } from './attachments/attachment';
 import { ComposerAttachmentsProvider, useComposerAttachments } from './attachments/composer-attachments';
+import { ComposerFileDrop } from './attachments/composer-file-drop';
 import { useReadAloud } from './chat/use-read-aloud';
 import { BracketOverlay } from './components/bracket-overlay';
-import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { MessageRow } from './messages/message-row';
 import { SuggestedPromptList } from './suggested-prompt-list';
 import { TaskPanel } from './task-panel';
@@ -419,60 +420,62 @@ const AgentComposer = ({
           Restoring draft…
         </p>
       )}
-      <Composer
-        className="relative"
-        onSubmit={event => {
-          event.preventDefault();
-          void submit();
-        }}
-      >
-        <ComposerAttachments>
-          <ChatComposerAttachments />
-        </ComposerAttachments>
-        <ComposerRing busy={isRunning}>
-          <ComposerBox sendingPulseKey={sendPulseKey}>
-            <ComposerInput
-              ref={textareaRef}
-              value={text}
-              autoFocus={false}
-              placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
-              onChange={event => {
-                setThreadInput(event.target.value);
-              }}
-              onKeyDown={event => {
-                // Ignore Enter while an IME composition is active (e.g. committing a
-                // CJK/pinyin candidate). `isComposing` is the browser-owned flag; the
-                // `keyCode === 229` fallback covers browsers that fire keydown without it.
-                if (event.nativeEvent.isComposing || event.keyCode === 229) return;
-                if (event.key === 'Enter' && !event.shiftKey) {
-                  if (sendBlocked) return;
-                  event.preventDefault();
-                  event.stopPropagation();
-                  void submit();
-                }
-              }}
-              disabled={!canExecuteAgent || draftStatus?.restoring}
-            />
-            {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning />}
-            <ComposerActions>
-              <ComposerActionRow
-                canExecute={canExecuteAgent && !draftStatus?.restoring}
-                agentId={agentId}
-                runOptionsSlot={runOptionsSlot}
-                showModelSwitcher={Boolean(agentId && !hasModelList && !hideModelSwitcher)}
-                isEmpty={isEmpty}
-                isRunning={isRunning}
-                canSendWhileStreaming={canSendWhileStreaming}
-                onCancel={() => void cancelRun()}
-                onSetText={value => {
-                  setThreadInput(value);
+      <ComposerFileDrop disabled={!canExecuteAgent || draftStatus?.restoring}>
+        <Composer
+          className="relative"
+          onSubmit={event => {
+            event.preventDefault();
+            void submit();
+          }}
+        >
+          <ComposerAttachments>
+            <ChatComposerAttachments />
+          </ComposerAttachments>
+          <ComposerRing busy={isRunning}>
+            <ComposerBox sendingPulseKey={sendPulseKey}>
+              <ComposerInput
+                ref={textareaRef}
+                value={text}
+                autoFocus={false}
+                placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
+                onChange={event => {
+                  setThreadInput(event.target.value);
                 }}
-                voiceCall={voiceCall}
+                onKeyDown={event => {
+                  // Ignore Enter while an IME composition is active (e.g. committing a
+                  // CJK/pinyin candidate). `isComposing` is the browser-owned flag; the
+                  // `keyCode === 229` fallback covers browsers that fire keydown without it.
+                  if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    if (sendBlocked) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void submit();
+                  }
+                }}
+                disabled={!canExecuteAgent || draftStatus?.restoring}
               />
-            </ComposerActions>
-          </ComposerBox>
-        </ComposerRing>
-      </Composer>
+              {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning />}
+              <ComposerActions>
+                <ComposerActionRow
+                  canExecute={canExecuteAgent && !draftStatus?.restoring}
+                  agentId={agentId}
+                  runOptionsSlot={runOptionsSlot}
+                  showModelSwitcher={Boolean(agentId && !hasModelList && !hideModelSwitcher)}
+                  isEmpty={isEmpty}
+                  isRunning={isRunning}
+                  canSendWhileStreaming={canSendWhileStreaming}
+                  onCancel={() => void cancelRun()}
+                  onSetText={value => {
+                    setThreadInput(value);
+                  }}
+                  voiceCall={voiceCall}
+                />
+              </ComposerActions>
+            </ComposerBox>
+          </ComposerRing>
+        </Composer>
+      </ComposerFileDrop>
     </div>
   );
 };

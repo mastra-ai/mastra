@@ -1,4 +1,4 @@
-import { CrumbSkeleton } from '@mastra/playground-ui/components/Breadcrumb';
+import { CrumbSkeleton, crumbSwitcherTriggerProps } from '@mastra/playground-ui/components/Breadcrumb';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { WorkflowCombobox } from '@mastra/playground-ui/domains/workflows/components/workflow-combobox';
 import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
@@ -14,7 +14,7 @@ export function WorkflowCrumb() {
   return workflows?.[workflowId]?.name || workflowId;
 }
 
-export function WorkflowSwitcherAction() {
+export function WorkflowSwitcher() {
   const { workflowId } = useParams<{ workflowId: string }>();
   const { requestContext } = usePlaygroundStore();
   if (!workflowId) return null;
@@ -22,9 +22,7 @@ export function WorkflowSwitcherAction() {
   return (
     <WorkflowCombobox
       value={workflowId}
-      variant="ghost"
-      size="icon-sm"
-      align="end"
+      {...crumbSwitcherTriggerProps}
       aria-label="Switch workflow"
       requestContext={requestContext}
     />

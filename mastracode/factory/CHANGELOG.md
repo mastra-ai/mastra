@@ -1,5 +1,32 @@
 # @mastra/factory
 
+## 0.17.3-alpha.5
+
+### Patch Changes
+
+- Fixed Factory builds approved by someone other than the plan's owner starting in a new, empty session. The build now continues in the plan's session so it keeps the plan, and the planning agent stops once the build starts. Comments and edits on a GitHub issue no longer restart triage while its card is being built or reviewed ([#25230](https://github.com/mastra-ai/mastra/issues/25230)). ([#25270](https://github.com/mastra-ai/mastra/pull/25270))
+
+- Board transitions and linked work item cards now apply while agent runs occupy every dispatch slot. Previously, closing an issue or opening a PR while `MASTRACODE_DISPATCH_MAX_IN_FLIGHT` runs were active left the card's stage stale until a run finished. Bookkeeping decisions now use their own small dispatch pool, so the board keeps mirroring GitHub while agents work. ([#25289](https://github.com/mastra-ai/mastra/pull/25289))
+
+- Fixed Factory kickoffs being delivered several times when they arrived while the previous run was ending. A kickoff queued onto an ending run is now resent only if it never showed up in the thread, and it is dropped instead of resent once the card has moved to another stage or its role was handed over. This stops a finished phase from restarting and pushing extra commits. ([#25277](https://github.com/mastra-ai/mastra/pull/25277))
+
+- Fixed Factory work sessions being able to load the review skills and approve their own pull requests. The factory-review, factory-rereview, factory-gitlab-review, and factory-gitlab-rereview skills are now only available to sessions running a Review phase ([#25228](https://github.com/mastra-ai/mastra/issues/25228)). ([#25273](https://github.com/mastra-ai/mastra/pull/25273))
+
+- Updated dependencies [[`43fbe75`](https://github.com/mastra-ai/mastra/commit/43fbe75535650345cf61dee00cf3e7b3f5efaf7f), [`ebd03fd`](https://github.com/mastra-ai/mastra/commit/ebd03fd3bc93fe3930747956724252f7c8834826), [`2c57ba8`](https://github.com/mastra-ai/mastra/commit/2c57ba896b04215fface2a8216b88fe59cfdd041), [`f6effda`](https://github.com/mastra-ai/mastra/commit/f6effdabafa9fc6388478b3e281ad4c457d4200b), [`7f4ce21`](https://github.com/mastra-ai/mastra/commit/7f4ce2190029710851d95f7b75a2fb724782483c), [`1ba1588`](https://github.com/mastra-ai/mastra/commit/1ba158873dadf3d290b111981c3bc7ef95ab1d1c), [`b537ab1`](https://github.com/mastra-ai/mastra/commit/b537ab14714870e058775530bc55b37c9115613f), [`d4e350a`](https://github.com/mastra-ai/mastra/commit/d4e350a5c1e29a7da5a22da52ed1f33431403012), [`285828e`](https://github.com/mastra-ai/mastra/commit/285828ec03fdf4ffca92cbec22d2dc904989d0f8)]:
+  - @mastra/core@1.72.0-alpha.5
+  - @mastra/auth-workos@1.6.6-alpha.0
+  - @mastra/code-sdk@1.8.4-alpha.5
+
+## 0.17.3-alpha.4
+
+### Patch Changes
+
+- New GitHub issues now create Factory work items when events are polled. Open issues filed after a repository was linked are recovered by the issue reconcile sweep when they have no work item. Changes to existing issues re-evaluate their linked work items. Events skipped during polling are logged at debug level. ([#25201](https://github.com/mastra-ai/mastra/pull/25201))
+
+- Updated dependencies [[`9773cb2`](https://github.com/mastra-ai/mastra/commit/9773cb2f22f307c8017f887af4a6728c4cb875c9)]:
+  - @mastra/core@1.72.0-alpha.4
+  - @mastra/code-sdk@1.8.4-alpha.4
+
 ## 0.17.3-alpha.3
 
 ### Patch Changes

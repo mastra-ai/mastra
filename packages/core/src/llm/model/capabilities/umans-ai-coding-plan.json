@@ -1,10 +1,17 @@
 {
-  "attachment": ["umans-coder", "umans-flash", "umans-glm-5.3-flash", "umans-kimi-k3", "umans-qwen3.6-35b-a3b"],
-  "temperature": ["umans-deepseek-v4-flash-0731", "umans-deepseek-v4-pro-0813", "umans-glm-5.3-flash"],
+  "attachment": [
+    "umans-coder",
+    "umans-deepseek-v4.1-flash",
+    "umans-flash",
+    "umans-glm-5.3-flash",
+    "umans-kimi-k3",
+    "umans-qwen3.6-35b-a3b"
+  ],
+  "temperature": ["umans-deepseek-v4-flash-0731", "umans-deepseek-v4.1-flash", "umans-glm-5.3-flash"],
   "structuredOutput": [
     "umans-coder",
     "umans-deepseek-v4-flash-0731",
-    "umans-deepseek-v4-pro-0813",
+    "umans-deepseek-v4.1-flash",
     "umans-flash",
     "umans-glm-5.3-flash",
     "umans-kimi-k3",

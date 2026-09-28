@@ -825,6 +825,12 @@ async function listTraceRows<TSpan>(
     const countResult = await db.query<{ total: number }>(countSql, prefilterParams);
     const total = Number(countResult[0]?.total ?? 0);
 
+    // An empty page_roots makes the reconstruction time bound NULL, which
+    // disables filter pushdown and scans all of span_events. Skip it.
+    if (total === 0 || offset >= total) {
+      return { pagination: { total, page, perPage, hasMore: false }, spans: [] };
+    }
+
     const pageSql = `
       WITH page_roots AS (
         SELECT traceId, spanId, min(timestamp) AS anchorStartedAt
@@ -877,6 +883,10 @@ async function listTraceRows<TSpan>(
   `;
   const countResult = await db.query<{ total: number }>(countSql, [...prefilterParams, ...postAggParams]);
   const total = Number(countResult[0]?.total ?? 0);
+
+  if (total === 0 || page * perPage >= total) {
+    return { pagination: { total, page, perPage, hasMore: false }, spans: [] };
+  }
 
   const dataSql = `
     ${cteSql},
@@ -1237,9 +1247,9 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
     const countResult = await db.query<{ total: number }>(countSql, prefilterParams);
     const total = Number(countResult[0]?.total ?? 0);
 
-    if (total === 0) {
+    if (total === 0 || page * perPage >= total) {
       return {
-        pagination: { total: 0, page, perPage, hasMore: false },
+        pagination: { total, page, perPage, hasMore: false },
         branches: [],
         ...(deltaPollingFeatureEnabled() ? { deltaCursor: currentDeltaCursor } : {}),
       };
@@ -1294,9 +1304,9 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
   const countResult = await db.query<{ total: number }>(countSql, [...prefilterParams, ...postAggParams]);
   const total = Number(countResult[0]?.total ?? 0);
 
-  if (total === 0) {
+  if (total === 0 || page * perPage >= total) {
     return {
-      pagination: { total: 0, page, perPage, hasMore: false },
+      pagination: { total, page, perPage, hasMore: false },
       branches: [],
       ...(deltaPollingFeatureEnabled() ? { deltaCursor: currentDeltaCursor } : {}),
     };
@@ -1438,7 +1448,7 @@ async function getBranchDeltaCursor(db: DuckDBConnection, filters: ListBranchesA
     branch_anchors AS (
       SELECT reconstructed.*, candidate_anchors.cursorId AS anchorCursorId
       FROM (
-        ${SPAN_RECONSTRUCT_SELECT}
+        ${buildPostAggReconstructSelect(postAgg, 'startedAt')}
         WHERE (traceId, spanId) IN (SELECT traceId, spanId FROM candidate_anchors)
         GROUP BY traceId, spanId
       ) AS reconstructed

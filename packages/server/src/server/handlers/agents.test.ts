@@ -1875,6 +1875,34 @@ describe('Agent Routes Authorization', () => {
       delete (mockAgent as any).recover;
     });
 
+    it('should surface an agent that does not support recover as a 400, not a 500', async () => {
+      // Mirrors InngestAgent.recover(): the agent is durable-like, but Inngest owns recovery.
+      const message = 'InngestAgent.recover() is not supported.';
+      (mockDurableAgent as any).recover = vi.fn().mockRejectedValue(
+        new MastraError({
+          id: 'INNGEST_AGENT_RECOVER_NOT_SUPPORTED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: message,
+          details: { status: 400 },
+        }),
+      );
+
+      await persistDurableAgenticLoopRun({ runId: 'recover-run-unsupported' });
+
+      const error = await RECOVER_ROUTE.handler({
+        mastra,
+        agentId: 'test-durable-agent',
+        requestContext: createContextWithReservedKeys({}),
+        abortSignal: new AbortController().signal,
+        runId: 'recover-run-unsupported',
+      } as any).catch(e => e);
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect(error.status).toBe(400);
+      expect(error.message).toBe(message);
+    });
+
     it('should stash version overrides on requestContext before calling agent.recover()', async () => {
       const recoverMock = vi.fn().mockResolvedValue({ fullStream: new ReadableStream() });
       (mockAgent as any).recover = recoverMock;
