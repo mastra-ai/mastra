@@ -43,8 +43,9 @@ export async function largestOutputEntries(
   return sized.sort((a, b) => b.bytes - a.bytes).slice(0, limit);
 }
 
-async function describeLargestEntries(outputDir: string): Promise<string> {
+async function describeLargestEntries(outputDir: string): Promise<string | null> {
   const entries = await largestOutputEntries(outputDir);
+  if (entries.length === 0) return null;
   const lines = entries.map(e => `  ${formatBytes(e.bytes).padStart(9)}  ${e.name}`);
   return [
     'Largest entries in .mastra/output (uncompressed):',
