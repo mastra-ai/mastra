@@ -5,7 +5,7 @@ interface UseAgentPlanOptions {
   agentId: string;
   path: string;
   agentVersionId?: string;
-  requestContext?: Record<string, unknown>;
+  requestContext?: Record<string, any>;
 }
 
 export function useAgentPlan({ agentId, path, agentVersionId, requestContext }: UseAgentPlanOptions) {

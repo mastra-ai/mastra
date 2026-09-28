@@ -9,16 +9,17 @@ import type {
 } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 export type { ListScorerVersionsParams, CreateScorerVersionParams };
 
 /**
  * Hook to list versions of a stored scorer
  */
-export const useScorerVersions = ({ scorerId, params }: { scorerId: string; params?: ListScorerVersionsParams }) => {
+export const useScorerVersions = (
+  { scorerId, params }: { scorerId: string; params?: ListScorerVersionsParams },
+  requestContext?: Record<string, any>,
+) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useQuery<ListScorerVersionsResponse>({
     queryKey: ['scorer-versions', scorerId, params, requestContext],
@@ -30,9 +31,11 @@ export const useScorerVersions = ({ scorerId, params }: { scorerId: string; para
 /**
  * Hook to get a single version of a stored scorer
  */
-export const useScorerVersion = ({ scorerId, versionId }: { scorerId: string; versionId: string }) => {
+export const useScorerVersion = (
+  { scorerId, versionId }: { scorerId: string; versionId: string },
+  requestContext?: Record<string, any>,
+) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useQuery<ScorerVersionResponse>({
     queryKey: ['scorer-version', scorerId, versionId, requestContext],
@@ -44,10 +47,9 @@ export const useScorerVersion = ({ scorerId, versionId }: { scorerId: string; ve
 /**
  * Hook to create a new version of a stored scorer
  */
-export const useCreateScorerVersion = ({ scorerId }: { scorerId: string }) => {
+export const useCreateScorerVersion = ({ scorerId }: { scorerId: string }, requestContext?: Record<string, any>) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useMutation<ScorerVersionResponse, Error, CreateScorerVersionParams | undefined>({
     mutationFn: (params?: CreateScorerVersionParams) =>
@@ -62,10 +64,9 @@ export const useCreateScorerVersion = ({ scorerId }: { scorerId: string }) => {
 /**
  * Hook to activate a specific version of a stored scorer
  */
-export const useActivateScorerVersion = ({ scorerId }: { scorerId: string }) => {
+export const useActivateScorerVersion = ({ scorerId }: { scorerId: string }, requestContext?: Record<string, any>) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useMutation<ActivateScorerVersionResponse, Error, string>({
     mutationFn: (versionId: string) => client.getStoredScorer(scorerId).activateVersion(versionId, requestContext),
@@ -79,10 +80,9 @@ export const useActivateScorerVersion = ({ scorerId }: { scorerId: string }) => 
 /**
  * Hook to restore a specific version of a stored scorer (creates a new version from an old one)
  */
-export const useRestoreScorerVersion = ({ scorerId }: { scorerId: string }) => {
+export const useRestoreScorerVersion = ({ scorerId }: { scorerId: string }, requestContext?: Record<string, any>) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useMutation<ScorerVersionResponse, Error, string>({
     mutationFn: (versionId: string) => client.getStoredScorer(scorerId).restoreVersion(versionId, requestContext),
@@ -96,10 +96,9 @@ export const useRestoreScorerVersion = ({ scorerId }: { scorerId: string }) => {
 /**
  * Hook to delete a specific version of a stored scorer
  */
-export const useDeleteScorerVersion = ({ scorerId }: { scorerId: string }) => {
+export const useDeleteScorerVersion = ({ scorerId }: { scorerId: string }, requestContext?: Record<string, any>) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useMutation<DeleteScorerVersionResponse, Error, string>({
     mutationFn: (versionId: string) => client.getStoredScorer(scorerId).deleteVersion(versionId, requestContext),
@@ -112,17 +111,19 @@ export const useDeleteScorerVersion = ({ scorerId }: { scorerId: string }) => {
 /**
  * Hook to compare two versions of a stored scorer
  */
-export const useCompareScorerVersions = ({
-  scorerId,
-  fromVersionId,
-  toVersionId,
-}: {
-  scorerId: string;
-  fromVersionId: string;
-  toVersionId: string;
-}) => {
+export const useCompareScorerVersions = (
+  {
+    scorerId,
+    fromVersionId,
+    toVersionId,
+  }: {
+    scorerId: string;
+    fromVersionId: string;
+    toVersionId: string;
+  },
+  requestContext?: Record<string, any>,
+) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useQuery<CompareScorerVersionsResponse>({
     queryKey: ['scorer-versions-compare', scorerId, fromVersionId, toVersionId, requestContext],

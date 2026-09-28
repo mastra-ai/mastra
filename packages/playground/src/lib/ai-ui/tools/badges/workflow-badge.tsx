@@ -25,9 +25,8 @@ import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { Eye } from 'lucide-react';
 import { useContext, useEffect } from 'react';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
-import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
+import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 import { PlaygroundWorkflowRunProvider } from '@/domains/workflows/playground-workflow-run-provider';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 export interface WorkflowBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   workflowId: string;
@@ -51,7 +50,10 @@ export const WorkflowBadge = ({
   toolCalled,
 }: WorkflowBadgeProps) => {
   const { runId, status } = result || {};
-  const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId, usePlaygroundStore().requestContext);
+  const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(
+    workflowId,
+    useEntityRequestContext('workflow', workflowId)[0],
+  );
   const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
   const selectionReason =
     metadata?.mode === 'network' ? (routingDecision?.selectionReason ?? metadata.selectionReason) : undefined;
@@ -124,7 +126,7 @@ interface WorkflowBadgeExtendedProps {
 }
 
 const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExtendedProps) => {
-  const requestContext = useMergedRequestContext();
+  const requestContext = useEntityRequestContext('workflow', workflowId)[0];
   const { Link } = useLinkComponent();
   const { isLoadingRunExecutionResult } = useContext(WorkflowRunContext);
 

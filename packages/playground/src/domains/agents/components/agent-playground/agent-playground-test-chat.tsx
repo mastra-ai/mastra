@@ -15,9 +15,9 @@ import { useAgent } from '../../hooks/use-agent';
 import { buildAgentDefaultSettings } from '../../utils/agent-default-settings';
 import { AgentChat } from '../agent-chat';
 import { BrowserViewPanel } from '../browser-view/browser-view-panel';
-import { ComposerRunOptions } from '../composer-run-options';
 import { ThreadInputProvider } from '@/domains/conversation';
-import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
+import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
+import { AgentRunActions } from '@/domains/run-options/components/agent-run-actions';
 
 interface AgentPlaygroundTestChatProps {
   agentId: string;
@@ -75,11 +75,11 @@ export function AgentPlaygroundTestChat({
   // Generate a stable ephemeral thread ID for test chat sessions
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: regenerate thread ID when agent changes
   const testThreadId = useMemo(() => uuid(), [agentId]);
-  const mergedRequestContext = useMergedRequestContext();
+  const mergedRequestContext = useEntityRequestContext('agent', agentId)[0];
   const hasRequestContext = Object.keys(mergedRequestContext).length > 0;
 
   const editFormCtx = useOptionalAgentEditFormContext();
-  const { data: agent } = useAgent(agentId);
+  const { data: agent } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
 
   return (
@@ -113,7 +113,7 @@ export function AgentPlaygroundTestChat({
                       memory={hasMemory}
                       modelList={agent?.modelList}
                       isNewThread
-                      runOptionsSlot={<ComposerRunOptions requestContextSchema={agent?.requestContextSchema} />}
+                      runOptionsSlot={<AgentRunActions agentId={agentId} />}
                     />
                   </div>
                 </div>
