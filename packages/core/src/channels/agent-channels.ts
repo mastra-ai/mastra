@@ -1242,15 +1242,21 @@ export class AgentChannels {
   }
 
   private async handleRunError(chatThread: Thread, message: Message, err: unknown): Promise<void> {
+    let refusal: ChannelSessionRejectedError | undefined;
+    try {
+      if (err instanceof ChannelSessionRejectedError) refusal = err;
+    } catch {
+      // A proxy can throw during instanceof; it must still reach the guarded diagnostic.
+    }
     // A refused request is not a malfunction: the host decided this sender
     // gets nothing. Log it and stop — posting would echo the host's
     // authorization message into the chat thread and confirm the bot is
     // present to a sender who was just turned away.
-    if (err instanceof ChannelSessionRejectedError) {
+    if (refusal) {
       this.log('info', `[${chatThread.adapter.name}] Session resolver refused the message`, {
         messageId: message.id,
         authorId: message.author?.userId,
-        reason: err.message,
+        reason: refusal.message,
       });
       return;
     }

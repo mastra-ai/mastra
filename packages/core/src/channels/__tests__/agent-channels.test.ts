@@ -1875,6 +1875,7 @@ describe('AgentChannels', () => {
         });
         const incoming = { ...message, id: '1790610846.868069', author: { userId: 'U123' } };
         return {
+          mastra,
           thread,
           incoming,
           storage,
@@ -2019,6 +2020,25 @@ describe('AgentChannels', () => {
         expect(f.record().error.message).toBe('Error details unavailable');
         expect(format(...f.output.mock.calls[0]!)).not.toContain('SENTINEL');
         expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('unchanged feedback');
+      });
+
+      it('logs before a throwing prototype check escapes feedback normalization', async () => {
+        const details = { name: 'Error', message: 'proxy failure', stack: 'proxy stack' };
+        const error = new Proxy(details, {
+          getPrototypeOf() {
+            throw new Error('SENTINEL_PROTOTYPE');
+          },
+        });
+        const f = await fixture(error);
+        f.storage.mockRestore();
+        // Mock call tracking inspects thrown values; throw this proxy without that interception.
+        f.mastra.getStorage = () => {
+          throw error;
+        };
+        await expect(f.run()).rejects.toThrow('SENTINEL_PROTOTYPE');
+        expect(f.record().error).toEqual(details);
+        expect(format(...f.output.mock.calls[0]!)).not.toContain('SENTINEL');
+        expect(f.thread.post).not.toHaveBeenCalled();
       });
 
       it('scrubs the bounded credential forms at every level and in correlation, retaining benign text', async () => {
