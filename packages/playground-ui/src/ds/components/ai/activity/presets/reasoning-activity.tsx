@@ -5,7 +5,6 @@ import type { ReasoningContent } from './reasoning-visibility';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 
 export interface ReasoningActivityProps extends ReasoningContent {
-  /** Whether the passage starts expanded. Defaults to `true`. */
   defaultOpen?: boolean;
 }
 

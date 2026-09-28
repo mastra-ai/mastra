@@ -8,7 +8,7 @@ import type { ToolCallGroupStep } from './tool-call-group';
 import { ToolCallOutput } from './tool-call-output';
 import { hasToolArguments, presentTool } from './tool-presentation';
 
-interface ToolPreviewProps extends ToolCallGroupStep {
+interface ToolBlocksExampleProps extends ToolCallGroupStep {
   argsText?: string;
   hideArguments?: boolean;
   commandOnly?: boolean;
@@ -17,7 +17,7 @@ interface ToolPreviewProps extends ToolCallGroupStep {
   defaultOpen?: boolean;
 }
 
-function ToolPreview({
+function ToolBlocksExample({
   toolName,
   args,
   argsText,
@@ -27,7 +27,7 @@ function ToolPreview({
   output,
   maxOutputLength,
   defaultOpen,
-}: ToolPreviewProps) {
+}: ToolBlocksExampleProps) {
   const { icon: ToolIcon, label, detail, command } = presentTool(toolName, args);
   const showsCommand = Boolean(commandOnly && command);
   const hasBody = showsCommand || output !== undefined || hasToolArguments({ toolName, args, argsText, hideArguments });
@@ -53,8 +53,8 @@ function ToolPreview({
 }
 
 const meta = {
-  title: 'AI/Activity/Tool call',
-  component: ToolPreview,
+  title: 'AI/Activity/With Tool Blocks',
+  component: ToolBlocksExample,
   decorators: [
     Story => (
       <div className="w-full max-w-3xl p-4">
@@ -74,11 +74,11 @@ const meta = {
     docs: {
       description: {
         component:
-          'Shared argument/edit and output blocks used by Studio and Factory. Apps normalize their tool data and choose which output to show; these components own presentation and copying. Factory bounds result previews while copying the full value. Studio keeps complete arguments and results, including successful edit results. Approval actions are also shared; requests and lifecycle stay with each app.',
+          '`Activity` composed with the tool blocks from `components/ai/tool-call`, the way Studio and Factory each build a tool line. `ToolBlocksExample` exists only in this story; import `presentTool`, `ToolCallArguments`, `ToolCallCommand`, `ToolCallOutput` and `ToolCallGroup` instead. Apps normalize their tool data and choose which output to show; these blocks own presentation and copying. Factory bounds result previews while copying the full value. Studio keeps complete arguments and results, including successful edit results. Approval actions are also shared; requests and lifecycle stay with each app.',
       },
     },
   },
-} satisfies Meta<typeof ToolPreview>;
+} satisfies Meta<typeof ToolBlocksExample>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -166,21 +166,21 @@ export const FullOutput: Story = {
   play: LongOutput.play,
 };
 
-const readStep: ToolPreviewProps = {
+const readStep: ToolBlocksExampleProps = {
   toolName: 'view',
   args: { path: 'src/agent.ts' },
   status: 'idle',
   hasResult: true,
   output: 'Agent source',
 };
-const searchStep: ToolPreviewProps = {
+const searchStep: ToolBlocksExampleProps = {
   toolName: 'search_content',
   args: { pattern: 'TODO' },
   status: 'idle',
   hasResult: true,
   output: 'No matches',
 };
-const commandStep: ToolPreviewProps = {
+const commandStep: ToolBlocksExampleProps = {
   toolName: 'execute_command',
   args: { command: 'pnpm test' },
   status: 'idle',
@@ -189,11 +189,11 @@ const commandStep: ToolPreviewProps = {
 };
 const completedSteps = [readStep, searchStep, commandStep];
 
-function ToolGroupPreview({ steps }: { steps: ToolPreviewProps[] }) {
+function ToolGroupPreview({ steps }: { steps: ToolBlocksExampleProps[] }) {
   return (
     <ToolCallGroup steps={steps}>
       {steps.map(step => (
-        <ToolPreview key={step.toolName} {...step} />
+        <ToolBlocksExample key={step.toolName} {...step} />
       ))}
     </ToolCallGroup>
   );
