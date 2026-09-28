@@ -477,7 +477,7 @@ describe('experiment item sub-route', () => {
       const traceDialog = screen.getByRole('dialog', { name: 'Trace experiment-trace-1' });
       expect(traceDialog.contains(spanHeading)).toBe(true);
       expect(screen.getAllByRole('dialog', { hidden: true })).toHaveLength(2);
-      await waitFor(() => expect(screen.queryByText('Loading span details...')).toBeNull());
+      await waitFor(() => expect(screen.queryByText('Loading span details')).toBeNull());
       expect(dialog.isConnected).toBe(true);
     });
 

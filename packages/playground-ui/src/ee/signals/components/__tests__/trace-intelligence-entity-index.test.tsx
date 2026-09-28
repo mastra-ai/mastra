@@ -259,9 +259,9 @@ describe('TraceIntelligenceEntityIndex', () => {
   });
 
   describe.each([
-    [401, 'Your session has expired'],
+    [401, 'Your session expired'],
     [403, 'Permission denied'],
-    [500, 'Failed to load Trace Intelligence'],
+    [500, 'Couldn’t load Trace Intelligence'],
   ])('when the entity request returns %i', (status, expectedText) => {
     it('renders the matching error state', async () => {
       useEntityFixture({ message: 'request failed' }, status);

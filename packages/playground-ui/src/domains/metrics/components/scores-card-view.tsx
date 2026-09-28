@@ -8,6 +8,7 @@ import { Tabs } from '../../../ds/components/Tabs/tabs-root';
 import { Tab } from '../../../ds/components/Tabs/tabs-tab';
 import type { ScorerSummary, ScoresOverTimePoint } from '../hooks/use-scores-metrics';
 import { CHART_COLORS, METRICS_DATA_LIST_PROPS } from './metrics-utils';
+import { formatCompactNumber } from '@/lib/cost';
 
 const SERIES_COLORS = [
   CHART_COLORS.green,
@@ -58,7 +59,7 @@ export function ScoresCardView({ data, isLoading, isError }: ScoresCardViewProps
       {isLoading ? (
         <MetricsCard.Loading />
       ) : isError ? (
-        <MetricsCard.Error message="Failed to load scores data" />
+        <MetricsCard.Error message="Couldn’t load scores" />
       ) : (
         <MetricsCard.Content>
           {!hasData ? (
@@ -91,7 +92,7 @@ export function ScoresCardView({ data, isLoading, isError }: ScoresCardViewProps
                       <DataList.NumberCell highlight>{row.avg.toFixed(2)}</DataList.NumberCell>
                       <DataList.NumberCell>{row.min.toFixed(2)}</DataList.NumberCell>
                       <DataList.NumberCell>{row.max.toFixed(2)}</DataList.NumberCell>
-                      <DataList.NumberCell>{row.count.toLocaleString()}</DataList.NumberCell>
+                      <DataList.NumberCell>{formatCompactNumber(row.count)}</DataList.NumberCell>
                     </DataList.RowStatic>
                   ))}
                 </DataList>

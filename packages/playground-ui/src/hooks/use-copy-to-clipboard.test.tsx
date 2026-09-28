@@ -292,7 +292,7 @@ describe('useCopyToClipboard', () => {
         result.current.handleCopy();
       });
 
-      await waitFor(() => expect(sonnerMock.error).toHaveBeenCalledWith('Failed to copy to clipboard.', {}));
+      await waitFor(() => expect(sonnerMock.error).toHaveBeenCalledWith('Couldn’t copy to clipboard', {}));
       expect(result.current.isCopied).toBe(false);
     });
 

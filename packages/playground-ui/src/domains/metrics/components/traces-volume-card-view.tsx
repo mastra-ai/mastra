@@ -105,7 +105,7 @@ export function TracesVolumeCardView({
       {isLoading ? (
         <MetricsCard.Loading />
       ) : isError ? (
-        <MetricsCard.Error message="Failed to load trace volume data" />
+        <MetricsCard.Error message="Couldn’t load trace volume" />
       ) : (
         <MetricsCard.Content>
           {!hasData ? (

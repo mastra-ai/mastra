@@ -6,9 +6,9 @@ import { ReasoningStreamingLine } from '../reasoning-streaming-line';
 
 describe('ReasoningStreamingLine', () => {
   it('renders the label inside a Shimmer', () => {
-    render(<ReasoningStreamingLine text="Reasoning..." />);
+    render(<ReasoningStreamingLine text="Reasoning" />);
 
-    const label = screen.getByText('Reasoning...');
+    const label = screen.getByText('Reasoning');
     expect(label.className).toContain('shimmer-text');
   });
 

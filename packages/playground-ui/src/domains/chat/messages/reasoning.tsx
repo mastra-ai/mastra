@@ -16,7 +16,7 @@ export const Reasoning = ({ text, redacted, streaming, defaultOpen = true }: Rea
   const body = redacted ? 'Reasoning was redacted by the provider.' : text;
 
   if (!body.trim()) {
-    return streaming ? <ReasoningStreamingLine text="Reasoning..." /> : null;
+    return streaming ? <ReasoningStreamingLine text="Reasoning" /> : null;
   }
 
   return (

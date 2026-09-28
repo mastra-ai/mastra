@@ -53,7 +53,7 @@ function EntityIndexError({ error }: { error: Error }) {
   }
   return (
     <div className="flex h-full items-center justify-center">
-      <EmptyState tone="error" titleSlot="Failed to load Trace Intelligence" descriptionSlot={error.message} />
+      <EmptyState tone="error" titleSlot="Couldn’t load Trace Intelligence" descriptionSlot={error.message} />
     </div>
   );
 }

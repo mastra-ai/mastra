@@ -418,7 +418,7 @@ export function TraceDataPanelView({
                       name={searchFieldName}
                       label="Search spans"
                       labelIsHidden
-                      placeholder="Search spans..."
+                      placeholder="Search spans"
                       value={query}
                       onChange={e => setQuery(e.target.value)}
                       onReset={() => setQuery('')}

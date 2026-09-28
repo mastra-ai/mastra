@@ -204,7 +204,7 @@ describe('TokenUsageTimelineCardView', () => {
   it('explains itself when the load failed', () => {
     const { container } = render(<TokenUsageTimelineCardView data={data} interval="1d" isLoading={false} isError />);
 
-    expect(screen.getByText('Failed to load token usage timeline')).toBeTruthy();
+    expect(screen.getByText('Couldn’t load token usage timeline')).toBeTruthy();
     expect(container.querySelector('.spinner')).toBeNull();
     expect(screen.queryByRole('tab')).toBeNull();
   });

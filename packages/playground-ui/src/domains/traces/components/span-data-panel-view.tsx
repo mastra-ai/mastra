@@ -88,7 +88,7 @@ export function SpanDataPanelView({
       </DataPanel.Header>
 
       {isLoading ? (
-        <DataPanel.LoadingData>Loading span details...</DataPanel.LoadingData>
+        <DataPanel.LoadingData>Loading span details</DataPanel.LoadingData>
       ) : !span ? (
         <DataPanel.NoData>Span not found.</DataPanel.NoData>
       ) : (

@@ -46,7 +46,7 @@ export const RequestContextSchemaForm = ({
   if (!zodSchema) {
     return (
       <div className="text-muted-foreground">
-        <Txt variant="caption">Failed to parse request context schema</Txt>
+        <Txt variant="caption">Couldn’t parse the request context schema</Txt>
       </div>
     );
   }

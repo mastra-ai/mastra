@@ -143,7 +143,7 @@ describe('CustomAutoForm', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Run' }));
 
       await waitFor(() => {
-        const invalid = screen.getByRole('spinbutton', { name: /^Limit/ }).getAttribute('aria-invalid');
+        const invalid = screen.getByRole('textbox', { name: /^Limit/ }).getAttribute('aria-invalid');
         expect(invalid).not.toBeNull();
         expect(invalid).not.toBe('false');
       });

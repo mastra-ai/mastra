@@ -108,7 +108,7 @@ export function LatencyCardView({ data, isLoading, isError, onPointClick, action
       {isLoading ? (
         <MetricsCard.Loading />
       ) : isError ? (
-        <MetricsCard.Error message="Failed to load latency data" />
+        <MetricsCard.Error message="Couldn’t load latency" />
       ) : (
         <MetricsCard.Content>
           {!hasData ? (
