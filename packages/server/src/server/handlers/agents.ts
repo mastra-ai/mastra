@@ -452,7 +452,8 @@ export async function getSerializedAgentTools(
 
         const outputSchema = schemaToJsonSchema(
           resolveLazySchema('outputSchema' in tool ? tool.outputSchema : undefined) as
-            PublicSchema<unknown> | undefined,
+            | PublicSchema<unknown>
+            | undefined,
         );
         if (outputSchema !== undefined) {
           outputSchemaForReturn = stringify(outputSchema);
@@ -460,7 +461,8 @@ export async function getSerializedAgentTools(
 
         const requestContextSchema = schemaToJsonSchema(
           resolveLazySchema('requestContextSchema' in tool ? tool.requestContextSchema : undefined) as
-            PublicSchema<unknown> | undefined,
+            | PublicSchema<unknown>
+            | undefined,
         );
         if (requestContextSchema !== undefined) {
           requestContextSchemaForReturn = stringify(requestContextSchema);
