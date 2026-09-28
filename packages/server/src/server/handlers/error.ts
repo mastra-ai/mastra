@@ -57,6 +57,17 @@ function isFeedbackReviewStatusConflictError(error: unknown): error is Error {
 }
 
 /**
+ * Matches the `OBSERVABILITY_STORAGE_*_NOT_IMPLEMENTED` MastraError the base
+ * observability store throws for every optional method a store doesn't
+ * implement. Checked by id (not `instanceof`) so it holds across duplicated
+ * `@mastra/core` installs.
+ */
+function isObservabilityStorageNotImplementedError(error: unknown): error is Error {
+  const id = error && typeof error === 'object' && 'id' in error ? error.id : undefined;
+  return typeof id === 'string' && id.startsWith('OBSERVABILITY_STORAGE_') && id.endsWith('_NOT_IMPLEMENTED');
+}
+
+/**
  * Structural check for ZodError instances.
  *
  * Avoids `instanceof ZodError` because consumers can resolve `'zod'` to a
@@ -139,6 +150,20 @@ export function handleError(error: unknown, defaultMessage: string): never {
 
   if (isWorkflowSchemaValidationError(error)) {
     throw new HTTPException(400, {
+      message: error.message,
+      stack: error.stack,
+      cause: error,
+    });
+  }
+
+  // Optional observability APIs (feedback, metrics, logs, scores, ...) throw
+  // `*_NOT_IMPLEMENTED` on stores that don't support them. That's a missing
+  // capability, not a server fault, so it maps to 501 — which server adapters
+  // log as a warning instead of an error. The message is preserved because
+  // clients match on it to detect unsupported operations. Clients should check
+  // `GET /observability/capabilities` before calling optional routes.
+  if (isObservabilityStorageNotImplementedError(error)) {
+    throw new HTTPException(501, {
       message: error.message,
       stack: error.stack,
       cause: error,

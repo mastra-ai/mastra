@@ -37,6 +37,17 @@ afterEach(() => {
   scrollToIndex.mockClear();
 });
 
+describe('TracesListView horizontal overflow', () => {
+  it('fades the left and right edges of the scroll viewport when columns overflow', () => {
+    const { container } = render(<TracesListView traces={[makeTrace(0)]} onTraceClick={vi.fn()} />);
+    const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
+    const viewport = grid?.closest<HTMLElement>('[data-slot="scroll-area-viewport"], [class*="mask-"]');
+
+    expect(viewport?.className).toContain('data-[overflow-x-end]:mask-r-from');
+    expect(viewport?.className).toContain('data-[overflow-x-start]:mask-l-from');
+  });
+});
+
 describe('TracesListView keyboard navigation', () => {
   it('uses roving tabindex so only one row is tabbable', () => {
     renderList();

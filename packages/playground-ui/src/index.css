@@ -147,6 +147,14 @@
   * {
     border-color: var(--border);
   }
+
+  :where(code, samp, pre, .font-mono) {
+    font-size-adjust: var(--font-mono-size-adjust, none);
+  }
+
+  kbd {
+    font-size-adjust: none;
+  }
   body {
     background-color: var(--sidebar);
     color: var(--foreground);

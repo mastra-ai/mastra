@@ -1,4 +1,3 @@
-import { format } from 'date-fns';
 import { ArrowRightIcon } from 'lucide-react';
 import { Fragment } from 'react';
 import type { LogRecord } from '../types';
@@ -7,10 +6,7 @@ import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { DataPanel } from '@/ds/components/DataPanel';
-
-function toDate(value: Date | string): Date {
-  return value instanceof Date ? value : new Date(value);
-}
+import { formatTimestampPrecise } from '@/utils/date-format';
 
 export interface LogDataPanelProps {
   /** Always mount the panel and pass `undefined` to close it, so the drawer can animate out. */
@@ -32,7 +28,7 @@ export function LogDataPanel({
   onNext,
   depth,
 }: LogDataPanelProps) {
-  const formattedDate = log ? format(toDate(log.timestamp), 'MMM dd, HH:mm:ss.SSS') : '';
+  const formattedDate = log ? (formatTimestampPrecise(log.timestamp) ?? '') : '';
 
   return (
     <DataPanel open={!!log} onClose={onClose} title={log ? `Log ${formattedDate}` : 'Log'} depth={depth}>

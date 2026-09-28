@@ -4,11 +4,12 @@ import { MetricsCard } from '../../../ds/components/MetricsCard';
 import { MetricsLineChart, MetricsLineChartLegend } from '../../../ds/components/MetricsLineChart';
 import { Tab, TabContent, TabList, Tabs } from '../../../ds/components/Tabs';
 import type { TokenTimelinePoint, TokenUsageTimeSeriesInterval } from '../hooks/use-token-usage-timeseries';
-import { CHART_COLORS, formatCompact, formatCost } from './metrics-utils';
+import { CHART_COLORS } from './metrics-utils';
+import { formatCompactNumber, formatCost } from '@/lib/cost';
 
 type TokenUsageTimelineTab = 'tokens' | 'cost';
 
-function sumMetric(dataKey: 'input' | 'output' | 'cost', formatter: (value: number) => string = formatCompact) {
+function sumMetric(dataKey: 'input' | 'output' | 'cost', formatter: (value: number) => string = formatCompactNumber) {
   return (data: Record<string, unknown>[]) => ({
     value: formatter(data.reduce((sum, point) => sum + (typeof point[dataKey] === 'number' ? point[dataKey] : 0), 0)),
   });

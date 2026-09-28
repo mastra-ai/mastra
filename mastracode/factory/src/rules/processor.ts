@@ -64,6 +64,14 @@ type CompletedToolResult = {
   value: FactoryRuleJsonValue;
 };
 
+function isApprovedPlanResult(result: CompletedToolResult): boolean {
+  if (result.toolName !== 'submit_plan' || result.status !== 'success') return false;
+  if (typeof result.value === 'string') return result.value.startsWith('Plan approved.');
+  if (!result.value || typeof result.value !== 'object' || Array.isArray(result.value)) return false;
+  const content = result.value.content;
+  return typeof content === 'string' && content.startsWith('Plan approved.');
+}
+
 type RuntimeSnapshot = {
   modelId: string;
   thinkingLevel: ThinkingLevel;
@@ -514,6 +522,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         ingress: { type: 'rule', identity: `decision:${entry.idempotencyKey}` },
         cause: 'tool_result_rule',
         causalChain: [{ ingressId, decisionType: entry.type }],
+        ...(isApprovedPlanResult(toolResult) ? { planApproved: true } : {}),
       });
     }
   }

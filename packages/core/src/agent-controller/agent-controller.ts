@@ -407,8 +407,15 @@ export class AgentController<TState = {}> {
     session.setMachinery({
       getAgent: () => this.getCurrentAgent(session),
       getRunScope: runId => this.getMastra()?.__getRunScope(runId),
-      subscribeToThread: ({ agent, resourceId, threadId }) =>
-        (agent ?? this.getCurrentAgent(session)).subscribeToThread({ resourceId, threadId }),
+      // History lets the runtime skip retained run parts that storage already
+      // covers, so a fresh session never re-acts on finished runs.
+      subscribeToThread: async ({ agent, resourceId, threadId }) =>
+        (agent ?? this.getCurrentAgent(session)).subscribeToThread({
+          resourceId,
+          threadId,
+          withInitialHistory: true,
+          requestContext: await this.buildRequestContext(session),
+        }),
       buildStreamOptions: input => this.buildAgentMessageStreamOptions({ session, ...input }),
       buildSharedRunOptions: () => this.buildSharedRunOptions(session),
       buildToolsets: requestContext => this.buildToolsets(session, requestContext),

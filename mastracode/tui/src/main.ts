@@ -8,7 +8,12 @@ import { createMastraCode } from '@mastra/code-sdk';
 import { createMastraCodeAnalytics } from '@mastra/code-sdk/analytics';
 import { isStreamDestroyedError } from '@mastra/code-sdk/error-classification';
 import { hasHeadlessFlag, runMCCli } from '@mastra/code-sdk/headless/index';
-import { createBrowserFromSettings, loadSettings } from '@mastra/code-sdk/onboarding/settings';
+import {
+  createBrowserFromSettings,
+  loadSettings,
+  resolveStagehandModel,
+  toActiveBrowserSettings,
+} from '@mastra/code-sdk/onboarding/settings';
 import { formatScaffoldSuccess, scaffoldPlugin } from '@mastra/code-sdk/plugins/scaffold';
 import {
   stopProcessMemoryDiagnosticsWithTimeout,
@@ -75,8 +80,8 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
     console.info(`⚠ ${warning}`);
   });
   let browserPromise: ReturnType<typeof createBrowserFromSettings> | undefined;
-  const loadBrowser = () => {
-    browserPromise ??= createBrowserFromSettings(settings.browser);
+  const loadBrowser = (chatModelId: string | undefined) => {
+    browserPromise ??= createBrowserFromSettings(settings.browser, { chatModelId });
     return browserPromise;
   };
 
@@ -169,11 +174,18 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
   });
 
   if (settings.browser.enabled) {
-    void loadBrowser()
+    // Captured once: the Stagehand instance is fixed at launch and shared by every thread.
+    const chatModelId = session.model.get();
+    void loadBrowser(chatModelId)
       .then(browser => {
         if (!browser) return;
         controller.setBrowser(browser);
-        void session.state.set({ activeBrowserSettings: settings.browser } as any).catch(() => {});
+        void session.state
+          .set({
+            activeBrowserSettings: toActiveBrowserSettings(settings.browser),
+            activeBrowserModel: resolveStagehandModel(settings.browser, { chatModelId }),
+          } as any)
+          .catch(() => {});
       })
       .catch(() => {});
   }

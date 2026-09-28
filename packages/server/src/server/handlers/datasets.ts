@@ -136,6 +136,7 @@ function getHttpStatusForMastraError(errorId: string): number {
     case 'EXPERIMENT_NO_ITEMS':
     case 'DATASET_ITEM_EXTERNAL_ID_INVALID':
     case 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE':
+    case 'DATASET_SCHEMA_PATTERN_UNSUPPORTED':
       return 400;
     case 'DATASET_ITEM_NOT_FOUND':
       return 404;

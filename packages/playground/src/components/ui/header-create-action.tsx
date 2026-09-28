@@ -1,6 +1,6 @@
 import { CreateButton } from '@mastra/playground-ui/components/Button';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import type { ReactNode } from 'react';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface HeaderCreateActionProps {
   href: string;

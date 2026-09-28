@@ -18,6 +18,7 @@ import type {
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { Pool } from 'pg';
+import { parseSchemaName, schemaNamePrefix } from '../../shared/schema-name';
 import type { DbClient, QueryValues, TxClient } from '../client';
 import { PoolAdapter } from '../client';
 import { buildConstraintName } from './constraint-utils';
@@ -169,7 +170,7 @@ export function resolvePgConfig(config: PgDomainConfig): {
 }
 
 export function getSchemaName(schema?: string) {
-  return schema ? `"${parseSqlIdentifier(schema, 'schema name')}"` : '"public"';
+  return schema ? `"${parseSchemaName(schema)}"` : '"public"';
 }
 
 export function getTableName({ indexName, schemaName }: { indexName: string; schemaName?: string }) {
@@ -239,7 +240,7 @@ export function generateTableSQL({
 
   const finalColumns = [...columns, ...timeZColumns, ...tableConstraints].join(',\n');
   // Sanitize schema name before using it in constraint names to ensure valid SQL identifiers
-  const parsedSchemaName = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+  const parsedSchemaName = schemaName ? schemaNamePrefix(schemaName) : '';
   // Use the original (long) base name so existing databases that already have
   // the constraint under this name are detected by the IF NOT EXISTS check.
   // buildConstraintName will truncate only when a schema prefix pushes the
@@ -253,7 +254,7 @@ export function generateTableSQL({
     schemaName: parsedSchemaName || undefined,
   });
   const quotedSchemaName = getSchemaName(schemaName);
-  const schemaFilter = parsedSchemaName || 'public';
+  const schemaFilter = schemaName ? parseSchemaName(schemaName) : 'public';
 
   const sql = `
             CREATE TABLE IF NOT EXISTS ${getTableName({ indexName: tableName, schemaName: quotedSchemaName })} (
@@ -357,7 +358,7 @@ export function generateTimestampTriggerSQL(tableName: string, schemaName?: stri
   // validated by parseSqlIdentifier, so they cannot carry a quote.
   const triggerNameLiteral = `'${parsedTriggerName}'`;
   const tableNameLiteral = `'${parseSqlIdentifier(tableName, 'table name')}'`;
-  const schemaNameLiteral = schemaName ? `'${parseSqlIdentifier(schemaName, 'schema name')}'` : `'public'`;
+  const schemaNameLiteral = schemaName ? `'${parseSchemaName(schemaName)}'` : `'public'`;
 
   return `CREATE OR REPLACE FUNCTION ${functionName}()
 RETURNS TRIGGER AS $$
@@ -489,7 +490,7 @@ export class PgDB extends MastraBase {
     if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
       const constraintName = buildConstraintName({
         baseName: 'mastra_workflow_snapshot_workflow_name_run_id_key',
-        schemaName: this.schemaName ? parseSqlIdentifier(this.schemaName, 'schema name') : undefined,
+        schemaName: this.schemaName ? schemaNamePrefix(this.schemaName) : undefined,
       }).toLowerCase();
       return snapshot.indexes.has(constraintName) && snapshot.replicaIdentityIndexes.has(constraintName);
     }
@@ -1381,7 +1382,7 @@ export class PgDB extends MastraBase {
    * Used to skip deduplication when the constraint already exists (migration already complete).
    */
   private async spansPrimaryKeyExists(): Promise<boolean> {
-    const parsedSchemaName = this.schemaName ? parseSqlIdentifier(this.schemaName, 'schema name') : '';
+    const parsedSchemaName = this.schemaName ? schemaNamePrefix(this.schemaName) : '';
     const constraintName = buildConstraintName({
       baseName: 'mastra_ai_spans_traceid_spanid_pk',
       schemaName: parsedSchemaName || undefined,
@@ -1412,7 +1413,7 @@ export class PgDB extends MastraBase {
    */
   private async addSpansPrimaryKey(): Promise<void> {
     const fullTableName = getTableName({ indexName: TABLE_SPANS, schemaName: getSchemaName(this.schemaName) });
-    const parsedSchemaName = this.schemaName ? parseSqlIdentifier(this.schemaName, 'schema name') : '';
+    const parsedSchemaName = this.schemaName ? schemaNamePrefix(this.schemaName) : '';
     const constraintName = buildConstraintName({
       baseName: 'mastra_ai_spans_traceid_spanid_pk',
       schemaName: parsedSchemaName || undefined,

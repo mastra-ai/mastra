@@ -80,6 +80,9 @@ export class Workflow extends BaseResource {
     if (params?.status) {
       searchParams.set('status', params.status);
     }
+    if (params?.summary) {
+      searchParams.set('summary', 'true');
+    }
     if (requestContextParam) {
       searchParams.set('requestContext', requestContextParam);
     }

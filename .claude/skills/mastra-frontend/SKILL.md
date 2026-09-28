@@ -55,3 +55,6 @@ Pick the highest rung that fits; each step down needs a reason:
 - `dark:` color overrides on semantic tokens — the palette already flips via `html.light`
 - `twMerge` imported from `tailwind-merge` or manual string concatenation instead of `cn()`
 - Decorative animation without `motion-safe:`/`motion-reduce:`
+- A `font-mono` class anywhere outside `packages/playground-ui/src/ds` (lint rejects it): use `<Txt font="mono">` for identifiers, timestamps, and durations, `InlineCode` or `CodeBlock` for code, `tabular-nums` for numbers. `<pre>` and `<code>` are already mono
+- Mono on text a person wrote or reads as language (labels, headings, status, prose): mono is for machine identifiers (IDs, hashes, log lines) and time (timestamps and durations). Other numbers, such as counts, costs, and scores, use the body face with `tabular-nums`. KPI values, chart axes, and chart tooltips stay in the body face even for time, so dashboards read in one face. See the Typography section of `packages/playground-ui/README.md`
+- Code as plain or mono text, or a hand-styled `<code className="rounded bg-…">`: use `InlineCode` in a sentence and a highlighted `CodeBlock` (with `lang`) for anything longer

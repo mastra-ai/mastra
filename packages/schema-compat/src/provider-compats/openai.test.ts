@@ -79,6 +79,63 @@ describe('OpenAISchemaCompatLayer', () => {
       expect(result.additionalProperties).toBe(false);
     });
 
+    it('keeps numeric format and range keywords only in the typed branch', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          pageSize: { type: 'integer', format: 'int32', description: 'Max files.' },
+          ratio: { type: 'number', minimum: 0, maximum: 1, multipleOf: 0.5 },
+          count: { type: ['integer', 'null'], format: 'int64', exclusiveMinimum: 0 },
+        },
+      };
+      const result = compat.processToJSONSchema(structuredClone(schema) as any) as Record<string, any>;
+      const { pageSize, ratio, count } = result.properties;
+
+      expect(pageSize).toEqual({
+        description: 'Max files.',
+        anyOf: [{ type: 'integer', format: 'int32', description: 'Max files.' }, { type: 'null' }],
+      });
+      for (const keyword of ['minimum', 'maximum', 'multipleOf', 'format']) {
+        expect(ratio).not.toHaveProperty(keyword);
+      }
+      expect(ratio.anyOf.map((b: any) => b.type)).toEqual(['number', 'null']);
+      expect(ratio.description).toContain('greater than or equal to 0');
+      expect(ratio.description).toContain('lower than or equal to 1');
+      expect(ratio.description).toContain('multiple of 0.5');
+      expect(count).toEqual({
+        description: 'constraints: greater than 0',
+        anyOf: [{ type: 'integer', format: 'int64' }, { type: 'null' }],
+      });
+    });
+
+    it('keeps a string format on the string branch of a mixed string/integer type', () => {
+      const schema = {
+        type: 'object',
+        properties: { when: { type: ['string', 'integer'], format: 'date-time' } },
+      };
+      const result = compat.processToJSONSchema(structuredClone(schema) as any) as Record<string, any>;
+      const { when } = result.properties;
+
+      expect(when).not.toHaveProperty('format');
+      const [stringBranch, integerBranch, nullBranch] = when.anyOf;
+      expect(stringBranch.type).toBe('string');
+      expect(integerBranch).toEqual({ type: 'integer' });
+      expect(nullBranch).toEqual({ type: 'null' });
+      expect(stringBranch.format ?? stringBranch.description).toContain('date-time');
+    });
+
+    it('keeps a numeric format on the integer branch of a mixed string/integer type', () => {
+      const schema = {
+        type: 'object',
+        properties: { size: { type: ['string', 'integer'], format: 'int32' } },
+      };
+      const result = compat.processToJSONSchema(structuredClone(schema) as any) as Record<string, any>;
+      const { size } = result.properties;
+
+      expect(size).not.toHaveProperty('format');
+      expect(size.anyOf).toEqual([{ type: 'string' }, { type: 'integer', format: 'int32' }, { type: 'null' }]);
+    });
+
     it('still accepts an object, a string, and null through the compat validation path', async () => {
       const compatSchema = compat.processToCompatSchema(structuredClone(searchToolSchema) as any);
 

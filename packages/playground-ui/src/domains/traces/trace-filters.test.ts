@@ -99,6 +99,46 @@ describe('createTraceFilterBarFields', () => {
     expect(Array.isArray(suggestions) && suggestions.map(s => s.value)).toEqual(['success', 'error']);
   });
 
+  describe('when withQueryTrace is false', () => {
+    const legacyFields = createTraceFilterBarFields({
+      availableRootEntityNames: ['weather-agent'],
+      availableEnvironments: ['prod'],
+      hiddenFieldIds: ['rootEntityType'],
+      metadataFields: [{ path: 'metadata.region', suggestions: [] }],
+      withQueryTrace: false,
+    });
+    const ids = legacyFields.map(f => f.id);
+
+    it('offers only fields the legacy list endpoint can filter on', () => {
+      expect(ids.sort()).toEqual(
+        [
+          'entityId',
+          'entityName',
+          'environment',
+          'experimentId',
+          'organizationId',
+          'requestId',
+          'resourceId',
+          'rootEntityType',
+          'runId',
+          'sessionId',
+          'status',
+          'threadId',
+          'traceId',
+          'userId',
+        ].sort(),
+      );
+    });
+
+    it('offers only the is operator', () => {
+      expect(legacyFields.every(f => f.operators.length === 1 && f.operators[0] === 'is')).toBe(true);
+    });
+
+    it('keeps hidden field ids hidden', () => {
+      expect(legacyFields.find(f => f.id === 'rootEntityType')?.hidden).toBe(true);
+    });
+  });
+
   describe('when a field can be unset', () => {
     it('keeps exists and does not exist', () => {
       const full = ['is', 'isNot', 'in', 'notIn', 'exists', 'notExists'];

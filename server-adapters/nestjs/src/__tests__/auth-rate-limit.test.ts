@@ -80,12 +80,9 @@ describe('NestJS Adapter - Auth and Rate Limiting', () => {
         public: [],
         authenticateToken: async (token: string, request: unknown) => {
           receivedRequest = request;
-          if (!(request instanceof Request)) {
-            return null;
-          }
           // Cookie-based providers (e.g. better-auth) call headers.get — this
           // must not throw on the Nest/Express request shape.
-          const cookie = request.headers.get('cookie');
+          const cookie = (request as { headers: Headers }).headers.get('cookie');
           if (token === 'valid' && cookie?.includes('session=abc')) {
             return { id: 'user-1', isAdmin: true };
           }
@@ -115,8 +112,9 @@ describe('NestJS Adapter - Auth and Rate Limiting', () => {
       },
     });
 
-    expect(receivedRequest).toBeInstanceOf(Request);
-    expect((receivedRequest as Request).headers.get('cookie')).toBe('session=abc');
+    // Matches the shared coreAuthMiddleware contract used by every adapter.
+    expect((receivedRequest as { raw: unknown }).raw).toBeInstanceOf(Request);
+    expect((receivedRequest as { headers: Headers }).headers.get('cookie')).toBe('session=abc');
     expect(response.status).toBe(200);
   });
 
@@ -135,10 +133,7 @@ describe('NestJS Adapter - Auth and Rate Limiting', () => {
         },
         authorizeUser: async (_user: unknown, request: unknown) => {
           receivedRequest = request;
-          if (!(request instanceof Request)) {
-            return false;
-          }
-          return request.headers.get('cookie')?.includes('session=abc') === true;
+          return (request as { headers: Headers }).headers.get('cookie')?.includes('session=abc') === true;
         },
       },
     } as any);
@@ -164,8 +159,9 @@ describe('NestJS Adapter - Auth and Rate Limiting', () => {
       },
     });
 
-    expect(receivedRequest).toBeInstanceOf(Request);
-    expect((receivedRequest as Request).headers.get('cookie')).toBe('session=abc');
+    // Matches the shared coreAuthMiddleware contract used by every adapter.
+    expect((receivedRequest as { raw: unknown }).raw).toBeInstanceOf(Request);
+    expect((receivedRequest as { headers: Headers }).headers.get('cookie')).toBe('session=abc');
     expect(response.status).toBe(200);
   });
 

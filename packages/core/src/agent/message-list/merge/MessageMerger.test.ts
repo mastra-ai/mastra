@@ -164,3 +164,22 @@ describe('MessageMerger insertion positions', () => {
     expectParts(merge([step, ...calls], incoming), [step, ...expected]);
   });
 });
+
+describe('MessageMerger tool updatedAt', () => {
+  it('stamps updatedAt on the tool part when its state changes, keeping createdAt', () => {
+    const list = merge([step, { ...tool('c1'), createdAt: 1 } as Part], [tool('c1', true)]);
+    const part = list.get.all.db()[0]!.content.parts[1] as Part & { createdAt?: number; updatedAt?: number };
+    expect(part.createdAt).toBe(1);
+    expect(part.updatedAt).toBeGreaterThan(1);
+  });
+
+  it('keeps an incoming updatedAt instead of restamping', () => {
+    const list = merge([step, tool('c1')], [{ ...tool('c1', true), updatedAt: 42 } as Part]);
+    expect((list.get.all.db()[0]!.content.parts[1] as { updatedAt?: number }).updatedAt).toBe(42);
+  });
+
+  it('keeps the stamp when a merge repeats the same tool state', () => {
+    const list = merge([step, { ...tool('c1', true), updatedAt: 7 } as Part], [tool('c1', true)]);
+    expect((list.get.all.db()[0]!.content.parts[1] as { updatedAt?: number }).updatedAt).toBe(7);
+  });
+});

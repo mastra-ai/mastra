@@ -67,7 +67,7 @@ const {
 | `postToolObserver` | `(context: ToolAfterHookContext) => void \| Promise<void>` | — | Observes completed tool calls without replacing tools. Errors are logged without failing successful tool calls |
 | `disabledTools` | `string[]` | `[]` | Tools removed from the dynamic tool set before exposure to the model |
 | `storage` | `StorageConfig` | Local LibSQL | Custom storage config instead of auto-detected default |
-| `omScope` | `'thread' \| 'resource'` | Auto-detected | Observational Memory scope |
+| `omScope` | `'thread' \| 'resource'` | Auto-detected | Observational Memory scope. `'resource'` is [deprecated](https://mastra.ai/docs/memory/observational-memory#resource-scope-deprecated) |
 | `settingsPath` | `string` | Global settings | Path to a custom `settings.json` file |
 | `initialState` | `Partial<MastraCodeState>` | Default state | Initial state overrides (yolo, thinkingLevel, etc.) |
 | `idGenerator` | `() => string` | Default | Override id generation for threads/messages (useful for deterministic tests) |

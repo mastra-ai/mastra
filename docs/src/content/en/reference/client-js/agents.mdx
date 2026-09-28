@@ -348,6 +348,8 @@ await subscription.processDataStream({
 })
 ```
 
+Pass `withInitialHistory: true` (or `{ perPage }`) to receive the stored messages as a first `thread-history` chunk instead of fetching history separately. Finished runs aren't replayed after it, so completed answers don't stream again on reconnect.
+
 `subscribeToThread()` returns the underlying `Response` plus a `processDataStream()` helper. The helper reads the subscription stream until the connection closes or the request is aborted. Pass `reconnect: true` to resubscribe when the transport closes or a reconnect request fails, such as after a proxy idle timeout.
 
 <PropertiesTable

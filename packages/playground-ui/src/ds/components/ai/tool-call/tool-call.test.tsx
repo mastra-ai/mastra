@@ -199,6 +199,25 @@ describe('ToolCallPresentedHeader', () => {
     expect(screen.queryByRole('img', { name: 'Failed' })).toBeNull();
   });
 
+  it('shows a description alone, in place of the label and detail', () => {
+    render(
+      <ToolCall>
+        <ToolCallTrigger>
+          <ToolCallPresentedHeader
+            icon={Search}
+            label="Run"
+            detail="rg -n processor"
+            description="Finding the processor wiring"
+          />
+        </ToolCallTrigger>
+      </ToolCall>,
+    );
+
+    expect(screen.getByText('Finding the processor wiring')).toBeTruthy();
+    expect(screen.queryByText('Run')).toBeNull();
+    expect(screen.queryByText('rg -n processor')).toBeNull();
+  });
+
   it('marks a failed call', () => {
     render(<Presented status="error" />);
 

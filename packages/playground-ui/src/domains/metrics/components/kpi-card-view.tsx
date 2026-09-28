@@ -1,8 +1,9 @@
+import type { ReactNode } from 'react';
 import { MetricsKpiCard } from '../../../ds/components/MetricsKpiCard';
 
 export interface KpiCardViewProps {
   label: string;
-  value: string | null;
+  value: ReactNode;
   prevValue?: string;
   changePct?: number | null;
   isLoading: boolean;

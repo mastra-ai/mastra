@@ -8,7 +8,8 @@ import { Tabs } from '../../../ds/components/Tabs/tabs-root';
 import { Tab } from '../../../ds/components/Tabs/tabs-tab';
 import type { LinkComponent } from '../../../ds/types/link-component';
 import type { TokenUsageByAgentRow } from '../hooks/use-token-usage-by-agent-metrics';
-import { CHART_COLORS, formatCompact, formatCost } from './metrics-utils';
+import { CHART_COLORS } from './metrics-utils';
+import { formatCompactNumber, formatCost } from '@/lib/cost';
 
 export interface TokenUsageByAgentCardViewProps {
   data: TokenUsageByAgentRow[] | undefined;
@@ -59,7 +60,7 @@ export function TokenUsageByAgentCardView({
           (activeTab === 'cost' && hasCostData ? (
             <MetricsCard.Summary value={formatCost(totalCost, costUnit)} label="Total cost" />
           ) : (
-            <MetricsCard.Summary value={formatCompact(totalTokens)} label="Total tokens" />
+            <MetricsCard.Summary value={formatCompactNumber(totalTokens)} label="Total tokens" />
           ))}
         {hasData && actions ? <MetricsCard.Actions>{actions}</MetricsCard.Actions> : null}
       </MetricsCard.TopBar>
@@ -97,7 +98,7 @@ export function TokenUsageByAgentCardView({
                     { label: 'Output', color: CHART_COLORS.blue },
                   ]}
                   maxVal={Math.max(...rows.map(d => d.input + d.output))}
-                  fmt={formatCompact}
+                  fmt={formatCompactNumber}
                 />
               </TabContent>
               <TabContent value="cost" className="pt-3">

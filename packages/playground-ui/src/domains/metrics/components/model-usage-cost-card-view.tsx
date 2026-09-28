@@ -3,7 +3,8 @@ import { DataList } from '../../../ds/components/DataList/data-list';
 import { MetricsCard } from '../../../ds/components/MetricsCard/metrics-card';
 import type { LinkComponent } from '../../../ds/types/link-component';
 import type { ModelUsageRow } from '../hooks/use-model-usage-cost-metrics';
-import { formatCost, METRICS_DATA_LIST_PROPS } from './metrics-utils';
+import { METRICS_DATA_LIST_PROPS } from './metrics-utils';
+import { formatCost } from '@/lib/cost';
 
 export interface ModelUsageCostCardViewProps {
   rows: ModelUsageRow[] | undefined;

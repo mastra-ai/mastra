@@ -144,7 +144,7 @@ describe('ClickHouse deletion lifecycle', () => {
     const scoresClient = createClient();
     await deleteScores(scoresClient.client, { scoreIds: ['score-1'] });
 
-    // Feedback runs a single delete before the applied mark; review updates mutate in place.
+    // Feedback runs a single delete before the applied mark.
     expect(feedbackClient.command).toHaveBeenCalledTimes(1);
     expect(feedbackClient.insert.mock.invocationCallOrder[1]).toBeGreaterThan(
       feedbackClient.command.mock.invocationCallOrder[0]!,
@@ -171,140 +171,95 @@ describe('ClickHouse deletion lifecycle', () => {
     expect(scoresClient.insert.mock.calls[1]?.[0].clickhouse_settings).not.toHaveProperty('insert_quorum');
   });
 
-  it('mutates only the observed row and reports a concurrent applied deletion', async () => {
-    const { client, insert, command, query } = createClient();
-    const existingRow = {
-      reviewWriteVersion: '0',
-      ...feedbackRecordToRow({
-        feedbackId: 'feedback-1',
-        timestamp: new Date('2026-09-03T12:00:00Z'),
-        traceId: 'trace-1',
-        feedbackSource: 'user',
-        feedbackType: 'rating',
-        value: 1,
-        organizationId: 'org-1',
-        resourceId: 'resource-1',
-        reviewStatus: 'needs-review',
-      }),
-    };
-    query
-      .mockResolvedValueOnce(queryResult([existingRow]))
-      .mockResolvedValueOnce(queryResult([]))
-      .mockResolvedValueOnce(queryResult([{ found: 1 }]));
-
-    await expect(
-      updateFeedbackReviewStatus(client, { feedbackId: 'feedback-1', reviewStatus: 'reviewed' }),
-    ).rejects.toThrow('Feedback record not found');
-
-    expect(query).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        query: expect.stringContaining("WHERE signal = 'feedback'"),
-        query_params: { feedbackId: 'feedback-1', organizationId: 'org-1', resourceId: 'resource-1' },
-      }),
-    );
-    expect(query.mock.calls[1]?.[0].query).toContain("predicateType = 'itemIds'");
-    expect(query.mock.calls[1]?.[0].query).toContain('has(predicateValues, {feedbackId:String})');
-    expect(query.mock.calls[1]?.[0].query).toContain('lastAppliedAt > toDateTime64(0, 3)');
-    expect(insert).not.toHaveBeenCalled();
-    expect(command).toHaveBeenCalledExactlyOnceWith({
-      query: expect.stringContaining(`ALTER TABLE ${TABLE_FEEDBACK_EVENTS} UPDATE reviewStatus`),
-      query_params: expect.objectContaining({
-        feedbackId: 'feedback-1',
-        traceId: 'trace-1',
-        writeVersion: '0',
-        reviewStatus: 'reviewed',
-      }),
-      clickhouse_settings: expect.objectContaining({ mutations_sync: '1' }),
-    });
-  });
-
-  it('re-applies the review to a newer version ingested during the update', async () => {
-    const { client, command, query } = createClient();
-    const base = {
+  describe('feedback review updates', () => {
+    const existingRow = feedbackRecordToRow({
       feedbackId: 'feedback-1',
       timestamp: new Date('2026-09-03T12:00:00Z'),
       traceId: 'trace-1',
       feedbackSource: 'user',
       feedbackType: 'rating',
       value: 1,
+      organizationId: 'org-1',
+      resourceId: 'resource-1',
       reviewStatus: 'needs-review',
-    } as const;
-    const v1 = { ...feedbackRecordToRow(base), reviewWriteVersion: '1' };
-    const v2 = { ...feedbackRecordToRow({ ...base, comment: 'newer' }), reviewWriteVersion: '2' };
-    query
-      // attempt 1: observed v1, no request, no request, v1 gone under FINAL
-      .mockResolvedValueOnce(queryResult([v1]))
-      .mockResolvedValueOnce(queryResult([]))
-      .mockResolvedValueOnce(queryResult([]))
-      .mockResolvedValueOnce(queryResult([]))
-      // attempt 2: observed v2, no request, no request, v2 read back
-      .mockResolvedValueOnce(queryResult([v2]))
-      .mockResolvedValueOnce(queryResult([]))
-      .mockResolvedValueOnce(queryResult([]))
-      .mockResolvedValueOnce(queryResult([{ ...v2, reviewStatus: 'reviewed' }]));
+    });
 
-    await expect(
-      updateFeedbackReviewStatus(client, { feedbackId: 'feedback-1', reviewStatus: 'reviewed' }),
-    ).resolves.toMatchObject({ feedbackId: 'feedback-1', reviewStatus: 'reviewed', comment: 'newer' });
+    /** Answers each deletion-request guard read from the next queued request state. */
+    function reviewClient(requests: Array<'none' | 'pending' | 'applied'>) {
+      const mocks = createClient();
+      mocks.query.mockImplementation(async (args: { query: string }) => {
+        if (args.query.includes(TABLE_DELETION_REQUESTS)) {
+          const state = requests.shift() ?? 'none';
+          const appliedOnly = args.query.includes('lastAppliedAt > toDateTime64(0, 3)');
+          return queryResult(state === 'applied' || (state === 'pending' && !appliedOnly) ? [{ found: 1 }] : []);
+        }
+        if (args.query.includes('max(writeVersion)'))
+          return queryResult([{ feedbackId: 'feedback-1', writeVersion: '1' }]);
+        return queryResult([existingRow]);
+      });
+      return mocks;
+    }
 
-    expect(command).toHaveBeenCalledTimes(2);
-    expect(command.mock.calls[0]?.[0].query_params).toMatchObject({ writeVersion: '1' });
-    expect(command.mock.calls[1]?.[0].query_params).toMatchObject({ writeVersion: '2' });
-  });
+    const review = (client: ClickHouseClient) =>
+      updateFeedbackReviewStatus(client, { feedbackId: 'feedback-1', reviewStatus: 'reviewed' });
 
-  it('re-applies when the mutation reports done but the row is unchanged', async () => {
-    const { client, command, query } = createClient();
-    const existingRow = {
-      reviewWriteVersion: '1',
-      ...feedbackRecordToRow({
-        feedbackId: 'feedback-1',
-        timestamp: new Date('2026-09-03T12:00:00Z'),
-        traceId: 'trace-1',
-        feedbackSource: 'user',
-        feedbackType: 'rating',
-        value: 1,
-        reviewStatus: 'needs-review',
-      }),
-    };
-    query
-      .mockResolvedValueOnce(queryResult([existingRow]))
-      .mockResolvedValueOnce(queryResult([]))
-      .mockResolvedValueOnce(queryResult([]))
-      .mockResolvedValueOnce(queryResult([existingRow]))
-      .mockResolvedValueOnce(queryResult([existingRow]))
-      .mockResolvedValueOnce(queryResult([]))
-      .mockResolvedValueOnce(queryResult([]))
-      .mockResolvedValueOnce(queryResult([{ ...existingRow, reviewStatus: 'reviewed' }]));
+    it('inserts a replacement row without mutating or deleting', async () => {
+      const { client, insert, command, query } = reviewClient(['none', 'none']);
 
-    await expect(
-      updateFeedbackReviewStatus(client, { feedbackId: 'feedback-1', reviewStatus: 'reviewed' }),
-    ).resolves.toMatchObject({ feedbackId: 'feedback-1', reviewStatus: 'reviewed' });
-    expect(command).toHaveBeenCalledTimes(2);
-  });
+      await expect(review(client)).resolves.toMatchObject({ feedbackId: 'feedback-1', reviewStatus: 'reviewed' });
 
-  it('reports a conflict instead of not-found when ingestion keeps superseding the row', async () => {
-    const { client, command, query } = createClient();
-    const row = {
-      ...feedbackRecordToRow({
-        feedbackId: 'feedback-1',
-        timestamp: new Date('2026-09-03T12:00:00Z'),
-        traceId: 'trace-1',
-        feedbackSource: 'user',
-        feedbackType: 'rating',
-        value: 1,
-        reviewStatus: 'needs-review',
-      }),
-      reviewWriteVersion: '1',
-    };
-    query.mockImplementation(async (args: { query: string }) =>
-      queryResult(args.query.includes('ORDER BY writeVersion DESC') ? [row] : []),
-    );
+      expect(insert).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          table: TABLE_FEEDBACK_EVENTS,
+          values: [expect.objectContaining({ feedbackId: 'feedback-1', reviewStatus: 'reviewed', writeVersion: '2' })],
+        }),
+      );
+      expect(command).not.toHaveBeenCalled();
+      const guards = query.mock.calls.map(([args]) => args.query).filter(sql => sql.includes(TABLE_DELETION_REQUESTS));
+      expect(guards).toHaveLength(2);
+      expect(guards[0]).toContain('lastAppliedAt > toDateTime64(0, 3)');
+      expect(guards[1]).not.toContain('lastAppliedAt');
+      expect(query.mock.calls.find(([args]) => args.query.includes(TABLE_DELETION_REQUESTS))?.[0].query_params).toEqual(
+        { feedbackId: 'feedback-1', organizationId: 'org-1', resourceId: 'resource-1' },
+      );
+    });
 
-    await expect(
-      updateFeedbackReviewStatus(client, { feedbackId: 'feedback-1', reviewStatus: 'reviewed' }),
-    ).rejects.toMatchObject({ id: 'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_CONFLICT' });
-    expect(command).toHaveBeenCalledTimes(3);
+    it('deletes a row still visible under an applied request instead of writing', async () => {
+      const { client, insert, command } = reviewClient(['applied']);
+
+      await expect(review(client)).rejects.toThrow('Feedback record not found');
+      expect(command).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ query: expect.stringContaining(`DELETE FROM ${TABLE_FEEDBACK_EVENTS}`) }),
+      );
+      // the new request row and its applied marker; no replacement row
+      expect(insert).toHaveBeenCalledTimes(2);
+      expect(insert.mock.calls.every(([args]) => args.table !== TABLE_FEEDBACK_EVENTS)).toBe(true);
+    });
+
+    it('re-runs the delete and reports not found when a request appears after the write', async () => {
+      const { client, insert, command } = reviewClient(['none', 'pending']);
+
+      await expect(review(client)).rejects.toThrow('Feedback record not found');
+      expect(command).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          query: expect.stringContaining(`DELETE FROM ${TABLE_FEEDBACK_EVENTS}`),
+          query_params: { fid_0: 'feedback-1', delOrganizationId: 'org-1', delResourceId: 'resource-1' },
+        }),
+      );
+      // replacement row, new request row, applied marker
+      expect(insert).toHaveBeenCalledTimes(3);
+      expect(insert.mock.invocationCallOrder[0]).toBeLessThan(command.mock.invocationCallOrder[0]!);
+    });
+
+    it('surfaces a failed re-run delete instead of reporting success', async () => {
+      // A pending request can be a delete that failed or one still running.
+      const { client, insert, command } = reviewClient(['pending', 'pending']);
+      command.mockRejectedValueOnce(new Error('missing ALTER DELETE'));
+
+      await expect(review(client)).rejects.toThrow('missing ALTER DELETE');
+      // replacement row, then the re-run delete's request row
+      expect(insert).toHaveBeenCalledTimes(2);
+    });
   });
 
   it('is a complete no-op for empty id arrays', async () => {
