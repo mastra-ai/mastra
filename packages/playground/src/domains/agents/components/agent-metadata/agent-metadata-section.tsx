@@ -6,13 +6,13 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { InfoIcon } from 'lucide-react';
 
 const sectionAccentIcon = {
-  amber: 'text-badge-yellow-dot',
-  blue: 'text-badge-blue-dot',
-  cyan: 'text-badge-cyan-dot',
-  green: 'text-badge-green-dot',
-  orange: 'text-badge-orange-dot',
-  pink: 'text-badge-pink-dot',
-  purple: 'text-badge-purple-dot',
+  amber: 'text-badge-yellow-indicator',
+  blue: 'text-badge-blue-indicator',
+  cyan: 'text-badge-cyan-indicator',
+  green: 'text-badge-green-indicator',
+  orange: 'text-badge-orange-indicator',
+  pink: 'text-badge-pink-indicator',
+  purple: 'text-badge-purple-indicator',
 };
 
 export interface AgentMetadataSectionProps {

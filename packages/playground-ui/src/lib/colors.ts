@@ -16,7 +16,7 @@ export function hashLabel(value: string) {
 export const hueForName = (name: string): CategoricalHue =>
   categoricalHues[hashLabel(name) % categoricalHues.length] ?? 'blue';
 
-export const hueAccentColor = (hue: CategoricalHue) => `var(--badge-${hue}-dot)`;
+export const hueAccentColor = (hue: CategoricalHue) => `var(--badge-${hue}-indicator)`;
 
 const HUE_FILL_CLASS: Record<CategoricalHue, string> = {
   blue: 'bg-badge-blue text-badge-blue-fg',
@@ -34,5 +34,5 @@ export const hueFillClass = (hue: CategoricalHue) => HUE_FILL_CLASS[hue];
 export const hueColors = (hue: CategoricalHue) => ({
   background: `var(--badge-${hue})`,
   foreground: `var(--badge-${hue}-fg)`,
-  tint: `var(--badge-${hue}-dot)`,
+  tint: `var(--badge-${hue}-indicator)`,
 });

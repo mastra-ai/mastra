@@ -69,42 +69,42 @@ const badgeToneStyles = {
   green: {
     strong: 'bg-badge-green text-badge-green-fg',
     subtle: 'bg-badge-green-muted text-badge-green-fg',
-    indicator: 'bg-badge-green-dot',
+    indicator: 'bg-badge-green-indicator',
   },
   red: {
     strong: 'bg-badge-red text-badge-red-fg',
     subtle: 'bg-badge-red-muted text-badge-red-fg',
-    indicator: 'bg-badge-red-dot',
+    indicator: 'bg-badge-red-indicator',
   },
   yellow: {
     strong: 'bg-badge-yellow text-badge-yellow-fg',
     subtle: 'bg-badge-yellow-muted text-badge-yellow-fg',
-    indicator: 'bg-badge-yellow-dot',
+    indicator: 'bg-badge-yellow-indicator',
   },
   blue: {
     strong: 'bg-badge-blue text-badge-blue-fg',
     subtle: 'bg-badge-blue-muted text-badge-blue-fg',
-    indicator: 'bg-badge-blue-dot',
+    indicator: 'bg-badge-blue-indicator',
   },
   purple: {
     strong: 'bg-badge-purple text-badge-purple-fg',
     subtle: 'bg-badge-purple-muted text-badge-purple-fg',
-    indicator: 'bg-badge-purple-dot',
+    indicator: 'bg-badge-purple-indicator',
   },
   orange: {
     strong: 'bg-badge-orange text-badge-orange-fg',
     subtle: 'bg-badge-orange-muted text-badge-orange-fg',
-    indicator: 'bg-badge-orange-dot',
+    indicator: 'bg-badge-orange-indicator',
   },
   cyan: {
     strong: 'bg-badge-cyan text-badge-cyan-fg',
     subtle: 'bg-badge-cyan-muted text-badge-cyan-fg',
-    indicator: 'bg-badge-cyan-dot',
+    indicator: 'bg-badge-cyan-indicator',
   },
   pink: {
     strong: 'bg-badge-pink text-badge-pink-fg',
     subtle: 'bg-badge-pink-muted text-badge-pink-fg',
-    indicator: 'bg-badge-pink-dot',
+    indicator: 'bg-badge-pink-indicator',
   },
 } satisfies Record<string, BadgeToneStyles>;
 

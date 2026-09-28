@@ -202,7 +202,7 @@ const ProgressBar = ({
 
 const ObservationalMemoryHeader = () => (
   <div className="mb-3 flex items-center gap-2">
-    <Brain className="h-4 w-4 text-badge-purple-dot" />
+    <Brain className="h-4 w-4 text-badge-purple-indicator" />
     <h3 className="text-subheading text-foreground">Observational Memory</h3>
   </div>
 );

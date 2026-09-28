@@ -39,7 +39,7 @@ export interface MemorySidebarProps {
 }
 
 const barColor = (percent: number): string => {
-  if (percent >= 85) return 'bg-badge-orange-dot';
+  if (percent >= 85) return 'bg-badge-orange-indicator';
   if (percent >= 60) return 'bg-info-indicator';
   return 'bg-success-indicator';
 };

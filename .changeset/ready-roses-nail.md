@@ -12,7 +12,7 @@ Added semantic Badge status variants `success`, `destructive`, `warning`, and `i
 
 `BADGE_COLORS` and topic colors now return color ramp variables such as `var(--purple-500)` instead of hex values.
 
-Status roles are `{status}-subtle`, `{status}-edge`, `{status}-fg`, and `{status}-indicator`. Badge roles are `--badge-{hue}` (fill), `--badge-{hue}-muted`, `--badge-{hue}-edge`, `--badge-{hue}-fg`, and `--badge-{hue}-dot`. `--badge-{hue}` used to be the indicator color; use `--badge-{hue}-dot` for dots.
+Status roles are `{status}-subtle`, `{status}-edge`, `{status}-fg`, and `{status}-indicator`. Badge roles are `--badge-{hue}` (fill), `--badge-{hue}-muted`, `--badge-{hue}-edge`, `--badge-{hue}-fg`, and `--badge-{hue}-indicator`. `--badge-{hue}` used to be the indicator color; use `--badge-{hue}-indicator` for dots, icons, and labels.
 
 **Breaking:** `Badge` `emphasis` values are now `strong` and `subtle` instead of `default` and `muted`. `strong` is the default when `emphasis` is omitted. Replace `emphasis="muted"` with `emphasis="subtle"` and `emphasis="default"` with `emphasis="strong"` (or drop it). `subtle` badges use a quieter tinted fill.
 
@@ -22,4 +22,4 @@ Ramp steps now stay inside sRGB, so neighbouring steps no longer flatten togethe
 
 **Breaking:** `@mastra/playground-ui/utils/colors` no longer generates `hsl()` colors. `stringToColor`, `themedHueColor`, and `stringToThemedColor` are replaced by `hueForName` (a stable categorical hue for any name), `hueFillClass`, `hueAccentColor`, and `hueColors`, which resolve to theme-aware badge tokens.
 
-`badge-{hue}-dot` now uses new even-chroma `--{hue}-soft-300` (dark) and `--{hue}-soft-600` (light) steps, so category dots, icons, and labels have the same intensity across hues.
+`badge-{hue}-indicator` and the span colors use new even-chroma `--{hue}-soft-300` (dark) and `--{hue}-soft-600` (light) steps, so every hue has the same intensity.

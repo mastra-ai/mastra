@@ -17,16 +17,16 @@
   --chart-sequential-4: var(--purple-500);
   --chart-sequential-5: var(--purple-600);
 
-  --span-agent: var(--blue-500);
-  --span-workflow: var(--cyan-400);
-  --span-model: var(--purple-300);
-  --span-mcp: var(--green-300);
-  --span-tool: var(--yellow-300);
-  --span-provider: var(--orange-300);
-  --span-memory: var(--orange-500);
-  --span-workspace: var(--red-400);
-  --span-skill: var(--green-500);
-  --span-scorer: var(--pink-500);
+  --span-agent: var(--blue-soft-300);
+  --span-workflow: var(--cyan-soft-300);
+  --span-model: var(--purple-soft-300);
+  --span-mcp: var(--green-soft-300);
+  --span-tool: var(--yellow-soft-300);
+  --span-provider: var(--orange-soft-300);
+  --span-memory: var(--orange-soft-300);
+  --span-workspace: var(--red-soft-300);
+  --span-skill: var(--green-soft-300);
+  --span-scorer: var(--pink-soft-300);
   --span-other: var(--muted-foreground);
 }
 
@@ -40,16 +40,16 @@ html.light {
   --chart-pink: var(--pink-500);
   --chart-red: var(--red-700);
 
-  --span-agent: var(--blue-500);
-  --span-workflow: var(--cyan-500);
-  --span-model: var(--purple-600);
-  --span-mcp: var(--green-500);
-  --span-tool: var(--yellow-600);
-  --span-provider: var(--orange-500);
-  --span-memory: var(--orange-800);
-  --span-workspace: var(--red-500);
-  --span-skill: var(--green-600);
-  --span-scorer: var(--pink-500);
+  --span-agent: var(--blue-soft-600);
+  --span-workflow: var(--cyan-soft-600);
+  --span-model: var(--purple-soft-600);
+  --span-mcp: var(--green-soft-600);
+  --span-tool: var(--yellow-soft-600);
+  --span-provider: var(--orange-soft-600);
+  --span-memory: var(--orange-soft-600);
+  --span-workspace: var(--red-soft-600);
+  --span-skill: var(--green-soft-600);
+  --span-scorer: var(--pink-soft-600);
   --chart-sequential-1: var(--purple-800);
   --chart-sequential-2: var(--purple-700);
   --chart-sequential-3: var(--purple-600);
