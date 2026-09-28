@@ -219,17 +219,17 @@ describe('handleGoalCommand', () => {
     );
   });
 
-  it('strips terminal control sequences from the pause cause', async () => {
+  it('strips terminal control sequences from every status field', async () => {
     const ctx = {
       state: {
         goalManager: {
           getGoal: vi.fn(() => ({
             id: 'goal-1',
-            objective: 'finish the task',
+            objective: 'finish\x1b[31m the task',
             status: 'paused',
             turnsUsed: 3,
             maxTurns: DEFAULT_MAX_TURNS,
-            judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+            judgeModelId: 'judge\x1b]0;x\x07',
             startedAt: '2026-05-15T10:00:00.000Z',
             pausedReason: 'judge failed\x1b[2J\x1b]0;pwned\x07\nboom',
           })),

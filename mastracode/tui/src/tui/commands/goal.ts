@@ -51,7 +51,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
     await goalManager.saveToThread(state);
     ctx.updateStatusLine();
     ctx.showInfo(
-      `Goal paused: "${goal.objective}" (${goal.turnsUsed}/${goal.maxTurns} turns used). Use /goal resume to continue.`,
+      `Goal paused: "${stripControlChars(goal.objective)}" (${goal.turnsUsed}/${goal.maxTurns} turns used). Use /goal resume to continue.`,
     );
     return;
   }
@@ -85,7 +85,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
       goalManager.pause();
       await goalManager.saveToThread(state);
       ctx.showError(
-        `Goal paused — failed to send continuation for "${goal.objective}": ${err instanceof Error ? err.message : String(err)}`,
+        `Goal paused — failed to send continuation for "${stripControlChars(goal.objective)}": ${stripControlChars(err instanceof Error ? err.message : String(err))}`,
       );
     }
     return;
@@ -125,15 +125,16 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
   await startGoalWithDefaults(ctx, objective);
 }
 
-// Pause reasons can carry provider or scorer error text; drop control characters so they can't drive the terminal.
+// Goal fields can come from the SDK or provider/scorer error text; drop control characters so they can't drive the terminal.
 function stripControlChars(text: string): string {
   return text.replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ').trim();
 }
 
 function formatGoalStatus(goal: GoalState): string {
-  const reason =
-    goal.status === 'paused' && goal.pausedReason ? ` — paused: ${stripControlChars(goal.pausedReason)}` : '';
-  return `Goal (${goal.status}): "${goal.objective}" — ${goal.turnsUsed}/${goal.maxTurns} turns used [judge: ${goal.judgeModelId}]${reason}`;
+  const reason = goal.status === 'paused' && goal.pausedReason ? ` — paused: ${goal.pausedReason}` : '';
+  return stripControlChars(
+    `Goal (${goal.status}): "${goal.objective}" — ${goal.turnsUsed}/${goal.maxTurns} turns used [judge: ${goal.judgeModelId}]${reason}`,
+  );
 }
 
 function formatGoalStatusRow(goal: GoalState): string {
