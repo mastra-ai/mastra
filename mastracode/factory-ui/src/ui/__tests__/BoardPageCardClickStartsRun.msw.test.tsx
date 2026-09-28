@@ -229,13 +229,14 @@ function stubBoardEndpoints({
       return HttpResponse.json({ comment: { id: 'comment-1' } });
     }),
     http.patch(`${TEST_BASE_URL}/web/factory/work-items/:itemId`, async ({ params, request }) => {
-      patches.push({ itemId: String(params.itemId), body: (await request.json()) as Record<string, unknown> });
+      const body = (await request.json()) as Record<string, unknown>;
+      patches.push({ itemId: String(params.itemId), body });
       return HttpResponse.json({
         workItem: {
           ...issueWorkItem,
           id: String(params.itemId),
           revision: 5,
-          plansPreapprovedAt: '2026-07-18T01:00:00.000Z',
+          ...(body.metadata ? { metadata: body.metadata } : {}),
         },
       });
     }),
@@ -430,45 +431,16 @@ describe('Board card buttons move the card', () => {
     expect(transitions[0]?.body).toMatchObject({ stage: 'triage', cause: 'card_action', reenter: true });
   });
 
-  it('patches plansPreapproved hands-off, then transitions against the revision the patch returned', async () => {
-    const { transitions, patches } = stubBoardEndpoints();
-    const { client } = renderWorkBoard();
+  it('offers only explicit card moves without hands-off approval shortcuts', async () => {
+    stubBoardEndpoints();
+    renderWorkBoard();
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole('button', { name: 'Actions for Fix login bug' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Investigate hands-off' }));
 
-    await waitFor(() => expect(transitions).toHaveLength(1));
-    await waitForMutationsIdle(client);
-    expect(patches).toEqual([{ itemId: 'item-1', body: { plansPreapproved: true } }]);
-    expect(transitions[0]?.body).toMatchObject({ stage: 'triage', cause: 'card_action', expectedRevision: 5 });
-  });
-
-  it('stamps a card hands-off once when the menu item is clicked twice', async () => {
-    const { transitions, patches } = stubBoardEndpoints();
-    let releasePatch = () => {};
-    const patchInFlight = new Promise<void>(resolve => {
-      releasePatch = resolve;
-    });
-    server.use(
-      http.patch(`${TEST_BASE_URL}/web/factory/work-items/:itemId`, async ({ params, request }) => {
-        patches.push({ itemId: String(params.itemId), body: (await request.json()) as Record<string, unknown> });
-        await patchInFlight;
-        return HttpResponse.json({ workItem: { ...issueWorkItem, id: String(params.itemId), revision: 5 } });
-      }),
-    );
-    const { client } = renderWorkBoard();
-    const user = userEvent.setup();
-
-    await user.click(await screen.findByRole('button', { name: 'Actions for Fix login bug' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Investigate hands-off' }));
-    await user.click(await screen.findByRole('button', { name: 'Actions for Fix login bug' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Investigate hands-off' }));
-    releasePatch();
-
-    await waitFor(() => expect(transitions).toHaveLength(1));
-    await waitForMutationsIdle(client);
-    expect(patches).toHaveLength(1);
+    expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
+    expect(screen.queryByRole('menuitem', { name: /hands-off/i })).not.toBeInTheDocument();
   });
 
   it('files a candidate in Intake, posts its custom prompt as a comment, then moves it', async () => {

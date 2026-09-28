@@ -1,5 +1,25 @@
 # @mastra/factory
 
+## 0.17.3-alpha.6
+
+### Patch Changes
+
+- Fixed Factory runs starting in the wrong repository when a project links several repositories. Automatic runs now stop when the target cannot be determined instead of choosing the first repository. ([#25116](https://github.com/mastra-ai/mastra/pull/25116))
+
+- Blocked automatic Planning-to-Building transitions unless the project enables auto-approval or a person approves the plan. ([#25329](https://github.com/mastra-ai/mastra/pull/25329))
+
+- Fixed Factory sign-in on custom domains to explain that Mastra Platform authentication requires a Mastra-hosted domain and point to supported custom auth providers. ([#25326](https://github.com/mastra-ai/mastra/pull/25326))
+
+- Fixed the Label filter on the Factory Review and Work boards showing no values. Pull request, merge request, and Linear issue cards now carry their labels, so the boards can offer and filter by them. ([#25095](https://github.com/mastra-ai/mastra/pull/25095))
+
+- Slack setup prompts now tell people to mention the bot again, or message it again in direct messages, after connecting their account or picking a default factory. ([#25323](https://github.com/mastra-ai/mastra/pull/25323))
+
+- Fixed Slack default factory prompts so they appear as visible thread replies and notify the sender. ([#25323](https://github.com/mastra-ai/mastra/pull/25323))
+
+- Updated dependencies:
+  - @mastra/code-sdk@1.8.4-alpha.6
+  - @mastra/core@1.72.0-alpha.6
+
 ## 0.17.3-alpha.5
 
 ### Patch Changes
