@@ -10,7 +10,6 @@ import { isEmptyZodObject } from './is-empty-zod-object';
 import { CustomZodProvider } from './zod-provider';
 import { getShape } from './zod-provider/compat';
 import type { ButtonProps } from '@/ds/components/Button';
-import { Txt } from '@/ds/components/Txt';
 
 interface DynamicFormProps {
   schema: any;
@@ -49,14 +48,6 @@ const SubmitButton = ({ children }: { children: ReactNode }) => {
 };
 
 const uiComponents = { SubmitButton };
-
-const formComponents = {
-  Label: ({ value }: { value: string }) => (
-    <Txt as="span" variant="body-sm">
-      {value}
-    </Txt>
-  ),
-};
 
 export function DynamicForm({
   schema,
@@ -154,7 +145,6 @@ export function DynamicForm({
         defaultValues={normalizedDefaultValues}
         formProps={{ className, noValidate: true }}
         uiComponents={uiComponents}
-        formComponents={formComponents}
         withSubmit={true}
         readOnly={readOnly}
       >

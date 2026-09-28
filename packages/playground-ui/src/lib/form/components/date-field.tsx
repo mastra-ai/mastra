@@ -6,9 +6,8 @@ import { Button } from '@/ds/components/Button';
 import { DatePicker } from '@/ds/components/DateTimePicker';
 import { useFieldControlAria } from '@/ds/components/Field';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
-import { cn } from '@/utils/cn';
 
-export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, field, error }) => {
+export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, field }) => {
   const { key, ...props } = inputProps;
   const [value, setValue] = useState<Date | undefined>(undefined);
   const [open, setOpen] = useState(false);
@@ -48,7 +47,7 @@ export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, field, err
           {...fieldAria}
           variant="default"
           size="lg"
-          className={cn('w-full', error ? 'border-accent2' : '')}
+          className="w-full aria-invalid:border-destructive aria-invalid:focus-visible:border-destructive"
           icon={<CalendarIcon />}
         >
           {value ? (
