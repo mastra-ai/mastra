@@ -2,6 +2,7 @@ import { v4 as uuid } from '@lukeed/uuid';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
@@ -32,8 +33,9 @@ import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities'
 import { isAuthenticated } from '@/domains/auth/types';
 import type { ThreadDraftHandle } from '@/domains/conversation/context/ThreadInputContext';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
-import { cleanProviderId } from '@/domains/llm/utils';
 import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
+import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
+import { AgentRunActions } from '@/domains/run-options/components/agent-run-actions';
 
 function AgentThread() {
   const { agentId, threadId } = useParams();
@@ -45,8 +47,12 @@ function AgentThread() {
   const draftScope = [client.options.baseUrl, client.options.apiPrefix, userId, agentId];
   const draftKey = JSON.stringify([...draftScope, threadId ?? 'new']);
   const [searchParams] = useSearchParams();
-  const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
-  const { data: memory } = useMemory(agentId!);
+  const {
+    data: agent,
+    isLoading: isAgentLoading,
+    error,
+  } = useAgent(agentId!, useEntityRequestContext('agent', agentId!)[0]);
+  const { data: memory } = useMemory(agentId!, useEntityRequestContext('agent', agentId!)[0]);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const threadsPanel = useRef<CollapsiblePanelHandle>(null);
@@ -70,11 +76,14 @@ function AgentThread() {
     data: threads,
     isLoading: isThreadsLoading,
     refetch: refreshThreads,
-  } = useThreads({
-    agentId: agentId!,
-    isMemoryEnabled: hasMemory,
-    resourceId: agentId!,
-  });
+  } = useThreads(
+    {
+      agentId: agentId!,
+      isMemoryEnabled: hasMemory,
+      resourceId: agentId!,
+    },
+    useEntityRequestContext('agent', agentId!)[0],
+  );
 
   const sidebarThreads = useMemo(
     () =>
@@ -219,6 +228,7 @@ function AgentThread() {
                             messageId={messageId}
                             suggestedPrompts={suggestedPrompts}
                             isNewThread={isNewThread}
+                            runOptionsSlot={<AgentRunActions agentId={agentId!} />}
                           />
                         </div>
                       </div>

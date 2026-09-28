@@ -25,7 +25,7 @@ import { useAgentPlan } from '@/domains/agents/hooks/use-agent-plan';
 export interface SubmitPlanToolProps {
   agentId: string;
   agentVersionId?: string;
-  requestContext?: Record<string, unknown>;
+  requestContext?: Record<string, any>;
   toolName: string;
   toolCallId: string;
   output: unknown;
@@ -119,7 +119,7 @@ function SubmittedPlanCard({ plan }: { plan: SubmittedPlan }) {
 interface PendingPlanCardProps {
   agentId: string;
   agentVersionId?: string;
-  requestContext?: Record<string, unknown>;
+  requestContext?: Record<string, any>;
   toolCallId: string;
   path: string;
 }

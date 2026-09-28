@@ -4,7 +4,6 @@ import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-
 import { Download } from 'lucide-react';
 import { useState } from 'react';
 import { useWorkflowSchema } from '../../hooks/use-workflow-schema';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 interface SchemaImportProps {
   schemaType: 'input' | 'output';
@@ -80,9 +79,7 @@ export function SchemaImport({ schemaType, onImport }: SchemaImportProps) {
   const [sourceType, setSourceType] = useState<SourceType | ''>('');
   const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(null);
 
-  const { data: workflows, isLoading: workflowsLoading } = useWorkflows({
-    requestContext: usePlaygroundStore().requestContext,
-  });
+  const { data: workflows, isLoading: workflowsLoading } = useWorkflows({});
   const { data: workflowSchema, isLoading: schemaLoading } = useWorkflowSchema(
     sourceType === 'workflow' ? selectedWorkflow : null,
   );

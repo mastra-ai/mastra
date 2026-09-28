@@ -1581,14 +1581,16 @@ describe('Agent Routes Authorization', () => {
       resourceId,
       toolCallId = 'tool-call-1',
       threadId,
+      workflowName = 'durable-agentic-loop',
     }: {
       resourceId: string;
       toolCallId?: string;
       threadId?: string;
+      workflowName?: string;
     }) {
       const workflowsStore = await storage.getStore('workflows');
       await workflowsStore?.persistWorkflowSnapshot({
-        workflowName: 'durable-agentic-loop',
+        workflowName,
         runId: 'durable-run-1',
         snapshot: {
           runId: 'durable-run-1',

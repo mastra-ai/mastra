@@ -1,5 +1,30 @@
 # @mastra/discord
 
+## 1.2.0-alpha.0
+
+### Minor Changes
+
+- A bot token is now enough to configure `DiscordProvider` — `applicationId` and `publicKey` are resolved automatically from Discord's `GET /applications/@me` when omitted, then persisted alongside the token. ([#25125](https://github.com/mastra-ai/mastra/pull/25125))
+
+  ```typescript
+  // Before: all three credentials were required
+  new DiscordProvider({ app: { botToken, publicKey, applicationId } });
+
+  // After: the bot token alone works
+  new DiscordProvider({ app: { botToken } });
+  ```
+
+  Explicitly supplied values (config, `DISCORD_PUBLIC_KEY` / `DISCORD_APPLICATION_ID` env vars, or `configure()`) still take precedence over the resolved ones.
+
+### Patch Changes
+
+- Switching the Discord bot token via `configure()` now replaces the app config instead of merging into it. Previously the prior application's `publicKey` and `applicationId` survived the switch — including in persisted config — so the old application's Ed25519 key kept verifying inbound webhooks while the new bot token was active. The provider now drops everything derived from the old token and re-resolves the new application's identity from `GET /applications/@me`. ([#25149](https://github.com/mastra-ai/mastra/pull/25149))
+
+  For the same reason, `publicKey` and `applicationId` no longer fall back to `DISCORD_PUBLIC_KEY` / `DISCORD_APPLICATION_ID` when the bot token is supplied via config or `configure()` — stale environment values from a different application would otherwise attach to the new token. Environment fallback for those fields applies only when the bot token itself comes from `DISCORD_BOT_TOKEN`.
+
+- Updated dependencies [[`68cc668`](https://github.com/mastra-ai/mastra/commit/68cc66800e5ce6f5d62189fc7b5ef9d71cf80971), [`781762b`](https://github.com/mastra-ai/mastra/commit/781762b2dcd0c8cc7f9b8ab73824ec45a5225db7), [`cc0da13`](https://github.com/mastra-ai/mastra/commit/cc0da13b826d5f74213c4d8c470acf8698542249), [`f2c3f8c`](https://github.com/mastra-ai/mastra/commit/f2c3f8c74e1d7bc7baca5303b36320b0b361775c), [`1fe1c2b`](https://github.com/mastra-ai/mastra/commit/1fe1c2b6f0b29481dca62a9199af751d594e3ea6), [`279a736`](https://github.com/mastra-ai/mastra/commit/279a736c62495cac0f247ab1402a8c80bccc892a), [`4edc93d`](https://github.com/mastra-ai/mastra/commit/4edc93dedadb89686aad75a4853cb0aa807d256e)]:
+  - @mastra/core@1.72.0-alpha.2
+
 ## 1.1.0
 
 ### Minor Changes

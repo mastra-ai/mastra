@@ -1,5 +1,6 @@
 import { getRecentMessagesSettings } from './lib/recent-messages';
 import { useMemoryConfig } from '@/domains/memory/hooks';
+import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 
 export interface MemoryFeatureFlags {
   recentMessages: ReturnType<typeof getRecentMessagesSettings>;
@@ -13,7 +14,7 @@ export interface MemoryFeatureFlags {
  * on/off flags the sidebar renders.
  */
 export function useMemoryFeatureFlags(agentId: string): MemoryFeatureFlags {
-  const { data: memoryConfig } = useMemoryConfig(agentId);
+  const { data: memoryConfig } = useMemoryConfig(agentId, useEntityRequestContext('agent', agentId)[0]);
   const config = memoryConfig?.config;
 
   return {

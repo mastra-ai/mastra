@@ -1,6 +1,6 @@
 import { coreFeatures } from '@mastra/core/features';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { TracingSettingsProvider } from '@mastra/playground-ui/domains/observability/context/tracing-settings-context';
+import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { KeyboardScope } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { useParams, useLocation, useNavigate } from 'react-router';
@@ -15,9 +15,8 @@ import { PlaygroundModelProvider } from '@/domains/agents/context/playground-mod
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
-import { cleanProviderId } from '@/domains/llm/utils';
 import { agentCrumb, navCrumb } from '@/domains/navigation/crumbs';
-import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
+import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 import { RouteSidePanel } from '@/lib/route-side-panel';
 
 const crumbs = [navCrumb('/agents'), agentCrumb];
@@ -39,7 +38,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const showPlayground = isCmsAvailable && isExperimentalFeatures;
   const showObservability = hasObservability && isExperimentalFeatures;
 
-  const { data: agent } = useAgent(agentId!);
+  const { data: agent } = useAgent(agentId!, useEntityRequestContext('agent', agentId!)[0]);
 
   const defaultProvider = cleanProviderId(agent?.provider ?? '');
   const defaultModel = agent?.modelId ?? '';
@@ -53,42 +52,38 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
         : 'none';
 
   return (
-    <TracingSettingsProvider entityId={agentId!} entityType="agent">
-      <SchemaRequestContextProvider>
-        <PlaygroundModelProvider
-          key={`${agentId}:${defaultProvider}/${defaultModel}`}
-          defaultProvider={defaultProvider}
-          defaultModel={defaultModel}
+    <PlaygroundModelProvider
+      key={`${agentId}:${defaultProvider}/${defaultModel}`}
+      defaultProvider={defaultProvider}
+      defaultModel={defaultModel}
+    >
+      <KeyboardScope>
+        <AgentShortcuts agentId={agentId!} />
+        <OverviewPanelShortcuts />
+
+        <PageLayout
+          variant="fit"
+          breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+          headerActions={<AgentDetailHeaderActions agentId={agentId!} />}
         >
-          <KeyboardScope>
-            <AgentShortcuts agentId={agentId!} />
-            <OverviewPanelShortcuts />
+          <h1 className="sr-only">{agentId}</h1>
+          <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+            <AgentPageTabs
+              agentId={agentId!}
+              activeTab={activeTab}
+              showPlayground={showPlayground}
+              showObservability={showObservability}
+            />
+            {children}
+          </div>
+        </PageLayout>
 
-            <PageLayout
-              variant="fit"
-              breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-              headerActions={<AgentDetailHeaderActions agentId={agentId!} />}
-            >
-              <h1 className="sr-only">{agentId}</h1>
-              <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
-                <AgentPageTabs
-                  agentId={agentId!}
-                  activeTab={activeTab}
-                  showPlayground={showPlayground}
-                  showObservability={showObservability}
-                />
-                {children}
-              </div>
-            </PageLayout>
-
-            <RouteSidePanel owner="agent-detail">
-              <ActivatedSkillsProvider key={agentId}>
-                <AgentOverviewPanel agentId={agentId!} />
-              </ActivatedSkillsProvider>
-            </RouteSidePanel>
-          </KeyboardScope>
-        </PlaygroundModelProvider>
-      </SchemaRequestContextProvider>
-    </TracingSettingsProvider>
+        <RouteSidePanel owner="agent-detail">
+          <ActivatedSkillsProvider key={agentId}>
+            <AgentOverviewPanel agentId={agentId!} />
+          </ActivatedSkillsProvider>
+        </RouteSidePanel>
+      </KeyboardScope>
+    </PlaygroundModelProvider>
   );
 };

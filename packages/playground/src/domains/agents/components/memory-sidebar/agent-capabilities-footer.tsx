@@ -13,6 +13,7 @@ import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useMemory } from '@/domains/memory/hooks/use-memory';
+import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 
 type CapabilityTone = 'purple' | 'amber' | 'emerald' | 'sky' | 'cyan' | 'orange';
 
@@ -136,7 +137,7 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
 // Each capability component owns its data and loading state; React Query
 // dedupes the underlying requests across instances — see client-request-dedupe.
 function MemoryCapability({ agentId, view }: AgentCapabilityProps) {
-  const { data: memory, isLoading } = useMemory(agentId);
+  const { data: memory, isLoading } = useMemory(agentId, useEntityRequestContext('agent', agentId)[0]);
   const enabled = hasConfiguredMemory(memory);
 
   const settledStatus = enabled ? (memory?.memoryType === 'gateway' ? 'Gateway' : 'On') : 'Off';
@@ -161,7 +162,7 @@ function MemoryCapability({ agentId, view }: AgentCapabilityProps) {
 }
 
 function EditorCapability({ agentId, view }: AgentCapabilityProps) {
-  const { data: agent, isLoading: isAgentLoading } = useAgent(agentId);
+  const { data: agent, isLoading: isAgentLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
   const { isCmsAvailable, isLoading: isCmsAvailabilityLoading } = useIsCmsAvailable();
   const enabled = isEditorAvailable(agent, isCmsAvailable);
   const locked = agent?.editor === false;
@@ -197,7 +198,7 @@ function EditorCapability({ agentId, view }: AgentCapabilityProps) {
 }
 
 function ToolsCapability({ agentId, view }: AgentCapabilityProps) {
-  const { data: agent, isLoading } = useAgent(agentId);
+  const { data: agent, isLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
   const count = getRecordCount(agent?.tools);
 
   return (
@@ -215,7 +216,7 @@ function ToolsCapability({ agentId, view }: AgentCapabilityProps) {
 }
 
 function WorkflowsCapability({ agentId, view }: AgentCapabilityProps) {
-  const { data: agent, isLoading } = useAgent(agentId);
+  const { data: agent, isLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
   const count = getRecordCount(agent?.workflows);
 
   return (
@@ -235,7 +236,7 @@ function WorkflowsCapability({ agentId, view }: AgentCapabilityProps) {
 }
 
 function SubAgentsCapability({ agentId, view }: AgentCapabilityProps) {
-  const { data: agent, isLoading } = useAgent(agentId);
+  const { data: agent, isLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
   const count = getRecordCount(agent?.agents);
 
   return (
@@ -257,7 +258,7 @@ function SubAgentsCapability({ agentId, view }: AgentCapabilityProps) {
 }
 
 function ProcessorsCapability({ agentId, view }: AgentCapabilityProps) {
-  const { data: agent, isLoading } = useAgent(agentId);
+  const { data: agent, isLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
   const count = getProcessorCount(agent);
 
   return (
@@ -279,8 +280,8 @@ function ProcessorsCapability({ agentId, view }: AgentCapabilityProps) {
 }
 
 function CapabilitiesSummary({ agentId }: { agentId: string }) {
-  const { data: memory } = useMemory(agentId);
-  const { data: agent } = useAgent(agentId);
+  const { data: memory } = useMemory(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: agent } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
   const { isCmsAvailable } = useIsCmsAvailable();
 
   const enabledFlags = [

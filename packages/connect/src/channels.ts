@@ -1,9 +1,9 @@
 import type { ChannelProvider } from '@mastra/core/channels';
 
-import type { ConnectClientOptions, ConnectionCredential, ProjectConnection, ResolvedClient } from './client.js';
+import type { ConnectClientOptions, ProjectConnection } from './client.js';
 import { getConnectionContext, getCredential, listProjectConnections, resolveClient } from './client.js';
 import { MastraConnectError } from './errors.js';
-import type { ChannelBuildContext, ChannelProviderRegistration } from './providers/channel-provider.js';
+import type { ChannelInstance, ChannelProviderRegistration, ChannelRuntime } from './providers/channel-provider.js';
 import type {
   DiscordReservedProviderOption,
   SlackReservedProviderOption,
@@ -11,6 +11,8 @@ import type {
 } from './providers/channels.js';
 import { CHANNELS } from './registry.js';
 import { groupByIntegrationId, validateIntegrationOverrides } from './resolution.js';
+
+type ApiRoute = ReturnType<ChannelProvider['getRoutes']>[number];
 
 /**
  * `providerOptions` fields that `channels()` refuses to forward to a
@@ -45,9 +47,9 @@ export type DiscordChannelsProviderOptions = Record<string, unknown> & {
 export interface ChannelsIntegrationOptions<ProviderOptions = Record<string, unknown>> {
   /** Pin a specific connection id (bypasses single-active-connection resolution). */
   connectionId?: string;
-  /** Exclude this provider entirely, even if a connection exists. */
+  /** Exclude this provider entirely — no instance is constructed and no routes are mounted. */
   disabled?: boolean;
-  /** Provider-specific options merged into the second argument of `ChannelProviderRegistration.build()`. */
+  /** Provider-specific options merged into the first argument of `ChannelProviderRegistration.create()`. */
   providerOptions?: ProviderOptions;
 }
 
@@ -75,15 +77,16 @@ export interface ChannelsOptions {
 
 /**
  * The result of resolving a project's connections into a
- * `ChannelProvider` map. Assignable directly to `Mastra({ channels })`.
+ * `ChannelProvider` map: integrations with an active connection, keyed by
+ * integrationId.
  */
 export type ResolvedChannels = Record<string, ChannelProvider>;
 
 /**
- * Callback context passed to `channels()`'s resolver when invoked with a
- * runtime context. Mirrors the shape used by `tools()` and other dynamic
- * agent fields — currently unused (per-request provider variance isn't
- * modeled here) but kept for signature symmetry.
+ * Callback context passed to the resolver when invoked with a runtime
+ * context. Mirrors `@mastra/core`'s `ChannelsResolverContext` — Mastra passes
+ * `{ mastra }` from `resolveChannels()`; the resolver currently doesn't vary
+ * output by context.
  */
 export interface ChannelsResolverContext {
   requestContext?: unknown;
@@ -91,27 +94,27 @@ export interface ChannelsResolverContext {
 }
 
 /**
- * The value returned by `channels()`. Symmetric with `tools()`:
+ * The value `channels()` resolves to. Satisfies `@mastra/core`'s
+ * `ChannelsResolver` contract, so it can be handed to
+ * `new Mastra({ channels })` directly:
  *
- * - Thenable — `await channels({ projectId })` yields a
- *   `Record<string, ChannelProvider>` directly, ready to hand to
- *   `new Mastra({ channels: await channels({ projectId }) })`.
- * - Callable — `channels(opts)(ctx)` returns the same
- *   `Record<string, ChannelProvider>`; identical to `await channels(opts)`.
- * - Handles — `invalidate()` / `refresh()` / `disconnect()` scope to the
- *   resolver's private cache only. `Mastra({ channels })` reads the
- *   `Record<string, ChannelProvider>` **synchronously** at construction time,
- *   so the constructed Mastra instance will not pick up newly-added
- *   connections or rotated credentials without a restart. These handles are
- *   for standalone/test usage where the resolver is being called directly —
- *   not for the Mastra-registered snapshot.
+ * - Callable — returns the current `Record<string, ChannelProvider>` of
+ *   integrations with an active connection. Mastra invokes it via
+ *   `resolveChannels()`; the TTL cache makes repeat calls cheap.
+ * - `getRoutes()` — the union of routes for every non-disabled channel,
+ *   available synchronously so Mastra can mount them at construction. Routes
+ *   exist before (and after) their integration has an active connection.
+ * - Handles — `invalidate()` / `refresh()` / `disconnect()` control the
+ *   resolver's private cache; `refresh()` forces a platform fetch now.
  */
-export interface ChannelsResolver extends PromiseLike<ResolvedChannels> {
-  /** Callable form used for symmetry with `tools()`; returns the resolved map. */
+export interface ChannelsResolver {
+  /** Returns the current provider map for integrations with an active connection. */
   (context?: ChannelsResolverContext): Promise<ResolvedChannels>;
+  /** Union of API routes for every non-disabled channel integration. */
+  getRoutes(): ApiRoute[];
   /** Drops the cached snapshot; the next resolution fetches fresh from the platform. */
   invalidate(): void;
-  /** Fetches providers from the platform now and updates the cache. Rejects if the platform fetch fails. */
+  /** Fetches connections from the platform now and updates the cache. Rejects if the platform fetch fails. */
   refresh(): Promise<ResolvedChannels>;
   /** Clears the cached snapshot. Reserved for symmetry with `tools()`; currently a no-op beyond invalidation. */
   disconnect(): Promise<void>;
@@ -121,17 +124,31 @@ const DEFAULT_TTL_MS = 30_000;
 /** Minimum wait after a failed platform fetch before another background revalidation. */
 const FAILURE_COOLDOWN_MS = 30_000;
 
+/** One registration's long-lived provider plus its currently-selected connection. */
+interface IntegrationState {
+  registration: ChannelProviderRegistration;
+  instance: ChannelInstance;
+  /** Selected active connection id, updated on every resolution. `undefined` = no active connection. */
+  connectionId: string | undefined;
+}
+
 /**
- * Returns a live channels resolver over the project's Platform connections.
- * Channel-capable integrations (Slack, Telegram, Discord) with an active
- * project connection are materialized into `ChannelProvider` instances ready
- * to hand to `new Mastra({ channels: await channels({...}) })`.
+ * Returns a live channels resolver over the project's Platform connections,
+ * ready to hand to `new Mastra({ channels: await channels({...}) })`.
+ *
+ * Provider instances for every channel-capable integration (Slack, Telegram,
+ * Discord) are constructed once, up front and credential-less, so their
+ * webhook/OAuth routes can mount at Mastra construction. Each resolution
+ * fetches the project's connections and late-binds credentials into the live
+ * instances: integrations with an active connection appear in the resolved
+ * map, others don't — so connecting a new channel on the platform takes
+ * effect without redeploying the app.
  *
  * Configuration errors (missing project id, bad ttlMs, malformed integration
- * id) throw at call time so they surface at startup. Actionable per-integration
- * problems during resolution (needs re-auth, ambiguity, provider build failure)
- * are downgraded to warn-and-skip so one bad integration never takes down the
- * whole map.
+ * id) reject at call time so they surface at startup. Actionable
+ * per-integration problems (provider construction failure, needs re-auth,
+ * ambiguity, credential sync failure) are downgraded to warn-and-skip so one
+ * bad integration never takes down the whole map.
  *
  * @example
  * ```ts
@@ -144,7 +161,7 @@ const FAILURE_COOLDOWN_MS = 30_000;
  * });
  * ```
  */
-export function channels(options: ChannelsOptions = {}): ChannelsResolver {
+export async function channels(options: ChannelsOptions = {}): Promise<ChannelsResolver> {
   const projectId = options.projectId?.trim() || process.env.MASTRA_PROJECT_ID?.trim();
   if (!projectId) {
     throw new MastraConnectError('missing_project_id', 'Missing project id: set MASTRA_PROJECT_ID or pass projectId.');
@@ -159,6 +176,53 @@ export function channels(options: ChannelsOptions = {}): ChannelsResolver {
 
   const ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
   const client = resolveClient(options.client);
+
+  // Construct long-lived provider instances up front (dynamic package import
+  // + credential-less constructor; no platform calls) so `getRoutes()` is
+  // synchronous and the instances survive across resolutions.
+  const states: IntegrationState[] = [];
+  for (const registration of CHANNELS) {
+    const overrides = options.integrations?.[registration.integrationId] ?? {};
+    if (overrides.disabled) continue;
+
+    const state: IntegrationState = { registration, instance: undefined as never, connectionId: undefined };
+    const runtime: ChannelRuntime = {
+      client,
+      getConnectionId: () => state.connectionId,
+      getCredential: async () => {
+        const connectionId = state.connectionId;
+        if (!connectionId) {
+          throw new MastraConnectError(
+            'no_active_connection',
+            `No active ${registration.integrationId} connection for project ${projectId}. Connect one on the platform, then retry.`,
+          );
+        }
+        return getCredential(client, connectionId);
+      },
+      getConnectionContext: async () => {
+        const connectionId = state.connectionId;
+        if (!connectionId) return undefined;
+        try {
+          return await getConnectionContext(client, connectionId);
+        } catch {
+          // Metadata is optional; providers that need it will surface the miss.
+          return undefined;
+        }
+      },
+    };
+    try {
+      state.instance = await registration.create(overrides.providerOptions ?? {}, runtime);
+    } catch (error) {
+      // Warn-and-skip so one broken integration (e.g. a failed module load)
+      // never takes down the others. The skipped channel gets no routes and
+      // never appears in the resolved map.
+      console.warn(
+        `[@mastra/connect] Skipping ${registration.integrationId} channel: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      continue;
+    }
+    states.push(state);
+  }
 
   let cache: { providers: ResolvedChannels; fetchedAt: number } | undefined;
   let inflight: Promise<ResolvedChannels> | undefined;
@@ -175,21 +239,36 @@ export function channels(options: ChannelsOptions = {}): ChannelsResolver {
     const byIntegrationId = groupByIntegrationId(connections);
     const providers: ResolvedChannels = {};
 
-    for (const registration of CHANNELS) {
-      const integrationId = registration.integrationId;
+    for (const state of states) {
+      const integrationId = state.registration.integrationId;
       const overrides = options.integrations?.[integrationId] ?? {};
-      if (overrides.disabled) continue;
-
       const candidates = byIntegrationId.get(integrationId) ?? [];
-      if (candidates.length === 0) continue;
 
-      const connectionId = selectChannelConnection(integrationId, overrides.connectionId, candidates);
-      if (!connectionId) continue; // warned + skipped
+      const connectionId =
+        candidates.length === 0
+          ? undefined
+          : selectChannelConnection(integrationId, overrides.connectionId, candidates);
+      // Update the runtime view first: the provider's lazy credential fetches
+      // (e.g. Slack's tokenResolver) read this on their next call. When the
+      // connection is gone we exclude the provider from the map but never
+      // clear its credentials — clearing is destructive on some providers
+      // (Discord deletes the stored app config) and live installations keep
+      // working from provider-managed storage.
+      state.connectionId = connectionId;
+      if (!connectionId) continue; // warned + skipped (or simply not connected)
 
-      const provider = await buildProvider(registration, connectionId, overrides, client);
-      if (!provider) continue; // warned + skipped
+      if (state.instance.sync) {
+        try {
+          await state.instance.sync();
+        } catch (error) {
+          console.warn(
+            `[@mastra/connect] Skipping ${integrationId} channel: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          continue;
+        }
+      }
 
-      providers[integrationId] = provider;
+      providers[integrationId] = state.instance.provider;
     }
 
     lastFailureAt = undefined;
@@ -233,9 +312,10 @@ export function channels(options: ChannelsOptions = {}): ChannelsResolver {
     return refresh();
   };
 
-  // Kept callable for signature symmetry with `tools()`; the context is
-  // ignored (per-request provider variance isn't modeled here).
+  // The context is accepted for the core `ChannelsResolver` contract; output
+  // doesn't vary by context (channel resolution is instance-scoped).
   const invocable = ((_context?: ChannelsResolverContext) => resolve()) as ChannelsResolver;
+  invocable.getRoutes = (): ApiRoute[] => states.flatMap(state => state.instance.provider.getRoutes());
   invocable.invalidate = (): void => {
     cache = undefined;
   };
@@ -243,44 +323,7 @@ export function channels(options: ChannelsOptions = {}): ChannelsResolver {
   invocable.disconnect = async (): Promise<void> => {
     cache = undefined;
   };
-  // Thenable so `await channels({...})` resolves to the map directly.
-  (invocable as unknown as { then: PromiseLike<ResolvedChannels>['then'] }).then = ((onfulfilled, onrejected) =>
-    resolve().then(onfulfilled as never, onrejected as never)) as PromiseLike<ResolvedChannels>['then'];
   return invocable;
-}
-
-async function buildProvider(
-  registration: ChannelProviderRegistration,
-  connectionId: string,
-  overrides: ChannelsIntegrationOptions,
-  client: ResolvedClient,
-): Promise<ChannelProvider | undefined> {
-  let credential: ConnectionCredential;
-  try {
-    credential = await getCredential(client, connectionId);
-  } catch (error) {
-    console.warn(
-      `[@mastra/connect] Skipping ${registration.integrationId} channel: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    return undefined;
-  }
-
-  let context: ChannelBuildContext = { connectionId, client };
-  try {
-    const connectionContext = await getConnectionContext(client, connectionId);
-    context = { connectionId, client, context: connectionContext };
-  } catch {
-    // Metadata is optional; providers that need it will surface the miss.
-  }
-
-  try {
-    return await registration.build(credential, overrides.providerOptions ?? {}, context);
-  } catch (error) {
-    console.warn(
-      `[@mastra/connect] Skipping ${registration.integrationId} channel: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    return undefined;
-  }
 }
 
 /**

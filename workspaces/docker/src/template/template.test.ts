@@ -141,6 +141,7 @@ describe('DockerTemplate.build', () => {
     expect(mockDocker.buildImage).toHaveBeenCalledTimes(1);
     const [, opts] = mockDocker.buildImage.mock.calls[0];
     expect(opts.t).toBe(template.templateId);
+    expect(opts.forcerm).toBe(true);
   });
 
   it('shares one in-flight build across concurrent callers', async () => {
@@ -261,7 +262,7 @@ describe('DockerTemplate.build', () => {
     const template = new DockerTemplate().runCmd('echo hi');
     await template.build({ force: true });
     expect(mockDocker.buildImage).toHaveBeenCalledTimes(1);
-    expect(mockDocker.buildImage.mock.calls[0]![1]).toEqual({ t: template.templateId, nocache: true });
+    expect(mockDocker.buildImage.mock.calls[0]![1]).toEqual({ t: template.templateId, nocache: true, forcerm: true });
   });
 
   const sessionSecrets = (call = 0) => mockOpenBuildSession.mock.calls[call]![1];

@@ -56,7 +56,7 @@ const asHandledStreamChunk = (chunk: unknown): HandledStreamChunk | undefined =>
 
 interface SendDeps {
   model?: string;
-  requestContext?: Record<string, unknown>;
+  requestContext?: Record<string, any>;
   agentVersionId?: string;
   threadId?: string;
   modelSettingsArgs: Record<string, unknown>;
@@ -69,7 +69,7 @@ interface SendDeps {
 
 interface UseChatSendHandlerArgs {
   agentId: string;
-  requestContext?: Record<string, unknown>;
+  requestContext?: Record<string, any>;
   agentVersionId?: string;
   threadId?: string;
   modelSettingsArgs: Record<string, unknown>;

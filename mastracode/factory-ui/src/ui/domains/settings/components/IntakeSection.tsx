@@ -8,7 +8,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
-import { useIncidentioSourcesQuery } from '../../../../hooks/useIncidentioData';
+import { useIncidentioSourcesQuery, useIncidentioStatusQuery } from '../../../../hooks/useIncidentioData';
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
 import { useJiraProjectsQuery, useJiraStatusQuery } from '../../../../hooks/useJiraData';
@@ -390,14 +390,23 @@ function IncidentioIntakeSection({
   const provider = 'incident-io';
   const meta = PLATFORM_CONNECT_PROVIDERS[provider];
   const connectionsQuery = usePlatformConnectionsQuery(provider);
+  const statusQuery = useIncidentioStatusQuery();
+  // A deployment-configured API key serves follow-ups without any Platform
+  // connection — the section must stay reachable so the org can still select
+  // and route sources.
+  const directConfigured = Boolean(
+    statusQuery.data?.enabled &&
+    statusQuery.data.configured &&
+    statusQuery.data.mode === 'api-key' &&
+    statusQuery.data.reason === 'ready',
+  );
   const active = connectionsQuery.data?.filter(connection => connection.status === 'active') ?? [];
-  const sourcesQuery = useIncidentioSourcesQuery(active.length > 0);
-  if (connectionsQuery.isPending) return null;
-  if (connectionsQuery.isError) {
-    // 403/404 means the feature isn't offered here — hide the section. A
-    // transient failure must keep the section reachable with a retry, or an
+  const credentialActive = active.length > 0 || directConfigured;
+  const sourcesQuery = useIncidentioSourcesQuery(credentialActive);
+  if (connectionsQuery.isPending || statusQuery.isPending) return null;
+  if (connectionsQuery.isError && !directConfigured && !isPlatformConnectUnavailableError(connectionsQuery.error)) {
+    // A transient failure must keep the section reachable with a retry, or an
     // org with incident.io connected silently loses its sync settings.
-    if (isPlatformConnectUnavailableError(connectionsQuery.error)) return null;
     return (
       <SettingsSubsection
         scope="org"
@@ -411,23 +420,32 @@ function IncidentioIntakeSection({
       />
     );
   }
-  const connections = connectionsQuery.data;
+  // 403/404 means Platform connections aren't offered here — hide the section
+  // unless a deployment API key serves the feature anyway.
+  if (connectionsQuery.isError && !directConfigured) return null;
+  const connections = connectionsQuery.isError ? [] : connectionsQuery.data;
   const needsReauth = connections.some(connection => connection.status === 'needs_reauth');
   const sources = sourcesQuery.data ?? [];
 
-  const action =
-    connections.length === 0 ? (
-      <ProviderConnectControl provider={provider} label={`Connect ${meta.displayName}`} />
-    ) : (
-      <span className="flex items-center gap-2">
-        <Txt as="span" variant="caption" className="text-muted-foreground">
-          {active.length === 1
-            ? (active[0]?.accountLabel ?? `${meta.displayName} connected`)
-            : `${active.length} ${meta.displayName} accounts connected`}
-        </Txt>
-        <ProviderConnectControl provider={provider} label="Connect another" size="sm" variant="ghost" />
-      </span>
-    );
+  // A direct API key takes precedence over Platform connections server-side,
+  // so connect controls are only offered when Platform connections drive the
+  // integration.
+  const action = directConfigured ? (
+    <Txt as="span" variant="caption" className="text-muted-foreground">
+      incident.io API key configured on this server
+    </Txt>
+  ) : connections.length === 0 ? (
+    <ProviderConnectControl provider={provider} label={`Connect ${meta.displayName}`} />
+  ) : (
+    <span className="flex items-center gap-2">
+      <Txt as="span" variant="caption" className="text-muted-foreground">
+        {active.length === 1
+          ? (active[0]?.accountLabel ?? `${meta.displayName} connected`)
+          : `${active.length} ${meta.displayName} accounts connected`}
+      </Txt>
+      <ProviderConnectControl provider={provider} label="Connect another" size="sm" variant="ghost" />
+    </span>
+  );
 
   const sourceIds = config.incidentio.sourceIds ?? [];
   return (
@@ -436,23 +454,25 @@ function IncidentioIntakeSection({
         scope="org"
         title="incident.io follow-ups"
         description={
-          needsReauth
+          needsReauth && !directConfigured
             ? 'An incident.io account needs to be reconnected to keep syncing follow-ups.'
             : 'Choose where outstanding follow-ups from connected incident.io accounts should be routed. Incidents stay out of intake.'
         }
         action={action}
       >
-        {connections.length > 0 && (
+        {(connections.length > 0 || directConfigured) && (
           <SettingsContainer>
             <SettingsRow label="Sync incident.io follow-ups">
               <Switch
                 aria-label="Sync incident.io follow-ups"
                 checked={config.incidentio.enabled}
-                disabled={busy || active.length === 0}
+                disabled={busy || !credentialActive}
                 onCheckedChange={enabled => update({ ...config, incidentio: { ...config.incidentio, enabled } })}
               />
             </SettingsRow>
-            <ProviderConnectionsList provider={provider} connections={connections} />
+            {!directConfigured && connections.length > 0 && (
+              <ProviderConnectionsList provider={provider} connections={connections} />
+            )}
             <SettingsRow
               label="Incident board configuration"
               description="Configure a dedicated board for incident response."
@@ -461,14 +481,14 @@ function IncidentioIntakeSection({
                 Coming soon
               </Badge>
             </SettingsRow>
-            {config.incidentio.enabled && active.length > 0 && sourcesQuery.isError && (
+            {config.incidentio.enabled && credentialActive && sourcesQuery.isError && (
               <SettingsRow label="Follow-up sources" description="Couldn't load follow-up sources.">
                 <Button size="sm" variant="ghost" onClick={() => void sourcesQuery.refetch()}>
                   Retry
                 </Button>
               </SettingsRow>
             )}
-            {config.incidentio.enabled && active.length > 0 && !sourcesQuery.isError && (
+            {config.incidentio.enabled && credentialActive && !sourcesQuery.isError && (
               <SourcePicker
                 label="Follow-up sources"
                 groups={[

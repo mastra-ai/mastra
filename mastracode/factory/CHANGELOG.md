@@ -1,5 +1,65 @@
 # @mastra/factory
 
+## 0.17.3-alpha.5
+
+### Patch Changes
+
+- Fixed Factory builds approved by someone other than the plan's owner starting in a new, empty session. The build now continues in the plan's session so it keeps the plan, and the planning agent stops once the build starts. Comments and edits on a GitHub issue no longer restart triage while its card is being built or reviewed ([#25230](https://github.com/mastra-ai/mastra/issues/25230)). ([#25270](https://github.com/mastra-ai/mastra/pull/25270))
+
+- Board transitions and linked work item cards now apply while agent runs occupy every dispatch slot. Previously, closing an issue or opening a PR while `MASTRACODE_DISPATCH_MAX_IN_FLIGHT` runs were active left the card's stage stale until a run finished. Bookkeeping decisions now use their own small dispatch pool, so the board keeps mirroring GitHub while agents work. ([#25289](https://github.com/mastra-ai/mastra/pull/25289))
+
+- Fixed Factory kickoffs being delivered several times when they arrived while the previous run was ending. A kickoff queued onto an ending run is now resent only if it never showed up in the thread, and it is dropped instead of resent once the card has moved to another stage or its role was handed over. This stops a finished phase from restarting and pushing extra commits. ([#25277](https://github.com/mastra-ai/mastra/pull/25277))
+
+- Fixed Factory work sessions being able to load the review skills and approve their own pull requests. The factory-review, factory-rereview, factory-gitlab-review, and factory-gitlab-rereview skills are now only available to sessions running a Review phase ([#25228](https://github.com/mastra-ai/mastra/issues/25228)). ([#25273](https://github.com/mastra-ai/mastra/pull/25273))
+
+- Updated dependencies [[`43fbe75`](https://github.com/mastra-ai/mastra/commit/43fbe75535650345cf61dee00cf3e7b3f5efaf7f), [`ebd03fd`](https://github.com/mastra-ai/mastra/commit/ebd03fd3bc93fe3930747956724252f7c8834826), [`2c57ba8`](https://github.com/mastra-ai/mastra/commit/2c57ba896b04215fface2a8216b88fe59cfdd041), [`f6effda`](https://github.com/mastra-ai/mastra/commit/f6effdabafa9fc6388478b3e281ad4c457d4200b), [`7f4ce21`](https://github.com/mastra-ai/mastra/commit/7f4ce2190029710851d95f7b75a2fb724782483c), [`1ba1588`](https://github.com/mastra-ai/mastra/commit/1ba158873dadf3d290b111981c3bc7ef95ab1d1c), [`b537ab1`](https://github.com/mastra-ai/mastra/commit/b537ab14714870e058775530bc55b37c9115613f), [`d4e350a`](https://github.com/mastra-ai/mastra/commit/d4e350a5c1e29a7da5a22da52ed1f33431403012), [`285828e`](https://github.com/mastra-ai/mastra/commit/285828ec03fdf4ffca92cbec22d2dc904989d0f8)]:
+  - @mastra/core@1.72.0-alpha.5
+  - @mastra/auth-workos@1.6.6-alpha.0
+  - @mastra/code-sdk@1.8.4-alpha.5
+
+## 0.17.3-alpha.4
+
+### Patch Changes
+
+- New GitHub issues now create Factory work items when events are polled. Open issues filed after a repository was linked are recovered by the issue reconcile sweep when they have no work item. Changes to existing issues re-evaluate their linked work items. Events skipped during polling are logged at debug level. ([#25201](https://github.com/mastra-ai/mastra/pull/25201))
+
+- Updated dependencies [[`9773cb2`](https://github.com/mastra-ai/mastra/commit/9773cb2f22f307c8017f887af4a6728c4cb875c9)]:
+  - @mastra/core@1.72.0-alpha.4
+  - @mastra/code-sdk@1.8.4-alpha.4
+
+## 0.17.3-alpha.3
+
+### Patch Changes
+
+- Added in-app GitHub and GitLab connections during Factory onboarding. Users can connect GitHub through the GitHub App install flow and connect GitLab without routing through Mastra Platform. The create-factory wizard now supports back navigation between steps. ([#24855](https://github.com/mastra-ai/mastra/pull/24855))
+
+- Added incident.io intake for self-managed servers: the generated Factory Server now wires the incident.io integration from INCIDENT_IO_API_KEY, and the incident.io status route reports the credential mode so clients can tell a deployment API key from Platform-managed connections. ([#25178](https://github.com/mastra-ai/mastra/pull/25178))
+
+  ```ts
+  import { MastraFactory } from '@mastra/factory';
+  import { IncidentioIntegration } from '@mastra/factory/integrations/incidentio/integration';
+
+  const factory = new MastraFactory({
+    // ...
+    integrations: [new IncidentioIntegration({ apiKey: process.env.INCIDENT_IO_API_KEY! })],
+  });
+  ```
+
+- Updated dependencies [[`77c6f1c`](https://github.com/mastra-ai/mastra/commit/77c6f1cf14ba9ba47257829646a4569c4462d12f), [`3d25340`](https://github.com/mastra-ai/mastra/commit/3d2534080417711d1baf2ad947d1205ca95a34cd), [`7540eb1`](https://github.com/mastra-ai/mastra/commit/7540eb176c32ffbff45ccc64a8d8fce82ce42a94), [`afc53be`](https://github.com/mastra-ai/mastra/commit/afc53be4c95e83e8613f4e080b5a1926e63c5da6), [`b33985e`](https://github.com/mastra-ai/mastra/commit/b33985eac3e019f58d3785c48ef85eae48b4e068), [`32d71df`](https://github.com/mastra-ai/mastra/commit/32d71df2ce71573b40f9a62b8ac510ad6eadd859), [`444debd`](https://github.com/mastra-ai/mastra/commit/444debd7104ada74fa15d0e70703ee9be180fc75), [`9997948`](https://github.com/mastra-ai/mastra/commit/99979482956903a2cd685b31f53370dd33074799), [`7540eb1`](https://github.com/mastra-ai/mastra/commit/7540eb176c32ffbff45ccc64a8d8fce82ce42a94), [`9623397`](https://github.com/mastra-ai/mastra/commit/96233975b75135852c9b1616b91fd8cb54c77a53)]:
+  - @mastra/core@1.72.0-alpha.3
+  - @mastra/code-sdk@1.8.4-alpha.3
+
+## 0.17.3-alpha.2
+
+### Patch Changes
+
+- Factory reviews no longer publish a verdict on a pull request head that has already moved. Before posting, the review and re-review skills check that the PR head still matches the commit they verified. If a push landed mid-review, they review the new commits before publishing. ([#25139](https://github.com/mastra-ai/mastra/pull/25139))
+
+- Updated dependencies [[`c3bc77c`](https://github.com/mastra-ai/mastra/commit/c3bc77ca9e1e665d9e0ad2bfd15a88ad71461f12), [`68cc668`](https://github.com/mastra-ai/mastra/commit/68cc66800e5ce6f5d62189fc7b5ef9d71cf80971), [`781762b`](https://github.com/mastra-ai/mastra/commit/781762b2dcd0c8cc7f9b8ab73824ec45a5225db7), [`cc0da13`](https://github.com/mastra-ai/mastra/commit/cc0da13b826d5f74213c4d8c470acf8698542249), [`f2c3f8c`](https://github.com/mastra-ai/mastra/commit/f2c3f8c74e1d7bc7baca5303b36320b0b361775c), [`1fe1c2b`](https://github.com/mastra-ai/mastra/commit/1fe1c2b6f0b29481dca62a9199af751d594e3ea6), [`279a736`](https://github.com/mastra-ai/mastra/commit/279a736c62495cac0f247ab1402a8c80bccc892a), [`4edc93d`](https://github.com/mastra-ai/mastra/commit/4edc93dedadb89686aad75a4853cb0aa807d256e)]:
+  - @mastra/slack@1.7.0-alpha.0
+  - @mastra/core@1.72.0-alpha.2
+  - @mastra/code-sdk@1.8.4-alpha.2
+
 ## 0.17.3-alpha.1
 
 ### Patch Changes
