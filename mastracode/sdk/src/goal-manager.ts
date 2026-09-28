@@ -258,7 +258,6 @@ export class GoalManager {
     if (!this.record && this.pendingDelete) {
       const clearedThreadId = this.pendingDelete.threadId;
       if (clearedThreadId === undefined || clearedThreadId === threadId) {
-        this.pendingDelete = null;
         await this.deleteFromThread(state);
       }
       return;
@@ -320,10 +319,10 @@ export class GoalManager {
    * writes nothing with an empty mirror unless {@link clear} ran. That asymmetry is deliberate: a
    * pre-migration goal must not resurface from the legacy key after a clear.
    * Like the save, this is best-effort: a failed durable delete also skips the
-   * legacy wipe.
+   * legacy wipe. A pending {@link clear} stays pending until both writes
+   * succeed, so a later save retries it.
    */
   async deleteFromThread(state: GoalManagerState): Promise<void> {
-    this.pendingDelete = null;
     const threadId = state.session.thread.getId();
     const agent = this.getAgent(state);
     try {
@@ -331,6 +330,7 @@ export class GoalManager {
         await agent.clearObjective({ threadId });
       }
       await state.session.thread.setSetting({ key: THREAD_GOAL_KEY, value: undefined });
+      this.pendingDelete = null;
     } catch {
       // Persistence is not critical.
     }

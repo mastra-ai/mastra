@@ -448,6 +448,24 @@ describe('GoalManager adapter', () => {
     expect(agent.clearObjective).toHaveBeenCalledTimes(1);
   });
 
+  it('retries a clear on the next save when the delete fails', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+
+    manager.clear();
+    agent.clearObjective.mockRejectedValueOnce(new Error('store unavailable'));
+    await manager.saveToThread(state);
+    expect(agent.clearObjective).toHaveBeenCalledTimes(1);
+
+    await manager.saveToThread(state);
+    expect(agent.clearObjective).toHaveBeenCalledTimes(2);
+
+    await manager.saveToThread(state);
+    expect(agent.clearObjective).toHaveBeenCalledTimes(2);
+  });
+
   it('does not delete on a save after clear() when a new goal was set in between', async () => {
     const agent = createAgent();
     const state = createState(agent);
