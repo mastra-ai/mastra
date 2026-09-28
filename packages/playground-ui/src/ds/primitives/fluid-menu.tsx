@@ -24,7 +24,6 @@ import { cn } from '@/lib/utils';
  * considers highlighted (Base UI: `data-highlighted`, cmdk: `data-selected`),
  * or moves focus onto it (roving-focus lists), and the item hook mirrors that
  * onto the fluid highlight, so arrow keys move the same surface the mouse does.
- * While the pointer steers, only a hovered row may take it: Base UI's `autoHighlight` flashes row 0 on every row crossing.
  *
  * A row whose submenu is open (`data-popup-open`) holds the highlight once the
  * pointer leaves for the submenu, so the path to the open submenu stays lit
@@ -32,7 +31,7 @@ import { cn } from '@/lib/utils';
  */
 type FluidMenuContextValue = {
   registerItem: UseFluidHoverReturn['registerItem'];
-  followLibraryHighlight: (index: number, row: HTMLElement) => void;
+  setActiveIndex: UseFluidHoverReturn['setActiveIndex'];
   activeAttr: string;
   allocateIndex: () => number;
   releaseIndex: (index: number) => void;
@@ -84,7 +83,6 @@ export function useFluidMenu<T extends HTMLElement = HTMLDivElement>({
   gapClick,
 }: UseFluidMenuOptions = {}): FluidMenu<T> {
   const containerRef = React.useRef<T>(null);
-  const pointerSteersRef = React.useRef(false);
   const hover = useFluidHover(containerRef, { isItemDisabled: isMenuItemDisabled, gapClick });
   const counterRef = React.useRef(0);
   const heldIndexRef = React.useRef<number | undefined>(undefined);
@@ -92,24 +90,13 @@ export function useFluidMenu<T extends HTMLElement = HTMLDivElement>({
   // mount/unmount rows while scrolling keep the index space bounded.
   const freeRef = React.useRef<number[]>([]);
 
-  // Capture phase: the library's reaction to the key must already see the keyboard in charge.
-  React.useEffect(() => {
-    const handToKeyboard = () => {
-      pointerSteersRef.current = false;
-    };
-    document.addEventListener('keydown', handToKeyboard, true);
-    return () => document.removeEventListener('keydown', handToKeyboard, true);
-  }, []);
-
   // Only the stable pieces go into context so item callback refs do not churn
   // (and re-register) on every hover-state render.
   const { registerItem, setActiveIndex, handlers } = hover;
   const context = React.useMemo<FluidMenuContextValue>(
     () => ({
       registerItem,
-      followLibraryHighlight: (index, row) => {
-        if (!pointerSteersRef.current || row.matches(':hover')) setActiveIndex(index);
-      },
+      setActiveIndex,
       activeAttr,
       allocateIndex: () => freeRef.current.pop() ?? counterRef.current++,
       releaseIndex: index => {
@@ -132,12 +119,10 @@ export function useFluidMenu<T extends HTMLElement = HTMLDivElement>({
       },
       onMouseMove: e => {
         own.onMouseMove?.(e);
-        pointerSteersRef.current = true;
         handlers.onMouseMove(e);
       },
       onMouseLeave: e => {
         own.onMouseLeave?.(e);
-        pointerSteersRef.current = false;
         handlers.onMouseLeave(e);
         if (heldIndexRef.current !== undefined) setActiveIndex(heldIndexRef.current);
       },
@@ -191,7 +176,7 @@ export function useFluidMenuItemRef<T extends HTMLElement>(forwardedRef?: React.
       else if (forwardedRef) forwardedRef.current = element;
 
       if (!ctx) return;
-      const { registerItem, followLibraryHighlight, activeAttr, allocateIndex, releaseIndex, setHeld } = ctx;
+      const { registerItem, setActiveIndex, activeAttr, allocateIndex, releaseIndex, setHeld } = ctx;
       unsubscribeRef.current?.();
       unsubscribeRef.current = undefined;
 
@@ -211,9 +196,9 @@ export function useFluidMenuItemRef<T extends HTMLElement>(forwardedRef?: React.
 
       const sync = () => {
         setHeld(index, element.hasAttribute(POPUP_OPEN_ATTR));
-        if (isAttrActive(element, activeAttr)) followLibraryHighlight(index, element);
+        if (isAttrActive(element, activeAttr)) setActiveIndex(index);
       };
-      const light = () => followLibraryHighlight(index, element);
+      const light = () => setActiveIndex(index);
       sync();
       element.addEventListener('focusin', light);
       const observer = typeof MutationObserver === 'undefined' ? undefined : new MutationObserver(sync);
