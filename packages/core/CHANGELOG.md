@@ -1,5 +1,34 @@
 # @mastra/core
 
+## 1.72.0-alpha.5
+
+### Patch Changes
+
+- Fixed `textStream` and `elementStream` returning incomplete array elements when streaming structured output with an array schema. Previously, if an element arrived across several tokens, the streams could keep an early partial version (for example `{"a":1}` instead of `{"a":1,"b":2}`) that didn't match the final `object`. Each element is now emitted only once it is complete, so the streamed elements always match the final result. ([#25278](https://github.com/mastra-ai/mastra/pull/25278))
+
+- Fixed workspace `grep` and `list_files` failing with "No mount for path: .gitignore" when a `CompositeFilesystem` has no root (`/`) mount. Reads of unmounted paths now report a not-found (`ENOENT`) error, so a missing root `.gitignore` is treated as absent. ([#25263](https://github.com/mastra-ai/mastra/pull/25263))
+
+- Fixed `createDurableAgent` dropping non-transient `data-*` parts that tools write with `context.writer.custom()`. These parts are now saved to memory, just like with a regular `Agent`. Transient parts still only go to the stream. ([#25283](https://github.com/mastra-ai/mastra/pull/25283))
+
+- Fixed evented workflows failing the entire run when a `.branch()` condition throws. A throwing condition is now logged and treated as false, so the remaining branches still run — matching the default workflow engine. ([#25279](https://github.com/mastra-ai/mastra/pull/25279))
+
+- Added an `outputEncoding` option to `LocalSandbox` so command output in non-UTF-8 encodings is decoded correctly. On Windows systems using a legacy code page, such as Chinese (GBK / code page 936), native commands previously returned garbled text. ([#25266](https://github.com/mastra-ai/mastra/pull/25266))
+
+  ```ts
+  const sandbox = new LocalSandbox({ outputEncoding: 'gbk' });
+  ```
+
+  UTF-8 remains the default. Fixes #25249.
+
+- Fixed threads getting stuck on Anthropic and Bedrock after a step failed mid-reasoning. Prompts now leave out reasoning that the provider cannot accept, so later turns no longer fail. ([#24928](https://github.com/mastra-ai/mastra/pull/24928))
+
+- Fixed subagents without memory failing immediately when their workspace has a browser. These subagents now complete their tasks and still see browser context in their prompt. ([#25291](https://github.com/mastra-ai/mastra/pull/25291))
+
+- Fixed trajectory scorers in dataset experiments receiving an empty trajectory for workflow targets when no trace is stored. They now receive the workflow's executed steps, matching `runEvals`. ([#25269](https://github.com/mastra-ai/mastra/pull/25269))
+
+- Updated dependencies [[`3f50f2a`](https://github.com/mastra-ai/mastra/commit/3f50f2a59068fc91ef7ccc513e5d93845faa298e)]:
+  - @mastra/schema-compat@1.3.12-alpha.1
+
 ## 1.72.0-alpha.4
 
 ### Patch Changes

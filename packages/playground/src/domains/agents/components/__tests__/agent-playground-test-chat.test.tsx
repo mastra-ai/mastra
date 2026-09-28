@@ -1,5 +1,4 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
-import { TracingSettingsProvider } from '@mastra/playground-ui/domains/observability/context/tracing-settings-context';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -9,7 +8,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentPlaygroundTestChat } from '../agent-playground/agent-playground-test-chat';
 import { memoryDisabled, v2Agent } from './fixtures/composer-model-settings';
-import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -25,16 +23,7 @@ const renderEditorTestChat = () => {
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
           <TooltipProvider>
-            <TracingSettingsProvider entityId={AGENT_ID} entityType="agent">
-              <SchemaRequestContextProvider>
-                <AgentPlaygroundTestChat
-                  agentId={AGENT_ID}
-                  agentName="Test Agent"
-                  modelVersion="v2"
-                  hasMemory={false}
-                />
-              </SchemaRequestContextProvider>
-            </TracingSettingsProvider>
+            <AgentPlaygroundTestChat agentId={AGENT_ID} agentName="Test Agent" modelVersion="v2" hasMemory={false} />
           </TooltipProvider>
         </MemoryRouter>
       </QueryClientProvider>
@@ -75,7 +64,7 @@ describe('AgentPlaygroundTestChat', () => {
 
     renderEditorTestChat();
 
-    const runOptionsTrigger = await screen.findByTestId('composer-run-options-trigger');
+    const runOptionsTrigger = await screen.findByRole('button', { name: 'Request context' });
     expect(runOptionsTrigger.closest('form')).not.toBeNull();
     expect(screen.getByRole('dialog', { name: /browser view/i, hidden: true })).not.toBeNull();
 
@@ -112,7 +101,7 @@ describe('AgentPlaygroundTestChat', () => {
 
     renderEditorTestChat();
 
-    await screen.findByTestId('composer-run-options-trigger');
+    await screen.findByRole('button', { name: 'Request context' });
 
     await waitFor(() => {
       expect(onBrowserProbe).toHaveBeenCalled();
@@ -147,7 +136,7 @@ describe('AgentPlaygroundTestChat', () => {
 
     renderEditorTestChat();
 
-    await screen.findByTestId('composer-run-options-trigger');
+    await screen.findByRole('button', { name: 'Request context' });
 
     // Give the probe a chance to fire if it (incorrectly) would.
     await act(async () => {

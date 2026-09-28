@@ -62,6 +62,9 @@ const preview: Preview = {
       },
     },
     backgrounds: { options: surfaces },
+    options: {
+      storySort: { order: ['*', 'Hooks', 'Helpers'] },
+    },
   },
   initialGlobals: {
     theme: 'dark',

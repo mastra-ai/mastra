@@ -1,5 +1,12 @@
 export type DateInput = Date | string | number | null | undefined;
-export type DatePreset = 'date' | 'date-time' | 'date-time-seconds' | 'time' | 'time-seconds' | 'relative-time';
+export type DatePreset =
+  | 'date'
+  | 'date-time'
+  | 'date-time-seconds'
+  | 'day-time-seconds'
+  | 'time'
+  | 'time-seconds'
+  | 'relative-time';
 
 type FormatOptions = { locale?: string; now?: Date | number; timeZone?: string };
 
@@ -21,6 +28,7 @@ const PRESET_OPTIONS = {
     minute: '2-digit',
     second: '2-digit',
   },
+  'day-time-seconds': { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' },
   calendar: { year: 'numeric', month: 'numeric', day: 'numeric', calendar: 'gregory', numberingSystem: 'latn' },
   dayMonth: { month: 'short', day: 'numeric' },
   dayMonthYear: { month: 'short', day: 'numeric', year: 'numeric' },
@@ -74,6 +82,7 @@ export function formatShortDate(value: DateInput, { locale, now, timeZone }: For
  * - `date`: date only; omits the year when it matches `now` in the requested timezone
  * - `date-time`: date, year and time to minutes, including historical dates
  * - `date-time-seconds`: date, year and time to seconds
+ * - `day-time-seconds`: month, day and time to seconds, without the year
  * - `time`: time to minutes, without a date
  * - `time-seconds`: time to seconds, without a date
  * - `relative-time`: short relative label; delegates to `date` at seven days

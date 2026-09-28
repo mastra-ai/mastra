@@ -7,8 +7,8 @@ import { z } from 'zod';
 import { useAgent } from '../hooks/use-agent';
 import { useExecuteAgentTool } from '../hooks/use-execute-agent-tool';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 import ToolExecutor from '@/domains/tools/components/ToolExecutor';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 export interface AgentToolPanelProps {
   toolId: string;
@@ -19,12 +19,15 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
   const { canExecute } = usePermissions();
   const canExecuteTool = canExecute('tools');
 
-  const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
+  const {
+    data: agent,
+    isLoading: isAgentLoading,
+    error,
+  } = useAgent(agentId!, useEntityRequestContext('agent', agentId)[0]);
 
   const tool = Object.values(agent?.tools ?? {}).find(tool => tool.id === toolId);
 
   const { mutateAsync: executeTool, isPending: isExecutingTool, data: result } = useExecuteAgentTool();
-  const { requestContext: playgroundRequestContext } = usePlaygroundStore();
 
   useEffect(() => {
     if (error) {
@@ -33,16 +36,8 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
     }
   }, [error]);
 
-  const handleExecuteTool = async (data: any, schemaRequestContext?: Record<string, any>) => {
+  const handleExecuteTool = async (data: any, requestContext?: Record<string, any>) => {
     if (!tool) return;
-
-    // Merge global playground request context with schema request context.
-    // Schema values take precedence and explicitly override global values,
-    // including when schema values are empty strings (user intentionally cleared them).
-    const requestContext = {
-      ...(playgroundRequestContext ?? {}),
-      ...(schemaRequestContext ?? {}),
-    };
 
     await executeTool({
       agentId: agentId!,
@@ -82,7 +77,8 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
       handleExecuteTool={handleExecuteTool}
       toolDescription={tool.description ?? ''}
       toolId={tool.id}
-      requestContextSchema={tool.requestContextSchema}
+      requestContextEntityType="agent-tool"
+      requestContextEntityId={`${agentId}:${tool.id}`}
     />
   );
 };

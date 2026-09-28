@@ -20,6 +20,13 @@ export const Default: Story = {
   },
 };
 
+export const Labeled: Story = {
+  args: {
+    value: minutesAgo(60 * 12 + 4),
+    label: 'Deployed',
+  },
+};
+
 export const Scale: Story = {
   render: () => (
     <div className="flex gap-6 text-body-sm">
