@@ -17,7 +17,7 @@ const COLLISION_AVOIDANCE = { align: 'shift' } as const;
 export function RunActionPopover({ label, icon, open, onOpenChange, children }: RunActionPopoverProps) {
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger variant="default" size="icon-md" type="button" tooltip={label} aria-label={label}>
+      <PopoverTrigger variant="ghost" size="icon-md" type="button" tooltip={label} aria-label={label}>
         {icon}
       </PopoverTrigger>
       <PopoverContent
