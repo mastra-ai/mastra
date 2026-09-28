@@ -1717,7 +1717,7 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
 
   if (!blockExternalProviders) {
     for (const [id, provider] of Object.entries(PROVIDER_REGISTRY)) {
-      allProviders[id] = provider as ProviderConfig;
+      allProviders[id] = provider;
     }
   }
 
@@ -1752,8 +1752,8 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
     return {
       id,
       name: provider.name,
-      label: (provider as any).label || provider.name,
-      description: (provider as any).description || '',
+      label: provider.name,
+      description: '',
       envVar: provider.apiKeyEnvVar,
       connected: isProviderConnected(id, allProviders) || isClaimedByGateway(id, provider.models, gateways),
       docUrl: provider.docUrl,
