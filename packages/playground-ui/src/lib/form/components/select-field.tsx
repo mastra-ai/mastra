@@ -28,7 +28,7 @@ export const SelectField: React.FC<AutoFormFieldProps> = ({ field, inputProps, e
     >
       <SelectTrigger
         id={id}
-        className={cn('w-full', error && 'border-accent2')}
+        className={cn('w-full max-w-80', error && 'border-accent2')}
         aria-invalid={ariaInvalid}
         aria-describedby={ariaDescribedBy}
       >

@@ -11,7 +11,7 @@ export const FieldWrapper: React.FC<FieldWrapperProps> = ({ label, children, id,
   return (
     <div className="pb-4 last:pb-0">
       {!isDisabled && (
-        <FieldBlock.Label name={id} htmlFor={id} required={field.required} className="pb-1">
+        <FieldBlock.Label name={id} htmlFor={id} required={field.required} className="flex w-fit pb-1">
           {label}
         </FieldBlock.Label>
       )}
