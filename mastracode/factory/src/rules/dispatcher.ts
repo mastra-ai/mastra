@@ -1330,12 +1330,15 @@ export class FactoryDecisionDispatcher {
     // An active seat for this role still runs — a terminal card can legitimately
     // hold one (e.g. a close-out skill dispatched on `done`).
     if (own.some(candidate => candidate.status === 'active')) return false;
-    // With no active seat left, a card that has already reached a terminal stage
-    // can never mint one for this role again, and its bindings are being revoked
-    // out from under the run by terminal-stage cleanup. Treat the decision as
-    // superseded so it stops retrying to MAX_ATTEMPTS as `session_unavailable`.
     const item = await this.#storage.get({ orgId: record.orgId, id: record.workItemId }).catch(() => null);
-    if (item && workItemPhaseSemantics(this.#boards, item)?.kind === 'terminal') return true;
+    if (item && workItemPhaseSemantics(this.#boards, item)?.kind === 'terminal') {
+      const entered = item.stageHistory.findLast(entry => entry.stage === item.stages[0] && !entry.exitedAt);
+      // Terminal cleanup retires earlier work, but the terminal transition's
+      // own close-out still needs to prepare a seat. Both are committed with
+      // the same timestamp; decision ordinals only order effects within it.
+      const queuedAt = record.createdAt.getTime() - record.effectOrdinal;
+      if (!entered || !(queuedAt >= Date.parse(entered.enteredAt))) return true;
+    }
     return own.some(
       revoked =>
         revoked.revokedAt !== null &&

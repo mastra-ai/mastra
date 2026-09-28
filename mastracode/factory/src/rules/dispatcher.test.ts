@@ -12,6 +12,7 @@ import {
 } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FACTORY_DISPATCH_CONSTANTS, FactoryDecisionDispatcher } from './dispatcher.js';
+import { createTerminalStageCleanup } from './terminal-cleanup.js';
 import { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision } from './types.js';
 
@@ -282,7 +283,11 @@ async function preapprovePlans(storage: WorkItemsStorage, workItemId: string) {
   await storage.update({ orgId: 'org-1', id: workItemId, userId: 'user-1', patch: { plansPreapproved: true } });
 }
 
-async function bindWorkRun(storage: WorkItemsStorage, workItemId: string, options?: { preapprovePlans?: boolean }) {
+async function bindWorkRun(
+  storage: WorkItemsStorage,
+  workItemId: string,
+  options?: { preapprovePlans?: boolean; role?: string; kickoffKey?: string },
+) {
   if (options?.preapprovePlans) await preapprovePlans(storage, workItemId);
   const prepared = await storage.prepareRunStart({
     orgId: 'org-1',
@@ -298,10 +303,10 @@ async function bindWorkRun(storage: WorkItemsStorage, workItemId: string, option
         metadata: {},
       },
     },
-    role: 'work',
+    role: options?.role ?? 'work',
     session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
     resourceId: PROJECT_ID,
-    kickoffKey: `kickoff-${workItemId}`,
+    kickoffKey: options?.kickoffKey ?? `kickoff-${workItemId}`,
     kickoffMessage: null,
   });
   await storage.markPendingStart(prepared.binding.id, 'sent');
@@ -3272,6 +3277,128 @@ describe('FactoryDecisionDispatcher', () => {
 
     const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     expect(record?.status).not.toBe('proposed');
+  });
+
+  it.each([false, true])(
+    'runs the Done close-out after terminal cleanup (existing triage binding: %s)',
+    async existingBinding => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const item = await createItem(storage);
+      if (existingBinding) await bindWorkRun(storage, item.id, { role: 'triage' });
+      const cleanup = createTerminalStageCleanup({ workItems: storage });
+      const transitionService = new FactoryTransitionService({
+        storage,
+        configVersion: 'rules-v1',
+        onTerminalStage: cleanup,
+      });
+      const current = await storage.get({ orgId: 'org-1', id: item.id });
+      const closed = await transitionService.transition({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        workItemId: item.id,
+        board: 'work',
+        stage: 'done',
+        expectedRevision: current!.revision,
+        actor: { type: 'github', login: 'maintainer', trusted: true, factoryAuthored: false },
+        ingress: { type: 'github', identity: 'issue-closed' },
+        cause: 'issue closed',
+      });
+      expect(closed.status).toBe('accepted');
+      expect(await storage.listRunBindings('org-1', PROJECT_ID, item.id)).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ status: 'active' })]),
+      );
+      const { controller, session } = createSession();
+      const prepareBinding = vi.fn(async () => {
+        await bindWorkRun(storage, item.id, { role: 'triage', kickoffKey: 'close-out-binding' });
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        isAutoRunEnabled: async () => true,
+        prepareBinding,
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+      await dispatcher.runOnce(new Date('2030-01-01T00:02:00Z'));
+
+      expect(prepareBinding).toHaveBeenCalledTimes(1);
+      expect(prepareBinding).toHaveBeenCalledWith(expect.objectContaining({ role: 'triage' }));
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['done']);
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'succeeded',
+        attempts: 1,
+        decision: { skillName: 'factory-complete-issue' },
+      });
+    },
+  );
+
+  it('prepares a close-out seat for a custom terminal phase after cleanup', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const boards = createBoardRegistry({
+      boards: [
+        createTestBoard({
+          onShipped: () => ({
+            type: 'invokeSkill',
+            role: 'triage',
+            skillName: 'custom-close-out',
+            idempotencyKey: 'shipped-close-out',
+          }),
+        }),
+      ],
+    });
+    const { item } = await storage.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      input: {
+        board: 'release',
+        title: 'Release issue',
+        stages: ['queued'],
+        sessions: {},
+        metadata: {},
+        externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:custom-close-out' },
+      },
+    });
+    const transitionService = new FactoryTransitionService({
+      storage,
+      configVersion: 'rules-v1',
+      boards,
+      onTerminalStage: createTerminalStageCleanup({ workItems: storage }),
+    });
+    expect((await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      board: 'release',
+      stage: 'shipped',
+      expectedRevision: item.revision,
+      actor: { type: 'system', id: 'factory-rule-dispatcher' },
+      ingress: { type: 'rule', identity: 'custom-terminal' },
+      cause: 'rule_decision',
+    })).status).toBe('accepted');
+    const { controller, session } = createSession();
+    const prepareBinding = vi.fn(async () => {
+      await bindWorkRun(storage, item.id, { role: 'triage' });
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      boards,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+      prepareBinding,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+    expect(prepareBinding).toHaveBeenCalledTimes(1);
+    expect(session.sendSignal).toHaveBeenCalledTimes(1);
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['shipped']);
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
   });
 
   it('still runs the close-out a resting verdict queued, while the disarm parks later events', async () => {
