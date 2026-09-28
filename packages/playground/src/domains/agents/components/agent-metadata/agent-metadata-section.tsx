@@ -5,20 +5,20 @@ import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { InfoIcon } from 'lucide-react';
 
-const sectionAccentText = {
-  amber: 'text-warning-indicator',
-  blue: 'text-info-indicator',
-  cyan: 'text-badge-cyan-fg',
-  green: 'text-success-indicator',
-  orange: 'text-badge-orange-fg',
-  pink: 'text-badge-pink-fg',
-  purple: 'text-badge-purple-fg',
+const sectionAccentIcon = {
+  amber: 'text-badge-yellow-dot',
+  blue: 'text-badge-blue-dot',
+  cyan: 'text-badge-cyan-dot',
+  green: 'text-badge-green-dot',
+  orange: 'text-badge-orange-dot',
+  pink: 'text-badge-pink-dot',
+  purple: 'text-badge-purple-dot',
 };
 
 export interface AgentMetadataSectionProps {
   title: string;
   count?: number;
-  accent: keyof typeof sectionAccentText;
+  accent: keyof typeof sectionAccentIcon;
   icon?: React.ReactNode;
   actions?: React.ReactNode;
   children: React.ReactNode;
@@ -45,12 +45,12 @@ export const AgentMetadataSection = ({
         <div className="flex min-w-0 items-center gap-2">
           <Txt as="h3" variant="label" tone="ink" className="flex min-w-0 items-center gap-2">
             {icon && (
-              <Icon aria-hidden="true" className={cn('shrink-0', sectionAccentText[accent])}>
+              <Icon aria-hidden="true" className={cn('shrink-0', sectionAccentIcon[accent])}>
                 {icon}
               </Icon>
             )}
             <span className="flex min-w-0 items-center gap-1.5">
-              <span className={sectionAccentText[accent]}>{title}</span>
+              <span>{title}</span>
               {count !== undefined && count > 0 && (
                 <Txt as="span" variant="caption" tone="muted" className="tabular-nums">
                   {count}
