@@ -19,7 +19,7 @@ export function EnvironmentVariablesEditorRows({
   const resolvedRowErrors = rowErrors ?? contextRowErrors;
 
   return (
-    <div className={cn('space-y-2', className)} {...props}>
+    <div className={cn('flex flex-col gap-2', className)} {...props}>
       {editor.rows.map((row, index) => (
         <EnvironmentVariablesEditorRow
           key={editor.getRowId(index)}

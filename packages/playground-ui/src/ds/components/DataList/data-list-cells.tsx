@@ -3,6 +3,7 @@ import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
 import { dataListRowActionRevealStyles, dataListStickyStartStyles } from './shared';
 import type { DataListSticky } from './shared';
 import { Checkbox } from '@/ds/components/Checkbox';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 import { formatDate, formatTimestampPrecise } from '@/utils/date-format';
 
@@ -189,7 +190,13 @@ export interface DataListIdCellProps {
 }
 
 export function DataListIdCell({ id }: DataListIdCellProps) {
-  return <DataListCell className="tracking-wide text-muted-foreground">{getShortId(id)}</DataListCell>;
+  return (
+    <DataListCell>
+      <Txt as="span" variant="body-sm" font="mono" className="truncate">
+        {getShortId(id)}
+      </Txt>
+    </DataListCell>
+  );
 }
 
 export interface DataListSelectCellProps {

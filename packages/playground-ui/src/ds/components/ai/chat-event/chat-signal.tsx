@@ -29,7 +29,7 @@ export function ChatSignal({ kind, label, message, mode, variant = 'row', defaul
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-column text-foreground">{label}</p>
               {mode && (
-                <span className="inline-flex items-center rounded-full border border-border px-1.5 py-0.5 text-caption leading-none text-muted-foreground">
+                <span className="inline-flex items-center rounded-full border border-border px-1.5 py-0.5 text-caption text-muted-foreground">
                   {mode}
                 </span>
               )}

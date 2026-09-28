@@ -16,7 +16,7 @@ export function ItemListVersionCell({ version, date, isLatest, isDeleted }: Item
   return (
     <ItemListCell className={cn('grid grid-cols-[1fr_auto] pl-1')}>
       <div
-        className={cn('grid gap-1 leading-none text-muted-foreground', {
+        className={cn('grid gap-1 text-muted-foreground', {
           'text-muted-foreground': isLatest,
         })}
       >

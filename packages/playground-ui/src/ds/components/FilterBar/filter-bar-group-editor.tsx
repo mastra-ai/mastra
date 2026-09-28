@@ -12,7 +12,7 @@ import { Button } from '@/ds/components/Button/Button';
 import { cn } from '@/lib/utils';
 
 const connectorClass =
-  'flex h-control-sm w-14 shrink-0 items-center justify-center rounded-md text-column tracking-wide text-muted-foreground uppercase';
+  'flex h-control-sm w-14 shrink-0 items-center justify-center rounded-md text-column text-muted-foreground uppercase';
 
 export type FilterBarLogicToggleProps = {
   groupId: string;
@@ -61,7 +61,7 @@ function FilterBarLogicSwitch({ groupId, logic }: { groupId: string; logic: Filt
           aria-checked={logic === value}
           aria-label={`Join with ${value}`}
           className={cn(
-            'h-full cursor-pointer rounded-sm px-1.5 text-column tracking-wide uppercase outline-none',
+            'h-full cursor-pointer rounded-sm px-1.5 text-column uppercase outline-none',
             'focus-visible:bg-fill-hover',
             logic === value ? 'bg-fill-hover text-foreground' : 'text-muted-foreground hover:text-foreground',
           )}

@@ -5,7 +5,7 @@ import type { DurationUnit } from './workflow-time-dial';
 import { formatDate, formatShortDate } from '@/utils/date-format';
 import { formatDuration } from '@/utils/duration';
 
-const captionClasses = 'text-meta tracking-wider whitespace-nowrap text-muted-foreground uppercase';
+const captionClasses = 'text-meta whitespace-nowrap text-muted-foreground uppercase';
 
 function durationReading(duration: number): { amount: number; unit: DurationUnit } {
   if (duration < 1000) return { amount: duration, unit: 'ms' };
@@ -28,9 +28,9 @@ function TimingReading({
   return (
     <span className="mt-1 flex min-h-27 items-center justify-between gap-1 text-foreground">
       <span className="z-10 flex min-w-0 flex-col gap-2">
-        <span className="flex items-baseline gap-1 text-display leading-none tracking-tighter whitespace-nowrap tabular-nums">
+        <span className="flex items-baseline gap-1 text-display whitespace-nowrap tabular-nums">
           {value}
-          {unit && <small className="text-meta tracking-normal text-muted-foreground">{unit}</small>}
+          {unit && <small className="text-meta text-muted-foreground">{unit}</small>}
         </span>
         <span className={captionClasses}>{caption}</span>
       </span>

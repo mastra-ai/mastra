@@ -1,47 +1,15 @@
-import { cn } from '@/lib/utils';
+import { DataDetailsPanelKeyValueListHeader } from './data-details-panel-key-value-list-header';
+import { DataDetailsPanelKeyValueListKey } from './data-details-panel-key-value-list-key';
+import { DataDetailsPanelKeyValueListRoot } from './data-details-panel-key-value-list-root';
+import { DataDetailsPanelKeyValueListValue } from './data-details-panel-key-value-list-value';
 
-export interface DataDetailsPanelKeyValueListProps {
-  className?: string;
-  children: React.ReactNode;
-}
+export type { DataDetailsPanelKeyValueListHeaderProps } from './data-details-panel-key-value-list-header';
+export type { DataDetailsPanelKeyValueListKeyProps } from './data-details-panel-key-value-list-key';
+export type { DataDetailsPanelKeyValueListProps } from './data-details-panel-key-value-list-root';
+export type { DataDetailsPanelKeyValueListValueProps } from './data-details-panel-key-value-list-value';
 
-function Root({ className, children }: DataDetailsPanelKeyValueListProps) {
-  return <dl className={cn('grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5', className)}>{children}</dl>;
-}
-
-export interface DataDetailsPanelKeyValueListKeyProps {
-  className?: string;
-  children: React.ReactNode;
-}
-
-function Key({ className, children }: DataDetailsPanelKeyValueListKeyProps) {
-  return <dt className={cn('shrink-0 py-0.5 text-body-sm text-placeholder', className)}>{children}</dt>;
-}
-
-export interface DataDetailsPanelKeyValueListValueProps {
-  className?: string;
-  children: React.ReactNode;
-}
-
-function Value({ className, children }: DataDetailsPanelKeyValueListValueProps) {
-  return <dd className={cn('min-w-0 truncate py-0.5 text-body-sm text-muted-foreground', className)}>{children}</dd>;
-}
-
-export interface DataDetailsPanelKeyValueListHeaderProps {
-  className?: string;
-  children: React.ReactNode;
-}
-
-function Header({ className, children }: DataDetailsPanelKeyValueListHeaderProps) {
-  return (
-    <dt className={cn('col-span-2 py-3 text-caption tracking-widest text-placeholder uppercase', className)}>
-      {children}
-    </dt>
-  );
-}
-
-export const DataDetailsPanelKeyValueList = Object.assign(Root, {
-  Key,
-  Value,
-  Header,
+export const DataDetailsPanelKeyValueList = Object.assign(DataDetailsPanelKeyValueListRoot, {
+  Key: DataDetailsPanelKeyValueListKey,
+  Value: DataDetailsPanelKeyValueListValue,
+  Header: DataDetailsPanelKeyValueListHeader,
 });

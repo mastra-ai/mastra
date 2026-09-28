@@ -9,6 +9,7 @@ import type { TimelineMarkerKind } from './snapshot-timeline';
 import { timelineTickPositions } from './snapshot-timeline-data';
 import type { ThemeSelection } from './theme-drilldown-data';
 import type { ThemeSnapshot, TraceSignalName } from './types';
+import { Txt } from '@/ds/components/Txt';
 
 /**
  * Compare mode: two interchangeable points on the shared time axis show how
@@ -99,25 +100,25 @@ export function ThemeCompare({
         />
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <p className="rounded-md border border-border px-2 py-1 font-mono text-caption text-muted-foreground tabular-nums">
+        <Txt variant="caption" tone="muted" className="rounded-md border border-border px-2 py-1 tabular-nums">
           {snapshotSummaryLabel(fromSnapshot, flows[fromIndex])}
-        </p>
-        <span aria-hidden="true" className="text-caption text-muted-foreground">
+        </Txt>
+        <Txt aria-hidden="true" as="span" variant="caption" tone="muted">
           →
-        </span>
-        <p className="rounded-md border border-border px-2 py-1 font-mono text-caption text-muted-foreground tabular-nums">
+        </Txt>
+        <Txt variant="caption" tone="muted" className="rounded-md border border-border px-2 py-1 tabular-nums">
           {snapshotSummaryLabel(toSnapshot, flows[toIndex])}
-        </p>
-        <p className="text-caption text-muted-foreground">
+        </Txt>
+        <Txt variant="caption" tone="muted">
           {grabbedPoint === undefined
             ? 'Click a landmark to move the nearest point · click a point to grab it.'
             : 'Point grabbed — click a landmark to place it.'}
-        </p>
+        </Txt>
       </div>
       {fromIndex === toIndex ? (
-        <p className="rounded-lg border border-border bg-background p-6 text-body text-muted-foreground">
+        <Txt variant="body" tone="muted" className="rounded-lg border border-border bg-background p-6">
           Pick two different landmarks on the timeline to compare them.
-        </p>
+        </Txt>
       ) : !fromFlow || !toFlow ? (
         <SignalsFrameLoadingSkeleton />
       ) : (

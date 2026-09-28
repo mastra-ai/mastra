@@ -14,12 +14,7 @@ export interface DataPanelSectionHeadingProps {
  */
 export function DataPanelSectionHeading({ icon, className, children }: DataPanelSectionHeadingProps) {
   return (
-    <div
-      className={cn(
-        'flex items-center gap-1.5 text-caption tracking-widest text-placeholder uppercase [&>svg]:size-3.5',
-        className,
-      )}
-    >
+    <div className={cn('flex items-center gap-1.5 text-column text-placeholder uppercase [&>svg]:size-3.5', className)}>
       {icon}
       {children}
     </div>

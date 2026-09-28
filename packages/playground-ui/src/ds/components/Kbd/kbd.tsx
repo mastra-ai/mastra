@@ -11,7 +11,7 @@ export type KbdProps = {
 const sizeClasses: Record<NonNullable<KbdProps['size']>, string> = {
   default: 'h-6 min-w-6 rounded-md px-1.5 text-caption',
   sm: 'h-5 min-w-5 rounded-md px-1 text-meta',
-  xs: 'h-4 min-w-4 rounded px-1 text-meta leading-none',
+  xs: 'h-4 min-w-4 rounded px-1 text-meta',
 };
 
 export const Kbd = ({ children, size = 'default', className }: KbdProps) => {

@@ -125,7 +125,7 @@ const TaskListLabel = ({ task }: { task: TaskListItem }) => {
       <span
         aria-hidden={!active}
         className={cn(
-          'col-start-1 row-start-1 truncate bg-linear-to-r from-accent6 to-foreground to-30% bg-size-[200%_100%] bg-clip-text font-medium text-transparent transition-[opacity,translate,filter,background-position] dark:from-[color-mix(in_oklab,var(--accent6)_60%,var(--foreground))]',
+          'col-start-1 row-start-1 truncate bg-linear-to-r from-accent6 to-foreground to-30% bg-size-[200%_100%] bg-clip-text text-column text-transparent transition-[opacity,translate,filter,background-position] dark:from-[color-mix(in_oklab,var(--accent6)_60%,var(--foreground))]',
           taskGraphMotion,
           active
             ? 'translate-y-0 bg-position-[0%_0] opacity-100 blur-none'

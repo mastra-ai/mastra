@@ -154,7 +154,7 @@ export type PlanIntroProps = ComponentProps<'div'>;
 
 export function PlanIntro({ children, className, ...props }: PlanIntroProps) {
   return (
-    <div data-slot="plan-intro" className={cn('mb-5 space-y-1', className)} {...props}>
+    <div data-slot="plan-intro" className={cn('mb-5 flex flex-col gap-1', className)} {...props}>
       {children}
     </div>
   );

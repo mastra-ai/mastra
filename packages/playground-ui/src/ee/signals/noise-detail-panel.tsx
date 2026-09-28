@@ -14,6 +14,7 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from '@/ds/components/Drawer';
+import { Txt } from '@/ds/components/Txt';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
@@ -80,41 +81,53 @@ export function NoiseDetailPanel({
           {insightTraceId === undefined && (
             <>
               <section aria-labelledby="noise-summary-heading">
-                <h2
-                  id="noise-summary-heading"
-                  className="font-mono text-caption tracking-wider text-muted-foreground uppercase"
-                >
+                <Txt id="noise-summary-heading" as="h2" variant="column" tone="muted" className="uppercase">
                   Summary
-                </h2>
-                <p className="mt-3 text-body text-foreground">
+                </Txt>
+                <Txt variant="body" tone="ink" className="mt-3">
                   Noise contains trace signal summaries that did not consistently match a recurring theme in this
                   snapshot.
-                </p>
-                {noiseQuery.isPending && <p className="mt-4 text-body text-muted-foreground">Loading noise details…</p>}
-                {noiseQuery.isError && <p className="mt-4 text-body text-red-500">Unable to load noise details.</p>}
+                </Txt>
+                {noiseQuery.isPending && (
+                  <Txt variant="body" tone="muted" className="mt-4">
+                    Loading noise details…
+                  </Txt>
+                )}
+                {noiseQuery.isError && (
+                  <Txt variant="body" className="mt-4 text-error">
+                    Unable to load noise details.
+                  </Txt>
+                )}
                 {noiseQuery.data && (
-                  <p className="mt-4 font-mono text-body text-foreground tabular-nums">
+                  <Txt variant="body" tone="ink" className="mt-4 tabular-nums">
                     {shareSentence(
                       filteredStats?.traceCount ?? noiseQuery.data.noise.traceCount,
                       filteredStats?.stageShare ?? noiseQuery.data.noise.coverage,
                     )}
-                  </p>
+                  </Txt>
                 )}
               </section>
 
               <section aria-labelledby="noise-examples-heading">
-                <h2
-                  id="noise-examples-heading"
-                  className="font-mono text-caption tracking-wider text-muted-foreground uppercase"
-                >
+                <Txt id="noise-examples-heading" as="h2" variant="column" tone="muted" className="uppercase">
                   Example summaries
-                </h2>
-                {examplesQuery.isPending && <p className="mt-3 text-body text-muted-foreground">Loading examples…</p>}
-                {examplesQuery.isError && <p className="mt-3 text-body text-red-500">Unable to load examples.</p>}
+                </Txt>
+                {examplesQuery.isPending && (
+                  <Txt variant="body" tone="muted" className="mt-3">
+                    Loading examples…
+                  </Txt>
+                )}
+                {examplesQuery.isError && (
+                  <Txt variant="body" className="mt-3 text-error">
+                    Unable to load examples.
+                  </Txt>
+                )}
                 {examplesQuery.data && (
                   <>
                     {examplesQuery.data.examples.length === 0 ? (
-                      <p className="mt-3 text-body text-muted-foreground">No noise examples in this snapshot.</p>
+                      <Txt variant="body" tone="muted" className="mt-3">
+                        No noise examples in this snapshot.
+                      </Txt>
                     ) : (
                       <ul className="mt-3 space-y-3">
                         {examplesQuery.data.examples.map(example => (

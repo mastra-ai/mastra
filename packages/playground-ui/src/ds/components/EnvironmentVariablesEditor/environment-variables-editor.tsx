@@ -34,7 +34,7 @@ const renderEnvironmentVariablesEditor = <TRow extends EnvironmentVariableEntry 
 }: EnvironmentVariablesEditorProps<TRow>) => {
   return (
     <EnvironmentVariablesEditorRoot
-      className={cn(!children && 'space-y-3', className)}
+      className={cn(!children && 'flex flex-col gap-3', className)}
       rowErrors={rowErrors}
       {...props}
     >

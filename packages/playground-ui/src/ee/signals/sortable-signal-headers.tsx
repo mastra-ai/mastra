@@ -145,7 +145,7 @@ export function SortableSignalHeaders({
                           >
                             <Tooltip>
                               <TooltipTrigger
-                                className="cursor-default font-mono text-column tracking-wider"
+                                className="cursor-default text-column"
                                 data-testid="signal-column-header"
                                 style={{ color: nodeColor(getSignalHue(signalName)) }}
                               >

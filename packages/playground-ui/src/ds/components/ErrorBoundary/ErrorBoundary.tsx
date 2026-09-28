@@ -1,6 +1,7 @@
 import { AlertTriangle, Bug, RefreshCw, RotateCcw } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '../Button';
+import { Txt } from '@/ds/components/Txt';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
@@ -168,14 +169,14 @@ function DefaultErrorFallback({
         <p className={cn('text-muted-foreground', isInline ? 'text-caption' : 'text-body')}>
           {description ?? 'An unexpected error occurred while rendering this part of the page.'}
         </p>
-        <p
-          className={cn(
-            'rounded-md bg-card px-3 py-2 font-mono break-words text-muted-foreground',
-            isInline ? 'text-meta' : 'text-caption',
-          )}
+        <Txt
+          variant={isInline ? 'meta' : 'caption'}
+          tone="muted"
+          font="mono"
+          className="rounded-md bg-card px-3 py-2 break-words"
         >
           {error.message}
-        </p>
+        </Txt>
         <div className={cn('flex flex-wrap items-center justify-center gap-2', isInline ? 'mt-1' : 'mt-2')}>
           <Button icon={<RotateCcw />} variant="primary" size={isInline ? 'sm' : 'lg'} onClick={reset}>
             Try again
