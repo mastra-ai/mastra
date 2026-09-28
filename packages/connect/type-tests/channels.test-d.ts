@@ -33,7 +33,7 @@ const legalOptions: ChannelsOptions = {
   integrations: {
     slack: { providerOptions: { defaultChannel: 'C123', streaming: { enabled: true } } },
     telegram: { providerOptions: { mode: 'webhook', typingStatus: true } },
-    discord: { providerOptions: { applicationId: 'a', publicKey: 'p', commandScope: 'global' } },
+    'discord-dual': { providerOptions: { applicationId: 'a', publicKey: 'p', commandScope: 'global' } },
   },
 };
 void legalOptions;
@@ -101,7 +101,7 @@ void illegalTelegramBotToken;
 const illegalDiscordBaseUrl: ChannelsOptions = {
   integrations: {
     // @ts-expect-error baseUrl is framework-managed and cannot be passed here.
-    discord: { providerOptions: { baseUrl: 'https://example.com' } },
+    'discord-dual': { providerOptions: { baseUrl: 'https://example.com' } },
   },
 };
 void illegalDiscordBaseUrl;
@@ -109,7 +109,7 @@ void illegalDiscordBaseUrl;
 const illegalDiscordEncryptionKey: ChannelsOptions = {
   integrations: {
     // @ts-expect-error encryptionKey is process-wide and cannot be passed here.
-    discord: { providerOptions: { encryptionKey: 'k' } },
+    'discord-dual': { providerOptions: { encryptionKey: 'k' } },
   },
 };
 void illegalDiscordEncryptionKey;
