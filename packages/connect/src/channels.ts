@@ -61,7 +61,7 @@ export interface ChannelsIntegrationOptions<ProviderOptions = Record<string, unk
 export interface ChannelsIntegrationOverrides {
   slack?: ChannelsIntegrationOptions<SlackChannelsProviderOptions>;
   telegram?: ChannelsIntegrationOptions<TelegramChannelsProviderOptions>;
-  'discord-dual'?: ChannelsIntegrationOptions<DiscordChannelsProviderOptions>;
+  discord?: ChannelsIntegrationOptions<DiscordChannelsProviderOptions>;
   [integrationId: string]: ChannelsIntegrationOptions | undefined;
 }
 

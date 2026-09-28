@@ -36,7 +36,7 @@ import { updateMessageTool } from './tools/update-message.js';
 import { updateRoleTool } from './tools/update-role.js';
 import { updateWebhookTool } from './tools/update-webhook.js';
 
-export function createDiscordDualTools(options?: ProviderToolsOptions) {
+export function createDiscordTools(options?: ProviderToolsOptions) {
   const platformProxy = createPlatformProxy({ connectionId: options?.connectionId, client: options?.client });
   const tools = {
     discord_add_guild_member_role: addGuildMemberRoleTool(platformProxy),

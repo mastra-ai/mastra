@@ -165,7 +165,7 @@ function fakeTelegram() {
 function fakeDiscord() {
   return class DiscordProvider extends FakeChannelProvider {
     constructor(config: Record<string, unknown>) {
-      super(config, 'discord-dual');
+      super(config, 'discord');
     }
   };
 }
@@ -227,7 +227,7 @@ describe('channels()', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     // All three providers exist already — that's what makes getRoutes() work.
     const constructed = FakeChannelProvider.configSpy.mock.calls.map(([id]) => id).sort();
-    expect(constructed).toEqual(['discord-dual', 'slack', 'telegram']);
+    expect(constructed).toEqual(['discord', 'slack', 'telegram']);
   });
 
   it('exposes getRoutes() for every non-disabled channel before any connection exists', async () => {
@@ -235,7 +235,7 @@ describe('channels()', () => {
     const channelsFn = await importChannels();
     const resolver = await channelsFn(options(fetchMock));
     const paths = resolver.getRoutes().map(route => route.path);
-    expect(paths.sort()).toEqual(['/discord-dual/webhook', '/slack/webhook', '/telegram/webhook']);
+    expect(paths.sort()).toEqual(['/discord/webhook', '/slack/webhook', '/telegram/webhook']);
   });
 
   it('builds a SlackProvider with a platform-backed tokenResolver from a single active connection', async () => {
@@ -303,8 +303,8 @@ describe('channels()', () => {
 
   it('syncs a DiscordProvider with the api_key credential as botToken plus metadata applicationId/publicKey', async () => {
     const fetchMock = platformFetch({
-      connections: [makeConnection({ id: 'c_dc', integrationId: 'discord-dual' })],
-      // The discord-dual integration is API-key auth: the credential IS the
+      connections: [makeConnection({ id: 'c_dc', integrationId: 'discord' })],
+      // The discord integration is API-key auth: the credential IS the
       // bot token, delivered on the platform's encrypted secrets path.
       credentials: { c_dc: { type: 'api_key', apiKey: DISCORD_BOT_TOKEN } },
       contexts: {
@@ -317,8 +317,8 @@ describe('channels()', () => {
     const channelsFn = await importChannels();
     const resolver = await channelsFn(options(fetchMock));
     const providers = await resolver();
-    expect(providers['discord-dual']).toBeInstanceOf(FakeChannelProvider);
-    expect(FakeChannelProvider.configureSpy).toHaveBeenCalledWith('discord-dual', {
+    expect(providers['discord']).toBeInstanceOf(FakeChannelProvider);
+    expect(FakeChannelProvider.configureSpy).toHaveBeenCalledWith('discord', {
       botToken: DISCORD_BOT_TOKEN,
       applicationId: 'app_123',
       publicKey: 'pubkey_abc',
@@ -327,7 +327,7 @@ describe('channels()', () => {
 
   it('accepts snake_case metadata keys for Discord (application_id / public_key)', async () => {
     const fetchMock = platformFetch({
-      connections: [makeConnection({ id: 'c_dc', integrationId: 'discord-dual' })],
+      connections: [makeConnection({ id: 'c_dc', integrationId: 'discord' })],
       credentials: { c_dc: { type: 'api_key', apiKey: DISCORD_BOT_TOKEN } },
       contexts: {
         c_dc: {
@@ -339,9 +339,9 @@ describe('channels()', () => {
     const channelsFn = await importChannels();
     const resolver = await channelsFn(options(fetchMock));
     const providers = await resolver();
-    expect(providers['discord-dual']).toBeDefined();
+    expect(providers['discord']).toBeDefined();
     expect(FakeChannelProvider.configureSpy).toHaveBeenCalledWith(
-      'discord-dual',
+      'discord',
       expect.objectContaining({ botToken: DISCORD_BOT_TOKEN, applicationId: 'app_snake', publicKey: 'pubkey_snake' }),
     );
   });
@@ -352,15 +352,15 @@ describe('channels()', () => {
     // every bot call with a misleading 401, so the channel is skipped with
     // an actionable warning instead.
     const fetchMock = platformFetch({
-      connections: [makeConnection({ id: 'c_dc', integrationId: 'discord-dual' })],
+      connections: [makeConnection({ id: 'c_dc', integrationId: 'discord' })],
       credentials: { c_dc: { type: 'oauth2', accessToken: 'oauth-bearer-not-a-bot-token', expiresAt: null } },
     });
     const channelsFn = await importChannels();
     const resolver = await channelsFn(options(fetchMock));
     const providers = await resolver();
-    expect(providers['discord-dual']).toBeUndefined();
+    expect(providers['discord']).toBeUndefined();
     expect(FakeChannelProvider.configureSpy).not.toHaveBeenCalledWith(
-      'discord-dual',
+      'discord',
       expect.objectContaining({ botToken: expect.anything() }),
     );
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("'oauth2' credential"));
@@ -368,18 +368,18 @@ describe('channels()', () => {
 
   it('syncs Discord from the credential alone — the provider backfills applicationId/publicKey', async () => {
     const fetchMock = platformFetch({
-      connections: [makeConnection({ id: 'c_dc', integrationId: 'discord-dual' })],
+      connections: [makeConnection({ id: 'c_dc', integrationId: 'discord' })],
       credentials: { c_dc: { type: 'api_key', apiKey: DISCORD_BOT_TOKEN } },
     });
     const channelsFn = await importChannels();
     const resolver = await channelsFn(options(fetchMock));
     const providers = await resolver();
-    expect(providers['discord-dual']).toBeDefined();
+    expect(providers['discord']).toBeDefined();
     expect(warnSpy).not.toHaveBeenCalled();
     // configure() merges over previous values, so absent fields must be
     // omitted — an explicit `undefined` would clobber env-var fallbacks or
     // the provider's own backfilled values.
-    expect(FakeChannelProvider.configureSpy).toHaveBeenCalledWith('discord-dual', { botToken: DISCORD_BOT_TOKEN });
+    expect(FakeChannelProvider.configureSpy).toHaveBeenCalledWith('discord', { botToken: DISCORD_BOT_TOKEN });
   });
 
   it('yields a real DiscordProvider that reports isConfigured from the bot token alone (end to end)', async () => {
@@ -392,14 +392,14 @@ describe('channels()', () => {
     vi.stubEnv('DISCORD_PUBLIC_KEY', undefined as unknown as string);
     vi.stubEnv('DISCORD_APPLICATION_ID', undefined as unknown as string);
     const fetchMock = platformFetch({
-      connections: [makeConnection({ id: 'c_dc', integrationId: 'discord-dual' })],
+      connections: [makeConnection({ id: 'c_dc', integrationId: 'discord' })],
       // The token is the only credential material available.
       credentials: { c_dc: { type: 'api_key', apiKey: DISCORD_BOT_TOKEN } },
     });
     const channelsFn = await importChannels();
     const resolver = await channelsFn(options(fetchMock));
     const providers = await resolver();
-    const discord = providers['discord-dual'] as unknown as { getInfo(): { isConfigured: boolean } };
+    const discord = providers['discord'] as unknown as { getInfo(): { isConfigured: boolean } };
     expect(discord.getInfo().isConfigured).toBe(true);
   });
 
@@ -414,8 +414,8 @@ describe('channels()', () => {
     vi.stubEnv('DISCORD_PUBLIC_KEY', undefined as unknown as string);
     vi.stubEnv('DISCORD_APPLICATION_ID', undefined as unknown as string);
     const state: PlatformState = {
-      connections: [makeConnection({ id: 'c_a', integrationId: 'discord-dual' })],
-      credentials: { c_a: { type: 'api_key', apiKey: 'discord-dual-A' } },
+      connections: [makeConnection({ id: 'c_a', integrationId: 'discord' })],
+      credentials: { c_a: { type: 'api_key', apiKey: 'discord-A' } },
       contexts: {
         c_a: {
           connection_config: null,
@@ -427,13 +427,13 @@ describe('channels()', () => {
     const channelsFn = await importChannels();
     const resolver = await channelsFn(options(fetchMock, { ttlMs: 0 }));
     const providers = await resolver();
-    const discord = providers['discord-dual'] as unknown as {
+    const discord = providers['discord'] as unknown as {
       connect(agentId: string): Promise<{ type: string; authorizationUrl: string }>;
     };
 
     // The platform swaps connection A for connection B — token only.
-    state.connections = [makeConnection({ id: 'c_b', integrationId: 'discord-dual' })];
-    state.credentials = { c_b: { type: 'api_key', apiKey: 'discord-dual-B' } };
+    state.connections = [makeConnection({ id: 'c_b', integrationId: 'discord' })];
+    state.credentials = { c_b: { type: 'api_key', apiKey: 'discord-B' } };
     state.contexts = {};
     resolver.invalidate();
     await resolver();
@@ -464,7 +464,7 @@ describe('channels()', () => {
       connections: [
         makeConnection({ id: 'c_slack', integrationId: 'slack' }),
         makeConnection({ id: 'c_tg', integrationId: 'telegram' }),
-        makeConnection({ id: 'c_dc', integrationId: 'discord-dual' }),
+        makeConnection({ id: 'c_dc', integrationId: 'discord' }),
       ],
       credentials: {
         c_slack: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null },
@@ -475,7 +475,7 @@ describe('channels()', () => {
     const channelsFn = await importChannels();
     const resolver = await channelsFn(options(fetchMock));
     const providers = await resolver();
-    expect(Object.keys(providers).sort()).toEqual(['discord-dual', 'slack', 'telegram']);
+    expect(Object.keys(providers).sort()).toEqual(['discord', 'slack', 'telegram']);
     for (const provider of Object.values(providers)) {
       expect(provider).toBeInstanceOf(FakeChannelProvider);
     }

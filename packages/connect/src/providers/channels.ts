@@ -43,7 +43,7 @@ export type DiscordReservedProviderOption = (typeof DISCORD_RESERVED_KEYS)[numbe
 const RESERVED_OPTION_KEYS: Record<string, readonly string[]> = {
   slack: SLACK_RESERVED_KEYS,
   telegram: TELEGRAM_RESERVED_KEYS,
-  'discord-dual': DISCORD_RESERVED_KEYS,
+  discord: DISCORD_RESERVED_KEYS,
 };
 
 function stripReservedOptions<T extends Record<string, unknown> | undefined>(integrationId: string, options: T): T {
@@ -149,20 +149,19 @@ interface DiscordProviderOptions extends Record<string, unknown> {
 
 /**
  * Discord: wraps `@mastra/discord`'s `DiscordProvider`, matched to the
- * platform's `discord-dual` integration — the platform-catalog rename over
- * Nango's `discord-bot` provider, so named because a single connection
- * powers **both** the channel (Ed25519 signature verification, per-guild
- * command registration, invite-URL install flow) and the generated Discord
- * tools (`packages/connect/src/providers/discord-dual/`) from the same
- * API-key credential. The bot token comes from the connection's
- * `/credentials` endpoint on every sync, so it lives on the platform's
- * encrypted, audited secrets path — never in connection metadata (which the
- * platform treats as non-secret).
+ * platform's `discord` integration — an API-key connection whose credential
+ * is the bot token, so a single connection powers **both** the channel
+ * (Ed25519 signature verification, per-guild command registration,
+ * invite-URL install flow) and the generated Discord tools
+ * (`packages/connect/src/providers/discord/`) from the same credential. The
+ * bot token comes from the connection's `/credentials` endpoint on every
+ * sync, so it lives on the platform's encrypted, audited secrets path —
+ * never in connection metadata (which the platform treats as non-secret).
  *
- * The OAuth-based `discord` integration is deliberately not channel-capable:
- * Discord's token exchange only yields a user Bearer token, which Discord
- * always rejects for bot auth, and Discord has no API to mint applications
- * programmatically (unlike Slack's manifest API).
+ * The channel deliberately requires API-key credentials: Discord's OAuth
+ * flow only yields a user Bearer token which Discord rejects for bot auth,
+ * and Discord has no API to mint applications programmatically (unlike
+ * Slack's manifest API).
  *
  * The bot token alone is enough: `DiscordProvider` backfills `applicationId`
  * and `publicKey` from `GET /applications/@me` (the application object
@@ -189,18 +188,18 @@ interface DiscordProviderOptions extends Record<string, unknown> {
  * `DiscordProviderConfig` for the full option surface.
  */
 const discordChannel: ChannelProviderRegistration<DiscordProviderOptions> = {
-  integrationId: 'discord-dual',
+  integrationId: 'discord',
   async create(options, runtime) {
     const mod = (await import('@mastra/discord')) as {
       DiscordProvider: new (config: Record<string, unknown>) => ChannelProvider;
     };
     const { applicationId: optionsAppId, publicKey: optionsPublicKey, ...rest } = options ?? {};
-    const safeOptions = stripReservedOptions('discord-dual', rest);
+    const safeOptions = stripReservedOptions('discord', rest);
     const provider = new mod.DiscordProvider({ ...(safeOptions ?? {}) });
     return {
       provider,
       async sync() {
-        // The `discord-dual` integration is API-key auth: the credential is
+        // The `discord` integration is API-key auth: the credential is
         // the bot token itself. An oauth2 credential here means the
         // connection belongs to a different integration flavor — its user
         // Bearer token would fail every bot call with a misleading 401, so
@@ -210,7 +209,7 @@ const discordChannel: ChannelProviderRegistration<DiscordProviderOptions> = {
           throw new MastraConnectError(
             'unsupported_credential_type',
             `Discord connection ${runtime.getConnectionId()} returned a '${credential.type}' credential, but the ` +
-              `Discord channel requires the bot token as an API-key credential (the 'discord-dual' integration). ` +
+              `Discord channel requires the bot token as an API-key credential (the 'discord' integration). ` +
               `OAuth Discord connections yield user Bearer tokens, which Discord rejects for bot auth.`,
           );
         }

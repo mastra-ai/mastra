@@ -50,7 +50,7 @@ export interface ChannelInstance {
  * one is present) so registrations stay minimal.
  */
 export interface ChannelProviderRegistration<Options = Record<string, unknown>> {
-  /** Platform catalog id used to match project connections (e.g. 'slack', 'telegram', 'discord-dual'). */
+  /** Platform catalog id used to match project connections (e.g. 'slack', 'telegram', 'discord'). */
   integrationId: string;
   /**
    * Construct the long-lived Mastra `ChannelProvider`. Channel packages are

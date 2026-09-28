@@ -18,7 +18,7 @@ describe('shipped provider registry', () => {
     expect(integrationIds).toEqual([
       'anthropic',
       'clerk',
-      'discord-dual',
+      'discord',
       'fireflies',
       'github',
       'google-calendar',
