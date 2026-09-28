@@ -12,7 +12,7 @@ packages:
 
 A classifier only returns evaluation results. Your application decides how to use them, for example by selecting a route or comparing a probability with a safety threshold.
 
-`Classifier` requires an AI SDK evaluation model (`EvaluationModelV4`). It doesn't resolve `'provider/model'` strings or convert a language model into an evaluation model.
+`Classifier` requires an evaluation model (`EvaluationModelV4`, optionally wrapped in `MastraEvaluationModel`). It doesn't accept a `'provider/model'` string, a bare model ID, or a language model.
 
 ## Basic usage
 
