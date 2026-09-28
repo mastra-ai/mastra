@@ -95,14 +95,27 @@ export abstract class TextTransformer implements Transformer {
     return text === '' ? null : text;
   }
 
-  protected mergeSplits(splits: string[], separator: string): string[] {
+  /**
+   * Merges splits into chunks of at most `maxSize`.
+   * `joiners[i]`, when given, is the text placed before `splits[i]` when it is
+   * joined to a preceding piece; otherwise `separator` is used for every piece.
+   */
+  protected mergeSplits(splits: string[], separator: string, joiners?: string[]): string[] {
     const docs: string[] = [];
     let currentDoc: string[] = [];
+    let currentJoiners: string[] = [];
     let total = 0;
+    const lengthOf = (s: string | undefined) => (s ? this.lengthFunction(s) : 0);
+    const join = (pieces: string[], pieceJoiners: string[]) => {
+      if (!joiners) return this.joinDocs(pieces, separator);
+      const text = pieces.map((piece, i) => (i === 0 ? piece : pieceJoiners[i] + piece)).join('');
+      return this.joinDocs([text], '');
+    };
 
-    for (const d of splits) {
+    splits.forEach((d, index) => {
       const len = this.lengthFunction(d);
-      const separatorLen = separator ? this.lengthFunction(separator) : 0;
+      const joiner = joiners ? (joiners[index] ?? separator) : separator;
+      const separatorLen = lengthOf(joiner);
 
       if (total + len + (currentDoc.length > 0 ? separatorLen : 0) > this.maxSize) {
         if (total > this.maxSize) {
@@ -110,14 +123,15 @@ export abstract class TextTransformer implements Transformer {
         }
 
         if (currentDoc.length > 0) {
-          const doc = this.joinDocs(currentDoc, separator);
+          const doc = join(currentDoc, currentJoiners);
           if (doc !== null) {
             docs.push(doc);
           }
 
           // Handle overlap: keep enough content from the end of current chunk
           if (this.overlap > 0) {
-            let overlapContent: string[] = [];
+            const overlapContent: string[] = [];
+            const overlapJoiners: string[] = [];
             let overlapSize = 0;
 
             // Work backwards through currentDoc until we have enough overlap
@@ -130,32 +144,37 @@ export abstract class TextTransformer implements Transformer {
               }
 
               overlapContent.unshift(piece);
-              overlapSize += pieceLen + (overlapContent.length > 1 ? separatorLen : 0);
+              overlapJoiners.unshift(currentJoiners[i]!);
+              overlapSize += pieceLen + (overlapContent.length > 1 ? lengthOf(overlapJoiners[1]) : 0);
             }
 
             // Drop from the front of the overlap window until the incoming
             // split fits under maxSize, so the next chunk never exceeds it.
             while (overlapContent.length > 0 && overlapSize + len + separatorLen > this.maxSize) {
               const removed = overlapContent.shift()!;
+              overlapJoiners.shift();
               const removedLen = this.lengthFunction(removed);
-              overlapSize -= removedLen + (overlapContent.length > 0 ? separatorLen : 0);
+              overlapSize -= removedLen + (overlapContent.length > 0 ? lengthOf(overlapJoiners[0]) : 0);
             }
 
             currentDoc = overlapContent;
+            currentJoiners = overlapJoiners;
             total = overlapSize;
           } else {
             currentDoc = [];
+            currentJoiners = [];
             total = 0;
           }
         }
       }
 
       currentDoc.push(d);
+      currentJoiners.push(joiner);
       total += len + (currentDoc.length > 1 ? separatorLen : 0);
-    }
+    });
 
     if (currentDoc.length > 0) {
-      const doc = this.joinDocs(currentDoc, separator);
+      const doc = join(currentDoc, currentJoiners);
       if (doc !== null) {
         docs.push(doc);
       }
