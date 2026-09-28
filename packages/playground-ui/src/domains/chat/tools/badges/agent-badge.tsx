@@ -168,7 +168,7 @@ export const AgentBadge = ({
       })}
 
       {isError && errorText && (
-        <ToolCallMono copyText={errorText} data-testid="agent-error" className="text-destructive-fg">
+        <ToolCallMono copyText={errorText} data-testid="agent-error" className="text-destructive-indicator">
           {errorText}
         </ToolCallMono>
       )}

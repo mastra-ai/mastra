@@ -74,7 +74,7 @@ Eight shared ramps (`red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `purple`
 }
 ```
 
-The same four suffixes apply to `destructive`, `warning`, and `info`. Backgrounds are opaque. Indicators are for dots and small marks, not filled-button backgrounds.
+The same four suffixes apply to `destructive`, `warning`, and `info`. Backgrounds are opaque. Use `-fg` only for text on a `-subtle` surface. Standalone status text, invalid-field borders, icons, dots, and bars use `-indicator`. `destructive` is only the filled-button color, paired with `destructive-foreground`.
 
 Product roles use `--product-{name}` and `--product-{name}-fg`. Names are `studio`, `server`, `observability`, `factory`, `workers`, and `persistent-server`. Use `ProductAvatar` for the round icon and `ProductBadge` for the icon with its label. Both take a `product` prop and use the matching semantic colors.
 
@@ -94,17 +94,17 @@ Numbered `accent*` tokens, `positive1`, `negative1`, `warning1`, `notice-success
 
 To migrate removed tokens:
 
-| Removed token          | Replacement                               |
-| ---------------------- | ----------------------------------------- |
-| `--chart-soft-N`       | `--chart-sequential-N`                    |
-| `--span-type-NAME`     | `--span-NAME`                             |
-| `accent1`, `positive1` | `success-*`                               |
-| `accent2`, `negative1` | `destructive-*`                           |
-| `accent6`, `warning1`  | `warning-*`                               |
-| `accent3`, `accent5`   | `info-*`                                  |
-| `error`                | `destructive-fg`, `destructive-indicator` |
-| `notice-STATUS`        | `STATUS-subtle`, `STATUS-fg`              |
-| `--brand-green-N`      | `--green-N`                               |
+| Removed token          | Replacement                  |
+| ---------------------- | ---------------------------- |
+| `--chart-soft-N`       | `--chart-sequential-N`       |
+| `--span-type-NAME`     | `--span-NAME`                |
+| `accent1`, `positive1` | `success-*`                  |
+| `accent2`, `negative1` | `destructive-*`              |
+| `accent6`, `warning1`  | `warning-*`                  |
+| `accent3`, `accent5`   | `info-*`                     |
+| `error`                | `destructive-indicator`      |
+| `notice-STATUS`        | `STATUS-subtle`, `STATUS-fg` |
+| `--brand-green-N`      | `--green-N`                  |
 
 `SankeyChart` accepts `getNodeColor` and `getLinkColor` callbacks returning CSS colors. Explicit link colors keep the default link transparency and hover emphasis:
 

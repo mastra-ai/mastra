@@ -89,7 +89,7 @@ export const AllExamples: Story = {
 
 export const CustomClassName: Story = {
   args: {
-    className: 'text-success-fg',
+    className: 'text-success-indicator',
     children: (
       <>
         <Clock />

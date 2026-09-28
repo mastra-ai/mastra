@@ -116,7 +116,7 @@ export function ReviewItemCard({
 
       {/* Error indicator */}
       {Boolean(item.error) && (
-        <Txt variant="meta" className="mt-1 block truncate text-destructive-fg">
+        <Txt variant="meta" className="mt-1 block truncate text-destructive-indicator">
           Error: {typeof item.error === 'string' ? item.error : String(item.error)}
         </Txt>
       )}
@@ -239,7 +239,7 @@ export function ReviewItemCard({
               <Txt variant="meta" tone="muted" className="mb-1 block">
                 Error
               </Txt>
-              <pre className="max-h-20 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-destructive-fg">
+              <pre className="max-h-20 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-destructive-indicator">
                 {formatUnknown(item.error)}
               </pre>
             </div>
@@ -268,7 +268,7 @@ export function ReviewItemCard({
                 className="text-caption"
               />
               {commentSaved && (
-                <Txt variant="meta" className="mt-0.5 text-success-fg">
+                <Txt variant="meta" className="mt-0.5 text-success-indicator">
                   Saved
                 </Txt>
               )}

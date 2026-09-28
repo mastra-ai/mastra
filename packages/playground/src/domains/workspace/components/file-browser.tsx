@@ -364,7 +364,7 @@ export function FileBrowser({
                               </span>
                             </TooltipTrigger>
                             <TooltipContent className="max-w-xs">
-                              <span className="text-destructive-fg">Error:</span>{' '}
+                              <span className="text-destructive-indicator">Error:</span>{' '}
                               {entry.mount.error || 'Failed to connect to this filesystem'}
                             </TooltipContent>
                           </Tooltip>
@@ -400,7 +400,7 @@ export function FileBrowser({
                         <button
                           onClick={() => handleDelete(entry)}
                           aria-label={`Delete ${entry.name}`}
-                          className="p-2 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 hover:text-destructive-fg"
+                          className="p-2 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 hover:text-destructive-indicator"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>

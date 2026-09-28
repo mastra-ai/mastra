@@ -31,7 +31,7 @@ export function ToolApprovalActions({
         aria-label={toolName ? `Approve ${toolName}` : undefined}
         autoFocus={autoFocus}
         disabled={actionsDisabled}
-        className={status === 'approved' ? 'text-success-fg!' : undefined}
+        className={status === 'approved' ? 'text-success-indicator!' : undefined}
         onClick={onApprove}
       >
         Approve
@@ -42,7 +42,7 @@ export function ToolApprovalActions({
         icon={<X />}
         aria-label={toolName ? `Decline ${toolName}` : undefined}
         disabled={actionsDisabled}
-        className={status === 'declined' ? 'text-destructive-fg!' : undefined}
+        className={status === 'declined' ? 'text-destructive-indicator!' : undefined}
         onClick={onDecline}
       >
         Decline

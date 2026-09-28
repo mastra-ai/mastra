@@ -5,7 +5,7 @@ import './pull-request-icon.css';
 
 const statuses = {
   draft: { icon: GitPullRequestDraft, className: 'text-muted-foreground!' },
-  open: { icon: GitPullRequest, className: 'text-success-fg!' },
+  open: { icon: GitPullRequest, className: 'text-success-indicator!' },
   closed: { icon: GitPullRequestClosed, className: 'text-destructive-indicator!' },
   merged: { icon: GitPullRequest, className: 'pull-request-icon-merged' },
 };

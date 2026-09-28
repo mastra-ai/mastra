@@ -28,7 +28,9 @@ export function TraceInsightView({ traceId, onBack }: TraceInsightViewProps) {
         </Button>
       </div>
       {insightQuery.isPending && <p className="text-body text-muted-foreground">Loading trace insight…</p>}
-      {insightQuery.isError && <p className="text-body text-destructive-fg">Unable to load the trace insight.</p>}
+      {insightQuery.isError && (
+        <p className="text-body text-destructive-indicator">Unable to load the trace insight.</p>
+      )}
       {insightQuery.data && <TraceInsightBody insight={insightQuery.data} />}
     </div>
   );
@@ -113,7 +115,9 @@ function TraceInsightBody({ insight }: { insight: TraceInsightResponse }) {
             </dl>
           )}
           {insight.summary.degenerate === true && (
-            <p className="mt-4 text-body text-destructive-fg">This trace was flagged as degenerate or looping.</p>
+            <p className="mt-4 text-body text-destructive-indicator">
+              This trace was flagged as degenerate or looping.
+            </p>
           )}
           {insight.summary.observations.length > 0 && (
             <>

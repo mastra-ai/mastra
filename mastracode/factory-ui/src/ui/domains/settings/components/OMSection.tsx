@@ -125,7 +125,7 @@ export function OMSection({
   return (
     <>
       {error && (
-        <Txt as="p" variant="caption" className="text-destructive-fg px-4 py-3">
+        <Txt as="p" variant="caption" className="text-destructive-indicator px-4 py-3">
           {error}
         </Txt>
       )}

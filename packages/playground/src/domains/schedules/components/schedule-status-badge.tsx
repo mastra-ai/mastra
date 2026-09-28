@@ -6,8 +6,8 @@ const STATUS_DOT_COLOR: Record<ScheduleStatus, string> = {
 };
 
 const STATUS_TEXT_COLOR: Record<ScheduleStatus, string> = {
-  active: 'text-success-fg',
-  paused: 'text-info-fg',
+  active: 'text-success-indicator',
+  paused: 'text-info-indicator',
 };
 
 /**

@@ -49,7 +49,7 @@ function RunWaiting({ since }: { since: number }) {
   const waiting = formatDuration(useTimeDiff({ startedAt: since }));
 
   return (
-    <span className="flex items-center gap-1.5 text-meta text-info-fg tabular-nums" title="Waiting for input">
+    <span className="flex items-center gap-1.5 text-meta text-info-indicator tabular-nums" title="Waiting for input">
       <Pause aria-hidden className="size-3.5" />
       {waiting}
     </span>

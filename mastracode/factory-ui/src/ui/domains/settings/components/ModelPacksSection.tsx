@@ -136,7 +136,7 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
         runs continue to use the Factory default model.
       </Txt>
       {error && (
-        <Txt as="p" variant="caption" className="text-destructive-fg">
+        <Txt as="p" variant="caption" className="text-destructive-indicator">
           {error}
         </Txt>
       )}

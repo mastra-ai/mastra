@@ -260,7 +260,7 @@ function ProviderHeading({ children }: { children: string }) {
 
 function RepositoryError({ message }: { message: string }) {
   return (
-    <p role="alert" className="text-caption text-destructive-fg m-0">
+    <p role="alert" className="text-caption text-destructive-indicator m-0">
       {message}
     </p>
   );

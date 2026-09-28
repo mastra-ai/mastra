@@ -58,7 +58,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
               {/* Zone header */}
               <div className="flex items-center gap-2">
                 <span className="text-subheading text-placeholder">{zone.label}</span>
-                {zone.required && <span className="text-caption text-success-fg">*</span>}
+                {zone.required && <span className="text-caption text-success-indicator">*</span>}
                 <span className="text-caption text-muted-foreground">{zone.description}</span>
               </div>
 
@@ -119,7 +119,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
 
         {/* Validation message */}
         {!inputHasColumns && (
-          <div className="text-body text-warning-fg">At least one column must be mapped to Input</div>
+          <div className="text-body text-warning-indicator">At least one column must be mapped to Input</div>
         )}
       </div>
     </DragDropContext>

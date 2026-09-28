@@ -173,7 +173,7 @@ const PackagesModalContent = ({
           {isLoadingUpdates ? (
             <span className="text-muted-foreground">Checking for updates...</span>
           ) : !hasUpdates ? (
-            <span className="text-success-fg">✓ All packages are up to date</span>
+            <span className="text-success-indicator">✓ All packages are up to date</span>
           ) : (
             <div className="flex items-center gap-3">
               {outdatedCount > 0 && (
@@ -211,7 +211,7 @@ const PackagesModalContent = ({
                     href={`https://www.npmjs.com/package/${pkg.name}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="group inline-flex items-center gap-1 hover:text-success-fg hover:underline"
+                    className="group inline-flex items-center gap-1 hover:text-success-indicator hover:underline"
                   >
                     <Txt as="span" variant="body" font="mono">
                       {pkg.name}
@@ -229,7 +229,11 @@ const PackagesModalContent = ({
                           font="mono"
                           className={cn(
                             'cursor-help',
-                            pkg.isDeprecated ? 'text-destructive-fg' : pkg.isOutdated ? 'text-warning-fg' : '',
+                            pkg.isDeprecated
+                              ? 'text-destructive-indicator'
+                              : pkg.isOutdated
+                                ? 'text-warning-indicator'
+                                : '',
                           )}
                         >
                           {pkg.version}
@@ -251,7 +255,7 @@ const PackagesModalContent = ({
                   {(pkg.isOutdated || pkg.isDeprecated) && pkg.latestVersion && (
                     <>
                       <MoveRight className="mx-2 h-4 w-4 text-muted-foreground" />
-                      <Txt as="span" variant="body" font="mono" className="text-success-fg">
+                      <Txt as="span" variant="body" font="mono" className="text-success-indicator">
                         {pkg.latestVersion}
                       </Txt>
                     </>

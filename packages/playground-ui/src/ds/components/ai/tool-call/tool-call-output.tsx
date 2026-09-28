@@ -14,7 +14,7 @@ export function ToolCallOutput({ text, error, maxLength, 'data-testid': testId }
     <ToolCallMono
       copyText={text}
       data-testid={testId}
-      className={error ? 'text-destructive-fg' : 'text-muted-foreground'}
+      className={error ? 'text-destructive-indicator' : 'text-muted-foreground'}
     >
       {preview}
     </ToolCallMono>

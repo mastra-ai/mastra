@@ -241,7 +241,7 @@ export const MemorySearch = ({
         <div className={cn(raisedSurfaceStyle, 'mt-2 flex-1 overflow-y-auto rounded-lg')}>
           {error ? (
             <div className="p-4 text-center">
-              <Txt variant="caption" className="text-destructive-fg">
+              <Txt variant="caption" className="text-destructive-indicator">
                 {error}
               </Txt>
             </div>

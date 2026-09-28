@@ -129,7 +129,7 @@ export function AddApiKeyDialog({
             </Txt>
           )}
           {error && (
-            <Txt as="p" variant="caption" className="text-destructive-fg">
+            <Txt as="p" variant="caption" className="text-destructive-indicator">
               {error}
             </Txt>
           )}

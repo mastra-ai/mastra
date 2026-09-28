@@ -58,7 +58,8 @@ export function comboboxTriggerClass({
     // Read as "active" while the popup is open, per variant (see map above).
     controlTriggerOpenState[visualVariant],
     'data-[placeholder]:text-muted-foreground',
-    error && 'border-destructive hover:border-destructive focus-visible:border-destructive',
+    error &&
+      'border-destructive-indicator hover:border-destructive-indicator focus-visible:border-destructive-indicator',
     className,
   );
 }
@@ -142,5 +143,5 @@ export const comboboxStyles = {
   optionEnd: 'ml-auto flex items-center shrink-0',
 
   /** Error message */
-  error: 'text-caption text-destructive-fg',
+  error: 'text-caption text-destructive-indicator',
 } as const;

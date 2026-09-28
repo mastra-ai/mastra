@@ -68,7 +68,10 @@ export default function Resources() {
             >
               <div className="flex items-center gap-2.5">
                 <resource.icon
-                  className={cn('h-5 w-5 text-muted-foreground group-hover:text-info-fg', controlStateColorTransition)}
+                  className={cn(
+                    'h-5 w-5 text-muted-foreground group-hover:text-info-indicator',
+                    controlStateColorTransition,
+                  )}
                 />
                 <span className="text-subheading text-foreground">{resource.title}</span>
                 {resource.external && (

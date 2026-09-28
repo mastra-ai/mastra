@@ -86,7 +86,7 @@ export function CardStatus({ status }: { status: BoardCardStatus }) {
       role="alert"
       tabIndex={status.detail === undefined ? undefined : 0}
       className={cn(
-        'text-meta text-destructive-fg flex w-full min-w-0 items-start gap-1.5',
+        'text-meta text-destructive-indicator flex w-full min-w-0 items-start gap-1.5',
         status.detail !== undefined &&
           'focus-visible:outline-border-focus relative cursor-help underline decoration-dotted underline-offset-2 outline-none focus-visible:outline-2',
       )}

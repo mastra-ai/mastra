@@ -34,7 +34,7 @@ export function safeReturnTo(raw?: string): string {
 function CustomDomainAuthError({ hostname }: { hostname: string }) {
   return (
     <div role="alert" className="border-destructive-edge bg-card rounded-lg border px-4 py-3">
-      <Txt as="h2" variant="subheading" className="text-destructive">
+      <Txt as="h2" variant="subheading" className="text-destructive-indicator">
         Mastra Platform sign-in isn&apos;t available on custom domains
       </Txt>
       <Txt as="p" variant="caption" tone="muted" className="mt-2 leading-5">
@@ -131,7 +131,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
         />
       </label>
       {error ? (
-        <Txt as="p" variant="caption" role="alert" className="text-destructive">
+        <Txt as="p" variant="caption" role="alert" className="text-destructive-indicator">
           {error}
         </Txt>
       ) : null}
@@ -203,7 +203,7 @@ export function SignInPage() {
           <section aria-label="Authentication" className="mt-10 w-full max-w-md lg:mt-12">
             {authError && !customDomainBlocked ? (
               <div role="alert" className="border-destructive-edge bg-card mb-6 rounded-lg border px-4 py-3">
-                <Txt as="p" variant="subheading" className="text-destructive">
+                <Txt as="p" variant="subheading" className="text-destructive-indicator">
                   {accessDenied ? 'Access denied' : 'Sign-in failed'}
                 </Txt>
                 {authErrorDescription ? (

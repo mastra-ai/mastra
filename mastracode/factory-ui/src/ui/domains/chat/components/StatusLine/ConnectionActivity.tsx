@@ -24,7 +24,7 @@ export function ConnectionActivity() {
   if (status === 'error')
     return (
       <span
-        className={cn(statusItem, 'text-destructive-fg [&_svg]:text-destructive-indicator')}
+        className={cn(statusItem, 'text-destructive-indicator [&_svg]:text-destructive-indicator')}
         role="status"
         aria-live="polite"
         title="Check the server and reload to reconnect"

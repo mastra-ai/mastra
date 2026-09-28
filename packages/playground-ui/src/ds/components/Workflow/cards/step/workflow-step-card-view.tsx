@@ -37,10 +37,10 @@ const statusLineClasses: Partial<Record<ReportedStatus, string>> = {
 };
 
 const footerStatusClasses: Partial<Record<ReportedStatus, string>> = {
-  success: 'text-success-fg',
-  failed: 'text-destructive-fg',
-  suspended: 'text-warning-fg',
-  tripwire: 'text-warning-fg',
+  success: 'text-success-indicator',
+  failed: 'text-destructive-indicator',
+  suspended: 'text-warning-indicator',
+  tripwire: 'text-warning-indicator',
 };
 
 const suspendedWickStyle: CSSProperties & { '--belt-hue': string } = { '--belt-hue': 'var(--warning-indicator)' };
@@ -131,7 +131,7 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
             <span className="flex flex-col gap-2 rounded-t-(--card-radius) bg-card px-3.5 py-3 empty:py-1.5">
               {description && <span className="text-caption wrap-anywhere text-muted-foreground">{description}</span>}
               <WorkflowTiming duration={props.duration} date={props.date} />
-              {isWaiting && <span className="text-meta text-info-fg">Next step in debug</span>}
+              {isWaiting && <span className="text-meta text-info-indicator">Next step in debug</span>}
               {isForEach && foreachProgress && (
                 <span className="flex flex-col gap-2 py-1 text-meta">
                   <span>

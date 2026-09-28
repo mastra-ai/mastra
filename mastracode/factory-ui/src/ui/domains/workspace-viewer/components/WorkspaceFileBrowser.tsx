@@ -201,7 +201,7 @@ export function WorkspaceFileBrowser({
       ) : null}
       {error ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">
-          <Txt variant="caption" className="text-destructive-fg">
+          <Txt variant="caption" className="text-destructive-indicator">
             {error.message}
           </Txt>
         </div>

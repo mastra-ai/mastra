@@ -195,7 +195,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
           </Button>
 
           {selectedPhase === 'outputStream' && (
-            <Txt variant="meta" className="text-warning-fg">
+            <Txt variant="meta" className="text-warning-indicator">
               Output Stream phase cannot be executed directly. Use streaming instead.
             </Txt>
           )}

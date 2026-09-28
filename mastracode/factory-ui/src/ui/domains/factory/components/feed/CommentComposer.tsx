@@ -130,7 +130,7 @@ export function CommentComposer({
           onKeyDown={onKeyDown}
         />
         {sendError ? (
-          <p role="alert" className="text-meta text-destructive-fg m-0 px-3 pb-1">
+          <p role="alert" className="text-meta text-destructive-indicator m-0 px-3 pb-1">
             {sendError}
           </p>
         ) : null}

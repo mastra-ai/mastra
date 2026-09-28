@@ -58,7 +58,7 @@ export function ConnectedAccountsSection() {
 
   if (accountsQuery.error) {
     return (
-      <Txt as="p" variant="caption" className="text-destructive-fg">
+      <Txt as="p" variant="caption" className="text-destructive-indicator">
         {accountsQuery.error instanceof Error ? accountsQuery.error.message : 'Failed to load connected accounts'}
       </Txt>
     );
@@ -78,7 +78,7 @@ export function ConnectedAccountsSection() {
         <Txt
           as="span"
           variant="caption"
-          className={slackAccounts.length > 0 ? 'text-success-fg' : 'text-muted-foreground'}
+          className={slackAccounts.length > 0 ? 'text-success-indicator' : 'text-muted-foreground'}
         >
           {slackAccounts.length > 1
             ? `${slackAccounts.length} connected`

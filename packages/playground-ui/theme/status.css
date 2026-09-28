@@ -87,7 +87,7 @@ html.light {
   --destructive-fg: var(--red-950);
   --warning-subtle: var(--yellow-100);
   --warning-edge: var(--yellow-300);
-  --warning-indicator: var(--yellow-600);
+  --warning-indicator: var(--yellow-700);
   --warning-fg: var(--yellow-950);
   --success-subtle: var(--green-100);
   --success-edge: var(--green-300);

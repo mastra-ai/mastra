@@ -57,7 +57,7 @@ export function ProposalTag({
             e.preventDefault();
             handleConfirm();
           }}
-          className="p-0.5 text-success-fg hover:text-success-fg"
+          className="p-0.5 text-success-indicator hover:text-success-indicator"
         >
           <Check className="h-3 w-3" />
         </button>
@@ -82,7 +82,7 @@ export function ProposalTag({
       <button
         type="button"
         onClick={onRemove}
-        className="p-0.5 text-placeholder opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive-fg"
+        className="p-0.5 text-placeholder opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive-indicator"
         title="Remove tag"
       >
         <X className="h-3 w-3" />

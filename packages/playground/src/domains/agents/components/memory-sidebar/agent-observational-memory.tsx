@@ -175,7 +175,7 @@ const ProgressBar = ({
           className={`text-meta ${tokenTextColor} whitespace-nowrap tabular-nums ${tokenBg} -ml-px flex items-center gap-1 rounded-r px-1.5`}
         >
           {formatTokens(value)}
-          <span className={isProcessing ? 'text-info-fg' : 'text-muted-foreground'}>/{formatTokens(max)}</span>
+          <span className={isProcessing ? 'text-info-indicator' : 'text-muted-foreground'}>/{formatTokens(max)}</span>
           {isAdaptive && totalBudget && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -221,7 +221,7 @@ const ObservationalMemoryDisabled = () => (
         target="_blank"
         rel="noopener noreferrer"
         className={cn(
-          'inline-flex items-center gap-2 text-body text-info-fg hover:underline',
+          'inline-flex items-center gap-2 text-body text-info-indicator hover:underline',
           controlStateColorTransition,
         )}
       >

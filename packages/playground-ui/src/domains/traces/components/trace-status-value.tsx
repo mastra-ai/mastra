@@ -9,8 +9,8 @@ const STATUS_LABELS: Record<TraceStatusValueStatus, string> = {
 };
 
 const STATUS_STYLES: Record<TraceStatusValueStatus, string> = {
-  success: 'text-success-fg',
-  error: 'text-destructive-fg',
+  success: 'text-success-indicator',
+  error: 'text-destructive-indicator',
   running: 'text-muted-foreground',
 };
 

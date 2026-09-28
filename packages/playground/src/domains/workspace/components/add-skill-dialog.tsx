@@ -346,7 +346,7 @@ export function AddSkillDialog({
                             href={skillsUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="mt-2 flex items-center gap-1 text-caption text-info-fg hover:underline"
+                            className="mt-2 flex items-center gap-1 text-caption text-info-indicator hover:underline"
                           >
                             View on skills.sh <ExternalLink className="h-3 w-3" />
                           </a>

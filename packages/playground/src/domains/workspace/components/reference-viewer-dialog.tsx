@@ -87,7 +87,7 @@ export function ReferenceViewerDialog({
             </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
-              <p className="mb-2 text-destructive-fg">Failed to load reference</p>
+              <p className="mb-2 text-destructive-indicator">Failed to load reference</p>
               <p className="text-body text-muted-foreground">{error}</p>
             </div>
           ) : content ? (

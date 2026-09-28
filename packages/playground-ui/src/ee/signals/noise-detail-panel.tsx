@@ -92,7 +92,7 @@ export function NoiseDetailPanel({
                 </p>
                 {noiseQuery.isPending && <p className="mt-4 text-body text-muted-foreground">Loading noise details…</p>}
                 {noiseQuery.isError && (
-                  <p className="mt-4 text-body text-destructive-fg">Unable to load noise details.</p>
+                  <p className="mt-4 text-body text-destructive-indicator">Unable to load noise details.</p>
                 )}
                 {noiseQuery.data && (
                   <p className="mt-4 font-mono text-body text-foreground tabular-nums">
@@ -113,7 +113,7 @@ export function NoiseDetailPanel({
                 </h2>
                 {examplesQuery.isPending && <p className="mt-3 text-body text-muted-foreground">Loading examples…</p>}
                 {examplesQuery.isError && (
-                  <p className="mt-3 text-body text-destructive-fg">Unable to load examples.</p>
+                  <p className="mt-3 text-body text-destructive-indicator">Unable to load examples.</p>
                 )}
                 {examplesQuery.data && (
                   <>

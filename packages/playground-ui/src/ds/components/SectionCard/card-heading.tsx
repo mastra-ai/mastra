@@ -21,14 +21,14 @@ export function CardHeading({
   const danger = tone === 'danger';
   return (
     <>
-      <h3 id={id} className={cn('text-heading text-foreground', danger && 'text-destructive-fg', className)}>
+      <h3 id={id} className={cn('text-heading text-foreground', danger && 'text-destructive-indicator', className)}>
         {title}
       </h3>
       {description != null && (
         <p
           className={cn(
             'mt-1 max-w-[62ch]',
-            danger ? 'text-caption text-destructive-fg' : 'text-caption text-muted-foreground',
+            danger ? 'text-caption text-destructive-indicator' : 'text-caption text-muted-foreground',
             descriptionClassName,
           )}
         >

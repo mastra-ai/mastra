@@ -258,7 +258,7 @@ export const SandboxExecutionBadge = ({
         <div className="flex items-center gap-2">
           {isRunning ? (
             <>
-              <span className="flex items-center gap-1.5 text-caption text-warning-fg">
+              <span className="flex items-center gap-1.5 text-caption text-warning-indicator">
                 <span className="size-1.5 animate-pulse rounded-full bg-warning-indicator" />
                 <span className="animate-pulse">running</span>
               </span>
