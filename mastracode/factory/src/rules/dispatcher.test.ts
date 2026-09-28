@@ -1640,25 +1640,35 @@ describe('FactoryDecisionDispatcher', () => {
 
     it('runs the close-out on a finished card by minting its own seat', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
-      const { item, transitionService } = await queueDecision(storage, {
-        type: 'invokeSkill',
-        idempotencyKey: 'close-out-terminal',
-        role: 'triage',
-        skillName: 'factory-complete-issue',
-        arguments: 'Issue 42',
-      } as FactoryCommitDecision);
-      const current = await storage.get({ orgId: 'org-1', id: item.id });
+      const item = await createItem(storage);
+      const transitionService = new FactoryTransitionService({
+        storage,
+        configVersion: 'rules-v1',
+        boards: createLifecycleTestRegistry({}),
+      });
+      // The close-out is decided by the same commit that lands the card in Done.
       await storage.commitTransition({
         orgId: 'org-1',
         factoryProjectId: PROJECT_ID,
         workItemId: item.id,
-        expectedRevision: current!.revision,
+        expectedRevision: item.revision,
         destinationStage: 'done',
         actorId: 'user-1',
         ingress: { identity: 'external-close', triggerType: 'github', transitionId: 'external-close' },
         configVersion: 'rules-v1',
         causalChain: [],
-        evaluation: { outcome: 'accepted', decisions: [] },
+        evaluation: {
+          outcome: 'accepted',
+          decisions: [
+            {
+              type: 'invokeSkill',
+              idempotencyKey: 'close-out-terminal',
+              role: 'triage',
+              skillName: 'factory-complete-issue',
+              arguments: 'Issue 42',
+            } as FactoryCommitDecision,
+          ],
+        },
       });
       const { controller, session } = createSession();
       let seatDuringRun: Promise<number> | undefined;
