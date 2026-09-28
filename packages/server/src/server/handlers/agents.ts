@@ -1759,9 +1759,8 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
     return {
       id,
       name: provider.name,
-      label: ('label' in provider && typeof provider.label === 'string' && provider.label) || provider.name,
-      description:
-        ('description' in provider && typeof provider.description === 'string' && provider.description) || '',
+      label: readStringField(provider, 'label') || provider.name,
+      description: readStringField(provider, 'description') || '',
       envVar: provider.apiKeyEnvVar,
       connected: isProviderConnected(id, allProviders) || isClaimedByGateway(id, provider.models, gateways),
       docUrl: provider.docUrl,
@@ -1779,6 +1778,14 @@ function isClaimedByGateway(
   if (!firstModel) return false;
   const routerId = `${providerId}/${firstModel}`;
   return gateways.some(gateway => gateway.shouldEnable?.() !== false && gateway.handlesModel?.(routerId) === true);
+}
+
+function readStringField<Field extends string>(
+  source: object & Partial<Record<Field, unknown>>,
+  field: Field,
+): string | undefined {
+  const value = source[field];
+  return typeof value === 'string' ? value : undefined;
 }
 
 export const GET_PROVIDERS_ROUTE = createRoute({
