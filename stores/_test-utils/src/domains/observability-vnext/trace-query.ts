@@ -55,8 +55,6 @@ export interface RawTraceQuerySpan {
   environment: string | null;
   organizationId: string | null;
   runId: string | null;
-  sessionId: string | null;
-  userId: string | null;
   tags: string[] | null;
   serviceName?: string | null;
   executionSource?: string | null;
