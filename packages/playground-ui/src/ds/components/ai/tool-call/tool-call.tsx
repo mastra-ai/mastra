@@ -196,7 +196,7 @@ export const ToolCallPresentedHeader = ({
           size={14}
           strokeWidth={1.75}
           aria-hidden
-          className={status === 'error' ? 'text-error/80' : 'text-placeholder'}
+          className={status === 'error' ? 'text-destructive-indicator' : 'text-placeholder'}
         />
       </ToolCallIcon>
       {description ? (
@@ -210,7 +210,7 @@ export const ToolCallPresentedHeader = ({
       <ToolCallSpacer />
       {status === 'error' && (
         <ToolCallTrailing>
-          <X size={13} role="img" aria-label="Failed" className="shrink-0 text-error" />
+          <X size={13} role="img" aria-label="Failed" className="shrink-0 text-destructive-indicator" />
         </ToolCallTrailing>
       )}
       {disclosure && <ToolCallDisclosure />}

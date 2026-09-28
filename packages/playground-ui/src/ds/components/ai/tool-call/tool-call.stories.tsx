@@ -86,14 +86,14 @@ export const Failed: Story = {
     <ToolCall status="error" defaultOpen aria-label="Tool: write file">
       <ToolCallTrigger>
         <ToolCallHeader>
-          <ToolCallIcon className="text-error/80">
+          <ToolCallIcon className="text-destructive-indicator">
             <FileText size={14} strokeWidth={1.75} aria-hidden />
           </ToolCallIcon>
           <ToolCallLabel>Write file</ToolCallLabel>
           <ToolCallDetail>src/config.ts</ToolCallDetail>
           <ToolCallSpacer />
           <ToolCallTrailing>
-            <X size={13} role="img" aria-label="Failed" className="text-error" />
+            <X size={13} role="img" aria-label="Failed" className="text-destructive-indicator" />
           </ToolCallTrailing>
           <ToolCallDisclosure />
         </ToolCallHeader>

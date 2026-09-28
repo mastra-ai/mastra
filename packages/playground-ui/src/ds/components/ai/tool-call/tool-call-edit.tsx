@@ -9,7 +9,7 @@ const DIFF_MAX_LINES = 200;
 const WRITTEN_FILE_MAX_CHARS = 2000;
 
 const DIFF_SIDES = {
-  removed: { sign: '-', row: 'bg-error/10', gutter: 'text-error' },
+  removed: { sign: '-', row: 'bg-destructive-bg', gutter: 'text-destructive-fg' },
   added: { sign: '+', row: 'bg-success-bg', gutter: 'text-success-fg' },
 } as const;
 

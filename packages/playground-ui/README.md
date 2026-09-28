@@ -94,16 +94,17 @@ Numbered `accent*` tokens, `positive1`, `negative1`, `warning1`, `notice-success
 
 To migrate removed tokens:
 
-| Removed token          | Replacement              |
-| ---------------------- | ------------------------ |
-| `--chart-soft-N`       | `--chart-sequential-N`   |
-| `--span-type-NAME`     | `--span-NAME`            |
-| `accent1`, `positive1` | `success-*`              |
-| `accent2`, `negative1` | `destructive-*`          |
-| `accent6`, `warning1`  | `warning-*`              |
-| `accent3`, `accent5`   | `info-*`                 |
-| `notice-STATUS`        | `STATUS-bg`, `STATUS-fg` |
-| `--brand-green-N`      | `--green-N`              |
+| Removed token          | Replacement                               |
+| ---------------------- | ----------------------------------------- |
+| `--chart-soft-N`       | `--chart-sequential-N`                    |
+| `--span-type-NAME`     | `--span-NAME`                             |
+| `accent1`, `positive1` | `success-*`                               |
+| `accent2`, `negative1` | `destructive-*`                           |
+| `accent6`, `warning1`  | `warning-*`                               |
+| `accent3`, `accent5`   | `info-*`                                  |
+| `error`                | `destructive-fg`, `destructive-indicator` |
+| `notice-STATUS`        | `STATUS-bg`, `STATUS-fg`                  |
+| `--brand-green-N`      | `--green-N`                               |
 
 `SankeyChart` accepts `getNodeColor` and `getLinkColor` callbacks returning CSS colors. Explicit link colors keep the default link transparency and hover emphasis:
 

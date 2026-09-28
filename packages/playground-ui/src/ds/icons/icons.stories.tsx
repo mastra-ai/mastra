@@ -172,7 +172,7 @@ export const IconColors: Story = {
       <Icon className="text-success-indicator">
         <AgentIcon />
       </Icon>
-      <Icon className="text-error">
+      <Icon className="text-destructive-indicator">
         <AgentIcon />
       </Icon>
     </div>

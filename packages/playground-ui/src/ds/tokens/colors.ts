@@ -176,8 +176,6 @@ export const Colors = {
   destructive: 'var(--destructive)',
   'destructive-foreground': 'var(--destructive-foreground)',
 
-  error: 'var(--error)',
-
   scrim: 'var(--scrim)',
 
   'notice-note': 'var(--notice-note)',

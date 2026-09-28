@@ -62,7 +62,7 @@ export const BadgeWrapper = ({
       <ToolCallSpacer />
       {status === 'error' && (
         <ToolCallTrailing>
-          <X size={13} role="img" aria-label="Failed" className="shrink-0 text-error" />
+          <X size={13} role="img" aria-label="Failed" className="shrink-0 text-destructive-indicator" />
         </ToolCallTrailing>
       )}
       {collapsible && <ToolCallDisclosure />}

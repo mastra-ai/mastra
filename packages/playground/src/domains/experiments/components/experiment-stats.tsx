@@ -15,7 +15,7 @@ const statusIconMap: Record<RunStatus, { icon: React.ReactNode; label: string }>
   pending: { icon: <ClockIcon className="size-4 text-warning-indicator" />, label: 'Pending' },
   running: { icon: <Spinner size="sm" />, label: 'Running' },
   completed: { icon: <CircleCheckIcon className="size-4 text-muted-foreground" />, label: 'Completed' },
-  failed: { icon: <CircleXIcon className="size-4 text-error" />, label: 'Failed' },
+  failed: { icon: <CircleXIcon className="size-4 text-destructive-indicator" />, label: 'Failed' },
 };
 
 /** Compact status indicator — a small icon with a tooltip describing the run state. */

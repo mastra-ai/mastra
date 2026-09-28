@@ -195,7 +195,7 @@ export function UserSessionsSection() {
         </MainSidebar.NavList>
         {sessionsQuery.isError && (
           <div className="flex items-center gap-2 px-2 py-1">
-            <Txt as="p" variant="meta" className="text-error m-0">
+            <Txt as="p" variant="meta" className="text-destructive-fg m-0">
               Couldn’t load sessions
             </Txt>
             <Button variant="ghost" size="sm" onClick={() => void sessionsQuery.refetch()}>

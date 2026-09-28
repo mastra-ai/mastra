@@ -48,7 +48,6 @@
 
   --destructive: var(--red-600);
   --destructive-foreground: var(--red-50);
-  --error: var(--destructive-indicator);
   /* Lightness for hue-only generated accents (e.g. per-filter colors) — legible on each theme. */
   --generated-accent-lightness: 72%;
 
@@ -58,12 +57,10 @@
 html.light {
   --destructive: var(--red-600);
   --destructive-foreground: var(--red-50);
-  --error: var(--destructive-indicator);
   --generated-accent-lightness: 38%;
 }
 
 @theme {
-  --color-error: var(--error);
 }
 
 /* Semantic aliases stay inline so utilities resolve var(--token) on the styled
