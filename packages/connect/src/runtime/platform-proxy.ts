@@ -74,9 +74,13 @@ export interface TemplateConnectionContextWithCredentials extends TemplateConnec
 
 /** Maps the platform credential to the field names templates are written against. */
 function toTemplateCredentials(credential: ConnectionCredential): Record<string, ProviderResponseData> {
-  return credential.type === 'oauth2'
-    ? { type: 'OAUTH2', access_token: credential.accessToken, expires_at: credential.expiresAt }
-    : { type: 'API_KEY', apiKey: credential.apiKey };
+  if (credential.type === 'oauth2') {
+    return { type: 'OAUTH2', access_token: credential.accessToken, expires_at: credential.expiresAt };
+  }
+  if (credential.type === 'two_step') {
+    return { type: 'TWO_STEP', token: credential.token, expires_at: credential.expiresAt };
+  }
+  return { type: 'API_KEY', apiKey: credential.apiKey };
 }
 
 /**

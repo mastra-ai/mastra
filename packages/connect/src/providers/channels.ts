@@ -53,7 +53,7 @@ export type DiscordReservedProviderOption = (typeof DISCORD_RESERVED_KEYS)[numbe
 export type TeamsReservedProviderOption = (typeof TEAMS_RESERVED_KEYS)[number];
 
 const RESERVED_OPTION_KEYS: Record<string, readonly string[]> = {
-  slack: SLACK_RESERVED_KEYS,
+  'slack-channels': SLACK_RESERVED_KEYS,
   telegram: TELEGRAM_RESERVED_KEYS,
   discord: DISCORD_RESERVED_KEYS,
   'microsoft-teams': TEAMS_RESERVED_KEYS,
@@ -83,19 +83,26 @@ function stripReservedOptions<T extends Record<string, unknown> | undefined>(int
 }
 
 /**
- * Slack: wraps `@mastra/slack`'s `SlackProvider`. The platform's credential
- * vendor (Nango) owns the Slack App Configuration token refresh cycle (a
- * TWO_STEP credential — the platform serves it as `{ type: 'two_step' }`
- * with the rotating config token under `token`), so the provider is
- * constructed with a `tokenResolver` that fetches a fresh access
- * token from the platform before each manifest API call. `SlackProvider`
- * never calls `tooling.tokens.rotate` in this mode — rotating the platform's
- * single-use refresh token locally would burn the vendor's stored copy and
- * permanently break the connection. The provider still handles per-agent app
- * minting via the manifest API, OAuth install flow, and webhook signature
- * verification (the per-app signing secret is minted at install time via the
- * manifest API and stored on `ChannelsStorage`, not sourced from
- * `providerOptions`).
+ * Slack: wraps `@mastra/slack`'s `SlackProvider`, matched to the platform's
+ * `slack-channels` integration — the platform-catalog rename over Nango's
+ * upstream `slack-app-configuration` provider. `slack-channels` serves a
+ * TWO_STEP credential carrying a Slack App Configuration token (the
+ * platform exposes it as `{ type: 'two_step' }` with the rotating config
+ * token under `token`), so the provider is constructed with a
+ * `tokenResolver` that fetches a fresh token from the platform before each
+ * manifest API call. `SlackProvider` never calls `tooling.tokens.rotate` in
+ * this mode — rotating the platform's single-use refresh token locally
+ * would burn the vendor's stored copy and permanently break the
+ * connection. The provider still handles per-agent app minting via the
+ * manifest API, OAuth install flow, and webhook signature verification
+ * (the per-app signing secret is minted at install time via the manifest
+ * API and stored on `ChannelsStorage`, not sourced from `providerOptions`).
+ *
+ * The OAuth-based `slack` integration is deliberately not channel-capable:
+ * its bot token is scoped to a single installed workspace and cannot mint
+ * per-agent apps, which is the whole point of the channel. The `slack`
+ * integration continues to back the generated Slack **tools**
+ * (`providers/slack/`) from its OAuth bot credential.
  *
  * `providerOptions` is spread into the `SlackProvider` constructor after
  * `tokenResolver`; reserved fields (`baseUrl`, `refreshToken`, `token`,
@@ -105,12 +112,12 @@ function stripReservedOptions<T extends Record<string, unknown> | undefined>(int
  * See `@mastra/slack`'s `SlackProviderConfig` for the full option surface.
  */
 const slackChannel: ChannelProviderRegistration = {
-  integrationId: 'slack',
+  integrationId: 'slack-channels',
   async create(options, runtime) {
     const mod = (await import('@mastra/slack')) as {
       SlackProvider: new (config: Record<string, unknown>) => ChannelProvider;
     };
-    const safeOptions = stripReservedOptions('slack', options);
+    const safeOptions = stripReservedOptions('slack-channels', options);
     // The resolver reads the *current* connection through the runtime on
     // every call, so a connection swapped on the platform takes effect on the
     // next manifest operation — no `sync()` needed.

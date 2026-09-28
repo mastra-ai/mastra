@@ -61,7 +61,7 @@ export interface ChannelsIntegrationOptions<ProviderOptions = Record<string, unk
  * change here.
  */
 export interface ChannelsIntegrationOverrides {
-  slack?: ChannelsIntegrationOptions<SlackChannelsProviderOptions>;
+  'slack-channels'?: ChannelsIntegrationOptions<SlackChannelsProviderOptions>;
   telegram?: ChannelsIntegrationOptions<TelegramChannelsProviderOptions>;
   discord?: ChannelsIntegrationOptions<DiscordChannelsProviderOptions>;
   'microsoft-teams'?: ChannelsIntegrationOptions<TeamsChannelsProviderOptions>;
