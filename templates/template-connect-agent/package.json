@@ -16,8 +16,8 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "@mastra/connect": "latest",
-    "@mastra/core": "latest",
+    "@mastra/connect": "^0.4.0",
+    "@mastra/core": "^1.71.0",
     "@mastra/libsql": "latest",
     "@mastra/loggers": "latest",
     "@mastra/memory": "latest",
