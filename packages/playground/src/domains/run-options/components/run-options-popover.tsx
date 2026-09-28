@@ -1,5 +1,5 @@
+import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { SlidersHorizontal } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
@@ -42,7 +42,7 @@ export function RunOptionsPopover({
   };
 
   return (
-    <RunActionPopover label="Run options" icon={<SlidersHorizontal />} open={open} onOpenChange={handleOpenChange}>
+    <RunActionPopover label="Run options" icon={<TraceIcon />} open={open} onOpenChange={handleOpenChange}>
       {extraFields}
       <JsonObjectEditor
         label="Tracing Options"
