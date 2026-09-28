@@ -88,7 +88,7 @@ const mocks = vi.hoisted(() => ({
   /** Run-binding role resolved for the session; null = no binding found. */
   runBindingRole: null as string | null,
   runBindingStatus: 'active' as 'active' | 'revoked',
-  findRunBindingBySession: vi.fn(async () =>
+  findActiveRunBindingForSession: vi.fn(async () =>
     mocks.runBindingRole ? { role: mocks.runBindingRole, status: mocks.runBindingStatus, orgId: 'org-1' } : null,
   ),
 }));
@@ -164,7 +164,7 @@ afterEach(async () => {
   mocks.githubReviewerPat = null;
   mocks.runBindingRole = null;
   mocks.runBindingStatus = 'active';
-  mocks.findRunBindingBySession.mockClear();
+  mocks.findActiveRunBindingForSession.mockClear();
 });
 
 function createRequestContext(projectPath: string) {
@@ -963,7 +963,7 @@ describe('GitHub session workspace preparation', () => {
     const resolver = createWorkspaceFactory({
       sandbox: mocks.createSandbox as any,
       github: fakeGithubIntegration() as any,
-      workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
+      workItems: { findActiveRunBindingForSession: mocks.findActiveRunBindingForSession } as any,
       ...(workspaceRegistry ? { workspaceRegistry } : {}),
     });
     return {
@@ -1119,6 +1119,27 @@ describe('GitHub session workspace preparation', () => {
     expect(await workspace.skills?.get('factory-review')).toBeFalsy();
     expect(await workspace.skills?.get('factory-rereview')).toBeFalsy();
     expect((await workspace.skills?.get('factory-plan'))?.instructions).toContain('# Factory Plan');
+  });
+
+  it('exposes review skills to a review session before it has a live thread', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
+    // The controller builds a session's workspace from its creation-time
+    // context, which has no thread yet — the case a dispatcher kickoff hits.
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    const controller = requestContext.get('controller') as Record<string, unknown>;
+    controller.threadId = null;
+    controller.getState = () => ({});
+
+    const workspace = (await resolver({ requestContext }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect((await workspace.skills?.get('factory-review'))?.instructions).toBeTruthy();
+    expect(mocks.findActiveRunBindingForSession).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: 'org-1', sessionId: 'session-a' }),
+    );
   });
 
   it('drops cached review skills when a reused workspace leaves the review role', async () => {
@@ -1715,7 +1736,7 @@ describe('GitHub session workspace preparation', () => {
       createWorkspaceFactory({
         sandbox: mocks.createSandbox as any,
         github: fakeGithubIntegration() as any,
-        workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
+        workItems: { findActiveRunBindingForSession: mocks.findActiveRunBindingForSession } as any,
       }),
     );
   }
@@ -2331,7 +2352,7 @@ describe('GitHub session workspace preparation', () => {
   it('serves no host workspace even on deploys with no sandbox config', async () => {
     const resolver = createWorkspaceFactory({
       github: fakeGithubIntegration() as any,
-      workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
+      workItems: { findActiveRunBindingForSession: mocks.findActiveRunBindingForSession } as any,
     });
     const projectPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-web-no-sandbox-'));
     tempDirs.push(projectPath);
@@ -2349,7 +2370,7 @@ describe('GitHub session workspace preparation', () => {
       return createWorkspaceFactory({
         sandbox: mocks.createSandbox as any,
         github: fakeGithubIntegration() as any,
-        workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
+        workItems: { findActiveRunBindingForSession: mocks.findActiveRunBindingForSession } as any,
         ...(sandboxStart !== undefined ? { sandboxStart } : {}),
       });
     }

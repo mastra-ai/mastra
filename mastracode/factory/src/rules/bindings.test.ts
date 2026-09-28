@@ -195,6 +195,23 @@ describe('Factory run binding authority', () => {
       ).resolves.toBe(1);
     });
 
+    it('finds the session binding without a thread and stops once it is revoked', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const prepared = await prepareBinding(storage);
+      const find = (orgId = 'org-1') =>
+        storage.findActiveRunBindingForSession({ orgId, factoryProjectId: PROJECT_ID, sessionId: 'session-1' });
+
+      await expect(find()).resolves.toMatchObject({ id: prepared.binding.id, role: 'work' });
+      await expect(find('org-2')).resolves.toBeNull();
+
+      await storage.revokeRunBinding({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        bindingId: prepared.binding.id,
+      });
+      await expect(find()).resolves.toBeNull();
+    });
+
     it('revokes fresh bindings whose work item is missing', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const prepared = await prepareBinding(storage);

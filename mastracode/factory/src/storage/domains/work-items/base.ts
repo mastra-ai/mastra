@@ -2781,6 +2781,27 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return row ? toBinding(row) : null;
   }
 
+  /**
+   * The active binding a Factory session is serving, keyed by the session
+   * alone so it resolves before the session has a live thread (e.g. when the
+   * dispatcher builds the workspace for a kickoff). Ambiguous matches never
+   * authorize.
+   */
+  async findActiveRunBindingForSession(input: {
+    orgId: string;
+    factoryProjectId: string;
+    sessionId: string;
+  }): Promise<FactoryRunBindingRecord | null> {
+    const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
+      org_id: input.orgId,
+      factory_project_id: input.factoryProjectId,
+      session_id: input.sessionId,
+      status: 'active',
+    });
+    if (rows.length !== 1) return null;
+    return toBinding(rows[0]!);
+  }
+
   /** Resolve exact bound-session state for processor awareness; ambiguous cross-tenant matches return null. */
   async findRunBindingBySession(address: FactoryRunBindingSessionAddress): Promise<FactoryRunBindingRecord | null> {
     const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {

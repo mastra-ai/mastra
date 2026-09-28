@@ -30,7 +30,6 @@ import {
   SetupCommandError,
 } from './integrations/github/sandbox.js';
 import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
-import { getFactorySessionAddress } from './rules/binding-context.js';
 import { requireExec } from './sandbox/materialization.js';
 import type { ExecutableSandbox } from './sandbox/materialization.js';
 import {
@@ -305,7 +304,7 @@ export interface CreateWorkspaceFactoryOptions {
   /** Work-items storage used to resolve the session's run-binding role, so
    * review-board sessions get the reviewer PAT as `GH_TOKEN`. Optional —
    * without it every session uses the default (worker) PAT. */
-  workItems?: Pick<WorkItemsStorage, 'findRunBindingBySession'>;
+  workItems?: Pick<WorkItemsStorage, 'findActiveRunBindingForSession'>;
   /** Projects storage used to authorize workspace-free supervisor sessions. */
   projects?: Pick<FactoryProjectsStorage, 'get'>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
@@ -619,13 +618,20 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       await ctx.setState({ projectPath: workdir, projectName: repoFullName });
     }
 
+    // Keyed by the session, not the request's thread: a workspace built for a
+    // dispatcher kickoff has no live thread yet, but the session's binding
+    // already says which role it is serving.
+    const findSessionBinding = () =>
+      workItems!.findActiveRunBindingForSession({
+        orgId: session.orgId,
+        factoryProjectId: connection.factoryProjectId,
+        sessionId: session.sessionId,
+      });
     // Fails closed: without a readable active review binding, review skills stay hidden.
     const isReviewSession = async (): Promise<boolean> => {
       if (!workItems) return false;
       try {
-        const address = getFactorySessionAddress(requestContext);
-        const runBinding = address ? await workItems.findRunBindingBySession(address) : null;
-        return isActiveReviewBinding(runBinding, session.orgId);
+        return isActiveReviewBinding(await findSessionBinding(), session.orgId);
       } catch {
         return false;
       }
@@ -649,9 +655,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const resolveGithubPatKind = async (fallback: GithubPatKind): Promise<GithubPatKind> => {
       if (!workItems) return 'default';
       try {
-        const address = getFactorySessionAddress(requestContext);
-        const runBinding = address ? await workItems.findRunBindingBySession(address) : null;
-        return isActiveReviewBinding(runBinding, session.orgId) ? 'reviewer' : 'default';
+        return isActiveReviewBinding(await findSessionBinding(), session.orgId) ? 'reviewer' : 'default';
       } catch {
         // Preserve the installed role when binding storage is temporarily unavailable.
         return fallback;
