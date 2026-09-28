@@ -237,15 +237,13 @@ Evaluates all questions against the supplied state.
 
 Omit `questions` from the constructor when the question set changes between evaluations. The answer type is inferred from the questions supplied to that call.
 
-```typescript
+```typescript oxfmt:false
 import { Classifier } from '@mastra/core/classifier'
 import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
 
 const classifier = new Classifier({
   id: 'dynamic-classifier',
-  model: createTypeSafeAi({ apiKey: process.env.TYPESAFE_AI_API_KEY }).evaluationModel(
-    'jev-latest',
-  ),
+  model: createTypeSafeAi({...}).evaluationModel('jev-latest'),
 })
 
 const result = await classifier.evaluate({
@@ -354,7 +352,7 @@ The span doesn't include the evaluated state, question instructions, criteria, a
 
 `Classifier` automatically wraps a raw AI SDK evaluation model in `MastraEvaluationModel`. Pass your own wrapper when provider output needs normalization before validation.
 
-```typescript
+```typescript oxfmt:false
 import {
   Classifier,
   MastraEvaluationModel,
@@ -374,7 +372,7 @@ class NormalizedEvaluationModel extends MastraEvaluationModel {
 const classifier = new Classifier({
   id: 'normalized-classifier',
   model: new NormalizedEvaluationModel(
-    createTypeSafeAi({ apiKey: process.env.TYPESAFE_AI_API_KEY }).evaluationModel('jev-latest'),
+    createTypeSafeAi({...}).evaluationModel('jev-latest'),
   ),
 })
 ```
@@ -385,7 +383,7 @@ const classifier = new Classifier({
 
 Register classifiers on the `Mastra` instance to share them across your application and retrieve them by key or ID. When a registered classifier is evaluated without an active trace, it starts a root `CLASSIFIER_EVALUATION` span through the `Mastra` instance's configured observability provider.
 
-```typescript title="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts" oxfmt:false
 import { Mastra } from '@mastra/core'
 import { Classifier } from '@mastra/core/classifier'
 import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
@@ -394,9 +392,7 @@ export const mastra = new Mastra({
   classifiers: {
     safety: new Classifier({
       id: 'safety',
-      model: createTypeSafeAi({ apiKey: process.env.TYPESAFE_AI_API_KEY }).evaluationModel(
-        'jev-latest',
-      ),
+      model: createTypeSafeAi({...}).evaluationModel('jev-latest'),
       questions: {
         unsafe: { type: 'boolean' },
       },
