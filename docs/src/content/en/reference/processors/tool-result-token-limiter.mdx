@@ -1,0 +1,83 @@
+---
+title: "Reference: ToolResultTokenLimiter | Processors"
+description: "The ToolResultTokenLimiter is an output processor that truncates each tool result to a token limit before it reaches the message list."
+packages:
+  - "@mastra/core"
+---
+
+# ToolResultTokenLimiter
+
+The `ToolResultTokenLimiter` is an **output processor** that truncates each tool result to a token limit, so later model calls see the truncated result. The model sees the truncated result and a marker that reports how many tokens are shown.
+
+Use it with [`TokenLimiterProcessor`](/reference/processors/token-limiter-processor) when tools can return large results. Without it, a single oversized tool result can exceed the input budget, and `TokenLimiterProcessor` removes the current run's tool call and result to fit. The model then has no data and may call the same tool again.
+
+The truncated result replaces the original, so it's also the result that's stored in memory.
+
+## Usage example
+
+```typescript title="src/mastra/agents/research-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { TokenLimiter, ToolResultTokenLimiter } from '@mastra/core/processors'
+
+export const agent = new Agent({
+  id: 'research-agent',
+  name: 'Research Agent',
+  instructions: 'You research topics using the search tool.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  inputProcessors: [new TokenLimiter(8000)],
+  outputProcessors: [new ToolResultTokenLimiter(2000)],
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: 'options',
+      type: 'number | ToolResultTokenLimiterOptions',
+      description:
+        'Either a number for the maximum tokens per tool result, or an options object. Must be a positive integer.',
+      isOptional: false,
+    },
+  ]}
+/>
+
+### Options
+
+<PropertiesTable
+  content={[
+    {
+      name: 'limit',
+      type: 'number',
+      description: 'Maximum number of tokens a single tool result may use.',
+      isOptional: false,
+    },
+  ]}
+/>
+
+## Behavior
+
+- String results are measured directly. Other results are measured by their JSON text, and `bigint` values are converted to strings.
+- Results within the limit are left unchanged.
+- An oversized result is replaced with its leading text and a marker such as `[truncated: showing 1950 of 12000 tokens]`. If the limit is too small to fit the marker, the result becomes an empty string.
+- Media results shaped like `{ data, mediaType }` and results the processor can't serialize (for example circular objects) are left unchanged.
+
+## Processor order
+
+The limiter measures the result as earlier output processors left it in the message list, so a processor that runs **before** the limiter, such as a redactor, has its output truncated.
+
+Every processor's `result` argument is the tool's original return value, not the truncated one. A processor that runs **after** the limiter and writes a new result built from `result` replaces the truncated result. Register the limiter last so its limit applies to the final result.
+
+```typescript title="src/mastra/agents/research-agent.ts"
+export const agent = new Agent({
+  // ...
+  // Redact first, then truncate the redacted result
+  outputProcessors: [redactor, new ToolResultTokenLimiter(2000)],
+})
+```
+
+## Related
+
+- [TokenLimiterProcessor](/reference/processors/token-limiter-processor)
+- [Processor Interface](/reference/processors/processor-interface)

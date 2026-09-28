@@ -14,6 +14,8 @@ The `TokenLimiterProcessor` limits the number of tokens in messages. Depending o
 - **Input processor** (`processInput`): In `memory-only` trim mode, filters historical messages to fit within the context window before the agentic loop starts, prioritizing recent messages
 - **Output processor**: Limits generated response tokens via streaming or non-streaming with configurable strategies for handling exceeded limits
 
+If a tool can return a result larger than the input budget, register [`ToolResultTokenLimiter`](/reference/processors/tool-result-token-limiter) as an output processor. Otherwise, in `best-fit` mode the prompt processor removes the current run's tool call and result to fit, so the model doesn't get the tool's data. In `contiguous` mode it aborts the run with a tripwire instead.
+
 ## Usage example
 
 ```typescript

@@ -57,6 +57,7 @@ export {
   TokenLimiterProcessor as TokenLimiter,
   type TokenLimiterOptions,
 } from './token-limiter';
+export { ToolResultTokenLimiter, type ToolResultTokenLimiterOptions } from './tool-result-token-limiter';
 export {
   SystemPromptScrubber,
   type SystemPromptScrubberOptions,
