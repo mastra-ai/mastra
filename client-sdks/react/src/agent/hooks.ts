@@ -560,7 +560,9 @@ export const useChat = ({
             liveRunId.current = runId;
             liveRunFinished.current = false;
           }
-          _currentRunId.current = runId;
+          if (liveRunId.current === runId) {
+            _currentRunId.current = runId;
+          }
         }
         setIsRunning(false);
       }
