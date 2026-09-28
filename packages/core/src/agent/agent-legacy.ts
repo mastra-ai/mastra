@@ -655,13 +655,21 @@ export class AgentLegacyHandler {
                 promises.push(
                   this.capabilities
                     .genTitle(userMessage, requestContext, observabilityContext, titleModel, titleInstructions)
-                    .then(title => {
+                    .then(async title => {
                       if (title) {
-                        return memory.createThread({
-                          threadId: thread.id,
-                          resourceId,
-                          memoryConfig,
+                        const existingThread = await memory.getThreadById({ threadId: thread.id });
+                        if (!existingThread) {
+                          this.capabilities.logger.debug(
+                            'Skipping title save: thread was deleted while the title was being generated',
+                            { threadId: thread.id },
+                          );
+                          return undefined;
+                        }
+
+                        return memory.updateThread({
+                          id: thread.id,
                           title,
+                          memoryConfig,
                           metadata: thread.metadata,
                         });
                       }

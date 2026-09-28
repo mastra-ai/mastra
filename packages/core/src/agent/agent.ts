@@ -8085,11 +8085,23 @@ export class Agent<
               )
                 .then(async title => {
                   if (title) {
-                    await memory.createThread({
-                      threadId: thread.id,
-                      resourceId,
-                      memoryConfig,
+                    // The thread is persisted before title generation starts, so the
+                    // title save only needs to update it. `updateThread` never inserts,
+                    // so a delete that lands between the existence check and this write
+                    // still cannot resurrect the thread — `createThread` upserts and
+                    // would re-create an empty, titled thread.
+                    const existingThread = await memory.getThreadById({ threadId: thread.id });
+                    if (!existingThread) {
+                      this.logger.debug('Skipping title save: thread was deleted while the title was being generated', {
+                        threadId: thread.id,
+                      });
+                      return undefined;
+                    }
+
+                    await memory.updateThread({
+                      id: thread.id,
                       title,
+                      memoryConfig,
                       metadata: thread.metadata,
                     });
 

@@ -621,6 +621,96 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(thread?.title).toBe('Custom Title Model Response');
     });
 
+    it('should not re-create a thread that was deleted while the title was being generated', async () => {
+      const mockMemory = new MockMemory();
+
+      let titleModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let agentModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      const threadId = 'thread-deleted-mid-title';
+      const titleResult = {
+        text: 'Late Title Response',
+        content: [{ type: 'text', text: 'Late Title Response' }] as any,
+      };
+
+      if (version === 'v1') {
+        titleModel = new MockLanguageModelV1({
+          doGenerate: async () => {
+            // Simulate the user deleting the thread while the slow title
+            // model is still running, then the title model resolving.
+            await mockMemory.deleteThread(threadId);
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { promptTokens: 5, completionTokens: 10 },
+              text: titleResult.text,
+            };
+          },
+        });
+        agentModel = new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: 'Response text',
+          }),
+        });
+      } else {
+        titleModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            await mockMemory.deleteThread(threadId);
+            return {
+              response: { id: 'title-resp-1', modelId: 'mock-title-model', timestamp: new Date() },
+              finishReason: 'stop',
+              usage: { promptTokens: 5, completionTokens: 10 },
+              content: titleResult.content,
+            };
+          },
+        });
+        agentModel = new MockLanguageModelV2({
+          doGenerate: async () => ({
+            response: { id: 'agent-resp-1', modelId: 'mock-agent-model', timestamp: new Date() },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            content: [{ type: 'text', text: 'Response text' }],
+          }),
+        });
+      }
+
+      mockMemory.getMergedThreadConfig = () => ({
+        generateTitle: { model: titleModel },
+      });
+
+      const agent = new Agent({
+        id: 'title-deleted-thread-agent',
+        name: 'Title Deleted Thread Agent',
+        instructions: 'test agent for deleted thread title generation',
+        model: agentModel,
+        memory: mockMemory,
+      });
+
+      const generateArgs = {
+        memory: {
+          resource: 'user-1',
+          thread: { id: threadId, title: '' },
+        },
+      };
+      if (version === 'v1') {
+        await agent.generateLegacy('Hello there!', generateArgs);
+      } else {
+        await agent.generate('Hello there!', generateArgs);
+      }
+
+      // The thread was deleted while the title model was running; give the
+      // background title save time to run before asserting it stayed deleted.
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // The deleted thread must stay deleted instead of coming back
+      // as an empty thread carrying the generated title.
+      const resurrectedThread = await mockMemory.getThreadById({ threadId });
+      expect(resurrectedThread).toBeNull();
+    });
+
     it('should support dynamic model selection for title generation', async () => {
       let usedModelName = '';
 
