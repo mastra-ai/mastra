@@ -279,7 +279,7 @@ Returns: `PermissionPolicy`
 
 #### `respondToToolApproval({ decision, toolCallId, requestContext?, declineContext? })`
 
-Respond to a pending tool approval request, raised by a `tool_approval_required` event. `toolCallId` is required and identifies the parked call — pass the `toolCallId` from the event. Pass `always_allow_category` to also grant the tool's whole category for the gate's thread.
+Respond to a pending tool approval request, raised by a `tool_approval_required` event. `toolCallId` is required and identifies the parked call, so pass the `toolCallId` from the event. Pass `always_allow_category` to also grant the tool's whole category for the gate's thread.
 
 ```typescript
 session.respondToToolApproval({ decision: 'approve', toolCallId: event.toolCallId })
