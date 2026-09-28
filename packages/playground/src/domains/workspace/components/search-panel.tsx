@@ -27,17 +27,17 @@ const modeConfig: Record<SearchMode, { label: string; icon: React.ReactNode; col
   bm25: {
     label: 'Keyword',
     icon: <FileText className="h-3.5 w-3.5" />,
-    color: 'bg-info-bg text-info-fg border-info-border',
+    color: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
   },
   vector: {
     label: 'Semantic',
     icon: <Sparkles className="h-3.5 w-3.5" />,
-    color: 'bg-badge-purple-bg text-badge-purple-fg border-badge-purple-border',
+    color: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
   },
   hybrid: {
     label: 'Hybrid',
     icon: <Zap className="h-3.5 w-3.5" />,
-    color: 'bg-warning-bg text-warning-fg border-warning-border',
+    color: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
   },
 };
 
@@ -192,7 +192,7 @@ function WorkspaceSearchResultItem({ result, rank, onClick }: WorkspaceSearchRes
             </Txt>
             <div className="flex shrink-0 items-center gap-1.5">
               <div className="h-1 w-12 overflow-hidden rounded-full bg-background">
-                <div className="h-full rounded-full bg-success-indicator" style={{ width: `${scorePercent}%` }} />
+                <div className="h-full rounded-full bg-green-400" style={{ width: `${scorePercent}%` }} />
               </div>
               <span className="text-meta text-muted-foreground tabular-nums">{result.score.toFixed(2)}</span>
             </div>

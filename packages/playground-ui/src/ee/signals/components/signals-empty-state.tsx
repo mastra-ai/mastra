@@ -243,7 +243,7 @@ export const SignalsEmptyState = ({
               <span className="signals-engine-pulse absolute size-20 rounded-full border border-success-border" />
               <span className="absolute size-14 rounded-full border border-success-border" />
               <span className="absolute size-9 rounded-full border border-success-border bg-success-bg shadow-[0_0_24px_var(--color-success-indicator)]" />
-              <CpuIcon className="relative size-4 text-success-fg" />
+              <CpuIcon className="relative size-4 text-success-indicator" />
             </div>
             <p className="mt-3 max-w-40 text-meta text-muted-foreground">
               Clusters similar trace signals into themes for each dimension

@@ -29,12 +29,12 @@ import { RAIL_ROW_BODY } from './Timeline';
 
 /** What landed: the glyph the rail hangs the row off, and the word the row's badge wears. */
 const KIND = {
-  mention: { glyph: MessageSquare, label: 'mention', tone: 'text-success-fg', badge: 'success' },
+  mention: { glyph: MessageSquare, label: 'mention', tone: 'text-green-400', badge: 'success' },
   activity: { glyph: MessagesSquare, label: 'comment', tone: 'text-muted-foreground', badge: 'neutral' },
   'automation-failed': { glyph: TriangleAlert, label: 'failed', tone: 'text-error', badge: 'destructive' },
-  'automation-proposed': { glyph: Sparkles, label: 'suggested', tone: 'text-warning-fg', badge: 'orange' },
-  'supervisor-finding': { glyph: Brain, label: 'finding', tone: 'text-success-fg', badge: 'info' },
-  'agent-waiting': { glyph: Hourglass, label: 'waiting', tone: 'text-warning-fg', badge: 'orange' },
+  'automation-proposed': { glyph: Sparkles, label: 'suggested', tone: 'text-yellow-400', badge: 'orange' },
+  'supervisor-finding': { glyph: Brain, label: 'finding', tone: 'text-green-400', badge: 'info' },
+  'agent-waiting': { glyph: Hourglass, label: 'waiting', tone: 'text-yellow-400', badge: 'orange' },
 } satisfies Record<
   FactoryAttentionItem['kind'],
   { glyph: typeof MessageSquare; label: string; tone: string; badge: BadgeVariant }

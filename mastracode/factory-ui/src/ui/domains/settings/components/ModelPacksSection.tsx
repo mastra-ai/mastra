@@ -196,7 +196,7 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
             <li key={p.id} className="flex items-center justify-between gap-3 py-2">
               <div className="flex min-w-0 flex-col gap-0.5">
                 <div className="flex items-center gap-2">
-                  {p.active && <Check size={13} className="text-success-fg shrink-0" />}
+                  {p.active && <Check size={13} className="shrink-0 text-green-400" />}
                   <Txt as="span" variant="body" className="text-foreground truncate">
                     {p.name}
                   </Txt>

@@ -13,18 +13,18 @@ function StatusIcon({ status }: WorkflowRunStatusIconProps) {
     case 'running':
       return <Spinner />;
     case 'failed':
-      return <X className="text-destructive-fg" />;
+      return <X className="text-destructive-indicator" />;
     case 'canceled':
       return <CircleSlash className="text-muted-foreground" />;
     case 'pending':
     case 'waiting':
       return <Clock className="text-muted-foreground" />;
     case 'paused':
-      return <Pause className="text-warning-fg" />;
+      return <Pause className="text-warning-indicator" />;
     case 'suspended':
-      return <CirclePause className="text-info-fg" />;
+      return <CirclePause className="text-info-indicator" />;
     case 'success':
-      return <Check className="text-success-fg" />;
+      return <Check className="text-success-indicator" />;
     default:
       return <Clock className="text-muted-foreground" />;
   }

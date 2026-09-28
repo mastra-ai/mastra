@@ -60,8 +60,8 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
               className={cn(
                 'rounded px-2 py-0.5 text-column',
                 workingMemorySource === 'resource'
-                  ? 'bg-badge-purple-bg text-badge-purple-fg'
-                  : 'bg-info-bg text-info-fg',
+                  ? 'bg-purple-500/20 text-purple-400'
+                  : 'bg-blue-500/20 text-blue-400',
               )}
               title={
                 workingMemorySource === 'resource'
@@ -211,7 +211,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
             target="_blank"
             rel="noopener noreferrer"
             className={cn(
-              'inline-flex items-center gap-2 text-body text-info-fg hover:underline',
+              'inline-flex items-center gap-2 text-body text-blue-400 hover:text-blue-300',
               controlStateColorTransition,
             )}
           >

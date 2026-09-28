@@ -182,7 +182,7 @@ export function ModelPicker() {
         aria-busy={busy}
         className={cn(
           buttonVariants({ variant: 'ghost', size: 'sm' }),
-          notConfigured ? 'text-destructive-fg' : 'text-muted-foreground',
+          notConfigured ? 'text-destructive-indicator' : 'text-muted-foreground',
         )}
         title={[selectedModelId, selectedPack?.name].filter(Boolean).join(' · ') || undefined}
       >

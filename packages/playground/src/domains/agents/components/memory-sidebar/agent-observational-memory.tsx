@@ -122,7 +122,7 @@ const ProgressBar = ({
                 {isAdaptive && totalBudget && (
                   <div>
                     <span className="text-muted-foreground">Mode:</span>{' '}
-                    <span className="text-warning-fg">Adaptive</span>{' '}
+                    <span className="text-yellow-400">Adaptive</span>{' '}
                     <span className="text-muted-foreground">({formatTokens(totalBudget)} shared budget)</span>
                   </div>
                 )}
@@ -178,11 +178,11 @@ const ProgressBar = ({
           {isAdaptive && totalBudget && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="cursor-help text-warning-fg">({formatTokens(baseThreshold)})</span>
+                <span className="cursor-help text-yellow-400">({formatTokens(baseThreshold)})</span>
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-xs">
                 <div className="text-caption">
-                  <span className="text-warning-fg">{formatTokens(baseThreshold)}</span>
+                  <span className="text-yellow-400">{formatTokens(baseThreshold)}</span>
                   <span className="text-muted-foreground"> is the configured threshold. </span>
                   <span className="text-foreground">
                     Adaptive mode shares a {formatTokens(totalBudget)} token budget between messages and observations.

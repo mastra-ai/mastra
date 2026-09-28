@@ -96,7 +96,7 @@ export function ReviewItemCard({
       {/* Header row */}
       <div className="flex items-center gap-2">
         {isCompleted ? (
-          <Icon size="xs" className="shrink-0 text-success-fg">
+          <Icon size="xs" className="shrink-0 text-success-indicator">
             <CheckCircle />
           </Icon>
         ) : (
@@ -133,7 +133,7 @@ export function ReviewItemCard({
               onClick={() => onRate(item.rating === 'positive' ? undefined : 'positive')}
               disabled={isCompleted}
             >
-              <Icon size="xs" className={item.rating === 'positive' ? 'text-success-fg' : ''}>
+              <Icon size="xs" className={item.rating === 'positive' ? 'text-success-indicator' : ''}>
                 <ThumbsUp />
               </Icon>
             </Button>
@@ -145,7 +145,7 @@ export function ReviewItemCard({
               onClick={() => onRate(item.rating === 'negative' ? undefined : 'negative')}
               disabled={isCompleted}
             >
-              <Icon size="xs" className={item.rating === 'negative' ? 'text-destructive-fg' : ''}>
+              <Icon size="xs" className={item.rating === 'negative' ? 'text-destructive-indicator' : ''}>
                 <ThumbsDown />
               </Icon>
             </Button>
@@ -188,13 +188,13 @@ export function ReviewItemCard({
             <div className="flex items-center gap-0.5">
               {onComplete && (
                 <Button tooltip="Mark as complete" variant="ghost" size="sm" onClick={onComplete}>
-                  <Icon size="xs" className="text-success-fg">
+                  <Icon size="xs" className="text-success-indicator">
                     <CheckCircle />
                   </Icon>
                 </Button>
               )}
               <Button tooltip="Remove from review" variant="ghost" size="sm" onClick={onRemove}>
-                <Icon size="xs" className="text-placeholder hover:text-destructive-fg">
+                <Icon size="xs" className="text-placeholder hover:text-destructive-indicator">
                   <Trash2 />
                 </Icon>
               </Button>

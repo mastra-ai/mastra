@@ -27,14 +27,14 @@ export function InitialFactoryStep({ onContinue }: InitialFactoryStepProps) {
           </div>
           <div className="border-border bg-background/80 rounded-xl border p-3">
             <div className="text-meta text-muted-foreground mb-3 flex items-center gap-2">
-              <span className="bg-success-indicator size-2 rounded-full" />
+              <span className="size-2 rounded-full bg-green-400" />
               In progress
             </div>
             <div className="min-h-[140px]" />
           </div>
           <div className="border-border bg-background/80 rounded-xl border p-3">
             <div className="text-meta text-muted-foreground mb-3 flex items-center gap-2">
-              <span className="bg-info-indicator size-2 rounded-full" />
+              <span className="size-2 rounded-full bg-blue-400" />
               Deployed
             </div>
             <div className="min-h-[140px]" />

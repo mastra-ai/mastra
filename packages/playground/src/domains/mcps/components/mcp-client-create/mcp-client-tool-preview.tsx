@@ -125,7 +125,7 @@ function ToolList({
           return (
             <Entity key={tool.name}>
               <EntityIcon>
-                <ToolsIcon className="group-hover/entity:text-warning-fg" />
+                <ToolsIcon className="group-hover/entity:text-warning-indicator" />
               </EntityIcon>
               <EntityContent>
                 <EntityName>{tool.name}</EntityName>

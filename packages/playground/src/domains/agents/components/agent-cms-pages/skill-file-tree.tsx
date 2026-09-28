@@ -24,9 +24,9 @@ function getFileIcon(name: string): ReactNode {
     case 'tsx':
     case 'js':
     case 'jsx':
-      return <FileCode className="text-info-indicator" />;
+      return <FileCode className="text-blue-400" />;
     case 'json':
-      return <FileJson className="text-warning-indicator" />;
+      return <FileJson className="text-yellow-400" />;
     case 'md':
     case 'mdx':
       return <FileText className="text-muted-foreground" />;
@@ -36,14 +36,14 @@ function getFileIcon(name: string): ReactNode {
     case 'gif':
     case 'svg':
     case 'webp':
-      return <Image className="text-badge-purple" />;
+      return <Image className="text-purple-400" />;
     default:
       return <File className="text-muted-foreground" />;
   }
 }
 
 function getFolderIcon(isOpen: boolean): ReactNode {
-  return isOpen ? <FolderOpen className="text-warning-indicator" /> : <Folder className="text-warning-indicator" />;
+  return isOpen ? <FolderOpen className="text-yellow-400" /> : <Folder className="text-yellow-400" />;
 }
 
 function insertNode(nodes: InMemoryFileNode[], parentId: string, newNode: InMemoryFileNode): InMemoryFileNode[] {

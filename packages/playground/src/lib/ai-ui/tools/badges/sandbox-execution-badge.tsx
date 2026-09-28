@@ -241,7 +241,7 @@ export const SandboxExecutionBadge = ({
           <Icon>
             <ChevronUpIcon className={cn('transition-all', isCollapsed ? 'rotate-90' : 'rotate-180')} />
           </Icon>
-          <Badge icon={<TerminalSquare className="text-warning-fg" size={16} />}>{displayName}</Badge>
+          <Badge icon={<TerminalSquare className="text-warning-indicator" size={16} />}>{displayName}</Badge>
           {execMeta?.sandbox && (
             <Link
               href={execMeta.id ? `/workspaces/${execMeta.id}` : '/workspaces'}

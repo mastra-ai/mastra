@@ -1,6 +1,6 @@
 export const toneClass = {
-  messages: 'text-info-indicator',
-  memory: 'text-badge-purple',
+  messages: 'text-blue-500',
+  memory: 'text-purple-500',
   warning: 'text-warning-indicator',
 } as const;
 

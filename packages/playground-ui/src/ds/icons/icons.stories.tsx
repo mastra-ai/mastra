@@ -166,10 +166,10 @@ export const IconColors: Story = {
       <Icon className="text-foreground">
         <AgentIcon />
       </Icon>
-      <Icon className="text-success-fg">
+      <Icon className="text-success-indicator">
         <AgentIcon />
       </Icon>
-      <Icon className="text-success-fg">
+      <Icon className="text-success-indicator">
         <AgentIcon />
       </Icon>
       <Icon className="text-error">

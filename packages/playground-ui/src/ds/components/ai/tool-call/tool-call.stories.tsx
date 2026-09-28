@@ -48,7 +48,7 @@ export const Completed: Story = {
           <ToolCallDetail>src/agent.ts</ToolCallDetail>
           <ToolCallSpacer />
           <ToolCallTrailing>
-            <Check size={13} aria-label="Completed" className="text-success-fg" />
+            <Check size={13} aria-label="Completed" className="text-success-indicator" />
           </ToolCallTrailing>
           <ToolCallDisclosure />
         </ToolCallHeader>

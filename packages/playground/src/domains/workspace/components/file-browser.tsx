@@ -84,16 +84,16 @@ function getMountIcon(mount: FileEntry['mount']) {
     case 'r2':
       return <Cloud className="h-4 w-4 text-[#F38020]" />;
     case 'minio':
-      return <HardDrive className="h-4 w-4 text-destructive-indicator" />;
+      return <HardDrive className="h-4 w-4 text-red-400" />;
     case 'database':
-      return <Database className="h-4 w-4 text-success-indicator" />;
+      return <Database className="h-4 w-4 text-green-400" />;
     case 'local':
     case 'folder':
-      return <Folder className="h-4 w-4 text-warning-indicator" />;
+      return <Folder className="h-4 w-4 text-yellow-400" />;
     case 'hard-drive':
       return <HardDrive className="h-4 w-4 text-muted-foreground" />;
     case 'cloud':
-      return <Cloud className="h-4 w-4 text-info-indicator" />;
+      return <Cloud className="h-4 w-4 text-cyan-400" />;
     default:
       // Default to cloud icon for unknown providers
       return <Cloud className="h-4 w-4 text-muted-foreground" />;
@@ -108,11 +108,7 @@ function getFileIcon(entry: FileEntry, isOpen = false) {
     if (mount) {
       return getMountIcon(mount);
     }
-    return isOpen ? (
-      <FolderOpen className="h-4 w-4 text-warning-indicator" />
-    ) : (
-      <Folder className="h-4 w-4 text-warning-indicator" />
-    );
+    return isOpen ? <FolderOpen className="h-4 w-4 text-yellow-400" /> : <Folder className="h-4 w-4 text-yellow-400" />;
   }
 
   const ext = name.split('.').pop()?.toLowerCase();
@@ -121,9 +117,9 @@ function getFileIcon(entry: FileEntry, isOpen = false) {
     case 'tsx':
     case 'js':
     case 'jsx':
-      return <FileCode className="h-4 w-4 text-info-indicator" />;
+      return <FileCode className="h-4 w-4 text-blue-400" />;
     case 'json':
-      return <FileJson className="h-4 w-4 text-warning-indicator" />;
+      return <FileJson className="h-4 w-4 text-yellow-400" />;
     case 'md':
     case 'mdx':
       return <FileText className="h-4 w-4 text-muted-foreground" />;
@@ -133,7 +129,7 @@ function getFileIcon(entry: FileEntry, isOpen = false) {
     case 'gif':
     case 'svg':
     case 'webp':
-      return <Image className="h-4 w-4 text-badge-purple" />;
+      return <Image className="h-4 w-4 text-purple-400" />;
     default:
       return <File className="h-4 w-4 text-muted-foreground" />;
   }
@@ -341,7 +337,7 @@ export function FileBrowser({
                     }}
                     className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-fill-subtle"
                   >
-                    <FolderOpen className="h-4 w-4 text-warning-indicator" />
+                    <FolderOpen className="h-4 w-4 text-yellow-400" />
                     <span className="text-body text-foreground">..</span>
                   </button>
                 </li>
