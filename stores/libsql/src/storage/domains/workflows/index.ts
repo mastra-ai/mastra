@@ -1,5 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type {
+  WorkflowExecutionClaim,
   WorkflowRun,
   WorkflowRuns,
   StorageListWorkflowRunsInput,
@@ -10,6 +11,7 @@ import type {
   TableRetentionPolicy,
 } from '@mastra/core/storage';
 import {
+  claimWorkflowExecution,
   createStorageErrorId,
   mergeWorkflowStepResult,
   normalizePerPage,
@@ -140,13 +142,15 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    executionClaim,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    executionClaim?: WorkflowExecutionClaim;
+  }): Promise<Record<string, StepResult<any, any, any, any>> | undefined> {
     return this.executeWithRetry(
       () =>
         // Serialize the interactive transaction against all other writes on the shared
@@ -184,9 +188,16 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
               snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
             }
 
-            // Merge the new step result using element-wise array merging
-            // (critical for concurrent foreach iteration results)
-            mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
+            if (!claimWorkflowExecution(snapshot, executionClaim)) {
+              await tx.rollback();
+              return;
+            }
+
+            if (!executionClaim?.preserveResult) {
+              // Merge the new step result using element-wise array merging
+              // (critical for concurrent foreach iteration results)
+              mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
+            }
 
             // Upsert the snapshot within the same transaction
             const now = new Date().toISOString();

@@ -2,7 +2,7 @@ import type { StepFlowEntry, WorkflowRunState } from '../..';
 import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
 import type { StepExecutor } from '../step-executor';
-import { getStepId } from './utils';
+import { createStepExecutionClaimKey, getStepId } from './utils';
 import type { ProcessorArgs } from '.';
 
 export async function processWorkflowWaitForEvent(
@@ -35,6 +35,7 @@ export async function processWorkflowWaitForEvent(
       workflowId: workflowData.workflowId,
       runId: workflowData.runId,
       executionPath,
+      executionClaimKey: createStepExecutionClaimKey({ sourceEventId: workflowData.sourceEventId, executionPath }),
       resumeSteps: [],
       resumeData: workflowData.resumeData,
       parentWorkflow: workflowData.parentWorkflow,
@@ -75,6 +76,7 @@ export async function processWorkflowSleep(
     requestContext,
     actor,
     perStep,
+    sourceEventId,
   }: ProcessorArgs,
   {
     pubsub,
@@ -159,6 +161,10 @@ export async function processWorkflowSleep(
           workflowId,
           runId,
           executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
+          executionClaimKey: createStepExecutionClaimKey({
+            sourceEventId,
+            executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
+          }),
           resumeSteps,
           timeTravel,
           restart,
@@ -194,6 +200,7 @@ export async function processWorkflowSleepUntil(
     requestContext,
     actor,
     perStep,
+    sourceEventId,
   }: ProcessorArgs,
   {
     pubsub,
@@ -279,6 +286,10 @@ export async function processWorkflowSleepUntil(
           workflowId,
           runId,
           executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
+          executionClaimKey: createStepExecutionClaimKey({
+            sourceEventId,
+            executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
+          }),
           resumeSteps,
           timeTravel,
           restart,

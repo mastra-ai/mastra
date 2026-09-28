@@ -410,6 +410,11 @@ export interface WorkflowRunState {
   resumeLabels: Record<string, WorkflowResumeLabel>;
   waitingPaths: Record<string, number[]>;
   timestamp: number;
+  /**
+   * Internal idempotency claims for evented step executions. Keys identify a
+   * logical execution attempt rather than a broker delivery.
+   */
+  eventedExecutionClaims?: string[];
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;
   stepExecutionPath?: string[];

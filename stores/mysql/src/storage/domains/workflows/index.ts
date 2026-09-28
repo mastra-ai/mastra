@@ -1,5 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
+  claimWorkflowExecution,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
   WorkflowsStorage,
@@ -7,6 +8,7 @@ import {
   matchesExpectedWorkflowStatus,
 } from '@mastra/core/storage';
 import type {
+  WorkflowExecutionClaim,
   CreateIndexOptions,
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
@@ -169,13 +171,15 @@ export class WorkflowsMySQL extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    executionClaim,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext?: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    executionClaim?: WorkflowExecutionClaim;
+  }): Promise<Record<string, StepResult<any, any, any, any>> | undefined> {
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -194,14 +198,22 @@ export class WorkflowsMySQL extends WorkflowsStorage {
       }
 
       const currentSnapshot = parseSnapshot(rows[0]!.snapshot) as WorkflowRunState;
+      if (!claimWorkflowExecution(currentSnapshot, executionClaim)) {
+        await connection.rollback();
+        return;
+      }
       const context = { ...(currentSnapshot.context ?? {}) };
 
-      context[stepId] = result;
+      if (!executionClaim?.preserveResult) {
+        context[stepId] = result;
+      }
 
       const updatedSnapshot: WorkflowRunState = {
         ...currentSnapshot,
         context,
-        requestContext: { ...(currentSnapshot.requestContext ?? {}), ...(requestContext ?? {}) },
+        requestContext: executionClaim?.preserveResult
+          ? currentSnapshot.requestContext
+          : { ...(currentSnapshot.requestContext ?? {}), ...(requestContext ?? {}) },
       };
 
       await connection.execute(

@@ -17,7 +17,7 @@ import type { GenericId } from 'convex/values';
 import type { EqualityFilter, StorageRequest, StorageResponse } from '../storage/types';
 import { findBestIndex } from './index-map';
 import { handleObservationalMemoryOperation } from './observational-memory';
-import { createEmptyWorkflowSnapshot, mergeWorkflowStepResult } from './workflow-snapshot';
+import { claimWorkflowExecution, createEmptyWorkflowSnapshot, mergeWorkflowStepResult } from './workflow-snapshot';
 
 // Vector-specific table names (not in @mastra/core)
 const TABLE_VECTOR_INDEXES = 'mastra_vector_indexes';
@@ -836,12 +836,18 @@ export async function handleTypedOperation(
         return { ok: false, error: `Snapshot for runId ${request.runId} is missing or has invalid context` };
       }
 
-      const context = mergeWorkflowStepResult({
-        snapshot,
-        stepId: request.stepId,
-        result: JSON.parse(request.result),
-        requestContext: JSON.parse(request.requestContext),
-      });
+      if (!claimWorkflowExecution(snapshot, request.executionClaim)) {
+        return { ok: true };
+      }
+
+      const context = request.preserveResult
+        ? snapshot.context
+        : mergeWorkflowStepResult({
+            snapshot,
+            stepId: request.stepId,
+            result: JSON.parse(request.result),
+            requestContext: JSON.parse(request.requestContext),
+          });
 
       await ctx.db.patch(existing._id, {
         snapshot: JSON.stringify(snapshot),

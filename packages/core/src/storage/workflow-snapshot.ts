@@ -54,6 +54,24 @@ export function createEmptyWorkflowSnapshot(runId: string): WorkflowRunState {
   } as WorkflowRunState;
 }
 
+export type WorkflowExecutionClaim = {
+  key: string;
+  preserveResult?: boolean;
+};
+
+export function claimWorkflowExecution(snapshot: WorkflowRunState, claim?: WorkflowExecutionClaim): boolean {
+  if (!claim) {
+    return true;
+  }
+
+  if (snapshot.eventedExecutionClaims?.includes(claim.key)) {
+    return false;
+  }
+
+  snapshot.eventedExecutionClaims = [...(snapshot.eventedExecutionClaims ?? []), claim.key];
+  return true;
+}
+
 export function mergeWorkflowStepResult({
   snapshot,
   stepId,

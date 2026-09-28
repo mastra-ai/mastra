@@ -1,5 +1,6 @@
 import { TABLE_WORKFLOW_SNAPSHOT, normalizePerPage, WorkflowsStorage } from '@mastra/core/storage';
 import type {
+  WorkflowExecutionClaim,
   StorageListWorkflowRunsInput,
   StorageWorkflowRun,
   WorkflowRun,
@@ -43,7 +44,8 @@ export class WorkflowsConvex extends WorkflowsStorage {
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    executionClaim?: WorkflowExecutionClaim;
+  }): Promise<Record<string, StepResult<any, any, any, any>> | undefined> {
     return this.#db.mergeWorkflowStepResult(args);
   }
 

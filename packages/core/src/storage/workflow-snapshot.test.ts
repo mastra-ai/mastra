@@ -1,6 +1,24 @@
 import { describe, expect, it } from 'vitest';
 
-import { createEmptyWorkflowSnapshot, mergeWorkflowStepResult } from './workflow-snapshot';
+import { claimWorkflowExecution, createEmptyWorkflowSnapshot, mergeWorkflowStepResult } from './workflow-snapshot';
+
+describe('claimWorkflowExecution', () => {
+  it('accepts a logical execution once and rejects duplicate claims', () => {
+    const snapshot = createEmptyWorkflowSnapshot('run-1');
+    const claim = { key: 'step1:[0]:attempt-0' };
+
+    expect(claimWorkflowExecution(snapshot, claim)).toBe(true);
+    expect(claimWorkflowExecution(snapshot, claim)).toBe(false);
+    expect(snapshot.eventedExecutionClaims).toEqual([claim.key]);
+  });
+
+  it('accepts updates without a claim for backwards compatibility', () => {
+    const snapshot = createEmptyWorkflowSnapshot('run-1');
+
+    expect(claimWorkflowExecution(snapshot)).toBe(true);
+    expect(snapshot.eventedExecutionClaims).toBeUndefined();
+  });
+});
 
 describe('mergeWorkflowStepResult', () => {
   it('merges forEach array outputs without clobbering completed iterations', () => {

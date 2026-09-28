@@ -1,5 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
+  claimWorkflowExecution,
   mergeWorkflowStepResult,
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
@@ -9,6 +10,7 @@ import {
   createStorageErrorId,
 } from '@mastra/core/storage';
 import type {
+  WorkflowExecutionClaim,
   UpdateWorkflowStateOptions,
   StorageListWorkflowRunsInput,
   WorkflowRun,
@@ -320,13 +322,15 @@ export class WorkflowsPG extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    executionClaim,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    executionClaim?: WorkflowExecutionClaim;
+  }): Promise<Record<string, StepResult<any, any, any, any>> | undefined> {
     try {
       // Use a transaction with row-level locking to ensure atomicity
       return await this.#db.client.tx(async t => {
@@ -362,9 +366,15 @@ export class WorkflowsPG extends WorkflowsStorage {
           snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
         }
 
-        // Merge the new step result using element-wise array merging
-        // (critical for concurrent foreach iteration results)
-        mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
+        if (!claimWorkflowExecution(snapshot, executionClaim)) {
+          return;
+        }
+
+        if (!executionClaim?.preserveResult) {
+          // Merge the new step result using element-wise array merging
+          // (critical for concurrent foreach iteration results)
+          mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
+        }
 
         // Upsert the snapshot within the same transaction
         const now = new Date();

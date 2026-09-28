@@ -1,5 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
+  claimWorkflowExecution,
   createStorageErrorId,
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
@@ -7,6 +8,7 @@ import {
   WorkflowsStorage,
 } from '@mastra/core/storage';
 import type {
+  WorkflowExecutionClaim,
   WorkflowRun,
   WorkflowRuns,
   StorageListWorkflowRunsInput,
@@ -110,13 +112,15 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    executionClaim,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    executionClaim?: WorkflowExecutionClaim;
+  }): Promise<Record<string, StepResult<any, any, any, any>> | undefined> {
     // Use optimistic locking with retry for atomic updates
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
@@ -154,9 +158,15 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
           previousUpdatedAt = existingRecord.data.updatedAt;
         }
 
-        // Merge the new step result and request context
-        snapshot.context[stepId] = result;
-        snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+        if (!claimWorkflowExecution(snapshot, executionClaim)) {
+          return;
+        }
+
+        if (!executionClaim?.preserveResult) {
+          // Merge the new step result and request context
+          snapshot.context[stepId] = result;
+          snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+        }
 
         const data: WorkflowSnapshotEntityData = {
           entity: 'workflow_snapshot',

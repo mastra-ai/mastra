@@ -1,5 +1,6 @@
 import type { StepResult, WorkflowRunState } from '../../../workflows';
 import type { UpdateWorkflowStateOptions, WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '../../types';
+import type { WorkflowExecutionClaim } from '../../workflow-snapshot';
 import { StorageDomain } from '../base';
 
 export abstract class WorkflowsStorage extends StorageDomain {
@@ -18,13 +19,15 @@ export abstract class WorkflowsStorage extends StorageDomain {
     stepId,
     result,
     requestContext,
+    executionClaim,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>>;
+    executionClaim?: WorkflowExecutionClaim;
+  }): Promise<Record<string, StepResult<any, any, any, any>> | undefined>;
 
   abstract updateWorkflowState({
     workflowName,

@@ -34,7 +34,7 @@ import { StepExecutor } from '../step-executor';
 import { processWorkflowForEach, processWorkflowLoop } from './loop';
 import { processWorkflowConditional, processWorkflowParallel } from './parallel';
 import { processWorkflowSleep, processWorkflowSleepUntil, processWorkflowWaitForEvent } from './sleep';
-import { getNestedWorkflow, getStepId, isExecutableStep } from './utils';
+import { createStepExecutionClaimKey, getNestedWorkflow, getStepId, isExecutableStep } from './utils';
 
 export type ProcessorArgs = {
   activeStepsPath: Record<string, number[]>;
@@ -76,6 +76,10 @@ export type ProcessorArgs = {
    * from) so the persisted run snapshot records the schedule's `resourceId`.
    */
   resourceId?: string;
+  /** Broker event currently causing this processor action. Stable across redelivery. */
+  sourceEventId?: string;
+  /** Stable identity for this logical step execution, propagated by the event that scheduled it. */
+  executionClaimKey?: string;
 };
 
 export type ParentWorkflow = {
@@ -594,6 +598,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     outputOptions,
     forEachIndex,
     resourceId: eventResourceId,
+    sourceEventId,
   }: ProcessorArgs & { initialState?: Record<string, any> }) {
     // Use initialState from event data if provided, otherwise use state from ProcessorArgs
     const initialState = (arguments[0] as any).initialState ?? state ?? {};
@@ -686,6 +691,11 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowId,
         runId,
         executionPath: startExecutionPath,
+        executionClaimKey: createStepExecutionClaimKey({
+          sourceEventId,
+          executionPath: startExecutionPath,
+          forEachIndex,
+        }),
         resumeSteps,
         stepResults: {
           ...(stepResults ?? {
@@ -719,6 +729,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       activeStepsPath,
       executionPath,
       parentWorkflow,
+      sourceEventId,
     } = args;
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
     const normalizedPrevResult = prevResult ?? ({ status } as StepResult<any, any, any, any>);
@@ -806,6 +817,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       stepResults,
       state,
       workflowId,
+      sourceEventId,
     } = args;
 
     // Extract final state from stepResults or args
@@ -860,6 +872,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             parentWorkflow: parentWorkflow.parentWorkflow,
             requestContext,
             actor,
+            sourceEventId,
             retryCount: 0,
           },
           {
@@ -1126,6 +1139,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       state,
       outputOptions,
       forEachIndex,
+      sourceEventId,
     } = args;
     // Get current state from stepResults.__state or from passed state
     const currentState = resolveCurrentState({ stepResults, state });
@@ -1233,6 +1247,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentWorkflow,
           requestContext,
           actor,
+          sourceEventId,
           perStep,
           state: currentState,
           outputOptions,
@@ -1259,6 +1274,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentWorkflow,
           requestContext,
           actor,
+          sourceEventId,
           perStep,
           state: currentState,
           outputOptions,
@@ -1286,6 +1302,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentWorkflow,
           requestContext,
           actor,
+          sourceEventId,
           perStep,
           state: currentState,
           outputOptions,
@@ -1313,6 +1330,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentWorkflow,
           requestContext,
           actor,
+          sourceEventId,
           perStep,
           state: currentState,
           outputOptions,
@@ -1340,6 +1358,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentWorkflow,
           requestContext,
           actor,
+          sourceEventId,
           perStep,
           state: currentState,
           outputOptions,
@@ -1395,6 +1414,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       forEachIndex,
       step,
       actor,
+      sourceEventId,
     } = args;
     let requestContext = args.requestContext;
     const streamFormat = this.runFormats.get(runId);
@@ -1463,40 +1483,31 @@ export class WorkflowEventProcessor extends EventProcessor {
       // Record first, then routing state: if the process dies between the two
       // writes recovery still routes through the old path, whereas the reverse
       // order would point restart at a step whose input was never recorded.
-      if (!isResumedEntry && step.type !== 'foreach') {
-        // Redelivery guard: a `step.run` redelivered (at-least-once transport)
-        // after the step suspended must not clobber the stored 'suspended'
-        // record — its suspendPayload is the resume artifact (stream state,
-        // nested-run ids). Both conditions matter: a suspended leaf record
-        // alone is NOT proof of a spurious delivery — after a resume, a loop
-        // re-entry (dountil around a suspending nested workflow, bug #5650)
-        // publishes a fresh non-resume `step.run` while the leaf record still
-        // reads 'suspended' (the resume path deliberately leaves it
-        // untouched). What discriminates the spurious case is the RUN being
-        // parked too: no legitimate non-resume delivery for a suspended leaf
-        // exists while the whole run sits in 'suspended'. Read-then-write
-        // narrows the race window rather than closing it — closing it needs
-        // an expectedStatus compare-and-set on `updateWorkflowResults` across
-        // all storage adapters.
-        const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId });
-        if (snapshot?.status === 'suspended' && (snapshot.context as any)?.[leafId]?.status === 'suspended') {
-          return;
-        }
-        await workflowsStore.updateWorkflowResults({
-          workflowName: workflowId,
-          runId,
-          stepId: leafId,
-          result: {
-            // Loop re-entries overwrite the previous iteration's completion
-            // fields (like the default engine's stepInfo) while preserving
-            // e.g. metadata.nestedRunId for nested-run recovery.
-            ...omitPriorCompletionFields((stepResults?.[leafId] ?? {}) as Record<string, unknown>),
-            payload: prevResult.status === 'success' ? prevResult.output : undefined,
-            startedAt: Date.now(),
-            status: 'running',
-          } as any,
-          requestContext,
-        });
+      const preserveResult = isResumedEntry || step.type === 'foreach';
+      const claimedResults = await workflowsStore.updateWorkflowResults({
+        workflowName: workflowId,
+        runId,
+        stepId: leafId,
+        result: {
+          // Loop re-entries overwrite the previous iteration's completion
+          // fields (like the default engine's stepInfo) while preserving
+          // e.g. metadata.nestedRunId for nested-run recovery.
+          ...omitPriorCompletionFields((stepResults?.[leafId] ?? {}) as Record<string, unknown>),
+          payload: prevResult.status === 'success' ? prevResult.output : undefined,
+          startedAt: Date.now(),
+          status: 'running',
+        } as any,
+        requestContext,
+        executionClaim: {
+          key:
+            args.executionClaimKey ??
+            args.sourceEventId ??
+            createStepExecutionClaimKey({ executionPath, retryCount, forEachIndex }),
+          preserveResult,
+        },
+      });
+      if (!claimedResults) {
+        return;
       }
       // `expectedStatus` makes this a compare-and-set: the row is 'running' on
       // the normal path (written by processWorkflowStart for both start and
@@ -2060,6 +2071,12 @@ export class WorkflowEventProcessor extends EventProcessor {
             workflowId,
             runId,
             executionPath,
+            executionClaimKey: createStepExecutionClaimKey({
+              sourceEventId,
+              executionPath,
+              retryCount: retryCount + 1,
+              forEachIndex,
+            }),
             resumeSteps,
             stepResults,
             timeTravel,
@@ -2126,6 +2143,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentWorkflow,
           requestContext,
           actor,
+          sourceEventId,
           retryCount: retryCount + 1,
         },
         {
@@ -2383,6 +2401,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     outputOptions,
     forEachIndex,
     nestedRunId,
+    sourceEventId,
   }: ProcessorArgs) {
     // Extract state from prevResult if it was updated by the step
     // For nested workflow completion (parentContext present), prefer the passed state
@@ -2490,6 +2509,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             activeStepsPath,
             requestContext,
             actor,
+            sourceEventId,
             perStep,
             state: currentState,
             outputOptions,
@@ -2637,6 +2657,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               parentWorkflow,
               requestContext,
               actor,
+              sourceEventId,
               perStep,
               state: currentState,
               outputOptions,
@@ -2778,6 +2799,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             parentWorkflow,
             requestContext,
             actor,
+            sourceEventId,
             perStep,
             state: currentState,
             outputOptions,
@@ -3032,6 +3054,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           activeStepsPath,
           requestContext,
           actor,
+          sourceEventId,
           perStep,
         });
       } else {
@@ -3047,6 +3070,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           activeStepsPath,
           requestContext,
           actor,
+          sourceEventId,
           perStep,
         });
       }
@@ -3080,6 +3104,11 @@ export class WorkflowEventProcessor extends EventProcessor {
           workflowId,
           runId,
           executionPath: executionPath.slice(0, -1),
+          executionClaimKey: createStepExecutionClaimKey({
+            sourceEventId,
+            executionPath: executionPath.slice(0, -1),
+            forEachIndex,
+          }),
           resumeSteps,
           parentWorkflow,
           stepResults,
@@ -3107,6 +3136,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         activeStepsPath,
         requestContext,
         actor,
+        sourceEventId,
         state: currentState,
         outputOptions,
       });
@@ -3119,6 +3149,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           workflowId,
           runId,
           executionPath: nextExecutionPath,
+          executionClaimKey: createStepExecutionClaimKey({ sourceEventId, executionPath: nextExecutionPath }),
           resumeSteps,
           parentWorkflow,
           stepResults,
@@ -3279,7 +3310,14 @@ export class WorkflowEventProcessor extends EventProcessor {
   async #dispatch(event: Event) {
     const { type, data } = event;
 
-    const workflowData = data as Omit<ProcessorArgs, 'workflow'>;
+    const workflowData = {
+      ...(data as Omit<ProcessorArgs, 'workflow' | 'sourceEventId'>),
+      sourceEventId: event.id,
+      executionClaimKey:
+        type === 'workflow.step.run'
+          ? ((data as Partial<ProcessorArgs>).executionClaimKey ?? event.id)
+          : (data as Partial<ProcessorArgs>).executionClaimKey,
+    } satisfies Omit<ProcessorArgs, 'workflow'>;
 
     const currentState = await this.loadData({
       workflowId: workflowData.workflowId,

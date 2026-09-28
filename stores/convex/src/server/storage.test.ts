@@ -432,6 +432,33 @@ describe('mastraStorage workflow snapshot merge operations', () => {
     expect(2 in patchedSnapshot.context.foreach.output).toBe(true);
   });
 
+  it('rejects a duplicate workflow execution claim without overwriting the stored result', async () => {
+    const snapshot = {
+      runId: 'run-1',
+      status: 'running',
+      context: {
+        'step-1': { status: 'success', output: { value: 'completed' } },
+      },
+      eventedExecutionClaims: ['step-1:[0]:attempt-0'],
+    };
+    const testCtx = createWorkflowSnapshotCtx(JSON.stringify(snapshot));
+
+    const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'mergeWorkflowStepResult',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName: 'workflow-a',
+      runId: 'run-1',
+      stepId: 'step-1',
+      result: JSON.stringify({ status: 'running' }),
+      requestContext: JSON.stringify({}),
+      executionClaim: 'step-1:[0]:attempt-0',
+      preserveResult: true,
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(testCtx.patch).not.toHaveBeenCalled();
+  });
+
   it('returns an error instead of dropping step results when the snapshot row is missing', async () => {
     const testCtx = createWorkflowSnapshotCtx(null, { missing: true });
 

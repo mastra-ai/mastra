@@ -1,5 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
+  claimWorkflowExecution,
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
@@ -8,6 +9,7 @@ import {
   createStorageErrorId,
 } from '@mastra/core/storage';
 import type {
+  WorkflowExecutionClaim,
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
   WorkflowRun,
@@ -120,13 +122,15 @@ export class WorkflowsDSQL extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    executionClaim,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    executionClaim?: WorkflowExecutionClaim;
+  }): Promise<Record<string, StepResult<any, any, any, any>> | undefined> {
     try {
       const { result: context } = await withRetry(
         async () => {
@@ -162,8 +166,14 @@ export class WorkflowsDSQL extends WorkflowsStorage {
               snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
             }
 
-            snapshot.context[stepId] = result;
-            snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+            if (!claimWorkflowExecution(snapshot, executionClaim)) {
+              return;
+            }
+
+            if (!executionClaim?.preserveResult) {
+              snapshot.context[stepId] = result;
+              snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+            }
 
             const now = new Date();
             await t.none(

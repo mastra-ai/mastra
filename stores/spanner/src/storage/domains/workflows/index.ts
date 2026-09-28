@@ -1,6 +1,7 @@
 import type { Database } from '@google-cloud/spanner';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
+  claimWorkflowExecution,
   createStorageErrorId,
   matchesExpectedWorkflowStatus,
   WorkflowsStorage,
@@ -9,6 +10,7 @@ import {
   normalizePerPage,
 } from '@mastra/core/storage';
 import type {
+  WorkflowExecutionClaim,
   StorageListWorkflowRunsInput,
   WorkflowRun,
   WorkflowRuns,
@@ -307,16 +309,18 @@ export class WorkflowsSpanner extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    executionClaim,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    executionClaim?: WorkflowExecutionClaim;
+  }): Promise<Record<string, StepResult<any, any, any, any>> | undefined> {
     const table = quoteIdent(TABLE_WORKFLOW_SNAPSHOT, 'table name');
     try {
-      let mergedContext: Record<string, StepResult<any, any, any, any>> = {};
+      let mergedContext: Record<string, StepResult<any, any, any, any>> | undefined;
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
@@ -351,8 +355,14 @@ export class WorkflowsSpanner extends WorkflowsStorage {
               const raw = existing.snapshot;
               snapshot = (typeof raw === 'string' ? JSON.parse(raw) : raw) as WorkflowRunState;
             }
-            snapshot.context[stepId] = result;
-            snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+            if (!claimWorkflowExecution(snapshot, executionClaim)) {
+              await tx.rollback();
+              return;
+            }
+            if (!executionClaim?.preserveResult) {
+              snapshot.context[stepId] = result;
+              snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+            }
             const now = new Date();
             const resolvedCreatedAt = existing?.createdAt
               ? new Date(existing.createdAt instanceof Date ? existing.createdAt.getTime() : existing.createdAt)

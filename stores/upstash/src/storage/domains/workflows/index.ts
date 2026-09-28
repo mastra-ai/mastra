@@ -7,6 +7,7 @@ import {
   ensureDate,
 } from '@mastra/core/storage';
 import type {
+  WorkflowExecutionClaim,
   StorageListWorkflowRunsInput,
   WorkflowRun,
   WorkflowRuns,
@@ -116,13 +117,15 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    executionClaim,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    executionClaim?: WorkflowExecutionClaim;
+  }): Promise<Record<string, StepResult<any, any, any, any>> | undefined> {
     try {
       const key = getKey(TABLE_WORKFLOW_SNAPSHOT, {
         namespace: 'workflows',
@@ -145,6 +148,8 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         local workflowName = ARGV[6]
         local runId = ARGV[7]
         local timestamp = tonumber(ARGV[8])
+        local executionClaim = ARGV[9]
+        local preserveResult = ARGV[10] == 'true'
 
         -- Get existing data
         local existing = redis.call('GET', key)
@@ -182,22 +187,36 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           }
         end
 
+        if executionClaim ~= '' then
+          if snapshot.eventedExecutionClaims == nil then
+            snapshot.eventedExecutionClaims = {}
+          end
+          for _, existingClaim in ipairs(snapshot.eventedExecutionClaims) do
+            if existingClaim == executionClaim then
+              return false
+            end
+          end
+          table.insert(snapshot.eventedExecutionClaims, executionClaim)
+        end
+
         -- Initialize context if nil
         if snapshot.context == nil then
           snapshot.context = {}
         end
 
-        -- Merge the new step result
-        local stepResult = cjson.decode(resultJson)
-        snapshot.context[stepId] = stepResult
+        if not preserveResult then
+          -- Merge the new step result
+          local stepResult = cjson.decode(resultJson)
+          snapshot.context[stepId] = stepResult
 
-        -- Merge request context
-        local newRequestContext = cjson.decode(requestContextJson)
-        if snapshot.requestContext == nil then
-          snapshot.requestContext = {}
-        end
-        for k, v in pairs(newRequestContext) do
-          snapshot.requestContext[k] = v
+          -- Merge request context
+          local newRequestContext = cjson.decode(requestContextJson)
+          if snapshot.requestContext == nil then
+            snapshot.requestContext = {}
+          end
+          for k, v in pairs(newRequestContext) do
+            snapshot.requestContext[k] = v
+          end
         end
 
         -- Update the record
@@ -223,8 +242,14 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           workflowName,
           runId,
           String(Date.now()),
+          executionClaim?.key ?? '',
+          String(executionClaim?.preserveResult ?? false),
         ],
       );
+
+      if (!resultJson) {
+        return;
+      }
 
       // Parse the result - handle both string and already-parsed object
       let data: any;

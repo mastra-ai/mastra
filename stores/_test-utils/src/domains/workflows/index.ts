@@ -849,6 +849,47 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
       });
     });
 
+    it('should accept a workflow execution claim exactly once without overwriting a preserved result', async () => {
+      if (!supportsConcurrentUpdates) {
+        console.log('Skipping workflow execution claim test');
+        return;
+      }
+
+      const workflowName = 'test-workflow';
+      const runId = `run-${randomUUID()}`;
+      const completedResult = {
+        status: 'success' as const,
+        output: { data: 'completed' },
+      };
+
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: {
+          status: 'running',
+          context: { 'step-1': completedResult },
+        } as any,
+      });
+
+      const results = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          workflowsStorage.updateWorkflowResults({
+            workflowName,
+            runId,
+            stepId: 'step-1',
+            result: { status: 'running', payload: undefined, startedAt: Date.now() },
+            requestContext: {},
+            executionClaim: { key: 'step-1:[0]:attempt-0', preserveResult: true },
+          }),
+        ),
+      );
+
+      expect(results.filter(result => result !== undefined)).toHaveLength(1);
+      const snapshot = await workflowsStorage.loadWorkflowSnapshot({ workflowName, runId });
+      expect(snapshot?.context['step-1']).toEqual(completedResult);
+      expect(snapshot?.eventedExecutionClaims).toEqual(['step-1:[0]:attempt-0']);
+    });
+
     it('should update workflow state sequentially', async () => {
       if (!supportsConcurrentUpdates) {
         console.log('Skipping workflow state updates sequentially test');

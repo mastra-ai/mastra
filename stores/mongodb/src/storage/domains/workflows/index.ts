@@ -7,6 +7,7 @@ import {
   normalizePerPage,
 } from '@mastra/core/storage';
 import type {
+  WorkflowExecutionClaim,
   PruneOptions,
   PruneResult,
   RetentionTablesDescriptor,
@@ -134,13 +135,15 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    executionClaim,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    executionClaim?: WorkflowExecutionClaim;
+  }): Promise<Record<string, StepResult<any, any, any, any>> | undefined> {
     try {
       const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
       const now = new Date();
@@ -164,7 +167,11 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       // Use findOneAndUpdate with aggregation pipeline for atomic read-modify-write
       // This ensures concurrent updates don't overwrite each other
       const updatedDoc = await collection.findOneAndUpdate(
-        { workflow_name: workflowName, run_id: runId },
+        {
+          workflow_name: workflowName,
+          run_id: runId,
+          ...(executionClaim ? { 'snapshot.eventedExecutionClaims': { $ne: executionClaim.key } } : {}),
+        },
         [
           {
             $set: {
@@ -175,18 +182,40 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
                 $mergeObjects: [
                   // Start with default snapshot if document is new
                   { $ifNull: ['$snapshot', defaultSnapshot] },
-                  // Merge the new context entry
-                  {
-                    context: {
-                      $mergeObjects: [{ $ifNull: [{ $ifNull: ['$snapshot.context', {}] }, {}] }, { [stepId]: result }],
-                    },
-                  },
-                  // Merge the new request context
-                  {
-                    requestContext: {
-                      $mergeObjects: [{ $ifNull: [{ $ifNull: ['$snapshot.requestContext', {}] }, {}] }, requestContext],
-                    },
-                  },
+                  ...(executionClaim?.preserveResult
+                    ? []
+                    : [
+                        // Merge the new context entry
+                        {
+                          context: {
+                            $mergeObjects: [
+                              { $ifNull: [{ $ifNull: ['$snapshot.context', {}] }, {}] },
+                              { [stepId]: result },
+                            ],
+                          },
+                        },
+                        // Merge the new request context
+                        {
+                          requestContext: {
+                            $mergeObjects: [
+                              { $ifNull: [{ $ifNull: ['$snapshot.requestContext', {}] }, {}] },
+                              requestContext,
+                            ],
+                          },
+                        },
+                      ]),
+                  ...(executionClaim
+                    ? [
+                        {
+                          eventedExecutionClaims: {
+                            $concatArrays: [
+                              { $ifNull: ['$snapshot.eventedExecutionClaims', []] },
+                              [executionClaim.key],
+                            ],
+                          },
+                        },
+                      ]
+                    : []),
                 ],
               },
               updatedAt: now,
@@ -195,11 +224,14 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
             },
           },
         ],
-        { upsert: true, returnDocument: 'after' },
+        { upsert: !executionClaim, returnDocument: 'after' },
       );
 
-      const snapshot =
-        typeof updatedDoc?.snapshot === 'string' ? JSON.parse(updatedDoc.snapshot) : updatedDoc?.snapshot;
+      if (!updatedDoc) {
+        return;
+      }
+
+      const snapshot = typeof updatedDoc.snapshot === 'string' ? JSON.parse(updatedDoc.snapshot) : updatedDoc.snapshot;
       return snapshot?.context || {};
     } catch (error) {
       throw new MastraError(

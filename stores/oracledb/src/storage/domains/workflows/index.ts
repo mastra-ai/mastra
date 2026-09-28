@@ -1,11 +1,13 @@
 import { ErrorCategory } from '@mastra/core/error';
 import {
+  claimWorkflowExecution,
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
   WorkflowsStorage,
   matchesExpectedWorkflowStatus,
 } from '@mastra/core/storage';
 import type {
+  WorkflowExecutionClaim,
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
   WorkflowRun,
@@ -75,13 +77,15 @@ export class WorkflowsOracle extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    executionClaim,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    executionClaim?: WorkflowExecutionClaim;
+  }): Promise<Record<string, StepResult<any, any, any, any>> | undefined> {
     try {
       return await this.db.tx(async client => {
         await this.ensureWorkflowRunRow(client, workflowName, runId);
@@ -93,8 +97,13 @@ export class WorkflowsOracle extends WorkflowsStorage {
         );
 
         const snapshot = parseSnapshot(existing.snapshot);
-        snapshot.context[stepId] = result;
-        snapshot.requestContext = { ...(snapshot.requestContext ?? {}), ...requestContext };
+        if (!claimWorkflowExecution(snapshot, executionClaim)) {
+          return;
+        }
+        if (!executionClaim?.preserveResult) {
+          snapshot.context[stepId] = result;
+          snapshot.requestContext = { ...(snapshot.requestContext ?? {}), ...requestContext };
+        }
 
         await client.none(this.workflowMergeSql(), {
           workflowName,

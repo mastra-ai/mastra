@@ -4,6 +4,7 @@ import type { PubSub } from '../../../events';
 import { getSingleStepEntryId } from '../../utils';
 import { resolveCurrentState } from '../helpers';
 import type { StepExecutor } from '../step-executor';
+import { createStepExecutionClaimKey } from './utils';
 import type { ProcessorArgs } from '.';
 
 export async function processWorkflowParallel(
@@ -24,6 +25,7 @@ export async function processWorkflowParallel(
     perStep,
     state,
     outputOptions,
+    sourceEventId,
   }: ProcessorArgs,
   {
     pubsub,
@@ -68,6 +70,10 @@ export async function processWorkflowParallel(
           workflowId,
           runId,
           executionPath: restart ? executionPath.slice(0, -1).concat([idx]) : executionPath.concat([idx]),
+          executionClaimKey: createStepExecutionClaimKey({
+            sourceEventId,
+            executionPath: restart ? executionPath.slice(0, -1).concat([idx]) : executionPath.concat([idx]),
+          }),
           resumeSteps,
           stepResults,
           prevResult,
@@ -105,6 +111,7 @@ export async function processWorkflowConditional(
     perStep,
     state,
     outputOptions,
+    sourceEventId,
   }: ProcessorArgs,
   {
     pubsub,
@@ -160,6 +167,7 @@ export async function processWorkflowConditional(
         workflowId,
         runId,
         executionPath: branchPath(stepIndex),
+        executionClaimKey: createStepExecutionClaimKey({ sourceEventId, executionPath: branchPath(stepIndex) }),
         resumeSteps,
         stepResults,
         timeTravel,
@@ -189,6 +197,7 @@ export async function processWorkflowConditional(
               workflowId,
               runId,
               executionPath: branchPath(idx),
+              executionClaimKey: createStepExecutionClaimKey({ sourceEventId, executionPath: branchPath(idx) }),
               resumeSteps,
               stepResults,
               timeTravel,
