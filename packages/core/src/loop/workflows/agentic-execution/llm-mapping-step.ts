@@ -351,10 +351,12 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
 
             // toModelOutput ran on the raw result above. If a processor rewrote the
             // result, map the rewritten value instead so the model never sees the raw one.
-            if (trResult.rewritten && !toolCall.providerExecuted) {
-              const result = (chunk as { payload: { result: unknown } }).payload.result;
-              providerMetadata = await getProviderMetadataWithModelOutput({ ...toolCall, result });
-              (chunk as { payload: { providerMetadata?: unknown } }).payload.providerMetadata = providerMetadata;
+            if (trResult.rewritten) {
+              if (!toolCall.providerExecuted) {
+                const result = (chunk as { payload: { result: unknown } }).payload.result;
+                providerMetadata = await getProviderMetadataWithModelOutput({ ...toolCall, result });
+                (chunk as { payload: { providerMetadata?: unknown } }).payload.providerMetadata = providerMetadata;
+              }
               // The payload transform also ran on the raw result; redo it on the rewritten one.
               chunk = await transformToolChunk(chunk, toolCall);
             }
@@ -517,10 +519,12 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
 
           // toModelOutput ran on the raw result above. If a processor rewrote the
           // result, map the rewritten value instead so the model never sees the raw one.
-          if (trResult.rewritten && !toolCall.providerExecuted) {
-            const result = (chunk as { payload: { result: unknown } }).payload.result;
-            providerMetadata = await getProviderMetadataWithModelOutput({ ...toolCall, result });
-            (chunk as { payload: { providerMetadata?: unknown } }).payload.providerMetadata = providerMetadata;
+          if (trResult.rewritten) {
+            if (!toolCall.providerExecuted) {
+              const result = (chunk as { payload: { result: unknown } }).payload.result;
+              providerMetadata = await getProviderMetadataWithModelOutput({ ...toolCall, result });
+              (chunk as { payload: { providerMetadata?: unknown } }).payload.providerMetadata = providerMetadata;
+            }
             // The payload transform also ran on the raw result; redo it on the rewritten one.
             chunk = await transformToolChunk(chunk, toolCall);
           }

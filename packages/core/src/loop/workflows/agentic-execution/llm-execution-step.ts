@@ -85,6 +85,7 @@ import {
   TRANSPORT_REF_KEY,
 } from '../../run-scope-keys';
 import { applyAutoResumeSystemMessage } from '../../shared/auto-resume-system-message';
+import { readToolResultFromMessageList } from '../../shared/read-tool-result';
 import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
 import { composeStepInput } from '../../shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
@@ -202,31 +203,6 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
    */
   onModelFinished?: () => void;
 };
-
-/**
- * Walk messageList backwards looking for a tool-invocation part with the given
- * toolCallId in result state. Returns the result value if found, undefined otherwise.
- *
- * Used to read the post-processToolResult value back from the message list so we can
- * sync any processor mutations into the downstream tool-result stream chunk.
- */
-function readToolResultFromMessageList(messageList: MessageList, toolCallId: string): unknown {
-  const messages = messageList.get.all.db();
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i];
-    if (!msg || msg.role !== 'assistant' || !msg.content?.parts) continue;
-    for (const part of msg.content.parts) {
-      if (
-        part?.type === 'tool-invocation' &&
-        part.toolInvocation?.toolCallId === toolCallId &&
-        part.toolInvocation?.state === 'result'
-      ) {
-        return part.toolInvocation.result;
-      }
-    }
-  }
-  return undefined;
-}
 
 type ToolResolvers = {
   resolveTool: (toolName: string) => ToolSet[string] | undefined;
@@ -1034,10 +1010,8 @@ async function processOutputStream<OUTPUT = undefined>({
               // Sync any processor mutation back into the chunk so streaming clients
               // see the post-processor value, not the raw tool return.
               const postProcessorResult = readToolResultFromMessageList(messageList, chunk.payload.toolCallId);
-              if (postProcessorResult !== undefined && postProcessorResult !== chunk.payload.result) {
-                (chunk.payload as { result: unknown }).result = postProcessorResult;
-              }
               if (postProcessorResult !== undefined) {
+                (chunk.payload as { result: unknown }).result = postProcessorResult;
                 // The payload transform ran on the raw result upstream; redo it so
                 // persisted transcript and emitted display state never carry the raw value.
                 const retransformed = await addToolPayloadTransformToChunk(chunk, {
