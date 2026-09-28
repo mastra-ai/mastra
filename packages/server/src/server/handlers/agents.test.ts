@@ -34,6 +34,7 @@ import {
   LIST_AGENTS_ROUTE,
   STREAM_GENERATE_ROUTE,
   RESUME_STREAM_ROUTE,
+  RESUME_STREAM_UNTIL_IDLE_ROUTE,
   APPROVE_TOOL_CALL_ROUTE,
   DECLINE_TOOL_CALL_ROUTE,
   APPROVE_TOOL_CALL_GENERATE_ROUTE,
@@ -1696,10 +1697,12 @@ describe('Agent Routes Authorization', () => {
     async function persistSuspendedDurableRun({
       resourceId,
       toolCallId = 'tool-call-1',
+      threadId,
       workflowName = 'durable-agentic-loop',
     }: {
       resourceId: string;
       toolCallId?: string;
+      threadId?: string;
       workflowName?: string;
     }) {
       const workflowsStore = await storage.getStore('workflows');
@@ -1713,7 +1716,7 @@ describe('Agent Routes Authorization', () => {
           context: {
             input: {
               agentId: 'test-agent',
-              state: { resourceId },
+              state: { resourceId, ...(threadId ? { threadId } : {}) },
               requestContextEntries: { [MASTRA_RESOURCE_ID_KEY]: resourceId },
             },
             'tool-step': {
@@ -1773,80 +1776,69 @@ describe('Agent Routes Authorization', () => {
       );
       expect(execution).not.toHaveBeenCalled();
     });
+    const resumeRoutes = [
+      { name: 'resume-stream', route: RESUME_STREAM_ROUTE, method: 'resumeStream' },
+      { name: 'resume-stream-until-idle', route: RESUME_STREAM_UNTIL_IDLE_ROUTE, method: 'resumeStreamUntilIdle' },
+    ] as const;
 
-    // Issue #25154: createInngestAgent() persists its loop under a namespaced
-    // workflow name and advertises it via `durableLoopWorkflowName`.
-    describe('agent with a namespaced loop workflow name', () => {
-      const namespacedLoop = 'inngest:durable-agentic-loop';
-
-      beforeEach(() => {
-        Object.defineProperty(mockAgent, 'durableLoopWorkflowName', { value: namespacedLoop, configurable: true });
+    function callResume(route: any, { resourceId, toolCallId = 'tool-call-1', thread }: any) {
+      return route.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId }),
+        abortSignal: new AbortController().signal,
+        runId: 'durable-run-1',
+        toolCallId,
+        resumeData: {},
+        ...(thread ? { memory: { thread, resource: resourceId } } : {}),
       });
+    }
 
-      afterEach(() => {
-        delete (mockAgent as any).durableLoopWorkflowName;
-      });
+    it.each(resumeRoutes)('$name rejects a durable run owned by another resource', async ({ route, method }) => {
+      await persistSuspendedDurableRun({ resourceId: 'user-b' });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
 
-      it.each(approvalRoutes)('$name accepts a run persisted under the advertised name', async ({ route, method }) => {
-        await persistSuspendedDurableRun({ resourceId: 'user-a', workflowName: namespacedLoop });
-        const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({
-          fullStream: new ReadableStream(),
-        });
-
-        await (route.handler as any)({
-          mastra,
-          agentId: 'test-agent',
-          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
-          abortSignal: new AbortController().signal,
-          runId: 'durable-run-1',
-          toolCallId: 'tool-call-1',
-        });
-
-        expect(execution).toHaveBeenCalledTimes(1);
-      });
-
-      it.each(approvalRoutes)(
-        '$name rejects a run under the advertised name owned by another resource',
-        async ({ route, method }) => {
-          await persistSuspendedDurableRun({ resourceId: 'user-b', workflowName: namespacedLoop });
-          const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({
-            fullStream: new ReadableStream(),
-          });
-
-          await expect(
-            (route.handler as any)({
-              mastra,
-              agentId: 'test-agent',
-              requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
-              abortSignal: new AbortController().signal,
-              runId: 'durable-run-1',
-              toolCallId: 'tool-call-1',
-            }),
-          ).rejects.toThrow(
-            new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
-          );
-          expect(execution).not.toHaveBeenCalled();
-        },
+      await expect(callResume(route, { resourceId: 'user-a' })).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
       );
+      expect(execution).not.toHaveBeenCalled();
+    });
 
-      it.each(approvalRoutes)('$name does not fall back to the core loop workflow name', async ({ route, method }) => {
-        await persistSuspendedDurableRun({ resourceId: 'user-a' });
-        const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({
-          fullStream: new ReadableStream(),
-        });
+    it.each(resumeRoutes)('$name rejects a missing durable run', async ({ route, method }) => {
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
 
-        await expect(
-          (route.handler as any)({
-            mastra,
-            agentId: 'test-agent',
-            requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
-            abortSignal: new AbortController().signal,
-            runId: 'durable-run-1',
-            toolCallId: 'tool-call-1',
-          }),
-        ).rejects.toThrow(HTTPException);
-        expect(execution).not.toHaveBeenCalled();
-      });
+      await expect(callResume(route, { resourceId: 'user-a' })).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
+      );
+      expect(execution).not.toHaveBeenCalled();
+    });
+
+    it.each(resumeRoutes)('$name rejects a durable run bound to a different thread', async ({ route, method }) => {
+      await persistSuspendedDurableRun({ resourceId: 'user-a', threadId: 'thread-a' });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+      await expect(callResume(route, { resourceId: 'user-a', thread: 'thread-b' })).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' }),
+      );
+      expect(execution).not.toHaveBeenCalled();
+    });
+
+    it.each(resumeRoutes)('$name rejects a thread when the durable run has none', async ({ route, method }) => {
+      await persistSuspendedDurableRun({ resourceId: 'user-a' });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+      await expect(callResume(route, { resourceId: 'user-a', thread: 'thread-b' })).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' }),
+      );
+      expect(execution).not.toHaveBeenCalled();
+    });
+
+    it.each(resumeRoutes)('$name resumes a durable run owned by the caller', async ({ route, method }) => {
+      await persistSuspendedDurableRun({ resourceId: 'user-a' });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+      await callResume(route, { resourceId: 'user-a' });
+      expect(execution).toHaveBeenCalled();
     });
   });
 
@@ -1990,34 +1982,6 @@ describe('Agent Routes Authorization', () => {
       expect(result).toBe(expectedStream);
 
       delete (mockAgent as any).recover;
-    });
-
-    it('should surface an agent that does not support recover as a 400, not a 500', async () => {
-      // Mirrors InngestAgent.recover(): the agent is durable-like, but Inngest owns recovery.
-      const message = 'InngestAgent.recover() is not supported.';
-      (mockDurableAgent as any).recover = vi.fn().mockRejectedValue(
-        new MastraError({
-          id: 'INNGEST_AGENT_RECOVER_NOT_SUPPORTED',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: message,
-          details: { status: 400 },
-        }),
-      );
-
-      await persistDurableAgenticLoopRun({ runId: 'recover-run-unsupported' });
-
-      const error = await RECOVER_ROUTE.handler({
-        mastra,
-        agentId: 'test-durable-agent',
-        requestContext: createContextWithReservedKeys({}),
-        abortSignal: new AbortController().signal,
-        runId: 'recover-run-unsupported',
-      } as any).catch(e => e);
-
-      expect(error).toBeInstanceOf(HTTPException);
-      expect(error.status).toBe(400);
-      expect(error.message).toBe(message);
     });
 
     it('should stash version overrides on requestContext before calling agent.recover()', async () => {

@@ -44,7 +44,7 @@ export function AgentProviderDetails({ agentName, provider, modelId }: AgentProv
       >
         <div className="grid gap-3">
           <CardTitle id={titleId}>Model</CardTitle>
-          <TextAndIcon className="text-caption text-foreground">
+          <TextAndIcon className="text-foreground">
             <span aria-hidden="true">
               <ProviderLogo providerId={provider} className="dark:invert" />
             </span>

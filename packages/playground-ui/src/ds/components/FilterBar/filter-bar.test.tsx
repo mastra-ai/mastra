@@ -219,6 +219,24 @@ describe('FilterBar', () => {
       await waitFor(() => expect(input.getAttribute('aria-activedescendant')).toBe(first.id));
     });
 
+    it('keeps the hovered option lit when the pointer crosses onto the next option', async () => {
+      render(<Harness />);
+      getInput().focus();
+      const first = await screen.findByRole('option', { name: 'Status' });
+      const hovered = screen.getByRole('option', { name: 'Trace ID' });
+      const next = screen.getByRole('option', { name: 'Tags' });
+
+      fireEvent.pointerMove(screen.getByRole('listbox'), { pointerType: 'mouse', movementX: 1 });
+      fireEvent.mouseMove(hovered, { movementX: 1 });
+      await waitFor(() => expect(hovered.hasAttribute('data-highlighted')).toBe(true));
+
+      fireEvent.pointerLeave(hovered, { pointerType: 'mouse', relatedTarget: within(next).getByText('Tags') });
+      await act(async () => {});
+
+      expect(first.hasAttribute('data-highlighted')).toBe(false);
+      expect(hovered.hasAttribute('data-highlighted')).toBe(true);
+    });
+
     it('restarts the highlight on the first option of the next step', async () => {
       render(<Harness />);
       getInput().focus();

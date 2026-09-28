@@ -1,7 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- pure re-export barrel */
 export * from './components/agent-chat';
 export * from './context';
-export * from './components/request-context';
 export * from './components/agent-metadata';
 export * from './components/agent-entity-header';
 export * from './components/chat-threads';

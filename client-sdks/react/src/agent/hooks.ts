@@ -553,6 +553,17 @@ export const useChat = ({
           pendingToolApprovalIdsRef.current.add(toolCallId);
           setIsAwaitingToolApproval(true);
         }
+        // Some runs (e.g. Inngest durable agents) emit no `start` chunk, so the
+        // approval chunk is the only place the run ID reaches the client.
+        if (runId) {
+          if (!liveRunId.current || liveRunFinished.current) {
+            liveRunId.current = runId;
+            liveRunFinished.current = false;
+          }
+          if (liveRunId.current === runId) {
+            _currentRunId.current = runId;
+          }
+        }
         setIsRunning(false);
       }
 
