@@ -5,13 +5,46 @@ import type { MastraDBMessage } from '@mastra/core/agent';
  * Pure functions for formatting relative timestamps and annotating observations.
  */
 
-/**
- * Format a relative time string like "5 days ago", "2 weeks ago", "today", etc.
- */
-export function formatRelativeTime(date: Date, currentDate: Date): string {
-  const diffMs = currentDate.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** Day number of the calendar date a parsed date names. Parsed dates are built from local-time fields. */
+function calendarDay(date: Date): number {
+  return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / DAY_MS;
+}
+
+const knownTimeZones = new Map<string, boolean>();
+
+/** `timeZone` when this runtime recognises it; otherwise undefined, which means the process time zone. */
+export function resolveTimeZone(timeZone: string | undefined): string | undefined {
+  if (!timeZone) return undefined;
+  let known = knownTimeZones.get(timeZone);
+  if (known === undefined) {
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone });
+      known = true;
+    } catch {
+      known = false;
+    }
+    knownTimeZones.set(timeZone, known);
+  }
+  return known ? timeZone : undefined;
+}
+
+/** Day number of the calendar date `instant` falls on in `timeZone` (the process time zone when unset). */
+function calendarDayIn(instant: Date, timeZone: string | undefined): number {
+  const zone = resolveTimeZone(timeZone);
+  if (!zone) return calendarDay(instant);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: zone,
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  }).formatToParts(instant);
+  const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find(p => p.type === type)?.value);
+  return Date.UTC(part('year'), part('month') - 1, part('day')) / DAY_MS;
+}
+
+function formatRelativeDays(diffDays: number): string {
   if (diffDays < 0) {
     const futureDays = Math.abs(diffDays);
     if (futureDays === 1) return 'tomorrow';
@@ -39,8 +72,7 @@ export function formatRelativeTime(date: Date, currentDate: Date): string {
  * Returns null for consecutive days (no gap marker needed).
  */
 export function formatGapBetweenDates(prevDate: Date, currDate: Date): string | null {
-  const diffMs = currDate.getTime() - prevDate.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const diffDays = calendarDay(currDate) - calendarDay(prevDate);
 
   if (diffDays <= 1) {
     return null; // No gap marker for consecutive days
@@ -256,10 +288,17 @@ export function parseDateFromContent(dateContent: string): Date | null {
   return findDateSpan(dateContent)?.start ?? null;
 }
 
-/** Relative time for a span: "3 weeks ago", or "7 months ago to 4 weeks ago" when the ends differ. */
-export function formatRelativeSpan(span: DateSpan, currentDate: Date): string {
-  const start = formatRelativeTime(span.start, currentDate);
-  const end = formatRelativeTime(span.end, currentDate);
+/**
+ * Relative time for a span: "3 weeks ago", or "7 months ago to 4 weeks ago" when the ends differ.
+ * Days are counted from the calendar date `currentDate` falls on in `timeZone`, the zone the dates were written in.
+ */
+export function formatRelativeSpan(span: DateSpan, currentDate: Date, timeZone?: string): string {
+  return relativeSpan(span, calendarDayIn(currentDate, timeZone));
+}
+
+function relativeSpan(span: DateSpan, today: number): string {
+  const start = formatRelativeDays(today - calendarDay(span.start));
+  const end = formatRelativeDays(today - calendarDay(span.end));
   if (start === end) return start;
   if (!end.startsWith('in ')) return `${start} to ${end}`;
   return start.startsWith('in ') ? `${start} to ${end.slice(3)}` : `${start} to ${end.slice(3)} from now`;
@@ -288,20 +327,21 @@ export function isFutureIntentObservation(line: string): boolean {
  * Matches patterns like "(estimated May 27-28, 2023)" or "(meaning May 30, 2023 at 3:00 PM)"
  * and expands them to "(meaning May 30, 2023 - 3 weeks ago)". Notes without a year are left alone.
  */
-export function expandInlineEstimatedDates(observations: string, currentDate: Date): string {
+export function expandInlineEstimatedDates(observations: string, currentDate: Date, timeZone?: string): string {
   const inlineDateRegex = /\((estimated|meaning)\s([^()]*)\)/gi;
+  const today = calendarDayIn(currentDate, timeZone);
 
   return observations.replace(inlineDateRegex, (match, prefix: string, noteText: string, offset: number) => {
     const dateContent = noteText.trimStart();
     const span = findDateSpan(dateContent);
     if (!span) return match;
 
-    const relative = formatRelativeSpan(span, currentDate);
+    const relative = relativeSpan(span, today);
 
-    // A planned action whose date has passed has likely happened; the intent is in the text before the note.
+    // A planned action whose date is behind us has likely happened; the intent is in the text before the note.
     const lineStart = observations.lastIndexOf('\n', offset) + 1;
     const lineBeforeDate = observations.slice(lineStart, offset);
-    if (span.end < currentDate && isFutureIntentObservation(lineBeforeDate)) {
+    if (calendarDay(span.end) < today && isFutureIntentObservation(lineBeforeDate)) {
       return `(${prefix} ${dateContent} - ${relative}, likely already happened)`;
     }
 
@@ -314,16 +354,17 @@ export function expandInlineEstimatedDates(observations: string, currentDate: Da
  * "exam on January 10, 2024 (5 months ago)". Only dates that state their year are annotated;
  * "Date:" headers and "(meaning/estimated …)" notes are handled separately and skipped here.
  */
-export function annotateObservationTextDates(observations: string, currentDate: Date): string {
+export function annotateObservationTextDates(observations: string, currentDate: Date, timeZone?: string): string {
   const regex = new RegExp(
     String.raw`^Date:.*$|\((?:[Ee]stimated|[Mm]eaning)\b[^()]*\)|${FREE_TEXT_DATE.source}`,
     'gm',
   );
+  const today = calendarDayIn(currentDate, timeZone);
   return observations.replace(regex, (match, offset: number) => {
     if (match.startsWith('Date:') || match.startsWith('(')) return match;
     const span = parseDateSpan(match);
     if (!span) return match;
-    const relative = formatRelativeSpan(span, currentDate);
+    const relative = relativeSpan(span, today);
     // A date closing a parenthetical takes the "(… - 3 weeks ago)" form rather than nesting parentheses.
     return observations[offset + match.length] === ')' ? `${match} - ${relative}` : `${match} (${relative})`;
   });
@@ -333,11 +374,16 @@ export function annotateObservationTextDates(observations: string, currentDate: 
  * Add relative time annotations to observations.
  * Transforms "Date: May 15, 2023" headers to "Date: May 15, 2023 (5 days ago)", range headers such as
  * "Date: Aug 1, 2024 - Feb 28, 2025" to "(7 months ago to 4 weeks ago)", and annotates inline dates.
+ *
+ * `timeZone` is the zone the Observer wrote its dates in (the record's `observedTimezone`). "Today" is
+ * `currentDate`'s calendar date in that zone, so the result doesn't depend on the zone of the process rendering it.
  */
-export function addRelativeTimeToObservations(observations: string, currentDate: Date): string {
+export function addRelativeTimeToObservations(observations: string, currentDate: Date, timeZone?: string): string {
+  const today = calendarDayIn(currentDate, timeZone);
   const withInlineDates = annotateObservationTextDates(
-    expandInlineEstimatedDates(observations, currentDate),
+    expandInlineEstimatedDates(observations, currentDate, timeZone),
     currentDate,
+    timeZone,
   );
 
   const dateHeaderRegex = /^(Date:[ \t]*)(.*)$/gm;
@@ -375,7 +421,7 @@ export function addRelativeTimeToObservations(observations: string, currentDate:
       }
     }
 
-    result += `${curr.prefix}${curr.dateStr} (${formatRelativeSpan(curr.span, currentDate)})`;
+    result += `${curr.prefix}${curr.dateStr} (${relativeSpan(curr.span, today)})`;
 
     lastIndex = curr.index + curr.match.length;
   }

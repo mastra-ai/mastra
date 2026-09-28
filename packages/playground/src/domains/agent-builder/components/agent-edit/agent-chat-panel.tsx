@@ -1,5 +1,6 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useAgentMessages } from '@mastra/playground-ui/domains/agents/hooks/use-agent-messages';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -15,7 +16,6 @@ import { MessageList } from '../chat-primitives/message-list';
 import { BrowserThumbnail } from '@/domains/agents/components/browser-view';
 import { useBrowserSession } from '@/domains/agents/context/browser-session-context';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
-import { useAgentMessages } from '@/hooks/use-agent-messages';
 
 interface AgentChatPanelProviderProps {
   agentId: string;

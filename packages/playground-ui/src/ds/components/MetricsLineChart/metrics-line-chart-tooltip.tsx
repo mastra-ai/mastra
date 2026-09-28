@@ -5,11 +5,13 @@ export function MetricsLineChartTooltip({
   payload,
   label,
   suffix,
+  formatValue = value => value.toLocaleString('en-US'),
 }: {
   active?: boolean;
   payload?: Array<{ name: string; value: number; color: string }>;
   label?: string;
   suffix?: string;
+  formatValue?: (value: number) => string;
 }) {
   if (!active || !payload?.length) return null;
   return (
@@ -20,7 +22,7 @@ export function MetricsLineChartTooltip({
           <span className="mr-2 inline-block size-2 rounded-full" style={{ backgroundColor: entry.color }} />
           {entry.name}:{' '}
           <span className="font-mono">
-            {typeof entry.value === 'number' ? entry.value.toLocaleString('en-US') : entry.value}
+            {typeof entry.value === 'number' ? formatValue(entry.value) : entry.value}
             {suffix}
           </span>
         </p>

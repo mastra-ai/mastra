@@ -5,6 +5,8 @@ description: Re-review a pull request after a push — reconcile the previous re
 
 # Factory Re-Review
 
+**Role guard:** only run this skill when the `factory-phase` signal shows `role="review"`. Under any other role, stop immediately: do not review, comment, label, approve, or transition the work item, and report that review skills are not available to this role.
+
 Re-review the pull request behind this Factory work item after new commits were pushed — reconcile your previous review against what changed, look for defects the push itself introduced, then take a fresh pass over the PR as it now stands — and finish by publishing the verdict on the PR, posting a verdict handoff, and requesting the stage transition.
 
 You are working in a bound Factory session. Complete the full re-review in one pass, then make `factory_transition_work_item` your terminal step — one transition request, repeated only if the governed transition rejects it and only with the rejection reason addressed. Never wait for or solicit human input mid-run; every judgment call is yours to resolve.

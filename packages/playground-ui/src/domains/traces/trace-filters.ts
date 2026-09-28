@@ -307,8 +307,8 @@ const TRACE_SYNTHETIC_OPERATORS: TraceFilterOperatorId[] = ['is', 'in'];
 const TRACE_LEGACY_OPERATORS: TraceFilterOperatorId[] = ['is'];
 
 const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
-  rootEntityType: 'Primitive Type',
-  entityName: 'Primitive Name',
+  rootEntityType: 'Primitive type',
+  entityName: 'Primitive name',
   entityId: 'Primitive ID',
   status: 'Status',
   tags: 'Tags',

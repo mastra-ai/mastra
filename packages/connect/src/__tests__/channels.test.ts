@@ -301,14 +301,16 @@ describe('channels()', () => {
     expect(FakeChannelProvider.configureSpy).toHaveBeenCalledWith('telegram', { botToken: TELEGRAM_BOT_TOKEN });
   });
 
-  it('syncs a DiscordProvider with { botToken, applicationId, publicKey } from credential + metadata', async () => {
+  it('syncs a DiscordProvider with { botToken, applicationId, publicKey } from connection metadata', async () => {
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_dc', integrationId: 'discord' })],
-      credentials: { c_dc: { type: 'oauth2', accessToken: DISCORD_BOT_TOKEN, expiresAt: null } },
+      // The oauth2 credential is a user Bearer token — Discord rejects it for
+      // bot auth, so it must NOT be used when metadata carries the bot token.
+      credentials: { c_dc: { type: 'oauth2', accessToken: 'oauth-bearer-not-a-bot-token', expiresAt: null } },
       contexts: {
         c_dc: {
           connection_config: null,
-          metadata: { applicationId: 'app_123', publicKey: 'pubkey_abc' },
+          metadata: { botToken: DISCORD_BOT_TOKEN, applicationId: 'app_123', publicKey: 'pubkey_abc' },
         },
       },
     });
@@ -323,14 +325,14 @@ describe('channels()', () => {
     });
   });
 
-  it('accepts snake_case metadata keys for Discord (application_id / public_key)', async () => {
+  it('accepts snake_case metadata keys for Discord (bot_token / application_id / public_key)', async () => {
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_dc', integrationId: 'discord' })],
-      credentials: { c_dc: { type: 'oauth2', accessToken: DISCORD_BOT_TOKEN, expiresAt: null } },
+      credentials: { c_dc: { type: 'oauth2', accessToken: 'oauth-bearer-not-a-bot-token', expiresAt: null } },
       contexts: {
         c_dc: {
           connection_config: null,
-          metadata: { application_id: 'app_snake', public_key: 'pubkey_snake' },
+          metadata: { bot_token: DISCORD_BOT_TOKEN, application_id: 'app_snake', public_key: 'pubkey_snake' },
         },
       },
     });
@@ -340,16 +342,37 @@ describe('channels()', () => {
     expect(providers.discord).toBeDefined();
     expect(FakeChannelProvider.configureSpy).toHaveBeenCalledWith(
       'discord',
-      expect.objectContaining({ applicationId: 'app_snake', publicKey: 'pubkey_snake' }),
+      expect.objectContaining({ botToken: DISCORD_BOT_TOKEN, applicationId: 'app_snake', publicKey: 'pubkey_snake' }),
     );
   });
 
-  it('syncs Discord from the bot token alone without warning — the provider backfills the rest', async () => {
+  it('skips Discord with a warning when the connection metadata has no botToken', async () => {
+    // The oauth2 credential is a user Bearer token that Discord always
+    // rejects for bot auth — there is no fallback. Without botToken metadata
+    // the channel is skipped with an actionable warning instead of failing
+    // later with a misleading 401.
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_dc', integrationId: 'discord' })],
-      credentials: { c_dc: { type: 'oauth2', accessToken: DISCORD_BOT_TOKEN, expiresAt: null } },
-      // No metadata → DiscordProvider self-resolves applicationId/publicKey
-      // from `GET /applications/@me`, so no warning fires.
+      credentials: { c_dc: { type: 'oauth2', accessToken: 'oauth-bearer-not-a-bot-token', expiresAt: null } },
+    });
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(fetchMock));
+    const providers = await resolver();
+    expect(providers.discord).toBeUndefined();
+    expect(FakeChannelProvider.configureSpy).not.toHaveBeenCalledWith(
+      'discord',
+      expect.objectContaining({ botToken: expect.anything() }),
+    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('no botToken in its metadata'));
+  });
+
+  it('syncs Discord from the metadata botToken alone — the provider backfills applicationId/publicKey', async () => {
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_dc', integrationId: 'discord' })],
+      credentials: { c_dc: { type: 'oauth2', accessToken: 'oauth-bearer-not-a-bot-token', expiresAt: null } },
+      contexts: {
+        c_dc: { connection_config: null, metadata: { botToken: DISCORD_BOT_TOKEN } },
+      },
     });
     const channelsFn = await importChannels();
     const resolver = await channelsFn(options(fetchMock));
@@ -373,8 +396,11 @@ describe('channels()', () => {
     vi.stubEnv('DISCORD_APPLICATION_ID', undefined as unknown as string);
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_dc', integrationId: 'discord' })],
-      credentials: { c_dc: { type: 'oauth2', accessToken: DISCORD_BOT_TOKEN, expiresAt: null } },
-      // No metadata — the token is the only credential material available.
+      credentials: { c_dc: { type: 'oauth2', accessToken: 'oauth-bearer-not-a-bot-token', expiresAt: null } },
+      contexts: {
+        // The token is the only credential material available (via metadata).
+        c_dc: { connection_config: null, metadata: { botToken: DISCORD_BOT_TOKEN } },
+      },
     });
     const channelsFn = await importChannels();
     const resolver = await channelsFn(options(fetchMock));
@@ -395,9 +421,12 @@ describe('channels()', () => {
     vi.stubEnv('DISCORD_APPLICATION_ID', undefined as unknown as string);
     const state: PlatformState = {
       connections: [makeConnection({ id: 'c_a', integrationId: 'discord' })],
-      credentials: { c_a: { type: 'oauth2', accessToken: 'discord-bot-A', expiresAt: null } },
+      credentials: { c_a: { type: 'oauth2', accessToken: 'oauth-bearer-A', expiresAt: null } },
       contexts: {
-        c_a: { connection_config: null, metadata: { applicationId: 'A_app_id', publicKey: 'A_public_key' } },
+        c_a: {
+          connection_config: null,
+          metadata: { botToken: 'discord-bot-A', applicationId: 'A_app_id', publicKey: 'A_public_key' },
+        },
       },
     };
     const fetchMock = platformFetch(state);
@@ -410,8 +439,8 @@ describe('channels()', () => {
 
     // The platform swaps connection A for connection B — token only.
     state.connections = [makeConnection({ id: 'c_b', integrationId: 'discord' })];
-    state.credentials = { c_b: { type: 'oauth2', accessToken: 'discord-bot-B', expiresAt: null } };
-    state.contexts = {};
+    state.credentials = { c_b: { type: 'oauth2', accessToken: 'oauth-bearer-B', expiresAt: null } };
+    state.contexts = { c_b: { connection_config: null, metadata: { botToken: 'discord-bot-B' } } };
     resolver.invalidate();
     await resolver();
 
@@ -446,7 +475,10 @@ describe('channels()', () => {
       credentials: {
         c_slack: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null },
         c_tg: { type: 'api_key', apiKey: TELEGRAM_BOT_TOKEN },
-        c_dc: { type: 'oauth2', accessToken: DISCORD_BOT_TOKEN, expiresAt: null },
+        c_dc: { type: 'oauth2', accessToken: 'oauth-bearer-not-a-bot-token', expiresAt: null },
+      },
+      contexts: {
+        c_dc: { connection_config: null, metadata: { botToken: DISCORD_BOT_TOKEN } },
       },
     });
     const channelsFn = await importChannels();

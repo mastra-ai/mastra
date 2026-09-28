@@ -1,6 +1,7 @@
 import { MemoryStudioPanel } from '@mastra/playground-ui/domains/memory/components/memory-studio-panel';
 import { useMemoryThreadMessages } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
 import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useEffect } from 'react';
 
 import { getObservationWindowTokens } from './lib/observation-window';
@@ -31,11 +32,11 @@ export function MemoryDetailView({ agentId, threadId }: MemoryDetailViewProps) {
   const isOMActive = isObservingFromStream || isReflectingFromStream;
 
   // Resolve the thread's actual resourceId (may differ from agentId for externally-created threads)
-  const { data: thread } = useThread({ threadId, agentId });
+  const { data: thread } = useThread({ threadId, agentId }, useEntityRequestContext('agent', agentId)[0]);
   const effectiveResourceId = thread?.resourceId ?? agentId;
 
   // Config thresholds, read the same way the OM sidebar section does.
-  const { data: configData } = useMemoryConfig(agentId);
+  const { data: configData } = useMemoryConfig(agentId, useEntityRequestContext('agent', agentId)[0]);
 
   const {
     data: omData,
