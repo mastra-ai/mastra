@@ -1225,10 +1225,9 @@ export class Agent<
    * are persisted into the record (so the precedence over agent config is
    * remembered in thread state). No-ops when no objective is set.
    *
-   * One field departs from that rule: `pausedReason` describes a single pause.
-   * Any non-paused resulting status retires it, even when one is supplied, and
-   * an explicit `status: 'paused'` is authoritative about its own cause — it
-   * clears a stored one when no replacement is supplied.
+   * `pausedReason` lasts for one pause: it's cleared when the goal leaves
+   * paused, or when a goal moves into paused from another status without a new
+   * reason. A supplied reason replaces the stored one.
    */
   async updateObjectiveOptions(options: {
     threadId: string;
@@ -1251,11 +1250,9 @@ export class Agent<
       ...(options.status !== undefined ? { status: options.status } : {}),
       ...(options.pausedReason !== undefined ? { pausedReason: options.pausedReason } : {}),
     };
-    // A pause cause only describes a paused goal; any other resulting status
-    // retires it so a later pause can't inherit a stale reason. An explicit
-    // pause is authoritative about its own cause for the same reason: pausing
-    // again without one replaces the earlier cause rather than inheriting it.
-    if (updated.status !== 'paused' || (options.status === 'paused' && options.pausedReason === undefined)) {
+    // A pause cause lasts for one pause. Leaving paused clears it, and entering
+    // paused without a new reason drops any stale one from a non-paused record.
+    if (updated.status !== 'paused' || (existing.status !== 'paused' && options.pausedReason === undefined)) {
       delete updated.pausedReason;
     }
     await writeObjective(store, options.threadId, updated);

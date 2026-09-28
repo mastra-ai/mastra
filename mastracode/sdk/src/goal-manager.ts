@@ -69,6 +69,8 @@ export class GoalManager {
   private threadId: string | undefined;
   private agentId: string | undefined;
   private persistGoalOnNextThreadCreate = false;
+  /** Set by {@link clear}: the next save with an empty mirror deletes the goal. */
+  private pendingDelete = false;
 
   // ---------------------------------------------------------------------------
   // Synchronous TUI surface
@@ -131,6 +133,7 @@ export class GoalManager {
     const agent = this.getAgent(state);
     const now = Date.now();
     const id = randomUUID();
+    this.pendingDelete = false;
     this.threadId = threadId ?? undefined;
     this.agentId = agent?.id;
 
@@ -204,6 +207,7 @@ export class GoalManager {
 
   clear(): void {
     this.record = null;
+    this.pendingDelete = true;
     this.threadId = undefined;
     this.agentId = undefined;
     this.persistGoalOnNextThreadCreate = false;
@@ -236,16 +240,20 @@ export class GoalManager {
    * a save that actually wrote, so stale state from older sessions cannot
    * shadow the record — and a save that wrote nothing leaves it alone.
    *
-   * This method only ever upserts. An empty in-memory mirror means "I have
-   * nothing *loaded*", which is not the same statement as "there is nothing" —
-   * the mirror is emptied by storage failures and thread switches as well as by
-   * the user. Only an explicit clear makes the second statement, so deletion
-   * lives in {@link deleteFromThread} and a save with an empty mirror is a
-   * complete no-op, legacy metadata included.
+   * An empty in-memory mirror means "I have nothing *loaded*", which is not the
+   * same statement as "there is nothing": the mirror is also emptied by storage
+   * failures and thread switches. So a save with an empty mirror deletes the
+   * goal (durable record and legacy key) only right after an explicit
+   * {@link clear}, and is a complete no-op otherwise.
    */
   async saveToThread(state: GoalManagerState): Promise<void> {
     const threadId = state.session.thread.getId();
     const agent = this.getAgent(state);
+    if (!this.record && this.pendingDelete) {
+      this.pendingDelete = false;
+      await this.deleteFromThread(state);
+      return;
+    }
     try {
       if (agent && threadId) {
         if (this.record) {
@@ -296,18 +304,17 @@ export class GoalManager {
   }
 
   /**
-   * Remove the objective from the thread. This is the only method that deletes.
-   * The caller expresses that intent, not the in-memory mirror, so it works the
-   * same when the mirror is already empty.
+   * Remove the objective from the thread, whatever the in-memory mirror holds.
    *
    * The durable record needs an agent and a thread; the legacy thread-metadata
    * key does not, so it is wiped either way — unlike {@link saveToThread}, which
-   * writes nothing with an empty mirror. That asymmetry is deliberate: a
+   * writes nothing with an empty mirror unless {@link clear} ran. That asymmetry is deliberate: a
    * pre-migration goal must not resurface from the legacy key after a clear.
    * Like the save, this is best-effort: a failed durable delete also skips the
    * legacy wipe.
    */
   async deleteFromThread(state: GoalManagerState): Promise<void> {
+    this.pendingDelete = false;
     const threadId = state.session.thread.getId();
     const agent = this.getAgent(state);
     try {
@@ -326,6 +333,7 @@ export class GoalManager {
    */
   async loadFromThread(state: GoalManagerState): Promise<void> {
     this.persistGoalOnNextThreadCreate = false;
+    this.pendingDelete = false;
 
     const threadId = state.session.thread.getId();
     const agent = this.getAgent(state);
@@ -356,6 +364,7 @@ export class GoalManager {
   loadFromThreadMetadata(metadata: Record<string, unknown> | undefined): void {
     const saved = metadata?.[THREAD_GOAL_KEY] as Partial<GoalState> | undefined;
     this.persistGoalOnNextThreadCreate = false;
+    this.pendingDelete = false;
     this.threadId = undefined;
     this.agentId = undefined;
     if (saved && saved.objective && saved.status) {

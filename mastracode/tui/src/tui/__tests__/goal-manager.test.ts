@@ -377,6 +377,37 @@ describe('GoalManager adapter', () => {
     expect(state.session.thread.setSetting).toHaveBeenCalledWith({ key: 'goal', value: undefined });
   });
 
+  it('deletes the goal when clear() is followed by saveToThread()', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+
+    manager.clear();
+    await manager.saveToThread(state);
+
+    expect(agent.clearObjective).toHaveBeenCalledWith({ threadId: 'parent-thread' });
+    expect(state.session.thread.setSetting).toHaveBeenCalledWith({ key: 'goal', value: undefined });
+
+    // The delete intent is consumed: a later empty save is a no-op again.
+    agent.clearObjective.mockClear();
+    await manager.saveToThread(state);
+    expect(agent.clearObjective).not.toHaveBeenCalled();
+  });
+
+  it('does not delete on a save after clear() when a new goal was set in between', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+    await manager.setGoal(state, 'first', '__GATEWAY_OPENAI_MODEL__');
+    manager.clear();
+    await manager.setGoal(state, 'second', '__GATEWAY_OPENAI_MODEL__');
+
+    await manager.saveToThread(state);
+
+    expect(agent.clearObjective).not.toHaveBeenCalled();
+  });
+
   it('still upserts on a normal save, and never deletes', async () => {
     const agent = createAgent();
     const state = createState(agent);
