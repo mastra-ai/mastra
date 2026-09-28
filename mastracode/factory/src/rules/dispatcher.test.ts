@@ -1980,7 +1980,7 @@ describe('FactoryDecisionDispatcher', () => {
       { type: 'sendMessage', role: 'work', message: 'Next run.', idempotencyKey: 'run-behind-wake' },
       { sourceKey: 'github-issue:1', ingress: 'move-3' },
     );
-    // A messaged transition may wake an idle session, so it waits for a run slot.
+    // A messaged transition's wake needs a run slot; its stage change does not.
     const messaged = await createItem(storage, 'github-issue:3');
     await storage.commitRuleEvaluation({
       orgId: 'org-1',
@@ -1994,6 +1994,7 @@ describe('FactoryDecisionDispatcher', () => {
       decisions: [
         {
           type: 'transition',
+          board: 'work',
           stage: 'done',
           message: { role: 'work', text: 'Moved.' },
           idempotencyKey: 'messaged-transition-behind-wake',
@@ -2008,7 +2009,13 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
     expect(await find('bookkeeping-during-wake')).toMatchObject({ status: 'succeeded' });
     expect(await find('run-behind-wake')).toMatchObject({ status: 'pending' });
-    expect(await find('messaged-transition-behind-wake')).toMatchObject({ status: 'pending' });
+    // The stage change commits now; only its message waits for a run slot.
+    expect(await find('messaged-transition-behind-wake')).toMatchObject({ status: 'succeeded' });
+    expect((await storage.get({ orgId: 'org-1', id: messaged.id }))?.stages).toEqual(['done']);
+    expect(await find('messaged-transition-behind-wake:message')).toMatchObject({
+      status: 'pending',
+      decision: { type: 'sendMessage', role: 'work', message: 'Moved.', idleBehavior: 'wake' },
+    });
 
     emitAgentEnd();
     await first;
@@ -3935,10 +3942,18 @@ describe('FactoryDecisionDispatcher', () => {
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
-
-    const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(record?.status).toBe('succeeded');
+    // The stage change commits first; its message is queued for the run pool.
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['done']);
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+
+    const records = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(records.map(r => [r.idempotencyKey, r.status])).toEqual(
+      expect.arrayContaining([
+        ['merged-with-binding', 'succeeded'],
+        ['merged-with-binding:message', 'succeeded'],
+      ]),
+    );
     expect(primeCredentials).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
     expect(sendNotificationSignal).toHaveBeenCalledWith(
       expect.objectContaining({

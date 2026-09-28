@@ -69,12 +69,11 @@ const SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS = 6 * 60 * 60_000;
 const MAX_IN_FLIGHT = 25;
 /**
  * Decisions that may start or wake an agent run and so hold a run slot. A
- * transition carrying a message wakes the idle bound session and waits on it.
+ * transition's message is queued as a separate sendMessage, so the transition
+ * itself stays bookkeeping.
  */
 const isRunBearingDecision = (decision: Record<string, unknown>): boolean =>
-  decision.type === 'invokeSkill' ||
-  decision.type === 'sendMessage' ||
-  (decision.type === 'transition' && decision.message != null);
+  decision.type === 'invokeSkill' || decision.type === 'sendMessage';
 const isBookkeepingDecision = (decision: Record<string, unknown>): boolean => !isRunBearingDecision(decision);
 const BOOKKEEPING_MAX_IN_FLIGHT = 4;
 // Staleness sweep: legacy/leaked active bindings (item deleted, transition
@@ -325,7 +324,7 @@ export interface FactoryBindingPreparationInput {
 export interface FactoryDecisionDispatcherOptions {
   audit?: AuditRecorder;
   controller: FactoryController;
-  transitionService: Pick<FactoryTransitionService, 'transition'>;
+  transitionService: Pick<FactoryTransitionService, 'transition' | 'configVersion'>;
   storage: WorkItemsStorage;
   /** Installed boards; defaults to the built-in Work and Review boards. */
   boards?: BoardRegistry;
@@ -485,7 +484,7 @@ async function awaitNotification(
 export class FactoryDecisionDispatcher {
   readonly #audit?: AuditRecorder;
   readonly #controller: FactoryController;
-  readonly #transitionService: Pick<FactoryTransitionService, 'transition'>;
+  readonly #transitionService: Pick<FactoryTransitionService, 'transition' | 'configVersion'>;
   readonly #boards: BoardRegistry;
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
@@ -824,43 +823,35 @@ export class FactoryDecisionDispatcher {
         if (result.status === 'rejected') throw new Error(`${result.code}: ${result.reason}`);
         const transitionMessage = decision.message;
         if (!transitionMessage) return;
-        // Best-effort recipient lookup: no active binding (or no authenticated
-        // session owner) means nobody is engaged with this item, so the
-        // transition itself is the whole effect. A retry after a delivery
-        // failure is safe because the transition replays by ingress identity.
-        const binding = await this.#findBinding(record, transitionMessage.role);
-        if (!binding) return;
-        const startedBy = item.sessions[binding.role]?.startedBy;
-        if (!startedBy) return;
-        await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-        const session = await this.#findSession(binding);
-        if (!session) return;
-        const requestContext = factoryRequestContext({
-          session,
-          binding,
-          userId: startedBy,
+        // The message may wake an idle session and hold it for a whole agent
+        // run, so it is queued as its own sendMessage decision for the run
+        // pool; the stage change above never waits on run capacity. Keyed by
+        // this decision, so a retry replays rather than queueing it twice.
+        const moved = await this.#storage.get({ orgId: record.orgId, id: item.id });
+        if (!moved) return;
+        const messageKey = `${record.idempotencyKey}:message`;
+        await this.#storage.commitRuleEvaluation({
           orgId: record.orgId,
+          factoryProjectId: record.factoryProjectId,
+          workItemId: item.id,
+          ingress: { identity: `decision:${messageKey}`, triggerType: 'transition.message' },
+          configVersion: this.#transitionService.configVersion,
+          expectedRevision: moved.revision,
+          actor: record.actor ?? { type: 'system', id: 'factory-rule-dispatcher' },
+          outcome: { status: 'accepted' },
+          decisions: [
+            {
+              type: 'sendMessage',
+              idempotencyKey: messageKey,
+              message: transitionMessage.text,
+              priority: 'high',
+              idleBehavior: 'wake',
+              ...(transitionMessage.role !== undefined ? { role: transitionMessage.role } : {}),
+            },
+          ],
+          causalChain: nextChain,
+          now: new Date(),
         });
-        await awaitNotification(
-          () =>
-            session.sendNotificationSignal(
-              {
-                source: 'factory',
-                kind: 'rule-message',
-                summary: transitionMessage.text,
-                priority: 'high',
-                payload: { message: transitionMessage.text },
-                sourceId: record.id,
-                dedupeKey: record.idempotencyKey,
-              },
-              {
-                ifActive: { behavior: 'deliver' },
-                ifIdle: { behavior: 'wake' },
-                requestContext,
-              },
-            ),
-          true,
-        );
         return;
       }
       case 'upsertLinkedWorkItem': {
