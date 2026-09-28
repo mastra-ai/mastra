@@ -1195,11 +1195,11 @@ export class AgentChannels {
         typeof err === 'object' && err !== null && 'cause' in err ? extractErrorMessage(err.cause) : undefined;
       const { id, domain, category } = err instanceof MastraError ? err : {};
       loggedError = {
-        message: typeof message === 'string' ? message : 'Unknown error',
+        message: typeof message === 'string' && message.length > 0 ? message : 'Unknown error',
         ...(typeof id === 'string' ? { code: id } : {}),
         ...(typeof domain === 'string' ? { domain } : {}),
         ...(typeof category === 'string' ? { category } : {}),
-        ...(typeof cause === 'string' ? { cause: { message: cause } } : {}),
+        ...(typeof cause === 'string' && cause.length > 0 ? { cause: { message: cause } } : {}),
       };
     } catch {
       loggedError = { message: 'Error details unavailable' };

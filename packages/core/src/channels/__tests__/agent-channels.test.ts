@@ -2105,7 +2105,14 @@ describe('AgentChannels', () => {
         },
       );
 
-      it.each([null, undefined, { details: { token: 'SENTINEL_TOKEN' } }])(
+      it.each(['', { details: { errorMessage: '' } }])('omits an empty immediate cause message (%#)', async cause => {
+        const f = await fixture(new Error('failure', { cause }));
+        await f.run();
+        expect(f.record().error).toEqual({ message: 'failure' });
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: failure');
+      });
+
+      it.each([null, undefined, '', { details: { errorMessage: '' } }, { details: { token: 'SENTINEL_TOKEN' } }])(
         'uses a static message for a throw without a useful message (%#)',
         async error => {
           const f = await fixture(error, { formatError: () => 'feedback' });
