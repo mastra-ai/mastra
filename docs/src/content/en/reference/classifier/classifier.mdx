@@ -30,11 +30,11 @@ Define questions in the constructor when every evaluation uses the same question
 import { Classifier } from '@mastra/core/classifier'
 import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
 
-const typeSafeAi = createTypeSafeAi({ apiKey: process.env.TYPESAFE_AI_API_KEY })
-
 const classifier = new Classifier({
   id: 'request-classifier',
-  model: typeSafeAi.evaluationModel('jev-latest'),
+  model: createTypeSafeAi({ apiKey: process.env.TYPESAFE_AI_API_KEY }).evaluationModel(
+    'jev-latest',
+  ),
   questions: {
     route: {
       type: 'choice',
@@ -64,11 +64,9 @@ result.answers.urgent.probability // P(true), from 0 to 1
 
 The evaluation model receives every question with the same `state`. When a question omits `instructions`, its question name is used instead.
 
-The remaining examples on this page use `model` to refer to an evaluation model created this way.
-
 ## Evaluation models
 
-The Basic usage example follows the [TypeSafe AI provider setup](https://ai-sdk.dev/providers/ai-sdk-providers/typesafe-ai#setup) in the AI SDK documentation. Other AI SDK providers, including OpenAI, Anthropic, and Google, also expose an `evaluationModel()` factory. See [provider models](https://ai-sdk.dev/docs/ai-sdk-core/evaluation#provider-models) for the full list, supported model IDs, and how each provider answers questions.
+The examples on this page follow the [TypeSafe AI provider setup](https://ai-sdk.dev/providers/ai-sdk-providers/typesafe-ai#setup) in the AI SDK documentation. Other AI SDK providers, including OpenAI, Anthropic, and Google, also expose an `evaluationModel()` factory. See [provider models](https://ai-sdk.dev/docs/ai-sdk-core/evaluation#provider-models) for the full list, supported model IDs, and how each provider answers questions.
 
 Each provider requires an API key. Pass it with the `apiKey` option when you create the provider instance, or set the provider's default environment variable. To find the variable name, open the provider's page under [AI SDK providers](https://ai-sdk.dev/providers/ai-sdk-providers) and look for the `apiKey` setting.
 
@@ -241,10 +239,13 @@ Omit `questions` from the constructor when the question set changes between eval
 
 ```typescript
 import { Classifier } from '@mastra/core/classifier'
+import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
 
 const classifier = new Classifier({
   id: 'dynamic-classifier',
-  model,
+  model: createTypeSafeAi({ apiKey: process.env.TYPESAFE_AI_API_KEY }).evaluationModel(
+    'jev-latest',
+  ),
 })
 
 const result = await classifier.evaluate({
@@ -359,6 +360,7 @@ import {
   MastraEvaluationModel,
   type EvaluationModelResult,
 } from '@mastra/core/classifier'
+import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
 
 class NormalizedEvaluationModel extends MastraEvaluationModel {
   protected override transformResult(result: EvaluationModelResult): EvaluationModelResult {
@@ -371,7 +373,9 @@ class NormalizedEvaluationModel extends MastraEvaluationModel {
 
 const classifier = new Classifier({
   id: 'normalized-classifier',
-  model: new NormalizedEvaluationModel(model),
+  model: new NormalizedEvaluationModel(
+    createTypeSafeAi({ apiKey: process.env.TYPESAFE_AI_API_KEY }).evaluationModel('jev-latest'),
+  ),
 })
 ```
 
@@ -384,12 +388,15 @@ Register classifiers on the `Mastra` instance to share them across your applicat
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import { Classifier } from '@mastra/core/classifier'
+import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
 
 export const mastra = new Mastra({
   classifiers: {
     safety: new Classifier({
       id: 'safety',
-      model,
+      model: createTypeSafeAi({ apiKey: process.env.TYPESAFE_AI_API_KEY }).evaluationModel(
+        'jev-latest',
+      ),
       questions: {
         unsafe: { type: 'boolean' },
       },
