@@ -1,6 +1,8 @@
-import { FieldBlock, TextareaFieldBlock, TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { SectionRoot, SubSectionRoot } from '@mastra/playground-ui/components/Section';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Controller } from 'react-hook-form';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
@@ -21,68 +23,53 @@ export function InformationPage() {
       <SectionRoot>
         <SectionHeader title="Identity" subtitle="Define your agent's name, description, and model." />
 
-        <TextFieldBlock
-          label="Name"
-          required
-          placeholder="My Agent"
-          {...register('name')}
-          errorMsg={errors.name?.message}
-          disabled={readOnly}
-        />
+        <Field invalid={Boolean(errors.name)} disabled={readOnly}>
+          <FieldLabel required>Name</FieldLabel>
+          <Input placeholder="My Agent" required {...register('name')} />
+          <FieldError>{errors.name?.message}</FieldError>
+        </Field>
 
-        <TextareaFieldBlock
-          label="Description"
-          className="pb-8"
-          placeholder="Describe what this agent does"
-          {...register('description')}
-          errorMsg={errors.description?.message}
-          disabled={readOnly}
-        />
+        <Field invalid={Boolean(errors.description)} disabled={readOnly} className="pb-8">
+          <FieldLabel>Description</FieldLabel>
+          <Textarea placeholder="Describe what this agent does" {...register('description')} />
+          <FieldError>{errors.description?.message}</FieldError>
+        </Field>
 
         <div className="border-t border-border pt-8">
           <SubSectionRoot>
             <SubSectionHeader title="Model Configuration" />
             <div className="grid grid-cols-2 gap-4">
-              <FieldBlock name="model-provider" label="Provider" required>
-                {fieldControl => (
-                  <Controller
-                    name="model.provider"
-                    control={control}
-                    render={({ field }) => (
-                      <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                        <LLMProviders
-                          id={fieldControl.id}
-                          name="model-provider"
-                          value={field.value}
-                          onValueChange={field.onChange}
-                          error={errors.model?.provider?.message}
-                        />
-                      </div>
-                    )}
-                  />
-                )}
-              </FieldBlock>
+              <Field invalid={Boolean(errors.model?.provider?.message)}>
+                <FieldLabel required>Provider</FieldLabel>
+                <Controller
+                  name="model.provider"
+                  control={control}
+                  render={({ field }) => (
+                    <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
+                      <LLMProviders value={field.value} onValueChange={field.onChange} />
+                    </div>
+                  )}
+                />
+                <FieldError>{errors.model?.provider?.message}</FieldError>
+              </Field>
 
-              <FieldBlock name="model-name" label="Model" required>
-                {fieldControl => (
-                  <Controller
-                    name="model.name"
-                    control={control}
-                    render={({ field }) => (
-                      <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                        <LLMModels
-                          id={fieldControl.id}
-                          name="model-name"
-                          value={field.value}
-                          onValueChange={field.onChange}
-                          llmId={form.watch('model.provider') || ''}
-                          error={errors.model?.name?.message}
-                        />
-                      </div>
-                    )}
-                  />
-                )}
-              </FieldBlock>
+              <Field invalid={Boolean(errors.model?.name?.message)}>
+                <FieldLabel required>Model</FieldLabel>
+                <Controller
+                  name="model.name"
+                  control={control}
+                  render={({ field }) => (
+                    <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
+                      <LLMModels
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        llmId={form.watch('model.provider') || ''}
+                      />
+                    </div>
+                  )}
+                />
+                <FieldError>{errors.model?.name?.message}</FieldError>
+              </Field>
             </div>
           </SubSectionRoot>
         </div>

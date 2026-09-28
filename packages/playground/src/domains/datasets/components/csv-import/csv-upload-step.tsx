@@ -1,6 +1,7 @@
 'use client';
 
-import { FieldBlock, fieldErrorId } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -73,19 +74,17 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
   );
 
   return (
-    <div className="flex flex-col gap-3">
+    <Field invalid={Boolean(error)} className="flex flex-col gap-3">
+      <FieldLabel className="sr-only">CSV file</FieldLabel>
       {/* Hidden file input */}
-      <input
+      <Input
         ref={inputRef}
-        id="input-csv-file"
         name="csv-file"
         type="file"
         accept=".csv"
         onChange={handleFileChange}
         className="hidden"
         disabled={isParsing}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? fieldErrorId('csv-file') : undefined}
       />
 
       {/* Dropzone */}
@@ -127,7 +126,7 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
       </div>
 
       {/* Error message */}
-      {error && <FieldBlock.ErrorMsg name="csv-file">{error}</FieldBlock.ErrorMsg>}
-    </div>
+      <FieldError>{error}</FieldError>
+    </Field>
   );
 }

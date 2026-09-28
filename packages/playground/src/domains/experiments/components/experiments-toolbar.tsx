@@ -2,8 +2,8 @@ import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup, ButtonsGroupText } from '@mastra/playground-ui/components/ButtonsGroup';
-import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { GitCompare, Play, XIcon, X } from 'lucide-react';
 import { EXPERIMENT_STATUS_OPTIONS } from './experiments-list-options';
 import type { DatasetTargetType } from '@/domains/datasets/components/target-type-options';
@@ -76,24 +76,30 @@ export function ExperimentsToolbar({
             onSearch={onSearchChange}
           />
         </div>
-        <SelectFieldBlock
-          label="Status"
-          labelIsHidden
-          name="filter-status"
-          options={[...EXPERIMENT_STATUS_OPTIONS]}
-          value={statusFilter}
-          onValueChange={onStatusFilterChange}
-          className="whitespace-nowrap"
-        />
-        <SelectFieldBlock
-          label="Dataset"
-          labelIsHidden
-          name="filter-dataset"
-          options={datasetOptions}
-          value={datasetFilter}
-          onValueChange={onDatasetFilterChange}
-          className="whitespace-nowrap"
-        />
+        <Select value={statusFilter} onValueChange={onStatusFilterChange}>
+          <SelectTrigger aria-label="Status" size="md" className="whitespace-nowrap">
+            <SelectValue placeholder="Select an option" />
+          </SelectTrigger>
+          <SelectContent>
+            {EXPERIMENT_STATUS_OPTIONS.map(option => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={datasetFilter} onValueChange={onDatasetFilterChange}>
+          <SelectTrigger aria-label="Dataset" size="md" className="whitespace-nowrap">
+            <SelectValue placeholder="Select an option" />
+          </SelectTrigger>
+          <SelectContent>
+            {datasetOptions.map(option => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <TargetFilter
           targetType={targetType}
           targetId={targetId}

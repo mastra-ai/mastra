@@ -1,9 +1,15 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
-import { SearchFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@mastra/playground-ui/components/InputGroup';
 import type { LightSpanRecord } from '@mastra/playground-ui/domains/traces/types';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { XIcon, CircleDashedIcon } from 'lucide-react';
+import { XIcon, CircleDashedIcon, SearchIcon } from 'lucide-react';
 import { Fragment, useEffect, useState } from 'react';
 import { useThrottledCallback } from 'use-debounce';
 import type { ExperimentUISpanType } from '../types';
@@ -57,17 +63,27 @@ export function ExperimentTraceTimelineTools({
   return (
     <div className="flex items-center justify-between gap-3">
       <div className="flex">
-        <SearchFieldBlock
-          name="search-spans"
-          label="Find span by name"
-          labelIsHidden
-          placeholder="Look for span name"
-          value={localSearchPhrase}
-          onChange={e => {
-            setLocalSearchPhrase(e.target.value);
-          }}
-          onReset={() => setLocalSearchPhrase('')}
-        />
+        <Field>
+          <FieldLabel className="sr-only">Find span by name</FieldLabel>
+          <InputGroup>
+            <InputGroupAddon>
+              <SearchIcon aria-hidden="true" />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="search"
+              placeholder="Look for span name"
+              value={localSearchPhrase}
+              onChange={e => setLocalSearchPhrase(e.target.value)}
+            />
+            {localSearchPhrase && (
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton aria-label="Clear search" onClick={() => setLocalSearchPhrase('')}>
+                  <XIcon />
+                </InputGroupButton>
+              </InputGroupAddon>
+            )}
+          </InputGroup>
+        </Field>
       </div>
       <ButtonsGroup>
         {usedSpanTypes.map(item => {

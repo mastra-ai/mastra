@@ -1,13 +1,12 @@
 import { LockKeyholeIcon } from 'lucide-react';
-import type { ComponentProps, ReactNode } from 'react';
-import { FieldBlockErrorMsg } from '@/ds/components/FormFieldBlocks/block/field-block-error-msg';
-import { Label } from '@/ds/components/Label/label';
+import type { ReactNode } from 'react';
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/ds/components/Field';
+import type { FieldProps } from '@/ds/components/Field';
 import { cn } from '@/lib/utils';
 
-export type SettingsRowProps = Omit<ComponentProps<'div'>, 'children'> & {
+export type SettingsRowProps = Omit<FieldProps, 'children' | 'invalid' | 'orientation'> & {
   label: ReactNode;
   description?: ReactNode;
-  htmlFor?: string;
   children?: ReactNode;
   tone?: 'default' | 'destructive';
   viewOnly?: boolean;
@@ -22,7 +21,6 @@ type SettingsRowLayoutProps = SettingsRowProps & {
 export function SettingsRowLayout({
   label,
   description,
-  htmlFor,
   children,
   className,
   layout,
@@ -30,12 +28,10 @@ export function SettingsRowLayout({
   viewOnly = false,
   required = false,
   errorMsg,
+  disabled,
   ...props
 }: SettingsRowLayoutProps) {
   const isSectionLayout = layout === 'section';
-  const TextElement = isSectionLayout ? 'p' : 'span';
-  const LabelElement = htmlFor ? Label : TextElement;
-  const DescriptionElement = isSectionLayout ? 'p' : 'div';
   const control = viewOnly ? (
     <>
       <LockKeyholeIcon className="size-4 shrink-0" aria-hidden />
@@ -47,9 +43,13 @@ export function SettingsRowLayout({
   );
 
   return (
-    <div
+    <Field
+      orientation="horizontal"
+      invalid={Boolean(errorMsg)}
+      disabled={disabled || viewOnly}
       data-slot={isSectionLayout ? 'section-row' : 'settings-row'}
       className={cn(
+        'items-stretch',
         isSectionLayout
           ? 'grid min-w-0 gap-3 group-data-[variant=factory]/section:px-3 group-data-[variant=factory]/section:py-2 group-data-[variant=flat]/section:p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:group-data-[variant=default]/section:gap-4 sm:group-data-[variant=factory]/section:gap-4 sm:group-data-[variant=flat]/section:gap-6'
           : 'flex min-w-0 flex-col',
@@ -60,39 +60,18 @@ export function SettingsRowLayout({
       {...props}
     >
       <div className={cn('min-w-0', !isSectionLayout && 'flex flex-col', layout === 'factory' && 'gap-0.5')}>
-        <LabelElement
-          htmlFor={htmlFor}
-          className={cn(
-            'text-label text-foreground',
-            viewOnly && 'text-muted-foreground',
-            tone === 'destructive' && 'text-destructive',
-          )}
-        >
+        <FieldLabel required={required} className={cn(tone === 'destructive' && 'text-destructive')}>
           {label}
-          {required ? (
-            <>
-              <span aria-hidden className={cn('ml-0.5', viewOnly ? 'text-muted-foreground' : 'text-destructive')}>
-                *
-              </span>
-              <span className="sr-only"> (required)</span>
-            </>
-          ) : null}
-        </LabelElement>
+        </FieldLabel>
         {description != null && (
-          <DescriptionElement
-            className={cn(
-              'text-caption text-muted-foreground',
-              isSectionLayout ? 'mt-1 max-w-[62ch] text-pretty' : 'flex flex-col gap-0.5',
-            )}
+          <FieldDescription
+            render={isSectionLayout ? undefined : <div />}
+            className={cn('mt-0', isSectionLayout ? 'mt-1 max-w-[62ch] text-pretty' : 'flex flex-col gap-0.5')}
           >
             {description}
-          </DescriptionElement>
+          </FieldDescription>
         )}
-        {errorMsg ? (
-          <FieldBlockErrorMsg name={htmlFor} className={cn(isSectionLayout && 'mt-1')}>
-            {errorMsg}
-          </FieldBlockErrorMsg>
-        ) : null}
+        <FieldError className={cn('mt-0', isSectionLayout && 'mt-1')}>{errorMsg}</FieldError>
       </div>
       {children != null &&
         (isSectionLayout || viewOnly ? (
@@ -109,7 +88,7 @@ export function SettingsRowLayout({
         ) : (
           control
         ))}
-    </div>
+    </Field>
   );
 }
 

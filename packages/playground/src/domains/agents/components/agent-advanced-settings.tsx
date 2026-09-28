@@ -1,5 +1,5 @@
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import { FieldBlock, fieldErrorId } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
@@ -78,156 +78,142 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
     <TooltipProvider>
       <div className="@container/advanced">
         <div className="grid grid-cols-1 gap-2 pb-2 @xs/advanced:grid-cols-2">
-          <FieldBlock name="frequency-penalty" label="Frequency Penalty">
-            {control => (
-              <Input
-                {...control}
-                type="number"
-                step="0.1"
-                min="-1"
-                max="1"
-                readOnly={!canEdit}
-                value={settings?.modelSettings?.frequencyPenalty ?? ''}
-                onChange={e =>
-                  setSettings({
-                    ...settings,
-                    modelSettings: {
-                      ...settings?.modelSettings,
-                      frequencyPenalty: e.target.value ? Number(e.target.value) : undefined,
-                    },
-                  })
-                }
-              />
-            )}
-          </FieldBlock>
+          <Field>
+            <FieldLabel>Frequency Penalty</FieldLabel>
+            <Input
+              type="number"
+              step="0.1"
+              min="-1"
+              max="1"
+              readOnly={!canEdit}
+              value={settings?.modelSettings?.frequencyPenalty ?? ''}
+              onChange={e =>
+                setSettings({
+                  ...settings,
+                  modelSettings: {
+                    ...settings?.modelSettings,
+                    frequencyPenalty: e.target.value ? Number(e.target.value) : undefined,
+                  },
+                })
+              }
+            />
+          </Field>
 
-          <FieldBlock name="presence-penalty" label="Presence Penalty">
-            {control => (
-              <Input
-                {...control}
-                type="number"
-                step="0.1"
-                min="-1"
-                max="1"
-                readOnly={!canEdit}
-                value={settings?.modelSettings?.presencePenalty ?? ''}
-                onChange={e =>
-                  setSettings({
-                    ...settings,
-                    modelSettings: {
-                      ...settings?.modelSettings,
-                      presencePenalty: e.target.value ? Number(e.target.value) : undefined,
-                    },
-                  })
-                }
-              />
-            )}
-          </FieldBlock>
+          <Field>
+            <FieldLabel>Presence Penalty</FieldLabel>
+            <Input
+              type="number"
+              step="0.1"
+              min="-1"
+              max="1"
+              readOnly={!canEdit}
+              value={settings?.modelSettings?.presencePenalty ?? ''}
+              onChange={e =>
+                setSettings({
+                  ...settings,
+                  modelSettings: {
+                    ...settings?.modelSettings,
+                    presencePenalty: e.target.value ? Number(e.target.value) : undefined,
+                  },
+                })
+              }
+            />
+          </Field>
 
-          <FieldBlock name="top-k" label="Top K">
-            {control => (
-              <Input
-                {...control}
-                type="number"
-                readOnly={!canEdit}
-                value={settings?.modelSettings?.topK || ''}
-                onChange={e =>
-                  setSettings({
-                    ...settings,
-                    modelSettings: {
-                      ...settings?.modelSettings,
-                      topK: e.target.value ? Number(e.target.value) : undefined,
-                    },
-                  })
-                }
-              />
-            )}
-          </FieldBlock>
+          <Field>
+            <FieldLabel>Top K</FieldLabel>
+            <Input
+              type="number"
+              readOnly={!canEdit}
+              value={settings?.modelSettings?.topK || ''}
+              onChange={e =>
+                setSettings({
+                  ...settings,
+                  modelSettings: {
+                    ...settings?.modelSettings,
+                    topK: e.target.value ? Number(e.target.value) : undefined,
+                  },
+                })
+              }
+            />
+          </Field>
 
-          <FieldBlock name="max-tokens" label="Max Tokens">
-            {control => (
-              <Input
-                {...control}
-                type="number"
-                readOnly={!canEdit}
-                value={settings?.modelSettings?.maxTokens || ''}
-                onChange={e =>
-                  setSettings({
-                    ...settings,
-                    modelSettings: {
-                      ...settings?.modelSettings,
-                      maxTokens: e.target.value ? Number(e.target.value) : undefined,
-                    },
-                  })
-                }
-              />
-            )}
-          </FieldBlock>
+          <Field>
+            <FieldLabel>Max Tokens</FieldLabel>
+            <Input
+              type="number"
+              readOnly={!canEdit}
+              value={settings?.modelSettings?.maxTokens || ''}
+              onChange={e =>
+                setSettings({
+                  ...settings,
+                  modelSettings: {
+                    ...settings?.modelSettings,
+                    maxTokens: e.target.value ? Number(e.target.value) : undefined,
+                  },
+                })
+              }
+            />
+          </Field>
 
-          <FieldBlock name="max-steps" label="Max Steps">
-            {control => (
-              <Input
-                {...control}
-                type="number"
-                readOnly={!canEdit}
-                value={settings?.modelSettings?.maxSteps || ''}
-                onChange={e =>
-                  setSettings({
-                    ...settings,
-                    modelSettings: {
-                      ...settings?.modelSettings,
-                      maxSteps: e.target.value ? Number(e.target.value) : undefined,
-                    },
-                  })
-                }
-              />
-            )}
-          </FieldBlock>
+          <Field>
+            <FieldLabel>Max Steps</FieldLabel>
+            <Input
+              type="number"
+              readOnly={!canEdit}
+              value={settings?.modelSettings?.maxSteps || ''}
+              onChange={e =>
+                setSettings({
+                  ...settings,
+                  modelSettings: {
+                    ...settings?.modelSettings,
+                    maxSteps: e.target.value ? Number(e.target.value) : undefined,
+                  },
+                })
+              }
+            />
+          </Field>
 
-          <FieldBlock name="max-retries" label="Max Retries">
-            {control => (
-              <Input
-                {...control}
-                type="number"
-                readOnly={!canEdit}
-                value={settings?.modelSettings?.maxRetries || ''}
-                onChange={e =>
-                  setSettings({
-                    ...settings,
-                    modelSettings: {
-                      ...settings?.modelSettings,
-                      maxRetries: e.target.value ? Number(e.target.value) : undefined,
-                    },
-                  })
-                }
-              />
-            )}
-          </FieldBlock>
+          <Field>
+            <FieldLabel>Max Retries</FieldLabel>
+            <Input
+              type="number"
+              readOnly={!canEdit}
+              value={settings?.modelSettings?.maxRetries || ''}
+              onChange={e =>
+                setSettings({
+                  ...settings,
+                  modelSettings: {
+                    ...settings?.modelSettings,
+                    maxRetries: e.target.value ? Number(e.target.value) : undefined,
+                  },
+                })
+              }
+            />
+          </Field>
 
-          <FieldBlock name="seed" label="Seed">
-            {control => (
-              <Input
-                {...control}
-                type="number"
-                readOnly={!canEdit}
-                value={settings?.modelSettings?.seed || ''}
-                onChange={e =>
-                  setSettings({
-                    ...settings,
-                    modelSettings: {
-                      ...settings?.modelSettings,
-                      seed: e.target.value ? Number(e.target.value) : undefined,
-                    },
-                  })
-                }
-              />
-            )}
-          </FieldBlock>
+          <Field>
+            <FieldLabel>Seed</FieldLabel>
+            <Input
+              type="number"
+              readOnly={!canEdit}
+              value={settings?.modelSettings?.seed || ''}
+              onChange={e =>
+                setSettings({
+                  ...settings,
+                  modelSettings: {
+                    ...settings?.modelSettings,
+                    seed: e.target.value ? Number(e.target.value) : undefined,
+                  },
+                })
+              }
+            />
+          </Field>
         </div>
 
-        <div className="space-y-1">
+        <Field invalid={Boolean(error)} className="gap-1">
           <div className="flex items-center justify-between">
-            <FieldBlock.Label name="provider-options">Provider Options</FieldBlock.Label>
+            <FieldLabel>Provider Options</FieldLabel>
 
             <div className="flex items-center gap-2">
               <Tooltip>
@@ -275,18 +261,15 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
             </div>
           </div>
           <CodeEditor
-            id="input-provider-options"
             value={providerOptionsValue}
             onChange={setProviderOptionsValue}
             language="json"
             editable={canEdit}
             showCopyButton={false}
-            aria-invalid={error ? true : undefined}
-            aria-describedby={error ? fieldErrorId('provider-options') : undefined}
             className="h-75"
           />
-          {error && <FieldBlock.ErrorMsg name="provider-options">{error}</FieldBlock.ErrorMsg>}
-        </div>
+          <FieldError>{error}</FieldError>
+        </Field>
       </div>
     </TooltipProvider>
   );

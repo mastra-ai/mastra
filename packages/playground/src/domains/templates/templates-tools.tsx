@@ -1,7 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { SearchFieldBlock, SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { XIcon } from 'lucide-react';
+import { SearchIcon, XIcon } from 'lucide-react';
 
 type TemplatesToolsProps = {
   selectedTag: string;
@@ -46,30 +48,45 @@ export function TemplatesTools({
 
   return (
     <div className={cn('sticky top-0 mx-auto flex flex-wrap gap-4 bg-background py-5', className)}>
-      <SearchFieldBlock
-        name="search-templates"
-        label="Search templates"
-        labelIsHidden
-        value={searchTerm}
-        onChange={e => onSearchChange?.(e.target.value)}
-        placeholder="Search Template"
-      />
-      <SelectFieldBlock
-        label="Filter by tag"
-        labelIsHidden={true}
-        name="filter-tag"
-        value={selectedTag}
-        onValueChange={onTagChange}
-        options={tagOptions}
-      />
-      <SelectFieldBlock
-        label="Filter by provider"
-        labelIsHidden={true}
-        name="filter-provider"
-        value={selectedProvider}
-        onValueChange={onProviderChange}
-        options={providerOptions}
-      />
+      <Field>
+        <FieldLabel className="sr-only">Search templates</FieldLabel>
+        <InputGroup>
+          <InputGroupAddon>
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput
+            type="search"
+            name="search-templates"
+            value={searchTerm}
+            onChange={e => onSearchChange?.(e.target.value)}
+            placeholder="Search Template"
+          />
+        </InputGroup>
+      </Field>
+      <Select name="filter-tag" value={selectedTag} onValueChange={onTagChange}>
+        <SelectTrigger aria-label="Filter by tag" size="md">
+          <SelectValue placeholder="Select an option" />
+        </SelectTrigger>
+        <SelectContent>
+          {tagOptions.map(option => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select name="filter-provider" value={selectedProvider} onValueChange={onProviderChange}>
+        <SelectTrigger aria-label="Filter by provider" size="md">
+          <SelectValue placeholder="Select an option" />
+        </SelectTrigger>
+        <SelectContent>
+          {providerOptions.map(option => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       {onReset && (
         <Button onClick={onReset} icon={<XIcon />}>
           Reset

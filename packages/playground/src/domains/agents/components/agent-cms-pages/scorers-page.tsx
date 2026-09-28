@@ -1,7 +1,7 @@
 import { EntityName, EntityDescription, EntityContent, Entity } from '@mastra/playground-ui/components/Entity';
+import { Field, FieldItem, FieldLabel, Fieldset, FieldsetLegend } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
-import { Label } from '@mastra/playground-ui/components/Label';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
@@ -156,7 +156,6 @@ export function ScorersPage() {
                           {isSelected && (
                             <div className="pt-2">
                               <ScorerConfigPanel
-                                scorerId={scorer.value}
                                 samplingConfig={selectedScorers?.[scorer.value]?.sampling}
                                 onSamplingChange={config => handleSamplingChange(scorer.value, config)}
                                 readOnly={readOnly}
@@ -191,13 +190,12 @@ export function ScorersPage() {
 }
 
 interface ScorerConfigPanelProps {
-  scorerId: string;
   samplingConfig?: ScorerConfig['sampling'];
   onSamplingChange: (config: ScorerConfig['sampling'] | undefined) => void;
   readOnly?: boolean;
 }
 
-function ScorerConfigPanel({ scorerId, samplingConfig, onSamplingChange, readOnly = false }: ScorerConfigPanelProps) {
+function ScorerConfigPanel({ samplingConfig, onSamplingChange, readOnly = false }: ScorerConfigPanelProps) {
   const samplingType = samplingConfig?.type || 'none';
 
   const handleTypeChange = (type: string) => {
@@ -217,37 +215,27 @@ function ScorerConfigPanel({ scorerId, samplingConfig, onSamplingChange, readOnl
   return (
     <div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`sampling-type-${scorerId}`} className="text-muted-foreground">
-          Sampling
-        </Label>
-        <RadioGroup
-          id={`sampling-type-${scorerId}`}
-          value={samplingType}
-          onValueChange={handleTypeChange}
-          className="flex flex-col gap-2"
-          disabled={readOnly}
-        >
-          <div className="flex items-center gap-2">
-            <RadioGroupItem value="none" id={`${scorerId}-none`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-none`} className="cursor-pointer text-foreground">
-              None (evaluate all)
-            </Label>
-          </div>
-          <div className="flex items-center gap-2">
-            <RadioGroupItem value="ratio" id={`${scorerId}-ratio`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-ratio`} className="cursor-pointer text-foreground">
-              Ratio (percentage)
-            </Label>
-          </div>
-        </RadioGroup>
+        <Field>
+          <Fieldset
+            className="gap-2"
+            render={<RadioGroup value={samplingType} onValueChange={handleTypeChange} disabled={readOnly} />}
+          >
+            <FieldsetLegend className="text-muted-foreground">Sampling</FieldsetLegend>
+            <FieldItem>
+              <RadioGroupItem value="none" disabled={readOnly} />
+              <FieldLabel className="cursor-pointer">None (evaluate all)</FieldLabel>
+            </FieldItem>
+            <FieldItem>
+              <RadioGroupItem value="ratio" disabled={readOnly} />
+              <FieldLabel className="cursor-pointer">Ratio (percentage)</FieldLabel>
+            </FieldItem>
+          </Fieldset>
+        </Field>
 
         {samplingType === 'ratio' && (
-          <div className="mt-2 flex flex-col gap-1.5">
-            <Label htmlFor={`rate-${scorerId}`} className="text-muted-foreground">
-              Sample Rate (0-1)
-            </Label>
+          <Field className="mt-2 gap-1.5">
+            <FieldLabel className="text-muted-foreground">Sample Rate (0-1)</FieldLabel>
             <Input
-              id={`rate-${scorerId}`}
               type="number"
               min="0"
               max="1"
@@ -257,7 +245,7 @@ function ScorerConfigPanel({ scorerId, samplingConfig, onSamplingChange, readOnl
               className="h-8"
               disabled={readOnly}
             />
-          </div>
+          </Field>
         )}
       </div>
     </div>

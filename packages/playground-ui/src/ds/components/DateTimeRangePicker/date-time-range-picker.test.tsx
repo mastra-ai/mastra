@@ -40,7 +40,7 @@ describe('DateTimeRangePicker (custom range popover)', () => {
     fireEvent.click(screen.getByRole('button', { name: /apply/i }));
 
     const error = screen.getByRole('alert');
-    // The shared FieldBlock.ErrorMsg renders a decorative alert icon before the text.
+    expect(error.textContent).toContain('Start date/time must be before end date/time');
     expect(error.querySelector('[data-slot="icon"] svg')).not.toBeNull();
   });
 });

@@ -38,12 +38,10 @@ function normalizeComboboxVariant(variant: ComboboxVariant): ComboboxVisualVaria
 export function comboboxTriggerClass({
   variant,
   size,
-  error,
   className,
 }: {
   variant: ComboboxVariant;
   size: ButtonSize;
-  error?: boolean;
   className?: string;
 }): string {
   const visualVariant = normalizeComboboxVariant(variant);
@@ -58,7 +56,7 @@ export function comboboxTriggerClass({
     // Read as "active" while the popup is open, per variant (see map above).
     controlTriggerOpenState[visualVariant],
     'data-[placeholder]:text-muted-foreground',
-    error && 'border-destructive hover:border-destructive focus-visible:border-destructive',
+    'aria-invalid:border-destructive aria-invalid:hover:border-destructive aria-invalid:focus-visible:border-destructive',
     className,
   );
 }
@@ -77,9 +75,6 @@ export const comboboxItemClass = cva(menuItemClass, {
 });
 
 export const comboboxStyles = {
-  /** Root wrapper */
-  root: 'flex flex-col gap-1.5',
-
   /** Chevron icon in trigger — decorative icon token shared by every field. */
   chevron: 'ml-2 h-4 w-4 shrink-0 text-muted-foreground',
 
@@ -140,7 +135,4 @@ export const comboboxStyles = {
 
   /** Option end slot — `ml-auto` makes it push right inside flex containers (used by multi-select). */
   optionEnd: 'ml-auto flex items-center shrink-0',
-
-  /** Error message */
-  error: 'text-caption text-accent2',
 } as const;

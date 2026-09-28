@@ -1,7 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { FieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldError, FieldLabel, Fieldset, FieldsetLegend } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -76,30 +75,21 @@ export function MCPClientFormSidebar({
         <div className="flex flex-col gap-4 p-4">
           <SectionHeader title="Identity" subtitle="Define the MCP client name and description." />
 
-          <FieldBlock name="mcp-client-name" label="Name" required errorMsg={errors.name?.message}>
-            {fieldControl => (
-              <Input
-                {...fieldControl}
-                placeholder="My MCP Client"
-                className={SOLID_FIELD}
-                disabled={readOnly}
-                {...register('name')}
-                error={!!errors.name}
-              />
-            )}
-          </FieldBlock>
+          <Field invalid={Boolean(errors.name)}>
+            <FieldLabel required>Name</FieldLabel>
+            <Input placeholder="My MCP Client" className={SOLID_FIELD} disabled={readOnly} {...register('name')} />
+            <FieldError>{errors.name?.message}</FieldError>
+          </Field>
 
-          <FieldBlock name="mcp-client-description" label="Description">
-            {fieldControl => (
-              <Textarea
-                {...fieldControl}
-                placeholder="Describe what this MCP client connects to"
-                className={SOLID_FIELD}
-                disabled={readOnly}
-                {...register('description')}
-              />
-            )}
-          </FieldBlock>
+          <Field>
+            <FieldLabel>Description</FieldLabel>
+            <Textarea
+              placeholder="Describe what this MCP client connects to"
+              className={SOLID_FIELD}
+              disabled={readOnly}
+              {...register('description')}
+            />
+          </Field>
 
           {!readOnly && (
             <>
@@ -122,98 +112,77 @@ export function MCPClientFormSidebar({
 
           <SectionHeader title="Server Configuration" subtitle="Configure the MCP server connection details." />
 
-          <FieldBlock name="mcp-server-name" label="Server Name" required errorMsg={errors.serverName?.message}>
-            {fieldControl => (
-              <Input
-                {...fieldControl}
-                placeholder="default"
-                className={SOLID_FIELD}
-                disabled={readOnly}
-                {...register('serverName')}
-                error={!!errors.serverName}
-              />
-            )}
-          </FieldBlock>
+          <Field invalid={Boolean(errors.serverName)}>
+            <FieldLabel required>Server Name</FieldLabel>
+            <Input placeholder="default" className={SOLID_FIELD} disabled={readOnly} {...register('serverName')} />
+            <FieldError>{errors.serverName?.message}</FieldError>
+          </Field>
 
-          <FieldBlock name="mcp-server-type" label="Server Type">
-            {fieldControl => (
-              <Controller
-                name="serverType"
-                control={control}
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange} disabled={readOnly}>
-                    <SelectTrigger {...fieldControl} className="bg-card">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="http">HTTP</SelectItem>
-                      <SelectItem value="stdio">Stdio</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            )}
-          </FieldBlock>
+          <Field>
+            <FieldLabel>Server Type</FieldLabel>
+            <Controller
+              name="serverType"
+              control={control}
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange} disabled={readOnly}>
+                  <SelectTrigger className="bg-card">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="http">HTTP</SelectItem>
+                    <SelectItem value="stdio">Stdio</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </Field>
 
           {serverType === 'http' && (
             <>
-              <FieldBlock name="mcp-url" label="URL" required errorMsg={errors.url?.message}>
-                {fieldControl => (
-                  <Input
-                    {...fieldControl}
-                    placeholder="http://localhost:4111/api/mcp/server/mcp"
-                    className={SOLID_FIELD}
-                    disabled={readOnly}
-                    {...register('url')}
-                    error={!!errors.url}
-                  />
-                )}
-              </FieldBlock>
+              <Field invalid={Boolean(errors.url)}>
+                <FieldLabel required>URL</FieldLabel>
+                <Input
+                  placeholder="http://localhost:4111/api/mcp/server/mcp"
+                  className={SOLID_FIELD}
+                  disabled={readOnly}
+                  {...register('url')}
+                />
+                <FieldError>{errors.url?.message}</FieldError>
+              </Field>
 
-              <FieldBlock name="mcp-timeout" label="Timeout (ms)">
-                {fieldControl => (
-                  <Input
-                    {...fieldControl}
-                    type="number"
-                    placeholder="30000"
-                    className={SOLID_FIELD}
-                    disabled={readOnly}
-                    {...register('timeout', { valueAsNumber: true })}
-                  />
-                )}
-              </FieldBlock>
+              <Field>
+                <FieldLabel>Timeout (ms)</FieldLabel>
+                <Input
+                  type="number"
+                  placeholder="30000"
+                  className={SOLID_FIELD}
+                  disabled={readOnly}
+                  {...register('timeout', { valueAsNumber: true })}
+                />
+              </Field>
             </>
           )}
 
           {serverType === 'stdio' && (
             <>
-              <FieldBlock name="mcp-command" label="Command" required errorMsg={errors.command?.message}>
-                {fieldControl => (
-                  <Input
-                    {...fieldControl}
-                    placeholder="npx"
-                    className={SOLID_FIELD}
-                    disabled={readOnly}
-                    {...register('command')}
-                    error={!!errors.command}
-                  />
-                )}
-              </FieldBlock>
+              <Field invalid={Boolean(errors.command)}>
+                <FieldLabel required>Command</FieldLabel>
+                <Input placeholder="npx" className={SOLID_FIELD} disabled={readOnly} {...register('command')} />
+                <FieldError>{errors.command?.message}</FieldError>
+              </Field>
 
-              <FieldBlock name="mcp-args" label="Arguments (one per line)">
-                {fieldControl => (
-                  <Textarea
-                    {...fieldControl}
-                    placeholder={'-y\n@modelcontextprotocol/server'}
-                    className={SOLID_FIELD}
-                    disabled={readOnly}
-                    {...register('args')}
-                  />
-                )}
-              </FieldBlock>
+              <Field>
+                <FieldLabel>Arguments (one per line)</FieldLabel>
+                <Textarea
+                  placeholder={'-y\n@modelcontextprotocol/server'}
+                  className={SOLID_FIELD}
+                  disabled={readOnly}
+                  {...register('args')}
+                />
+              </Field>
 
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-foreground">Environment Variables</Label>
+              <Fieldset className="gap-1.5">
+                <FieldsetLegend>Environment Variables</FieldsetLegend>
                 <div className="flex flex-col gap-2">
                   {env.map((_, index) => (
                     <div key={index} className="flex items-center gap-2">
@@ -242,7 +211,7 @@ export function MCPClientFormSidebar({
                     </Button>
                   )}
                 </div>
-              </div>
+              </Fieldset>
             </>
           )}
         </div>

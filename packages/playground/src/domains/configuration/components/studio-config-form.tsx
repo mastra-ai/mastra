@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
@@ -87,13 +87,18 @@ export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }:
           {connectionFields.map(({ label, ...field }) => {
             if (isFactoryLayout) {
               return (
-                <SettingsRow key={field.name} label={label} htmlFor={`input-${field.name}`}>
-                  <Input {...field} id={`input-${field.name}`} className="w-full lg:max-w-96" />
+                <SettingsRow key={field.name} label={label}>
+                  <Input {...field} className="w-full lg:max-w-96" />
                 </SettingsRow>
               );
             }
 
-            return <TextFieldBlock key={field.name} label={label} {...field} />;
+            return (
+              <Field key={field.name}>
+                <FieldLabel required={field.required}>{label}</FieldLabel>
+                <Input {...field} />
+              </Field>
+            );
           })}
           {isFactoryLayout ? (
             <SettingsRow label="Headers">

@@ -1,10 +1,17 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { FieldBlock, TextareaFieldBlock, TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import {
+  Field,
+  FieldError,
+  FieldItem,
+  FieldLabel,
+  Fieldset,
+  FieldsetLegend,
+} from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Check, Save } from 'lucide-react';
 import type { RefObject } from 'react';
@@ -49,64 +56,50 @@ export function ScorerEditSidebar({
         <div className="flex flex-col gap-4 p-4">
           <SectionHeader title="Configuration" subtitle="Define your scorer's name, type, and settings." />
 
-          <TextFieldBlock
-            label="Name"
-            required
-            placeholder="My Scorer"
-            {...register('name')}
-            errorMsg={errors.name?.message}
-          />
+          <Field invalid={Boolean(errors.name)}>
+            <FieldLabel required>Name</FieldLabel>
+            <Input placeholder="My Scorer" {...register('name')} />
+            <FieldError>{errors.name?.message}</FieldError>
+          </Field>
 
-          <TextareaFieldBlock
-            label="Description"
-            required
-            placeholder="Describe what this scorer does"
-            {...register('description')}
-            errorMsg={errors.description?.message}
-          />
+          <Field invalid={Boolean(errors.description)}>
+            <FieldLabel required>Description</FieldLabel>
+            <Textarea placeholder="Describe what this scorer does" {...register('description')} />
+            <FieldError>{errors.description?.message}</FieldError>
+          </Field>
 
-          <FieldBlock name="model-provider" label="Provider" required>
-            {fieldControl => (
-              <Controller
-                name="model.provider"
-                control={control}
-                render={({ field }) => (
-                  <LLMProviders
-                    id={fieldControl.id}
-                    name="model-provider"
-                    value={field.value}
-                    onValueChange={field.onChange}
-                    container={formRef}
-                    error={errors.model?.provider?.message}
-                  />
-                )}
-              />
-            )}
-          </FieldBlock>
+          <Field invalid={Boolean(errors.model?.provider)}>
+            <FieldLabel required>Provider</FieldLabel>
+            <Controller
+              name="model.provider"
+              control={control}
+              render={({ field }) => (
+                <LLMProviders value={field.value} onValueChange={field.onChange} container={formRef} />
+              )}
+            />
+            <FieldError>{errors.model?.provider?.message}</FieldError>
+          </Field>
 
-          <FieldBlock name="model-name" label="Model" required>
-            {fieldControl => (
-              <Controller
-                name="model.name"
-                control={control}
-                render={({ field }) => (
-                  <LLMModels
-                    id={fieldControl.id}
-                    name="model-name"
-                    value={field.value}
-                    onValueChange={field.onChange}
-                    llmId={watchedProvider || ''}
-                    container={formRef}
-                    error={errors.model?.name?.message}
-                  />
-                )}
-              />
-            )}
-          </FieldBlock>
+          <Field invalid={Boolean(errors.model?.name)}>
+            <FieldLabel required>Model</FieldLabel>
+            <Controller
+              name="model.name"
+              control={control}
+              render={({ field }) => (
+                <LLMModels
+                  value={field.value}
+                  onValueChange={field.onChange}
+                  llmId={watchedProvider || ''}
+                  container={formRef}
+                />
+              )}
+            />
+            <FieldError>{errors.model?.name?.message}</FieldError>
+          </Field>
 
           {/* Score Range */}
-          <div className="flex flex-col gap-1.5">
-            <Label className="text-foreground">Score Range</Label>
+          <Fieldset className="flex flex-col gap-1.5">
+            <FieldsetLegend className="text-foreground">Score Range</FieldsetLegend>
             <div className="flex items-center gap-2">
               <Controller
                 name="scoreRange.min"
@@ -134,29 +127,30 @@ export function ScorerEditSidebar({
                 )}
               />
             </div>
-          </div>
+          </Fieldset>
 
           {/* Default Sampling */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-foreground">Default Sampling</Label>
             <Controller
               name="defaultSampling.type"
               control={control}
               render={({ field }) => (
-                <RadioGroup value={field.value ?? 'none'} onValueChange={field.onChange}>
-                  <div className="flex items-center gap-2">
-                    <RadioGroupItem value="none" id="sampling-none" />
-                    <Label htmlFor="sampling-none" className="text-foreground">
-                      None
-                    </Label>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <RadioGroupItem value="ratio" id="sampling-ratio" />
-                    <Label htmlFor="sampling-ratio" className="text-foreground">
-                      Ratio
-                    </Label>
-                  </div>
-                </RadioGroup>
+                <Field>
+                  <Fieldset
+                    className="flex flex-col gap-1.5"
+                    render={<RadioGroup value={field.value ?? 'none'} onValueChange={field.onChange} />}
+                  >
+                    <FieldsetLegend className="text-foreground">Default Sampling</FieldsetLegend>
+                    <FieldItem>
+                      <RadioGroupItem value="none" />
+                      <FieldLabel className="text-foreground">None</FieldLabel>
+                    </FieldItem>
+                    <FieldItem>
+                      <RadioGroupItem value="ratio" />
+                      <FieldLabel className="text-foreground">Ratio</FieldLabel>
+                    </FieldItem>
+                  </Fieldset>
+                </Field>
               )}
             />
             {watchedSamplingType === 'ratio' && (

@@ -54,7 +54,8 @@ const surfaceRimFocus = 'focus-visible:[--surface-rim:var(--surface-rim-focus)]'
 const surfaceTintHoverWithin = '[&:hover:not(:focus-within):not(:has(:disabled))]:[--surface-tint:var(--fill-subtle)]';
 const fieldRimFocus = 'focus-visible:[--surface-rim:var(--field-rim-focus)]';
 const fieldRimFocusWithin = 'focus-within:[--surface-rim:var(--field-rim-focus)]';
-export const fieldErrorRim = '[--field-rim:var(--destructive)] [--field-rim-focus:var(--destructive)]';
+export const fieldErrorRim =
+  'aria-invalid:[--field-rim:var(--destructive)] aria-invalid:[--field-rim-focus:var(--destructive)]';
 export const fieldErrorRimWithin =
   'has-[[aria-invalid=true]]:[--field-rim:var(--destructive)] has-[[aria-invalid=true]]:[--field-rim-focus:var(--destructive)]';
 export const fieldTriggerStyle =

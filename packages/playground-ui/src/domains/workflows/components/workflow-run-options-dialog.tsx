@@ -10,7 +10,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/ds/components/Dialog';
-import { TextFieldBlock } from '@/ds/components/FormFieldBlocks';
+import { Field, FieldDescription, FieldLabel } from '@/ds/components/Field';
+import { Input } from '@/ds/components/Input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Icon } from '@/ds/icons/Icon';
 
@@ -45,14 +46,15 @@ export const WorkflowRunOptionsDialog = ({ resourceId, onResourceIdChange }: Wor
           </DialogHeader>
           <DialogBody>
             <div className="px-5 py-2">
-              <TextFieldBlock
-                name="workflow-run-resource-id"
-                label="Resource ID"
-                value={resourceId}
-                onChange={event => onResourceIdChange(event.target.value)}
-                placeholder="e.g. tenant-42"
-                helpText="Ignored when server auth derives the resource ID from the user."
-              />
+              <Field>
+                <FieldLabel>Resource ID</FieldLabel>
+                <Input
+                  value={resourceId}
+                  onChange={event => onResourceIdChange(event.target.value)}
+                  placeholder="e.g. tenant-42"
+                />
+                <FieldDescription>Ignored when server auth derives the resource ID from the user.</FieldDescription>
+              </Field>
             </div>
             <WorkflowTracingRunOptions onSaved={() => setOpen(false)} />
           </DialogBody>

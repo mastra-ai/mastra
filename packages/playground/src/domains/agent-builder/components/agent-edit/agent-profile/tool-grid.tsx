@@ -1,4 +1,5 @@
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -55,7 +56,8 @@ export const ToolGrid = ({
           />
         </InputGroup>
 
-        <label
+        <Field
+          orientation="horizontal"
           data-testid="tools-only-selected-filter"
           className={cn(
             'inline-flex cursor-pointer items-center gap-2 text-meta text-muted-foreground select-none',
@@ -70,8 +72,8 @@ export const ToolGrid = ({
             style={filterCheckboxStyle}
             className="h-3 w-3 shadow-none data-[state=checked]:shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5"
           />
-          <span>Show only selected</span>
-        </label>
+          <FieldLabel className="cursor-pointer text-meta text-muted-foreground">Show only selected</FieldLabel>
+        </Field>
       </div>
 
       {tools.length === 0 ? (

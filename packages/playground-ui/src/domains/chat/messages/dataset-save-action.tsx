@@ -15,7 +15,7 @@ import {
   DialogBody,
   DialogFooter,
 } from '@/ds/components/Dialog';
-import { Label } from '@/ds/components/Label';
+import { Field, FieldLabel } from '@/ds/components/Field';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ds/components/Select';
 import { Spinner } from '@/ds/components/Spinner';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
@@ -103,14 +103,14 @@ function DatasetSaveDialog({
           <DialogDescription>Save as a dataset item for evaluation.</DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-4 py-1">
-          <div className="grid gap-2">
-            <Label htmlFor="ds-target">Dataset</Label>
+          <Field>
+            <FieldLabel>Dataset</FieldLabel>
             <Select
               value={selectedDatasetId}
               onValueChange={setSelectedDatasetId}
               disabled={addItem.isPending || isDatasetsLoading}
             >
-              <SelectTrigger id="ds-target">
+              <SelectTrigger>
                 <SelectValue placeholder={isDatasetsLoading ? 'Loading...' : 'Select a dataset'} />
               </SelectTrigger>
               <SelectContent>
@@ -125,22 +125,22 @@ function DatasetSaveDialog({
                 )}
               </SelectContent>
             </Select>
-          </div>
+          </Field>
 
-          <div className="grid gap-2">
-            <Label>Input (JSON)</Label>
+          <Field>
+            <FieldLabel>Input (JSON)</FieldLabel>
             <CodeEditor value={input} onChange={onInputChange} showCopyButton={false} className="max-h-60 min-h-30" />
-          </div>
+          </Field>
 
-          <div className="grid gap-2">
-            <Label>Ground Truth (JSON, optional)</Label>
+          <Field>
+            <FieldLabel>Ground Truth (JSON, optional)</FieldLabel>
             <CodeEditor
               value={groundTruth}
               onChange={setGroundTruth}
               showCopyButton={false}
               className="max-h-40 min-h-20"
             />
-          </div>
+          </Field>
         </DialogBody>
         <DialogFooter className="px-4">
           <Button icon={<X />} variant="default" size="sm" onClick={() => onOpenChange(false)}>

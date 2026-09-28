@@ -20,9 +20,6 @@ const meta: Meta<typeof Textarea> = {
     disabled: {
       control: { type: 'boolean' },
     },
-    error: {
-      control: { type: 'boolean' },
-    },
   },
 };
 
@@ -58,7 +55,7 @@ export const Sizes: Story = {
 export const Error: Story = {
   args: {
     placeholder: 'Invalid input...',
-    error: true,
+    'aria-invalid': true,
     className: 'w-75',
   },
 };

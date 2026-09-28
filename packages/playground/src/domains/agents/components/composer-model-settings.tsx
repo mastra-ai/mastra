@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { Entry } from '@mastra/playground-ui/components/Entry';
-import { Label } from '@mastra/playground-ui/components/Label';
+import { FieldItem, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
@@ -35,15 +35,12 @@ const NetworkRadio = ({ hasMemory, hasSubAgents, disabled }: NetworkRadioProps) 
   const itemDisabled = disabled || !isNetworkAvailable;
 
   const radio = (
-    <div className="flex items-center gap-2">
-      <RadioGroupItem value="network" id="network" className="text-foreground" disabled={itemDisabled} />
-      <Label
-        className={cn('text-foreground', !isNetworkAvailable && 'cursor-not-allowed text-muted-foreground!')}
-        htmlFor="network"
-      >
+    <FieldItem>
+      <RadioGroupItem value="network" className="text-foreground" disabled={itemDisabled} />
+      <FieldLabel className={cn('text-foreground', !isNetworkAvailable && 'cursor-not-allowed text-muted-foreground!')}>
         Network
-      </Label>
-    </div>
+      </FieldLabel>
+    </FieldItem>
   );
 
   if (isNetworkAvailable) {
@@ -77,20 +74,12 @@ const StreamSubscriptionRadio = ({ supported, disabled }: StreamSubscriptionRadi
   const itemDisabled = disabled || !supported;
 
   const radio = (
-    <div className="flex items-center gap-2">
-      <RadioGroupItem
-        value="streamSubscription"
-        id="streamSubscription"
-        className="text-foreground"
-        disabled={itemDisabled}
-      />
-      <Label
-        className={cn('text-foreground', !supported && 'cursor-not-allowed text-muted-foreground!')}
-        htmlFor="streamSubscription"
-      >
+    <FieldItem>
+      <RadioGroupItem value="streamSubscription" className="text-foreground" disabled={itemDisabled} />
+      <FieldLabel className={cn('text-foreground', !supported && 'cursor-not-allowed text-muted-foreground!')}>
         Stream subscription (default)
-      </Label>
-    </div>
+      </FieldLabel>
+    </FieldItem>
   );
 
   if (supported) {
@@ -208,59 +197,31 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                   className="flex flex-col gap-3"
                 >
                   {!isSupportedModel && (
-                    <div className="flex items-center gap-2">
-                      <RadioGroupItem
-                        value="generateLegacy"
-                        id="generateLegacy"
-                        className="text-foreground"
-                        disabled={!canEditSettings}
-                      />
-                      <Label className="text-foreground" htmlFor="generateLegacy">
-                        Generate (Legacy)
-                      </Label>
-                    </div>
+                    <FieldItem>
+                      <RadioGroupItem value="generateLegacy" className="text-foreground" disabled={!canEditSettings} />
+                      <FieldLabel className="text-foreground">Generate (Legacy)</FieldLabel>
+                    </FieldItem>
                   )}
                   {isSupportedModel && (
-                    <div className="flex items-center gap-2">
-                      <RadioGroupItem
-                        value="generate"
-                        id="generate"
-                        className="text-foreground"
-                        disabled={!canEditSettings}
-                      />
-                      <Label className="text-foreground" htmlFor="generate">
-                        Generate
-                      </Label>
-                    </div>
+                    <FieldItem>
+                      <RadioGroupItem value="generate" className="text-foreground" disabled={!canEditSettings} />
+                      <FieldLabel className="text-foreground">Generate</FieldLabel>
+                    </FieldItem>
                   )}
                   {!isSupportedModel && (
-                    <div className="flex items-center gap-2">
-                      <RadioGroupItem
-                        value="streamLegacy"
-                        id="streamLegacy"
-                        className="text-foreground"
-                        disabled={!canEditSettings}
-                      />
-                      <Label className="text-foreground" htmlFor="streamLegacy">
-                        Stream (Legacy)
-                      </Label>
-                    </div>
+                    <FieldItem>
+                      <RadioGroupItem value="streamLegacy" className="text-foreground" disabled={!canEditSettings} />
+                      <FieldLabel className="text-foreground">Stream (Legacy)</FieldLabel>
+                    </FieldItem>
                   )}
                   {isSupportedModel && (
                     <StreamSubscriptionRadio supported={supportsThreadSubscription} disabled={!canEditSettings} />
                   )}
                   {isSupportedModel && (
-                    <div className="flex items-center gap-2">
-                      <RadioGroupItem
-                        value="stream"
-                        id="stream"
-                        className="text-foreground"
-                        disabled={!canEditSettings}
-                      />
-                      <Label className="text-foreground" htmlFor="stream">
-                        Stream
-                      </Label>
-                    </div>
+                    <FieldItem>
+                      <RadioGroupItem value="stream" className="text-foreground" disabled={!canEditSettings} />
+                      <FieldLabel className="text-foreground">Stream</FieldLabel>
+                    </FieldItem>
                   )}
                   {isSupportedModel && (
                     <NetworkRadio hasMemory={hasMemory} hasSubAgents={hasSubAgents} disabled={!canEditSettings} />

@@ -1,10 +1,9 @@
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import { FieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useTracingSettings } from '@mastra/playground-ui/domains/observability/context/tracing-settings-context';
 import { WorkflowRunOptions } from '@mastra/playground-ui/domains/workflows/workflow/workflow-run-options';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useId } from 'react';
 
 interface TracingRunOptionsProps {
   className?: string;
@@ -19,7 +18,6 @@ export const TracingRunOptions = ({
   hideTitle = false,
   showEditorHeader = false,
 }: TracingRunOptionsProps = {}) => {
-  const fieldName = useId();
   const { settings, setSettings, entityType } = useTracingSettings();
 
   const handleChange = (value: string) => {
@@ -50,25 +48,24 @@ export const TracingRunOptions = ({
         </Txt>
       )}
 
-      {showEditorHeader && (
-        <div className="flex items-center justify-between pb-2">
-          <FieldBlock.Label name={fieldName} size="bigger">
-            Tracing Options (JSON)
-          </FieldBlock.Label>
-          <Txt as="span" variant="meta" tone="muted">
-            Auto-applied on valid JSON
-          </Txt>
-        </div>
-      )}
+      <Field className="block">
+        {showEditorHeader && (
+          <div className="flex items-center justify-between pb-2">
+            <FieldLabel size="bigger">Tracing Options (JSON)</FieldLabel>
+            <Txt as="span" variant="meta" tone="muted">
+              Auto-applied on valid JSON
+            </Txt>
+          </div>
+        )}
 
-      <CodeEditor
-        id={`input-${fieldName}`}
-        value={strValue}
-        onChange={handleChange}
-        language="json"
-        showCopyButton={false}
-        className={editorClassName}
-      />
+        <CodeEditor
+          value={strValue}
+          onChange={handleChange}
+          language="json"
+          showCopyButton={false}
+          className={editorClassName}
+        />
+      </Field>
 
       {entityType === 'workflow' && <WorkflowRunOptions />}
     </div>

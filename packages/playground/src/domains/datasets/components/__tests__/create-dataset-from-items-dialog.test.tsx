@@ -62,7 +62,7 @@ describe('CreateDatasetFromItemsDialog', () => {
 
     renderDialog();
 
-    fireEvent.change(screen.getByLabelText('Name *'), { target: { value: 'Copied Dataset' } });
+    fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: 'Copied Dataset' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create Dataset' }));
 
     await waitFor(() => expect(addItemBodies).toHaveLength(1));
@@ -90,7 +90,7 @@ describe('CreateDatasetFromItemsDialog', () => {
 
     renderDialog();
 
-    fireEvent.change(screen.getByLabelText('Name *'), { target: { value: 'Copied Dataset' } });
+    fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: 'Copied Dataset' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create Dataset' }));
 
     await waitFor(() => expect(itemDatasetIds).toEqual(['ds-new']));

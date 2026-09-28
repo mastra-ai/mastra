@@ -1,8 +1,8 @@
 'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
 import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
@@ -157,28 +157,26 @@ export function DuplicateDatasetDialog({
         </DialogHeader>
         <DialogBody>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="dataset-name">Name *</Label>
+            <Field>
+              <FieldLabel required>Name</FieldLabel>
               <Input
-                id="dataset-name"
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="Enter dataset name"
                 autoFocus
                 disabled={isDuplicating}
               />
-            </div>
+            </Field>
 
-            <div className="space-y-2">
-              <Label htmlFor="dataset-description">Description</Label>
+            <Field>
+              <FieldLabel>Description</FieldLabel>
               <Input
-                id="dataset-description"
                 value={description}
                 onChange={e => setDescription(e.target.value)}
                 placeholder="Enter dataset description (optional)"
                 disabled={isDuplicating}
               />
-            </div>
+            </Field>
 
             <p className="text-body text-muted-foreground">
               All items from &quot;{sourceDatasetName}&quot; will be copied to the new dataset

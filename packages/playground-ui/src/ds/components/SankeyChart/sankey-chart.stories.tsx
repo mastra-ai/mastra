@@ -7,6 +7,7 @@ import { SankeyChart } from './sankey-chart';
 import type { SankeyChartCurveSelection } from './sankey-chart-utils';
 import { Sankey, useSankey } from './sankey-context';
 import { Checkbox } from '@/ds/components/Checkbox';
+import { Field, FieldLabel } from '@/ds/components/Field';
 
 const data = [
   { channel: 'Search', region: 'Europe', outcome: 'Won' },
@@ -58,14 +59,14 @@ function UserLandControls() {
           <div ref={provided.innerRef} {...provided.droppableProps} className="flex flex-wrap items-center gap-2">
             {controlColumns.map(column => {
               const checkbox = (
-                <label className="flex items-center gap-2 text-caption">
+                <Field orientation="horizontal" className="items-center gap-2">
                   <Checkbox
                     checked={column.visible}
                     onCheckedChange={() => toggleColumn(column.id)}
                     aria-label={`Include ${column.label}`}
                   />
-                  <span>{column.label}</span>
-                </label>
+                  <FieldLabel className="text-caption">{column.label}</FieldLabel>
+                </Field>
               );
 
               if (!column.visible) {

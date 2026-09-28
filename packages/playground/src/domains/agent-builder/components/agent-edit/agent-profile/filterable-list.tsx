@@ -1,4 +1,5 @@
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -112,7 +113,8 @@ export const FilterableList = ({
 
               return (
                 <li key={item.id}>
-                  <label
+                  <Field
+                    orientation="horizontal"
                     data-testid={`${testIdPrefix}-filter-item-${item.id}`}
                     data-checked={checked ? 'true' : 'false'}
                     className={cn(
@@ -129,8 +131,10 @@ export const FilterableList = ({
                       className="h-3.5 w-3.5 shrink-0 shadow-none data-[state=checked]:shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5"
                     />
                     {item.icon && <span className="flex shrink-0 items-center">{item.icon}</span>}
-                    <span className="truncate">{item.label}</span>
-                  </label>
+                    <FieldLabel className="min-w-0 flex-1 cursor-pointer text-caption">
+                      <span className="truncate">{item.label}</span>
+                    </FieldLabel>
+                  </Field>
                 </li>
               );
             })}

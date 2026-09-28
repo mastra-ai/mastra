@@ -1,4 +1,5 @@
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
@@ -45,7 +46,8 @@ const ToolkitFilterRow = memo(
 
     return (
       <li className="flex items-center gap-1">
-        <label
+        <Field
+          orientation="horizontal"
           data-testid={`${TEST_ID_PREFIX}-filter-item-${item.id}`}
           data-checked={checked ? 'true' : 'false'}
           className={cn(
@@ -70,8 +72,10 @@ const ToolkitFilterRow = memo(
               className="h-4 w-4 shrink-0 rounded object-contain"
             />
           )}
-          <span className="truncate">{item.label}</span>
-        </label>
+          <FieldLabel className="min-w-0 flex-1 cursor-pointer text-caption">
+            <span className="truncate">{item.label}</span>
+          </FieldLabel>
+        </Field>
         {providerId && (
           <div className="shrink-0">
             <ToolkitConnectionControl

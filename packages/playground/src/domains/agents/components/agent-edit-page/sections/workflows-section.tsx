@@ -1,5 +1,6 @@
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { Field, FieldError } from '@mastra/playground-ui/components/Field';
 import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { ChevronRight } from 'lucide-react';
@@ -81,19 +82,20 @@ export function WorkflowsSection({ control, error, readOnly = false }: Workflows
 
                 return (
                   <div className="flex flex-col gap-2">
-                    <Combobox
-                      multiple
-                      name="workflows"
-                      aria-label="Workflows"
-                      options={options}
-                      value={selectedIds}
-                      onValueChange={handleValueChange}
-                      placeholder="Select workflows..."
-                      searchPlaceholder="Search workflows..."
-                      emptyText="No workflows available"
-                      disabled={isLoading || readOnly}
-                      error={error}
-                    />
+                    <Field invalid={Boolean(error)}>
+                      <Combobox
+                        multiple
+                        aria-label="Workflows"
+                        options={options}
+                        value={selectedIds}
+                        onValueChange={handleValueChange}
+                        placeholder="Select workflows..."
+                        searchPlaceholder="Search workflows..."
+                        emptyText="No workflows available"
+                        disabled={isLoading || readOnly}
+                      />
+                      <FieldError>{error}</FieldError>
+                    </Field>
                     {selectedOptions.length > 0 && (
                       <div className="mt-2 flex flex-col gap-3">
                         {selectedOptions.map(workflow => (

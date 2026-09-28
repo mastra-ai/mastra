@@ -10,6 +10,7 @@ import {
   unstyledFormElementStyle,
 } from '@/ds/primitives/form-element';
 import type { DeprecatedFilledVariant } from '@/ds/primitives/form-element';
+import { TextareaControl } from '@/ds/primitives/textarea-control';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -48,21 +49,15 @@ export type TextareaProps = Omit<React.TextareaHTMLAttributes<HTMLTextAreaElemen
     /** `filled` is a deprecated alias for `default`; both render the filled surface. */
     variant?: VariantProps<typeof textareaVariants>['variant'] | DeprecatedFilledVariant;
     testId?: string;
-    error?: boolean;
   };
 
 const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ className, size, testId, variant, error, ...props }, ref) => {
+  ({ className, size, testId, variant, ...props }, ref) => {
     return (
-      <textarea
-        className={cn(
-          textareaVariants({ variant: resolveFieldVariant(variant), size }),
-          error && fieldErrorRim,
-          className,
-        )}
+      <TextareaControl
+        className={cn(textareaVariants({ variant: resolveFieldVariant(variant), size }), fieldErrorRim, className)}
         data-testid={testId}
         ref={ref}
-        aria-invalid={error}
         {...props}
       />
     );

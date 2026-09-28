@@ -5,8 +5,7 @@ import { comboboxItemClass, comboboxStyles, comboboxTriggerClass } from './combo
 import type { ComboboxVariant } from './combobox-styles';
 import { Button, isIconButtonSize } from '@/ds/components/Button/Button';
 import type { ButtonSize } from '@/ds/components/Button/Button';
-import { FieldBlock } from '@/ds/components/FormFieldBlocks/block/field-block';
-import { fieldErrorId } from '@/ds/components/FormFieldBlocks/block/field-error-id';
+import { useFieldAriaIds } from '@/ds/components/Field/field-control-aria';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
@@ -37,9 +36,7 @@ type ComboboxSharedProps = {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
-  error?: string;
   id?: string;
-  name?: string;
   'aria-label'?: string;
   'aria-describedby'?: string;
   /** Which edge of the trigger the popup lines up with. `end` opens it leftwards (e.g. an icon trigger at the end of a row). */
@@ -100,9 +97,7 @@ export function Combobox(props: ComboboxProps) {
     open,
     onOpenChange,
     container,
-    error,
     id,
-    name,
     'aria-label': ariaLabel,
     'aria-describedby': ariaDescribedBy,
     align = 'start',
@@ -113,10 +108,9 @@ export function Combobox(props: ComboboxProps) {
   } = props;
   const multiple = isMultipleCombobox(props);
   const clearLabel = multiple ? props.clearLabel : undefined;
-  const generatedName = React.useId();
-  const errorName = name ?? generatedName;
+  const field = useFieldAriaIds();
   const describedBy =
-    [ariaDescribedBy, error ? fieldErrorId(errorName) : undefined].filter(Boolean).join(' ') || undefined;
+    [ariaDescribedBy, field?.invalid ? field.errorId : undefined].filter(Boolean).join(' ') || undefined;
   const [inputValue, setInputValue] = React.useState('');
   const customValue = inputValue.trim();
   const customOption =
@@ -142,14 +136,13 @@ export function Combobox(props: ComboboxProps) {
     <>
       <BaseCombobox.Trigger
         id={id}
-        aria-label={ariaLabel ?? (id ? undefined : multiple ? 'Select options' : 'Select option')}
-        aria-invalid={error ? true : undefined}
+        aria-label={ariaLabel ?? (id || field ? undefined : multiple ? 'Select options' : 'Select option')}
+        aria-invalid={field?.invalid || undefined}
         aria-describedby={describedBy}
         data-shape={iconOnly ? 'icon' : undefined}
         className={comboboxTriggerClass({
           variant,
           size,
-          error: Boolean(error),
           className: cn(iconOnlyValue && 'px-2.5', className),
         })}
       >
@@ -251,7 +244,7 @@ export function Combobox(props: ComboboxProps) {
     </>
   );
 
-  const root = multiple ? (
+  return multiple ? (
     <BaseCombobox.Root
       multiple
       autoHighlight
@@ -287,17 +280,5 @@ export function Combobox(props: ComboboxProps) {
     >
       {comboboxContent}
     </BaseCombobox.Root>
-  );
-
-  // Without an error there is nothing to stack, so the trigger is the root: a wrapper
-  // here would hide the trigger from a parent that styles its own children — a
-  // ButtonsGroup seam, an InputGroup control, a flex row.
-  if (!error) return root;
-
-  return (
-    <div className={comboboxStyles.root}>
-      {root}
-      <FieldBlock.ErrorMsg name={errorName}>{error}</FieldBlock.ErrorMsg>
-    </div>
   );
 }

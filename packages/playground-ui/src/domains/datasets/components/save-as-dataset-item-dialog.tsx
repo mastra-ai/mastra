@@ -8,7 +8,7 @@ import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 import { useDatasets } from '../hooks/use-datasets';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
-import { Label } from '@/ds/components/Label';
+import { Field, FieldLabel } from '@/ds/components/Field';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ds/components/Select';
 import { SideDialog } from '@/ds/components/SideDialog';
 import type { SideDialogRootProps } from '@/ds/components/SideDialog';
@@ -227,14 +227,14 @@ export function SaveAsDatasetItemDialog({
         </SideDialog.Header>
 
         <form onSubmit={handleSubmit} className="grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="target-dataset">Dataset *</Label>
+          <Field>
+            <FieldLabel required>Dataset</FieldLabel>
             <Select
               value={selectedDatasetId}
               onValueChange={setSelectedDatasetId}
               disabled={addItem.isPending || isDatasetsLoading}
             >
-              <SelectTrigger id="target-dataset">
+              <SelectTrigger>
                 <SelectValue placeholder={isDatasetsLoading ? 'Loading datasets...' : 'Select a dataset'} />
               </SelectTrigger>
               <SelectContent>
@@ -249,42 +249,42 @@ export function SaveAsDatasetItemDialog({
                 )}
               </SelectContent>
             </Select>
-          </div>
+          </Field>
 
-          <div className="grid gap-2">
-            <Label htmlFor="item-input">Input (JSON) *</Label>
+          <Field>
+            <FieldLabel required>Input (JSON)</FieldLabel>
             <CodeEditor value={input} onChange={handleInputChange} showCopyButton={false} className="min-h-30" />
-          </div>
+          </Field>
 
-          <div className="grid gap-2">
-            <Label htmlFor="item-ground-truth">Ground Truth (JSON, optional)</Label>
+          <Field>
+            <FieldLabel>Ground Truth (JSON, optional)</FieldLabel>
             <CodeEditor
               value={groundTruth}
               onChange={handleGroundTruthChange}
               showCopyButton={false}
               className="min-h-20"
             />
-          </div>
+          </Field>
 
-          <div className="grid gap-2">
-            <Label htmlFor="item-trajectory">Expected Trajectory (JSON, optional)</Label>
+          <Field>
+            <FieldLabel>Expected Trajectory (JSON, optional)</FieldLabel>
             <CodeEditor
               value={expectedTrajectory}
               onChange={handleExpectedTrajectoryChange}
               showCopyButton={false}
               className="min-h-20"
             />
-          </div>
+          </Field>
 
-          <div className="grid gap-2">
-            <Label htmlFor="item-tool-mocks">Tool Mocks (JSON, optional)</Label>
+          <Field>
+            <FieldLabel>Tool Mocks (JSON, optional)</FieldLabel>
             <CodeEditor
               value={toolMocks}
               onChange={handleToolMocksChange}
               showCopyButton={false}
               className="min-h-20"
             />
-          </div>
+          </Field>
 
           <div className="flex justify-end gap-2 pt-4">
             <Button icon={<X />} type="button" onClick={handleCancel}>

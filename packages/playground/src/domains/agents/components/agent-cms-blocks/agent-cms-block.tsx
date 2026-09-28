@@ -11,7 +11,8 @@ import {
   DialogBody,
   DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
-import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -98,21 +99,23 @@ const SaveAsPromptBlockDialog = ({
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <DialogBody className="space-y-3">
-            <TextFieldBlock
-              name="prompt-block-name"
-              label="Name"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="e.g. Tone guidelines"
-              autoFocus
-            />
-            <TextFieldBlock
-              name="prompt-block-description"
-              label="Description (optional)"
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="Brief description..."
-            />
+            <Field>
+              <FieldLabel>Name</FieldLabel>
+              <Input
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="e.g. Tone guidelines"
+                autoFocus
+              />
+            </Field>
+            <Field>
+              <FieldLabel>Description (optional)</FieldLabel>
+              <Input
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="Brief description..."
+              />
+            </Field>
             {error ? (
               <div role="alert">
                 <Notice variant="destructive">{error}</Notice>

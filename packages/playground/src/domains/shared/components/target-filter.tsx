@@ -1,5 +1,5 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
-import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { DATASET_TARGET_TYPES, type DatasetTargetType } from '@/domains/datasets/components/target-type-options';
@@ -63,15 +63,22 @@ export function TargetFilter({ targetType, targetId, onTargetTypeChange, onTarge
 
   return (
     <>
-      <SelectFieldBlock
-        label="Target type"
-        labelIsHidden
+      <Select
         name="filter-target-type"
-        options={targetTypeOptions}
         value={targetType || ALL_TARGETS}
         onValueChange={value => onTargetTypeChange(value === ALL_TARGETS ? '' : (value as DatasetTargetType))}
-        className="whitespace-nowrap"
-      />
+      >
+        <SelectTrigger aria-label="Target type" size="md" className="whitespace-nowrap">
+          <SelectValue placeholder="Select an option" />
+        </SelectTrigger>
+        <SelectContent>
+          {targetTypeOptions.map(option => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       {targetType && (
         <Combobox
           options={[{ value: ALL_TARGETS, label: `All ${targetType}s` }, ...entityOptions]}

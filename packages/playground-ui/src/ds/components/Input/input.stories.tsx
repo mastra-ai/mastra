@@ -134,7 +134,7 @@ export const Error: Story = {
   args: {
     placeholder: 'invalid@',
     defaultValue: 'invalid@',
-    error: true,
+    'aria-invalid': true,
   },
 };
 

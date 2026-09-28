@@ -1,9 +1,10 @@
 import { Check, X } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import type { KeyboardEvent } from 'react';
 
 import { Button } from '@/ds/components/Button';
-import { FieldBlock, fieldErrorId } from '@/ds/components/FormFieldBlocks';
+import { Field, FieldError } from '@/ds/components/Field';
+import { TextareaControl } from '@/ds/primitives/textarea-control';
 import { cn } from '@/lib/utils';
 
 export interface CommentEditorProps {
@@ -30,7 +31,6 @@ export function CommentEditor({
   className,
 }: CommentEditorProps) {
   const [draft, setDraft] = useState(initialBody);
-  const fieldName = useId();
   const body = draft.trim();
   const canSave = body.length > 0 && !isPending;
 
@@ -53,16 +53,14 @@ export function CommentEditor({
   };
 
   return (
-    <div data-slot="comment-editor" className={cn('mt-1 flex flex-col gap-1.5', className)}>
+    <Field invalid={Boolean(error)} data-slot="comment-editor" className={cn('mt-1 flex flex-col gap-1.5', className)}>
       <div className="relative">
-        <textarea
+        <TextareaControl
           value={draft}
           onChange={event => setDraft(event.target.value)}
           onKeyDown={onKeyDown}
           readOnly={isPending}
           aria-label={ariaLabel}
-          aria-invalid={error ? true : undefined}
-          aria-describedby={error ? fieldErrorId(fieldName) : undefined}
           rows={2}
           className="block field-sizing-content max-h-40 w-full resize-none overflow-y-auto rounded-lg border border-border bg-background px-2 pt-1.5 pb-9 text-caption text-foreground outline-none focus:border-border-strong"
         />
@@ -76,7 +74,7 @@ export function CommentEditor({
           </Button>
         </div>
       </div>
-      {error ? <FieldBlock.ErrorMsg name={fieldName}>{error}</FieldBlock.ErrorMsg> : null}
-    </div>
+      <FieldError>{error}</FieldError>
+    </Field>
   );
 }

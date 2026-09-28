@@ -10,7 +10,7 @@ import {
   SettingsRow,
   SettingsTitle,
 } from './index';
-import { fieldErrorId } from '@/ds/components/FormFieldBlocks/block/field-error-id';
+import { Input } from '@/ds/components/Input';
 
 afterEach(cleanup);
 
@@ -69,8 +69,8 @@ describe('Settings', () => {
       render(
         <form aria-label="Connection settings">
           <SettingsContainer>
-            <SettingsRow label="API prefix" description="Applied to API requests." htmlFor="prefix">
-              <input id="prefix" name="apiPrefix" defaultValue="/api" />
+            <SettingsRow label="API prefix" description="Applied to API requests.">
+              <Input name="apiPrefix" defaultValue="/api" />
             </SettingsRow>
           </SettingsContainer>
         </form>,
@@ -87,8 +87,8 @@ describe('Settings', () => {
   describe('when a setting is required', () => {
     it('announces the requirement in the control name', () => {
       render(
-        <SettingsRow label="Model" htmlFor="model" required>
-          <input id="model" />
+        <SettingsRow label="Model" required>
+          <Input />
         </SettingsRow>,
       );
 
@@ -100,21 +100,21 @@ describe('Settings', () => {
   describe('when a setting has an error', () => {
     it('shows the message as an alert the control can describe itself with', () => {
       render(
-        <SettingsRow label="Model" htmlFor="model" errorMsg="Choose the model this agent runs on.">
-          <input id="model" aria-describedby={fieldErrorId('model')} />
+        <SettingsRow label="Model" errorMsg="Choose the model this agent runs on.">
+          <Input />
         </SettingsRow>,
       );
 
       expect(screen.getByRole('alert').textContent).toBe('Choose the model this agent runs on.');
-      expect(screen.getByRole('textbox', { name: 'Model' }).getAttribute('aria-describedby')).toBe(
-        screen.getByRole('alert').id,
-      );
+      const control = screen.getByRole('textbox', { name: 'Model' });
+      expect(control.getAttribute('aria-invalid')).toBe('true');
+      expect(control.getAttribute('aria-describedby')).toContain(screen.getByRole('alert').id);
     });
 
     it.each([false, ''])('renders no alert when the message is %j', errorMsg => {
       render(
-        <SettingsRow label="Model" htmlFor="model" errorMsg={errorMsg}>
-          <input id="model" />
+        <SettingsRow label="Model" errorMsg={errorMsg}>
+          <Input />
         </SettingsRow>,
       );
 

@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useJSONSchemaFormField } from './json-schema-form-field-context';
 import { Checkbox } from '@/ds/components/Checkbox';
+import { Field, FieldLabel } from '@/ds/components/Field';
 import { cn } from '@/lib/utils';
 
 type CheckboxProps = React.ComponentPropsWithoutRef<typeof Checkbox>;
@@ -26,9 +27,13 @@ export function FieldOptional({
   );
 
   return (
-    <label className={cn('flex cursor-pointer items-center gap-2 text-caption text-muted-foreground', labelClassName)}>
+    <Field orientation="horizontal" className="items-center gap-2">
       <Checkbox {...props} className={className} checked={field.optional} onCheckedChange={handleCheckedChange} />
-      {label}
-    </label>
+      {label ? (
+        <FieldLabel className={cn('cursor-pointer text-caption text-muted-foreground', labelClassName)}>
+          {label}
+        </FieldLabel>
+      ) : null}
+    </Field>
   );
 }

@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Plus, Trash } from 'lucide-react';
 
@@ -59,21 +60,15 @@ interface HeaderListFormItemProps {
 
 const HeaderListFormItem = ({ index, header, onRemove }: HeaderListFormItemProps) => (
   <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-4">
-    <TextFieldBlock
-      name={`headers.${index}.name`}
-      label="Name"
-      placeholder="e.g. Authorization"
-      required
-      defaultValue={header.name}
-    />
+    <Field>
+      <FieldLabel required>Name</FieldLabel>
+      <Input name={`headers.${index}.name`} placeholder="e.g. Authorization" required defaultValue={header.name} />
+    </Field>
 
-    <TextFieldBlock
-      name={`headers.${index}.value`}
-      label="Value"
-      placeholder="e.g. Bearer <token>"
-      required
-      defaultValue={header.value}
-    />
+    <Field>
+      <FieldLabel required>Value</FieldLabel>
+      <Input name={`headers.${index}.value`} placeholder="e.g. Bearer <token>" required defaultValue={header.value} />
+    </Field>
 
     <Button type="button" onClick={onRemove} aria-label="Remove header" tooltip="Remove header">
       <Trash />

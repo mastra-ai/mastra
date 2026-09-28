@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Checkbox } from '../../../ds/components/Checkbox';
 import { CodeDiff } from '../../../ds/components/CodeDiff';
 import { EmptyState } from '../../../ds/components/EmptyState';
+import { Field, FieldLabel } from '../../../ds/components/Field';
 import { Skeleton } from '../../../ds/components/Skeleton';
 import { Txt } from '../../../ds/components/Txt';
 import { cn } from '../../../lib/utils';
@@ -336,10 +337,10 @@ export function ObservationDetailView({
         {previousRecord && (
           <div className="border-b border-border px-4 py-2">
             <div className="flex items-start justify-end gap-3">
-              <label className="flex cursor-pointer items-center gap-1.5 text-caption">
+              <Field orientation="horizontal" className="items-center gap-1.5">
                 <Checkbox checked={showDiff} onCheckedChange={v => setShowDiff(v === true)} />
-                <span className="text-caption text-muted-foreground">Show diff</span>
-              </label>
+                <FieldLabel className="cursor-pointer text-caption text-muted-foreground">Show diff</FieldLabel>
+              </Field>
             </div>
           </div>
         )}

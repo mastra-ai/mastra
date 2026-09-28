@@ -44,9 +44,9 @@ type Story = StoryObj<typeof SettingsRow>;
 export const WithSelect: Story = {
   render: () => (
     <SectionCard title="Theme" description="Customize the appearance of the studio.">
-      <SettingsRow label="Theme mode" htmlFor="theme">
+      <SettingsRow label="Theme mode">
         <Select defaultValue="dark">
-          <SelectTrigger id="theme" className="w-full sm:w-48">
+          <SelectTrigger className="w-full sm:w-48">
             <SelectValue className="inline-flex max-w-full min-w-0 items-center" />
           </SelectTrigger>
           <SelectContent>
@@ -65,13 +65,9 @@ export const WithSelect: Story = {
 export const WithDescription: Story = {
   render: () => (
     <SectionCard title="Appearance" description="Customize how the studio renders.">
-      <SettingsRow
-        label="Theme mode"
-        description="Choose how the studio appears in different lighting."
-        htmlFor="theme"
-      >
+      <SettingsRow label="Theme mode" description="Choose how the studio appears in different lighting.">
         <Select defaultValue="dark">
-          <SelectTrigger id="theme" className="w-full sm:w-48">
+          <SelectTrigger className="w-full sm:w-48">
             <SelectValue className="inline-flex max-w-full min-w-0 items-center" />
           </SelectTrigger>
           <SelectContent>
@@ -101,9 +97,9 @@ export const Stacked: Story = {
   render: () => (
     <SectionCard title="Preferences" description="Configure your studio experience.">
       <div className="flex flex-col gap-6">
-        <SettingsRow label="Theme mode" description="Choose how the studio appears." htmlFor="theme">
+        <SettingsRow label="Theme mode" description="Choose how the studio appears.">
           <Select defaultValue="dark">
-            <SelectTrigger id="theme" className="w-full sm:w-48">
+            <SelectTrigger className="w-full sm:w-48">
               <SelectValue className="inline-flex max-w-full min-w-0 items-center" />
             </SelectTrigger>
             <SelectContent>
@@ -115,9 +111,9 @@ export const Stacked: Story = {
             </SelectContent>
           </Select>
         </SettingsRow>
-        <SettingsRow label="Density" description="Compact spacing reduces vertical padding." htmlFor="density">
+        <SettingsRow label="Density" description="Compact spacing reduces vertical padding.">
           <Select defaultValue="comfortable">
-            <SelectTrigger id="density" className="w-full sm:w-48">
+            <SelectTrigger className="w-full sm:w-48">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -138,14 +134,9 @@ export const FactoryVariant: Story = {
       description="Models and thresholds used to summarize and retain context."
       contentClassName="px-0 pb-0"
     >
-      <SettingsRow
-        variant="factory"
-        htmlFor="factory-observer-model"
-        label="Observer model"
-        description="Summarizes the conversation into observations"
-      >
+      <SettingsRow variant="factory" label="Observer model" description="Summarizes the conversation into observations">
         <Select defaultValue="dark">
-          <SelectTrigger id="factory-observer-model" className="w-full lg:w-72">
+          <SelectTrigger className="w-full lg:w-72">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

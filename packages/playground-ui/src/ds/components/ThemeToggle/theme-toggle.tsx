@@ -4,6 +4,7 @@ import { Monitor, Moon, Sun } from 'lucide-react';
 
 import { useTheme } from '../ThemeProvider';
 import type { Theme } from '../ThemeProvider/theme-context';
+import { FieldItem } from '@/ds/components/Field';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -108,26 +109,27 @@ export const ThemeToggle = ({
         style={{ width: sizeConfig.itemWidth, transform: `translateX(${indicatorOffset}px)` }}
       />
       {options.map(option => (
-        <RadioPrimitive.Root
-          key={option.value}
-          value={option.value}
-          aria-label={option.label}
-          style={{ width: sizeConfig.itemWidth }}
-          className={cn(
-            'relative inline-flex cursor-pointer items-center justify-center rounded-full',
-            // Base UI exposes `data-checked` instead of Radix's `data-state="checked"`.
-            'text-muted-foreground hover:text-foreground data-[checked]:text-foreground',
-            sizeConfig.item,
-            'focus-visible:outline-hidden',
-            'active:scale-90 motion-reduce:transition-none',
-            transitions.colors,
-            transitions.transform,
-          )}
-        >
-          <span aria-hidden="true" className="pointer-events-none inline-flex items-center justify-center">
-            {option.icon}
-          </span>
-        </RadioPrimitive.Root>
+        <FieldItem key={option.value} className="contents">
+          <RadioPrimitive.Root
+            value={option.value}
+            aria-label={option.label}
+            style={{ width: sizeConfig.itemWidth }}
+            className={cn(
+              'relative inline-flex cursor-pointer items-center justify-center rounded-full',
+              // Base UI exposes `data-checked` instead of Radix's `data-state="checked"`.
+              'text-muted-foreground hover:text-foreground data-[checked]:text-foreground',
+              sizeConfig.item,
+              'focus-visible:outline-hidden',
+              'active:scale-90 motion-reduce:transition-none',
+              transitions.colors,
+              transitions.transform,
+            )}
+          >
+            <span aria-hidden="true" className="pointer-events-none inline-flex items-center justify-center">
+              {option.icon}
+            </span>
+          </RadioPrimitive.Root>
+        </FieldItem>
       ))}
     </RadioGroupPrimitive>
   );

@@ -1,9 +1,9 @@
 import type { EntityType } from '@mastra/core/observability';
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { FilterBar, isFilterBarGroup } from '@mastra/playground-ui/components/FilterBar';
 import type { FilterBarExpression, FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
-import { Label } from '@mastra/playground-ui/components/Label';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useFeedbackAvailable, useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
 import { useTraceSpanScores, ScoreDataPanel, TraceScoresTab } from '@mastra/playground-ui/domains/scores';
@@ -416,15 +416,14 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
           onRemoveMetadataColumn={traceColumns.removeMetadataColumn}
           onReset={traceColumns.resetColumns}
         />
-        <div className="flex items-center gap-2">
+        <Field orientation="horizontal" className="items-center gap-2">
           <Checkbox
-            id="auto-refetch"
             checked={autoRefetchTraces}
             onCheckedChange={checked => setAutoRefetchTraces(checked === true)}
             disabled={isTracesLoading}
           />
-          <Label htmlFor="auto-refetch">Auto refresh</Label>
-        </div>
+          <FieldLabel>Auto refresh</FieldLabel>
+        </Field>
       </ActionRow.End>
     </ActionRow>
   );

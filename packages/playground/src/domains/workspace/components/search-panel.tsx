@@ -1,5 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@mastra/playground-ui/primitives/raised-surface';
@@ -255,29 +258,26 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
         </div>
 
         <div className="flex items-center gap-4 text-body">
-          <label className="flex items-center gap-2 text-caption text-muted-foreground">
-            <span>Results:</span>
-            <select
-              value={topK}
-              onChange={e => setTopK(Number(e.target.value))}
-              className={cn(raisedSurfaceStyle, 'rounded px-2 py-1 text-foreground')}
-            >
-              <option value={3}>3</option>
-              <option value={5}>5</option>
-              <option value={10}>10</option>
-              <option value={20}>20</option>
-            </select>
-          </label>
+          <Field orientation="horizontal" className="items-center gap-2">
+            <FieldLabel className="text-caption text-muted-foreground">Results:</FieldLabel>
+            <Select value={String(topK)} onValueChange={value => setTopK(Number(value))}>
+              <SelectTrigger size="sm" className="w-auto">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[3, 5, 10, 20].map(value => (
+                  <SelectItem key={value} value={String(value)}>
+                    {value}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
 
-          <label className="flex cursor-pointer items-center gap-2 text-caption text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={includeReferences}
-              onChange={e => setIncludeReferences(e.target.checked)}
-              className="rounded border-border bg-card"
-            />
-            <span>Include references</span>
-          </label>
+          <Field orientation="horizontal" className="items-center gap-2">
+            <Checkbox checked={includeReferences} onCheckedChange={checked => setIncludeReferences(checked === true)} />
+            <FieldLabel className="cursor-pointer text-caption text-muted-foreground">Include references</FieldLabel>
+          </Field>
         </div>
       </form>
 

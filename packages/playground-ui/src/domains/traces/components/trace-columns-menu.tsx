@@ -14,9 +14,8 @@ import {
   DialogTitle,
 } from '@/ds/components/Dialog';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { FieldBlock } from '@/ds/components/FormFieldBlocks';
+import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
 
-const METADATA_KEY_FIELD_NAME = 'trace-metadata-key';
 const EMPTY_KEYS: readonly string[] = [];
 
 const STANDARD_COLUMNS: readonly TraceOptionalColumn[] = ['type', 'input', 'duration', 'endTime', 'environment'];
@@ -191,25 +190,22 @@ export function TraceColumnsMenu({
                 </DialogDescription>
               </DialogHeader>
               <DialogBody>
-                <FieldBlock name={METADATA_KEY_FIELD_NAME} label="Metadata key">
-                  {control => (
-                    <Combobox
-                      {...control}
-                      name={METADATA_KEY_FIELD_NAME}
-                      options={metadataKeyOptions}
-                      value={metadataKey}
-                      onValueChange={key => {
-                        setMetadataKey(key);
-                        setMetadataError(undefined);
-                      }}
-                      allowCustomValue
-                      placeholder="Select a metadata key…"
-                      searchPlaceholder="Search metadata keys…"
-                      emptyText="No metadata keys observed. Type one to add it."
-                      error={metadataError}
-                    />
-                  )}
-                </FieldBlock>
+                <Field invalid={Boolean(metadataError)}>
+                  <FieldLabel>Metadata key</FieldLabel>
+                  <Combobox
+                    options={metadataKeyOptions}
+                    value={metadataKey}
+                    onValueChange={key => {
+                      setMetadataKey(key);
+                      setMetadataError(undefined);
+                    }}
+                    allowCustomValue
+                    placeholder="Select a metadata key…"
+                    searchPlaceholder="Search metadata keys…"
+                    emptyText="No metadata keys observed. Type one to add it."
+                  />
+                  <FieldError>{metadataError}</FieldError>
+                </Field>
               </DialogBody>
               <DialogFooter>
                 <Button icon={<X />} type="button" onClick={() => handleDialogOpenChange(false)}>

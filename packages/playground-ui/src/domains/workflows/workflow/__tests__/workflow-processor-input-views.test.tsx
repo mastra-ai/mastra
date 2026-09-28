@@ -119,7 +119,7 @@ describe('Workflow processor input views', () => {
   });
 
   describe('when simple input is invalid', () => {
-    it('associates the shared error message with both processor controls', () => {
+    it('marks both processor controls invalid and describes the message with the error', () => {
       render(
         <WorkflowInputData
           schema={z.object({ phase: z.literal('never'), messages: z.array(z.unknown()) })}
@@ -135,11 +135,9 @@ describe('Workflow processor input views', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Run' }));
 
       const error = screen.getByRole('alert');
-      expect(error.id).toBe('error-workflow-processor-input');
       expect(phase.getAttribute('aria-invalid')).toBe('true');
-      expect(phase.getAttribute('aria-describedby')).toBe(error.id);
       expect(message.getAttribute('aria-invalid')).toBe('true');
-      expect(message.getAttribute('aria-describedby')).toBe(error.id);
+      expect(message.getAttribute('aria-describedby')?.split(' ')).toContain(error.id);
     });
   });
 

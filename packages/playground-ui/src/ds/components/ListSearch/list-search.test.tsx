@@ -98,3 +98,28 @@ describe('ListSearch keyboard shortcut', () => {
     vi.useRealTimers();
   });
 });
+
+describe('ListSearch clearing', () => {
+  it('offers no clear button until there is something to clear', () => {
+    renderListSearch();
+
+    expect(screen.queryByRole('button', { name: 'Clear search' })).toBeNull();
+  });
+
+  it('clears the field at once, drops the pending search and keeps focus in the field', () => {
+    vi.useFakeTimers();
+    const onSearch = vi.fn();
+    renderListSearch({ onSearch });
+    const input = screen.getByRole<HTMLInputElement>('textbox', { name: 'Filter agents' });
+
+    fireEvent.change(input, { target: { value: 'abc' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
+    vi.advanceTimersByTime(300);
+
+    expect(input.value).toBe('');
+    expect(onSearch.mock.calls).toEqual([['']]);
+    expect(document.activeElement).toBe(input);
+    expect(screen.queryByRole('button', { name: 'Clear search' })).toBeNull();
+    vi.useRealTimers();
+  });
+});

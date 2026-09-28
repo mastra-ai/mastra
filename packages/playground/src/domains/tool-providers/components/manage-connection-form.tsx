@@ -1,7 +1,7 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DialogBody } from '@mastra/playground-ui/components/Dialog';
-import { FieldBlock, fieldErrorId } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldError } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -89,34 +89,31 @@ export const ManageConnectionForm = ({
             <Txt variant="meta" tone="muted">
               {integrationName} connection
             </Txt>
-            <div className="relative w-full">
-              <Input
-                id={`input-${connectionNameField}`}
-                name={connectionNameField}
-                size="sm"
-                value={draft}
-                onChange={event => {
-                  setDraft(event.target.value);
-                  rename.scheduleRename(event.target.value);
-                }}
-                disabled={disabled || rename.isPending}
-                placeholder="Unnamed connection"
-                autoFocus
-                aria-label="Connection name"
-                aria-describedby={rename.error ? fieldErrorId(connectionNameField) : undefined}
-                error={Boolean(rename.error)}
-                testId={`${testIdPrefix}-input`}
-                className="text-center"
-              />
-              {rename.isPending && (
-                <span className="absolute top-1/2 right-2 -translate-y-1/2">
-                  <Spinner size="sm" aria-label="Saving" data-testid={`${testIdPrefix}-saving`} />
-                </span>
-              )}
-            </div>
-            {rename.error ? (
-              <FieldBlock.ErrorMsg name={connectionNameField}>{String(rename.error)}</FieldBlock.ErrorMsg>
-            ) : null}
+            <Field invalid={Boolean(rename.error)} className="w-full justify-items-center gap-1.5">
+              <div className="relative w-full">
+                <Input
+                  name={connectionNameField}
+                  size="sm"
+                  value={draft}
+                  onChange={event => {
+                    setDraft(event.target.value);
+                    rename.scheduleRename(event.target.value);
+                  }}
+                  disabled={disabled || rename.isPending}
+                  placeholder="Unnamed connection"
+                  autoFocus
+                  aria-label="Connection name"
+                  testId={`${testIdPrefix}-input`}
+                  className="text-center"
+                />
+                {rename.isPending && (
+                  <span className="absolute top-1/2 right-2 -translate-y-1/2">
+                    <Spinner size="sm" aria-label="Saving" data-testid={`${testIdPrefix}-saving`} />
+                  </span>
+                )}
+              </div>
+              <FieldError>{rename.error ? String(rename.error) : null}</FieldError>
+            </Field>
           </div>
 
           <Button

@@ -198,7 +198,7 @@ export const Invalid: Story = {
         <InputGroupAddon>
           <MailIcon />
         </InputGroupAddon>
-        <InputGroupInput placeholder="Invalid" defaultValue="not an email" error />
+        <InputGroupInput placeholder="Invalid" defaultValue="not an email" aria-invalid />
       </InputGroup>
     </div>
   ),

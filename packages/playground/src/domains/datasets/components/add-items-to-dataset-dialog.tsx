@@ -3,7 +3,7 @@
 import type { DatasetItem } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
-import { Label } from '@mastra/playground-ui/components/Label';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@mastra/playground-ui/components/Select';
 import { useDatasetMutations, useDatasets } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
@@ -91,14 +91,14 @@ export function AddItemsToDatasetDialog({
         </DialogHeader>
         <DialogBody>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="target-dataset">Target Dataset *</Label>
+            <Field>
+              <FieldLabel required>Target Dataset</FieldLabel>
               <Select
                 value={selectedDatasetId}
                 onValueChange={setSelectedDatasetId}
                 disabled={isAdding || isDatasetsLoading}
               >
-                <SelectTrigger id="target-dataset">
+                <SelectTrigger>
                   <SelectValue placeholder={isDatasetsLoading ? 'Loading datasets...' : 'Select a dataset'} />
                 </SelectTrigger>
                 <SelectContent>
@@ -115,7 +115,7 @@ export function AddItemsToDatasetDialog({
                   )}
                 </SelectContent>
               </Select>
-            </div>
+            </Field>
 
             <p className="text-body text-muted-foreground">
               {items.length} item{items.length !== 1 ? 's' : ''} will be copied to the selected dataset

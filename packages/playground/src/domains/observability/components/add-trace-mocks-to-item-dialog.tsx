@@ -3,7 +3,7 @@ import { collectToolMocks } from '@mastra/core/utils/collect-tool-mocks';
 import { safeStringify } from '@mastra/core/utils/safe-stringify';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import { Label } from '@mastra/playground-ui/components/Label';
+import { Field, FieldDescription, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@mastra/playground-ui/components/Select';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
@@ -170,10 +170,10 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
 
   return (
     <form onSubmit={handleSubmit} className="grid gap-4">
-      <div className="grid gap-2">
-        <Label htmlFor="target-dataset">Dataset *</Label>
+      <Field>
+        <FieldLabel required>Dataset</FieldLabel>
         <Select value={selectedDatasetId} onValueChange={handleDatasetChange} disabled={isDatasetsLoading}>
-          <SelectTrigger id="target-dataset">
+          <SelectTrigger>
             <SelectValue placeholder={isDatasetsLoading ? 'Loading datasets...' : 'Select a dataset'} />
           </SelectTrigger>
           <SelectContent>
@@ -188,16 +188,16 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
             )}
           </SelectContent>
         </Select>
-      </div>
+      </Field>
 
-      <div className="grid gap-2">
-        <Label htmlFor="target-item">Item *</Label>
+      <Field>
+        <FieldLabel required>Item</FieldLabel>
         <Select
           value={selectedItemId}
           onValueChange={setSelectedItemId}
           disabled={!selectedDatasetId || isItemsLoading}
         >
-          <SelectTrigger id="target-item">
+          <SelectTrigger>
             <SelectValue
               placeholder={
                 !selectedDatasetId ? 'Select a dataset first' : isItemsLoading ? 'Loading items...' : 'Select an item'
@@ -216,15 +216,15 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
             )}
           </SelectContent>
         </Select>
-      </div>
+      </Field>
 
-      <div className="grid gap-2">
-        <Label htmlFor="derived-mocks">Tool Mocks (JSON)</Label>
+      <Field>
+        <FieldLabel>Tool Mocks (JSON)</FieldLabel>
         <CodeEditor value={mocksJson} onChange={setMocksJson} showCopyButton={false} className="min-h-[160px]" />
-        <p className="text-caption text-muted-foreground">
+        <FieldDescription>
           Seeded from the trace&apos;s tool calls. Edit or remove entries before appending.
-        </p>
-      </div>
+        </FieldDescription>
+      </Field>
 
       <div className="flex justify-end gap-2 pt-4">
         <Button icon={<X />} type="button" onClick={onClose}>

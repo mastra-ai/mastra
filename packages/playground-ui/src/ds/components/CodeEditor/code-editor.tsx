@@ -16,6 +16,7 @@ import { codeLanguages } from './code-languages';
 import { createVariableAutocomplete } from './variable-autocomplete-extension';
 import { variableHighlight } from './variable-highlight-extension';
 import { CopyButton } from '@/ds/components/CopyButton';
+import { useFieldControlAria } from '@/ds/components/Field/field-control-aria';
 import { useTheme } from '@/ds/components/ThemeProvider';
 import { fieldErrorRimWithin, inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
 import type { JsonSchema } from '@/lib/json-schema';
@@ -319,13 +320,17 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       variant,
       id,
       'aria-label': ariaLabel = 'Code editor',
-      'aria-labelledby': ariaLabelledBy,
-      'aria-describedby': ariaDescribedBy,
-      'aria-invalid': ariaInvalid,
+      'aria-labelledby': ariaLabelledByProp,
+      'aria-describedby': ariaDescribedByProp,
+      'aria-invalid': ariaInvalidProp,
       ...props
     },
     ref,
   ) => {
+    const fieldAria = useFieldControlAria();
+    const ariaLabelledBy = ariaLabelledByProp ?? fieldAria['aria-labelledby'];
+    const ariaDescribedBy = ariaDescribedByProp ?? fieldAria['aria-describedby'];
+    const ariaInvalid = ariaInvalidProp ?? fieldAria['aria-invalid'];
     const theme = useCodemirrorTheme();
     const formattedCode = data ? JSON.stringify(data, null, 2) : (value ?? '');
 

@@ -4,13 +4,15 @@ import { CalendarIcon, X } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/ds/components/Button';
 import { DatePicker } from '@/ds/components/DateTimePicker';
+import { useFieldControlAria } from '@/ds/components/Field';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { cn } from '@/utils/cn';
 
-export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, field, error, id }) => {
+export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, field, error }) => {
   const { key, ...props } = inputProps;
   const [value, setValue] = useState<Date | undefined>(undefined);
   const [open, setOpen] = useState(false);
+  const fieldAria = useFieldControlAria();
 
   useEffect(() => {
     if (field.default) {
@@ -43,7 +45,7 @@ export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, field, err
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
-          id={id}
+          {...fieldAria}
           variant="default"
           size="lg"
           className={cn('w-full', error ? 'border-accent2' : '')}

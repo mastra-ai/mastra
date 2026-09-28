@@ -3,7 +3,7 @@
 import type { DatasetItemToolMock, AddDatasetItemParams } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import { FieldBlock, fieldErrorId } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
@@ -202,69 +202,49 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
         </SideDialog.Header>
 
         <form onSubmit={handleSubmit} className="grid gap-4">
-          <div className="grid gap-2">
-            <FieldBlock.Label name="item-input" required>
-              Input (JSON)
-            </FieldBlock.Label>
-            <CodeEditor
-              id="input-item-input"
-              aria-invalid={validationErrors?.field === 'input' ? true : undefined}
-              aria-describedby={validationErrors?.field === 'input' ? fieldErrorId('item-input') : undefined}
-              value={input}
-              onChange={handleInputChange}
-              showCopyButton={false}
-              className="min-h-[240px]"
-            />
+          <Field invalid={validationErrors?.field === 'input'}>
+            <FieldLabel required>Input (JSON)</FieldLabel>
+            <CodeEditor value={input} onChange={handleInputChange} showCopyButton={false} className="min-h-[240px]" />
             {validationErrors?.field === 'input' && (
-              <DatasetFieldErrors name="item-input" field="input" errors={validationErrors.errors} />
+              <DatasetFieldErrors field="input" errors={validationErrors.errors} />
             )}
-          </div>
+          </Field>
 
-          <div className="grid gap-2">
-            <FieldBlock.Label name="item-ground-truth">Ground Truth (JSON, optional)</FieldBlock.Label>
+          <Field invalid={validationErrors?.field === 'groundTruth'}>
+            <FieldLabel>Ground Truth (JSON, optional)</FieldLabel>
             <CodeEditor
-              id="input-item-ground-truth"
-              aria-invalid={validationErrors?.field === 'groundTruth' ? true : undefined}
-              aria-describedby={
-                validationErrors?.field === 'groundTruth' ? fieldErrorId('item-ground-truth') : undefined
-              }
               value={groundTruth}
               onChange={handleGroundTruthChange}
               showCopyButton={false}
               className="min-h-[200px]"
             />
             {validationErrors?.field === 'groundTruth' && (
-              <DatasetFieldErrors name="item-ground-truth" field="groundTruth" errors={validationErrors.errors} />
+              <DatasetFieldErrors field="groundTruth" errors={validationErrors.errors} />
             )}
-          </div>
+          </Field>
 
-          <FieldBlock name="item-trajectory" label="Expected Trajectory (JSON, optional)">
-            {control => (
-              <CodeEditor
-                {...control}
-                value={expectedTrajectory}
-                onChange={setExpectedTrajectory}
-                showCopyButton={false}
-                className="min-h-[200px]"
-              />
-            )}
-          </FieldBlock>
-
-          <div className="grid gap-2">
-            <FieldBlock.Label name="item-tool-mocks">Tool Mocks (JSON array, optional)</FieldBlock.Label>
+          <Field>
+            <FieldLabel>Expected Trajectory (JSON, optional)</FieldLabel>
             <CodeEditor
-              id="input-item-tool-mocks"
-              aria-invalid={validationErrors?.field === 'toolMocks' ? true : undefined}
-              aria-describedby={validationErrors?.field === 'toolMocks' ? fieldErrorId('item-tool-mocks') : undefined}
+              value={expectedTrajectory}
+              onChange={setExpectedTrajectory}
+              showCopyButton={false}
+              className="min-h-[200px]"
+            />
+          </Field>
+
+          <Field invalid={validationErrors?.field === 'toolMocks'}>
+            <FieldLabel>Tool Mocks (JSON array, optional)</FieldLabel>
+            <CodeEditor
               value={toolMocks}
               onChange={handleToolMocksChange}
               showCopyButton={false}
               className="min-h-[200px]"
             />
             {validationErrors?.field === 'toolMocks' && (
-              <DatasetFieldErrors name="item-tool-mocks" field="toolMocks" errors={validationErrors.errors} />
+              <DatasetFieldErrors field="toolMocks" errors={validationErrors.errors} />
             )}
-          </div>
+          </Field>
 
           <DatasetItemScorerSelector
             overrideEnabled={scorerOverrideEnabled}
@@ -274,17 +254,15 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
             disabled={addItem.isPending}
           />
 
-          <FieldBlock name="item-request-context" label="Request Context (JSON, optional)">
-            {control => (
-              <CodeEditor
-                {...control}
-                value={requestContext}
-                onChange={setRequestContext}
-                showCopyButton={false}
-                className="min-h-[200px]"
-              />
-            )}
-          </FieldBlock>
+          <Field>
+            <FieldLabel>Request Context (JSON, optional)</FieldLabel>
+            <CodeEditor
+              value={requestContext}
+              onChange={setRequestContext}
+              showCopyButton={false}
+              className="min-h-[200px]"
+            />
+          </Field>
 
           <div className="flex justify-end gap-2 pt-4">
             <Button icon={<X />} type="button" onClick={handleCancel}>

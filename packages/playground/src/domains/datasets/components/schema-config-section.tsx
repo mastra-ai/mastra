@@ -1,6 +1,6 @@
 'use client';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
-import { FieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
@@ -200,13 +200,11 @@ export function SchemaConfigSection({
         </Notice>
 
         {/* Source selector */}
-        <div className="space-y-2">
-          <FieldBlock.Label name="schema-source" size="bigger">
-            Import From
-          </FieldBlock.Label>
+        <Field>
+          <FieldLabel size="bigger">Import From</FieldLabel>
           <div className="flex items-center gap-2">
             <Select value={sourceType} onValueChange={v => handleSourceChange(v as SourceType)} disabled={disabled}>
-              <SelectTrigger id="input-schema-source" size="sm" className="w-40">
+              <SelectTrigger size="sm" className="w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -220,7 +218,7 @@ export function SchemaConfigSection({
             {/* Workflow picker when workflow source selected */}
             {sourceType === 'workflow' && (
               <Select value={selectedWorkflow ?? ''} onValueChange={setSelectedWorkflow} disabled={disabled}>
-                <SelectTrigger size="sm" className="w-48">
+                <SelectTrigger aria-label="Workflow" size="sm" className="w-48">
                   <SelectValue placeholder="Select workflow..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -255,7 +253,7 @@ export function SchemaConfigSection({
                 onValueChange={v => setScorerTargetType(v as ScorerTargetType)}
                 disabled={disabled}
               >
-                <SelectTrigger size="sm" className="w-32">
+                <SelectTrigger aria-label="Scorer target type" size="sm" className="w-32">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -274,12 +272,11 @@ export function SchemaConfigSection({
                 : 'For calibrating custom scorers (input/output as any)'}
             </p>
           )}
-        </div>
+        </Field>
 
         {/* Schema fields */}
         <SchemaField
           label="Input Schema"
-          schemaType="input"
           value={inputSchema}
           onChange={handleInputSchemaChange}
           sourceSchema={isAutoPopulate ? sourceSchemas.inputSchema : undefined}
@@ -288,7 +285,6 @@ export function SchemaConfigSection({
 
         <SchemaField
           label="Ground Truth Schema"
-          schemaType="output"
           value={outputSchema}
           onChange={handleOutputSchemaChange}
           sourceSchema={isAutoPopulate ? sourceSchemas.outputSchema : undefined}
@@ -297,7 +293,6 @@ export function SchemaConfigSection({
 
         <SchemaField
           label="Request Context Schema"
-          schemaType="requestContext"
           value={requestContextSchema}
           onChange={handleRequestContextSchemaChange}
           autoPopulate={false}

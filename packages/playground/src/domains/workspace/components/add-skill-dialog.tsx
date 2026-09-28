@@ -7,10 +7,11 @@ import {
   DialogDescription,
   DialogBody,
 } from '@mastra/playground-ui/components/Dialog';
-import { FieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
@@ -364,27 +365,25 @@ export function AddSkillDialog({
             <div className="flex flex-col gap-3 border-t border-border pt-4">
               {/* Mount picker - only shown when multiple writable mounts exist */}
               {writableMounts && writableMounts.length > 1 && (
-                <div className={cn(raisedSurfaceStyle, 'flex items-center gap-3 rounded-lg p-3')}>
+                <Field orientation="horizontal" className={cn(raisedSurfaceStyle, 'items-center gap-3 rounded-lg p-3')}>
                   <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <FieldBlock.Label name="mount-select" htmlFor="mount-select" className="whitespace-nowrap">
-                    Install to
-                  </FieldBlock.Label>
-                  <select
-                    id="mount-select"
-                    value={selectedMount ?? ''}
-                    onChange={e => setSelectedMount(e.target.value)}
-                    className="flex-1 rounded-md border border-border bg-background px-3 py-1.5 text-body text-foreground"
-                  >
-                    {writableMounts.map(m => {
-                      const name = m.displayName ?? m.name ?? m.provider ?? 'unknown';
-                      return (
-                        <option key={m.path} value={m.path}>
-                          {name} ({m.path})
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
+                  <FieldLabel className="whitespace-nowrap">Install to</FieldLabel>
+                  <Select value={selectedMount ?? ''} onValueChange={setSelectedMount}>
+                    <SelectTrigger className="flex-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {writableMounts.map(m => {
+                        const name = m.displayName ?? m.name ?? m.provider ?? 'unknown';
+                        return (
+                          <SelectItem key={m.path} value={m.path}>
+                            {name} ({m.path})
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </Field>
               )}
               <div className="flex items-center justify-end gap-2">
                 {isSelectedSkillInstalled &&

@@ -1,12 +1,12 @@
 import { isValid, parse } from 'date-fns';
 import { CalendarIcon, Check } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import type { ReactElement } from 'react';
 import { Button } from '@/ds/components/Button/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
 import { DatePicker, TimePicker } from '@/ds/components/DateTimePicker';
 import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
-import { FieldBlock, fieldErrorId } from '@/ds/components/FormFieldBlocks';
+import { Field, FieldError } from '@/ds/components/Field';
 import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover/popover';
 import { cn } from '@/lib/utils';
 
@@ -71,7 +71,6 @@ export function DateTimeRangePicker({
   const [draftTimeFrom, setDraftTimeFrom] = useState('12:00 AM');
   const [draftTimeTo, setDraftTimeTo] = useState('11:59 PM');
   const [customRangeError, setCustomRangeError] = useState<string | undefined>();
-  const customRangeFieldName = useId();
 
   const datePresetLabel = DATE_PRESETS.find(p => p.value === preset)?.label ?? 'All';
 
@@ -126,12 +125,7 @@ export function DateTimeRangePicker({
           </PopoverTrigger>
         )}
         <PopoverContent align="start" className={cn('w-auto p-0')}>
-          <div
-            role="group"
-            aria-label="Custom date range"
-            aria-invalid={customRangeError ? true : undefined}
-            aria-describedby={customRangeError ? fieldErrorId(customRangeFieldName) : undefined}
-          >
+          <Field invalid={Boolean(customRangeError)} role="group" aria-label="Custom date range" className="block">
             <div className={cn('flex')}>
               <div className={cn('border-r border-border')}>
                 <span className={cn('block px-4 pt-3 text-column text-muted-foreground')}>Start</span>
@@ -170,12 +164,8 @@ export function DateTimeRangePicker({
                 />
               </div>
             </div>
-            {customRangeError && (
-              <FieldBlock.ErrorMsg name={customRangeFieldName} className="px-4 pb-1">
-                {customRangeError}
-              </FieldBlock.ErrorMsg>
-            )}
-          </div>
+            <FieldError className="px-4 pb-1">{customRangeError}</FieldError>
+          </Field>
           <div className={cn('flex items-center justify-between px-4 pb-3')}>
             <Button
               variant="ghost"

@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { SearchIcon, XIcon } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
+import { Field, FieldLabel } from '@/ds/components/Field';
 import type { InputProps } from '@/ds/components/Input';
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
 import { useKeydown } from '@/lib/keyboard';
 
 export type ListSearchProps = {
@@ -32,7 +34,6 @@ export const ListSearch = ({
   value: controlledValue,
   shortcutDisabled = false,
 }: ListSearchProps) => {
-  const id = useId();
   const [internalValue, setInternalValue] = useState(controlledValue ?? '');
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -74,20 +75,25 @@ export const ListSearch = ({
     setInternalValue('');
     onSearch('');
     debouncedSearch.cancel();
+    inputRef.current?.focus();
   }, [onSearch, debouncedSearch]);
 
   return (
-    <SearchFieldBlock
-      name={id}
-      label={label}
-      labelIsHidden
-      placeholder={placeholder}
-      value={internalValue}
-      onChange={handleChange}
-      onReset={handleReset}
-      size={size}
-      inputRef={inputRef}
-      className="w-full max-w-120"
-    />
+    <Field className="w-full max-w-120">
+      <FieldLabel className="sr-only">{label}</FieldLabel>
+      <InputGroup size={size ?? undefined}>
+        <InputGroupAddon>
+          <SearchIcon aria-hidden />
+        </InputGroupAddon>
+        <InputGroupInput ref={inputRef} placeholder={placeholder} value={internalValue} onChange={handleChange} />
+        {internalValue ? (
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton aria-label="Clear search" onClick={handleReset}>
+              <XIcon />
+            </InputGroupButton>
+          </InputGroupAddon>
+        ) : null}
+      </InputGroup>
+    </Field>
   );
 };

@@ -3,14 +3,15 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
-import { FieldBlock, TextareaFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import CodeMirror from '@uiw/react-codemirror';
 import { Play } from 'lucide-react';
-import { useState, useId, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import type {
   ProcessorDetail,
   ProcessorPhase,
@@ -71,9 +72,6 @@ export function ProcessorPanel({ processorId }: ProcessorPanelProps) {
 
 function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
   const theme = useCodemirrorTheme();
-  const formId = useId();
-  const phaseId = useId();
-  const agentConfigurationId = useId();
 
   const [selectedPhase, setSelectedPhase] = useState<ProcessorPhase>(processor.phases[0] || 'input');
   const [selectedAgentId, setSelectedAgentId] = useState<string>(processor.configurations[0]?.agentId || '');
@@ -130,54 +128,53 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
 
         <div className="space-y-5 p-5">
           <div className="space-y-2">
-            <FieldBlock name={phaseId} label="Phase">
-              {control => (
-                <Select value={selectedPhase} onValueChange={v => setSelectedPhase(v as ProcessorPhase)}>
-                  <SelectTrigger {...control} className="w-full">
-                    <SelectValue placeholder="Select phase" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {processor.phases.map(phase => (
-                      <SelectItem key={phase} value={phase}>
-                        {phase}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </FieldBlock>
+            <Field>
+              <FieldLabel>Phase</FieldLabel>
+              <Select value={selectedPhase} onValueChange={v => setSelectedPhase(v as ProcessorPhase)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select phase" />
+                </SelectTrigger>
+                <SelectContent>
+                  {processor.phases.map(phase => (
+                    <SelectItem key={phase} value={phase}>
+                      {phase}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
             <Txt variant="meta" tone="muted">
               {PHASE_LABELS[selectedPhase]}
             </Txt>
           </div>
 
           {processor.configurations.length > 1 && (
-            <FieldBlock name={agentConfigurationId} label="Agent Configuration">
-              {control => (
-                <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
-                  <SelectTrigger {...control} className="w-full">
-                    <SelectValue placeholder="Select agent" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {processor.configurations.map(config => (
-                      <SelectItem key={config.agentId} value={config.agentId}>
-                        {config.agentName} ({config.type})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </FieldBlock>
+            <Field>
+              <FieldLabel>Agent Configuration</FieldLabel>
+              <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select agent" />
+                </SelectTrigger>
+                <SelectContent>
+                  {processor.configurations.map(config => (
+                    <SelectItem key={config.agentId} value={config.agentId}>
+                      {config.agentName} ({config.type})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
           )}
 
-          <TextareaFieldBlock
-            name={formId}
-            label="Test Message"
-            value={testMessage}
-            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setTestMessage(e.target.value)}
-            placeholder="Enter a test message..."
-            rows={4}
-          />
+          <Field>
+            <FieldLabel>Test Message</FieldLabel>
+            <Textarea
+              value={testMessage}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setTestMessage(e.target.value)}
+              placeholder="Enter a test message..."
+              rows={4}
+            />
+          </Field>
 
           <Button
             icon={<Play />}

@@ -1,3 +1,4 @@
+import { Input as InputPrimitive } from '@base-ui/react/input';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
@@ -7,6 +8,7 @@ import type { ButtonProps } from '@/ds/components/Button/Button';
 import { ControlSizeContext, controlHeight } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
 import { fieldErrorRimWithin, inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
+import { TextareaControl } from '@/ds/primitives/textarea-control';
 import { cn } from '@/lib/utils';
 
 // Size flows down as `data-size` on the named group root (`group/input-group`), read by the
@@ -153,18 +155,16 @@ const inputGroupControlHeightBySize = cn(
 );
 export type InputGroupInputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> & {
   testId?: string;
-  error?: boolean;
 };
 
 const InputGroupInput = React.forwardRef<HTMLInputElement, InputGroupInputProps>(
-  ({ className, testId, error, type = 'text', ...props }, ref) => {
+  ({ className, testId, type = 'text', ...props }, ref) => {
     return (
-      <input
+      <InputPrimitive
         ref={ref}
         type={type}
         data-slot="input-group-control"
         data-testid={testId}
-        aria-invalid={error}
         className={cn(
           // Height fits the root's content box (see inputGroupControlHeightBySize).
           'min-w-0 flex-1 bg-transparent px-3 text-foreground outline-hidden',
@@ -193,17 +193,15 @@ InputGroupInput.displayName = 'InputGroupInput';
 
 export type InputGroupTextareaProps = React.TextareaHTMLAttributes<HTMLTextAreaElement> & {
   testId?: string;
-  error?: boolean;
 };
 
 const InputGroupTextarea = React.forwardRef<HTMLTextAreaElement, InputGroupTextareaProps>(
-  ({ className, testId, error, ...props }, ref) => {
+  ({ className, testId, ...props }, ref) => {
     return (
-      <textarea
+      <TextareaControl
         ref={ref}
         data-slot="input-group-control"
         data-testid={testId}
-        aria-invalid={error}
         className={cn(
           'min-h-15 min-w-0 flex-1 resize-y bg-transparent px-3 py-2 text-foreground outline-hidden',
           inputGroupControlTextBySize,

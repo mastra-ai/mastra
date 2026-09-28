@@ -2,35 +2,32 @@
 '@mastra/playground-ui': minor
 ---
 
-`FieldBlock` is now a field component. Give it a label, help text and an error message. It renders your control and links it to all three, so any control can be a labelled form field.
+Added `Field` components for building form fields: `Field`, `FieldLabel`, `FieldDescription`, `FieldError`, `FieldContent`, `FieldItem`, `Fieldset` and `FieldsetLegend`, from `@mastra/playground-ui/components/Field`. They are built on Base UI Field and Fieldset. Put a label and any control inside a `Field`, and the label names the control. The description and error are linked to it too, and the control is marked invalid, with no ids to pass around.
 
 ```tsx
 // Before
-<FieldBlock.Layout>
-  <FieldBlock.Column>
-    <FieldBlock.Label name="payload">Payload</FieldBlock.Label>
-    <CodeEditor id="input-payload" aria-describedby={error ? fieldErrorId('payload') : undefined} />
-    {error && <FieldBlock.ErrorMsg name="payload">{error}</FieldBlock.ErrorMsg>}
-  </FieldBlock.Column>
-</FieldBlock.Layout>
+<TextFieldBlock name="email" label="Email" helpText="Used to sign in." errorMsg={errors.email?.message} required />
 
 // After
-<FieldBlock name="payload" label="Payload" errorMsg={error}>
-  {control => <CodeEditor {...control} />}
-</FieldBlock>
+<Field invalid={Boolean(errors.email)}>
+  <FieldLabel required>Email</FieldLabel>
+  <Input {...register('email')} />
+  <FieldDescription>Used to sign in.</FieldDescription>
+  <FieldError>{errors.email?.message}</FieldError>
+</Field>
 ```
 
-`TextFieldBlock`, `TextareaFieldBlock`, `SelectFieldBlock` and `SearchFieldBlock` are built on it, and their props are unchanged.
+This works for `Input`, `Textarea`, `InputGroupInput`, `InputGroupTextarea`, `Select`, `Combobox`, `Checkbox`, `Switch`, `RadioGroup` and `CodeEditor`. To hide a label and keep it for screen readers, use `<FieldLabel className="sr-only">`. To put the label beside the control, use `<Field orientation="horizontal">`. For a radio group, use `<Fieldset render={<RadioGroup />}>` with a `FieldsetLegend`, and wrap each option in a `FieldItem`.
 
-**Fixed**
+**Why**
 
-- `TextFieldBlock`, `TextareaFieldBlock` and `SelectFieldBlock` with `labelIsHidden` now keep their label for screen readers. Before, the label was dropped and the field had no accessible name.
-- With `layout="horizontal"` and a hidden label, the control now spans the full row instead of leaving an empty label column.
-- `SelectFieldBlock` now applies its `error` and `testId` props, which it used to ignore.
-- In the horizontal layout, labels of `SelectFieldBlock` and `SearchFieldBlock` now use the larger label size, matching `TextFieldBlock`. Pass `labelSize="default"` to keep the smaller one.
+Before, there were three ways to build a field: the `*FieldBlock` components, `FieldBlock` parts with hand-built ids, and `Label` with `htmlFor`. Mistakes in the id wiring left fields without an accessible name, such as hidden labels that were dropped and radio labels pointing at a `div`. Now there is one way to build a field, and it links the label, description and error for you.
 
 **Removed**
 
-- `FieldBlock.Layout`, `FieldBlock.Column` and `FieldBlock.Message`: render `<FieldBlock>` instead. `FieldBlock.Label`, `FieldBlock.HelpText`, `FieldBlock.ErrorMsg` and `fieldErrorId` are still available for custom layouts.
-- `FieldBlocksLayout`: use a plain grid such as `<div className="grid gap-6">`.
-- The `id` prop on `TextFieldBlock` and `TextareaFieldBlock`. The control id is always `input-<name>`, so the label always points at it.
+- `TextFieldBlock`, `TextareaFieldBlock`, `SelectFieldBlock`, `SearchFieldBlock`, `FieldBlock`, `FieldBlocksLayout` and `fieldErrorId` (`@mastra/playground-ui/components/FormFieldBlocks`): build fields with the `Field` components. A select without a visible label, such as a toolbar filter, needs no `Field`: name it with `<SelectTrigger aria-label="…">`. For a search box, use `ListSearch`.
+- `Label` (`@mastra/playground-ui/components/Label`): use `FieldLabel` inside a `Field`.
+- The `error` prop on `Input`, `Textarea`, `InputGroupInput` and `InputGroupTextarea`: use `<Field invalid>`, or set `aria-invalid` on a control outside a `Field`.
+- The `error` and `name` props on `Combobox`: wrap it in `<Field invalid>` with a `FieldError`.
+- The `htmlFor` prop on `SettingsRow`: pass the control as a child without an `id`, and the row's label names it.
+- `JSONSchemaForm.FieldName`, `JSONSchemaForm.FieldDescription` and `JSONSchemaForm.FieldType` no longer accept the old `TextFieldBlock` or `SelectFieldBlock` props. They take `label`, `labelIsHidden` and the props of their control.

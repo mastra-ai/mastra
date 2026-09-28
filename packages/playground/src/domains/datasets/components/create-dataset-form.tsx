@@ -1,6 +1,7 @@
 'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
@@ -70,23 +71,25 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <TextFieldBlock
-        name="dataset-name"
-        label="Name"
-        required
-        value={name}
-        onChange={e => setName(e.target.value)}
-        placeholder="Enter dataset name"
-        autoFocus
-      />
+      <Field>
+        <FieldLabel required>Name</FieldLabel>
+        <Input
+          required
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="Enter dataset name"
+          autoFocus
+        />
+      </Field>
 
-      <TextFieldBlock
-        name="dataset-description"
-        label="Description"
-        value={description}
-        onChange={e => setDescription(e.target.value)}
-        placeholder="Enter dataset description (optional)"
-      />
+      <Field>
+        <FieldLabel>Description</FieldLabel>
+        <Input
+          value={description}
+          onChange={e => setDescription(e.target.value)}
+          placeholder="Enter dataset description (optional)"
+        />
+      </Field>
 
       <ScorerSelector
         selectedScorers={scorerIds}

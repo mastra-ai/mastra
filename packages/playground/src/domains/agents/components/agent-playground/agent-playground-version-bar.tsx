@@ -13,8 +13,8 @@ import {
   DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -270,10 +270,9 @@ export function AgentPlaygroundVersionBar({
               <DialogDescription>Add a message to describe the changes in this version.</DialogDescription>
             </DialogHeader>
             <DialogBody className="py-1">
-              <div className="grid gap-2">
-                <Label htmlFor="change-message">Change message</Label>
+              <Field>
+                <FieldLabel>Change message</FieldLabel>
                 <Input
-                  id="change-message"
                   placeholder="Describe what changed..."
                   value={changeMessage}
                   className="focus:ring-white/50"
@@ -286,7 +285,7 @@ export function AgentPlaygroundVersionBar({
                   disabled={isSavingDraft}
                   autoFocus
                 />
-              </div>
+              </Field>
             </DialogBody>
             <DialogFooter className="px-4">
               <Button icon={<X />} variant="default" size="sm" onClick={() => setShowMessageDialog(false)}>

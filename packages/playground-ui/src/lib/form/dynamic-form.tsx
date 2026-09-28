@@ -10,7 +10,7 @@ import { isEmptyZodObject } from './is-empty-zod-object';
 import { CustomZodProvider } from './zod-provider';
 import { getShape } from './zod-provider/compat';
 import type { ButtonProps } from '@/ds/components/Button';
-import { Label } from '@/ds/components/Label';
+import { Txt } from '@/ds/components/Txt';
 
 interface DynamicFormProps {
   schema: any;
@@ -51,7 +51,11 @@ const SubmitButton = ({ children }: { children: ReactNode }) => {
 const uiComponents = { SubmitButton };
 
 const formComponents = {
-  Label: ({ value }: { value: string }) => <Label className="text-body-sm">{value}</Label>,
+  Label: ({ value }: { value: string }) => (
+    <Txt as="span" variant="body-sm">
+      {value}
+    </Txt>
+  ),
 };
 
 export function DynamicForm({

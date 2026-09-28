@@ -14,7 +14,8 @@ import {
 } from './dialog';
 import { Button } from '@/ds/components/Button';
 import type { TextButtonSize } from '@/ds/components/Button';
-import { TextFieldBlock } from '@/ds/components/FormFieldBlocks';
+import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
+import { Input } from '@/ds/components/Input';
 import { Notice } from '@/ds/components/Notice';
 
 function ConfirmationExample({
@@ -225,14 +226,11 @@ function FactoryForm() {
               <DialogDescription>Choose a name your team will recognize.</DialogDescription>
             </DialogHeader>
             <DialogBody>
-              <TextFieldBlock
-                name="dialog-new-factory-name"
-                label="Factory name"
-                required
-                value={name}
-                onChange={event => setName(event.target.value)}
-                errorMsg={missingName ? 'Enter a Factory name' : undefined}
-              />
+              <Field invalid={missingName}>
+                <FieldLabel required>Factory name</FieldLabel>
+                <Input required value={name} onChange={event => setName(event.target.value)} />
+                <FieldError>{missingName ? 'Enter a Factory name' : undefined}</FieldError>
+              </Field>
             </DialogBody>
             <DialogFooter>
               <DialogCancel>Cancel</DialogCancel>

@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Lock, LogIn } from 'lucide-react';
 import { useState } from 'react';
@@ -130,41 +131,47 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
       {hasCredentials && (
         <form onSubmit={handleCredentialsSubmit} className="space-y-4">
           {!isSignIn && (
-            <TextFieldBlock
-              name="name"
-              label="Name"
-              type="text"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="Your name"
+            <Field>
+              <FieldLabel>Name</FieldLabel>
+              <Input
+                name="name"
+                type="text"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="Your name"
+                variant="default"
+                size="lg"
+              />
+            </Field>
+          )}
+
+          <Field>
+            <FieldLabel required>Email</FieldLabel>
+            <Input
+              name="email"
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              required
               variant="default"
               size="lg"
             />
-          )}
+          </Field>
 
-          <TextFieldBlock
-            name="email"
-            label="Email"
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            required
-            variant="default"
-            size="lg"
-          />
-
-          <TextFieldBlock
-            name="password"
-            label="Password"
-            type="password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            placeholder={isSignIn ? 'Enter your password' : 'Create a password'}
-            required
-            variant="default"
-            size="lg"
-          />
+          <Field>
+            <FieldLabel required>Password</FieldLabel>
+            <Input
+              name="password"
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder={isSignIn ? 'Enter your password' : 'Create a password'}
+              required
+              variant="default"
+              size="lg"
+            />
+          </Field>
 
           {error ? (
             <div role="alert">

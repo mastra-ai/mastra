@@ -9,9 +9,11 @@ import {
   MessageSquareTextIcon,
   MoreHorizontalIcon,
   SaveIcon,
+  SearchIcon,
   WrenchIcon,
+  XIcon,
 } from 'lucide-react';
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
 import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
@@ -28,7 +30,8 @@ import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataPanel } from '@/ds/components/DataPanel';
 import type { DataPanelProps } from '@/ds/components/DataPanel';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks';
+import { Field, FieldLabel } from '@/ds/components/Field';
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
 import { Notice } from '@/ds/components/Notice';
 import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
 import { Icon } from '@/ds/icons/Icon';
@@ -252,7 +255,6 @@ export function TraceDataPanelView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSpanId, spans, isLoading]);
 
-  const searchFieldName = useId();
   const { query, setQuery, results, payloadOnlyMatchIds } = useTraceSearch(spans ?? []);
 
   const hierarchicalSpans = useMemo(
@@ -414,17 +416,26 @@ export function TraceDataPanelView({
                 const isTimeline = spanView === 'timeline';
                 const searchHeader = (
                   <DataPanel.Header className="gap-2 border-b border-border">
-                    <SearchFieldBlock
-                      name={searchFieldName}
-                      label="Search spans"
-                      labelIsHidden
-                      placeholder="Search spans..."
-                      value={query}
-                      onChange={e => setQuery(e.target.value)}
-                      onReset={() => setQuery('')}
-                      size="sm"
-                      className="w-full"
-                    />
+                    <Field className="w-full">
+                      <FieldLabel className="sr-only">Search spans</FieldLabel>
+                      <InputGroup size="sm">
+                        <InputGroupAddon>
+                          <SearchIcon />
+                        </InputGroupAddon>
+                        <InputGroupInput
+                          placeholder="Search spans..."
+                          value={query}
+                          onChange={e => setQuery(e.target.value)}
+                        />
+                        {query && (
+                          <InputGroupAddon align="inline-end">
+                            <InputGroupButton aria-label="Clear search" onClick={() => setQuery('')}>
+                              <XIcon />
+                            </InputGroupButton>
+                          </InputGroupAddon>
+                        )}
+                      </InputGroup>
+                    </Field>
                     <ButtonsGroup size="sm" className="shrink-0">
                       <Button
                         variant={isTimeline ? 'default' : 'primary'}

@@ -1,5 +1,6 @@
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { Field, FieldError } from '@mastra/playground-ui/components/Field';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -95,19 +96,20 @@ export function AgentsSection({ control, error, currentAgentId, readOnly = false
                 <CollapsibleContent>
                   <div className="border-t border-border p-3">
                     <div className="flex flex-col gap-2">
-                      <Combobox
-                        multiple
-                        name="agents"
-                        aria-label="Agents"
-                        options={options}
-                        value={selectedIds}
-                        onValueChange={handleValueChange}
-                        placeholder="Select sub-agents..."
-                        searchPlaceholder="Search agents..."
-                        emptyText="No agents available"
-                        disabled={isLoading || readOnly}
-                        error={error}
-                      />
+                      <Field invalid={Boolean(error)}>
+                        <Combobox
+                          multiple
+                          aria-label="Agents"
+                          options={options}
+                          value={selectedIds}
+                          onValueChange={handleValueChange}
+                          placeholder="Select sub-agents..."
+                          searchPlaceholder="Search agents..."
+                          emptyText="No agents available"
+                          disabled={isLoading || readOnly}
+                        />
+                        <FieldError>{error}</FieldError>
+                      </Field>
                       {selectedOptions.length > 0 && (
                         <div className="mt-2 flex flex-col gap-3">
                           {selectedOptions.map(agent => (

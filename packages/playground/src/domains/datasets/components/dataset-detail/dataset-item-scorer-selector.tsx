@@ -1,6 +1,6 @@
 'use client';
 
-import { Label } from '@mastra/playground-ui/components/Label';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { ScorerSelector } from '../experiment-trigger/scorer-selector';
 
@@ -21,15 +21,10 @@ export function DatasetItemScorerSelector({
 }: DatasetItemScorerSelectorProps) {
   return (
     <div className="grid gap-3">
-      <div className="flex items-center gap-3">
-        <Switch
-          id="override-dataset-scorers"
-          checked={overrideEnabled}
-          onCheckedChange={onOverrideEnabledChange}
-          disabled={disabled}
-        />
-        <Label htmlFor="override-dataset-scorers">Override dataset scorers</Label>
-      </div>
+      <Field orientation="horizontal" className="items-center">
+        <Switch checked={overrideEnabled} onCheckedChange={onOverrideEnabledChange} disabled={disabled} />
+        <FieldLabel>Override dataset scorers</FieldLabel>
+      </Field>
       <p className="text-caption text-muted-foreground">
         {overrideEnabled
           ? 'Only selected scorers run for this item. Leave empty to run no scorers.'

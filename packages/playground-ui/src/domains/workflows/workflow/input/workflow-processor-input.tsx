@@ -1,9 +1,10 @@
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import type { WorkflowInputDataProps } from '../workflow-input-data';
 import { getProcessorMessage, updateProcessorMessage, withPhaseRole } from './processor-input';
 import type { ProcessorDraft } from './processor-input';
-import { FieldBlock, fieldErrorId, TextareaFieldBlock } from '@/ds/components/FormFieldBlocks';
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/ds/components/Field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
+import { Textarea } from '@/ds/components/Textarea';
 import { FormSubmitRow } from '@/lib/form/components/form-submit-row';
 
 const PROCESSOR_PHASES = [
@@ -33,8 +34,6 @@ export const WorkflowProcessorInput = ({
   submitButtonVariant,
   submitButtonFullWidth,
 }: WorkflowProcessorInputProps) => {
-  const messageName = useId();
-  const phaseName = useId();
   const [errors, setErrors] = useState<string[]>([]);
 
   const handleSubmit = () => {
@@ -50,61 +49,56 @@ export const WorkflowProcessorInput = ({
 
   return (
     <div className="flex flex-col gap-4">
-      <FieldBlock
-        name={phaseName}
-        label="Phase"
-        helpText={PROCESSOR_PHASES.find(phaseOption => phaseOption.value === value.phase)?.label}
-        describedBy={errors.length > 0 ? fieldErrorId('workflow-processor-input') : undefined}
-      >
-        {control => (
-          <Select
-            value={value.phase}
-            onValueChange={phase => {
-              setErrors([]);
-              onChange(withPhaseRole({ ...value, phase }));
-            }}
-            disabled={isSubmitLoading}
-          >
-            <SelectTrigger {...control} className="w-full" aria-invalid={errors.length > 0 ? true : undefined}>
-              <SelectValue placeholder="Select phase" />
-            </SelectTrigger>
-            <SelectContent>
-              {PROCESSOR_PHASES.map(phaseOption => (
-                <SelectItem key={phaseOption.value} value={phaseOption.value}>
-                  {phaseOption.value}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-      </FieldBlock>
-
-      <TextareaFieldBlock
-        name={messageName}
-        label="Test Message"
-        value={getProcessorMessage(value)}
-        onChange={event => {
-          setErrors([]);
-          onChange(withPhaseRole(updateProcessorMessage(value, event.target.value)));
-        }}
-        placeholder="Enter a test message..."
-        rows={4}
-        disabled={isSubmitLoading}
-        aria-invalid={errors.length > 0 ? true : undefined}
-        aria-describedby={errors.length > 0 ? fieldErrorId('workflow-processor-input') : undefined}
-      />
-
-      {errors.length > 0 && (
-        <FieldBlock.ErrorMsg name="workflow-processor-input">
-          <span className="space-y-1">
-            {errors.map(error => (
-              <span key={error} className="block">
-                {error}
-              </span>
+      <Field invalid={errors.length > 0}>
+        <FieldLabel>Phase</FieldLabel>
+        <Select
+          value={value.phase}
+          onValueChange={phase => {
+            setErrors([]);
+            onChange(withPhaseRole({ ...value, phase }));
+          }}
+          disabled={isSubmitLoading}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select phase" />
+          </SelectTrigger>
+          <SelectContent>
+            {PROCESSOR_PHASES.map(phaseOption => (
+              <SelectItem key={phaseOption.value} value={phaseOption.value}>
+                {phaseOption.value}
+              </SelectItem>
             ))}
-          </span>
-        </FieldBlock.ErrorMsg>
-      )}
+          </SelectContent>
+        </Select>
+        <FieldDescription>
+          {PROCESSOR_PHASES.find(phaseOption => phaseOption.value === value.phase)?.label}
+        </FieldDescription>
+      </Field>
+
+      <Field invalid={errors.length > 0}>
+        <FieldLabel>Test Message</FieldLabel>
+        <Textarea
+          value={getProcessorMessage(value)}
+          onChange={event => {
+            setErrors([]);
+            onChange(withPhaseRole(updateProcessorMessage(value, event.target.value)));
+          }}
+          placeholder="Enter a test message..."
+          rows={4}
+          disabled={isSubmitLoading}
+        />
+        <FieldError>
+          {errors.length > 0 && (
+            <span className="space-y-1">
+              {errors.map(error => (
+                <span key={error} className="block">
+                  {error}
+                </span>
+              ))}
+            </span>
+          )}
+        </FieldError>
+      </Field>
 
       {children}
 
