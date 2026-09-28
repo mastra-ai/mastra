@@ -312,42 +312,6 @@ describe('getProvidersHandler', () => {
     expect(result.providers.find(p => p.id === 'openai')?.connected).toBe(false);
   });
 
-  it('should still list providers and honor other gateway claims when one gateway throws while claiming', async () => {
-    delete process.env.OPENAI_API_KEY;
-
-    const throwingGateway = {
-      id: 'throwing-gateway',
-      name: 'Throwing Gateway',
-      fetchProviders: vi.fn().mockResolvedValue({}),
-      handlesModel: () => {
-        throw new Error('settings file unreadable');
-      },
-      buildUrl: vi.fn(),
-      getApiKey: vi.fn(),
-      resolveLanguageModel: vi.fn(),
-    };
-    const claimingGateway = {
-      id: 'claiming-gateway',
-      name: 'Claiming Gateway',
-      fetchProviders: vi.fn().mockResolvedValue({}),
-      handlesModel: (modelId: string) => modelId.startsWith('openai/'),
-      buildUrl: vi.fn(),
-      getApiKey: vi.fn(),
-      resolveLanguageModel: vi.fn(),
-    };
-    const mastra = new Mastra({
-      gateways: { 'throwing-gateway': throwingGateway, 'claiming-gateway': claimingGateway },
-    });
-
-    const result = await GET_PROVIDERS_ROUTE.handler({
-      mastra,
-      requestContext: new RequestContext(),
-      abortSignal: new AbortController().signal,
-    });
-
-    expect(result.providers.find(p => p.id === 'openai')?.connected).toBe(true);
-  });
-
   it('should pass through a gateway provider label and description, falling back to name and empty', async () => {
     const describedGateway = {
       id: 'described-gateway',

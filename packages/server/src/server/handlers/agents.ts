@@ -1755,44 +1755,30 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
     }
   }
 
-  const claimedProviderIds = listClaimedProviderIds(allProviders, gateways);
   return Object.entries(allProviders).map(([id, provider]) => {
     return {
       id,
       name: provider.name,
-      label: readUndeclaredStringField(provider, 'label') ?? provider.name,
-      description: readUndeclaredStringField(provider, 'description') ?? '',
+      label: ('label' in provider && typeof provider.label === 'string' && provider.label) || provider.name,
+      description:
+        ('description' in provider && typeof provider.description === 'string' && provider.description) || '',
       envVar: provider.apiKeyEnvVar,
-      connected: isProviderConnected(id, allProviders) || claimedProviderIds.has(id),
+      connected: isProviderConnected(id, allProviders) || isClaimedByGateway(id, provider.models, gateways),
       docUrl: provider.docUrl,
       models: [...provider.models],
     };
   });
 }
 
-function listClaimedProviderIds(
-  providers: Record<string, ProviderConfig>,
+function isClaimedByGateway(
+  providerId: string,
+  models: readonly string[],
   gateways: MastraModelGatewayInterface[],
-): Set<string> {
-  const claimedProviderIds = new Set<string>();
-  for (const gateway of gateways) {
-    try {
-      if (gateway.shouldEnable?.() === false) continue;
-      for (const [providerId, provider] of Object.entries(providers)) {
-        const [firstModel] = provider.models;
-        if (!firstModel || claimedProviderIds.has(providerId)) continue;
-        if (gateway.handlesModel?.(`${providerId}/${firstModel}`) === true) claimedProviderIds.add(providerId);
-      }
-    } catch (error) {
-      console.warn(`Failed to check model claims for gateway "${gateway.id}":`, error);
-    }
-  }
-  return claimedProviderIds;
-}
-
-function readUndeclaredStringField(source: object, field: string): string | undefined {
-  const value: unknown = Reflect.get(source, field);
-  return typeof value === 'string' && value !== '' ? value : undefined;
+): boolean {
+  const [firstModel] = models;
+  if (!firstModel) return false;
+  const routerId = `${providerId}/${firstModel}`;
+  return gateways.some(gateway => gateway.shouldEnable?.() !== false && gateway.handlesModel?.(routerId) === true);
 }
 
 export const GET_PROVIDERS_ROUTE = createRoute({
