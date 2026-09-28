@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import { NotificationActivity } from './notification-activity';
 import { SignalActivity } from './signal-activity';
 import { PullRequestIcon } from '@/ds/components/PullRequestIcon';
@@ -96,4 +96,43 @@ export const Transcript: Story = {
       <SignalActivity kind="state" label="factory-phase" mode="delta" message="Stage: building → review" />
     </div>
   ),
+};
+
+const deploymentMessage = 'The production deployment failed. Please check the logs.';
+const buildFailureMessage = `Build failed:\n  packages/core: type error\n  Logs: https://example.com/${'a'.repeat(180)}`;
+
+export const NarrowNotifications: Story = {
+  render: () => (
+    <div className="flex w-80 max-w-full flex-col gap-3">
+      <NotificationActivity
+        label="github / issue-opened"
+        message="Opening a workflow shows a blank page."
+        priority="high"
+        status="delivered"
+        pending="3"
+      />
+      <NotificationActivity
+        label="Deployment"
+        message={deploymentMessage}
+        link={{ href: 'https://github.com/mastra-ai/mastra', label: 'Open on GitHub' }}
+      />
+      <NotificationActivity label="Build" message={buildFailureMessage} defaultOpen />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const notification = canvas.getByRole('group', { name: 'Notification: github / issue-opened' });
+    const message = within(notification).getByText('Opening a workflow shows a blank page.');
+    await expect(message.getBoundingClientRect().width).toBeGreaterThan(100);
+    await expect(notification.scrollWidth).toBeLessThanOrEqual(notification.clientWidth);
+
+    const deployment = within(canvas.getByRole('group', { name: 'Notification: Deployment' }));
+    await userEvent.click(deployment.getByRole('button'));
+    await expect(deployment.getByText(deploymentMessage, { selector: 'p' })).toBeVisible();
+
+    const build = within(canvas.getByRole('group', { name: 'Notification: Build' }));
+    const buildMessage = build.getByText(/Build failed:/, { selector: 'p' });
+    await expect(getComputedStyle(buildMessage).whiteSpace).toBe('pre-wrap');
+    await expect(buildMessage.scrollWidth).toBeLessThanOrEqual(buildMessage.clientWidth);
+  },
 };

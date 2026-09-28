@@ -63,7 +63,11 @@ export function NotificationActivity({
     >
       {(!lineHoldsMessage || link) && (
         <div className="flex flex-col gap-2">
-          {!lineHoldsMessage && <Txt variant="caption">{message}</Txt>}
+          {message && (
+            <Txt variant="caption" className="break-words whitespace-pre-wrap">
+              {message}
+            </Txt>
+          )}
           {link && <NotificationLink link={link} message={message} />}
         </div>
       )}

@@ -1,5 +1,5 @@
 ---
-'@mastra/playground-ui': minor
+'@mastra/playground-ui': major
 ---
 
 Everything an agent does in a chat now renders on one `Activity` line: tool calls, reasoning, signals, notifications, skills and plain "working" rows. A body is optional, and without one the line looks the same with no chevron, so a step that returns nothing reads like one that does.
@@ -77,6 +77,8 @@ import { ReasoningActivity } from '@mastra/playground-ui/components/ai/activity'
 **A line only folds when its body says more than the line**
 
 A short single-line message fits in the preview, so opening a disclosure used to reveal a copy of the line above it. Such a line now has no disclosure and wraps its detail instead of clipping it, so a narrow transcript never hides the end of a sentence it offers no way to open. Because folding is now the exception, a line that folds shows a dimmed chevron at rest instead of only on hover.
+
+Notification badges wrap in narrow transcripts without squeezing the message out. Linked notifications keep their full message in the expanded body. Expanded messages preserve line breaks and wrap long URLs.
 
 The same rule covers a composed `Activity`: pass `foldable={false}` when there is nothing to open, and the line drops its disclosure button and its empty body. A tool call with no arguments, no output and no result is one example, and so is a call whose arguments are an empty object. `hasToolArguments` tells you whether `ToolCallArguments` would render anything, and `awaitsToolApproval` tells you whether `ToolApprovalButtons` would.
 

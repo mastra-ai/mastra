@@ -80,8 +80,6 @@ export function Activity({
   );
 }
 
-// The button overlays the line instead of wrapping it: a line that gains a body keeps its
-// subtree mounted, so its shimmer and arrival fade do not replay.
 export const ActivityTrigger = ({ className, children, ...props }: ComponentProps<'div'>) => {
   const { foldable } = useActivity();
   const lineId = useId();
@@ -136,7 +134,7 @@ export const ActivityIcon = ({ className, ...props }: ComponentProps<'span'>) =>
   return (
     <span
       className={cn(
-        'flex size-4 shrink-0 items-center justify-center [&_svg]:size-3.5 [&_svg]:shrink-0 [&_svg]:stroke-[1.75]',
+        '[&_svg]:stroke-1.75 flex size-4 shrink-0 items-center justify-center [&_svg]:size-3.5 [&_svg]:shrink-0',
         status === 'error' ? 'text-error/80' : 'text-placeholder',
         className,
       )}
@@ -214,7 +212,6 @@ export interface ActivityHeadlineProps extends Omit<ComponentProps<typeof Activi
   icon: ReactNode;
   label: ReactNode;
   detail?: string;
-  /** Replaces label and detail with plain text saying what the line does. */
   description?: string;
   detailFont?: ActivityDetailProps['font'];
   wrapDetail?: boolean;
@@ -233,19 +230,22 @@ export const ActivityHeadline = ({
   ...props
 }: ActivityHeadlineProps) => {
   const { status } = useActivity();
+  const hasBadges = Boolean(badges);
 
   return (
     <ActivityHeader {...props}>
       <ActivityLeading>{leading}</ActivityLeading>
       <ActivityIcon>{icon}</ActivityIcon>
-      <ActivityLabel className={cn(description && 'max-w-none min-w-0 shrink')}>{description || label}</ActivityLabel>
-      {badges}
-      {!description && detail && (
-        <ActivityDetail font={detailFont} wrap={wrapDetail}>
-          {detail}
-        </ActivityDetail>
-      )}
-      <ActivitySpacer />
+      <span className={cn('contents', hasBadges && 'flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1')}>
+        <ActivityLabel className={cn(description && 'max-w-none min-w-0 shrink')}>{description || label}</ActivityLabel>
+        {badges}
+        {!description && detail && (
+          <ActivityDetail font={detailFont} wrap={wrapDetail} className={cn(hasBadges && 'grow basis-40')}>
+            {detail}
+          </ActivityDetail>
+        )}
+      </span>
+      <ActivitySpacer className={cn(hasBadges && 'flex-none')} />
       {status === 'error' && (
         <ActivityTrailing>
           <X size={13} role="img" aria-label="Failed" className="shrink-0 text-error" />
