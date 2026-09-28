@@ -1,16 +1,14 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
-  claimWorkflowExecution,
   createStorageErrorId,
-  ensureDate,
-  matchesExpectedWorkflowStatus,
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
+  matchesExpectedWorkflowStatus,
   WorkflowsStorage,
+  ensureDate,
 } from '@mastra/core/storage';
 import type {
   StorageListWorkflowRunsInput,
-  WorkflowExecutionClaim,
   WorkflowRun,
   WorkflowRuns,
   UpdateWorkflowStateOptions,
@@ -73,15 +71,13 @@ export class WorkflowsElasticSearch extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
-    executionClaim,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<unknown, unknown, unknown, unknown>;
     requestContext: Record<string, unknown>;
-    executionClaim?: WorkflowExecutionClaim;
-  }): Promise<Record<string, StepResult<unknown, unknown, unknown, unknown>> | undefined> {
+  }): Promise<Record<string, StepResult<unknown, unknown, unknown, unknown>>> {
     try {
       const existingRecord = await this.db.get<WorkflowSnapshotRecord>({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
@@ -112,14 +108,8 @@ export class WorkflowsElasticSearch extends WorkflowsStorage {
         } as WorkflowRunState;
       }
 
-      // Best-effort only: this store does not support atomic concurrent updates.
-      if (!claimWorkflowExecution(snapshot, executionClaim)) {
-        return;
-      }
-      if (!executionClaim?.preserveResult) {
-        snapshot.context[stepId] = result;
-        snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
-      }
+      snapshot.context[stepId] = result;
+      snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
 
       await this.persistWorkflowSnapshot({
         namespace: 'workflows',

@@ -89,8 +89,6 @@ export type ProcessorArgs = {
   stepRunEventId?: string;
   /** Stable identity for this logical step execution, propagated by the event that scheduled it. */
   executionClaimKey?: string;
-  /** Processor-local signal that a fenced redelivery may resume a previously claimed running step. */
-  recoverRunningExecutionClaim?: boolean;
 };
 
 export type ParentWorkflow = {
@@ -1506,10 +1504,13 @@ export class WorkflowEventProcessor extends EventProcessor {
         startedAt: Date.now(),
         status: 'running',
       } as any;
+      // `#dispatch` stamps `executionClaimKey` on every `workflow.step.run`, so
+      // the fallback only runs for events built by hand. It must stay derived
+      // from the execution path: keying off the source event alone would make
+      // every entry scheduled by that event (parallel branches, conditional
+      // branches, foreach iterations) share one claim, and the first would win.
       const executionClaimKey =
-        args.executionClaimKey ??
-        args.sourceEventId ??
-        createStepExecutionClaimKey({ executionPath, retryCount, forEachIndex });
+        args.executionClaimKey ?? createStepExecutionClaimKey({ executionPath, retryCount, forEachIndex });
       let claimedResults = await workflowsStore.updateWorkflowResults({
         workflowName: workflowId,
         runId,
@@ -1521,15 +1522,16 @@ export class WorkflowEventProcessor extends EventProcessor {
           preserveResult,
         },
       });
-      if (!claimedResults && args.recoverRunningExecutionClaim) {
-        // The logical claim outlived the worker that recorded it. The step fence
-        // proves this worker exclusively owns recovery, so resume from the
-        // recorded running input instead of acking the redelivery as a
-        // duplicate. The write is guarded by the stored step status — a
-        // compare-and-set instead of a read-then-write — so it cannot resurrect
-        // a step whose previous owner committed a result before losing the
-        // fence. The guard ignores the claim key, so a recovery can be retried
-        // after another crash.
+      if (!claimedResults) {
+        // The logical claim outlived the worker that recorded it: the step is
+        // still marked `running`, which means the previous owner died before
+        // committing anything. Resume from the recorded running input instead
+        // of acking the redelivery as a duplicate — on transports without a
+        // lease that ack would strand the run forever. The write is guarded by
+        // the stored step status — a compare-and-set instead of a
+        // read-then-write — so it cannot resurrect a step whose previous owner
+        // committed a result before losing the fence. The guard ignores the
+        // claim key, so a recovery can be retried after another crash.
         claimedResults = await workflowsStore.updateWorkflowResults({
           workflowName: workflowId,
           runId,
@@ -3241,12 +3243,16 @@ export class WorkflowEventProcessor extends EventProcessor {
    */
   async handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
     if (event.type !== 'workflow.step.run' || !event.id) {
-      return this.#handle(event, false);
+      return this.#handle(event);
     }
 
     const { provider: leaseProvider, isFallback } = this.#getLeaseProvider();
     if (isFallback) {
-      return this.#handle(event, false);
+      // No lease backend: exclusivity cannot be established, so delivery stays
+      // at-least-once. A redelivery whose claim is already recorded still
+      // resumes a step a crashed worker left `running` — see the guarded
+      // recovery in `runLeafStep`.
+      return this.#handle(event);
     }
 
     const executionClaimKey = (event.data as Partial<ProcessorArgs>)?.executionClaimKey ?? event.id;
@@ -3261,7 +3267,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       // Fencing is best-effort; preserve the existing retry behavior if the
       // lease backend itself is unavailable.
       this.mastra.getLogger()?.warn('WorkflowEventProcessor.handle: failed to acquire step fence', { key, error: err });
-      return this.#handle(event, false);
+      return this.#handle(event);
     }
 
     if (!acquired) {
@@ -3310,15 +3316,30 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     let result: { ok: true } | { ok: false; retry: boolean } | undefined;
     try {
-      result = await this.#handle(event, true);
+      result = await this.#handle(event);
       return result;
     } finally {
       clearInterval(renewal);
       // Keep successful fences until their TTL expires so late concurrent
       // duplicates are dropped. Failed handlers release immediately so the
-      // transport retry can acquire the fence.
+      // transport retry can acquire the fence; a lease left behind here would
+      // make that retry look like a duplicate and get acked, stranding the step
+      // for the rest of the TTL, so the release is retried before giving up.
       if (!result?.ok) {
-        await leaseProvider.releaseLease(key, owner).catch(() => {});
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            await leaseProvider.releaseLease(key, owner);
+            break;
+          } catch (err) {
+            if (attempt === 2) {
+              this.mastra
+                .getLogger()
+                ?.warn('WorkflowEventProcessor.handle: failed to release step fence', { key, error: err });
+            } else {
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+          }
+        }
       }
     }
   }
@@ -3335,10 +3356,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     return { provider, isFallback: provider === NoopLeaseProvider };
   }
 
-  async #handle(
-    event: Event,
-    recoverRunningExecutionClaim: boolean,
-  ): Promise<{ ok: true } | { ok: false; retry: boolean }> {
+  async #handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
     // Build a stable retry key once per call. If event.id is missing we fall
     // back to a deterministic composite of type/runId/workflowId/executionPath
     // so the same logical event lands in the same bucket on each redelivery
@@ -3363,7 +3381,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     try {
-      await this.#dispatch(event, recoverRunningExecutionClaim);
+      await this.#dispatch(event);
       this.deliveryAttempts.delete(eventKey);
       return { ok: true };
     } catch (err) {
@@ -3454,13 +3472,12 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
   }
 
-  async #dispatch(event: Event, recoverRunningExecutionClaim: boolean) {
+  async #dispatch(event: Event) {
     const { type, data } = event;
 
     const workflowData = {
-      ...(data as Omit<ProcessorArgs, 'workflow' | 'sourceEventId' | 'recoverRunningExecutionClaim'>),
+      ...(data as Omit<ProcessorArgs, 'workflow' | 'sourceEventId'>),
       sourceEventId: event.id,
-      recoverRunningExecutionClaim,
       executionClaimKey:
         type === 'workflow.step.run'
           ? ((data as Partial<ProcessorArgs>).executionClaimKey ?? event.id)
