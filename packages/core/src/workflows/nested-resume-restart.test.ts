@@ -97,7 +97,10 @@ describe('nested workflow restart after crash during resume (issue #25187)', () 
     },
   );
 
-  it('resumes the nested run when the process died before it claimed the resume', async () => {
+  it.each([
+    ['before it claimed the resume', 'suspended'],
+    ['after it claimed the resume but before the resumed step started', 'running'],
+  ] as const)('resumes the nested run when the process died %s', async (_, nestedStatus) => {
     const storage1 = new MockStore();
     let markRunning!: () => void;
     const running = new Promise<void>(r => (markRunning = r));
@@ -128,7 +131,11 @@ describe('nested workflow restart after crash during resume (issue #25187)', () 
       runId: run1.runId,
       snapshot: JSON.parse(JSON.stringify(parentSnapshot)),
     });
-    await store2.persistWorkflowSnapshot({ workflowName: 'nested', runId: run1.runId, snapshot: suspendedNested });
+    await store2.persistWorkflowSnapshot({
+      workflowName: 'nested',
+      runId: run1.runId,
+      snapshot: { ...suspendedNested, status: nestedStatus },
+    });
 
     const seen: any[] = [];
     const p2 = build(async data => {

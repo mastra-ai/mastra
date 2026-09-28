@@ -3148,7 +3148,25 @@ export class Workflow<
           workflowName: this.id,
           runId: run.runId,
         });
-        const nestedStatus = nestedSnapshot?.status;
+        let nestedStatus = nestedSnapshot?.status;
+        // A crash between the nested run's resume claim and its resumed step starting leaves a
+        // `running` snapshot that still only has suspended steps. Restarting it would drop the
+        // resume data, so hand it back to `suspended` and resume it with the parent's saved data.
+        if (
+          nestedSnapshot &&
+          (nestedStatus === 'running' || nestedStatus === 'waiting') &&
+          Object.keys(nestedSnapshot.activeStepsPath ?? {}).length === 0 &&
+          Object.keys(nestedSnapshot.suspendedPaths ?? {}).length > 0
+        ) {
+          await workflowsStore!.persistWorkflowSnapshot({
+            workflowName: this.id,
+            runId: run.runId,
+            snapshot: { ...nestedSnapshot, status: 'suspended' },
+          });
+          nestedStatus = 'suspended';
+          restartNested = false;
+          resumeNested = true;
+        }
         if (isResume && (nestedStatus === 'running' || nestedStatus === 'waiting')) {
           restartNested = true;
         } else if (restart && (nestedStatus === 'suspended' || nestedStatus === 'paused')) {
