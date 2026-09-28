@@ -106,11 +106,7 @@ describe('evented suspended-record redelivery guard', () => {
       );
       expect(original).toBeTruthy();
 
-      const updateSpy = vi.spyOn(workflowsStore, 'updateWorkflowResults');
       pubsub.redeliver(original!.topic, original!.event);
-      // Wait for the redelivered event to attempt its atomic execution claim,
-      // then let processing settle.
-      await vi.waitFor(() => expect(updateSpy).toHaveBeenCalled());
       await new Promise(resolve => setTimeout(resolve, 50));
 
       // The step did not re-execute and the suspended record survived.
@@ -172,9 +168,7 @@ describe('evented suspended-record redelivery guard', () => {
       expect(original).toBeTruthy();
 
       const workflowsStore = (await storage.getStore('workflows'))!;
-      const updateSpy = vi.spyOn(workflowsStore, 'updateWorkflowResults');
       pubsub.redeliver(original!.topic, original!.event);
-      await vi.waitFor(() => expect(updateSpy).toHaveBeenCalled());
       await new Promise(resolve => setTimeout(resolve, 50));
 
       expect(step1Execute).toHaveBeenCalledTimes(1);
@@ -235,10 +229,7 @@ describe('evented suspended-record redelivery guard', () => {
       );
       expect(step1End).toBeTruthy();
 
-      const workflowsStore = (await storage.getStore('workflows'))!;
-      const updateSpy = vi.spyOn(workflowsStore, 'updateWorkflowResults');
       pubsub.redeliver(step1End!.topic, step1End!.event);
-      await vi.waitFor(() => expect(updateSpy).toHaveBeenCalled());
       await new Promise(resolve => setTimeout(resolve, 50));
 
       expect(step1Execute).toHaveBeenCalledTimes(1);

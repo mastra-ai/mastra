@@ -2,6 +2,8 @@ import EventEmitter from 'node:events';
 import type { ActorSignal } from '../../../auth/ee';
 import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../../error';
 import { EventProcessor } from '../../../events/processor';
+import { NoopLeaseProvider, isLeaseProvider } from '../../../events/pubsub';
+import type { LeaseProvider } from '../../../events/pubsub';
 import type { Event } from '../../../events/types';
 import type { Mastra } from '../../../mastra';
 import type { TracingContext } from '../../../observability';
@@ -80,6 +82,8 @@ export type ProcessorArgs = {
   sourceEventId?: string;
   /** Stable identity for this logical step execution, propagated by the event that scheduled it. */
   executionClaimKey?: string;
+  /** Processor-local signal that a fenced redelivery may resume a previously claimed running step. */
+  recoverRunningExecutionClaim?: boolean;
 };
 
 export type ParentWorkflow = {
@@ -152,6 +156,8 @@ export class WorkflowEventProcessor extends EventProcessor {
   // so 3 transport-level redeliveries is enough headroom for transient
   // failures without keeping a poisoned event in flight for minutes.
   private static readonly MAX_DELIVERY_ATTEMPTS = 3;
+  /** TTL of the lease fencing a running logical `workflow.step.run`; renewed every ttl/3. */
+  static STEP_FENCE_TTL_MS = 30_000;
   // Sentinel value stored in deliveryAttempts to mark an event whose terminal
   // workflow.fail has already been published. Any subsequent redelivery of
   // the same logical event short-circuits as terminal and does NOT re-run
@@ -1484,19 +1490,20 @@ export class WorkflowEventProcessor extends EventProcessor {
       // writes recovery still routes through the old path, whereas the reverse
       // order would point restart at a step whose input was never recorded.
       const preserveResult = isResumedEntry || step.type === 'foreach';
-      const claimedResults = await workflowsStore.updateWorkflowResults({
+      const runningResult = {
+        // Loop re-entries overwrite the previous iteration's completion
+        // fields (like the default engine's stepInfo) while preserving
+        // e.g. metadata.nestedRunId for nested-run recovery.
+        ...omitPriorCompletionFields((stepResults?.[leafId] ?? {}) as Record<string, unknown>),
+        payload: prevResult.status === 'success' ? prevResult.output : undefined,
+        startedAt: Date.now(),
+        status: 'running',
+      } as any;
+      let claimedResults = await workflowsStore.updateWorkflowResults({
         workflowName: workflowId,
         runId,
         stepId: leafId,
-        result: {
-          // Loop re-entries overwrite the previous iteration's completion
-          // fields (like the default engine's stepInfo) while preserving
-          // e.g. metadata.nestedRunId for nested-run recovery.
-          ...omitPriorCompletionFields((stepResults?.[leafId] ?? {}) as Record<string, unknown>),
-          payload: prevResult.status === 'success' ? prevResult.output : undefined,
-          startedAt: Date.now(),
-          status: 'running',
-        } as any,
+        result: runningResult,
         requestContext,
         executionClaim: {
           key:
@@ -1506,9 +1513,23 @@ export class WorkflowEventProcessor extends EventProcessor {
           preserveResult,
         },
       });
-      if (!claimedResults) {
-        return;
+      if (!claimedResults && args.recoverRunningExecutionClaim) {
+        const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId });
+        if (snapshot?.context?.[leafId]?.status === 'running') {
+          // The logical claim survived a worker crash. The step fence proves
+          // this worker exclusively owns recovery, so keep the existing claim
+          // and resume from the recorded running input instead of acking the
+          // redelivery as a duplicate.
+          claimedResults = await workflowsStore.updateWorkflowResults({
+            workflowName: workflowId,
+            runId,
+            stepId: leafId,
+            result: runningResult,
+            requestContext,
+          });
+        }
       }
+      if (!claimedResults) return;
       // `expectedStatus` makes this a compare-and-set: the row is 'running' on
       // the normal path (written by processWorkflowStart for both start and
       // resume), and if a concurrent sibling already committed a suspension
@@ -3192,6 +3213,82 @@ export class WorkflowEventProcessor extends EventProcessor {
    *   should drop the event (or return 4xx for HTTP push).
    */
   async handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
+    if (event.type !== 'workflow.step.run' || !event.id) {
+      return this.#handle(event, false);
+    }
+
+    const { provider: leaseProvider, isFallback } = this.#getLeaseProvider();
+    if (isFallback) {
+      return this.#handle(event, false);
+    }
+
+    const executionClaimKey = (event.data as Partial<ProcessorArgs>)?.executionClaimKey ?? event.id;
+    const key = `workflow-step-run:${event.runId}:${executionClaimKey}`;
+    const owner = globalThis.crypto.randomUUID();
+    const ttl = WorkflowEventProcessor.STEP_FENCE_TTL_MS;
+
+    let acquired: boolean;
+    try {
+      ({ acquired } = await leaseProvider.acquireLease(key, owner, ttl));
+    } catch (err) {
+      // Fencing is best-effort; preserve the existing retry behavior if the
+      // lease backend itself is unavailable.
+      this.mastra.getLogger()?.warn('WorkflowEventProcessor.handle: failed to acquire step fence', { key, error: err });
+      return this.#handle(event, false);
+    }
+
+    if (!acquired) {
+      this.mastra.getLogger()?.debug('WorkflowEventProcessor.handle: dropping duplicate delivery of running step', {
+        runId: event.runId,
+        eventId: event.id,
+        executionClaimKey,
+        deliveryAttempt: event.deliveryAttempt,
+      });
+      return { ok: true };
+    }
+
+    const renewal = setInterval(
+      () => {
+        leaseProvider.renewLease(key, owner, ttl).catch(err => {
+          this.mastra
+            .getLogger()
+            ?.warn('WorkflowEventProcessor.handle: failed to renew step fence', { key, error: err });
+        });
+      },
+      Math.max(1, Math.floor(ttl / 3)),
+    );
+
+    let result: { ok: true } | { ok: false; retry: boolean } | undefined;
+    try {
+      result = await this.#handle(event, true);
+      return result;
+    } finally {
+      clearInterval(renewal);
+      // Keep successful fences until their TTL expires so late concurrent
+      // duplicates are dropped. Failed handlers release immediately so the
+      // transport retry can acquire the fence.
+      if (!result?.ok) {
+        await leaseProvider.releaseLease(key, owner).catch(() => {});
+      }
+    }
+  }
+
+  #getLeaseProvider(): { provider: LeaseProvider; isFallback: boolean } {
+    const pubsub = this.mastra.pubsub as unknown;
+    const unwrap = (pubsub as { getLeaseProvider?: () => LeaseProvider | undefined } | undefined)?.getLeaseProvider;
+    const provider =
+      typeof unwrap === 'function'
+        ? (unwrap.call(pubsub) ?? NoopLeaseProvider)
+        : isLeaseProvider(pubsub)
+          ? pubsub
+          : NoopLeaseProvider;
+    return { provider, isFallback: provider === NoopLeaseProvider };
+  }
+
+  async #handle(
+    event: Event,
+    recoverRunningExecutionClaim: boolean,
+  ): Promise<{ ok: true } | { ok: false; retry: boolean }> {
     // Build a stable retry key once per call. If event.id is missing we fall
     // back to a deterministic composite of type/runId/workflowId/executionPath
     // so the same logical event lands in the same bucket on each redelivery
@@ -3216,7 +3313,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     try {
-      await this.#dispatch(event);
+      await this.#dispatch(event, recoverRunningExecutionClaim);
       this.deliveryAttempts.delete(eventKey);
       return { ok: true };
     } catch (err) {
@@ -3307,12 +3404,13 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
   }
 
-  async #dispatch(event: Event) {
+  async #dispatch(event: Event, recoverRunningExecutionClaim: boolean) {
     const { type, data } = event;
 
     const workflowData = {
-      ...(data as Omit<ProcessorArgs, 'workflow' | 'sourceEventId'>),
+      ...(data as Omit<ProcessorArgs, 'workflow' | 'sourceEventId' | 'recoverRunningExecutionClaim'>),
       sourceEventId: event.id,
+      recoverRunningExecutionClaim,
       executionClaimKey:
         type === 'workflow.step.run'
           ? ((data as Partial<ProcessorArgs>).executionClaimKey ?? event.id)
