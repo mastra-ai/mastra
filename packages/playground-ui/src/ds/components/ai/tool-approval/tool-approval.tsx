@@ -1,6 +1,7 @@
 import { Check, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Button } from '@/ds/components/Button';
+import { cn } from '@/lib/utils';
 
 export interface ToolApprovalActionsProps {
   onApprove: () => void;
@@ -31,10 +32,10 @@ export function ToolApprovalActions({
         aria-label={toolName ? `Approve ${toolName}` : undefined}
         autoFocus={autoFocus}
         disabled={actionsDisabled}
-        className={status === 'approved' ? 'text-success-indicator!' : undefined}
+        className={status === 'approved' ? 'text-success-indicator! [&_svg]:text-success-indicator!' : undefined}
         onClick={onApprove}
       >
-        Approve
+        {status === 'approved' ? 'Approved' : 'Approve'}
       </Button>
       <Button
         type="button"
@@ -42,10 +43,12 @@ export function ToolApprovalActions({
         icon={<X />}
         aria-label={toolName ? `Decline ${toolName}` : undefined}
         disabled={actionsDisabled}
-        className={status === 'declined' ? 'text-destructive-indicator!' : undefined}
+        className={
+          status === 'declined' ? 'text-destructive-indicator! [&_svg]:text-destructive-indicator!' : undefined
+        }
         onClick={onDecline}
       >
-        Decline
+        {status === 'declined' ? 'Declined' : 'Decline'}
       </Button>
     </div>
   );
@@ -56,10 +59,19 @@ export interface ToolApprovalProps extends ToolApprovalActionsProps {
   children?: ReactNode;
 }
 
+const railColor = {
+  approved: 'border-l-success-indicator',
+  declined: 'border-l-destructive-indicator',
+  pending: 'border-l-warning-indicator',
+};
+
 export function ToolApproval({ toolName, children, ...actions }: ToolApprovalProps) {
   return (
     <div
-      className="my-2 min-w-0 rounded-lg border border-l-4 border-border border-l-warning-indicator bg-fill px-4 py-3"
+      className={cn(
+        'my-2 min-w-0 rounded-lg border border-l-4 border-border bg-fill px-4 py-3',
+        railColor[actions.status ?? 'pending'],
+      )}
       role="group"
       aria-label={`Tool approval for ${toolName}`}
     >
