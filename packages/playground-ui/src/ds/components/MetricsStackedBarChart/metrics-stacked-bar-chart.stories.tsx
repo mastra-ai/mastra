@@ -17,9 +17,9 @@ const sum = (key: string) => (points: Record<string, unknown>[]) => ({
 });
 
 const series = [
-  { dataKey: 'tokens', label: 'Tokens', color: 'var(--chart-blue)', aggregate: sum('tokens') },
-  { dataKey: 'storage', label: 'Storage', color: 'var(--chart-green)', aggregate: sum('storage') },
-  { dataKey: 'compute', label: 'Compute', color: 'var(--chart-orange)', aggregate: sum('compute') },
+  { dataKey: 'tokens', label: 'Tokens', color: 'var(--chart-1)', aggregate: sum('tokens') },
+  { dataKey: 'storage', label: 'Storage', color: 'var(--chart-4)', aggregate: sum('storage') },
+  { dataKey: 'compute', label: 'Compute', color: 'var(--chart-6)', aggregate: sum('compute') },
 ] satisfies MetricsLineChartSeries[];
 
 const meta: Meta<typeof MetricsStackedBarChart> = {
@@ -41,7 +41,7 @@ export const MultipleSeries: Story = {};
 
 export const SingleSeries: Story = {
   args: {
-    series: [{ dataKey: 'tokens', label: 'Tokens', color: 'var(--chart-blue)' }],
+    series: [{ dataKey: 'tokens', label: 'Tokens', color: 'var(--chart-1)' }],
     valueFormatter: undefined,
     showLegend: false,
   },
@@ -66,10 +66,10 @@ export const OverIncluded: Story = {
     })),
     series: [
       { dataKey: 'included', label: 'Included', color: 'var(--gray-6)' },
-      { dataKey: 'over', label: 'Over', color: 'var(--badge-red)' },
+      { dataKey: 'over', label: 'Over', color: 'var(--destructive-indicator)' },
     ],
     valueFormatter: value => `${value} GB`,
-    referenceLine: { value: included, label: `${included} GB included`, color: 'var(--badge-red)' },
+    referenceLine: { value: included, label: `${included} GB included`, color: 'var(--destructive-indicator)' },
     showLegend: false,
   },
 };
