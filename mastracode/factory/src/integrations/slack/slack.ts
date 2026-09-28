@@ -814,6 +814,49 @@ export async function upsertThreadWorkItem({
   }
 }
 
+function preDispatchErrorDetails(error: unknown): { message: string; cause?: { message: string } } {
+  const readMessage = (value: unknown) => {
+    const message =
+      typeof value === 'string'
+        ? value
+        : value && typeof value === 'object'
+          ? Reflect.get(value, 'message')
+          : undefined;
+    return typeof message === 'string' && message.length > 0 ? message : undefined;
+  };
+  try {
+    const message = readMessage(error) ?? 'Unknown error';
+    const cause = error && typeof error === 'object' ? readMessage(Reflect.get(error, 'cause')) : undefined;
+    return { message, ...(cause ? { cause: { message: cause } } : {}) };
+  } catch {
+    return { message: 'Error details unavailable' };
+  }
+}
+
+async function reportPreDispatchError(thread: HandlerThread, message: HandlerMessage, error: unknown): Promise<void> {
+  try {
+    if (error instanceof ChannelSessionRejectedError) return;
+  } catch {
+    // A thrown proxy can fail even the refusal check; still report the failure.
+  }
+  const correlation = {
+    platform: thread.adapter.name,
+    threadId: thread.id,
+    messageId: message.id,
+    authorId: message.author.userId,
+  };
+  console.error(
+    `[slack] Pre-dispatch failure ${JSON.stringify({ ...correlation, error: preDispatchErrorDetails(error) })}`,
+  );
+  try {
+    await thread.post('Couldn’t start processing your message. Please try again.');
+  } catch (deliveryError) {
+    console.error(
+      `[slack] Failed to deliver pre-dispatch error reply ${JSON.stringify({ ...correlation, error: preDispatchErrorDetails(deliveryError) })}`,
+    );
+  }
+}
+
 function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
   const { workItems } = deps;
   return async (thread, message, defaultHandler, ctx) => {
@@ -822,13 +865,20 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
     // created (which would otherwise be tenant-less and fail credential
     // resolution). This handler is the only gate — core dispatches whatever
     // reaches it — so every slot that can start a run must call it.
-    const gate = await gateDispatch(thread, message, deps, ctx);
-    if (!gate) return;
+    let gate: Awaited<ReturnType<typeof gateDispatch>>;
+    let isNewSession: boolean;
+    try {
+      gate = await gateDispatch(thread, message, deps, ctx);
+      if (!gate) return;
 
-    // A mention on a not-yet-subscribed thread is a NEW session. The
-    // default handler auto-subscribes, so once subscribed this is a
-    // follow-up mention — don't re-announce.
-    const isNewSession = !(await thread.isSubscribed());
+      // A mention on a not-yet-subscribed thread is a NEW session. The
+      // default handler auto-subscribes, so once subscribed this is a
+      // follow-up mention — don't re-announce.
+      isNewSession = !(await thread.isSubscribed());
+    } catch (error) {
+      await reportPreDispatchError(thread, message, error);
+      return;
+    }
 
     // Run the framework handler first so the internal Mastra thread and
     // controller session are created before we build the deep link.
@@ -978,8 +1028,13 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       // (e.g. the link was removed mid-conversation), and it must still
       // resolve a factory (e.g. the default was cleared or its factory
       // deleted mid-conversation).
-      const gate = await gateDispatch(thread, message, deps, ctx);
-      if (!gate) return;
+      try {
+        const gate = await gateDispatch(thread, message, deps, ctx);
+        if (!gate) return;
+      } catch (error) {
+        await reportPreDispatchError(thread, message, error);
+        return;
+      }
       await defaultHandler(thread, message);
     },
     onMention: newSessionChatHandler,
