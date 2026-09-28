@@ -2,7 +2,7 @@
 '@mastra/playground-ui': minor
 ---
 
-Added chromatic ramps and theme-aware status, product, and visualization colors. Notices now use opaque backgrounds, and badges use a tint of the matching color ramp. Added ProductAvatar and ProductBadge components with product icons and theme-aware inset highlights, product Badge variants and optional SankeyChart color callbacks.
+Added chromatic ramps and theme-aware status, product, and visualization colors. Notices and badges use solid backgrounds. Dark badges sit on new low-chroma `--{hue}-soft-900` and `--{hue}-soft-950` steps (also available as utilities such as `bg-green-soft-900`), and badges and product avatars share a neutral `shadow-inset` edge built from `--inset-highlight` and `--inset-rim`. Added ProductAvatar and ProductBadge components with product icons and theme-aware inset highlights, product Badge variants and optional SankeyChart color callbacks.
 
 Chart roles keep their hue names (`--chart-blue`, `--chart-green`, and so on) and now resolve from the color ramps. Replace `var(--chart-soft-1)` with `var(--chart-sequential-1)`, and `var(--span-type-agent)` with `var(--span-agent)`. See the playground-ui README for the complete mapping.
 

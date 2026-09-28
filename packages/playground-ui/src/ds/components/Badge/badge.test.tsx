@@ -46,9 +46,7 @@ describe('Badge', () => {
       expect(badge.tagName).toBe('SPAN');
       expect(badge.getAttribute('title')).toBe('Publication status');
       expect(badge.parentElement?.textContent).toBe('Status: Published');
-      expect(Array.from(badge.classList)).toEqual(
-        expect.arrayContaining(['rounded-[7px]', 'inset-ring-1', 'inset-shadow-xs']),
-      );
+      expect(Array.from(badge.classList)).toEqual(expect.arrayContaining(['rounded-[7px]', 'shadow-inset']));
     });
   });
 

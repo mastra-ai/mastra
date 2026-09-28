@@ -48,62 +48,62 @@ const badgeToneStyles = {
   },
   success: {
     default: 'bg-badge-green-bg text-badge-green-fg',
-    muted: 'bg-badge-green-bg/60 text-badge-green-fg',
+    muted: 'bg-badge-green-bg-muted text-badge-green-fg',
     indicator: 'bg-success-indicator',
   },
   destructive: {
     default: 'bg-badge-red-bg text-badge-red-fg',
-    muted: 'bg-badge-red-bg/60 text-badge-red-fg',
+    muted: 'bg-badge-red-bg-muted text-badge-red-fg',
     indicator: 'bg-destructive-indicator',
   },
   info: {
     default: 'bg-badge-blue-bg text-badge-blue-fg',
-    muted: 'bg-badge-blue-bg/60 text-badge-blue-fg',
+    muted: 'bg-badge-blue-bg-muted text-badge-blue-fg',
     indicator: 'bg-info-indicator',
   },
   warning: {
     default: 'bg-badge-yellow-bg text-badge-yellow-fg',
-    muted: 'bg-badge-yellow-bg/60 text-badge-yellow-fg',
+    muted: 'bg-badge-yellow-bg-muted text-badge-yellow-fg',
     indicator: 'bg-warning-indicator',
   },
   green: {
     default: 'bg-badge-green-bg text-badge-green-fg',
-    muted: 'bg-badge-green-bg/60 text-badge-green-fg',
+    muted: 'bg-badge-green-bg-muted text-badge-green-fg',
     indicator: 'bg-badge-green',
   },
   red: {
     default: 'bg-badge-red-bg text-badge-red-fg',
-    muted: 'bg-badge-red-bg/60 text-badge-red-fg',
+    muted: 'bg-badge-red-bg-muted text-badge-red-fg',
     indicator: 'bg-badge-red',
   },
   yellow: {
     default: 'bg-badge-yellow-bg text-badge-yellow-fg',
-    muted: 'bg-badge-yellow-bg/60 text-badge-yellow-fg',
+    muted: 'bg-badge-yellow-bg-muted text-badge-yellow-fg',
     indicator: 'bg-badge-yellow',
   },
   blue: {
     default: 'bg-badge-blue-bg text-badge-blue-fg',
-    muted: 'bg-badge-blue-bg/60 text-badge-blue-fg',
+    muted: 'bg-badge-blue-bg-muted text-badge-blue-fg',
     indicator: 'bg-badge-blue',
   },
   purple: {
     default: 'bg-badge-purple-bg text-badge-purple-fg',
-    muted: 'bg-badge-purple-bg/60 text-badge-purple-fg',
+    muted: 'bg-badge-purple-bg-muted text-badge-purple-fg',
     indicator: 'bg-badge-purple',
   },
   orange: {
     default: 'bg-badge-orange-bg text-badge-orange-fg',
-    muted: 'bg-badge-orange-bg/60 text-badge-orange-fg',
+    muted: 'bg-badge-orange-bg-muted text-badge-orange-fg',
     indicator: 'bg-badge-orange',
   },
   cyan: {
     default: 'bg-badge-cyan-bg text-badge-cyan-fg',
-    muted: 'bg-badge-cyan-bg/60 text-badge-cyan-fg',
+    muted: 'bg-badge-cyan-bg-muted text-badge-cyan-fg',
     indicator: 'bg-badge-cyan',
   },
   pink: {
     default: 'bg-badge-pink-bg text-badge-pink-fg',
-    muted: 'bg-badge-pink-bg/60 text-badge-pink-fg',
+    muted: 'bg-badge-pink-bg-muted text-badge-pink-fg',
     indicator: 'bg-badge-pink',
   },
 } satisfies Record<string, BadgeToneStyles>;
@@ -162,8 +162,7 @@ export const Badge = ({
     <span
       className={cn(
         'inline-flex w-fit max-w-full shrink-0 items-center rounded-[7px]',
-        'inset-ring-1 inset-ring-current/5',
-        'inset-shadow-xs inset-shadow-white/5 dark:inset-shadow-[0_3px_10px_-2px_white] dark:inset-shadow-white/7',
+        'shadow-inset',
         badgeToneStyles[variant][emphasis],
         sizeStyles.badge,
         paddingClass,
