@@ -219,6 +219,35 @@ describe('handleGoalCommand', () => {
     );
   });
 
+  it('strips terminal control sequences from the pause cause', async () => {
+    const ctx = {
+      state: {
+        goalManager: {
+          getGoal: vi.fn(() => ({
+            id: 'goal-1',
+            objective: 'finish the task',
+            status: 'paused',
+            turnsUsed: 3,
+            maxTurns: DEFAULT_MAX_TURNS,
+            judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+            startedAt: '2026-05-15T10:00:00.000Z',
+            pausedReason: 'judge failed\x1b[2J\x1b]0;pwned\x07\nboom',
+          })),
+        },
+        ui: { hideOverlay: vi.fn() },
+      },
+      showInfo: vi.fn(),
+      updateStatusLine: vi.fn(),
+    } as any;
+
+    await handleGoalCommand(ctx, ['status']);
+
+    const shown = ctx.showInfo.mock.calls[0][0] as string;
+    expect(shown).toContain('judge failed');
+    expect(shown).toContain('boom');
+    expect(shown).not.toMatch(/[\u0000-\u001f\u007f-\u009f]/);
+  });
+
   it('does not report a cause for a goal that is no longer paused', async () => {
     const ctx = {
       state: {

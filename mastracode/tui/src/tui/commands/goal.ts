@@ -125,8 +125,14 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
   await startGoalWithDefaults(ctx, objective);
 }
 
+// Pause reasons can carry provider or scorer error text; drop control characters so they can't drive the terminal.
+function stripControlChars(text: string): string {
+  return text.replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ').trim();
+}
+
 function formatGoalStatus(goal: GoalState): string {
-  const reason = goal.status === 'paused' && goal.pausedReason ? ` — paused: ${goal.pausedReason}` : '';
+  const reason =
+    goal.status === 'paused' && goal.pausedReason ? ` — paused: ${stripControlChars(goal.pausedReason)}` : '';
   return `Goal (${goal.status}): "${goal.objective}" — ${goal.turnsUsed}/${goal.maxTurns} turns used [judge: ${goal.judgeModelId}]${reason}`;
 }
 
