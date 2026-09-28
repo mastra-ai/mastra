@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { useAgent } from '../hooks/use-agent';
 import { useExecuteAgentTool } from '../hooks/use-execute-agent-tool';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { useLocalRequestContext } from '@/domains/request-context/context/schema-request-context';
+import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 import ToolExecutor from '@/domains/tools/components/ToolExecutor';
 
 export interface AgentToolPanelProps {
@@ -19,7 +19,11 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
   const { canExecute } = usePermissions();
   const canExecuteTool = canExecute('tools');
 
-  const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!, useLocalRequestContext());
+  const {
+    data: agent,
+    isLoading: isAgentLoading,
+    error,
+  } = useAgent(agentId!, useEntityRequestContext('agent', agentId)[0]);
 
   const tool = Object.values(agent?.tools ?? {}).find(tool => tool.id === toolId);
 

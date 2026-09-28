@@ -28,7 +28,7 @@ import { useObservationalMemoryContext } from '@/domains/agents/context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { usePlaygroundModelOptional } from '@/domains/agents/context/playground-model-context';
 import { useMemoryConfig } from '@/domains/memory/hooks';
-import { useLocalRequestContext } from '@/domains/request-context/context/schema-request-context';
+import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 import { getCanSendWhileStreaming } from '@/services/mastra-runtime-state';
 import {
   buildGlobalOmPartsByCycleId,
@@ -132,7 +132,7 @@ export function ChatProvider({
   const queryClient = useQueryClient();
   const baseClient = useMastraClient();
 
-  const { data: memoryConfigData } = useMemoryConfig(agentId, useLocalRequestContext());
+  const { data: memoryConfigData } = useMemoryConfig(agentId, useEntityRequestContext('agent', agentId)[0]);
   const omConfig = memoryConfigData?.config?.observationalMemory as unknown;
   const isOMEnabled =
     omConfig === true ||

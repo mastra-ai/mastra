@@ -17,11 +17,8 @@ import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
 import { navCrumb, workflowCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
-import {
-  SchemaRequestContextProvider,
-  useLocalRequestContext,
-  useSchemaRequestContext,
-} from '@/domains/request-context/context/schema-request-context';
+import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
+import { WorkflowRunActions } from '@/domains/run-options/components/workflow-run-actions';
 import { WorkflowPageTabs, type WorkflowPageTab } from '@/domains/workflows/components/workflow-page-tabs';
 import { PlaygroundWorkflowRunProvider } from '@/domains/workflows/playground-workflow-run-provider';
 
@@ -33,13 +30,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
       title="Unable to display this workflow"
       description="The workflow data could not be displayed. Try again or open another workflow."
     >
-      {workflowId ? (
-        <SchemaRequestContextProvider entityType="workflow" entityId={workflowId}>
-          <WorkflowRoute>{children}</WorkflowRoute>
-        </SchemaRequestContextProvider>
-      ) : (
-        <WorkflowRoute>{children}</WorkflowRoute>
-      )}
+      {workflowId ? <WorkflowRoute>{children}</WorkflowRoute> : <WorkflowRoute>{children}</WorkflowRoute>}
     </ErrorBoundary>
   );
 };
@@ -60,7 +51,7 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
   // Match the child segment rather than searching the pathname, so a workflow whose id is
   // itself "traces" or "schedules" doesn't get the wrong tab highlighted.
   const tabMatch = useMatch('/workflows/:workflowId/:tab/*');
-  const { isLoading: isWorkflowLoading } = useWorkflow(workflowId, useLocalRequestContext());
+  const { isLoading: isWorkflowLoading } = useWorkflow(workflowId, useEntityRequestContext('workflow', workflowId!)[0]);
   const { hasObservability } = useHasObservability();
 
   const activeTab: WorkflowPageTab | 'none' = isWorkflowPageTab(tabMatch?.params.tab) ? tabMatch.params.tab : 'none';
@@ -130,7 +121,8 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
 }
 
 function PlaygroundWorkflowInformation({ workflowId, initialRunId }: { workflowId: string; initialRunId?: string }) {
-  const { schemaValues: requestContext, setSchemaValues } = useSchemaRequestContext();
+  const [requestContext] = useEntityRequestContext('workflow', workflowId);
+  const { data: workflow } = useWorkflow(workflowId, requestContext);
   const { canExecute, canDelete } = usePermissions();
 
   return (
@@ -138,7 +130,13 @@ function PlaygroundWorkflowInformation({ workflowId, initialRunId }: { workflowI
       workflowId={workflowId}
       initialRunId={initialRunId}
       requestContext={requestContext}
-      onRequestContextChange={setSchemaValues}
+      runActionsSlot={ctx => (
+        <WorkflowRunActions
+          workflowId={workflowId}
+          requestContextSchema={workflow?.requestContextSchema ?? undefined}
+          {...ctx}
+        />
+      )}
       canExecute={canExecute('workflows')}
       canDelete={canDelete('workflows')}
     />

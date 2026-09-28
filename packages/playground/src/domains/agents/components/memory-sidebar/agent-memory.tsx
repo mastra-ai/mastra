@@ -17,7 +17,7 @@ import {
   useMemoryWithOMStatus,
   useThread,
 } from '@/domains/memory/hooks';
-import { useLocalRequestContext } from '@/domains/request-context/context/schema-request-context';
+import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 import { MemorySearch } from '@/lib/ai-ui/memory-search';
 
 interface AgentMemoryProps {
@@ -33,11 +33,11 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
   const { paths, navigate } = useLinkComponent();
 
   // Resolve the thread's actual resourceId (may differ from agentId for externally-created threads)
-  const { data: thread } = useThread({ threadId, agentId }, useLocalRequestContext());
+  const { data: thread } = useThread({ threadId, agentId }, useEntityRequestContext('agent', agentId)[0]);
   const effectiveResourceId = thread?.resourceId ?? agentId;
 
   // Get memory config to check if semantic recall is enabled
-  const { data, isLoading: isConfigLoading } = useMemoryConfig(agentId, useLocalRequestContext());
+  const { data, isLoading: isConfigLoading } = useMemoryConfig(agentId, useEntityRequestContext('agent', agentId)[0]);
 
   // Check if semantic recall is enabled
   const config = data?.config;
@@ -58,7 +58,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
       resourceId: effectiveResourceId || '',
       threadId,
     },
-    useLocalRequestContext(),
+    useEntityRequestContext('agent', agentId)[0],
   );
 
   // Get clone thread hook

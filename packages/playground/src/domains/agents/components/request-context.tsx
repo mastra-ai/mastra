@@ -14,14 +14,18 @@ import { toast } from '@mastra/playground-ui/utils/toast';
 import CodeMirror from '@uiw/react-codemirror';
 import { Braces, CopyIcon, X, Check } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { useSchemaRequestContext } from '@/domains/request-context/context/schema-request-context';
+import { z } from 'zod/v4';
 import type { RequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
 import { useRequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
 
 interface RequestContextProps {
+  value: Record<string, any>;
+  onSave: (value: Record<string, any>) => void;
   editorClassName?: string;
   labelTooltip?: string;
 }
+
+const requestContextObjectSchema = z.record(z.string(), z.any());
 
 function getMatchingPresetKey(presets: RequestContextPresets | null, requestContextStr: string) {
   if (!presets) return '__custom__';
@@ -41,8 +45,12 @@ function normalizeJsonString(value: string) {
   }
 }
 
-export const RequestContext = ({ editorClassName = 'h-[400px]', labelTooltip }: RequestContextProps = {}) => {
-  const { schemaValues: requestContext, setSchemaValues: setRequestContext } = useSchemaRequestContext();
+export const RequestContext = ({
+  value: requestContext,
+  onSave,
+  editorClassName = 'h-[400px]',
+  labelTooltip,
+}: RequestContextProps) => {
   const [requestContextValue, setRequestContextValue] = useState<string>('');
   const [savedRequestContextValue, setSavedRequestContextValue] = useState<string>('');
   const theme = useCodemirrorTheme();
@@ -84,14 +92,19 @@ export const RequestContext = ({ editorClassName = 'h-[400px]', labelTooltip }: 
   const handleSaveRequestContext = () => {
     if (!isRequestContextDirty) return;
 
+    let parsedContext: unknown;
     try {
-      const parsedContext = JSON.parse(requestContextValue);
-      setRequestContext(parsedContext);
-      toast.success('Request context saved successfully');
-    } catch (error) {
-      console.error('error', error);
+      parsedContext = JSON.parse(requestContextValue);
+    } catch {
       toast.error('Invalid JSON');
+      return;
     }
+    const result = requestContextObjectSchema.safeParse(parsedContext);
+    if (!result.success) {
+      toast.error('Request context must be a JSON object');
+      return;
+    }
+    onSave(result.data);
   };
 
   const handleRevertRequestContext = () => {

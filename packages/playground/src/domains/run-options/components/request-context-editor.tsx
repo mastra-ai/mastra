@@ -1,5 +1,4 @@
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { RequestContextLabel } from '@mastra/playground-ui/domains/request-context/components/request-context-label';
 import { RequestContextSchemaForm } from '@mastra/playground-ui/domains/request-context/components/request-context-schema-form';
@@ -12,11 +11,12 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { FileJson, FormInput } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
-import { useOptionalAgentEditFormContext } from '../context/agent-edit-form-context';
-import { RequestContext } from './request-context';
-import { useSchemaRequestContext } from '@/domains/request-context/context/schema-request-context';
+import { RequestContext } from '@/domains/agents/components/request-context';
+import { useOptionalAgentEditFormContext } from '@/domains/agents/context/agent-edit-form-context';
 
-interface AgentRequestContextRunOptionsProps {
+interface RequestContextEditorProps {
+  value: Record<string, any>;
+  onSave: (value: Record<string, any>) => void;
   requestContextSchema?: string;
   freeformEditorClassName?: string;
   requestContextTooltip?: string;
@@ -38,11 +38,14 @@ function hasSchemaProperties(schema: Record<string, unknown> | undefined): schem
 function VariablesRequestContextForm({
   labelTooltip,
   variablesSchema,
+  value: schemaValues,
+  onSave,
 }: {
   labelTooltip?: string;
   variablesSchema: Record<string, unknown>;
+  value: Record<string, any>;
+  onSave: (value: Record<string, any>) => void;
 }) {
-  const { setSchemaValues, schemaValues } = useSchemaRequestContext();
   const localFormValuesStr = JSON.stringify(schemaValues);
 
   const zodSchema = useMemo(() => {
@@ -71,12 +74,7 @@ function VariablesRequestContextForm({
         <CopyButton content={localFormValuesStr} />
       </div>
 
-      <DynamicForm
-        schema={zodSchema}
-        onSubmit={setSchemaValues}
-        submitButtonLabel="Save"
-        defaultValues={schemaValues}
-      />
+      <DynamicForm schema={zodSchema} onSubmit={onSave} submitButtonLabel="Save" defaultValues={schemaValues} />
     </div>
   );
 }
@@ -118,19 +116,19 @@ function ModeSwitcher({ mode, onModeChange }: { mode: InputMode; onModeChange: (
   );
 }
 
-export function AgentRequestContextRunOptionsBody({
+export function RequestContextEditor({
+  value,
+  onSave,
   requestContextSchema,
   freeformEditorClassName,
   requestContextTooltip,
-}: AgentRequestContextRunOptionsProps) {
+}: RequestContextEditorProps) {
   const formCtx = useOptionalAgentEditFormContext();
   const variables = formCtx?.form.watch('variables') as Record<string, unknown> | undefined;
   const [mode, setMode] = useState<InputMode>('form');
 
   const hasVariables = hasSchemaProperties(variables);
   const hasSchemaForm = Boolean(requestContextSchema) || hasVariables;
-
-  const { schemaValues, setSchemaValues } = useSchemaRequestContext();
 
   return (
     <div className="space-y-4">
@@ -145,29 +143,34 @@ export function AgentRequestContextRunOptionsBody({
               <RequestContextSchemaForm
                 requestContextSchema={requestContextSchema}
                 labelTooltip={requestContextTooltip}
-                values={schemaValues}
-                onSave={setSchemaValues}
+                values={value}
+                onSave={onSave}
               />
             ) : hasVariables ? (
-              <VariablesRequestContextForm variablesSchema={variables} labelTooltip={requestContextTooltip} />
+              <VariablesRequestContextForm
+                variablesSchema={variables}
+                labelTooltip={requestContextTooltip}
+                value={value}
+                onSave={onSave}
+              />
             ) : null
           ) : (
-            <RequestContext editorClassName={freeformEditorClassName} labelTooltip={requestContextTooltip} />
+            <RequestContext
+              value={value}
+              onSave={onSave}
+              editorClassName={freeformEditorClassName}
+              labelTooltip={requestContextTooltip}
+            />
           )}
         </>
       ) : (
-        <RequestContext editorClassName={freeformEditorClassName} labelTooltip={requestContextTooltip} />
+        <RequestContext
+          value={value}
+          onSave={onSave}
+          editorClassName={freeformEditorClassName}
+          labelTooltip={requestContextTooltip}
+        />
       )}
     </div>
-  );
-}
-
-export function AgentRequestContextRunOptions({ requestContextSchema }: AgentRequestContextRunOptionsProps) {
-  return (
-    <ScrollArea className="max-h-[500px]">
-      <div className="p-4">
-        <AgentRequestContextRunOptionsBody requestContextSchema={requestContextSchema} />
-      </div>
-    </ScrollArea>
   );
 }

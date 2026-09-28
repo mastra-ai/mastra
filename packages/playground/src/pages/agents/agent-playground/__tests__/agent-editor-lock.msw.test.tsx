@@ -11,7 +11,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import AgentPlayground from '..';
 import { AGENT_ID, makeCodeAgent, versionsList } from './fixtures/agent-editor-lock';
-import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -27,11 +26,9 @@ const renderAgentPlayground = () => {
         <MemoryRouter initialEntries={[`/agents/${AGENT_ID}/editor`]}>
           <TooltipProvider>
             <TracingSettingsProvider entityId={AGENT_ID} entityType="agent">
-              <SchemaRequestContextProvider entityType="agent" entityId="agent-1">
-                <Routes>
-                  <Route path="/agents/:agentId/editor" element={<AgentPlayground />} />
-                </Routes>
-              </SchemaRequestContextProvider>
+              <Routes>
+                <Route path="/agents/:agentId/editor" element={<AgentPlayground />} />
+              </Routes>
             </TracingSettingsProvider>
           </TooltipProvider>
         </MemoryRouter>

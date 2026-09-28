@@ -2,7 +2,7 @@
 import type { ReactNode } from 'react';
 import { createContext, useContext } from 'react';
 import { useAgentWorkingMemory } from '@/domains/agents/hooks/use-agent-working-memory';
-import { useLocalRequestContext } from '@/domains/request-context/context/schema-request-context';
+import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 
 type AgentWorkingMemoryContextType = {
   threadExists: boolean;
@@ -32,7 +32,7 @@ export interface AgentWorkingMemoryProviderProps {
 }
 
 export function WorkingMemoryProvider({ agentId, threadId, resourceId, children }: AgentWorkingMemoryProviderProps) {
-  const value = useAgentWorkingMemory(agentId, threadId, resourceId, useLocalRequestContext());
+  const value = useAgentWorkingMemory(agentId, threadId, resourceId, useEntityRequestContext('agent', agentId)[0]);
   return <WorkingMemoryContext.Provider value={value}>{children}</WorkingMemoryContext.Provider>;
 }
 

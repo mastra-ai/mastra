@@ -7,12 +7,9 @@ import { isEmptyZodObject } from '@mastra/playground-ui/lib/form/is-empty-zod-ob
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useState } from 'react';
 import type { ZodType } from 'zod';
-import type { RequestContextEntityType } from '@/domains/request-context';
-import {
-  RequestContextSchemaForm,
-  SchemaRequestContextProvider,
-  useSchemaRequestContext,
-} from '@/domains/request-context';
+import { RequestContextSchemaForm } from '@/domains/request-context';
+import type { RequestContextEntityType } from '@/domains/request-context/hooks/use-entity-request-context';
+import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 import { ToolInformation } from '@/domains/tools/components/ToolInformation';
 
 interface ToolExecutorProps {
@@ -29,24 +26,23 @@ interface ToolExecutorProps {
   requestContextEntityId: string;
 }
 
-/** Inner component that can access SchemaRequestContext */
-const ToolExecutorContent = ({
+const ToolExecutor = ({
   isExecutingTool,
   zodInputSchema,
   handleExecuteTool,
-  result,
   errorString,
   toolDescription,
   toolId,
   toolType,
   requestContextSchema,
-}: Omit<ToolExecutorProps, 'executionResult' | 'requestContextEntityType' | 'requestContextEntityId'> & {
-  result: any;
-}) => {
+  requestContextEntityType,
+  requestContextEntityId,
+  executionResult: result,
+}: ToolExecutorProps) => {
   const hasResult = errorString !== undefined || result !== undefined;
   const code = JSON.stringify(result ?? {}, null, 2);
   const [selectedTab, setSelectedTab] = useState('input-data');
-  const { schemaValues, setSchemaValues } = useSchemaRequestContext();
+  const [schemaValues, setSchemaValues] = useEntityRequestContext(requestContextEntityType, requestContextEntityId);
   const hasInputFields = !isEmptyZodObject(zodInputSchema);
   const hasConfiguration = hasInputFields || Boolean(requestContextSchema);
 
@@ -97,36 +93,6 @@ const ToolExecutorContent = ({
         </div>
       </div>
     </div>
-  );
-};
-
-const ToolExecutor = ({
-  isExecutingTool,
-  zodInputSchema,
-  handleExecuteTool,
-  executionResult: result,
-  errorString,
-  toolDescription,
-  toolId,
-  toolType,
-  requestContextSchema,
-  requestContextEntityType,
-  requestContextEntityId,
-}: ToolExecutorProps) => {
-  return (
-    <SchemaRequestContextProvider entityType={requestContextEntityType} entityId={requestContextEntityId}>
-      <ToolExecutorContent
-        isExecutingTool={isExecutingTool}
-        zodInputSchema={zodInputSchema}
-        handleExecuteTool={handleExecuteTool}
-        result={result}
-        errorString={errorString}
-        toolDescription={toolDescription}
-        toolId={toolId}
-        toolType={toolType}
-        requestContextSchema={requestContextSchema}
-      />
-    </SchemaRequestContextProvider>
   );
 };
 

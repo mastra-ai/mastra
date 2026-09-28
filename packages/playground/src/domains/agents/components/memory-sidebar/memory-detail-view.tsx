@@ -7,7 +7,7 @@ import { getObservationWindowTokens } from './lib/observation-window';
 import type { OmAgentConfig } from './lib/observation-window';
 import { useMemoryTimeline, useObservationalMemoryContext } from '@/domains/agents/context';
 import { useMemoryConfig, useThread } from '@/domains/memory/hooks';
-import { useLocalRequestContext } from '@/domains/request-context/context/schema-request-context';
+import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 
 export interface MemoryDetailViewProps {
   agentId: string;
@@ -32,11 +32,11 @@ export function MemoryDetailView({ agentId, threadId }: MemoryDetailViewProps) {
   const isOMActive = isObservingFromStream || isReflectingFromStream;
 
   // Resolve the thread's actual resourceId (may differ from agentId for externally-created threads)
-  const { data: thread } = useThread({ threadId, agentId }, useLocalRequestContext());
+  const { data: thread } = useThread({ threadId, agentId }, useEntityRequestContext('agent', agentId)[0]);
   const effectiveResourceId = thread?.resourceId ?? agentId;
 
   // Config thresholds, read the same way the OM sidebar section does.
-  const { data: configData } = useMemoryConfig(agentId, useLocalRequestContext());
+  const { data: configData } = useMemoryConfig(agentId, useEntityRequestContext('agent', agentId)[0]);
 
   const {
     data: omData,

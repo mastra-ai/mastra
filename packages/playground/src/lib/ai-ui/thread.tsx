@@ -43,7 +43,7 @@ import { ComposerModelSettings } from '@/domains/agents/components/composer-mode
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
-import { useLocalRequestContext } from '@/domains/request-context';
+import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 import { useVoiceCall, VoiceCallButton, VoiceCallPanel } from '@/domains/voice';
 import type { VoiceCallControls } from '@/domains/voice';
 import { startViewTransition } from '@/lib/routing';
@@ -146,7 +146,7 @@ export const Thread = ({
 
   const messages = useChatMessages();
   const { isRunning } = useChatRunning();
-  const requestContext = useLocalRequestContext();
+  const [requestContext] = useEntityRequestContext('agent', agentId ?? '');
   const { isSpeaking, readAloud, stop: stopSpeaking } = useReadAloud(agentId, requestContext);
 
   const { hasSession, viewMode } = useBrowserSession();
@@ -478,7 +478,7 @@ const AgentComposer = ({
 };
 
 const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript: (text: string) => void }) => {
-  const requestContext = useLocalRequestContext();
+  const [requestContext] = useEntityRequestContext('agent', agentId ?? '');
   const { start, stop, isListening, transcript } = useSpeechRecognition({ agentId, requestContext });
 
   useEffect(() => {

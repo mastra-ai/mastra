@@ -17,10 +17,7 @@ import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
 import { agentCrumb, navCrumb } from '@/domains/navigation/crumbs';
-import {
-  SchemaRequestContextProvider,
-  useLocalRequestContext,
-} from '@/domains/request-context/context/schema-request-context';
+import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 import { RouteSidePanel } from '@/lib/route-side-panel';
 
 const crumbs = [navCrumb('/agents'), agentCrumb];
@@ -42,7 +39,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const showPlayground = isCmsAvailable && isExperimentalFeatures;
   const showObservability = hasObservability && isExperimentalFeatures;
 
-  const { data: agent } = useAgent(agentId!, useLocalRequestContext());
+  const { data: agent } = useAgent(agentId!, useEntityRequestContext('agent', agentId!)[0]);
 
   const defaultProvider = cleanProviderId(agent?.provider ?? '');
   const defaultModel = agent?.modelId ?? '';
@@ -57,41 +54,39 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <TracingSettingsProvider entityId={agentId!} entityType="agent">
-      <SchemaRequestContextProvider entityType="agent" entityId={agentId!}>
-        <PlaygroundModelProvider
-          key={`${agentId}:${defaultProvider}/${defaultModel}`}
-          defaultProvider={defaultProvider}
-          defaultModel={defaultModel}
-        >
-          <KeyboardScope>
-            <AgentShortcuts agentId={agentId!} />
-            <OverviewPanelShortcuts />
+      <PlaygroundModelProvider
+        key={`${agentId}:${defaultProvider}/${defaultModel}`}
+        defaultProvider={defaultProvider}
+        defaultModel={defaultModel}
+      >
+        <KeyboardScope>
+          <AgentShortcuts agentId={agentId!} />
+          <OverviewPanelShortcuts />
 
-            <PageLayout
-              variant="fit"
-              breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-              headerActions={<AgentDetailHeaderActions agentId={agentId!} />}
-            >
-              <h1 className="sr-only">{agentId}</h1>
-              <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
-                <AgentPageTabs
-                  agentId={agentId!}
-                  activeTab={activeTab}
-                  showPlayground={showPlayground}
-                  showObservability={showObservability}
-                />
-                {children}
-              </div>
-            </PageLayout>
+          <PageLayout
+            variant="fit"
+            breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+            headerActions={<AgentDetailHeaderActions agentId={agentId!} />}
+          >
+            <h1 className="sr-only">{agentId}</h1>
+            <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+              <AgentPageTabs
+                agentId={agentId!}
+                activeTab={activeTab}
+                showPlayground={showPlayground}
+                showObservability={showObservability}
+              />
+              {children}
+            </div>
+          </PageLayout>
 
-            <RouteSidePanel owner="agent-detail">
-              <ActivatedSkillsProvider key={agentId}>
-                <AgentOverviewPanel agentId={agentId!} />
-              </ActivatedSkillsProvider>
-            </RouteSidePanel>
-          </KeyboardScope>
-        </PlaygroundModelProvider>
-      </SchemaRequestContextProvider>
+          <RouteSidePanel owner="agent-detail">
+            <ActivatedSkillsProvider key={agentId}>
+              <AgentOverviewPanel agentId={agentId!} />
+            </ActivatedSkillsProvider>
+          </RouteSidePanel>
+        </KeyboardScope>
+      </PlaygroundModelProvider>
     </TracingSettingsProvider>
   );
 };

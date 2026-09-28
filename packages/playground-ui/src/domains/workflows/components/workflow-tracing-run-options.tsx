@@ -7,6 +7,7 @@ import { Button } from '@/ds/components/Button';
 import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/utils/cn';
+import { toast } from '@/utils/toast';
 
 type TracingOptions = NonNullable<ReturnType<typeof useTracingSettings>['settings']>['tracingOptions'];
 
@@ -71,6 +72,7 @@ export const WorkflowTracingRunOptions = ({
       }
     } catch {
       // Invalid JSON is not persisted; the editor keeps the raw text so the user can fix it.
+      toast.error('Invalid tracing options JSON');
       return;
     }
 

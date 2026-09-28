@@ -2,7 +2,7 @@ import type { StorageThreadType } from '@mastra/core/memory';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { MemorySidebar } from '@/domains/agents/components/memory-sidebar/memory-sidebar';
 import { useDeleteThread } from '@/domains/memory/hooks/use-memory';
-import { useLocalRequestContext } from '@/domains/request-context/context/schema-request-context';
+import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 
 export function AgentSidebar({
   agentId,
@@ -15,7 +15,7 @@ export function AgentSidebar({
   threads: StorageThreadType[];
   onHidePanel?: () => void;
 }) {
-  const { mutateAsync } = useDeleteThread(useLocalRequestContext());
+  const { mutateAsync } = useDeleteThread(useEntityRequestContext('agent', agentId)[0]);
   const { paths, navigate } = useLinkComponent();
 
   const handleDelete = async (deleteId: string) => {
