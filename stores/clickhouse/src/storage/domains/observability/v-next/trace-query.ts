@@ -333,6 +333,8 @@ function compileClickHouseTraceScope(
     SELECT * FROM (
       SELECT *
       FROM ${TABLE_TRACE_ROOTS}
+      WHERE startedAt >= ${from}
+        AND startedAt < ${to}${tenant}
       ORDER BY dedupeKey
       LIMIT 1 BY dedupeKey
     )
@@ -342,8 +344,6 @@ function compileClickHouseTraceScope(
     `root_scope AS (
     SELECT *
     FROM current_roots
-    WHERE startedAt >= ${from}
-      AND startedAt < ${to}${tenant}
   )`,
   ];
 

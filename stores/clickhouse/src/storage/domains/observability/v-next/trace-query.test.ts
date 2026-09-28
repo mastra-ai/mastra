@@ -405,13 +405,16 @@ describe('ClickHouse advanced trace query', () => {
       planTraceQuery(request, { scope: { organizationId: 'org-1', resourceId: 'res-1' } }),
     );
 
-    // The related-scores CTE wraps a FINAL subquery, so check the tenant condition once for
-    // root_scope and once for current_scores by position rather than by CTE boundary.
-    const rootStart = compiled.query.indexOf('root_scope AS (');
+    // Tenant conditions are applied to trace roots before dedupe (current_roots) and to
+    // current_scores; check them by position rather than by CTE boundary.
+    const rootStart = compiled.query.indexOf('current_roots AS (');
     const scoresStart = compiled.query.indexOf('current_scores AS (');
     expect(rootStart).toBeGreaterThan(-1);
     expect(scoresStart).toBeGreaterThan(rootStart);
     const rootScope = compiled.query.slice(rootStart, scoresStart);
+    expect(rootScope).toMatch(
+      /AND resourceId = \{trace_query_\d+:String\}\s+ORDER BY dedupeKey\s+LIMIT 1 BY dedupeKey/,
+    );
     const scores = compiled.query.slice(scoresStart);
     for (const cte of [rootScope, scores]) {
       expect(cte).toMatch(/AND organizationId = \{trace_query_\d+:String\}/);
@@ -447,6 +450,14 @@ describe('ClickHouse advanced trace query', () => {
     expect(compiled.query).toContain('LIMIT 1 BY dedupeKey');
     expect(compiled.query).toContain('LIMIT 1 BY traceId');
     expect(compiled.query).not.toMatch(/\bingestionVersion\b|\bisPending\b|\bFINAL\b|\bOPTIMIZE\b/);
+  });
+
+  it('filters trace roots by time window before deduplicating', () => {
+    const compiled = compileClickHouseTraceQuery(plan({}));
+
+    expect(compiled.query).toMatch(
+      /FROM mastra_trace_roots\s+WHERE startedAt >= \{[^}]+\}\s+AND startedAt < \{[^}]+\}\s+ORDER BY dedupeKey\s+LIMIT 1 BY dedupeKey/,
+    );
   });
 
   it('uses trace_roots and emits one reusable reconstruction per referenced collection', () => {
