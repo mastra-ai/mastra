@@ -830,11 +830,13 @@ export class FactoryDecisionDispatcher {
         const moved = await this.#storage.get({ orgId: record.orgId, id: item.id });
         if (!moved) return;
         const messageKey = `${record.idempotencyKey}:message`;
-        await this.#storage.commitRuleEvaluation({
+        // Keyed by revision too: a stale commit is recorded as rejected under
+        // its identity, so the retry needs a fresh one to queue the message.
+        const queued = await this.#storage.commitRuleEvaluation({
           orgId: record.orgId,
           factoryProjectId: record.factoryProjectId,
           workItemId: item.id,
-          ingress: { identity: `decision:${messageKey}`, triggerType: 'transition.message' },
+          ingress: { identity: `decision:${messageKey}@${moved.revision}`, triggerType: 'transition.message' },
           configVersion: this.#transitionService.configVersion,
           expectedRevision: moved.revision,
           actor: record.actor ?? { type: 'system', id: 'factory-rule-dispatcher' },
@@ -852,6 +854,11 @@ export class FactoryDecisionDispatcher {
           causalChain: nextChain,
           now: new Date(),
         });
+        if (queued.status === 'missing') return;
+        const queuedStatus = (queued.result as { status?: string }).status;
+        if (queuedStatus !== 'accepted') {
+          throw new Error(`Factory transition message was not queued: ${queuedStatus ?? 'unknown'}.`);
+        }
         return;
       }
       case 'upsertLinkedWorkItem': {
