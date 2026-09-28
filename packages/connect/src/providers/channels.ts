@@ -9,7 +9,17 @@ import { MastraConnectError } from '../errors.js';
 import type { ChannelProviderRegistration } from './channel-provider.js';
 
 function credentialToken(credential: ConnectionCredential): string {
-  return credential.type === 'oauth2' ? credential.accessToken : credential.apiKey;
+  switch (credential.type) {
+    case 'oauth2':
+      return credential.accessToken;
+    case 'two_step':
+      // TWO_STEP credentials (e.g. Slack app-configuration tokens) carry the
+      // rotating access token under `token`; the vendor owns the refresh
+      // cycle and never exposes the refresh token.
+      return credential.token;
+    default:
+      return credential.apiKey;
+  }
 }
 
 /**
@@ -74,8 +84,10 @@ function stripReservedOptions<T extends Record<string, unknown> | undefined>(int
 
 /**
  * Slack: wraps `@mastra/slack`'s `SlackProvider`. The platform's credential
- * vendor (Nango) owns the Slack App Configuration token refresh cycle, so the
- * provider is constructed with a `tokenResolver` that fetches a fresh access
+ * vendor (Nango) owns the Slack App Configuration token refresh cycle (a
+ * TWO_STEP credential — the platform serves it as `{ type: 'two_step' }`
+ * with the rotating config token under `token`), so the provider is
+ * constructed with a `tokenResolver` that fetches a fresh access
  * token from the platform before each manifest API call. `SlackProvider`
  * never calls `tooling.tokens.rotate` in this mode — rotating the platform's
  * single-use refresh token locally would burn the vendor's stored copy and
@@ -250,13 +262,14 @@ const discordChannel: ChannelProviderRegistration<DiscordProviderOptions> = {
  *   oauth2 credential. The platform's credential vendor (Nango) owns the
  *   refresh cycle; each `getCredential()` call may return a newer token.
  * - **Teams Developer Portal** (`TEAMS_DEV_PORTAL_SCOPE`): resolved from the
- *   connection's `connection_config.devPortalAccessToken` — the secondary
+ *   credential's `secondaryAccessTokens.devPortalAccessToken` — the secondary
  *   token Nango's `microsoft-teams` provider mints when the integration
- *   requests the `dev.teams.microsoft.com/AppDefinitions.ReadWrite` scope.
- *   The resolver fetches the credential first so the vendor's refresh cycle
- *   (which re-mints the secondary token alongside the Graph token) has run
- *   before the context is read. Connections whose integration doesn't
- *   request that scope get an actionable error instead of a Dev Portal 401.
+ *   requests the `dev.teams.microsoft.com/AppDefinitions.ReadWrite` scope,
+ *   served by the platform alongside the primary Graph token on the same
+ *   credentials response (a single `getCredential()` call triggers the
+ *   vendor refresh cycle that re-mints both). Connections whose integration
+ *   doesn't request that scope get an actionable error instead of a Dev
+ *   Portal 401.
  *
  * The manager credential is only used at provisioning time — each provisioned
  * bot authenticates with its own client secret from the provider's install
@@ -281,22 +294,19 @@ const teamsChannel: ChannelProviderRegistration = {
     const tokenResolver = async (scope: string | string[]): Promise<string> => {
       const scopes = Array.isArray(scope) ? scope : [scope];
       const wantsDevPortal = scopes.some(entry => entry.includes('dev.teams.microsoft.com'));
-      // Fetching the credential first triggers the vendor's refresh cycle,
-      // which keeps the secondary Dev Portal token fresh alongside the Graph
-      // token — so the context read below never observes an expired token
-      // the vendor would have refreshed.
+      // A single credentials fetch triggers the vendor's refresh cycle,
+      // which re-mints the secondary Dev Portal token alongside the Graph
+      // token and serves both on the same response.
       const credential = await runtime.getCredential();
       if (!wantsDevPortal) {
         return credentialToken(credential);
       }
-      const config = ((await runtime.getConnectionContext())?.connection_config ?? {}) as Record<string, unknown>;
-      const devPortal = config.devPortalAccessToken as { access_token?: unknown } | undefined;
       const token =
-        typeof devPortal?.access_token === 'string' && devPortal.access_token ? devPortal.access_token : undefined;
+        credential.type === 'oauth2' ? credential.secondaryAccessTokens?.devPortalAccessToken?.accessToken : undefined;
       if (!token) {
         throw new MastraConnectError(
           'no_active_connection',
-          `Teams connection ${runtime.getConnectionId()} has no Dev Portal token in its connection config. ` +
+          `Teams connection ${runtime.getConnectionId()} has no Dev Portal token on its credential. ` +
             `Reconnect with an integration that requests the ${'https://dev.teams.microsoft.com/AppDefinitions.ReadWrite'} scope.`,
         );
       }

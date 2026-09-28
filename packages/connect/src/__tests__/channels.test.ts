@@ -32,8 +32,15 @@ function makeConnection(
 
 type CredentialMap = Record<
   string,
-  | { type: 'oauth2'; accessToken: string; refreshToken?: string; expiresAt?: string | null }
+  | {
+      type: 'oauth2';
+      accessToken: string;
+      refreshToken?: string;
+      expiresAt?: string | null;
+      secondaryAccessTokens?: Record<string, { accessToken: string; expiresAt: string | null }>;
+    }
   | { type: 'api_key'; apiKey: string }
+  | { type: 'two_step'; token: string; expiresAt?: string | null }
 >;
 
 type ContextMap = Record<
@@ -296,6 +303,28 @@ describe('channels()', () => {
     await expect(tokenResolver!()).resolves.toBe('xoxe.xoxp-access-2');
   });
 
+  it('serves the config token from a two_step credential (Nango slack-app-configuration)', async () => {
+    // The platform integration keeps `integrationId: 'slack'` even when it is
+    // backed by the Nango `slack-app-configuration` TWO_STEP provider — the
+    // credential arrives as `{ type: 'two_step', token }`.
+    const credentials: CredentialMap = {
+      c_slack: { type: 'two_step', token: 'xoxe.xoxp-config-1', expiresAt: null },
+    };
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_slack', integrationId: 'slack' })],
+      credentials,
+    });
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(fetchMock));
+    await resolver();
+    const { tokenResolver } = slackConfig();
+    await expect(tokenResolver!()).resolves.toBe('xoxe.xoxp-config-1');
+    // The vendor rotates the config token (12h expiry, single-use refresh
+    // seed) — the resolver picks up the rotated token on the next call.
+    credentials.c_slack = { type: 'two_step', token: 'xoxe.xoxp-config-2', expiresAt: null };
+    await expect(tokenResolver!()).resolves.toBe('xoxe.xoxp-config-2');
+  });
+
   it('rejects tokenResolver calls while the integration has no active connection', async () => {
     const state: PlatformState = { connections: [] };
     const fetchMock = platformFetch(state);
@@ -513,16 +542,17 @@ describe('channels()', () => {
     await expect(tokenResolver!('https://graph.microsoft.com/.default')).resolves.toBe('graph-token-2');
   });
 
-  it('serves Dev Portal tokens from connection_config.devPortalAccessToken, refreshing the credential first', async () => {
+  it('serves Dev Portal tokens from the credential secondaryAccessTokens, without a context read', async () => {
     const state: PlatformState = {
       connections: [makeConnection({ id: 'c_teams', integrationId: 'microsoft-teams' })],
-      credentials: { c_teams: { type: 'oauth2', accessToken: 'graph-token-1', expiresAt: null } },
-      contexts: {
+      credentials: {
         c_teams: {
-          connection_config: {
-            devPortalAccessToken: { access_token: 'tdp-token-1', expires_at: '2027-01-01T00:00:00Z' },
+          type: 'oauth2',
+          accessToken: 'graph-token-1',
+          expiresAt: null,
+          secondaryAccessTokens: {
+            devPortalAccessToken: { accessToken: 'tdp-token-1', expiresAt: '2027-01-01T00:00:00Z' },
           },
-          metadata: null,
         },
       },
     };
@@ -535,21 +565,34 @@ describe('channels()', () => {
     await expect(tokenResolver!(['https://dev.teams.microsoft.com/AppDefinitions.ReadWrite'])).resolves.toBe(
       'tdp-token-1',
     );
-    // The credential endpoint was hit before the context read: fetching the
-    // credential triggers the vendor's refresh cycle, which re-mints the
-    // secondary Dev Portal token alongside the Graph token.
+    // A single credentials fetch serves both tokens: the vendor's refresh
+    // cycle re-mints the secondary Dev Portal token alongside the Graph
+    // token on the same response — no context endpoint round-trip.
     const paths = fetchMock.mock.calls.map(call => new URL(String(call[0])).pathname);
-    const credentialIndex = paths.findIndex(path => path.endsWith('/c_teams/credentials'));
-    const contextIndex = paths.findIndex(path => path.endsWith('/c_teams/context'));
-    expect(credentialIndex).toBeGreaterThanOrEqual(0);
-    expect(contextIndex).toBeGreaterThan(credentialIndex);
+    expect(paths.some(path => path.endsWith('/c_teams/credentials'))).toBe(true);
+    expect(paths.some(path => path.endsWith('/c_teams/context'))).toBe(false);
+
+    // The vendor rotates the secondary token: the resolver re-fetches the
+    // credential per call and picks up the new value.
+    state.credentials = {
+      c_teams: {
+        type: 'oauth2',
+        accessToken: 'graph-token-2',
+        expiresAt: null,
+        secondaryAccessTokens: {
+          devPortalAccessToken: { accessToken: 'tdp-token-2', expiresAt: null },
+        },
+      },
+    };
+    await expect(tokenResolver!('https://dev.teams.microsoft.com/AppDefinitions.ReadWrite')).resolves.toBe(
+      'tdp-token-2',
+    );
   });
 
-  it('fails actionably when the Teams connection has no Dev Portal token', async () => {
+  it('fails actionably when the Teams credential carries no Dev Portal token', async () => {
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_teams', integrationId: 'microsoft-teams' })],
       credentials: { c_teams: { type: 'oauth2', accessToken: 'graph-token-1', expiresAt: null } },
-      contexts: { c_teams: { connection_config: null, metadata: null } },
     });
     const channelsFn = await importChannels();
     const resolver = await channelsFn(options(fetchMock));
