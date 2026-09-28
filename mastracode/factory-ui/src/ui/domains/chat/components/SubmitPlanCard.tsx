@@ -106,7 +106,11 @@ export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false
             <PlanContent>{plan}</PlanContent>
           )}
           {inline.feedback ? (
-            <div role="note" aria-label="Plan feedback" className="mt-4 border-l-2 border-green-600 dark:border-green-400 pl-3">
+            <div
+              role="note"
+              aria-label="Plan feedback"
+              className="mt-4 border-l-2 border-green-600 pl-3 dark:border-green-400"
+            >
               <p className="text-meta text-muted-foreground mb-1">Feedback</p>
               <p className="text-caption text-foreground whitespace-pre-wrap">{inline.feedback}</p>
             </div>

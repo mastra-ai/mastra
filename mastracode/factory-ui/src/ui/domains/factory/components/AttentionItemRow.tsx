@@ -37,9 +37,19 @@ const KIND = {
     tone: 'text-destructive-indicator',
     badge: 'destructive',
   },
-  'automation-proposed': { glyph: Sparkles, label: 'suggested', tone: 'text-yellow-700 dark:text-yellow-400', badge: 'orange' },
+  'automation-proposed': {
+    glyph: Sparkles,
+    label: 'suggested',
+    tone: 'text-yellow-700 dark:text-yellow-400',
+    badge: 'orange',
+  },
   'supervisor-finding': { glyph: Brain, label: 'finding', tone: 'text-green-700 dark:text-green-400', badge: 'blue' },
-  'agent-waiting': { glyph: Hourglass, label: 'waiting', tone: 'text-yellow-700 dark:text-yellow-400', badge: 'orange' },
+  'agent-waiting': {
+    glyph: Hourglass,
+    label: 'waiting',
+    tone: 'text-yellow-700 dark:text-yellow-400',
+    badge: 'orange',
+  },
 } satisfies Record<
   FactoryAttentionItem['kind'],
   { glyph: typeof MessageSquare; label: string; tone: string; badge: BadgeVariant }

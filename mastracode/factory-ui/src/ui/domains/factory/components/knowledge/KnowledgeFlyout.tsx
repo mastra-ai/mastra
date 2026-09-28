@@ -137,7 +137,11 @@ function RecordCard({
         <div className="text-foreground text-xs leading-relaxed">
           <RecordText text={record.text} onNodeRef={onNodeRef} />
           {record.pinned ? (
-            <Pin size={11} className="ml-1 inline text-yellow-700 dark:text-yellow-400" aria-label="Pinned knowledge record" />
+            <Pin
+              size={11}
+              className="ml-1 inline text-yellow-700 dark:text-yellow-400"
+              aria-label="Pinned knowledge record"
+            />
           ) : null}
         </div>
         <div className="text-muted-foreground mt-1.5 flex items-center gap-2 text-[10px]">
@@ -154,7 +158,7 @@ function RecordCard({
               {record.sourceThreadId ? (
                 <button
                   type="button"
-                  className="flex items-center gap-1 text-purple-700 dark:text-purple-300 hover:underline"
+                  className="flex items-center gap-1 text-purple-700 hover:underline dark:text-purple-300"
                   onClick={() => onOpenThread?.(record.sourceThreadId)}
                 >
                   <span className="max-w-40 truncate">{record.sourceThreadId}</span>
@@ -311,7 +315,11 @@ export function KnowledgeFlyout({
                     nodeQuery.data.records.map(record => (
                       <div
                         key={record.id}
-                        className={record.id === focusRecordId ? 'rounded-lg ring-2 ring-purple-600 dark:ring-purple-400' : undefined}
+                        className={
+                          record.id === focusRecordId
+                            ? 'rounded-lg ring-2 ring-purple-600 dark:ring-purple-400'
+                            : undefined
+                        }
                       >
                         <RecordCard
                           record={record}

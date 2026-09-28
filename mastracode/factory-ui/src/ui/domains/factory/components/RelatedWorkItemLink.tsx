@@ -41,7 +41,14 @@ export function RelatedWorkItemLink({
         <PullRequestStatusIcon status={pullRequestStatus} size={12} decorative />
       )}
       <span className="truncate">{reference ?? item.title}</span>
-      {live && <MessageSquare data-live-session-indicator size={11} className="shrink-0 text-green-700 dark:text-green-400" aria-hidden />}
+      {live && (
+        <MessageSquare
+          data-live-session-indicator
+          size={11}
+          className="shrink-0 text-green-700 dark:text-green-400"
+          aria-hidden
+        />
+      )}
     </>
   );
   let tooltip = reference === undefined ? relation : `${relation} · ${item.title}`;

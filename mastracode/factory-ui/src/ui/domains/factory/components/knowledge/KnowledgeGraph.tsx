@@ -655,7 +655,9 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
       >
         <div className="text-foreground mb-1 flex items-center gap-1.5">
           Record
-          {record.pinned ? <Pin size={11} className="text-yellow-700 dark:text-yellow-400" aria-label="Pinned" /> : null}
+          {record.pinned ? (
+            <Pin size={11} className="text-yellow-700 dark:text-yellow-400" aria-label="Pinned" />
+          ) : null}
         </div>
         <div className="text-muted-foreground leading-relaxed">{record.text}</div>
       </div>

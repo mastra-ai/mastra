@@ -159,7 +159,11 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
           <Txt as="p" variant="body" className="text-muted-foreground">
             This session's knowledge is no longer available.
           </Txt>
-          <button type="button" className="text-sm text-purple-700 dark:text-purple-300 hover:underline" onClick={backToProject}>
+          <button
+            type="button"
+            className="text-sm text-purple-700 hover:underline dark:text-purple-300"
+            onClick={backToProject}
+          >
             Back to the project view
           </button>
         </div>

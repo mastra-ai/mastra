@@ -21,9 +21,24 @@ const AUDIT_CATEGORY_STYLES: Record<AuditNamespace, AuditCategoryStyle> = {
     dotClass: 'bg-blue-600 dark:bg-blue-400',
     strokeClass: 'stroke-blue-600 dark:stroke-blue-400',
   },
-  run: { tone: 'green', label: 'Runs', dotClass: 'bg-green-600 dark:bg-green-400', strokeClass: 'stroke-green-600 dark:stroke-green-400' },
-  git: { tone: 'orange', label: 'Git', dotClass: 'bg-orange-600 dark:bg-orange-300', strokeClass: 'stroke-orange-600 dark:stroke-orange-300' },
-  agent: { tone: 'blue', label: 'Agent', dotClass: 'bg-yellow-600 dark:bg-yellow-400', strokeClass: 'stroke-yellow-600 dark:stroke-yellow-400' },
+  run: {
+    tone: 'green',
+    label: 'Runs',
+    dotClass: 'bg-green-600 dark:bg-green-400',
+    strokeClass: 'stroke-green-600 dark:stroke-green-400',
+  },
+  git: {
+    tone: 'orange',
+    label: 'Git',
+    dotClass: 'bg-orange-600 dark:bg-orange-300',
+    strokeClass: 'stroke-orange-600 dark:stroke-orange-300',
+  },
+  agent: {
+    tone: 'blue',
+    label: 'Agent',
+    dotClass: 'bg-yellow-600 dark:bg-yellow-400',
+    strokeClass: 'stroke-yellow-600 dark:stroke-yellow-400',
+  },
   intake: { tone: 'cyan', label: 'Intake', dotClass: 'bg-placeholder', strokeClass: 'stroke-placeholder' },
 };
 
