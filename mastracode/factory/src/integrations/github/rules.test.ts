@@ -2254,23 +2254,16 @@ describe('GithubRules', () => {
 
     await service.ingest(pullRequest('opened', 'delivery-branch-link'));
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
-    expect(decisions).toHaveLength(2);
-    expect(decisions).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          workItemId: work.item.id,
-          decision: expect.objectContaining({
-            type: 'upsertLinkedWorkItem',
-            source: 'github-pr',
-            metadata: expect.objectContaining({ headBranch: 'feature' }),
-          }),
+    expect(decisions).toEqual([
+      expect.objectContaining({
+        workItemId: work.item.id,
+        decision: expect.objectContaining({
+          type: 'upsertLinkedWorkItem',
+          source: 'github-pr',
+          metadata: expect.objectContaining({ headBranch: 'feature' }),
         }),
-        expect.objectContaining({
-          workItemId: work.item.id,
-          decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'review' }),
-        }),
-      ]),
-    );
+      }),
+    ]);
   });
 
   it('answers a pull request opening for the pull request card and the item it was authored from', async () => {

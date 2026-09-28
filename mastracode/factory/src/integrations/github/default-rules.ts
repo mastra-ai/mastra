@@ -148,8 +148,11 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
   // — the evaluation carrying `pullRequestIntake` — files the pull request's own
   // Review card. The authoring Work item's evaluation hands a finished build to
   // Review, so the move no longer depends on the agent calling the tool itself.
+  // The authoring item can be matched by head branch alone, so a fork PR from
+  // an untrusted author must not move it.
   if (context.item && context.pullRequestIntake !== true) {
     if (context.board !== 'work' || context.item.stages.length !== 1 || context.item.stages[0] !== 'execute') return;
+    if (!trustedGithubActor(context) && !context.pullRequest.factoryAuthored) return;
     return {
       type: 'transition',
       idempotencyKey: `${context.ingress.id}:work-pull-request-opened`,

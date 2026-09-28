@@ -1124,6 +1124,35 @@ describe('built-in board and integration handlers', () => {
     },
   );
 
+  it('moves an authoring Work item to Review only for a trusted or Factory-authored pull request', async () => {
+    const context = githubContext('pullRequestOpened');
+    const authored = {
+      ...context,
+      actor: { type: 'github' as const, login: 'stranger', trusted: false, factoryAuthored: false },
+      item: {
+        id: 'item-1',
+        source: 'github-issue' as const,
+        sourceKey: 'github-issue:42',
+        parentWorkItemId: null,
+        title: 'Issue 42',
+        url: 'https://github.test/acme/repo/issues/42',
+        stages: ['execute'],
+        acceptedAt: null,
+        metadata: {},
+      },
+      board: 'work',
+      itemRevision: 1,
+    };
+
+    expect(await defaultGithubRules.pullRequestOpened?.(authored)).toBeUndefined();
+    expect(
+      await defaultGithubRules.pullRequestOpened?.({
+        ...authored,
+        pullRequest: { ...context.pullRequest!, factoryAuthored: true },
+      }),
+    ).toMatchObject({ type: 'transition', board: 'work', stage: 'review' });
+  });
+
   it('records PR branches, status, assignments, and review requests on Review intake', async () => {
     const context = githubContext('pullRequestOpened');
     context.pullRequest = { ...context.pullRequest!, draft: true };
