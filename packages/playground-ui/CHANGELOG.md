@@ -5095,8 +5095,8 @@
   import { Badge } from '@mastra/playground-ui/components/Badge';
 
   <div className="flex items-center gap-1">
-    <Badge variant="purple" emphasis="muted">Baseline</Badge>
-    <Badge variant="blue" emphasis="muted">Candidate</Badge>
+    <Badge variant="purple" emphasis="subtle">Baseline</Badge>
+    <Badge variant="blue" emphasis="subtle">Candidate</Badge>
   </div>
   <Badge variant="green" indicator="dot">Connected</Badge>
   ```
@@ -5316,8 +5316,8 @@
   import { Badge } from '@mastra/playground-ui/components/Badge';
 
   <div className="flex items-center gap-1">
-    <Badge variant="purple" emphasis="muted">Baseline</Badge>
-    <Badge variant="blue" emphasis="muted">Candidate</Badge>
+    <Badge variant="purple" emphasis="subtle">Baseline</Badge>
+    <Badge variant="blue" emphasis="subtle">Candidate</Badge>
   </div>
   <Badge variant="green" indicator="dot">Connected</Badge>
   ```

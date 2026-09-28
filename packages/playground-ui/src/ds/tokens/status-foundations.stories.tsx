@@ -123,7 +123,7 @@ export const StatusFoundations: Story = {
             <Specimen name="--badge-neutral-fg" note="Ink only — the fill is --fill, no hue to pair with">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge>Draft</Badge>
-                <Badge emphasis="muted">Draft</Badge>
+                <Badge emphasis="subtle">Draft</Badge>
                 <Badge indicator="dot">Draft</Badge>
               </div>
             </Specimen>
@@ -138,7 +138,7 @@ export const StatusFoundations: Story = {
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant={hue}>{hue}</Badge>
-                  <Badge variant={hue} emphasis="muted">
+                  <Badge variant={hue} emphasis="subtle">
                     {hue}
                   </Badge>
                   <Badge variant={hue} indicator="dot">

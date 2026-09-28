@@ -136,7 +136,7 @@ export function AttentionItemRow({
         <span className="text-column text-foreground min-w-0 flex-1 truncate">{item.title}</span>
         <Badge
           variant={KIND[item.kind].badge}
-          emphasis={item.read ? 'muted' : 'default'}
+          emphasis={item.read ? 'subtle' : 'strong'}
           size="xs"
           icon={createElement(KIND[item.kind].glyph)}
           className={MASKED_BY_ACTIONS}

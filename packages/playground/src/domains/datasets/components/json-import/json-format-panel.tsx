@@ -42,7 +42,7 @@ export function JSONFormatPanel() {
                   required
                 </Badge>
               ) : (
-                <Badge variant="neutral" emphasis="muted" size="xs">
+                <Badge variant="neutral" emphasis="subtle" size="xs">
                   optional
                 </Badge>
               )}

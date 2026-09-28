@@ -69,7 +69,7 @@ export const StyleComparison: Story = {
           <h2 className="text-subheading text-foreground">{group.label}</h2>
           <div className={cn('flex flex-wrap items-center gap-2', group.surfaceClassName)}>
             {group.badges.map(badge => (
-              <Badge key={badge.children} {...badge} emphasis="muted" />
+              <Badge key={badge.children} {...badge} emphasis="subtle" />
             ))}
           </div>
         </section>
@@ -121,18 +121,18 @@ export const Emphasis: Story = {
     <div className="grid gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <Badge>Neutral</Badge>
-        <Badge emphasis="muted">Neutral muted</Badge>
+        <Badge emphasis="subtle">Neutral subtle</Badge>
         <Badge variant="success">Success</Badge>
-        <Badge variant="success" emphasis="muted">
-          Success muted
+        <Badge variant="success" emphasis="subtle">
+          Success subtle
         </Badge>
         <Badge variant="purple">Purple</Badge>
-        <Badge variant="purple" emphasis="muted">
-          Purple muted
+        <Badge variant="purple" emphasis="subtle">
+          Purple subtle
         </Badge>
         <Badge variant="cyan">Cyan</Badge>
-        <Badge variant="cyan" emphasis="muted">
-          Cyan muted
+        <Badge variant="cyan" emphasis="subtle">
+          Cyan subtle
         </Badge>
       </div>
     </div>

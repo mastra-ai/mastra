@@ -21,7 +21,7 @@ export function WorkflowRunStatusBadge({ status }: { status?: WorkflowRunStatus 
     <Badge
       size="md"
       variant={status === 'paused' ? 'warning' : 'neutral'}
-      emphasis="muted"
+      emphasis="subtle"
       icon={status && <WorkflowRunStatusIcon status={status} />}
     >
       {formatRunStatus(status)}
@@ -77,7 +77,7 @@ export function RunWorkflowHeader({
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <WorkflowRunStatusBadge status={status} />
           {resourceId && (
-            <Badge size="md" variant="neutral" emphasis="muted" className="min-w-0">
+            <Badge size="md" variant="neutral" emphasis="subtle" className="min-w-0">
               <span className="min-w-0 truncate" title={`Resource ${resourceId}`}>
                 {resourceId}
               </span>

@@ -76,7 +76,7 @@ export function WorkflowSuspendedSteps({
             </Icon>
             Step suspended
           </Txt>
-          <Badge variant="orange" emphasis="muted">
+          <Badge variant="orange" emphasis="subtle">
             Needs input
           </Badge>
         </div>

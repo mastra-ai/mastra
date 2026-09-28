@@ -237,11 +237,11 @@ function DecisionRow({
       <Txt as="span" variant="column" className="text-foreground shrink-0 truncate">
         {decision.type}
       </Txt>
-      <Badge size="xs" variant={tone} emphasis="muted" {...(live ? { indicator: 'pulse' as const } : {})}>
+      <Badge size="xs" variant={tone} emphasis="subtle" {...(live ? { indicator: 'pulse' as const } : {})}>
         {label}
       </Badge>
       {decision.attempts > 1 ? (
-        <Badge size="xs" variant="neutral" emphasis="muted" icon={<Repeat aria-hidden />} title="Attempts">
+        <Badge size="xs" variant="neutral" emphasis="subtle" icon={<Repeat aria-hidden />} title="Attempts">
           {decision.attempts}
         </Badge>
       ) : null}

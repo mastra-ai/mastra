@@ -2,7 +2,7 @@
 '@mastra/playground-ui': minor
 ---
 
-Added chromatic ramps and theme-aware status, product, and visualization colors. Notices and badges use solid backgrounds. Dark badges sit on new low-chroma `--{hue}-soft-900` and `--{hue}-soft-950` steps (also available as utilities such as `bg-green-soft-900`), and badges and product avatars share a neutral `shadow-inset` edge built from `--inset-highlight` and `--inset-rim`. Product avatars and badges use the same soft steps in dark mode. Component tints no longer use opacity or `color-mix()`: they point at status, badge, or ramp tokens, and destructive buttons step through `--red-*` for hover, pressed, and disabled states, with a new `--destructive-subtle-active` token for pressed ghost states. Added ProductAvatar and ProductBadge components with product icons and theme-aware inset highlights, product Badge variants and optional SankeyChart color callbacks.
+Added chromatic ramps and theme-aware status, product, and visualization colors. Notices and badges use solid backgrounds. Dark badges and product avatars sit on new low-chroma `--{hue}-soft-800`, `--{hue}-soft-900`, and `--{hue}-soft-950` steps (also available as utilities such as `bg-green-soft-900`), and badges and product avatars share a neutral `shadow-inset` edge built from `--inset-highlight` and `--inset-rim`. Product avatars and badges use the same soft steps in dark mode. Component tints no longer use opacity or `color-mix()`: they point at status, badge, or ramp tokens, and destructive buttons step through `--red-*` for hover, pressed, and disabled states, with a new `--destructive-subtle-active` token for pressed ghost states. Added ProductAvatar and ProductBadge components with product icons and theme-aware inset highlights, product Badge variants and optional SankeyChart color callbacks.
 
 Chart roles keep their hue names (`--chart-blue`, `--chart-green`, and so on) and now resolve from the color ramps. Replace `var(--chart-soft-1)` with `var(--chart-sequential-1)`, and `var(--span-type-agent)` with `var(--span-agent)`. See the playground-ui README for the complete mapping.
 
@@ -13,3 +13,5 @@ Added semantic Badge status variants `success`, `destructive`, `warning`, and `i
 `BADGE_COLORS` and topic colors now return color ramp variables such as `var(--purple-500)` instead of hex values.
 
 Status roles are `{status}-subtle`, `{status}-edge`, `{status}-fg`, and `{status}-indicator`. Badge roles are `--badge-{hue}` (fill), `--badge-{hue}-muted`, `--badge-{hue}-edge`, `--badge-{hue}-fg`, and `--badge-{hue}-dot`. `--badge-{hue}` used to be the indicator color; use `--badge-{hue}-dot` for dots.
+
+**Breaking:** `Badge` `emphasis` values are now `strong` and `subtle` instead of `default` and `muted`. `strong` is the default when `emphasis` is omitted. Replace `emphasis="muted"` with `emphasis="subtle"` and `emphasis="default"` with `emphasis="strong"` (or drop it). `subtle` badges use a quieter tinted fill.

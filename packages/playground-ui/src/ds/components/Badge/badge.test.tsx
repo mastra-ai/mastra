@@ -89,7 +89,7 @@ describe('Badge', () => {
       render(
         <>
           <Badge variant={variant}>default</Badge>
-          <Badge variant={variant} emphasis="muted">
+          <Badge variant={variant} emphasis="subtle">
             muted
           </Badge>
         </>,
