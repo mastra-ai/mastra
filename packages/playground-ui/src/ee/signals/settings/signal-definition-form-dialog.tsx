@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/ds/components/Dialog';
-import { FieldBlock, TextFieldBlock, fieldErrorId } from '@/ds/components/FormFieldBlocks';
+import { FieldBlock, TextareaFieldBlock, TextFieldBlock, fieldErrorId } from '@/ds/components/FormFieldBlocks';
 import { Notice } from '@/ds/components/Notice';
 import { Spinner } from '@/ds/components/Spinner';
 import { Textarea } from '@/ds/components/Textarea';
@@ -122,7 +122,6 @@ export function SignalDefinitionFormDialog({
             }}
           >
             <TextFieldBlock
-              id="input-name"
               name="name"
               label="Signal name"
               helpText="A stable lowercase slug. It cannot be changed after creation."
@@ -133,7 +132,6 @@ export function SignalDefinitionFormDialog({
               onChange={event => setField('name', event.target.value)}
             />
             <TextFieldBlock
-              id="input-displayLabel"
               name="displayLabel"
               label="Display label"
               placeholder="Handoff quality"
@@ -142,38 +140,34 @@ export function SignalDefinitionFormDialog({
               errorMsg={validationErrors.displayLabel}
               onChange={event => setField('displayLabel', event.target.value)}
             />
-            <FieldBlock.Layout>
-              <FieldBlock.Column>
-                <FieldBlock.Label name="description">Description</FieldBlock.Label>
-                <Textarea
-                  id="input-description"
-                  rows={2}
-                  value={value.description}
-                  disabled={pending}
-                  onChange={event => setField('description', event.target.value)}
-                />
-              </FieldBlock.Column>
-              <FieldBlock.Column>
-                <FieldBlock.Label name="taskPrompt">Signal instructions</FieldBlock.Label>
-                <Textarea
-                  id="input-taskPrompt"
-                  rows={5}
-                  value={value.taskPrompt}
-                  disabled={pending}
-                  placeholder="Describe what this signal should evaluate and how the result should be written."
-                  error={Boolean(validationErrors.taskPrompt)}
-                  aria-describedby={validationErrors.taskPrompt ? fieldErrorId('taskPrompt') : undefined}
-                  onChange={event => setField('taskPrompt', event.target.value)}
-                />
-                <FieldBlock.HelpText>
-                  Tell the model what to evaluate and what the signal result should contain. {value.taskPrompt.length}
-                  /2,000 characters
-                </FieldBlock.HelpText>
-                {validationErrors.taskPrompt ? (
-                  <FieldBlock.ErrorMsg name="taskPrompt">{validationErrors.taskPrompt}</FieldBlock.ErrorMsg>
-                ) : null}
-              </FieldBlock.Column>
-            </FieldBlock.Layout>
+            <TextareaFieldBlock
+              name="description"
+              label="Description"
+              rows={2}
+              value={value.description}
+              disabled={pending}
+              onChange={event => setField('description', event.target.value)}
+            />
+            <div className="grid gap-2">
+              <FieldBlock.Label name="taskPrompt">Signal instructions</FieldBlock.Label>
+              <Textarea
+                id="input-taskPrompt"
+                rows={5}
+                value={value.taskPrompt}
+                disabled={pending}
+                placeholder="Describe what this signal should evaluate and how the result should be written."
+                error={Boolean(validationErrors.taskPrompt)}
+                aria-describedby={validationErrors.taskPrompt ? fieldErrorId('taskPrompt') : undefined}
+                onChange={event => setField('taskPrompt', event.target.value)}
+              />
+              <FieldBlock.HelpText>
+                Tell the model what to evaluate and what the signal result should contain. {value.taskPrompt.length}
+                /2,000 characters
+              </FieldBlock.HelpText>
+              {validationErrors.taskPrompt ? (
+                <FieldBlock.ErrorMsg name="taskPrompt">{validationErrors.taskPrompt}</FieldBlock.ErrorMsg>
+              ) : null}
+            </div>
             {editing ? (
               <p className="text-meta text-muted-foreground">
                 Instruction changes create a new version and apply only to new traces. Existing analysis is unchanged.

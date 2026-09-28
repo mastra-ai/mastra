@@ -1,119 +1,126 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FieldBlock } from './block/field-block';
+import type { FieldBlockProps } from './block/field-block';
 import { SelectFieldBlock } from './fields/select-field-block';
 import { TextFieldBlock } from './fields/text-field-block';
 import { TextareaFieldBlock } from './fields/textarea-field-block';
 
 afterEach(() => cleanup());
 
-const messageContainer = (container: HTMLElement) => container.querySelector('.h-\\[1lh\\]');
+const messageLine = (container: HTMLElement) => container.querySelector('.h-\\[1lh\\]');
 
-describe('TextFieldBlock message', () => {
-  describe('when neither helpText nor errorMsg is provided', () => {
-    it('does not render the message container', () => {
-      const { container } = render(<TextFieldBlock name="email" label="Email" />);
+type LabelledFieldProps = Pick<FieldBlockProps, 'labelIsHidden' | 'layout' | 'errorMsg'>;
 
-      expect(messageContainer(container)).toBeNull();
-    });
+const fields: Array<{ kind: string; role: string; field: (props: LabelledFieldProps) => ReactElement }> = [
+  { kind: 'TextFieldBlock', role: 'textbox', field: props => <TextFieldBlock name="kind" label="Kind" {...props} /> },
+  {
+    kind: 'TextareaFieldBlock',
+    role: 'textbox',
+    field: props => <TextareaFieldBlock name="kind" label="Kind" {...props} />,
+  },
+  {
+    kind: 'SelectFieldBlock',
+    role: 'combobox',
+    field: props => (
+      <SelectFieldBlock
+        name="kind"
+        label="Kind"
+        options={[{ value: 'a', label: 'A' }]}
+        onValueChange={() => {}}
+        {...props}
+      />
+    ),
+  },
+];
+
+describe.each(fields)('$kind', ({ role, field }) => {
+  it('keeps its accessible name when the label is hidden', () => {
+    render(field({ labelIsHidden: true }));
+
+    const control = screen.getByRole(role, { name: 'Kind' });
+    expect(control.id).toBe('input-kind');
+    expect(screen.getByText('Kind').classList.contains('sr-only')).toBe(true);
   });
 
-  describe('when helpText is provided', () => {
-    it('renders the message container', () => {
-      const { container } = render(<TextFieldBlock name="email" label="Email" helpText="Use your work email." />);
+  it('keeps its accessible name when a horizontal label is hidden, and gives the control the full row', () => {
+    const { container } = render(field({ labelIsHidden: true, layout: 'horizontal' }));
 
-      expect(messageContainer(container)).not.toBeNull();
-      expect(screen.getByText('Use your work email.')).toBeDefined();
-    });
-  });
-});
-
-describe('TextareaFieldBlock message', () => {
-  describe('when neither helpText nor errorMsg is provided', () => {
-    it('does not render the message container', () => {
-      const { container } = render(<TextareaFieldBlock name="bio" label="Bio" />);
-
-      expect(messageContainer(container)).toBeNull();
-    });
+    const [labelColumn, controlColumn] = container.firstElementChild?.children ?? [];
+    expect(screen.getByRole(role, { name: 'Kind' }).id).toBe('input-kind');
+    expect(labelColumn?.classList.contains('sr-only')).toBe(true);
+    expect(controlColumn?.classList.contains('col-span-full')).toBe(true);
   });
 
-  describe('when helpText is provided', () => {
-    it('renders the message container', () => {
-      const { container } = render(<TextareaFieldBlock name="bio" label="Bio" helpText="Keep it short." />);
+  it('ties its error message to the control', () => {
+    render(field({ errorMsg: 'Pick a kind.' }));
 
-      expect(messageContainer(container)).not.toBeNull();
-      expect(screen.getByText('Keep it short.')).toBeDefined();
-    });
-  });
-});
-
-describe('SelectFieldBlock message', () => {
-  const options = [{ value: 'a', label: 'A' }];
-
-  describe('when neither helpText nor errorMsg is provided', () => {
-    it('does not render the message container', () => {
-      const { container } = render(
-        <SelectFieldBlock name="kind" label="Kind" options={options} onValueChange={() => {}} />,
-      );
-
-      expect(messageContainer(container)).toBeNull();
-    });
-  });
-
-  describe('when helpText is provided', () => {
-    it('renders the message container', () => {
-      const { container } = render(
-        <SelectFieldBlock
-          name="kind"
-          label="Kind"
-          options={options}
-          onValueChange={() => {}}
-          helpText="Pick a kind."
-        />,
-      );
-
-      expect(messageContainer(container)).not.toBeNull();
-      expect(screen.getByText('Pick a kind.')).toBeDefined();
-    });
+    const control = screen.getByRole(role, { name: 'Kind' });
+    expect(control.getAttribute('aria-invalid')).toBe('true');
+    expect(control.getAttribute('aria-describedby')).toBe('error-kind');
+    expect(screen.getByRole('alert').id).toBe('error-kind');
   });
 });
 
-describe('FieldBlock error wiring', () => {
-  it('ties the message to its control so the reason is announced with the field', () => {
-    render(<TextFieldBlock name="email" label="Email" errorMsg="Your email must include an @ symbol." />);
+describe('FieldBlock', () => {
+  it('names, describes and invalidates any control it wraps, even one a label cannot point at', () => {
+    render(
+      <FieldBlock name="payload" label="Payload" errorMsg="Payload must be JSON.">
+        {control => <div role="textbox" tabIndex={0} {...control} />}
+      </FieldBlock>,
+    );
 
-    const input = screen.getByLabelText('Email');
-    const message = screen.getByRole('alert');
-
-    expect(input.getAttribute('aria-invalid')).toBe('true');
-    expect(input.getAttribute('aria-describedby')).toBe('error-email');
-    expect(input.parentElement?.className).toContain('gap-1');
-    expect(input.parentElement?.parentElement?.className).toContain('gap-2');
-    expect(message.id).toBe('error-email');
-    expect(message.textContent).toContain('@ symbol');
-    expect(message.parentElement?.className).toContain('h-[1lh]');
+    const control = screen.getByRole('textbox', { name: 'Payload' });
+    expect(control.id).toBe('input-payload');
+    expect(control.getAttribute('aria-invalid')).toBe('true');
+    expect(control.getAttribute('aria-describedby')).toBe('error-payload');
   });
 
-  it('ties a textarea message to its control', () => {
-    render(<TextareaFieldBlock name="bio" label="Bio" errorMsg="Bio is too long." />);
+  it('leaves a healthy control unmarked', () => {
+    render(
+      <FieldBlock name="payload" label="Payload" helpText="Sent as the request body.">
+        {control => <input {...control} />}
+      </FieldBlock>,
+    );
 
-    const textarea = screen.getByLabelText('Bio');
-    const message = screen.getByRole('alert');
-
-    expect(textarea.getAttribute('aria-invalid')).toBe('true');
-    expect(textarea.getAttribute('aria-describedby')).toBe('error-bio');
-    expect(message.id).toBe('error-bio');
-  });
-
-  it('leaves a healthy field unmarked', () => {
-    render(<TextFieldBlock name="email" label="Email" />);
-
-    const input = screen.getByLabelText('Email');
-    expect(input.getAttribute('aria-describedby')).toBeNull();
+    const control = screen.getByLabelText('Payload');
+    expect(control.hasAttribute('aria-invalid')).toBe(false);
+    expect(control.hasAttribute('aria-describedby')).toBe(false);
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
+  it('renders no message line when it has nothing to say', () => {
+    const { container } = render(<FieldBlock name="payload">{control => <input {...control} />}</FieldBlock>);
+
+    expect(messageLine(container)).toBeNull();
+  });
+
+  it('uses one reserved line for helper text or an error, the error winning', () => {
+    const { container } = render(
+      <FieldBlock name="email" label="Email" helpText="Use your work email." errorMsg="Email is required.">
+        {control => <input {...control} />}
+      </FieldBlock>,
+    );
+
+    expect(messageLine(container)).not.toBeNull();
+    expect(screen.getByRole('alert').textContent).toBe('Email is required.');
+    expect(screen.queryByText('Use your work email.')).toBeNull();
+  });
+
+  it('shows helper text on the reserved line when there is no error', () => {
+    const { container } = render(
+      <FieldBlock name="email" label="Email" helpText="Use your work email.">
+        {control => <input {...control} />}
+      </FieldBlock>,
+    );
+
+    expect(messageLine(container)?.textContent).toBe('Use your work email.');
+  });
+});
+
+describe('TextFieldBlock error state', () => {
   it('preserves caller descriptions alongside the error message', () => {
     render(
       <TextFieldBlock
@@ -133,12 +140,13 @@ describe('FieldBlock error wiring', () => {
     expect(screen.getByLabelText('Email').getAttribute('aria-invalid')).toBe('true');
     expect(screen.getByLabelText('Email').getAttribute('aria-describedby')).toBeNull();
   });
+});
 
+describe('FieldBlock.ErrorMsg', () => {
   it('announces without the caller wrapping it', () => {
     render(<FieldBlock.ErrorMsg name="token">Token is required.</FieldBlock.ErrorMsg>);
 
-    const message = screen.getByRole('alert');
-    expect(message.id).toBe('error-token');
+    expect(screen.getByRole('alert').id).toBe('error-token');
   });
 
   it('marks the message with an icon so the error does not rely on color alone', () => {
@@ -154,7 +162,9 @@ describe('FieldBlock error wiring', () => {
 
     expect(screen.getByRole('alert').id).toBe('error-');
   });
+});
 
+describe('FieldBlock.Label', () => {
   it('supports controls whose id does not use the field prefix', () => {
     render(
       <>
@@ -168,7 +178,7 @@ describe('FieldBlock error wiring', () => {
     expect(screen.getByLabelText('Schema').id).toBe('schema-editor');
   });
 
-  it('labels a field as primary control text with a required asterisk', () => {
+  it('marks a required field for sighted and screen reader users alike', () => {
     render(
       <FieldBlock.Label name="email" required>
         Email
@@ -178,15 +188,5 @@ describe('FieldBlock error wiring', () => {
     expect(screen.getByText('(required)').closest('label')).not.toBeNull();
     expect(screen.getByText('*').getAttribute('aria-hidden')).toBe('true');
     expect(screen.getByText('(required)').className).toContain('sr-only');
-  });
-
-  it('uses one reserved line for helper text or an error', () => {
-    const { container } = render(
-      <FieldBlock.Message name="email" helpText="Use your work email." errorMsg="Email is required." />,
-    );
-
-    expect(container.firstElementChild?.className).toContain('h-[1lh]');
-    expect(screen.getByRole('alert').textContent).toBe('Email is required.');
-    expect(screen.queryByText('Use your work email.')).toBeNull();
   });
 });

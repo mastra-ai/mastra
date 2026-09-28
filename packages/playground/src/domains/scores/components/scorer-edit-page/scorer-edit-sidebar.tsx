@@ -65,17 +65,14 @@ export function ScorerEditSidebar({
             errorMsg={errors.description?.message}
           />
 
-          <FieldBlock.Layout>
-            <FieldBlock.Column>
-              <FieldBlock.Label name="model-provider" required>
-                Provider
-              </FieldBlock.Label>
+          <FieldBlock name="model-provider" label="Provider" required>
+            {fieldControl => (
               <Controller
                 name="model.provider"
                 control={control}
                 render={({ field }) => (
                   <LLMProviders
-                    id="input-model-provider"
+                    id={fieldControl.id}
                     name="model-provider"
                     value={field.value}
                     onValueChange={field.onChange}
@@ -84,20 +81,17 @@ export function ScorerEditSidebar({
                   />
                 )}
               />
-            </FieldBlock.Column>
-          </FieldBlock.Layout>
+            )}
+          </FieldBlock>
 
-          <FieldBlock.Layout>
-            <FieldBlock.Column>
-              <FieldBlock.Label name="model-name" required>
-                Model
-              </FieldBlock.Label>
+          <FieldBlock name="model-name" label="Model" required>
+            {fieldControl => (
               <Controller
                 name="model.name"
                 control={control}
                 render={({ field }) => (
                   <LLMModels
-                    id="input-model-name"
+                    id={fieldControl.id}
                     name="model-name"
                     value={field.value}
                     onValueChange={field.onChange}
@@ -107,8 +101,8 @@ export function ScorerEditSidebar({
                   />
                 )}
               />
-            </FieldBlock.Column>
-          </FieldBlock.Layout>
+            )}
+          </FieldBlock>
 
           {/* Score Range */}
           <div className="flex flex-col gap-1.5">

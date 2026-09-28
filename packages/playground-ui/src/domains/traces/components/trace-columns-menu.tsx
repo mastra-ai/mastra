@@ -191,24 +191,25 @@ export function TraceColumnsMenu({
                 </DialogDescription>
               </DialogHeader>
               <DialogBody>
-                <FieldBlock.Column>
-                  <FieldBlock.Label name={METADATA_KEY_FIELD_NAME}>Metadata key</FieldBlock.Label>
-                  <Combobox
-                    id={`input-${METADATA_KEY_FIELD_NAME}`}
-                    name={METADATA_KEY_FIELD_NAME}
-                    options={metadataKeyOptions}
-                    value={metadataKey}
-                    onValueChange={key => {
-                      setMetadataKey(key);
-                      setMetadataError(undefined);
-                    }}
-                    allowCustomValue
-                    placeholder="Select a metadata key…"
-                    searchPlaceholder="Search metadata keys…"
-                    emptyText="No metadata keys observed. Type one to add it."
-                    error={metadataError}
-                  />
-                </FieldBlock.Column>
+                <FieldBlock name={METADATA_KEY_FIELD_NAME} label="Metadata key">
+                  {control => (
+                    <Combobox
+                      {...control}
+                      name={METADATA_KEY_FIELD_NAME}
+                      options={metadataKeyOptions}
+                      value={metadataKey}
+                      onValueChange={key => {
+                        setMetadataKey(key);
+                        setMetadataError(undefined);
+                      }}
+                      allowCustomValue
+                      placeholder="Select a metadata key…"
+                      searchPlaceholder="Search metadata keys…"
+                      emptyText="No metadata keys observed. Type one to add it."
+                      error={metadataError}
+                    />
+                  )}
+                </FieldBlock>
               </DialogBody>
               <DialogFooter>
                 <Button icon={<X />} type="button" onClick={() => handleDialogOpenChange(false)}>

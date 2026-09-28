@@ -238,16 +238,17 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
             )}
           </div>
 
-          <div className="grid gap-2">
-            <FieldBlock.Label name="item-trajectory">Expected Trajectory (JSON, optional)</FieldBlock.Label>
-            <CodeEditor
-              id="input-item-trajectory"
-              value={expectedTrajectory}
-              onChange={setExpectedTrajectory}
-              showCopyButton={false}
-              className="min-h-[200px]"
-            />
-          </div>
+          <FieldBlock name="item-trajectory" label="Expected Trajectory (JSON, optional)">
+            {control => (
+              <CodeEditor
+                {...control}
+                value={expectedTrajectory}
+                onChange={setExpectedTrajectory}
+                showCopyButton={false}
+                className="min-h-[200px]"
+              />
+            )}
+          </FieldBlock>
 
           <div className="grid gap-2">
             <FieldBlock.Label name="item-tool-mocks">Tool Mocks (JSON array, optional)</FieldBlock.Label>
@@ -273,16 +274,17 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
             disabled={addItem.isPending}
           />
 
-          <div className="grid gap-2">
-            <FieldBlock.Label name="item-request-context">Request Context (JSON, optional)</FieldBlock.Label>
-            <CodeEditor
-              id="input-item-request-context"
-              value={requestContext}
-              onChange={setRequestContext}
-              showCopyButton={false}
-              className="min-h-[200px]"
-            />
-          </div>
+          <FieldBlock name="item-request-context" label="Request Context (JSON, optional)">
+            {control => (
+              <CodeEditor
+                {...control}
+                value={requestContext}
+                onChange={setRequestContext}
+                showCopyButton={false}
+                className="min-h-[200px]"
+              />
+            )}
+          </FieldBlock>
 
           <div className="flex justify-end gap-2 pt-4">
             <Button icon={<X />} type="button" onClick={handleCancel}>

@@ -130,44 +130,44 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
 
         <div className="space-y-5 p-5">
           <div className="space-y-2">
-            <FieldBlock.Label name={phaseId} htmlFor={phaseId}>
-              Phase
-            </FieldBlock.Label>
-            <Select value={selectedPhase} onValueChange={v => setSelectedPhase(v as ProcessorPhase)}>
-              <SelectTrigger id={phaseId} className="w-full">
-                <SelectValue placeholder="Select phase" />
-              </SelectTrigger>
-              <SelectContent>
-                {processor.phases.map(phase => (
-                  <SelectItem key={phase} value={phase}>
-                    {phase}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <FieldBlock name={phaseId} label="Phase">
+              {control => (
+                <Select value={selectedPhase} onValueChange={v => setSelectedPhase(v as ProcessorPhase)}>
+                  <SelectTrigger {...control} className="w-full">
+                    <SelectValue placeholder="Select phase" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {processor.phases.map(phase => (
+                      <SelectItem key={phase} value={phase}>
+                        {phase}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </FieldBlock>
             <Txt variant="meta" tone="muted">
               {PHASE_LABELS[selectedPhase]}
             </Txt>
           </div>
 
           {processor.configurations.length > 1 && (
-            <div className="space-y-2">
-              <FieldBlock.Label name={agentConfigurationId} htmlFor={agentConfigurationId}>
-                Agent Configuration
-              </FieldBlock.Label>
-              <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
-                <SelectTrigger id={agentConfigurationId} className="w-full">
-                  <SelectValue placeholder="Select agent" />
-                </SelectTrigger>
-                <SelectContent>
-                  {processor.configurations.map(config => (
-                    <SelectItem key={config.agentId} value={config.agentId}>
-                      {config.agentName} ({config.type})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <FieldBlock name={agentConfigurationId} label="Agent Configuration">
+              {control => (
+                <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
+                  <SelectTrigger {...control} className="w-full">
+                    <SelectValue placeholder="Select agent" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {processor.configurations.map(config => (
+                      <SelectItem key={config.agentId} value={config.agentId}>
+                        {config.agentName} ({config.type})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </FieldBlock>
           )}
 
           <TextareaFieldBlock

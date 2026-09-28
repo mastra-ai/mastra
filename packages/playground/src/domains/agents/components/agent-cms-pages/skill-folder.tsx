@@ -80,18 +80,19 @@ export function SkillFolder({
     <div className="grid h-full grid-cols-[300px_1fr]">
       <div className="h-full overflow-y-auto border-r border-border p-4">
         {workspaceOptions.length > 0 && (
-          <div className="flex flex-col gap-1.5 pb-4">
-            <FieldBlock.Label name="skill-workspace">Workspace</FieldBlock.Label>
-            <Combobox
-              id="input-skill-workspace"
-              name="skill-workspace"
-              options={workspaceOptions}
-              value={workspaceId}
-              onValueChange={setWorkspaceId}
-              placeholder="Select a workspace..."
-              disabled={readOnly}
-            />
-          </div>
+          <FieldBlock name="skill-workspace" label="Workspace" className="pb-4">
+            {control => (
+              <Combobox
+                {...control}
+                name="skill-workspace"
+                options={workspaceOptions}
+                value={workspaceId}
+                onValueChange={setWorkspaceId}
+                placeholder="Select a workspace..."
+                disabled={readOnly}
+              />
+            )}
+          </FieldBlock>
         )}
 
         <SkillFileTree

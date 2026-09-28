@@ -104,16 +104,17 @@ export function EditModeContent({
           )}
         </div>
 
-        <div className="space-y-2">
-          <FieldBlock.Label name="item-trajectory">Expected Trajectory (JSON, optional)</FieldBlock.Label>
-          <CodeEditor
-            id="input-item-trajectory"
-            value={trajectoryValue}
-            onChange={setTrajectoryValue}
-            showCopyButton={false}
-            className="min-h-[80px]"
-          />
-        </div>
+        <FieldBlock name="item-trajectory" label="Expected Trajectory (JSON, optional)">
+          {control => (
+            <CodeEditor
+              {...control}
+              value={trajectoryValue}
+              onChange={setTrajectoryValue}
+              showCopyButton={false}
+              className="min-h-[80px]"
+            />
+          )}
+        </FieldBlock>
 
         <div className="space-y-2">
           <FieldBlock.Label name="item-tool-mocks">Tool Mocks (JSON array, optional)</FieldBlock.Label>
@@ -144,27 +145,29 @@ export function EditModeContent({
           disabled={isSaving}
         />
 
-        <div className="space-y-2">
-          <FieldBlock.Label name="item-request-context">Request Context (JSON, optional)</FieldBlock.Label>
-          <CodeEditor
-            id="input-item-request-context"
-            value={requestContextValue}
-            onChange={setRequestContextValue}
-            showCopyButton={false}
-            className="min-h-[80px]"
-          />
-        </div>
+        <FieldBlock name="item-request-context" label="Request Context (JSON, optional)">
+          {control => (
+            <CodeEditor
+              {...control}
+              value={requestContextValue}
+              onChange={setRequestContextValue}
+              showCopyButton={false}
+              className="min-h-[80px]"
+            />
+          )}
+        </FieldBlock>
 
-        <div className="space-y-2">
-          <FieldBlock.Label name="item-metadata">Metadata (JSON, optional)</FieldBlock.Label>
-          <CodeEditor
-            id="input-item-metadata"
-            value={metadataValue}
-            onChange={setMetadataValue}
-            showCopyButton={false}
-            className="min-h-[80px]"
-          />
-        </div>
+        <FieldBlock name="item-metadata" label="Metadata (JSON, optional)">
+          {control => (
+            <CodeEditor
+              {...control}
+              value={metadataValue}
+              onChange={setMetadataValue}
+              showCopyButton={false}
+              className="min-h-[80px]"
+            />
+          )}
+        </FieldBlock>
 
         <div className="flex gap-2 pt-4">
           <Button icon={<Check />} variant="primary" onClick={onSave} disabled={isSaving}>

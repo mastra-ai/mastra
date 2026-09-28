@@ -29,10 +29,10 @@ export function ScorerSelector({
     }));
 
   return (
-    <FieldBlock.Layout layout="vertical">
-      <FieldBlock.Column>
-        {label ? <FieldBlock.Label name="scorers">{label}</FieldBlock.Label> : null}
+    <FieldBlock name="scorers" label={label} helpText={helperText}>
+      {control => (
         <Combobox
+          {...control}
           multiple
           options={options}
           value={selectedScorers}
@@ -43,8 +43,7 @@ export function ScorerSelector({
           disabled={disabled || isLoading}
           container={container}
         />
-        {helperText ? <FieldBlock.HelpText>{helperText}</FieldBlock.HelpText> : null}
-      </FieldBlock.Column>
-    </FieldBlock.Layout>
+      )}
+    </FieldBlock>
   );
 }

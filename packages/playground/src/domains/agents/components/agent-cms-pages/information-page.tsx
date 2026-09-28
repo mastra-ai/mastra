@@ -43,18 +43,15 @@ export function InformationPage() {
           <SubSectionRoot>
             <SubSectionHeader title="Model Configuration" />
             <div className="grid grid-cols-2 gap-4">
-              <FieldBlock.Layout>
-                <FieldBlock.Column>
-                  <FieldBlock.Label name="model-provider" required>
-                    Provider
-                  </FieldBlock.Label>
+              <FieldBlock name="model-provider" label="Provider" required>
+                {fieldControl => (
                   <Controller
                     name="model.provider"
                     control={control}
                     render={({ field }) => (
                       <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
                         <LLMProviders
-                          id="input-model-provider"
+                          id={fieldControl.id}
                           name="model-provider"
                           value={field.value}
                           onValueChange={field.onChange}
@@ -63,21 +60,18 @@ export function InformationPage() {
                       </div>
                     )}
                   />
-                </FieldBlock.Column>
-              </FieldBlock.Layout>
+                )}
+              </FieldBlock>
 
-              <FieldBlock.Layout>
-                <FieldBlock.Column>
-                  <FieldBlock.Label name="model-name" required>
-                    Model
-                  </FieldBlock.Label>
+              <FieldBlock name="model-name" label="Model" required>
+                {fieldControl => (
                   <Controller
                     name="model.name"
                     control={control}
                     render={({ field }) => (
                       <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
                         <LLMModels
-                          id="input-model-name"
+                          id={fieldControl.id}
                           name="model-name"
                           value={field.value}
                           onValueChange={field.onChange}
@@ -87,8 +81,8 @@ export function InformationPage() {
                       </div>
                     )}
                   />
-                </FieldBlock.Column>
-              </FieldBlock.Layout>
+                )}
+              </FieldBlock>
             </div>
           </SubSectionRoot>
         </div>

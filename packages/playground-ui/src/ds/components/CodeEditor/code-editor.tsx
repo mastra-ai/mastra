@@ -274,6 +274,7 @@ const editorFocusExtensions: Extension[] = [editorFocusAttributes, editorFocusTh
 type CodeEditorContentAttributes = {
   'aria-label': string;
   id?: string;
+  'aria-labelledby'?: string;
   'aria-describedby'?: string;
   'aria-invalid'?: string;
 };
@@ -318,6 +319,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       variant,
       id,
       'aria-label': ariaLabel = 'Code editor',
+      'aria-labelledby': ariaLabelledBy,
       'aria-describedby': ariaDescribedBy,
       'aria-invalid': ariaInvalid,
       ...props
@@ -330,6 +332,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     const extensions = useMemo(() => {
       const contentAttributes: CodeEditorContentAttributes = { 'aria-label': ariaLabel };
       if (id) contentAttributes.id = id;
+      if (ariaLabelledBy) contentAttributes['aria-labelledby'] = ariaLabelledBy;
       if (ariaDescribedBy) contentAttributes['aria-describedby'] = ariaDescribedBy;
       if (ariaInvalid !== undefined) contentAttributes['aria-invalid'] = String(ariaInvalid);
 
@@ -358,7 +361,18 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       }
 
       return exts;
-    }, [language, highlightVariables, schema, editable, lineWrapping, id, ariaLabel, ariaDescribedBy, ariaInvalid]);
+    }, [
+      language,
+      highlightVariables,
+      schema,
+      editable,
+      lineWrapping,
+      id,
+      ariaLabel,
+      ariaLabelledBy,
+      ariaDescribedBy,
+      ariaInvalid,
+    ]);
 
     return (
       <div className={cn(codeEditorVariants({ variant }), className)} {...props}>

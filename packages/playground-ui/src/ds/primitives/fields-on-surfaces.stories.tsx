@@ -14,12 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/ds/components/Dialog';
-import {
-  FieldBlocksLayout,
-  SelectFieldBlock,
-  TextareaFieldBlock,
-  TextFieldBlock,
-} from '@/ds/components/FormFieldBlocks';
+import { SelectFieldBlock, TextareaFieldBlock, TextFieldBlock } from '@/ds/components/FormFieldBlocks';
 import { Txt } from '@/ds/components/Txt';
 import { dialogSurfaceStyle } from '@/ds/primitives/raised-surface';
 
@@ -33,7 +28,7 @@ function Fields({ id }: { id: string }) {
   const [owner, setOwner] = useState('');
   const [date, setDate] = useState<Date | undefined>();
   return (
-    <FieldBlocksLayout>
+    <div className="grid gap-6">
       <TextFieldBlock
         name={`${id}-api-key`}
         label="API key"
@@ -62,7 +57,7 @@ function Fields({ id }: { id: string }) {
       <DateTimePicker value={date} onValueChange={setDate} placeholder="Pick an expiry date" />
       <TextareaFieldBlock name={`${id}-notes`} label="Notes" placeholder="Optional" />
       <TextFieldBlock name={`${id}-token`} label="Legacy token" disabled defaultValue="sk-legacy-disabled" />
-    </FieldBlocksLayout>
+    </div>
   );
 }
 

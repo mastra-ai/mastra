@@ -4,7 +4,6 @@ import { getProcessorMessage, updateProcessorMessage, withPhaseRole } from './pr
 import type { ProcessorDraft } from './processor-input';
 import { FieldBlock, fieldErrorId, TextareaFieldBlock } from '@/ds/components/FormFieldBlocks';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
-import { Txt } from '@/ds/components/Txt';
 import { FormSubmitRow } from '@/lib/form/components/form-submit-row';
 
 const PROCESSOR_PHASES = [
@@ -35,7 +34,7 @@ export const WorkflowProcessorInput = ({
   submitButtonFullWidth,
 }: WorkflowProcessorInputProps) => {
   const messageName = useId();
-  const phaseId = useId();
+  const phaseName = useId();
   const [errors, setErrors] = useState<string[]>([]);
 
   const handleSubmit = () => {
@@ -51,38 +50,34 @@ export const WorkflowProcessorInput = ({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="space-y-2">
-        <FieldBlock.Label name={phaseId} htmlFor={phaseId}>
-          Phase
-        </FieldBlock.Label>
-        <Select
-          value={value.phase}
-          onValueChange={phase => {
-            setErrors([]);
-            onChange(withPhaseRole({ ...value, phase }));
-          }}
-          disabled={isSubmitLoading}
-        >
-          <SelectTrigger
-            id={phaseId}
-            className="w-full"
-            aria-invalid={errors.length > 0 ? true : undefined}
-            aria-describedby={errors.length > 0 ? fieldErrorId('workflow-processor-input') : undefined}
+      <FieldBlock
+        name={phaseName}
+        label="Phase"
+        helpText={PROCESSOR_PHASES.find(phaseOption => phaseOption.value === value.phase)?.label}
+        describedBy={errors.length > 0 ? fieldErrorId('workflow-processor-input') : undefined}
+      >
+        {control => (
+          <Select
+            value={value.phase}
+            onValueChange={phase => {
+              setErrors([]);
+              onChange(withPhaseRole({ ...value, phase }));
+            }}
+            disabled={isSubmitLoading}
           >
-            <SelectValue placeholder="Select phase" />
-          </SelectTrigger>
-          <SelectContent>
-            {PROCESSOR_PHASES.map(phaseOption => (
-              <SelectItem key={phaseOption.value} value={phaseOption.value}>
-                {phaseOption.value}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Txt variant="meta" tone="muted">
-          {PROCESSOR_PHASES.find(phaseOption => phaseOption.value === value.phase)?.label}
-        </Txt>
-      </div>
+            <SelectTrigger {...control} className="w-full" aria-invalid={errors.length > 0 ? true : undefined}>
+              <SelectValue placeholder="Select phase" />
+            </SelectTrigger>
+            <SelectContent>
+              {PROCESSOR_PHASES.map(phaseOption => (
+                <SelectItem key={phaseOption.value} value={phaseOption.value}>
+                  {phaseOption.value}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </FieldBlock>
 
       <TextareaFieldBlock
         name={messageName}

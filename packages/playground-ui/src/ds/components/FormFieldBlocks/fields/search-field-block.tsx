@@ -5,25 +5,17 @@ import { Input } from '../../Input';
 import type { InputProps } from '../../Input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../Tooltip';
 import { FieldBlock } from '../block/field-block';
-import { fieldErrorId } from '../block/field-error-id';
+import type { FieldBlockProps } from '../block/field-block';
 import { cn } from '@/lib/utils';
 
-export type SearchFieldBlockProps = {
-  name: string;
-  testId?: string;
+export type SearchFieldBlockProps = Omit<FieldBlockProps, 'children' | 'describedBy' | 'label'> & {
   label?: string;
-  labelIsHidden?: boolean;
-  required?: boolean;
-  disabled?: boolean;
+  testId?: string;
   value?: string;
   placeholder?: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onReset?: () => void;
-  helpText?: string;
   error?: boolean;
-  errorMsg?: string;
-  layout?: 'horizontal' | 'vertical';
-  className?: string;
   size?: InputProps['size'];
   isMinimized?: boolean;
   onMinimizedChange?: (minimized: boolean) => void;
@@ -33,19 +25,22 @@ export type SearchFieldBlockProps = {
 
 export function SearchFieldBlock({
   name,
+  label,
+  labelIsHidden,
+  labelSize,
+  layout,
+  labelColumnWidth,
+  required = false,
+  disabled = false,
   helpText,
   error,
   errorMsg,
-  required = false,
-  disabled = false,
+  className,
+  testId,
   value,
-  label,
-  labelIsHidden = false,
-  layout = 'vertical',
   placeholder = 'Search...',
   onChange,
   onReset,
-  className,
   size,
   isMinimized,
   onMinimizedChange,
@@ -82,71 +77,63 @@ export function SearchFieldBlock({
   }
 
   return (
-    <FieldBlock.Layout layout={layout} className={className}>
-      {layout === 'horizontal' ? (
-        <FieldBlock.Column className={labelIsHidden ? 'sr-only' : undefined}>
-          <FieldBlock.Label name={name} required={required} disabled={disabled}>
-            {label}
-          </FieldBlock.Label>
-        </FieldBlock.Column>
-      ) : null}
-      <FieldBlock.Column className={layout === 'horizontal' && labelIsHidden ? 'col-span-full' : undefined}>
-        {layout === 'vertical' && label ? (
-          <FieldBlock.Label
+    <FieldBlock
+      name={name}
+      label={label}
+      labelIsHidden={labelIsHidden}
+      labelSize={labelSize}
+      layout={layout}
+      labelColumnWidth={labelColumnWidth}
+      required={required}
+      disabled={disabled}
+      helpText={helpText}
+      errorMsg={errorMsg}
+      className={className}
+    >
+      {control => (
+        <div className="group relative">
+          <Input
+            {...control}
+            ref={setInputRef}
             name={name}
-            required={required}
             disabled={disabled}
-            className={labelIsHidden ? 'sr-only' : undefined}
-          >
-            {label}
-          </FieldBlock.Label>
-        ) : null}
-        <FieldBlock.Column className="gap-1">
-          <div className="group relative">
-            <Input
-              ref={setInputRef}
-              id={`input-${name}`}
-              name={name}
-              disabled={disabled}
-              value={value}
-              placeholder={placeholder}
-              onChange={onChange}
-              size={size}
-              error={error || Boolean(errorMsg)}
-              aria-describedby={errorMsg ? fieldErrorId(name) : undefined}
-              className={cn(size === 'sm' && 'px-8', (!size || size === 'md') && 'px-9', size === 'lg' && 'px-10')}
-            />
-            <SearchIcon
-              aria-hidden="true"
-              className={cn(
-                'absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground',
-                size === 'sm' && 'size-3.5',
-                (!size || size === 'md') && 'size-4',
-                size === 'lg' && 'size-[1.125rem]',
-              )}
-            />
-            {onReset && (value || isMinimized === false) && (
-              <Button
-                variant="ghost"
-                size={size || 'md'}
-                aria-label="Clear search"
-                onClick={() => {
-                  if (value) {
-                    onReset();
-                  }
-                  if (isMinimized === false) {
-                    onMinimizedChange?.(true);
-                  }
-                }}
-                className="absolute top-1/2 right-0 -translate-y-1/2"
-              >
-                <XIcon />
-              </Button>
+            value={value}
+            placeholder={placeholder}
+            onChange={onChange}
+            size={size}
+            testId={testId}
+            error={error || Boolean(errorMsg)}
+            className={cn(size === 'sm' && 'px-8', (!size || size === 'md') && 'px-9', size === 'lg' && 'px-10')}
+          />
+          <SearchIcon
+            aria-hidden="true"
+            className={cn(
+              'absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground',
+              size === 'sm' && 'size-3.5',
+              (!size || size === 'md') && 'size-4',
+              size === 'lg' && 'size-[1.125rem]',
             )}
-          </div>
-          {helpText || errorMsg ? <FieldBlock.Message name={name} helpText={helpText} errorMsg={errorMsg} /> : null}
-        </FieldBlock.Column>
-      </FieldBlock.Column>
-    </FieldBlock.Layout>
+          />
+          {onReset && (value || isMinimized === false) && (
+            <Button
+              variant="ghost"
+              size={size || 'md'}
+              aria-label="Clear search"
+              onClick={() => {
+                if (value) {
+                  onReset();
+                }
+                if (isMinimized === false) {
+                  onMinimizedChange?.(true);
+                }
+              }}
+              className="absolute top-1/2 right-0 -translate-y-1/2"
+            >
+              <XIcon />
+            </Button>
+          )}
+        </div>
+      )}
+    </FieldBlock>
   );
 }

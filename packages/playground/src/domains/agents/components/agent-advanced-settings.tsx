@@ -78,158 +78,151 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
     <TooltipProvider>
       <div className="@container/advanced">
         <div className="grid grid-cols-1 gap-2 pb-2 @xs/advanced:grid-cols-2">
-          <div className="space-y-1">
-            <FieldBlock.Label name="frequency-penalty" htmlFor="frequency-penalty">
-              Frequency Penalty
-            </FieldBlock.Label>
-            <Input
-              id="frequency-penalty"
-              type="number"
-              step="0.1"
-              min="-1"
-              max="1"
-              readOnly={!canEdit}
-              value={settings?.modelSettings?.frequencyPenalty ?? ''}
-              onChange={e =>
-                setSettings({
-                  ...settings,
-                  modelSettings: {
-                    ...settings?.modelSettings,
-                    frequencyPenalty: e.target.value ? Number(e.target.value) : undefined,
-                  },
-                })
-              }
-            />
-          </div>
+          <FieldBlock name="frequency-penalty" label="Frequency Penalty">
+            {control => (
+              <Input
+                {...control}
+                type="number"
+                step="0.1"
+                min="-1"
+                max="1"
+                readOnly={!canEdit}
+                value={settings?.modelSettings?.frequencyPenalty ?? ''}
+                onChange={e =>
+                  setSettings({
+                    ...settings,
+                    modelSettings: {
+                      ...settings?.modelSettings,
+                      frequencyPenalty: e.target.value ? Number(e.target.value) : undefined,
+                    },
+                  })
+                }
+              />
+            )}
+          </FieldBlock>
 
-          <div className="space-y-1">
-            <FieldBlock.Label name="presence-penalty" htmlFor="presence-penalty">
-              Presence Penalty
-            </FieldBlock.Label>
-            <Input
-              id="presence-penalty"
-              type="number"
-              step="0.1"
-              min="-1"
-              max="1"
-              readOnly={!canEdit}
-              value={settings?.modelSettings?.presencePenalty ?? ''}
-              onChange={e =>
-                setSettings({
-                  ...settings,
-                  modelSettings: {
-                    ...settings?.modelSettings,
-                    presencePenalty: e.target.value ? Number(e.target.value) : undefined,
-                  },
-                })
-              }
-            />
-          </div>
+          <FieldBlock name="presence-penalty" label="Presence Penalty">
+            {control => (
+              <Input
+                {...control}
+                type="number"
+                step="0.1"
+                min="-1"
+                max="1"
+                readOnly={!canEdit}
+                value={settings?.modelSettings?.presencePenalty ?? ''}
+                onChange={e =>
+                  setSettings({
+                    ...settings,
+                    modelSettings: {
+                      ...settings?.modelSettings,
+                      presencePenalty: e.target.value ? Number(e.target.value) : undefined,
+                    },
+                  })
+                }
+              />
+            )}
+          </FieldBlock>
 
-          <div className="space-y-1">
-            <FieldBlock.Label name="top-k" htmlFor="top-k">
-              Top K
-            </FieldBlock.Label>
-            <Input
-              id="top-k"
-              type="number"
-              readOnly={!canEdit}
-              value={settings?.modelSettings?.topK || ''}
-              onChange={e =>
-                setSettings({
-                  ...settings,
-                  modelSettings: {
-                    ...settings?.modelSettings,
-                    topK: e.target.value ? Number(e.target.value) : undefined,
-                  },
-                })
-              }
-            />
-          </div>
+          <FieldBlock name="top-k" label="Top K">
+            {control => (
+              <Input
+                {...control}
+                type="number"
+                readOnly={!canEdit}
+                value={settings?.modelSettings?.topK || ''}
+                onChange={e =>
+                  setSettings({
+                    ...settings,
+                    modelSettings: {
+                      ...settings?.modelSettings,
+                      topK: e.target.value ? Number(e.target.value) : undefined,
+                    },
+                  })
+                }
+              />
+            )}
+          </FieldBlock>
 
-          <div className="space-y-1">
-            <FieldBlock.Label name="max-tokens" htmlFor="max-tokens">
-              Max Tokens
-            </FieldBlock.Label>
-            <Input
-              id="max-tokens"
-              type="number"
-              readOnly={!canEdit}
-              value={settings?.modelSettings?.maxTokens || ''}
-              onChange={e =>
-                setSettings({
-                  ...settings,
-                  modelSettings: {
-                    ...settings?.modelSettings,
-                    maxTokens: e.target.value ? Number(e.target.value) : undefined,
-                  },
-                })
-              }
-            />
-          </div>
+          <FieldBlock name="max-tokens" label="Max Tokens">
+            {control => (
+              <Input
+                {...control}
+                type="number"
+                readOnly={!canEdit}
+                value={settings?.modelSettings?.maxTokens || ''}
+                onChange={e =>
+                  setSettings({
+                    ...settings,
+                    modelSettings: {
+                      ...settings?.modelSettings,
+                      maxTokens: e.target.value ? Number(e.target.value) : undefined,
+                    },
+                  })
+                }
+              />
+            )}
+          </FieldBlock>
 
-          <div className="space-y-1">
-            <FieldBlock.Label name="max-steps" htmlFor="max-steps">
-              Max Steps
-            </FieldBlock.Label>
-            <Input
-              id="max-steps"
-              type="number"
-              readOnly={!canEdit}
-              value={settings?.modelSettings?.maxSteps || ''}
-              onChange={e =>
-                setSettings({
-                  ...settings,
-                  modelSettings: {
-                    ...settings?.modelSettings,
-                    maxSteps: e.target.value ? Number(e.target.value) : undefined,
-                  },
-                })
-              }
-            />
-          </div>
+          <FieldBlock name="max-steps" label="Max Steps">
+            {control => (
+              <Input
+                {...control}
+                type="number"
+                readOnly={!canEdit}
+                value={settings?.modelSettings?.maxSteps || ''}
+                onChange={e =>
+                  setSettings({
+                    ...settings,
+                    modelSettings: {
+                      ...settings?.modelSettings,
+                      maxSteps: e.target.value ? Number(e.target.value) : undefined,
+                    },
+                  })
+                }
+              />
+            )}
+          </FieldBlock>
 
-          <div className="space-y-1">
-            <FieldBlock.Label name="max-retries" htmlFor="max-retries">
-              Max Retries
-            </FieldBlock.Label>
-            <Input
-              id="max-retries"
-              type="number"
-              readOnly={!canEdit}
-              value={settings?.modelSettings?.maxRetries || ''}
-              onChange={e =>
-                setSettings({
-                  ...settings,
-                  modelSettings: {
-                    ...settings?.modelSettings,
-                    maxRetries: e.target.value ? Number(e.target.value) : undefined,
-                  },
-                })
-              }
-            />
-          </div>
+          <FieldBlock name="max-retries" label="Max Retries">
+            {control => (
+              <Input
+                {...control}
+                type="number"
+                readOnly={!canEdit}
+                value={settings?.modelSettings?.maxRetries || ''}
+                onChange={e =>
+                  setSettings({
+                    ...settings,
+                    modelSettings: {
+                      ...settings?.modelSettings,
+                      maxRetries: e.target.value ? Number(e.target.value) : undefined,
+                    },
+                  })
+                }
+              />
+            )}
+          </FieldBlock>
 
-          <div className="space-y-1">
-            <FieldBlock.Label name="seed" htmlFor="seed">
-              Seed
-            </FieldBlock.Label>
-            <Input
-              id="seed"
-              type="number"
-              readOnly={!canEdit}
-              value={settings?.modelSettings?.seed || ''}
-              onChange={e =>
-                setSettings({
-                  ...settings,
-                  modelSettings: {
-                    ...settings?.modelSettings,
-                    seed: e.target.value ? Number(e.target.value) : undefined,
-                  },
-                })
-              }
-            />
-          </div>
+          <FieldBlock name="seed" label="Seed">
+            {control => (
+              <Input
+                {...control}
+                type="number"
+                readOnly={!canEdit}
+                value={settings?.modelSettings?.seed || ''}
+                onChange={e =>
+                  setSettings({
+                    ...settings,
+                    modelSettings: {
+                      ...settings?.modelSettings,
+                      seed: e.target.value ? Number(e.target.value) : undefined,
+                    },
+                  })
+                }
+              />
+            )}
+          </FieldBlock>
         </div>
 
         <div className="space-y-1">

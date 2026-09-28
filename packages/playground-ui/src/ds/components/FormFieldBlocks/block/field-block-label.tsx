@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils';
 export type FieldBlockLabelProps = {
   children: React.ReactNode;
   name: string;
+  id?: string;
   htmlFor?: string;
   required?: boolean;
   disabled?: boolean;
@@ -13,6 +14,7 @@ export type FieldBlockLabelProps = {
 export function FieldBlockLabel({
   children,
   name,
+  id,
   htmlFor = `input-${name}`,
   required,
   disabled = false,
@@ -21,6 +23,7 @@ export function FieldBlockLabel({
 }: FieldBlockLabelProps) {
   return (
     <label
+      id={id}
       htmlFor={htmlFor}
       className={cn(
         'inline-flex items-center text-label',

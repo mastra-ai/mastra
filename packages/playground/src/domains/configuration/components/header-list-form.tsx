@@ -2,7 +2,6 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Plus, Trash } from 'lucide-react';
-import { useId } from 'react';
 
 export type HeaderListFormItem = {
   name: string;
@@ -58,33 +57,26 @@ interface HeaderListFormItemProps {
   onRemove: () => void;
 }
 
-const HeaderListFormItem = ({ index, header, onRemove }: HeaderListFormItemProps) => {
-  const nameId = useId();
-  const valueId = useId();
+const HeaderListFormItem = ({ index, header, onRemove }: HeaderListFormItemProps) => (
+  <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-4">
+    <TextFieldBlock
+      name={`headers.${index}.name`}
+      label="Name"
+      placeholder="e.g. Authorization"
+      required
+      defaultValue={header.name}
+    />
 
-  return (
-    <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-4">
-      <TextFieldBlock
-        id={nameId}
-        name={`headers.${index}.name`}
-        label="Name"
-        placeholder="e.g. Authorization"
-        required
-        defaultValue={header.name}
-      />
+    <TextFieldBlock
+      name={`headers.${index}.value`}
+      label="Value"
+      placeholder="e.g. Bearer <token>"
+      required
+      defaultValue={header.value}
+    />
 
-      <TextFieldBlock
-        id={valueId}
-        name={`headers.${index}.value`}
-        label="Value"
-        placeholder="e.g. Bearer <token>"
-        required
-        defaultValue={header.value}
-      />
-
-      <Button type="button" onClick={onRemove} aria-label="Remove header" tooltip="Remove header">
-        <Trash />
-      </Button>
-    </div>
-  );
-};
+    <Button type="button" onClick={onRemove} aria-label="Remove header" tooltip="Remove header">
+      <Trash />
+    </Button>
+  </div>
+);

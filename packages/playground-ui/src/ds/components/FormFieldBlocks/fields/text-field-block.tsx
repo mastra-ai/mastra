@@ -1,79 +1,58 @@
 import { Input } from '../../Input';
 import type { InputProps } from '../../Input';
 import { FieldBlock } from '../block/field-block';
-import type { FieldBlockErrorMsgProps } from '../block/field-block-error-msg';
-import type { FieldBlockHelpTextProps } from '../block/field-block-help-text';
-import type { FieldBlockLabelProps } from '../block/field-block-label';
-import type { FieldBlockLayoutProps } from '../block/field-block-layout';
-import { fieldErrorId } from '../block/field-error-id';
-import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
+import type { FieldBlockProps } from '../block/field-block';
 
-export type TextFieldBlockProps = Pick<FieldBlockLayoutProps, 'layout' | 'labelColumnWidth'> &
-  Omit<InputProps, 'name' | 'size'> & {
-    name: string;
-    labelIsHidden?: boolean;
-    label?: FieldBlockLabelProps['children'];
-    labelSize?: FieldBlockLabelProps['size'];
-    helpText?: FieldBlockHelpTextProps['children'];
-    errorMsg?: FieldBlockErrorMsgProps['children'];
+export type TextFieldBlockProps = Omit<FieldBlockProps, 'children' | 'describedBy'> &
+  Omit<InputProps, 'name' | 'size' | 'id'> & {
     size?: InputProps['size'];
   };
 
 export function TextFieldBlock({
   name,
-  value,
   label,
-  labelIsHidden = false,
+  labelIsHidden,
+  labelSize,
+  layout,
   labelColumnWidth,
+  required = false,
+  disabled = false,
   helpText,
   error,
   errorMsg,
-  required = false,
-  disabled = false,
-  labelSize,
-  layout = 'vertical',
-  placeholder,
   size = 'md',
   testId,
   className,
-  'aria-describedby': ariaDescribedBy,
-  ...props
+  'aria-describedby': describedBy,
+  ...inputProps
 }: TextFieldBlockProps) {
-  const describedBy =
-    [ariaDescribedBy, errorMsg ? fieldErrorId(name) : undefined].filter(Boolean).join(' ') || undefined;
-
   return (
-    <FieldBlock.Layout layout={layout} labelColumnWidth={labelColumnWidth} className={className}>
-      {layout === 'horizontal' ? (
-        <FieldBlock.Column>
-          <FieldBlock.Label name={name} required={required} disabled={disabled} size={labelSize || 'bigger'}>
-            {labelIsHidden ? <VisuallyHidden>{label}</VisuallyHidden> : label}
-          </FieldBlock.Label>
-        </FieldBlock.Column>
-      ) : null}
-      <FieldBlock.Column>
-        {!labelIsHidden && layout === 'vertical' ? (
-          <FieldBlock.Label name={name} required={required} disabled={disabled} size={labelSize || 'default'}>
-            {label}
-          </FieldBlock.Label>
-        ) : null}
-        <FieldBlock.Column className="gap-1">
-          <Input
-            id={`input-${name}`}
-            name={name}
-            disabled={disabled}
-            required={required}
-            value={value}
-            placeholder={placeholder}
-            data-testid={testId}
-            size={size}
-            error={error || Boolean(errorMsg)}
-            aria-describedby={describedBy}
-            {...props}
-          />
-          {helpText || errorMsg ? <FieldBlock.Message name={name} helpText={helpText} errorMsg={errorMsg} /> : null}
-        </FieldBlock.Column>
-      </FieldBlock.Column>
-    </FieldBlock.Layout>
+    <FieldBlock
+      name={name}
+      label={label}
+      labelIsHidden={labelIsHidden}
+      labelSize={labelSize}
+      layout={layout}
+      labelColumnWidth={labelColumnWidth}
+      required={required}
+      disabled={disabled}
+      helpText={helpText}
+      errorMsg={errorMsg}
+      describedBy={describedBy}
+      className={className}
+    >
+      {control => (
+        <Input
+          {...inputProps}
+          {...control}
+          name={name}
+          disabled={disabled}
+          required={required}
+          data-testid={testId}
+          size={size}
+          error={error || Boolean(errorMsg)}
+        />
+      )}
+    </FieldBlock>
   );
 }
