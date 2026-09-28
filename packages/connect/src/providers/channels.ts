@@ -34,16 +34,19 @@ function credentialToken(credential: ConnectionCredential): string {
 const SLACK_RESERVED_KEYS = ['baseUrl', 'refreshToken', 'token', 'tokenResolver', 'encryptionKey'] as const;
 const TELEGRAM_RESERVED_KEYS = ['baseUrl', 'apiBaseUrl', 'botToken', 'tokenResolver', 'encryptionKey'] as const;
 const DISCORD_RESERVED_KEYS = ['baseUrl', 'encryptionKey'] as const;
+const TEAMS_RESERVED_KEYS = ['baseUrl', 'appId', 'appPassword', 'tokenResolver', 'encryptionKey'] as const;
 
 /** Reserved (credential + framework-managed) `providerOptions` keys per integration. */
 export type SlackReservedProviderOption = (typeof SLACK_RESERVED_KEYS)[number];
 export type TelegramReservedProviderOption = (typeof TELEGRAM_RESERVED_KEYS)[number];
 export type DiscordReservedProviderOption = (typeof DISCORD_RESERVED_KEYS)[number];
+export type TeamsReservedProviderOption = (typeof TEAMS_RESERVED_KEYS)[number];
 
 const RESERVED_OPTION_KEYS: Record<string, readonly string[]> = {
   slack: SLACK_RESERVED_KEYS,
   telegram: TELEGRAM_RESERVED_KEYS,
   discord: DISCORD_RESERVED_KEYS,
+  'microsoft-teams': TEAMS_RESERVED_KEYS,
 };
 
 function stripReservedOptions<T extends Record<string, unknown> | undefined>(integrationId: string, options: T): T {
@@ -238,4 +241,74 @@ const discordChannel: ChannelProviderRegistration<DiscordProviderOptions> = {
   },
 };
 
-export const CHANNELS: readonly ChannelProviderRegistration[] = [slackChannel, telegramChannel, discordChannel];
+/**
+ * Microsoft Teams: wraps `@mastra/teams`'s `TeamsProvider` in delegated mode.
+ * Teams provisioning spans two token audiences, so unlike the Slack/Telegram
+ * resolvers this one is scope-aware:
+ *
+ * - **Microsoft Graph** (`TEAMS_GRAPH_SCOPE`): resolved from the connection's
+ *   oauth2 credential. The platform's credential vendor (Nango) owns the
+ *   refresh cycle; each `getCredential()` call may return a newer token.
+ * - **Teams Developer Portal** (`TEAMS_DEV_PORTAL_SCOPE`): resolved from the
+ *   connection's `connection_config.devPortalAccessToken` — the secondary
+ *   token Nango's `microsoft-teams` provider mints when the integration
+ *   requests the `dev.teams.microsoft.com/AppDefinitions.ReadWrite` scope.
+ *   The resolver fetches the credential first so the vendor's refresh cycle
+ *   (which re-mints the secondary token alongside the Graph token) has run
+ *   before the context is read. Connections whose integration doesn't
+ *   request that scope get an actionable error instead of a Dev Portal 401.
+ *
+ * The manager credential is only used at provisioning time — each provisioned
+ * bot authenticates with its own client secret from the provider's install
+ * store, so the message path never round-trips to the platform.
+ *
+ * Reserved `providerOptions` fields (`baseUrl`, `appId`, `appPassword`,
+ * `tokenResolver`, `encryptionKey`) are rejected at the type level and
+ * stripped at runtime. Non-reserved provider config (`appType`, `streaming`,
+ * `typingStatus`, handlers, etc.) is forwarded unchanged. See
+ * `@mastra/teams`'s `TeamsProviderConfig` for the full option surface.
+ */
+const teamsChannel: ChannelProviderRegistration = {
+  integrationId: 'microsoft-teams',
+  async create(options, runtime) {
+    const mod = (await import('@mastra/teams')) as {
+      TeamsProvider: new (config: Record<string, unknown>) => ChannelProvider;
+    };
+    const safeOptions = stripReservedOptions('microsoft-teams', options);
+    // Reads the *current* connection through the runtime on every call, so a
+    // connection swapped on the platform takes effect on the next
+    // provisioning operation — no `sync()` needed.
+    const tokenResolver = async (scope: string | string[]): Promise<string> => {
+      const scopes = Array.isArray(scope) ? scope : [scope];
+      const wantsDevPortal = scopes.some(entry => entry.includes('dev.teams.microsoft.com'));
+      // Fetching the credential first triggers the vendor's refresh cycle,
+      // which keeps the secondary Dev Portal token fresh alongside the Graph
+      // token — so the context read below never observes an expired token
+      // the vendor would have refreshed.
+      const credential = await runtime.getCredential();
+      if (!wantsDevPortal) {
+        return credentialToken(credential);
+      }
+      const config = ((await runtime.getConnectionContext())?.connection_config ?? {}) as Record<string, unknown>;
+      const devPortal = config.devPortalAccessToken as { access_token?: unknown } | undefined;
+      const token =
+        typeof devPortal?.access_token === 'string' && devPortal.access_token ? devPortal.access_token : undefined;
+      if (!token) {
+        throw new MastraConnectError(
+          'no_active_connection',
+          `Teams connection ${runtime.getConnectionId()} has no Dev Portal token in its connection config. ` +
+            `Reconnect with an integration that requests the ${'https://dev.teams.microsoft.com/AppDefinitions.ReadWrite'} scope.`,
+        );
+      }
+      return token;
+    };
+    return { provider: new mod.TeamsProvider({ tokenResolver, ...(safeOptions ?? {}) }) };
+  },
+};
+
+export const CHANNELS: readonly ChannelProviderRegistration[] = [
+  slackChannel,
+  telegramChannel,
+  discordChannel,
+  teamsChannel,
+];

@@ -100,6 +100,7 @@ afterEach(() => {
   vi.doUnmock('@mastra/slack');
   vi.doUnmock('@mastra/telegram');
   vi.doUnmock('@mastra/discord');
+  vi.doUnmock('@mastra/teams');
   warnSpy.mockRestore();
 });
 
@@ -174,6 +175,21 @@ function fakeDiscord() {
     }
   };
 }
+function fakeTeams() {
+  return class TeamsProvider extends FakeChannelProvider {
+    constructor(config: Record<string, unknown>) {
+      super(config, 'teams');
+    }
+  };
+}
+/** The constructor config the most recent fake TeamsProvider was built with. */
+function teamsConfig(): Record<string, unknown> & {
+  tokenResolver?: (scope: string | string[]) => Promise<string>;
+} {
+  const call = FakeChannelProvider.configSpy.mock.calls.findLast(c => c[0] === 'teams');
+  if (!call) throw new Error('TeamsProvider was never constructed');
+  return call[1] as Record<string, unknown> & { tokenResolver?: (scope: string | string[]) => Promise<string> };
+}
 
 /**
  * `channels()` constructs every non-disabled registration eagerly (so routes
@@ -184,6 +200,7 @@ function mockAllProviders() {
   vi.doMock('@mastra/slack', () => ({ SlackProvider: fakeSlack() }));
   vi.doMock('@mastra/telegram', () => ({ TelegramProvider: fakeTelegram() }));
   vi.doMock('@mastra/discord', () => ({ DiscordProvider: fakeDiscord() }));
+  vi.doMock('@mastra/teams', () => ({ TeamsProvider: fakeTeams() }));
 }
 
 async function importChannels() {
@@ -232,7 +249,7 @@ describe('channels()', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     // All three providers exist already — that's what makes getRoutes() work.
     const constructed = FakeChannelProvider.configSpy.mock.calls.map(([id]) => id).sort();
-    expect(constructed).toEqual(['discord', 'slack', 'telegram']);
+    expect(constructed).toEqual(['discord', 'slack', 'teams', 'telegram']);
   });
 
   it('exposes getRoutes() for every non-disabled channel before any connection exists', async () => {
@@ -240,7 +257,7 @@ describe('channels()', () => {
     const channelsFn = await importChannels();
     const resolver = await channelsFn(options(fetchMock));
     const paths = resolver.getRoutes().map(route => route.path);
-    expect(paths.sort()).toEqual(['/discord/webhook', '/slack/webhook', '/telegram/webhook']);
+    expect(paths.sort()).toEqual(['/discord/webhook', '/slack/webhook', '/teams/webhook', '/telegram/webhook']);
   });
 
   it('builds a SlackProvider with a platform-backed tokenResolver from a single active connection', async () => {
@@ -475,17 +492,113 @@ describe('channels()', () => {
     }
   });
 
-  it('resolves slack + telegram + discord together into a single ChannelProvider map', async () => {
+  it('builds a TeamsProvider whose tokenResolver serves Graph tokens from the platform credential', async () => {
+    const state: PlatformState = {
+      connections: [makeConnection({ id: 'c_teams', integrationId: 'microsoft-teams' })],
+      credentials: { c_teams: { type: 'oauth2', accessToken: 'graph-token-1', expiresAt: null } },
+    };
+    const fetchMock = platformFetch(state);
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(fetchMock));
+    const providers = await resolver();
+    expect(providers['microsoft-teams']).toBeInstanceOf(FakeChannelProvider);
+
+    const { tokenResolver } = teamsConfig();
+    expect(tokenResolver).toBeTypeOf('function');
+    await expect(tokenResolver!('https://graph.microsoft.com/.default')).resolves.toBe('graph-token-1');
+
+    // The vendor rotates the Graph token: the next call sees it with no
+    // resolver refresh — the resolver re-fetches the credential per call.
+    state.credentials = { c_teams: { type: 'oauth2', accessToken: 'graph-token-2', expiresAt: null } };
+    await expect(tokenResolver!('https://graph.microsoft.com/.default')).resolves.toBe('graph-token-2');
+  });
+
+  it('serves Dev Portal tokens from connection_config.devPortalAccessToken, refreshing the credential first', async () => {
+    const state: PlatformState = {
+      connections: [makeConnection({ id: 'c_teams', integrationId: 'microsoft-teams' })],
+      credentials: { c_teams: { type: 'oauth2', accessToken: 'graph-token-1', expiresAt: null } },
+      contexts: {
+        c_teams: {
+          connection_config: {
+            devPortalAccessToken: { access_token: 'tdp-token-1', expires_at: '2027-01-01T00:00:00Z' },
+          },
+          metadata: null,
+        },
+      },
+    };
+    const fetchMock = platformFetch(state);
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(fetchMock));
+    await resolver();
+
+    const { tokenResolver } = teamsConfig();
+    await expect(tokenResolver!(['https://dev.teams.microsoft.com/AppDefinitions.ReadWrite'])).resolves.toBe(
+      'tdp-token-1',
+    );
+    // The credential endpoint was hit before the context read: fetching the
+    // credential triggers the vendor's refresh cycle, which re-mints the
+    // secondary Dev Portal token alongside the Graph token.
+    const paths = fetchMock.mock.calls.map(call => new URL(String(call[0])).pathname);
+    const credentialIndex = paths.findIndex(path => path.endsWith('/c_teams/credentials'));
+    const contextIndex = paths.findIndex(path => path.endsWith('/c_teams/context'));
+    expect(credentialIndex).toBeGreaterThanOrEqual(0);
+    expect(contextIndex).toBeGreaterThan(credentialIndex);
+  });
+
+  it('fails actionably when the Teams connection has no Dev Portal token', async () => {
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_teams', integrationId: 'microsoft-teams' })],
+      credentials: { c_teams: { type: 'oauth2', accessToken: 'graph-token-1', expiresAt: null } },
+      contexts: { c_teams: { connection_config: null, metadata: null } },
+    });
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(fetchMock));
+    await resolver();
+
+    const { tokenResolver } = teamsConfig();
+    await expect(tokenResolver!('https://dev.teams.microsoft.com/AppDefinitions.ReadWrite')).rejects.toThrow(
+      /Dev Portal token/,
+    );
+  });
+
+  it('strips reserved teams providerOptions fields while forwarding the rest', async () => {
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_teams', integrationId: 'microsoft-teams' })],
+      credentials: { c_teams: { type: 'oauth2', accessToken: 'graph-token-1', expiresAt: null } },
+    });
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(
+      options(fetchMock, {
+        integrations: {
+          'microsoft-teams': {
+            providerOptions: { appId: 'sneaky', appPassword: 'sneaky', typingStatus: false } as Record<string, unknown>,
+          },
+        },
+      }),
+    );
+    await resolver();
+
+    const config = teamsConfig();
+    expect(config.appId).toBeUndefined();
+    expect(config.appPassword).toBeUndefined();
+    expect(config.typingStatus).toBe(false);
+    expect(config.tokenResolver).toBeTypeOf('function');
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/ignoring reserved providerOptions/));
+  });
+
+  it('resolves slack + telegram + discord + teams together into a single ChannelProvider map', async () => {
     const fetchMock = platformFetch({
       connections: [
         makeConnection({ id: 'c_slack', integrationId: 'slack' }),
         makeConnection({ id: 'c_tg', integrationId: 'telegram' }),
         makeConnection({ id: 'c_dc', integrationId: 'discord' }),
+        makeConnection({ id: 'c_teams', integrationId: 'microsoft-teams' }),
       ],
       credentials: {
         c_slack: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null },
         c_tg: { type: 'api_key', apiKey: TELEGRAM_BOT_TOKEN },
         c_dc: { type: 'oauth2', accessToken: 'oauth-bearer-not-a-bot-token', expiresAt: null },
+        c_teams: { type: 'oauth2', accessToken: 'graph-token-1', expiresAt: null },
       },
       contexts: {
         c_dc: { connection_config: null, metadata: { botToken: DISCORD_BOT_TOKEN } },
@@ -494,7 +607,7 @@ describe('channels()', () => {
     const channelsFn = await importChannels();
     const resolver = await channelsFn(options(fetchMock));
     const providers = await resolver();
-    expect(Object.keys(providers).sort()).toEqual(['discord', 'slack', 'telegram']);
+    expect(Object.keys(providers).sort()).toEqual(['discord', 'microsoft-teams', 'slack', 'telegram']);
     for (const provider of Object.values(providers)) {
       expect(provider).toBeInstanceOf(FakeChannelProvider);
     }

@@ -7,6 +7,7 @@ import type { ChannelInstance, ChannelProviderRegistration, ChannelRuntime } fro
 import type {
   DiscordReservedProviderOption,
   SlackReservedProviderOption,
+  TeamsReservedProviderOption,
   TelegramReservedProviderOption,
 } from './providers/channels.js';
 import { CHANNELS } from './registry.js';
@@ -42,6 +43,7 @@ export type DiscordChannelsProviderOptions = Record<string, unknown> & {
   applicationId?: string;
   publicKey?: string;
 } & ForbidReservedOptions<DiscordReservedProviderOption>;
+export type TeamsChannelsProviderOptions = Record<string, unknown> & ForbidReservedOptions<TeamsReservedProviderOption>;
 
 /** Base shape shared by every integration override; per-id specializations narrow `providerOptions`. */
 export interface ChannelsIntegrationOptions<ProviderOptions = Record<string, unknown>> {
@@ -62,6 +64,7 @@ export interface ChannelsIntegrationOverrides {
   slack?: ChannelsIntegrationOptions<SlackChannelsProviderOptions>;
   telegram?: ChannelsIntegrationOptions<TelegramChannelsProviderOptions>;
   discord?: ChannelsIntegrationOptions<DiscordChannelsProviderOptions>;
+  'microsoft-teams'?: ChannelsIntegrationOptions<TeamsChannelsProviderOptions>;
   [integrationId: string]: ChannelsIntegrationOptions | undefined;
 }
 
