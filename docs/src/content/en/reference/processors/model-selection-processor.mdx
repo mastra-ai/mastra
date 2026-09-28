@@ -251,6 +251,10 @@ Single-step runs are unaffected, because the two scopes are identical when there
 Choice criteria are mutually exclusive, which is the wrong shape when routing depends on independent dimensions. Ask several questions and combine the answers in `select`. It receives the fully typed answers, and the routing policy is your code:
 
 ```typescript
+import { Classifier } from '@mastra/core/classifier'
+import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
+import { ModelSelectionProcessor } from '@mastra/core/processors'
+
 const triage = new Classifier({
   id: 'triage',
   model: createTypeSafeAi({/* ... */}).evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
