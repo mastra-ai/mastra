@@ -111,6 +111,33 @@ describe('fluid-menu primitive', () => {
       await flushFrames();
       expect(activeRow()).toBe('a');
     });
+
+    it('leaves the row under a moving pointer lit', async () => {
+      await setup();
+      fireEvent.mouseMove(screen.getByTestId('menu'), { clientX: 10, clientY: ROW_HEIGHT * 2 + 5 });
+      await flushFrames();
+
+      await act(async () => {
+        screen.getByText('a').setAttribute('data-highlighted', '');
+      });
+      await flushFrames();
+
+      expect(activeRow()).toBe('c');
+    });
+
+    it('follows it again once a key is pressed', async () => {
+      await setup();
+      fireEvent.mouseMove(screen.getByTestId('menu'), { clientX: 10, clientY: ROW_HEIGHT * 2 + 5 });
+      await flushFrames();
+
+      fireEvent.keyDown(document.body, { key: 'ArrowUp' });
+      await act(async () => {
+        screen.getByText('a').setAttribute('data-highlighted', '');
+      });
+      await flushFrames();
+
+      expect(activeRow()).toBe('a');
+    });
   });
 
   describe('when rows unmount and new ones mount (virtualized lists)', () => {
