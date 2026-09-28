@@ -21,13 +21,16 @@ import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-settings';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
-import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
+import {
+  SchemaRequestContextProvider,
+  useLocalRequestContext,
+} from '@/domains/request-context/context/schema-request-context';
 
 function AgentSession() {
   const { agentId, threadId } = useParams();
   const [searchParams] = useSearchParams();
-  const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
-  const { data: memory } = useMemory(agentId!);
+  const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!, useLocalRequestContext());
+  const { data: memory } = useMemory(agentId!, useLocalRequestContext());
   const navigate = useNavigate();
   const isNewThread = threadId === 'new';
 
@@ -36,11 +39,14 @@ function AgentSession() {
 
   const hasMemory = Boolean(memory?.result);
 
-  const { refetch: refreshThreads } = useThreads({
-    resourceId: agentId!,
-    agentId: agentId!,
-    isMemoryEnabled: hasMemory,
-  });
+  const { refetch: refreshThreads } = useThreads(
+    {
+      resourceId: agentId!,
+      agentId: agentId!,
+      isMemoryEnabled: hasMemory,
+    },
+    useLocalRequestContext(),
+  );
 
   useEffect(() => {
     if (!hasMemory) return;
@@ -91,7 +97,7 @@ function AgentSession() {
   return (
     <TracingSettingsProvider entityId={agentId!} entityType="agent">
       <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
-        <SchemaRequestContextProvider>
+        <SchemaRequestContextProvider entityType="agent" entityId={agentId!}>
           <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId} resourceId={agentId!}>
             <BrowserToolCallsProvider key={`browser-${agentId}-${actualThreadId}`}>
               <BrowserSessionProvider

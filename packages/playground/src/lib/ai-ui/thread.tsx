@@ -43,10 +43,10 @@ import { ComposerModelSettings } from '@/domains/agents/components/composer-mode
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
+import { useLocalRequestContext } from '@/domains/request-context';
 import { useVoiceCall, VoiceCallButton, VoiceCallPanel } from '@/domains/voice';
 import type { VoiceCallControls } from '@/domains/voice';
 import { startViewTransition } from '@/lib/routing';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 const SKELETON_DELAY_MS = 300;
 const EMPTY_SUGGESTED_PROMPTS: string[] = [];
@@ -146,7 +146,7 @@ export const Thread = ({
 
   const messages = useChatMessages();
   const { isRunning } = useChatRunning();
-  const { requestContext } = usePlaygroundStore();
+  const requestContext = useLocalRequestContext();
   const { isSpeaking, readAloud, stop: stopSpeaking } = useReadAloud(agentId, requestContext);
 
   const { hasSession, viewMode } = useBrowserSession();
@@ -478,7 +478,7 @@ const AgentComposer = ({
 };
 
 const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript: (text: string) => void }) => {
-  const { requestContext } = usePlaygroundStore();
+  const requestContext = useLocalRequestContext();
   const { start, stop, isListening, transcript } = useSpeechRecognition({ agentId, requestContext });
 
   useEffect(() => {

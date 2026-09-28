@@ -26,7 +26,7 @@ const renderEditorTestChat = () => {
         <MemoryRouter>
           <TooltipProvider>
             <TracingSettingsProvider entityId={AGENT_ID} entityType="agent">
-              <SchemaRequestContextProvider>
+              <SchemaRequestContextProvider entityType="agent" entityId={AGENT_ID}>
                 <AgentPlaygroundTestChat
                   agentId={AGENT_ID}
                   agentName="Test Agent"

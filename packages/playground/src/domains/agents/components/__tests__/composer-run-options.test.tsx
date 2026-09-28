@@ -8,7 +8,10 @@ import { MemoryRouter } from 'react-router';
 import { stringify } from 'superjson';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
-import { SchemaRequestContextProvider } from '../../../request-context/context/schema-request-context';
+import {
+  SchemaRequestContextProvider,
+  useLocalRequestContext,
+} from '../../../request-context/context/schema-request-context';
 import { AgentEditFormProvider } from '../../context/agent-edit-form-context';
 import type { AgentFormValues } from '../agent-edit-page/utils/form-validation';
 import { ComposerRunOptions } from '../composer-run-options';
@@ -22,7 +25,7 @@ beforeAll(() => {
   }
 });
 
-const renderRunOptions = (ui: React.ReactNode) => {
+const renderRunOptions = (ui: React.ReactNode, entityId = AGENT_ID) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -32,7 +35,9 @@ const renderRunOptions = (ui: React.ReactNode) => {
         <MemoryRouter>
           <TooltipProvider>
             <TracingSettingsProvider entityId={AGENT_ID} entityType="agent">
-              <SchemaRequestContextProvider>{ui}</SchemaRequestContextProvider>
+              <SchemaRequestContextProvider entityType="agent" entityId={entityId}>
+                {ui}
+              </SchemaRequestContextProvider>
             </TracingSettingsProvider>
           </TooltipProvider>
         </MemoryRouter>
@@ -69,6 +74,10 @@ function AgentVariablesHarness({ children }: { children: React.ReactNode }) {
       {children}
     </AgentEditFormProvider>
   );
+}
+
+function LocalContextProbe() {
+  return <output data-testid="local-request-context">{JSON.stringify(useLocalRequestContext())}</output>;
 }
 
 afterEach(() => {
@@ -167,4 +176,41 @@ describe('ComposerRunOptions', () => {
     expect(await screen.findByRole('button', { name: /save/i })).not.toBeNull();
     expect(screen.getByRole('button', { name: /json/i })).not.toBeNull();
   });
+
+  it('persists the saved request context per agent and restores it after remount', async () => {
+    (window as typeof window & { MASTRA_REQUEST_CONTEXT_PRESETS?: string }).MASTRA_REQUEST_CONTEXT_PRESETS =
+      JSON.stringify({ French: { locale: 'fr' } });
+
+    const view = renderRunOptions(
+      <>
+        <ComposerRunOptions />
+        <LocalContextProbe />
+      </>,
+    );
+    await openByTestId('composer-run-options-trigger');
+    expect(await screen.findByText('Request Context (JSON)', undefined, { timeout: 10_000 })).not.toBeNull();
+
+    fireEvent.click(screen.getByRole('combobox'));
+    const presetOption = await screen.findByRole('option', { name: 'French' });
+    fireEvent.pointerDown(presetOption, { pointerType: 'mouse' });
+    fireEvent.click(presetOption, { detail: 1 });
+    const saveButton = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement;
+    await waitFor(() => expect(saveButton.disabled).toBe(false));
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('local-request-context').textContent).toBe('{"locale":"fr"}');
+    });
+    expect(JSON.parse(window.localStorage.getItem(`mastra-request-context:agent:${AGENT_ID}`) ?? 'null')).toEqual({
+      locale: 'fr',
+    });
+
+    view.unmount();
+    renderRunOptions(<LocalContextProbe />);
+    expect(screen.getByTestId('local-request-context').textContent).toBe('{"locale":"fr"}');
+
+    cleanup();
+    renderRunOptions(<LocalContextProbe />, 'agent-2');
+    expect(screen.getByTestId('local-request-context').textContent).toBe('{}');
+  }, 15_000);
 });

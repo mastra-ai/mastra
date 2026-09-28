@@ -6,13 +6,14 @@ import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { CopyIcon, Check } from 'lucide-react';
 import { useAgent } from '../hooks/use-agent';
+import { useLocalRequestContext } from '@/domains/request-context/context/schema-request-context';
 
 export interface AgentEntityHeaderProps {
   agentId: string;
 }
 
 export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
-  const { data: agent, isLoading } = useAgent(agentId);
+  const { data: agent, isLoading } = useAgent(agentId, useLocalRequestContext());
   const { handleCopy, isCopied } = useCopyToClipboard({ text: agentId });
   const agentName = agent?.name || '';
 

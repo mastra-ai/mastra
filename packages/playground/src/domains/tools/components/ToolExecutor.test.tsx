@@ -15,6 +15,8 @@ function renderToolExecutor(zodInputSchema: ZodType = z.object({})) {
       isExecutingTool={false}
       toolDescription="Runs without configuration"
       toolId="test-tool"
+      requestContextEntityType="tool"
+      requestContextEntityId="test-tool"
       zodInputSchema={zodInputSchema}
     />,
   );

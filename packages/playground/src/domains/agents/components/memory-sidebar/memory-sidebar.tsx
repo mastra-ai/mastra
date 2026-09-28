@@ -25,6 +25,7 @@ import { useMemoryTimeline, useObservationalMemoryContext } from '@/domains/agen
 
 import { useMemoryConfig, useThread } from '@/domains/memory/hooks';
 import { useMemory } from '@/domains/memory/hooks/use-memory';
+import { useLocalRequestContext } from '@/domains/request-context/context/schema-request-context';
 
 export interface MemorySidebarProps {
   agentId: string;
@@ -110,7 +111,7 @@ export function MemorySidebarBody({
 }: MemorySidebarProps) {
   // Derive memory state from the shared (React Query deduped) hook instead of
   // accepting it as props — see structure-derive-dont-duplicate.
-  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
+  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId, useLocalRequestContext());
   const hasMemory = Boolean(memory?.result);
   const memoryType = memory?.memoryType;
 
@@ -133,8 +134,8 @@ export function MemorySidebarBody({
   // Status parts are streamed but not persisted, so on a fresh load there is no live
   // progress yet. Fall back to the durable OM record the same way the expanded OM
   // section and the timeline panel do, otherwise the bar stays empty after a reload.
-  const { data: thread } = useThread({ threadId, agentId });
-  const { data: memoryConfigData } = useMemoryConfig(agentId);
+  const { data: thread } = useThread({ threadId, agentId }, useLocalRequestContext());
+  const { data: memoryConfigData } = useMemoryConfig(agentId, useLocalRequestContext());
   const { data: omData } = useObservationalMemory(
     observationalOn ? agentId : undefined,
     observationalOn ? threadId : undefined,

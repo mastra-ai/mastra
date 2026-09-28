@@ -19,6 +19,7 @@ import { useSamplingRestriction } from '../hooks/use-sampling-restriction';
 import { AgentAdvancedSettingsBody } from './agent-advanced-settings';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useMemory } from '@/domains/memory/hooks/use-memory';
+import { useLocalRequestContext } from '@/domains/request-context/context/schema-request-context';
 
 export interface ComposerModelSettingsProps {
   agentId: string;
@@ -108,8 +109,8 @@ const StreamSubscriptionRadio = ({ supported, disabled }: StreamSubscriptionRadi
 };
 
 export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) => {
-  const { data: agent, isLoading } = useAgent(agentId);
-  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
+  const { data: agent, isLoading } = useAgent(agentId, useLocalRequestContext());
+  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId, useLocalRequestContext());
   const { settings, setSettings, resetAll } = useAgentSettings();
   const { canEdit } = usePermissions();
   const [advancedOpen, setAdvancedOpen] = useState(false);

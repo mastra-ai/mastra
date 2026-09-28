@@ -27,7 +27,7 @@ const renderAgentPlayground = () => {
         <MemoryRouter initialEntries={[`/agents/${AGENT_ID}/editor`]}>
           <TooltipProvider>
             <TracingSettingsProvider entityId={AGENT_ID} entityType="agent">
-              <SchemaRequestContextProvider>
+              <SchemaRequestContextProvider entityType="agent" entityId="agent-1">
                 <Routes>
                   <Route path="/agents/:agentId/editor" element={<AgentPlayground />} />
                 </Routes>

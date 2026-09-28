@@ -21,6 +21,7 @@ import { getEditorOwnership } from '@/domains/agents/utils/editor-ownership';
 import { CmsEditHeaderActions } from '@/domains/cms/components/cms-edit-header-actions';
 import { useEditorSource } from '@/domains/configuration/hooks/use-editor-source';
 import { agentCrumb, navCrumb } from '@/domains/navigation/crumbs';
+import { useLocalRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 
 const crumbs = [navCrumb('/agents'), agentCrumb];
@@ -139,7 +140,7 @@ function EditLayoutWrapper() {
   const { isMastraPlatform, mastraPlatformApiEndpoint, mastraPlatformProjectId } = useMastraPlatform();
 
   // Fetch the code/merged agent (GET /agents/:id) to determine source
-  const { data: codeAgent, isLoading: isLoadingCodeAgent } = useAgent(agentId);
+  const { data: codeAgent, isLoading: isLoadingCodeAgent } = useAgent(agentId, useLocalRequestContext());
 
   // Fetch versions first — this endpoint returns an empty array for code-only agents
   const { data: versionsData } = useAgentVersions({

@@ -14,6 +14,7 @@ import { useState } from 'react';
 import { useWorkingMemory } from '../../context/agent-working-memory-context';
 import { CodeDisplay } from './code-display';
 import { useMemoryConfig } from '@/domains/memory/hooks';
+import { useLocalRequestContext } from '@/domains/request-context/context/schema-request-context';
 
 interface AgentWorkingMemoryProps {
   agentId: string;
@@ -24,7 +25,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
     useWorkingMemory();
 
   // Get memory config to check if working memory is enabled
-  const { data, isLoading: isConfigLoading } = useMemoryConfig(agentId);
+  const { data, isLoading: isConfigLoading } = useMemoryConfig(agentId, useLocalRequestContext());
   const config = data?.config;
   // Check if working memory is enabled
   const isWorkingMemoryEnabled = Boolean(config?.workingMemory?.enabled);

@@ -16,14 +16,15 @@ import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initi
 import { getEditorOwnership } from '@/domains/agents/utils/editor-ownership';
 import { useEditorSource } from '@/domains/configuration/hooks/use-editor-source';
 import { useMemory } from '@/domains/memory/hooks/use-memory';
+import { useLocalRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 
 function AgentPlayground() {
   const { agentId } = useParams();
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
 
-  const { data: codeAgent, isLoading: isLoadingCodeAgent, error } = useAgent(agentId!);
-  const { data: memory } = useMemory(agentId!);
+  const { data: codeAgent, isLoading: isLoadingCodeAgent, error } = useAgent(agentId!, useLocalRequestContext());
+  const { data: memory } = useMemory(agentId!, useLocalRequestContext());
   const editorSource = useEditorSource();
   const { isMastraPlatform, mastraPlatformApiEndpoint, mastraPlatformProjectId } = useMastraPlatform();
 

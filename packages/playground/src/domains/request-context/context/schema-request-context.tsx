@@ -1,36 +1,50 @@
+/* eslint-disable react-refresh/only-export-components -- context and hooks intentionally co-located with their provider */
+import { useLocalStorageState } from '@mastra/playground-ui/hooks/use-local-storage-state';
 import type { ReactNode } from 'react';
-import { createContext, useContext, useState } from 'react';
-import { usePlaygroundStore } from '@/store/playground-store';
+import { createContext, useContext } from 'react';
+import { z } from 'zod/v4';
+
+export type RequestContextEntityType = 'agent' | 'agent-tool' | 'workflow' | 'tool' | 'mcp-tool';
 
 interface SchemaRequestContextState {
   /**
-   * Current values from the schema-driven request context form.
-   * These values are specific to the entity (agent/workflow) with a requestContextSchema.
+   * Request context values of the entity (agent/workflow/tool) this provider is scoped to.
+   * Persisted in localStorage per entity.
    */
   schemaValues: Record<string, any>;
 
-  /**
-   * Update the schema values. Called by RequestContextSchemaForm when form values change.
-   */
   setSchemaValues: (values: Record<string, any>) => void;
 
-  /**
-   * Clear the schema values. Called when navigating away from an entity with a schema.
-   */
   clearSchemaValues: () => void;
 }
 
 export const SchemaRequestContext = createContext<SchemaRequestContextState | null>(null);
 
-export function SchemaRequestContextProvider({ children }: { children: ReactNode }) {
-  const { requestContext } = usePlaygroundStore();
-  const [schemaValues, setSchemaValuesState] = useState<Record<string, any>>(requestContext);
+const requestContextSchema = z.record(z.string(), z.unknown());
 
-  const setSchemaValues = (values: Record<string, any>) => setSchemaValuesState(values);
+interface SchemaRequestContextProviderProps {
+  entityType: RequestContextEntityType;
+  entityId: string;
+  children: ReactNode;
+}
 
-  const clearSchemaValues = () => {
-    setSchemaValuesState({});
-  };
+export function SchemaRequestContextProvider({ entityType, entityId, children }: SchemaRequestContextProviderProps) {
+  const storageKey = `mastra-request-context:${entityType}:${entityId}`;
+  return (
+    <SchemaRequestContextState key={storageKey} storageKey={storageKey}>
+      {children}
+    </SchemaRequestContextState>
+  );
+}
+
+function SchemaRequestContextState({ storageKey, children }: { storageKey: string; children: ReactNode }) {
+  const [schemaValues, setSchemaValues] = useLocalStorageState<Record<string, unknown>>({
+    initialKey: storageKey,
+    defaultValue: {},
+    schema: requestContextSchema,
+  });
+
+  const clearSchemaValues = () => setSchemaValues({});
 
   return (
     <SchemaRequestContext.Provider value={{ schemaValues, setSchemaValues, clearSchemaValues }}>
@@ -40,8 +54,8 @@ export function SchemaRequestContextProvider({ children }: { children: ReactNode
 }
 
 /**
- * Hook to access schema-driven request context values.
- * Used by RequestContextSchemaForm to update values and by chat components to read them.
+ * Hook to access the entity-scoped request context values.
+ * Used by RequestContextSchemaForm / RequestContext editor to update values.
  */
 export function useSchemaRequestContext() {
   const context = useContext(SchemaRequestContext);
@@ -52,17 +66,10 @@ export function useSchemaRequestContext() {
 }
 
 /**
- * Hook to get merged request context (global store + schema form values).
- * Schema form values take precedence over global store values.
- * Works with or without SchemaRequestContextProvider.
+ * Returns the request context of the enclosing entity, or `undefined` outside an entity scope.
  */
-export function useMergedRequestContext() {
-  const { requestContext: globalRequestContext } = usePlaygroundStore();
-  const schemaContext = useContext(SchemaRequestContext);
-  const schemaValues = schemaContext?.schemaValues ?? {};
+const EMPTY_REQUEST_CONTEXT: Record<string, any> = {};
 
-  return {
-    ...(globalRequestContext ?? {}),
-    ...schemaValues,
-  };
+export function useLocalRequestContext(): Record<string, any> {
+  return useContext(SchemaRequestContext)?.schemaValues ?? EMPTY_REQUEST_CONTEXT;
 }

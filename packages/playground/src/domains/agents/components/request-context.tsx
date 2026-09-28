@@ -1,26 +1,22 @@
 import { jsonLanguage } from '@codemirror/lang-json';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
-import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { RequestContextLabel } from '@mastra/playground-ui/domains/request-context/components/request-context-label';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatJSON, isValidJson } from '@mastra/playground-ui/utils/formatting';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import CodeMirror from '@uiw/react-codemirror';
-import { Braces, CopyIcon, ExternalLink, X, Check } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { Braces, CopyIcon, X, Check } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useSchemaRequestContext } from '@/domains/request-context/context/schema-request-context';
 import type { RequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
 import { useRequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
-
-import { usePlaygroundStore } from '@/store/playground-store';
 
 interface RequestContextProps {
   editorClassName?: string;
@@ -46,7 +42,7 @@ function normalizeJsonString(value: string) {
 }
 
 export const RequestContext = ({ editorClassName = 'h-[400px]', labelTooltip }: RequestContextProps = {}) => {
-  const { requestContext, setRequestContext } = usePlaygroundStore();
+  const { schemaValues: requestContext, setSchemaValues: setRequestContext } = useSchemaRequestContext();
   const [requestContextValue, setRequestContextValue] = useState<string>('');
   const [savedRequestContextValue, setSavedRequestContextValue] = useState<string>('');
   const theme = useCodemirrorTheme();
@@ -214,34 +210,5 @@ export const RequestContext = ({ editorClassName = 'h-[400px]', labelTooltip }: 
         </div>
       </div>
     </TooltipProvider>
-  );
-};
-
-export const RequestContextWrapper = ({ children }: { children: ReactNode }) => {
-  const { Link } = useLinkComponent();
-
-  return (
-    <div>
-      <Notice
-        variant="note"
-        title="Request context"
-        className="mb-5"
-        action={
-          <Notice.Button render={<Link href="https://mastra.ai/docs/server/request-context" target="_blank" />}>
-            <Icon>
-              <ExternalLink />
-            </Icon>
-            See documentation
-          </Notice.Button>
-        }
-      >
-        <Notice.Message>
-          Mastra provides request context, which is a system based on dependency injection that enables you to configure
-          your agents and tools with runtime variables. If you find yourself creating several different agents that do
-          very similar things, request context allows you to combine them into one agent.
-        </Notice.Message>
-      </Notice>
-      {children}
-    </div>
   );
 };

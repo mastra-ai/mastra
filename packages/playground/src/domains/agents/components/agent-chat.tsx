@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useAgentSettings } from '../context/agent-context';
-import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
+import { useLocalRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 import { ChatProvider } from '@/lib/ai-ui/chat/chat-provider';
 import { Thread } from '@/lib/ai-ui/thread';
@@ -31,7 +31,7 @@ export const AgentChat = ({
   runOptionsSlot?: React.ReactNode;
 }) => {
   const { settings } = useAgentSettings();
-  const requestContext = useMergedRequestContext();
+  const requestContext = useLocalRequestContext();
 
   const {
     data,
@@ -39,11 +39,14 @@ export const AgentChat = ({
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useAgentMessages({
-    agentId: agentId,
-    threadId: isNewThread ? undefined : threadId!, // Prevent fetching when thread is new
-    memory: memory ?? false,
-  });
+  } = useAgentMessages(
+    {
+      agentId: agentId,
+      threadId: isNewThread ? undefined : threadId!, // Prevent fetching when thread is new
+      memory: memory ?? false,
+    },
+    requestContext,
+  );
 
   // Handle scrolling to message after navigation
   useEffect(() => {

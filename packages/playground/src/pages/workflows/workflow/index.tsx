@@ -14,8 +14,7 @@ import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-
 import { Panel } from 'react-resizable-panels';
 import { useParams } from 'react-router';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
-import { usePlaygroundStore } from '@/store/playground-store';
+import { useLocalRequestContext } from '@/domains/request-context';
 
 interface WorkflowContentProps {
   workflowId: string;
@@ -24,7 +23,7 @@ interface WorkflowContentProps {
 }
 
 const WorkflowContent = ({ workflowId, workflow, isLoading }: WorkflowContentProps) => {
-  const requestContext = useMergedRequestContext();
+  const requestContext = useLocalRequestContext();
   const { canExecute, isLoading: isLoadingPermissions } = usePermissions();
   const { stepDetail } = useWorkflowStepDetail();
   const isMobile = useIsMobile();
@@ -83,7 +82,7 @@ const WorkflowContent = ({ workflowId, workflow, isLoading }: WorkflowContentPro
 
 export const Workflow = () => {
   const { workflowId } = useParams();
-  const { data: workflow, isLoading, error } = useWorkflow(workflowId!, usePlaygroundStore().requestContext);
+  const { data: workflow, isLoading, error } = useWorkflow(workflowId!, useLocalRequestContext());
 
   if (error && is401UnauthorizedError(error)) {
     return <SessionExpired variant="fill" />;

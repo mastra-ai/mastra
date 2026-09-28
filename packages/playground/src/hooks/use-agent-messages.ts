@@ -1,7 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { useMastraClient } from '@mastra/react';
 import { skipToken, useInfiniteQuery } from '@tanstack/react-query';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 export interface UseAgentMessagesProps {
   threadId?: string;
@@ -17,9 +16,11 @@ const createdAtMs = (message: MastraDBMessage) => new Date(message.createdAt).ge
 
 const byCreatedAt = (a: MastraDBMessage, b: MastraDBMessage) => createdAtMs(a) - createdAtMs(b);
 
-export const useAgentMessages = ({ threadId, agentId, memory }: UseAgentMessagesProps) => {
+export const useAgentMessages = (
+  { threadId, agentId, memory }: UseAgentMessagesProps,
+  requestContext?: Record<string, any>,
+) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useInfiniteQuery({
     queryKey: ['memory', 'messages', threadId, agentId, requestContext],

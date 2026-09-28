@@ -8,6 +8,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChevronRight } from 'lucide-react';
 import { z } from 'zod';
 import { useMemoryConfig } from '@/domains/memory/hooks';
+import { useLocalRequestContext } from '@/domains/request-context/context/schema-request-context';
 
 interface MemoryConfigSection {
   title: string;
@@ -122,7 +123,7 @@ function MemoryConfigFields({ items }: Pick<MemoryConfigSection, 'items'>) {
 }
 
 export function AgentMemoryConfig({ agentId }: { agentId: string }) {
-  const { data, isLoading, isError, isFetching, refetch } = useMemoryConfig(agentId);
+  const { data, isLoading, isError, isFetching, refetch } = useMemoryConfig(agentId, useLocalRequestContext());
 
   if (isLoading) return <Skeleton className="h-28 w-full" />;
 

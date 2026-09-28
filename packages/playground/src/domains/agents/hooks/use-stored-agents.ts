@@ -2,7 +2,6 @@ import type { CreateStoredAgentParams, UpdateStoredAgentParams, ListStoredAgents
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { isModelNotAllowedError } from '@/domains/agent-builder/services/is-model-not-allowed';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 export const useStoredAgents = (params?: ListStoredAgentsParams, options?: { enabled?: boolean }) => {
   const client = useMastraClient();
@@ -14,9 +13,12 @@ export const useStoredAgents = (params?: ListStoredAgentsParams, options?: { ena
   });
 };
 
-export const useStoredAgent = (agentId?: string, options?: { status?: 'draft' | 'published'; enabled?: boolean }) => {
+export const useStoredAgent = (
+  agentId?: string,
+  options?: { status?: 'draft' | 'published'; enabled?: boolean },
+  requestContext?: Record<string, any>,
+) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
   const { enabled = true, ...queryOptions } = options ?? {};
 
   return useQuery({
@@ -40,9 +42,12 @@ export const useStoredAgent = (agentId?: string, options?: { status?: 'draft' | 
 
 export type StoredAgent = NonNullable<ReturnType<typeof useStoredAgent>['data']>;
 
-export const useStoredAgentDependents = (agentId?: string, options?: { enabled?: boolean }) => {
+export const useStoredAgentDependents = (
+  agentId?: string,
+  options?: { enabled?: boolean },
+  requestContext?: Record<string, any>,
+) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
   const enabled = (options?.enabled ?? true) && Boolean(agentId);
 
   return useQuery({
@@ -53,10 +58,9 @@ export const useStoredAgentDependents = (agentId?: string, options?: { enabled?:
   });
 };
 
-export const useStoredAgentMutations = (agentId?: string) => {
+export const useStoredAgentMutations = (agentId?: string, requestContext?: Record<string, any>) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
 
   // If the server rejects with HTTP 422 + MODEL_NOT_ALLOWED the admin policy
   // has likely changed under us — refresh the cached settings so the UI

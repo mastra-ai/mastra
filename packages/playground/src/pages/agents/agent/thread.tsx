@@ -34,6 +34,7 @@ import { isAuthenticated } from '@/domains/auth/types';
 import type { ThreadDraftHandle } from '@/domains/conversation/context/ThreadInputContext';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
+import { useLocalRequestContext } from '@/domains/request-context/context/schema-request-context';
 
 function AgentThread() {
   const { agentId, threadId } = useParams();
@@ -45,8 +46,8 @@ function AgentThread() {
   const draftScope = [client.options.baseUrl, client.options.apiPrefix, userId, agentId];
   const draftKey = JSON.stringify([...draftScope, threadId ?? 'new']);
   const [searchParams] = useSearchParams();
-  const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
-  const { data: memory } = useMemory(agentId!);
+  const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!, useLocalRequestContext());
+  const { data: memory } = useMemory(agentId!, useLocalRequestContext());
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const threadsPanel = useRef<CollapsiblePanelHandle>(null);
@@ -70,11 +71,14 @@ function AgentThread() {
     data: threads,
     isLoading: isThreadsLoading,
     refetch: refreshThreads,
-  } = useThreads({
-    agentId: agentId!,
-    isMemoryEnabled: hasMemory,
-    resourceId: agentId!,
-  });
+  } = useThreads(
+    {
+      agentId: agentId!,
+      isMemoryEnabled: hasMemory,
+      resourceId: agentId!,
+    },
+    useLocalRequestContext(),
+  );
 
   const sidebarThreads = useMemo(
     () =>

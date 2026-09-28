@@ -17,7 +17,7 @@ import { AgentChat } from '../agent-chat';
 import { BrowserViewPanel } from '../browser-view/browser-view-panel';
 import { ComposerRunOptions } from '../composer-run-options';
 import { ThreadInputProvider } from '@/domains/conversation';
-import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
+import { useLocalRequestContext } from '@/domains/request-context';
 
 interface AgentPlaygroundTestChatProps {
   agentId: string;
@@ -75,11 +75,11 @@ export function AgentPlaygroundTestChat({
   // Generate a stable ephemeral thread ID for test chat sessions
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: regenerate thread ID when agent changes
   const testThreadId = useMemo(() => uuid(), [agentId]);
-  const mergedRequestContext = useMergedRequestContext();
+  const mergedRequestContext = useLocalRequestContext();
   const hasRequestContext = Object.keys(mergedRequestContext).length > 0;
 
   const editFormCtx = useOptionalAgentEditFormContext();
-  const { data: agent } = useAgent(agentId);
+  const { data: agent } = useAgent(agentId, useLocalRequestContext());
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
 
   return (

@@ -17,7 +17,10 @@ import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
 import { agentCrumb, navCrumb } from '@/domains/navigation/crumbs';
-import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
+import {
+  SchemaRequestContextProvider,
+  useLocalRequestContext,
+} from '@/domains/request-context/context/schema-request-context';
 import { RouteSidePanel } from '@/lib/route-side-panel';
 
 const crumbs = [navCrumb('/agents'), agentCrumb];
@@ -39,7 +42,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const showPlayground = isCmsAvailable && isExperimentalFeatures;
   const showObservability = hasObservability && isExperimentalFeatures;
 
-  const { data: agent } = useAgent(agentId!);
+  const { data: agent } = useAgent(agentId!, useLocalRequestContext());
 
   const defaultProvider = cleanProviderId(agent?.provider ?? '');
   const defaultModel = agent?.modelId ?? '';
@@ -54,7 +57,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <TracingSettingsProvider entityId={agentId!} entityType="agent">
-      <SchemaRequestContextProvider>
+      <SchemaRequestContextProvider entityType="agent" entityId={agentId!}>
         <PlaygroundModelProvider
           key={`${agentId}:${defaultProvider}/${defaultModel}`}
           defaultProvider={defaultProvider}

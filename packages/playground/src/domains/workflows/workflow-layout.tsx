@@ -19,12 +19,11 @@ import { useHasObservability } from '@/domains/configuration/hooks/use-has-obser
 import { navCrumb, workflowCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
 import {
   SchemaRequestContextProvider,
-  useMergedRequestContext,
+  useLocalRequestContext,
   useSchemaRequestContext,
 } from '@/domains/request-context/context/schema-request-context';
 import { WorkflowPageTabs, type WorkflowPageTab } from '@/domains/workflows/components/workflow-page-tabs';
 import { PlaygroundWorkflowRunProvider } from '@/domains/workflows/playground-workflow-run-provider';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflowId, runId } = useParams();
@@ -34,7 +33,13 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
       title="Unable to display this workflow"
       description="The workflow data could not be displayed. Try again or open another workflow."
     >
-      <WorkflowRoute>{children}</WorkflowRoute>
+      {workflowId ? (
+        <SchemaRequestContextProvider entityType="workflow" entityId={workflowId}>
+          <WorkflowRoute>{children}</WorkflowRoute>
+        </SchemaRequestContextProvider>
+      ) : (
+        <WorkflowRoute>{children}</WorkflowRoute>
+      )}
     </ErrorBoundary>
   );
 };
@@ -55,7 +60,7 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
   // Match the child segment rather than searching the pathname, so a workflow whose id is
   // itself "traces" or "schedules" doesn't get the wrong tab highlighted.
   const tabMatch = useMatch('/workflows/:workflowId/:tab/*');
-  const { isLoading: isWorkflowLoading } = useWorkflow(workflowId, usePlaygroundStore().requestContext);
+  const { isLoading: isWorkflowLoading } = useWorkflow(workflowId, useLocalRequestContext());
   const { hasObservability } = useHasObservability();
 
   const activeTab: WorkflowPageTab | 'none' = isWorkflowPageTab(tabMatch?.params.tab) ? tabMatch.params.tab : 'none';
@@ -100,35 +105,32 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
 
   return (
     <TracingSettingsProvider entityId={workflowId} entityType="workflow">
-      <SchemaRequestContextProvider>
-        <KeyboardScope>
-          <WorkflowShortcuts workflowId={workflowId} />
-          {activeTab === 'graph' ? (
-            <WorkflowStepDetailProvider key={workflowId}>
-              <PlaygroundWorkflowRunProvider workflowId={workflowId} initialRunId={runId}>
-                <WorkflowSelectedStepProvider>
-                  {page(
-                    <WorkflowLayoutUI
-                      leftSlot={<PlaygroundWorkflowInformation workflowId={workflowId} initialRunId={runId} />}
-                    >
-                      {children}
-                    </WorkflowLayoutUI>,
-                  )}
-                </WorkflowSelectedStepProvider>
-              </PlaygroundWorkflowRunProvider>
-            </WorkflowStepDetailProvider>
-          ) : (
-            page(children)
-          )}
-        </KeyboardScope>
-      </SchemaRequestContextProvider>
+      <KeyboardScope>
+        <WorkflowShortcuts workflowId={workflowId} />
+        {activeTab === 'graph' ? (
+          <WorkflowStepDetailProvider key={workflowId}>
+            <PlaygroundWorkflowRunProvider workflowId={workflowId} initialRunId={runId}>
+              <WorkflowSelectedStepProvider>
+                {page(
+                  <WorkflowLayoutUI
+                    leftSlot={<PlaygroundWorkflowInformation workflowId={workflowId} initialRunId={runId} />}
+                  >
+                    {children}
+                  </WorkflowLayoutUI>,
+                )}
+              </WorkflowSelectedStepProvider>
+            </PlaygroundWorkflowRunProvider>
+          </WorkflowStepDetailProvider>
+        ) : (
+          page(children)
+        )}
+      </KeyboardScope>
     </TracingSettingsProvider>
   );
 }
 
 function PlaygroundWorkflowInformation({ workflowId, initialRunId }: { workflowId: string; initialRunId?: string }) {
-  const requestContext = useMergedRequestContext();
-  const { setSchemaValues } = useSchemaRequestContext();
+  const { schemaValues: requestContext, setSchemaValues } = useSchemaRequestContext();
   const { canExecute, canDelete } = usePermissions();
 
   return (

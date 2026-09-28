@@ -7,6 +7,7 @@ import { isEmptyZodObject } from '@mastra/playground-ui/lib/form/is-empty-zod-ob
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useState } from 'react';
 import type { ZodType } from 'zod';
+import type { RequestContextEntityType } from '@/domains/request-context';
 import {
   RequestContextSchemaForm,
   SchemaRequestContextProvider,
@@ -24,6 +25,8 @@ interface ToolExecutorProps {
   toolId: string;
   toolType?: MCPToolType;
   requestContextSchema?: string;
+  requestContextEntityType: RequestContextEntityType;
+  requestContextEntityId: string;
 }
 
 /** Inner component that can access SchemaRequestContext */
@@ -37,7 +40,9 @@ const ToolExecutorContent = ({
   toolId,
   toolType,
   requestContextSchema,
-}: Omit<ToolExecutorProps, 'executionResult'> & { result: any }) => {
+}: Omit<ToolExecutorProps, 'executionResult' | 'requestContextEntityType' | 'requestContextEntityId'> & {
+  result: any;
+}) => {
   const hasResult = errorString !== undefined || result !== undefined;
   const code = JSON.stringify(result ?? {}, null, 2);
   const [selectedTab, setSelectedTab] = useState('input-data');
@@ -105,9 +110,11 @@ const ToolExecutor = ({
   toolId,
   toolType,
   requestContextSchema,
+  requestContextEntityType,
+  requestContextEntityId,
 }: ToolExecutorProps) => {
   return (
-    <SchemaRequestContextProvider>
+    <SchemaRequestContextProvider entityType={requestContextEntityType} entityId={requestContextEntityId}>
       <ToolExecutorContent
         isExecutingTool={isExecutingTool}
         zodInputSchema={zodInputSchema}

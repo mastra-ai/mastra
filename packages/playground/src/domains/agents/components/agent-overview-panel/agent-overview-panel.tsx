@@ -26,6 +26,7 @@ import { AgentMetadataSection } from '../agent-metadata/agent-metadata-section';
 import { AgentMemoryConfig } from '../agent-settings/agent-memory-config';
 import { AgentSystemPrompt } from './agent-system-prompt';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
+import { useLocalRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { useRouteSidePanel } from '@/lib/route-side-panel';
 
 export interface AgentOverviewPanelProps {
@@ -59,7 +60,7 @@ export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
 }
 
 function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
-  const { data: agent, isLoading } = useAgent(agentId);
+  const { data: agent, isLoading } = useAgent(agentId, useLocalRequestContext());
   const { mutate: reorderModelList } = useReorderModelList(agentId);
   const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList(agentId);
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();

@@ -13,6 +13,7 @@ import { useEffect } from 'react';
 import { getObservationWindowTokens } from './lib/observation-window';
 import { useMemoryTimeline, useObservationalMemoryContext } from '@/domains/agents/context';
 import { useObservationalMemory, useMemoryWithOMStatus, useMemoryConfig } from '@/domains/memory/hooks';
+import { useLocalRequestContext } from '@/domains/request-context/context/schema-request-context';
 
 const formatTokens = (n: number) => {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -306,7 +307,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   // The provider retains progress across thread switches.
   const liveProgress = streamProgress?.threadId === threadId ? streamProgress : null;
 
-  const { data: configData } = useMemoryConfig(agentId);
+  const { data: configData } = useMemoryConfig(agentId, useLocalRequestContext());
 
   const { data: statusData, isLoading: isStatusLoading } = useMemoryWithOMStatus({
     agentId,
