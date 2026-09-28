@@ -50,7 +50,9 @@ export class JudgeDisplayComponent extends WidthAwareContainer {
     this.rebuild();
   }
 
-  addActivity(line: string): void {
+  addActivity(rawLine: string): void {
+    // Activity lines interpolate raw judge tool arguments.
+    const line = stripControlChars(rawLine);
     if (this.activity[this.activity.length - 1] !== line) {
       this.activity.push(line);
     }
@@ -105,9 +107,8 @@ export class JudgeDisplayComponent extends WidthAwareContainer {
       this.addChild(new Text(this.renderRow('', innerWidth, border), BOX_INDENT, 0));
     }
 
-    const rawReason = this.result?.reason ?? this.streamingReason;
     // The reason can be provider/scorer error text on a judge failure.
-    const reason = rawReason ? stripControlChars(rawReason) : rawReason;
+    const reason = stripControlChars(this.result?.reason ?? this.streamingReason);
     if (reason) {
       for (const line of this.wrapLine(reason, innerWidth)) {
         this.addChild(new Text(this.renderRow(chalk.dim(line), innerWidth, border), BOX_INDENT, 0));

@@ -82,6 +82,18 @@ describe('JudgeDisplayComponent', () => {
     expect(new Set(lines.map(line => line.length)).size).toBe(1);
   });
 
+  it('strips terminal control sequences from judge activity lines', () => {
+    const component = new JudgeDisplayComponent(null, 1, 20);
+    component.addActivity('grep "x\x1b[2J\x1b]0;pwned\x07\ny"');
+
+    const raw = component.render(WIDTH).join('\n');
+    const lines = renderPlain(component).filter(line => line.trim().length > 0);
+
+    expect(raw).not.toContain('\x1b[2J');
+    expect(raw).not.toContain('\x1b]0;');
+    expect(new Set(lines.map(line => line.length)).size).toBe(1);
+  });
+
   it('renders user-blocked goals as waiting instead of continue', () => {
     const component = new JudgeDisplayComponent(
       {
