@@ -459,10 +459,10 @@ describe('WorkItemsStorage', () => {
     expect((await commit()).status).toBe('committed');
   });
 
-  it('claims deferred decisions by decision type, reaching past a backlog of filtered-out rows', async () => {
+  it('claims deferred decisions by payload filter, paging past any backlog of filtered-out rows', async () => {
     const storage = await makeStorage();
     const scope = { orgId: 'org1', factoryProjectId: 'p1' };
-    const runDecisions = Array.from({ length: 60 }, (_, index) => ({
+    const runDecisions = Array.from({ length: 700 }, (_, index) => ({
       type: 'invokeSkill',
       role: 'work',
       skillName: 'triage',
@@ -487,20 +487,20 @@ describe('WorkItemsStorage', () => {
     const bookkeeping = await storage.claimDeferredDecisions({
       ...lease,
       limit: 5,
-      decisionTypes: { exclude: ['invokeSkill', 'sendMessage'] },
+      decisionFilter: decision => decision.type !== 'invokeSkill',
     });
     expect(bookkeeping.map(d => d.idempotencyKey)).toEqual(['bookkeeping-1']);
 
     const runs = await storage.claimDeferredDecisions({
       ...lease,
       limit: 3,
-      decisionTypes: { include: ['invokeSkill', 'sendMessage'] },
+      decisionFilter: decision => decision.type === 'invokeSkill',
     });
     expect(runs.map(d => d.decision.type)).toEqual(['invokeSkill', 'invokeSkill', 'invokeSkill']);
 
     const all = await storage.listDeferredDecisions('org1', 'p1');
     expect(all.filter(d => d.status === 'leased')).toHaveLength(4);
-    expect(all.filter(d => d.status === 'pending')).toHaveLength(57);
+    expect(all.filter(d => d.status === 'pending')).toHaveLength(697);
   });
 
   it('lists newest-first within the org/project scope and updates atomically', async () => {

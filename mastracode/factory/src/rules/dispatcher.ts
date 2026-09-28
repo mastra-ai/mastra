@@ -67,8 +67,15 @@ const SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS = 6 * 60 * 60_000;
 // capacity until their agent run reaches a terminal state; binding preparation
 // also runs detached from the poll loop under this concurrency cap.
 const MAX_IN_FLIGHT = 25;
-/** Decision types that may start or wake an agent run and so hold a run slot. */
-const RUN_DECISION_TYPES = ['invokeSkill', 'sendMessage'] as const;
+/**
+ * Decisions that may start or wake an agent run and so hold a run slot. A
+ * transition carrying a message wakes the idle bound session and waits on it.
+ */
+const isRunBearingDecision = (decision: Record<string, unknown>): boolean =>
+  decision.type === 'invokeSkill' ||
+  decision.type === 'sendMessage' ||
+  (decision.type === 'transition' && decision.message != null);
+const isBookkeepingDecision = (decision: Record<string, unknown>): boolean => !isRunBearingDecision(decision);
 const BOOKKEEPING_MAX_IN_FLIGHT = 4;
 // Staleness sweep: legacy/leaked active bindings (item deleted, transition
 // path bypassed, or pre-dating terminal-stage revocation) are revoked on a
@@ -596,7 +603,7 @@ export class FactoryDecisionDispatcher {
               now,
               leaseExpiresAt,
               limit: decisionsLimit,
-              decisionTypes: { include: RUN_DECISION_TYPES },
+              decisionFilter: isRunBearingDecision,
             })
           : [];
       dispatches.push(
@@ -611,7 +618,7 @@ export class FactoryDecisionDispatcher {
         now,
         leaseExpiresAt,
         limit: Math.min(BATCH_SIZE, bookkeepingCapacity),
-        decisionTypes: { exclude: RUN_DECISION_TYPES },
+        decisionFilter: isBookkeepingDecision,
       });
       dispatches.push(
         ...decisions.map(decision => this.#track(this.#bookkeepingInFlight, this.#dispatchDecision(decision, now))),

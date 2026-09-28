@@ -420,8 +420,8 @@ export interface FactoryLeaseClaimInput {
 }
 
 export interface FactoryDeferredDecisionClaimInput extends FactoryLeaseClaimInput {
-  /** Restrict the claim by `decision.type`; filtered-out rows are never leased. */
-  decisionTypes?: { include?: readonly string[]; exclude?: readonly string[] };
+  /** Restrict the claim by decision payload; rejected rows are never leased. */
+  decisionFilter?: (decision: Record<string, unknown>) => boolean;
 }
 
 export interface FactoryLeaseIdentity {
@@ -864,11 +864,9 @@ function decisionSourceKey(decision: unknown): string | null {
   return record.sourceKey;
 }
 
-function decisionRowType(decision: unknown): string | undefined {
+function decisionRowPayload(decision: unknown): Record<string, unknown> {
   const parsed = typeof decision === 'string' ? safeJsonParse(decision) : decision;
-  if (typeof parsed !== 'object' || parsed === null) return undefined;
-  const type = (parsed as Record<string, unknown>).type;
-  return typeof type === 'string' ? type : undefined;
+  return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {};
 }
 
 function safeJsonParse(value: string): unknown {
@@ -1430,46 +1428,57 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         // Bounded candidate window: only rows in claimable/expirable statuses,
         // oldest first. Terminal rows (sent/succeeded/failed) accumulate over a
         // deployment's lifetime and must never be scanned per dispatch tick.
-        const candidates = await ops.findMany<GovernanceDbRow>(
-          table,
-          { status: { in: ['pending', 'retry', 'leased'] } },
-          // A filtered claim widens its window so matching rows queued behind a
-          // backlog of filtered-out rows are still reachable.
-          { orderBy: [['created_at', 'asc']], limit: Math.max(input.limit * 5, accept ? 500 : 50) },
-        );
+        const where = { status: { in: ['pending', 'retry', 'leased'] } };
         const claimed: T[] = [];
-        for (const candidate of candidates) {
-          if (claimed.length >= input.limit) break;
-          const availableAt = new Date(candidate.available_at as Date | string).getTime();
-          const leaseExpiresAt = candidate.lease_expires_at
-            ? new Date(candidate.lease_expires_at as Date | string).getTime()
-            : 0;
-          const claimable =
-            (candidate.status === 'pending' || candidate.status === 'retry') && availableAt <= input.now.getTime();
-          const expired = candidate.status === 'leased' && leaseExpiresAt <= input.now.getTime();
-          if (!claimable && !expired) continue;
-          if (accept && !accept(candidate)) continue;
-          let didClaim = false;
-          const row = await ops.updateAtomic<GovernanceDbRow>(table, { id: candidate.id }, current => {
-            const currentAvailable = new Date(current.available_at as Date | string).getTime();
-            const currentExpiry = current.lease_expires_at
-              ? new Date(current.lease_expires_at as Date | string).getTime()
-              : 0;
-            const currentClaimable =
-              (current.status === 'pending' || current.status === 'retry') && currentAvailable <= input.now.getTime();
-            const currentExpired = current.status === 'leased' && currentExpiry <= input.now.getTime();
-            if (!currentClaimable && !currentExpired) return null;
-            didClaim = true;
-            return {
-              status: 'leased',
-              attempts: Number(current.attempts) + 1,
-              lease_owner: input.ownerId,
-              lease_expires_at: input.leaseExpiresAt,
-              updated_at: input.now,
-            };
+        // A filtered claim widens its window past rows it rejects so matching
+        // rows queued behind any size of filtered-out backlog stay reachable.
+        // Unfiltered claims read one window: the first claimable rows are the
+        // oldest. Ties on created_at keep the store's insertion order.
+        let window = Math.max(input.limit * 5, 50);
+        let scanned = 0;
+        let exhausted = false;
+        do {
+          const page = await ops.findMany<GovernanceDbRow>(table, where, {
+            orderBy: [['created_at', 'asc']],
+            limit: window,
           });
-          if (didClaim && row) claimed.push(map(row));
-        }
+          exhausted = !accept || page.length < window;
+          const candidates = page.slice(scanned);
+          scanned = page.length;
+          window *= 4;
+          for (const candidate of candidates) {
+            if (claimed.length >= input.limit) break;
+            const availableAt = new Date(candidate.available_at as Date | string).getTime();
+            const leaseExpiresAt = candidate.lease_expires_at
+              ? new Date(candidate.lease_expires_at as Date | string).getTime()
+              : 0;
+            const claimable =
+              (candidate.status === 'pending' || candidate.status === 'retry') && availableAt <= input.now.getTime();
+            const expired = candidate.status === 'leased' && leaseExpiresAt <= input.now.getTime();
+            if (!claimable && !expired) continue;
+            if (accept && !accept(candidate)) continue;
+            let didClaim = false;
+            const row = await ops.updateAtomic<GovernanceDbRow>(table, { id: candidate.id }, current => {
+              const currentAvailable = new Date(current.available_at as Date | string).getTime();
+              const currentExpiry = current.lease_expires_at
+                ? new Date(current.lease_expires_at as Date | string).getTime()
+                : 0;
+              const currentClaimable =
+                (current.status === 'pending' || current.status === 'retry') && currentAvailable <= input.now.getTime();
+              const currentExpired = current.status === 'leased' && currentExpiry <= input.now.getTime();
+              if (!currentClaimable && !currentExpired) return null;
+              didClaim = true;
+              return {
+                status: 'leased',
+                attempts: Number(current.attempts) + 1,
+                lease_owner: input.ownerId,
+                lease_expires_at: input.leaseExpiresAt,
+                updated_at: input.now,
+              };
+            });
+            if (didClaim && row) claimed.push(map(row));
+          }
+        } while (!exhausted && claimed.length < input.limit);
         return claimed;
       });
     return claim();
@@ -2407,15 +2416,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   async claimDeferredDecisions(input: FactoryDeferredDecisionClaimInput): Promise<FactoryDeferredDecisionRecord[]> {
-    const filter = input.decisionTypes;
-    const accept = filter
-      ? (row: GovernanceDbRow) => {
-          const type = decisionRowType(row.decision);
-          if (filter.include && !(type !== undefined && filter.include.includes(type))) return false;
-          if (filter.exclude && type !== undefined && filter.exclude.includes(type)) return false;
-          return true;
-        }
-      : undefined;
+    const filter = input.decisionFilter;
+    const accept = filter ? (row: GovernanceDbRow) => filter(decisionRowPayload(row.decision)) : undefined;
     return this.#claimLeases('factory_deferred_decisions', input, toDeferredDecision, accept);
   }
 

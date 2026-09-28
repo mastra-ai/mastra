@@ -1980,12 +1980,35 @@ describe('FactoryDecisionDispatcher', () => {
       { type: 'sendMessage', role: 'work', message: 'Next run.', idempotencyKey: 'run-behind-wake' },
       { sourceKey: 'github-issue:1', ingress: 'move-3' },
     );
+    // A messaged transition may wake an idle session, so it waits for a run slot.
+    const messaged = await createItem(storage, 'github-issue:3');
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: messaged.id,
+      ingress: { identity: 'move-4', triggerType: 'github' },
+      configVersion: 'rules-v1',
+      expectedRevision: messaged.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'transition',
+          stage: 'done',
+          message: { role: 'work', text: 'Moved.' },
+          idempotencyKey: 'messaged-transition-behind-wake',
+        },
+      ],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
     const find = async (key: string) =>
       (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(d => d.idempotencyKey === key);
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
     expect(await find('bookkeeping-during-wake')).toMatchObject({ status: 'succeeded' });
     expect(await find('run-behind-wake')).toMatchObject({ status: 'pending' });
+    expect(await find('messaged-transition-behind-wake')).toMatchObject({ status: 'pending' });
 
     emitAgentEnd();
     await first;
