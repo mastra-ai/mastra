@@ -113,7 +113,10 @@ describe('AttentionPage', () => {
             {
               id: 'connection-1',
               installationId: 'installation-1',
-              repositories: [{ id: 'repo-1', branch: 'main', repository: { slug: 'acme/app', defaultBranch: 'main' } }],
+              repositories: [
+                { id: 'repo-2', branch: 'main', repository: { slug: 'acme/other', defaultBranch: 'main' } },
+                { id: 'repo-1', branch: 'main', repository: { slug: 'acme/app', defaultBranch: 'main' } },
+              ],
             },
           ],
         }),
