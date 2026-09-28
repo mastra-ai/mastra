@@ -90,9 +90,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
     };
     stepNumber: number;
     steps: Array<StepResult<ToolSet>>;
-  }): Promise<{ ok: true } | { ok: false; tripwire: TripWire }> {
+  }): Promise<{ ok: true; rewritten: boolean } | { ok: false; tripwire: TripWire }> {
     if (!processorRunner || !rest.outputProcessors?.length) {
-      return { ok: true };
+      return { ok: true, rewritten: false };
     }
     const { chunk, stepNumber, steps } = args;
     try {
@@ -118,8 +118,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
       const postProcessorResult = readToolResultFromMessageList(rest.messageList, chunk.payload.toolCallId);
       if (postProcessorResult !== undefined && postProcessorResult !== chunk.payload.result) {
         (chunk.payload as { result: unknown }).result = postProcessorResult;
+        return { ok: true, rewritten: true };
       }
-      return { ok: true };
+      return { ok: true, rewritten: false };
     } catch (error) {
       if (error instanceof TripWire) {
         return { ok: false, tripwire: error };
@@ -298,7 +299,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             // Compute modelOutput before emitting the chunk so consumers (e.g. harness)
             // can access it on the chunk's providerMetadata.mastra.modelOutput.
             // getProviderMetadataWithModelOutput already returns the fully-merged providerMetadata.
-            const providerMetadata = !toolCall.providerExecuted
+            let providerMetadata = !toolCall.providerExecuted
               ? await getProviderMetadataWithModelOutput(toolCall)
               : undefined;
             const chunkProviderMetadata = (providerMetadata ?? toolCall.providerMetadata) as
@@ -343,6 +344,14 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             if (!trResult.ok) {
               emitTripwireChunk(trResult.tripwire);
               continue;
+            }
+
+            // toModelOutput ran on the raw result above. If a processor rewrote the
+            // result, map the rewritten value instead so the model never sees the raw one.
+            if (trResult.rewritten && !toolCall.providerExecuted) {
+              const result = (chunk as { payload: { result: unknown } }).payload.result;
+              providerMetadata = await getProviderMetadataWithModelOutput({ ...toolCall, result });
+              (chunk as { payload: { providerMetadata?: unknown } }).payload.providerMetadata = providerMetadata;
             }
 
             if (!toolCall.providerExecuted) {
@@ -456,7 +465,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           // Compute modelOutput before emitting the chunk so consumers (e.g. harness)
           // can access it on the chunk's providerMetadata.mastra.modelOutput.
           // getProviderMetadataWithModelOutput already returns the fully-merged providerMetadata.
-          const providerMetadata = !toolCall.providerExecuted
+          let providerMetadata = !toolCall.providerExecuted
             ? await getProviderMetadataWithModelOutput(toolCall)
             : undefined;
           const chunkProviderMetadata = (providerMetadata ?? toolCall.providerMetadata) as ProviderMetadata | undefined;
@@ -499,6 +508,14 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           if (!trResult.ok) {
             emitTripwireChunk(trResult.tripwire);
             continue;
+          }
+
+          // toModelOutput ran on the raw result above. If a processor rewrote the
+          // result, map the rewritten value instead so the model never sees the raw one.
+          if (trResult.rewritten && !toolCall.providerExecuted) {
+            const result = (chunk as { payload: { result: unknown } }).payload.result;
+            providerMetadata = await getProviderMetadataWithModelOutput({ ...toolCall, result });
+            (chunk as { payload: { providerMetadata?: unknown } }).payload.providerMetadata = providerMetadata;
           }
 
           // Provider-executed tools are handled by llm-execution-step; for client-executed

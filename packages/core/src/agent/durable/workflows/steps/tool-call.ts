@@ -1581,28 +1581,30 @@ export function createDurableToolCallStep() {
         let modelOutputComputed: boolean | undefined;
         const mappingTool = globalRunRegistry.get(runId)?.tools?.[toolName] ?? tool;
         const toModelOutput = mappingTool.toModelOutput;
-        if (toModelOutput) {
-          modelOutputComputed = true;
+        // Maps `value` into providerMetadata.mastra.modelOutput, replacing any earlier mapping.
+        const mapModelOutput = async (value: unknown) => {
+          providerMetadata = typedInput.providerMetadata;
+          if (!toModelOutput) return;
           const mappingSpan = stepSpan?.createChildSpan({
             type: SpanType.MAPPING,
             name: `tool output mapping: '${toolName}'`,
             entityType: EntityType.TOOL,
             entityId: toolName,
             entityName: toolName,
-            input: outcome.rawResult,
+            input: value,
             attributes: {
               mappingType: 'toModelOutput',
               toolCallId,
             },
           });
           try {
-            const modelOutput = normalizeModelOutput(await toModelOutput(outcome.rawResult));
+            const modelOutput = normalizeModelOutput(await toModelOutput(value));
             mappingSpan?.end({ output: modelOutput });
 
             if (modelOutput != null) {
-              const existingMastra = (providerMetadata as any)?.mastra;
+              const existingMastra = (typedInput.providerMetadata as any)?.mastra;
               providerMetadata = {
-                ...providerMetadata,
+                ...typedInput.providerMetadata,
                 mastra: { ...existingMastra, modelOutput },
               };
             }
@@ -1610,6 +1612,10 @@ export function createDurableToolCallStep() {
             mappingSpan?.error({ error: mappingError as Error, endSpan: true });
             logger?.warn?.(`[DurableAgent] toModelOutput failed for tool "${toolName}": ${mappingError}`);
           }
+        };
+        if (toModelOutput) {
+          modelOutputComputed = true;
+          await mapModelOutput(outcome.rawResult);
         }
 
         // Run processToolResult hooks before the tool-result chunk is emitted.
@@ -1670,6 +1676,8 @@ export function createDurableToolCallStep() {
             const postProcessorResult = readToolResultFromMessageList(messageList, toolCallId);
             if (postProcessorResult !== undefined && postProcessorResult !== result) {
               result = postProcessorResult;
+              // The mapping above ran on the raw result; map the rewritten one instead.
+              if (toModelOutput) await mapModelOutput(result);
             }
           } catch (processorError) {
             if (processorError instanceof TripWire) {
@@ -1711,6 +1719,7 @@ export function createDurableToolCallStep() {
             // keeps the run alive.
             logger?.warn?.(`[DurableAgent] processToolResult failed for tool "${toolName}": ${processorError}`);
             result = { error: 'Tool result processing failed' };
+            if (toModelOutput) providerMetadata = typedInput.providerMetadata;
           }
         }
 
