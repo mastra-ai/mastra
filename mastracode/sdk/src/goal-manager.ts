@@ -71,7 +71,9 @@ export class GoalManager {
   private persistGoalOnNextThreadCreate = false;
   /**
    * Set by {@link clear} to the thread the goal was cleared on: the next save
-   * with an empty mirror on that same thread deletes the goal.
+   * with an empty mirror on that same thread deletes the goal. A goal hydrated
+   * from legacy metadata has no known thread, so its clear applies to whichever
+   * thread the next save runs on (the pre-existing behaviour).
    */
   private pendingDelete: { threadId: string | undefined } | null = null;
 
@@ -247,7 +249,7 @@ export class GoalManager {
    * same statement as "there is nothing": the mirror is also emptied by storage
    * failures and thread switches. So a save with an empty mirror deletes the
    * goal (durable record and legacy key) only right after an explicit
-   * {@link clear}, and is a complete no-op otherwise.
+   * {@link clear} on the same thread, and is a complete no-op otherwise.
    */
   async saveToThread(state: GoalManagerState): Promise<void> {
     const threadId = state.session.thread.getId();
