@@ -132,7 +132,7 @@ Direct credentials (`appId`/`appPassword`) and `tokenResolver` are mutually excl
     type: 'string',
     isOptional: true,
     description:
-      'Passphrase for encrypting the per-bot client secret at rest (AES-256-GCM). Defaults to the MASTRA_ENCRYPTION_KEY environment variable.',
+      'Passphrase for encrypting the per-bot client secret at rest (AES-256-GCM). Defaults to the MASTRA_ENCRYPTION_KEY environment variable. Required in delegated mode: connect() refuses to provision a bot when no key is available.',
   },
   {
     name: 'apiUrl',

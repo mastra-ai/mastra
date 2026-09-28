@@ -33,6 +33,11 @@ export class TeamsInstallStore {
     private readonly encryptionKey?: string,
   ) {}
 
+  /** Whether secrets written through this store are encrypted at rest. */
+  get canEncrypt(): boolean {
+    return Boolean(this.encryptionKey);
+  }
+
   /** The active or pending installation for an agent, if any. */
   async getByAgent(agentId: string): Promise<TeamsInstallation | null> {
     const record = await this.storage.getInstallationByAgent(PLATFORM, agentId);

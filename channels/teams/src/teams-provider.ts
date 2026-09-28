@@ -323,6 +323,15 @@ export class TeamsProvider implements ChannelProvider {
   ): Promise<ChannelConnectResult> {
     const tokenResolver = this.#config.tokenResolver!;
     const store = await this.#getStore();
+    if (!store.canEncrypt) {
+      // Delegated provisioning creates a client secret the user never sees and
+      // persists it, so refusing up front (before any Azure resources exist)
+      // beats warning about a plaintext secret after the fact.
+      throw new Error(
+        'Delegated Teams provisioning stores a Mastra-provisioned bot client secret and requires an encryption key. ' +
+          'Set `encryptionKey` on TeamsProvider or the MASTRA_ENCRYPTION_KEY environment variable.',
+      );
+    }
     const baseUrl = this.#getBaseUrl();
     if (!baseUrl) {
       throw new Error(

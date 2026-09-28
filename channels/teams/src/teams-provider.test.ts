@@ -22,6 +22,9 @@ const APP_PASSWORD = 'client~secret~value';
 const OBJECT_ID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 const MINTED_APP_ID = '99999999-8888-7777-6666-555555555555';
 const MINTED_SECRET = 'minted~client~secret';
+// Delegated provisioning refuses to run without an encryption key, so
+// delegated tests supply one explicitly.
+const ENC_KEY = 'a-32+char-passphrase-for-testing-only';
 
 let mockAgent: MockAgent;
 
@@ -209,13 +212,25 @@ describe('TeamsProvider.connect — self-managed', () => {
     await provider.connect('agent-1');
     await expect(provider.connect('agent-1')).rejects.toThrow(/already connected to Microsoft Teams/);
   });
+
+  it('warns when a user-supplied client secret is persisted without an encryption key', async () => {
+    stubCredentialMint();
+    const { provider } = makeProvider({ appId: APP_ID, appPassword: APP_PASSWORD });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await provider.connect('agent-1');
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('WITHOUT encryption'));
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });
 
 describe('TeamsProvider.connect — delegated provisioning', () => {
   it('provisions an Entra app + secret + Dev Portal bot registration per agent', async () => {
     const stubs = stubProvisioning();
     const tokenResolver = makeTokenResolver();
-    const { provider, storage } = makeProvider({ tokenResolver });
+    const { provider, storage } = makeProvider({ tokenResolver, encryptionKey: ENC_KEY });
 
     const result = await provider.connect('agent-1', { name: 'Sales Bot' });
     expect(result).toMatchObject({ type: 'deep_link', url: DEV_PORTAL_BOTS_URL });
@@ -236,7 +251,7 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
     expect(record?.status).toBe('active');
     expect(record?.data.appId).toBe(MINTED_APP_ID);
     expect(record?.data.entraObjectId).toBe(OBJECT_ID);
-    expect(record?.data.appPassword).toBe(MINTED_SECRET);
+    expect(isEncrypted(String(record?.data.appPassword))).toBe(true);
 
     expect(stubs.botRegistrationBody()).toMatchObject({
       botId: MINTED_APP_ID,
@@ -250,7 +265,7 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
     stubProvisioning();
     const { provider, storage } = makeProvider({
       tokenResolver: makeTokenResolver(),
-      encryptionKey: 'a-32+char-passphrase-for-testing-only',
+      encryptionKey: ENC_KEY,
     });
     await provider.connect('agent-1');
     const record = await storage.getInstallationByAgent(PLATFORM, 'agent-1');
@@ -267,7 +282,7 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
 
   it('requires a baseUrl to register the messaging endpoint', async () => {
     const storage = new InMemoryChannelsStorage();
-    const provider = new TeamsProvider({ storage, tokenResolver: makeTokenResolver() });
+    const provider = new TeamsProvider({ storage, tokenResolver: makeTokenResolver(), encryptionKey: ENC_KEY });
     await expect(provider.connect('agent-1')).rejects.toThrow(/needs a baseUrl/);
   });
 
@@ -293,7 +308,7 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
         return '';
       });
 
-    const { provider, storage } = makeProvider({ tokenResolver: makeTokenResolver() });
+    const { provider, storage } = makeProvider({ tokenResolver: makeTokenResolver(), encryptionKey: ENC_KEY });
     await expect(provider.connect('agent-1')).rejects.toThrow(/Dev Portal bot registration failed/);
     expect(rolledBack).toBe(true);
     expect(await storage.getInstallationByAgent(PLATFORM, 'agent-1')).toBeNull();
@@ -304,12 +319,17 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
       tokenResolver: async () => {
         throw new Error('platform credential fetch failed');
       },
+      encryptionKey: ENC_KEY,
     });
     await expect(provider.connect('agent-1')).rejects.toThrow('platform credential fetch failed');
   });
 
   it('rejects SingleTenant provisioning without a tenant id', async () => {
-    const { provider } = makeProvider({ tokenResolver: makeTokenResolver(), appType: 'SingleTenant' });
+    const { provider } = makeProvider({
+      tokenResolver: makeTokenResolver(),
+      encryptionKey: ENC_KEY,
+      appType: 'SingleTenant',
+    });
     await expect(provider.connect('agent-1')).rejects.toThrow(/no appTenantId is available/);
   });
 
@@ -317,7 +337,12 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
     const tenant = 'customer-tenant-id';
     const stubs = stubProvisioning();
     const tokenResolver = makeTokenResolver();
-    const { provider, storage } = makeProvider({ tokenResolver, appType: 'SingleTenant', appTenantId: tenant });
+    const { provider, storage } = makeProvider({
+      tokenResolver,
+      encryptionKey: ENC_KEY,
+      appType: 'SingleTenant',
+      appTenantId: tenant,
+    });
 
     await provider.connect('agent-1');
 
@@ -360,6 +385,7 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
       storage,
       baseUrl: BASE_URL,
       tokenResolver: makeTokenResolver(),
+      encryptionKey: ENC_KEY,
     } as TeamsProviderConfig);
 
     await expect(provider.connect('agent-1')).rejects.toThrow('database unavailable');
@@ -371,6 +397,7 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
     stubProvisioning();
     const { provider, storage } = makeProvider({
       tokenResolver: makeTokenResolver(),
+      encryptionKey: ENC_KEY,
       onInstall: async () => {
         throw new Error('user hook exploded');
       },
@@ -386,16 +413,13 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
     expect((await storage.getInstallationByAgent(PLATFORM, 'agent-1'))?.status).toBe('active');
   });
 
-  it('warns when the minted client secret is persisted without an encryption key', async () => {
-    stubProvisioning();
-    const { provider } = makeProvider({ tokenResolver: makeTokenResolver() });
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    try {
-      await provider.connect('agent-1');
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('WITHOUT encryption'));
-    } finally {
-      warnSpy.mockRestore();
-    }
+  it('refuses to provision without an encryption key, before touching Azure', async () => {
+    // No Graph/Dev Portal stubs registered — any control-plane call would
+    // throw a network error instead of this message (net connect disabled).
+    const tokenResolver = makeTokenResolver();
+    const { provider } = makeProvider({ tokenResolver });
+    await expect(provider.connect('agent-1')).rejects.toThrow(/requires an encryption key/);
+    expect(tokenResolver).not.toHaveBeenCalled();
   });
 
   it('surfaces Mastra storage initialization failures instead of degrading to in-memory', async () => {
@@ -441,7 +465,7 @@ describe('TeamsProvider.disconnect', () => {
   it('deletes the Dev Portal registration and Entra app for provisioned bots', async () => {
     stubProvisioning();
     const tokenResolver = makeTokenResolver();
-    const { provider, storage } = makeProvider({ tokenResolver });
+    const { provider, storage } = makeProvider({ tokenResolver, encryptionKey: ENC_KEY });
     await provider.connect('agent-1');
 
     let botDeleted = false;
@@ -470,7 +494,7 @@ describe('TeamsProvider.disconnect', () => {
 
   it('still removes the installation when control-plane cleanup fails', async () => {
     stubProvisioning();
-    const { provider, storage } = makeProvider({ tokenResolver: makeTokenResolver() });
+    const { provider, storage } = makeProvider({ tokenResolver: makeTokenResolver(), encryptionKey: ENC_KEY });
     await provider.connect('agent-1');
 
     mockAgent
