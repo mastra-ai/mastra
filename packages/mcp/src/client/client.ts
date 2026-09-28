@@ -31,6 +31,7 @@ import type {
 } from '@modelcontextprotocol/client';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { asyncExitHook, gracefulExit } from 'exit-hook';
+import { JSON_SCHEMA_2020_12, toJsonSchema2020 } from '../shared/json-schema-dialect';
 import { getMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { UnauthorizedError } from '../shared/oauth-types';
 import { traceContextToMeta } from '../shared/trace-context';
@@ -74,7 +75,6 @@ export type {
 type MCPToolListEntry = Awaited<ReturnType<Client['listTools']>>['tools'][0];
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
-const JSON_SCHEMA_2020_12 = 'https://json-schema.org/draft/2020-12/schema';
 const MAX_JSON_SCHEMA_DEPTH = 128;
 const MAX_JSON_SCHEMA_NODES = 10_000;
 
@@ -155,12 +155,12 @@ const SUPPORTED_DIALECTS = new Set([
 /**
  * MCP 2026-07-28 schemas default to JSON Schema 2020-12 when they declare no dialect.
  * Dialects the validator cannot load (e.g. 2019-09 from zod v3 servers) are treated as
- * 2020-12 so tool calls are not rejected before they run.
+ * 2020-12 (tuples rewritten) so tool calls are not rejected before they run.
  */
 function withDefaultDialect(schema: JSONSchema7): JSONSchema7 {
-  return schema.$schema && SUPPORTED_DIALECTS.has(schema.$schema)
-    ? schema
-    : { ...schema, $schema: JSON_SCHEMA_2020_12 };
+  if (!schema.$schema) return { ...schema, $schema: JSON_SCHEMA_2020_12 };
+  if (SUPPORTED_DIALECTS.has(schema.$schema)) return schema;
+  return { ...toJsonSchema2020(schema), $schema: JSON_SCHEMA_2020_12 };
 }
 const DEFAULT_INSTRUCTIONS_MAX_LENGTH = 512;
 const DEFAULT_SERVER_LOG_LEVEL: LoggingLevel = 'info';

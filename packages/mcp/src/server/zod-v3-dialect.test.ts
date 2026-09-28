@@ -34,6 +34,12 @@ describe('MCPServer with zod v3 schemas', () => {
           outputSchema: z.object({ result: z.number() }),
           execute: async ({ operation, a, b }) => ({ result: operation === 'add' ? a + b : a - b }),
         }),
+        point: createTool({
+          id: 'point',
+          description: 'Labels a point',
+          inputSchema: z.object({ point: z.tuple([z.number(), z.number()]).rest(z.string()) }),
+          execute: async ({ point }) => ({ label: `${point[0]},${point[1]}:${point.slice(2).join('|')}` }),
+        }),
         tree: createTool({
           id: 'tree',
           description: 'Counts nodes',
@@ -60,12 +66,16 @@ describe('MCPServer with zod v3 schemas', () => {
       expect(calculator.inputSchema.$schema).toBe(JSON_SCHEMA_2020_12);
       expect(calculator.outputSchema?.$schema).toBe(JSON_SCHEMA_2020_12);
       expect(tools.find(t => t.name === 'tree')!.inputSchema.$schema).toBe(JSON_SCHEMA_2020_12);
+      expect((tools.find(t => t.name === 'point')!.inputSchema.properties as any).point).toMatchObject({
+        prefixItems: [{ type: 'number' }, { type: 'number' }],
+        items: { type: 'string' },
+      });
     } finally {
       await client.close();
     }
   });
 
-  it('lets MCPClient call zod v3 tools, including recursive schemas', async () => {
+  it('lets MCPClient call zod v3 tools, including tuple and recursive schemas', async () => {
     const client = new InternalMastraMCPClient({ name: 'zod-v3-client', server: { url: served.url } });
     try {
       await client.connect();
@@ -77,6 +87,8 @@ describe('MCPServer with zod v3 schemas', () => {
         {},
       )) as any;
       expect(JSON.stringify(tree)).toContain('4');
+      const point = (await tools['point'].execute!({ point: [1, 2, 'a', 'b'] }, {})) as any;
+      expect(JSON.stringify(point)).toContain('1,2:a|b');
     } finally {
       await client.disconnect();
     }

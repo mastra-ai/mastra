@@ -56,6 +56,7 @@ import type {
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import type { StdioServerHandle } from '@modelcontextprotocol/server/stdio';
 
+import { JSON_SCHEMA_2020_12, toJsonSchema2020 } from '../shared/json-schema-dialect';
 import { withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { ServerPromptActions, ServerResourceActions, ServerToolActions } from './actions';
 import {
@@ -102,7 +103,6 @@ export interface MCPServerHTTPOptions {
 type JSONSchema7 = NonNullable<Extract<MCPToolExecutionResultV2, { status: 'suspended' }>['resumeSchema']>;
 
 const EMPTY_OBJECT_SCHEMA = { type: 'object', properties: {} } as const;
-const JSON_SCHEMA_2020_12 = 'https://json-schema.org/draft/2020-12/schema';
 
 /** Tool description served over Mastra's REST routes; `id` is what Studio keys tools by. */
 type ToolInfo = {
@@ -354,7 +354,7 @@ export class MCPServer extends MCPServerBase {
    * Converts a tool schema to JSON Schema 2020-12, the dialect MCP 2026-07-28
    * assumes when none is declared. The dialect declaration is kept so validators
    * that dispatch on `$schema` pick the same draft on both sides. Some vendors
-   * (e.g. zod v3) emit a 2019-09 declaration for this target, so it is relabelled.
+   * (e.g. zod v3) emit 2019-09 for this target, so it is rewritten to 2020-12.
    */
   private jsonSchema(schema: unknown, options?: { io: 'input' | 'output' }): Record<string, unknown> | undefined {
     if (!schema) return undefined;
@@ -365,7 +365,8 @@ export class MCPServer extends MCPServerBase {
       string,
       unknown
     >;
-    return converted.$schema ? { ...converted, $schema: JSON_SCHEMA_2020_12 } : converted;
+    if (!converted.$schema || converted.$schema === JSON_SCHEMA_2020_12) return converted;
+    return { ...toJsonSchema2020(converted), $schema: JSON_SCHEMA_2020_12 };
   }
 
   private addTools(tools: ToolsInput): void {
