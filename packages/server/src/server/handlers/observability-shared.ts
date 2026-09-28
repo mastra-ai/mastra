@@ -234,6 +234,7 @@ export type ObservabilityStorageCapabilities = {
   deltaPolling: boolean;
   traceQuery: boolean;
   traceQueryRootDuration: boolean;
+  traceQueryContextIds: boolean;
   traceQueryDiscovery: boolean;
   traceQueryTenantScope: boolean;
   threadQuery: boolean;
@@ -254,6 +255,7 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   deltaPolling: false,
   traceQuery: false,
   traceQueryRootDuration: false,
+  traceQueryContextIds: false,
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
   threadQuery: false,
@@ -324,6 +326,8 @@ export function getObservabilityStorageCapabilities(
     traceQuery,
     traceQueryRootDuration:
       (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE),
+    traceQueryContextIds:
+      (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE),
     traceQueryDiscovery:
       newApiCore && supportsTraceQueryDiscoveryCore() && declares(OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE),
     traceQueryTenantScope:

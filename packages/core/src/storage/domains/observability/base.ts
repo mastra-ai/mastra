@@ -116,6 +116,7 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `trace-query`: `queryTraces`
  * - `trace-aggregate`: `aggregateTraces`
  * - `trace-query-root-duration`: `durationMs` predicates in trace/thread queries
+ * - `trace-query-context-ids`: `runId`, `sessionId`, `userId` and `organizationId` predicates in trace/thread queries
  * - `trace-query-discovery`: `getTraceQueryObservedFields`, `getTraceQueryValues`
  * - `thread-query`: `queryThreads`
  * - `trace-query-tenant-scope`: enforcing a trusted tenant scope on trace/thread queries
