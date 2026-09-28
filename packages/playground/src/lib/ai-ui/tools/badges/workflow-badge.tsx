@@ -10,23 +10,24 @@ import { NetworkChoiceMetadataDialogTrigger } from '@mastra/playground-ui/domain
 import { SectionLabel } from '@mastra/playground-ui/domains/chat/components/section-label';
 import type { ToolApprovalButtonsProps } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
 import { ToolApprovalButtons } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
-import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
-import { Eye } from 'lucide-react';
-import { useContext, useEffect } from 'react';
-import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import {
   WorkflowGraph,
   WorkflowRunContext,
-  WorkflowRunProvider,
   WorkflowSelectedStepProvider,
   WorkflowStepDetailProvider,
   useWorkflowStepDetail,
-} from '@/domains/workflows';
-import { WorkflowStepDetailContent } from '@/domains/workflows/components/workflow-step-detail';
-import type { WorkflowRunStreamResult } from '@/domains/workflows/context/workflow-run-context';
-import { useWorkflow } from '@/hooks';
-import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
-import { useLinkComponent } from '@/lib/framework';
+} from '@mastra/playground-ui/domains/workflows';
+import { WorkflowStepDetailContent } from '@mastra/playground-ui/domains/workflows/components/workflow-step-detail';
+import type { WorkflowRunStreamResult } from '@mastra/playground-ui/domains/workflows/context/workflow-run-context';
+import { useWorkflow } from '@mastra/playground-ui/domains/workflows/hooks/use-workflow';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { Eye } from 'lucide-react';
+import { useContext, useEffect } from 'react';
+import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
+import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
+import { PlaygroundWorkflowRunProvider } from '@/domains/workflows/playground-workflow-run-provider';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 export interface WorkflowBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   workflowId: string;
@@ -50,15 +51,7 @@ export const WorkflowBadge = ({
   toolCalled,
 }: WorkflowBadgeProps) => {
   const { runId, status } = result || {};
-  const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId);
-  const { data: runs, isLoading: isRunsLoading } = useWorkflowRuns(workflowId, {
-    enabled: Boolean(runId) && !isStreaming,
-  });
-  const run = runs?.find(run => run.runId === runId);
-  const isLoading = isRunsLoading || !run;
-
-  const snapshot = typeof run?.snapshot === 'object' ? run?.snapshot : undefined;
-
+  const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId, usePlaygroundStore().requestContext);
   const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
   const selectionReason =
     metadata?.mode === 'network' ? (routingDecision?.selectionReason ?? metadata.selectionReason) : undefined;
@@ -97,10 +90,10 @@ export const WorkflowBadge = ({
         ) : null
       }
     >
-      {!isStreaming && !isLoading && (
-        <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId} withoutTimeTravel>
+      {!isStreaming && runId && (
+        <PlaygroundWorkflowRunProvider workflowId={workflowId} initialRunId={runId} withoutTimeTravel>
           <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />
-        </WorkflowRunProvider>
+        </PlaygroundWorkflowRunProvider>
       )}
 
       {isStreaming && <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />}
@@ -131,7 +124,9 @@ interface WorkflowBadgeExtendedProps {
 }
 
 const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExtendedProps) => {
+  const requestContext = useMergedRequestContext();
   const { Link } = useLinkComponent();
+  const { isLoadingRunExecutionResult } = useContext(WorkflowRunContext);
 
   return (
     <>
@@ -149,21 +144,26 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
       <WorkflowSelectedStepProvider>
         <WorkflowStepDetailProvider>
           <div className="h-[60vh] w-full overflow-hidden rounded-md">
-            <WorkflowGraph workflowId={workflowId} workflow={workflow!} />
+            <WorkflowGraph
+              workflowId={workflowId}
+              workflow={workflow!}
+              isLoading={isLoadingRunExecutionResult}
+              requestContext={requestContext}
+            />
           </div>
-          <WorkflowBadgeStepDetail />
+          <WorkflowBadgeStepDetail requestContext={requestContext} />
         </WorkflowStepDetailProvider>
       </WorkflowSelectedStepProvider>
     </>
   );
 };
 
-const WorkflowBadgeStepDetail = () => {
+const WorkflowBadgeStepDetail = ({ requestContext }: { requestContext: Record<string, any> }) => {
   const { stepDetail } = useWorkflowStepDetail();
   if (!stepDetail) return null;
   return (
     <div className="mt-2 flex max-h-[60vh] flex-col overflow-hidden rounded-md border border-border bg-background">
-      <WorkflowStepDetailContent />
+      <WorkflowStepDetailContent requestContext={requestContext} />
     </div>
   );
 };

@@ -1,11 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { Check, Link as LinkIcon, Pencil } from 'lucide-react';
 
 import { useAgent } from '../hooks/use-agent';
 import { AgentConfigToggle } from './agent-config-toggle';
 import { useCanCreateAgent } from '@/domains/agent-builder/hooks/use-can-create-agent';
-import { useLinkComponent } from '@/lib/framework';
 import { withStudioBasePath } from '@/lib/studio-base-path';
 
 export interface AgentDetailHeaderActionsProps {

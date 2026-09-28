@@ -1579,13 +1579,15 @@ describe('Agent Routes Authorization', () => {
     async function persistSuspendedDurableRun({
       resourceId,
       toolCallId = 'tool-call-1',
+      workflowName = 'durable-agentic-loop',
     }: {
       resourceId: string;
       toolCallId?: string;
+      workflowName?: string;
     }) {
       const workflowsStore = await storage.getStore('workflows');
       await workflowsStore?.persistWorkflowSnapshot({
-        workflowName: 'durable-agentic-loop',
+        workflowName,
         runId: 'durable-run-1',
         snapshot: {
           runId: 'durable-run-1',
@@ -1653,6 +1655,81 @@ describe('Agent Routes Authorization', () => {
         new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' }),
       );
       expect(execution).not.toHaveBeenCalled();
+    });
+
+    // Issue #25154: createInngestAgent() persists its loop under a namespaced
+    // workflow name and advertises it via `durableLoopWorkflowName`.
+    describe('agent with a namespaced loop workflow name', () => {
+      const namespacedLoop = 'inngest:durable-agentic-loop';
+
+      beforeEach(() => {
+        Object.defineProperty(mockAgent, 'durableLoopWorkflowName', { value: namespacedLoop, configurable: true });
+      });
+
+      afterEach(() => {
+        delete (mockAgent as any).durableLoopWorkflowName;
+      });
+
+      it.each(approvalRoutes)('$name accepts a run persisted under the advertised name', async ({ route, method }) => {
+        await persistSuspendedDurableRun({ resourceId: 'user-a', workflowName: namespacedLoop });
+        const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({
+          fullStream: new ReadableStream(),
+        });
+
+        await (route.handler as any)({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          abortSignal: new AbortController().signal,
+          runId: 'durable-run-1',
+          toolCallId: 'tool-call-1',
+        });
+
+        expect(execution).toHaveBeenCalledTimes(1);
+      });
+
+      it.each(approvalRoutes)(
+        '$name rejects a run under the advertised name owned by another resource',
+        async ({ route, method }) => {
+          await persistSuspendedDurableRun({ resourceId: 'user-b', workflowName: namespacedLoop });
+          const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({
+            fullStream: new ReadableStream(),
+          });
+
+          await expect(
+            (route.handler as any)({
+              mastra,
+              agentId: 'test-agent',
+              requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+              abortSignal: new AbortController().signal,
+              runId: 'durable-run-1',
+              toolCallId: 'tool-call-1',
+            }),
+          ).rejects.toThrow(
+            new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
+          );
+          expect(execution).not.toHaveBeenCalled();
+        },
+      );
+
+      it.each(approvalRoutes)('$name does not fall back to the core loop workflow name', async ({ route, method }) => {
+        await persistSuspendedDurableRun({ resourceId: 'user-a' });
+        const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({
+          fullStream: new ReadableStream(),
+        });
+
+        await expect(
+          (route.handler as any)({
+            mastra,
+            agentId: 'test-agent',
+            requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+            abortSignal: new AbortController().signal,
+            runId: 'durable-run-1',
+            toolCallId: 'tool-call-1',
+          }),
+        ).rejects.toThrow(HTTPException);
+        expect(execution).not.toHaveBeenCalled();
+      });
     });
   });
 
@@ -1796,6 +1873,34 @@ describe('Agent Routes Authorization', () => {
       expect(result).toBe(expectedStream);
 
       delete (mockAgent as any).recover;
+    });
+
+    it('should surface an agent that does not support recover as a 400, not a 500', async () => {
+      // Mirrors InngestAgent.recover(): the agent is durable-like, but Inngest owns recovery.
+      const message = 'InngestAgent.recover() is not supported.';
+      (mockDurableAgent as any).recover = vi.fn().mockRejectedValue(
+        new MastraError({
+          id: 'INNGEST_AGENT_RECOVER_NOT_SUPPORTED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: message,
+          details: { status: 400 },
+        }),
+      );
+
+      await persistDurableAgenticLoopRun({ runId: 'recover-run-unsupported' });
+
+      const error = await RECOVER_ROUTE.handler({
+        mastra,
+        agentId: 'test-durable-agent',
+        requestContext: createContextWithReservedKeys({}),
+        abortSignal: new AbortController().signal,
+        runId: 'recover-run-unsupported',
+      } as any).catch(e => e);
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect(error.status).toBe(400);
+      expect(error.message).toBe(message);
     });
 
     it('should stash version overrides on requestContext before calling agent.recover()', async () => {
@@ -2782,6 +2887,68 @@ describe('Agent Routes Authorization', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    it('should forward withInitialHistory with the server request context', async () => {
+      await mockMemory.createThread({
+        threadId: 'subscribe-thread-history',
+        resourceId: 'user-a',
+        title: 'Subscribe History',
+      });
+      const subscribeToThread = vi.fn(async () => ({
+        activeRunId: () => null,
+        abort: vi.fn(),
+        unsubscribe: vi.fn(),
+        stream: (async function* () {})(),
+      }));
+      (mockAgent as any).subscribeToThread = subscribeToThread;
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      const stream = (await SUBSCRIBE_AGENT_THREAD_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        resourceId: 'user-a',
+        threadId: 'subscribe-thread-history',
+        withInitialHistory: { perPage: 10 },
+      } as any)) as ReadableStream;
+      await stream.cancel();
+
+      expect(subscribeToThread).toHaveBeenCalledWith({
+        resourceId: 'user-a',
+        threadId: 'subscribe-thread-history',
+        withInitialHistory: { perPage: 10 },
+        requestContext,
+      });
+    });
+
+    it('checks thread read access before sending initial history', async () => {
+      await mockMemory.createThread({ threadId: 'fga-history', resourceId: 'user-a', title: 'Private' });
+      const require = vi.fn().mockRejectedValue(Object.assign(new Error('FGA denied'), { status: 403 }));
+      vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: { require } } as any);
+      const subscribeToThread = vi.fn();
+      (mockAgent as any).subscribeToThread = subscribeToThread;
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+      const user = { id: 'user-a' };
+      requestContext.set('user', user);
+
+      await expect(
+        SUBSCRIBE_AGENT_THREAD_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          threadId: 'fga-history',
+          withInitialHistory: true,
+        } as any),
+      ).rejects.toThrow('FGA denied');
+      expect(subscribeToThread).not.toHaveBeenCalled();
+      expect(require).toHaveBeenCalledWith(user, {
+        resource: { type: 'thread', id: 'fga-history' },
+        permission: 'memory:read',
+        context: expect.objectContaining({ resourceId: 'user-a' }),
+      });
     });
 
     it('should clear heartbeat timers when an idle subscription stream is aborted', async () => {

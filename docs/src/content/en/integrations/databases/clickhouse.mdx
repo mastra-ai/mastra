@@ -77,9 +77,7 @@ Lightweight deletion is a hide-only operation that marks rows with ClickHouse's 
 
 When all five observability signals have finite retention, Mastra also applies a TTL to deletion requests so they outlive the signal rows they protect. If any signal is unbounded, deletion requests remain unbounded. See [storage retention](/reference/storage/retention#clickhouse-native-ttl) for how the deletion-request TTL is calculated.
 
-Feedback review-status updates require `ALTER UPDATE` permission on `mastra_feedback_events` and, when delta polling is enabled, `INSERT` permission on `mastra_feedback_events_delta`. These updates wait for the ClickHouse mutation to finish on the server that receives the write, so latency depends on that server's mutation queue. Other replicas apply the mutation through the replication log, so a reader on a lagging replica can briefly see the previous status, and an inactive replica doesn't block the update. They modify the existing feedback row and preserve deletion masks: a concurrent review update cannot recreate deleted feedback. Successful updates remain available through delta polling. If a newer version of the same feedback event is ingested while a review update is in flight, the update is re-applied to that newer version; after repeated conflicts it fails with a conflict error (HTTP 409) and the caller retries.
-
-The status mutation and the delta insert are separate operations. If the delta insert fails, the API returns an error even though the status may have changed, and continued delta polling doesn't recover that notification: later polls from the same cursor never return it, and starting delta mode without a cursor subscribes at the current head. To recover, retry the review update after resolving the error, or reread the feedback with a regular list query.
+Feedback review-status updates read the current row and insert a replacement, so they need `SELECT` and `INSERT` rather than `ALTER UPDATE`, and the insert materialized view publishes each update to delta polling. An update that re-runs a delete also needs the delete permissions listed in [initialization](#initialization). A review update that lands while a delete of the same feedback is in progress re-runs that delete and returns not found, so it can't recreate deleted feedback. A failed delete doesn't block review updates, but the next update retries it: if the retry succeeds, the update returns not found; if it fails again, the new status is saved but the update returns the delete's error. If a network error or a lagging replica lets a review row outlive a successful delete, the next review update of that feedback deletes it again and returns not found.
 
 ### Observability with the legacy domain
 
@@ -384,16 +382,10 @@ const observability = new ObservabilityStorageClickhouseVNext({
 await observability.init()
 ```
 
-In CI/CD pipelines, set `disableInit: true` on `ClickhouseStore` and run `init()` from a deployment step that uses elevated credentials. Runtime application credentials still need more than read and insert:
+In CI/CD pipelines, set `disableInit: true` on `ClickhouseStore` and run `init()` from a deployment step that uses elevated credentials. Runtime application credentials need:
 
 - `SELECT` and `INSERT` on the Mastra tables.
 - `ALTER DELETE` on the observability tables you delete from. On ClickHouse 26.6 and earlier, lightweight deletes also require `ALTER UPDATE` on those tables; ClickHouse 26.7 removed that requirement.
-- For feedback review updates, `ALTER UPDATE(reviewStatus)` on `mastra_feedback_events` and `INSERT` on `mastra_feedback_events_delta`.
-
-```sql
-GRANT ALTER UPDATE(reviewStatus) ON <database>.mastra_feedback_events TO <runtime_user>;
-GRANT INSERT ON <database>.mastra_feedback_events_delta TO <runtime_user>;
-```
 
 ## Observability
 

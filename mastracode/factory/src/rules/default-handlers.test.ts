@@ -129,10 +129,10 @@ function linearContext(): FactoryLinearRuleContext {
 
 describe('built-in board and integration handlers', () => {
   it('ships ordinary visible default leaves', () => {
-    expect(workBoard.rules.intake?.issue?.onEnter).toBeTypeOf('function');
+    expect(workBoard.rules.intake?.issue?.onEnter).toBeUndefined();
     expect(workBoard.rules.triage?.issue?.onEnter).toBeTypeOf('function');
     expect(workBoard.rules.done?.issue?.onEnter).toBeTypeOf('function');
-    expect(reviewBoard.rules.intake?.pullRequest?.onEnter).toBeTypeOf('function');
+    expect(reviewBoard.rules.intake?.pullRequest?.onEnter).toBeUndefined();
     expect(reviewBoard.rules.review?.pullRequest?.onEnter).toBeTypeOf('function');
     expect(workBoard.tools.submit_plan?.onResult).toBeTypeOf('function');
     expect(defaultGithubRules.issueOpened).toBeTypeOf('function');
@@ -148,7 +148,7 @@ describe('built-in board and integration handlers', () => {
     expect(workBoard.rules.triage?.linearIssue?.onEnter).toBeTypeOf('function');
   });
 
-  it('materializes observed Linear issues directly in Triage', async () => {
+  it('materializes observed Linear issues directly in Intake', async () => {
     const rule = defaultLinearRules.issueObserved;
 
     expect(await rule?.(linearContext())).toMatchObject({
@@ -156,7 +156,7 @@ describe('built-in board and integration handlers', () => {
       source: 'linear-issue',
       sourceKey: 'linear:ENG-42',
       title: 'ENG-42: Fix intake sync',
-      stage: 'triage',
+      stage: 'intake',
       metadata: { linearIssueId: 'issue-1', identifier: 'ENG-42' },
     });
   });
@@ -1013,54 +1013,11 @@ describe('built-in board and integration handlers', () => {
     },
   );
 
-  it('suggests a review from Intake only for stamped pull requests materialized by webhook', async () => {
-    const rule = reviewBoard.rules.intake?.pullRequest?.onEnter;
-
-    expect(
-      await rule?.({
-        ...stageContext({ type: 'system', id: 'factory-rule-dispatcher' }, 'review'),
-        cause: 'linked_item_materialized',
-        item: { ...item, source: 'github-pr' as const, metadata: { autoStartCandidate: true } },
-      }),
-    ).toMatchObject({ type: 'invokeSkill', role: 'review', skillName: 'factory-review' });
-
-    // An untrusted author's PR gets no suggestion — the card waits for a click.
-    expect(
-      await rule?.({
-        ...stageContext({ type: 'system', id: 'factory-rule-dispatcher' }, 'review'),
-        cause: 'linked_item_materialized',
-        item: { ...item, source: 'github-pr' as const, metadata: { autoStartCandidate: false } },
-      }),
-    ).toBeUndefined();
-
-    // A candidate filed by hand is not an arrival.
-    expect(
-      await rule?.({
-        ...stageContext({ type: 'human', id: 'user-1' }, 'review'),
-        cause: 'board_drag',
-        item: { ...item, source: 'github-pr' as const, metadata: { autoStartCandidate: true } },
-      }),
-    ).toBeUndefined();
-  });
-
-  it('suggests an investigation from Intake only for stamped issues materialized by webhook', async () => {
-    const rule = workBoard.rules.intake?.issue?.onEnter;
-
-    expect(
-      await rule?.({
-        ...stageContext({ type: 'system', id: 'factory-rule-dispatcher' }, 'work'),
-        cause: 'linked_item_materialized',
-        item: { ...item, metadata: { autoStartCandidate: true } },
-      }),
-    ).toMatchObject({ type: 'invokeSkill', role: 'triage', skillName: 'factory-triage' });
-
-    expect(
-      await rule?.({
-        ...stageContext({ type: 'system', id: 'factory-rule-dispatcher' }, 'work'),
-        cause: 'linked_item_materialized',
-        item: { ...item, metadata: {} },
-      }),
-    ).toBeUndefined();
+  it('does not run default arrival handlers from Work or Review Intake', () => {
+    expect(workBoard.rules.intake?.issue?.onEnter).toBeUndefined();
+    expect(workBoard.rules.intake?.gitlabIssue?.onEnter).toBeUndefined();
+    expect(reviewBoard.rules.intake?.pullRequest?.onEnter).toBeUndefined();
+    expect(reviewBoard.rules.intake?.gitlabPullRequest?.onEnter).toBeUndefined();
   });
 
   it('keeps a factory-authored pull request opened before the Factory from being picked up on its own', async () => {

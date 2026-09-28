@@ -3,7 +3,7 @@ import { OpenInTracesButton } from '@mastra/playground-ui/domains/metrics/compon
 import { ModelUsageCostCardView } from '@mastra/playground-ui/domains/metrics/components/model-usage-cost-card-view';
 import { useDrilldown } from '@mastra/playground-ui/domains/metrics/hooks/use-drilldown';
 import { useModelUsageCostMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-model-usage-cost-metrics';
-import { useLinkComponent } from '@/lib/framework';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 
 export function ModelUsageCostCard() {
   const { data, isLoading, isError } = useModelUsageCostMetrics();

@@ -1,4 +1,5 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useEffect } from 'react';
 import { parse } from 'superjson';
@@ -7,7 +8,6 @@ import { useAgent } from '../hooks/use-agent';
 import { useExecuteAgentTool } from '../hooks/use-execute-agent-tool';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import ToolExecutor from '@/domains/tools/components/ToolExecutor';
-import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 export interface AgentToolPanelProps {

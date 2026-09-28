@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
@@ -88,7 +89,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                       content={workingMemoryData || ''}
                       isCopied={isCopied}
                       onCopy={handleCopy}
-                      className={cn(raisedSurfaceStyle, 'min-h-[150px] rounded-lg font-mono text-body')}
+                      className={cn(raisedSurfaceStyle, 'min-h-[150px] rounded-lg text-body')}
                     />
                   ) : (
                     <>
@@ -119,22 +120,22 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                   )}
                 </>
               ) : (
-                <div className="font-mono text-body text-muted-foreground">
+                <div className="text-body text-muted-foreground">
                   No working memory content yet. Click "Edit Working Memory" to add content.
                 </div>
               )}
             </>
           ) : (
-            <textarea
-              className={cn(
-                raisedSurfaceStyle,
-                'min-h-[150px] w-full resize-none rounded-lg p-3 font-mono text-body text-foreground',
-              )}
-              value={editState.value}
-              onChange={e => setEditState(state => ({ ...state, value: e.target.value }))}
-              disabled={isUpdating}
+            <CodeEditor
               aria-label="Working memory content"
+              language={editState.value.trim().startsWith('{') ? 'json' : 'markdown'}
+              lineNumbers={false}
+              showCopyButton={false}
               placeholder="Enter working memory content..."
+              value={editState.value}
+              onChange={value => setEditState(state => ({ ...state, value }))}
+              editable={!isUpdating}
+              className="min-h-[150px] w-full"
             />
           )}
           <div className="flex gap-2">

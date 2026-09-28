@@ -1,10 +1,10 @@
 import type { DatasetItem } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { focusRing, transitions } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { BanIcon, EqualIcon, PenIcon, PlusIcon } from 'lucide-react';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface DatasetCompareVersionsListProps {
   datasetId: string;

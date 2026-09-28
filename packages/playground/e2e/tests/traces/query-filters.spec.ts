@@ -1,10 +1,12 @@
 import { expect, test } from '@playwright/test';
 import { traceQueryPage } from '../../../src/pages/traces/__tests__/fixtures/trace-query';
+import { mockTraceQueryCapabilities } from '../__utils__/mock-trace-query-capabilities';
 
 // URL filters must reach the appropriate endpoint and retain their meaning after reload.
 test.describe('Trace query filtering', () => {
   test.describe('when filtering traces by entity name', () => {
     test('sends the predicate to /observability/traces/query and shows only matching rows', async ({ page }) => {
+      await mockTraceQueryCapabilities(page);
       await page.route('**/api/observability/traces/query', route => {
         expect(route.request().postDataJSON()).toMatchObject({
           where: { op: 'and', args: [{ op: 'eq', left: { path: 'entityName' }, right: { literal: 'preview' } }] },
@@ -20,6 +22,7 @@ test.describe('Trace query filtering', () => {
 
   test.describe('when opening an obsolete service-name filter URL', () => {
     test('uses trace queries without requesting a legacy list', async ({ page }) => {
+      await mockTraceQueryCapabilities(page);
       let legacyRequests = 0;
       await page.route('**/api/observability/traces/query', route => {
         expect(route.request().postDataJSON().where).toBeUndefined();

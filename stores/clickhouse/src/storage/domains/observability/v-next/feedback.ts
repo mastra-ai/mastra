@@ -26,12 +26,7 @@ import { parseFieldKey } from '@mastra/core/utils';
 
 import { isReplicationConfigured } from '../../../db/replication';
 import type { ClickhouseReplicationConfig } from '../../../db/replication';
-import {
-  buildDeltaCursorExpr,
-  TABLE_DELETION_REQUESTS,
-  TABLE_FEEDBACK_EVENTS,
-  TABLE_FEEDBACK_EVENTS_DELTA,
-} from './ddl';
+import { TABLE_DELETION_REQUESTS, TABLE_FEEDBACK_EVENTS, TABLE_FEEDBACK_EVENTS_DELTA } from './ddl';
 import { markDeletionRequestApplied, recordDeletionRequest } from './deletion-requests';
 import { buildFeedbackFilterConditions, buildPaginationClause, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
@@ -296,38 +291,24 @@ function feedbackNotFoundError(feedbackId: string): MastraError {
   });
 }
 
-function feedbackConflictError(feedbackId: string): MastraError {
-  return new MastraError({
-    id: 'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_CONFLICT',
-    domain: ErrorDomain.MASTRA_OBSERVABILITY,
-    category: ErrorCategory.USER,
-    text: 'Feedback record changed while its review status was being updated; retry the update',
-    details: { feedbackId },
-  });
-}
-
-/** Re-reads before giving up when ingestion keeps superseding the observed row. */
-const REVIEW_UPDATE_ATTEMPTS = 3;
-
 /**
- * Only applied requests block a review update. The guard decides the reply,
- * not data safety: the update mutates the row in place and preserves the
- * delete mask, so a replica that has not received a marker yet can only
- * mis-report a status, never bring deleted feedback back.
+ * Finds a deletion request covering this feedback. With `appliedOnly`, only
+ * requests whose DELETE succeeded count; otherwise pending requests count too,
+ * including a delete that is still running or one that failed.
  */
 async function hasFeedbackDeletionRequest(
   client: ClickHouseClient,
   feedbackId: string,
   organizationId: string | null,
   resourceId: string | null,
+  { appliedOnly }: { appliedOnly: boolean },
 ): Promise<boolean> {
   const rows = await queryJson<{ found: number }>(
     client,
     `SELECT 1 AS found FROM ${TABLE_DELETION_REQUESTS} FINAL
      WHERE signal = 'feedback'
        AND predicateType = 'itemIds'
-       AND has(predicateValues, {feedbackId:String})
-       AND lastAppliedAt > toDateTime64(0, 3)
+       AND has(predicateValues, {feedbackId:String})${appliedOnly ? '\n       AND lastAppliedAt > toDateTime64(0, 3)' : ''}
        AND (organizationId = '' OR organizationId = {organizationId:String})
        AND (resourceId = '' OR resourceId = {resourceId:String})
      LIMIT 1`,
@@ -336,38 +317,30 @@ async function hasFeedbackDeletionRequest(
   return rows.length > 0;
 }
 
+/**
+ * Review updates insert a replacement row, so they need only `INSERT` and the
+ * insert materialized view publishes the delta cursor.
+ *
+ * A replacement written after a concurrent DELETE is not covered by that
+ * DELETE. The post-write check therefore looks for any request, pending or
+ * applied, and re-runs the delete when it finds one. Only applied requests
+ * block the update up front, so feedback whose delete failed stays editable.
+ *
+ * If the post-write check reads a replica that has not received the request
+ * yet, or the check or its delete fails, the replacement stays visible. A row
+ * that is still visible under an applied request can only be such a leftover,
+ * so the next update deletes it again.
+ */
 export async function updateFeedbackReviewStatus(
   client: ClickHouseClient,
   args: UpdateFeedbackReviewStatusArgs,
-  strategy: ClickHouseDeltaCursorStrategy | null = null,
+  replication?: ClickhouseReplicationConfig,
 ): Promise<FeedbackRecord> {
   const { feedbackId, reviewStatus } = parseUpdateFeedbackReviewStatusArgs(args);
 
-  // The mutation targets the exact writeVersion observed. Ingestion can insert
-  // a newer version at any time, which turns that mutation into a no-op; re-read
-  // and re-apply to the newest row instead of reporting a false not-found.
-  for (let attempt = 1; ; attempt++) {
-    const updated = await applyReviewStatus(client, feedbackId, reviewStatus, strategy);
-    if (updated) return updated;
-    if (attempt >= REVIEW_UPDATE_ATTEMPTS) throw feedbackConflictError(feedbackId);
-  }
-}
-
-/**
- * One read-guard-mutate-verify pass. Returns `null` when the read-back does not
- * show the new status: a newer version superseded the observed row, a delete
- * hid it after the guard read (the next pass then reports not found), or the
- * mutation left the row untouched.
- */
-async function applyReviewStatus(
-  client: ClickHouseClient,
-  feedbackId: string,
-  reviewStatus: FeedbackRecord['reviewStatus'],
-  strategy: ClickHouseDeltaCursorStrategy | null,
-): Promise<FeedbackRecord | null> {
   const existing = await queryJson<Record<string, any>>(
     client,
-    `SELECT *, toString(writeVersion) AS reviewWriteVersion FROM ${TABLE_FEEDBACK_EVENTS} FINAL
+    `SELECT * FROM ${TABLE_FEEDBACK_EVENTS} FINAL
      WHERE feedbackId = {feedbackId:String}
      ORDER BY writeVersion DESC, timestamp DESC
      LIMIT 1`,
@@ -377,64 +350,33 @@ async function applyReviewStatus(
   if (!existingRow) {
     throw feedbackNotFoundError(feedbackId);
   }
-
-  if (await hasFeedbackDeletionRequest(client, feedbackId, existingRow.organizationId, existingRow.resourceId)) {
+  const { organizationId, resourceId } = existingRow;
+  const redelete = async (): Promise<never> => {
+    await deleteFeedback(
+      client,
+      {
+        feedbackIds: [feedbackId],
+        organizationId: organizationId ?? undefined,
+        resourceId: resourceId ?? undefined,
+      },
+      replication,
+    );
     throw feedbackNotFoundError(feedbackId);
-  }
-
-  // Mutate the observed row instead of inserting a replacement. ClickHouse
-  // mutations preserve the delete mask, so even a stale post-write guard
-  // cannot leave a deleted record visible again. Wait for the server that
-  // receives the write only: other replicas apply the mutation through the
-  // replication log, and waiting for all of them fails while any replica is
-  // inactive even though the status already changed.
-  const identity = `feedbackId = {feedbackId:String}
-    AND timestamp = parseDateTime64BestEffort({timestamp:String}, 3, 'UTC')
-    AND (traceId = {traceId:Nullable(String)} OR (isNull(traceId) AND isNull({traceId:Nullable(String)})))
-    AND writeVersion = {writeVersion:UInt64}`;
-  const params = {
-    feedbackId,
-    timestamp: existingRow.timestamp,
-    traceId: existingRow.traceId,
-    writeVersion: existingRow.reviewWriteVersion,
-    reviewStatus,
   };
-  await client.command({
-    query: `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} UPDATE reviewStatus = {reviewStatus:String} WHERE ${identity}`,
-    query_params: params,
-    clickhouse_settings: { ...CH_SETTINGS, mutations_sync: '1' },
-  });
 
-  // UPDATE mutations do not trigger the insert materialized view. Publish the
-  // cursor explicitly, only for a row that is still visible. A concurrent
-  // delete remains safe because delta reads join back to the visible main row.
-  if (strategy !== null) {
-    await client.command({
-      query: `INSERT INTO ${TABLE_FEEDBACK_EVENTS_DELTA}
-        SELECT ${buildDeltaCursorExpr(strategy, 'mastra_feedback_events_delta_cursor', 'feedbackId')} AS cursorId,
-          ingestedAt, traceId, timestamp, feedbackId
-        FROM (
-          SELECT now64(9, 'UTC') AS ingestedAt, traceId, timestamp, feedbackId
-          FROM ${TABLE_FEEDBACK_EVENTS} FINAL WHERE ${identity}
-        )`,
-      query_params: params,
-      clickhouse_settings: { ...CH_INSERT_SETTINGS, async_insert: 0 },
-    });
+  if (await hasFeedbackDeletionRequest(client, feedbackId, organizationId, resourceId, { appliedOnly: true })) {
+    return redelete();
   }
 
-  if (await hasFeedbackDeletionRequest(client, feedbackId, existingRow.organizationId, existingRow.resourceId)) {
-    throw feedbackNotFoundError(feedbackId);
-  }
+  const updated = rowToFeedbackRecord({ ...existingRow, reviewStatus });
+  await batchCreateFeedback(client, { feedbacks: [updated] });
 
-  // Under heavy concurrent mutation of the same part, ClickHouse can report a
-  // mutation done while the row is left untouched (about 0.2% at 100 in-flight
-  // updates on 26.6). Treat an unchanged row like a superseded one and re-apply.
-  const current = await queryJson<Record<string, any>>(
-    client,
-    `SELECT * FROM ${TABLE_FEEDBACK_EVENTS} FINAL WHERE ${identity} LIMIT 1`,
-    params,
-  );
-  return current[0]?.reviewStatus === reviewStatus ? rowToFeedbackRecord(current[0]) : null;
+  // A pending request is either a delete that failed or one still running.
+  // They look the same here, so re-run the delete in both cases.
+  if (await hasFeedbackDeletionRequest(client, feedbackId, organizationId, resourceId, { appliedOnly: false })) {
+    return redelete();
+  }
+  return updated;
 }
 
 // ============================================================================

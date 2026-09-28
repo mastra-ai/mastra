@@ -1,3 +1,4 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ConnectionItem, GroupedConnections } from '../types';
 
 function ConnectionRow({
@@ -14,7 +15,9 @@ function ConnectionRow({
   return (
     <li className="flex items-center justify-between border-b py-2">
       <div>
-        <div className="font-mono text-caption">{connection.connectionId}</div>
+        <Txt as="div" variant="caption" font="mono">
+          {connection.connectionId}
+        </Txt>
         <div className="text-caption text-muted-foreground">
           {connection.label ?? '(no label)'} · {connection.status}
           {connection.scope ? ` · ${connection.scope}` : ''}

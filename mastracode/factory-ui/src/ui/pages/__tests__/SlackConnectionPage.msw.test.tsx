@@ -104,7 +104,10 @@ describe('SlackConnectionPage', () => {
     expect(await screen.findByText('Slack user ID: U00000001')).toBeInTheDocument();
 
     expect(within(connectionSection).queryByText('Connected account')).not.toBeInTheDocument();
-    expect(within(connectionSection).getByText(/Connected January 15, 2026/)).toBeInTheDocument();
+    const linkedAt = new Intl.DateTimeFormat(undefined, { dateStyle: 'long', timeStyle: 'short' }).format(
+      new Date(slackLink.linkedAt),
+    );
+    expect(within(connectionSection).getByText(`Connected ${linkedAt}`)).toBeInTheDocument();
     expect(screen.getByText('Start and continue Factory sessions from Slack.')).toBeInTheDocument();
 
     const sessionBehaviorSection = screen

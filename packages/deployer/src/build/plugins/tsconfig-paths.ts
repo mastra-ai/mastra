@@ -8,7 +8,7 @@ import { createHandler } from 'typescript-paths';
 const PLUGIN_NAME = 'tsconfig-paths';
 const JS_IMPORT_SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx'];
 
-export type PluginOptions = Omit<RegisterOptions, 'loggerID'> & { localResolve?: boolean; cwd?: string };
+export type PluginOptions = Omit<RegisterOptions, 'loggerID'> & { localResolve?: boolean };
 
 /**
  * Check if a tsconfig file has path mappings configured.
@@ -31,7 +31,7 @@ export function hasPaths(tsConfigPath: string): boolean {
   }
 }
 
-export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve, cwd }: PluginOptions = {}): Plugin {
+export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }: PluginOptions = {}): Plugin {
   const handlerCache = new Map<string, ReturnType<typeof createHandler>>();
 
   function resolveJsImportToSourceFile(moduleName: string): string {
@@ -147,7 +147,7 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve, c
         // Convert relative paths to absolute to ensure proper tsconfig path resolution
         // This allows path aliases to work regardless of how the importer path is provided
         if (!path.isAbsolute(importer)) {
-          importer = path.resolve(cwd ?? process.cwd(), importer);
+          importer = path.resolve(process.cwd(), importer);
         }
 
         const moduleName = resolveAlias(request, importer);

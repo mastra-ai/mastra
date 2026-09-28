@@ -1814,21 +1814,41 @@ export class EventedWorkflow<
       throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
     }
 
+    // The evented engine cannot function without a Mastra host — it is the
+    // source of the pubsub transport, snapshot storage, and agent/workflow
+    // resolution. Construction legitimately precedes registration (builders
+    // create workflows first; `__registerMastra` wires the host later), so
+    // enforce the precondition here rather than in the constructor. Without
+    // this guard the run would start and then hang or fail deep inside the
+    // event processor, far from the actual mistake.
+    if (!this.mastra) {
+      throw new MastraError({
+        id: 'EVENTED_WORKFLOW_MASTRA_HOST_REQUIRED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text:
+          `Workflow "${this.id}" runs on the evented execution engine, which requires a Mastra host. ` +
+          `Register this workflow on a Mastra instance (e.g. \`new Mastra({ workflows: { ${this.id}: workflow } })\`) before calling createRun().`,
+        details: { workflowId: this.id },
+      });
+    }
+
     const runIdToUse = options?.runId || globalThis.crypto.randomUUID();
 
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
 
     const supportsConcurrentUpdates = workflowsStore?.supportsConcurrentUpdates?.() ?? false;
     if (workflowsStore && !supportsConcurrentUpdates) {
+      const storageName = this.mastra?.getStorage()?.name ?? 'The configured storage';
       throw new MastraError({
         id: 'ATOMIC_STORAGE_OPERATIONS_NOT_SUPPORTED',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.USER,
         text:
-          `Workflow "${this.id}" runs on the evented execution engine, which requires a storage adapter that supports concurrent updates. ` +
-          `Your current workflow storage adapter does not. Switch to an adapter that does (for example @mastra/libsql), or, if you do not need scheduled execution, ` +
-          `remove the \`schedule\` field from this workflow's definition to use the default execution engine.`,
-        details: { workflowId: this.id },
+          `Workflow "${this.id}" runs on the evented execution engine, which advances steps from concurrent workers and therefore requires a storage adapter whose workflows domain applies concurrent updates atomically (\`supportsConcurrentUpdates()\`). ${storageName} storage reports that it does not. ` +
+          `Storage adapters that do: @mastra/libsql, @mastra/pg, @mastra/mysql, @mastra/mssql, @mastra/oracledb, @mastra/mongodb, @mastra/dynamodb, @mastra/spanner, @mastra/dsql, @mastra/upstash and @mastra/convex. ` +
+          `A workflow runs on this engine when it declares a \`schedule\`. Durable agents on such a store fall back to the in-process engine with a warning instead of failing here.`,
+        details: { workflowId: this.id, storage: storageName },
       });
     }
 
@@ -1968,6 +1988,7 @@ export class EventedRun<
     perStep,
     outputOptions,
     tracingContext,
+    actor,
   }: {
     inputData?: TInput;
     requestContext?: RequestContext;
@@ -1978,6 +1999,7 @@ export class EventedRun<
       includeResumeLabels?: boolean;
     };
     tracingContext?: TracingContext;
+    actor?: ActorSignal;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     // Add validation checks
     if (this.serializedStepGraph.length === 0) {
@@ -2073,6 +2095,7 @@ export class EventedRun<
         pubsub: this.mastra.pubsub,
         retryConfig: this.retryConfig,
         requestContext,
+        actor,
         abortController: this.abortController,
         perStep,
         outputOptions,
@@ -2107,11 +2130,13 @@ export class EventedRun<
     initialState,
     requestContext,
     perStep,
+    actor,
   }: {
     inputData?: TInput;
     requestContext?: RequestContext;
     initialState?: TState;
     perStep?: boolean;
+    actor?: ActorSignal;
   }): Promise<{ runId: string }> {
     // Add validation checks
     if (this.serializedStepGraph.length === 0) {
@@ -2179,6 +2204,7 @@ export class EventedRun<
         runId: this.runId,
         prevResult: { status: 'success', output: inputDataToUse },
         requestContext: requestContext.toJSON(),
+        actor,
         initialState: initialStateToUse,
         perStep,
       },
@@ -2199,6 +2225,7 @@ export class EventedRun<
     closeOnSuspend = true,
     perStep,
     outputOptions,
+    actor,
   }: (TInput extends unknown ? { inputData?: TInput } : { inputData: TInput }) &
     (TState extends unknown ? { initialState?: TState } : { initialState: TState }) & {
       requestContext?: RequestContext;
@@ -2208,6 +2235,7 @@ export class EventedRun<
         includeState?: boolean;
         includeResumeLabels?: boolean;
       };
+      actor?: ActorSignal;
     }): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     if (this.closeStreamAction && this.streamOutput) {
       return this.streamOutput;
@@ -2249,6 +2277,7 @@ export class EventedRun<
             initialState: initialState as TState,
             perStep,
             outputOptions,
+            actor,
           });
 
           if (self.streamOutput) {
@@ -2541,6 +2570,7 @@ export class EventedRun<
         },
         pubsub: this.mastra.pubsub,
         requestContext,
+        actor: params.actor,
         abortController: this.abortController,
         perStep: params.perStep,
         outputOptions: params.outputOptions,

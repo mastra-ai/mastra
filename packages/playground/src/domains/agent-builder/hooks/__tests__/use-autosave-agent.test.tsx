@@ -1,4 +1,3 @@
-import { usePlaygroundStore } from '@mastra/playground-ui/store/playground-store';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, act, waitFor } from '@testing-library/react';
@@ -9,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import { useAutosaveAgent } from '../use-autosave-agent';
 import { authEnabledCapabilities } from './fixtures/auth';
+import { usePlaygroundStore } from '@/store/playground-store';
 import { server } from '@/test/msw-server';
 
 vi.mock('@mastra/playground-ui/utils/toast', () => ({

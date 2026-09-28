@@ -6,5 +6,7 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
     testTimeout: 200_000,
+    // Test files share one Redis instance and clear tables between tests.
+    fileParallelism: false,
   },
 });

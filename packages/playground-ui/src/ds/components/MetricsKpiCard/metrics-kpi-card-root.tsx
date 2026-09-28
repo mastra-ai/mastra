@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 export function MetricsKpiCardRoot({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <Card className={cn('min-w-72 flex-1 px-5 py-4', className)}>
-      <div className="grid gap-3">{children}</div>
+      <div className="grid gap-1.5">{children}</div>
     </Card>
   );
 }

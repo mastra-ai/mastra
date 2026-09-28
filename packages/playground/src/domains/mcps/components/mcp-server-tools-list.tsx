@@ -4,11 +4,11 @@ import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playgro
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useMemo, useState } from 'react';
 import { z } from 'zod';
 import { useMCPServerTools } from '../hooks/useMCPServerTools';
 import { ToolIconMap } from '@/domains/tools/components/ToolIcon';
-import { useLinkComponent } from '@/lib/framework';
 
 const COLUMNS = 'auto 1fr auto';
 

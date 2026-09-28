@@ -677,12 +677,19 @@ LIMIT 1`,
       expect(storage.getFeatures()).toEqual([
         'metrics',
         'logs',
+        'entity-type-discovery',
+        'entity-name-discovery',
+        'service-name-discovery',
+        'environment-discovery',
+        'tag-discovery',
+        'metric-discovery',
         'delta-polling',
         'trace-query',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
+        'feedback',
       ]);
     });
 
@@ -693,11 +700,18 @@ LIMIT 1`,
         expect(storage.getFeatures()).toEqual([
           'metrics',
           'logs',
+          'entity-type-discovery',
+          'entity-name-discovery',
+          'service-name-discovery',
+          'environment-discovery',
+          'tag-discovery',
+          'metric-discovery',
           'trace-query',
           'trace-query-root-duration',
           'trace-query-discovery',
           'thread-query',
           'trace-query-tenant-scope',
+          'feedback',
         ]);
       } finally {
         coreFeatures.add('observability-delta-polling');
@@ -2811,7 +2825,7 @@ LIMIT 1`,
             format: 'JSONEachRow',
           });
           expect(await result.json<{ feedbackSource: string; reviewStatus: string; writeVersion: string }>()).toEqual([
-            { feedbackSource: 'current-review-source', reviewStatus: 'reviewed', writeVersion: '2' },
+            { feedbackSource: 'current-review-source', reviewStatus: 'reviewed', writeVersion: '3' },
           ]);
         } finally {
           await client.close();
@@ -3102,18 +3116,22 @@ LIMIT 1`,
         await scopedClient.command({
           query: `CREATE TABLE ${TABLE_DISCOVERY_PAIRS} (kind LowCardinality(String), key1 String, key2 String, value String) ENGINE = ReplacingMergeTree ORDER BY (kind, key1, key2, value)`,
         });
-        // Legacy views without APPEND, as created by older releases.
+        // Legacy views without APPEND, as created by older releases. A
+        // non-APPEND refresh swaps the target table, so a refresh running
+        // while the test inserts or checks the marker row would replace the
+        // table under it. EMPTY skips the refresh at creation and STOP VIEW
+        // disables the scheduled ones.
         await scopedClient.command({
-          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_VALUES} REFRESH EVERY 1 MINUTE TO ${TABLE_DISCOVERY_VALUES} AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS value WHERE 0`,
+          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_VALUES} REFRESH EVERY 1 MINUTE TO ${TABLE_DISCOVERY_VALUES} EMPTY AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS value WHERE 0`,
         });
         await scopedClient.command({
-          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_PAIRS} REFRESH EVERY 5 MINUTE TO ${TABLE_DISCOVERY_PAIRS} AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS key2, '' AS value WHERE 0`,
+          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_PAIRS} REFRESH EVERY 5 MINUTE TO ${TABLE_DISCOVERY_PAIRS} EMPTY AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS key2, '' AS value WHERE 0`,
         });
+        await scopedClient.command({ query: `SYSTEM STOP VIEW ${MV_DISCOVERY_VALUES}` });
+        await scopedClient.command({ query: `SYSTEM STOP VIEW ${MV_DISCOVERY_PAIRS}` });
 
         // Marker row proving the table (and its data) survives init()'s view
-        // migration. Inserted after the legacy views because a non-APPEND
-        // view's initial refresh atomically swaps the target table — the very
-        // behavior this fix removes.
+        // migration.
         await scopedClient.command({
           query: `INSERT INTO ${TABLE_DISCOVERY_VALUES} VALUES ('entityType', '', 'marker-survivor')`,
         });
@@ -5309,16 +5327,12 @@ LIMIT 1`,
 
         expect(await requestsFor('unapplied-feedback-1')).toEqual([{ signal: 'feedback', applied: 0 }]);
         expect((await flaky.listFeedback({})).feedback.map(f => f.feedbackId)).toEqual(['unapplied-feedback-1']);
+
+        // The failed request does not block the update up front. The update's
+        // post-write check finds it and retries the delete, which now succeeds.
         await expect(
           flaky.updateFeedbackReviewStatus({ feedbackId: 'unapplied-feedback-1', reviewStatus: 'reviewed' }),
-        ).resolves.toMatchObject({ feedbackId: 'unapplied-feedback-1', reviewStatus: 'reviewed' });
-
-        // Retry converges: row hidden, a request is marked applied, guard blocks.
-        await flaky.deleteFeedback({
-          feedbackIds: ['unapplied-feedback-1'],
-          organizationId: 'org-1',
-          resourceId: 'resource-1',
-        });
+        ).rejects.toThrow('Feedback record not found');
         expect((await flaky.listFeedback({})).feedback).toEqual([]);
         expect((await requestsFor('unapplied-feedback-1')).map(r => r.applied)).toEqual([0, 1]);
         await expect(
@@ -5353,6 +5367,7 @@ LIMIT 1`,
       const originalQuery = client.query.bind(client);
       const originalInsert = client.insert.bind(client);
       let guardCalls = 0;
+      let appliedMarks = 0;
       const querySpy = vi.spyOn(client, 'query').mockImplementation(async args => {
         const query = (args as { query: string }).query;
         if (query.includes('has(predicateValues') && guardCalls++ === 0) await updateGuard.opened;
@@ -5362,7 +5377,8 @@ LIMIT 1`,
         const row = (args as { table: string; values: Array<{ lastAppliedAt?: string }> }).values[0];
         if (
           (args as { table: string }).table === TABLE_DELETION_REQUESTS &&
-          row?.lastAppliedAt !== '1970-01-01T00:00:00.000Z'
+          row?.lastAppliedAt !== '1970-01-01T00:00:00.000Z' &&
+          appliedMarks++ === 0
         ) {
           await appliedMark.opened;
         }
@@ -5406,7 +5422,8 @@ LIMIT 1`,
 
         updateGuard.open();
         await expect(update).rejects.toThrow('Feedback record not found');
-        // The request is still pending, but the update cannot recreate the deleted row.
+        // The first request is still pending. The update's replacement row was
+        // written after the DELETE, so its post-write check re-ran the delete.
         expect((await racing.listFeedback({})).feedback).toEqual([]);
 
         appliedMark.open();
@@ -5424,58 +5441,7 @@ LIMIT 1`,
       }
     });
 
-    it('re-applies the review to a newer version ingested during the update', async () => {
-      const client = createClient({
-        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
-        username: process.env.CLICKHOUSE_USERNAME || 'default',
-        password: process.env.CLICKHOUSE_PASSWORD || 'password',
-      });
-      const originalCommand = client.command.bind(client);
-      let mutations = 0;
-      const feedback = {
-        feedbackId: 'supersede-feedback-1',
-        timestamp: new Date('2026-09-01T12:00:02Z'),
-        traceId: 'supersede-trace-1',
-        spanId: null,
-        feedbackSource: 'user',
-        feedbackType: 'rating',
-        value: 1,
-        comment: 'original',
-        experimentId: null,
-        organizationId: 'org-1',
-        resourceId: 'resource-1',
-        metadata: null,
-      } as const;
-      let store!: ObservabilityStorageClickhouseVNext;
-      // Ingest a newer version of the row between the update's read and its mutation.
-      const commandSpy = vi.spyOn(client, 'command').mockImplementation(async args => {
-        const query = (args as { query: string }).query;
-        if (query.includes(`ALTER TABLE ${TABLE_FEEDBACK_EVENTS} UPDATE`) && mutations++ === 0) {
-          await store.createFeedback({ feedback: { ...feedback, comment: 'newer' } });
-        }
-        return originalCommand(args);
-      });
-
-      try {
-        store = new ObservabilityStorageClickhouseVNext({ client });
-        await store.init();
-        await store.createFeedback({ feedback });
-
-        await expect(
-          store.updateFeedbackReviewStatus({ feedbackId: feedback.feedbackId, reviewStatus: 'reviewed' }),
-        ).resolves.toMatchObject({ feedbackId: feedback.feedbackId, reviewStatus: 'reviewed', comment: 'newer' });
-
-        expect(mutations).toBe(2);
-        expect((await store.listFeedback({})).feedback).toMatchObject([
-          { feedbackId: feedback.feedbackId, reviewStatus: 'reviewed', comment: 'newer' },
-        ]);
-      } finally {
-        commandSpy.mockRestore();
-        await client.close();
-      }
-    });
-
-    it('publishes review updates through the delta cursor only when delta polling is supported', async () => {
+    it('publishes review updates through the delta cursor', async () => {
       const client = createClient({
         url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
         username: process.env.CLICKHOUSE_USERNAME || 'default',
@@ -5517,14 +5483,8 @@ LIMIT 1`,
         expect((await store.listFeedback({ mode: 'delta', after: cursor })).feedback).toMatchObject([
           { feedbackId: feedback.feedbackId, reviewStatus: 'reviewed' },
         ]);
-        const published = await publishedRows();
-
-        // Without delta polling the update still succeeds and publishes nothing.
-        coreFeatures.delete('observability-delta-polling');
-        await expect(
-          store.updateFeedbackReviewStatus({ feedbackId: feedback.feedbackId, reviewStatus: 'needs-review' }),
-        ).resolves.toMatchObject({ feedbackId: feedback.feedbackId, reviewStatus: 'needs-review' });
-        expect(await publishedRows()).toBe(published);
+        // The insert materialized view publishes the replacement row.
+        expect(await publishedRows()).toBe(2);
       } finally {
         if (enabled) coreFeatures.add('observability-delta-polling');
         else coreFeatures.delete('observability-delta-polling');

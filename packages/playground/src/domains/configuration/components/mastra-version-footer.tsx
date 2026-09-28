@@ -206,29 +206,34 @@ const PackagesModalContent = ({
           <div className="grid grid-cols-[1fr_auto_auto] text-body">
             {packages.map((pkg, index) => (
               <div key={pkg.name} className={cn('contents', index > 0 && '[&>div]:border-t [&>div]:border-border')}>
-                <div className="min-w-0 truncate px-3 py-2 font-mono text-foreground">
+                <div className="min-w-0 truncate px-3 py-2 text-foreground">
                   <a
                     href={`https://www.npmjs.com/package/${pkg.name}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="group inline-flex items-center gap-1 hover:text-accent1 hover:underline"
                   >
-                    {pkg.name}
+                    <Txt as="span" variant="body" font="mono">
+                      {pkg.name}
+                    </Txt>
                     <ExternalLink className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" />
                   </a>
                 </div>
-                <div className="flex items-center gap-1.5 px-3 py-2 font-mono text-muted-foreground">
+                <div className="flex items-center gap-1.5 px-3 py-2 text-muted-foreground">
                   {pkg.isOutdated || pkg.isDeprecated ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <span
+                        <Txt
+                          as="span"
+                          variant="body"
+                          font="mono"
                           className={cn(
                             'cursor-help',
                             pkg.isDeprecated ? 'text-red-500' : pkg.isOutdated ? 'text-yellow-500' : '',
                           )}
                         >
                           {pkg.version}
-                        </span>
+                        </Txt>
                       </TooltipTrigger>
                       <TooltipContent>
                         {pkg.isDeprecated
@@ -237,14 +242,18 @@ const PackagesModalContent = ({
                       </TooltipContent>
                     </Tooltip>
                   ) : (
-                    <span>{pkg.version}</span>
+                    <Txt as="span" variant="body" font="mono">
+                      {pkg.version}
+                    </Txt>
                   )}
                 </div>
-                <div className="flex items-center px-3 py-2 font-mono text-muted-foreground">
+                <div className="flex items-center px-3 py-2 text-muted-foreground">
                   {(pkg.isOutdated || pkg.isDeprecated) && pkg.latestVersion && (
                     <>
                       <MoveRight className="mx-2 h-4 w-4 text-muted-foreground" />
-                      <span className="text-accent1">{pkg.latestVersion}</span>
+                      <Txt as="span" variant="body" font="mono" className="text-accent1">
+                        {pkg.latestVersion}
+                      </Txt>
                     </>
                   )}
                 </div>

@@ -177,6 +177,10 @@ function hasSuspendedToolCall(snapshot: Record<string, any>, toolCallId: string)
   return visit(snapshot.context);
 }
 
+function getDurableLoopWorkflowName(agent: DurableAgentLike): string {
+  return agent.durableLoopWorkflowName ?? DurableStepIds.AGENTIC_LOOP;
+}
+
 async function validateDurableToolCallAccess({
   mastra,
   agent,
@@ -194,7 +198,7 @@ async function validateDurableToolCallAccess({
 
   const workflowsStore = await mastra.getStorage()?.getStore('workflows');
   const workflowRun = await workflowsStore?.getWorkflowRunById({
-    workflowName: DurableStepIds.AGENTIC_LOOP,
+    workflowName: getDurableLoopWorkflowName(agent),
     runId,
   });
   if (!workflowRun) {
@@ -2309,7 +2313,15 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
   tags: ['Agents', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agents:execute',
-  handler: async ({ mastra, agentId, resourceId, threadId, abortSignal, requestContext: serverRequestContext }) => {
+  handler: async ({
+    mastra,
+    agentId,
+    resourceId,
+    threadId,
+    withInitialHistory,
+    abortSignal,
+    requestContext: serverRequestContext,
+  }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext: serverRequestContext });
       if (typeof (agent as { subscribeToThread?: unknown }).subscribeToThread !== 'function') {
@@ -2325,7 +2337,20 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'threadId is required' });
       }
 
-      if (effectiveResourceId) {
+      if (withInitialHistory) {
+        // History returns stored messages, so apply the same checks as the messages route.
+        const memory = await agent.getMemory({ requestContext: serverRequestContext });
+        if (memory) {
+          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+          await enforceThreadAccess({
+            mastra,
+            requestContext: serverRequestContext,
+            threadId: effectiveThreadId,
+            thread,
+            effectiveResourceId,
+          });
+        }
+      } else if (effectiveResourceId) {
         const memory = await agent.getMemory({ requestContext: serverRequestContext });
         if (memory) {
           const thread = await memory.getThreadById({ threadId: effectiveThreadId });
@@ -2336,6 +2361,7 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
       const subscription = await agent.subscribeToThread({
         resourceId: effectiveResourceId,
         threadId: effectiveThreadId,
+        ...(withInitialHistory ? { withInitialHistory, requestContext: serverRequestContext } : {}),
       });
 
       let cleanedUp = false;
@@ -3038,7 +3064,7 @@ export const RECOVER_ROUTE = createRoute({
 
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
       const workflowRun = await workflowsStore?.getWorkflowRunById({
-        workflowName: DurableStepIds.AGENTIC_LOOP,
+        workflowName: getDurableLoopWorkflowName(agent),
         runId,
       });
       await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined));

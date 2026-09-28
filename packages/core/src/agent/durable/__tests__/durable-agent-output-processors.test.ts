@@ -29,11 +29,9 @@ function createToolCallingModel(toolName: string, toolArgs: Record<string, unkno
             { type: 'response-metadata', id: 'resp-1', modelId: 'mock', timestamp: new Date(0) },
             {
               type: 'tool-call',
-              id: 'tc-1',
-              toolCallType: 'function',
               toolCallId: 'tc-1',
               toolName,
-              args: JSON.stringify(toolArgs),
+              input: JSON.stringify(toolArgs),
             },
             {
               type: 'finish',
@@ -195,5 +193,80 @@ describe('DurableAgent output processors for tool chunks', () => {
     // The tool-result chunk should have been blocked (not emitted)
     const toolResultChunks = chunks.filter((c: any) => c.type === 'tool-result');
     expect(toolResultChunks).toHaveLength(0);
+  });
+
+  it('a throwing stream processor falls back to the processToolResult-gated value — the raw result never reaches the stream', async () => {
+    // Contract under test (two-hook architecture):
+    //   - processToolResult is the authoritative value gate. It runs BEFORE
+    //     the transcript commit and its mutation becomes the baseline for the
+    //     step output, finish aggregates, and the emitted chunk.
+    //   - processOutputStream is stream-view shaping. When it throws, the
+    //     shared ProcessorRunner logs and continues with the part as it stood
+    //     going INTO the stream pipeline (pre-existing policy, both engines) —
+    //     i.e. the gated value, never the raw tool output.
+    const gatedRedactor = {
+      id: 'test-gated-redactor',
+      name: 'Test Gated Redactor',
+      processToolResult: async ({ messageList, toolCallId, toolName, args }: any) => {
+        messageList.updateToolInvocation({
+          type: 'tool-invocation',
+          toolInvocation: { state: 'result', toolCallId, toolName, args, result: { secret: '[REDACTED]' } },
+        });
+      },
+      processOutputStream: vi.fn().mockImplementation(async ({ part }) => {
+        if (part.type === 'tool-result') {
+          throw new Error('stream redaction processor crashed');
+        }
+        return part;
+      }),
+    };
+
+    const secretTool = createTool({
+      id: 'getSecret',
+      description: 'Get secret',
+      inputSchema: z.object({ city: z.string() }),
+      outputSchema: z.object({ secret: z.string() }),
+      execute: async () => ({ secret: 'RAW-SECRET-VALUE' }),
+    });
+
+    const baseAgent = new Agent({
+      id: 'gated-agent',
+      name: 'Gated Agent',
+      instructions: 'You are a helpful agent.',
+      model: createToolCallingModel('getSecret', { city: 'NYC' }) as LanguageModelV2,
+      tools: { getSecret: secretTool },
+      outputProcessors: [gatedRedactor as any],
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    new Mastra({
+      agents: { 'gated-agent': durableAgent as any },
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub,
+    });
+
+    const result = await durableAgent.stream('What is the secret?', {
+      maxSteps: 3,
+    });
+
+    const chunks = await drain(result.fullStream);
+
+    // The raw value appears nowhere on the stream — not in the tool-result
+    // chunk, not in step-finish/finish aggregates. The gate held.
+    expect(JSON.stringify(chunks)).not.toContain('RAW-SECRET-VALUE');
+
+    // The stream falls back to the GATED chunk, not to nothing and not to
+    // the raw output: the emitted tool-result carries the redacted value.
+    const toolResultChunks = chunks.filter((c: any) => c.type === 'tool-result');
+    expect(toolResultChunks.length).toBeGreaterThan(0);
+    expect(toolResultChunks[0].payload.result).toEqual({ secret: '[REDACTED]' });
+
+    // The run survives the crashing stream processor: the loop continues and
+    // the second model call still produces the final text.
+    const textDeltas = chunks.filter((c: any) => c.type === 'text-delta');
+    expect(textDeltas.length).toBeGreaterThan(0);
+    const finishChunks = chunks.filter((c: any) => c.type === 'finish');
+    expect(finishChunks.length).toBeGreaterThan(0);
   });
 });

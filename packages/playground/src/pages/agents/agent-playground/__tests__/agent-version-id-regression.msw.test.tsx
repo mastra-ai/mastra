@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { TracingSettingsProvider } from '@mastra/playground-ui/domains/observability/context/tracing-settings-context';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -16,7 +17,6 @@ import {
   LATEST_DRAFT_VERSION_ID,
   PUBLISHED_VERSION_ID,
 } from './fixtures/agent-version-id-regression';
-import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 import { server } from '@/test/msw-server';
 

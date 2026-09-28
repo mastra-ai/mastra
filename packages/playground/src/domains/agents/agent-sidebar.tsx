@@ -1,7 +1,7 @@
 import type { StorageThreadType } from '@mastra/core/memory';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { MemorySidebar } from '@/domains/agents/components/memory-sidebar/memory-sidebar';
 import { useDeleteThread } from '@/domains/memory/hooks/use-memory';
-import { useLinkComponent } from '@/lib/framework';
 
 export function AgentSidebar({
   agentId,

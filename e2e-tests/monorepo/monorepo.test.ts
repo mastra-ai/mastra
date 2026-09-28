@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
-import { dirname, join, relative } from 'path';
+import { join, relative } from 'path';
 import { setupMonorepo } from './prepare';
 import { mkdtemp, mkdir, readdir, readFile, readlink, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
@@ -658,12 +658,13 @@ export const environmentRoute = registerApiRoute('/environment', {
     });
 
     // This stays in the monorepo E2E suite because it builds the generated fixture and validates its output manifest.
-    it('should keep global and user-configured externals in the output manifest', async () => {
+    it('should keep default and user-configured externals in the output manifest', async () => {
       const packageJsonPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'package.json');
       const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
 
       expect(packageJson.dependencies).toEqual(
         expect.objectContaining({
+          '@mastra/core': expect.any(String),
           bcrypt: expect.any(String),
           typescript: expect.any(String),
         }),
@@ -675,21 +676,6 @@ export const environmentRoute = registerApiRoute('/environment', {
       const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
 
       expect(packageJson.dependencies?.['date-fns']).toBeUndefined();
-    });
-
-    it('should preserve workspace externals as runtime dependencies instead of bundling them', async () => {
-      const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
-      const outputFiles = await readdir(outputDir, { recursive: true });
-      const output = (
-        await Promise.all(
-          outputFiles.filter(file => file.endsWith('.mjs')).map(file => readFile(join(outputDir, file), 'utf-8')),
-        )
-      ).join('\n');
-      const packageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
-
-      expect(packageJson.dependencies?.['@inner/subpath-only']).toBeTruthy();
-      expect(output).toMatch(/from ["']@inner\/subpath-only["']/);
-      expect(output).toMatch(/from ["']@inner\/subpath-only\/value["']/);
     });
 
     it('should update the source pnpm lockfile while installing output dependencies', async () => {
@@ -1384,17 +1370,18 @@ export const mastra = new Mastra({
     );
   });
 
-  describe.sequential('reproducible bundles', () => {
+  describe.sequential('reproducible tool bundles', () => {
     it(
-      'produces identical bundles when invoked from the app and monorepo roots',
+      'produces identical tool bundles when invoked from the app and monorepo roots',
       async () => {
         const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-reproducible-test-${pkgManager}-`));
         try {
           await setupMonorepo(isolatedFixturePath, pkgManager);
 
           const appDir = join(isolatedFixturePath, 'apps', 'custom');
-          const build = async (cwd: string, args: string[], outputRoot: string, cliPath?: string) => {
-            await rm(dirname(outputRoot), { recursive: true, force: true });
+          const outputRoot = join(appDir, '.mastra', 'output');
+          const build = async (cwd: string, args: string[], cliPath?: string) => {
+            await rm(join(appDir, '.mastra'), { recursive: true, force: true });
             const options = {
               cwd,
               env: { ...process.env, MASTRA_BUILD_SKIP_INSTALL: 'true' },
@@ -1403,14 +1390,17 @@ export const mastra = new Mastra({
             const result = cliPath ? await execaNode(cliPath, args, options) : await execa(pkgManager, args, options);
             expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
             const outputDigests = await getDirectoryDigests(outputRoot);
-            return Object.fromEntries(Object.entries(outputDigests).filter(([path]) => path.endsWith('.mjs')));
+            return Object.fromEntries(
+              Object.entries(outputDigests).filter(
+                ([path]) => path === 'tools.mjs' || (path.startsWith('tools/') && path.endsWith('.mjs')),
+              ),
+            );
           };
 
-          const first = await build(appDir, ['build'], join(appDir, '.mastra', 'output'));
+          const first = await build(appDir, ['build']);
           const second = await build(
             isolatedFixturePath,
-            ['build', '--root', '.', '--dir', 'apps/custom/src/mastra'],
-            join(isolatedFixturePath, '.mastra', 'output'),
+            ['build', '--root', 'apps/custom'],
             join(appDir, 'node_modules', 'mastra', 'dist', 'index.js'),
           );
 

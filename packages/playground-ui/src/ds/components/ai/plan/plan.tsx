@@ -269,7 +269,7 @@ export function PlanFile({ children, className, ...props }: PlanFileProps) {
       <Txt as="p" variant="meta" tone="muted" className="mb-2">
         Plan file
       </Txt>
-      <Txt as="p" variant="caption" tone="ink" className="font-mono break-all">
+      <Txt as="p" variant="caption" tone="ink" font="mono" className="break-all">
         {children}
       </Txt>
     </div>

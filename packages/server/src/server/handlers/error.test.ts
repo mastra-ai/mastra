@@ -165,4 +165,35 @@ describe('handleError', () => {
       expect(caught!.message).toBe('feedback changed');
     });
   });
+
+  describe('OBSERVABILITY_STORAGE_*_NOT_IMPLEMENTED', () => {
+    it('maps a missing optional storage capability to 501 with the original message', () => {
+      const err = Object.assign(new Error('This storage provider does not support listing feedback'), {
+        id: 'OBSERVABILITY_STORAGE_LIST_FEEDBACK_NOT_IMPLEMENTED',
+      });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, 'default');
+      } catch (e) {
+        caught = e as HTTPException;
+      }
+      expect(caught).toBeInstanceOf(HTTPException);
+      expect(caught!.status).toBe(501);
+      expect(caught!.message).toBe('This storage provider does not support listing feedback');
+    });
+
+    it('does not treat other observability storage errors as unsupported', () => {
+      const err = Object.assign(new Error('query failed'), {
+        id: 'OBSERVABILITY_STORAGE_LIST_FEEDBACK_FAILED',
+      });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, 'default');
+      } catch (e) {
+        caught = e as HTTPException;
+      }
+      expect(caught).toBeInstanceOf(HTTPException);
+      expect(caught!.status).toBe(500);
+    });
+  });
 });

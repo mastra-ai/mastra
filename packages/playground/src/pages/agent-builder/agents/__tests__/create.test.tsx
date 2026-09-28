@@ -28,7 +28,7 @@ vi.mock('@/domains/agent-builder/components/agent-starter/agent-builder-starter'
   AgentBuilderStarter: () => <div data-testid="agent-builder-starter" />,
 }));
 
-vi.mock('@mastra/playground-ui/store/playground-store', () => ({
+vi.mock('@/store/playground-store', () => ({
   usePlaygroundStore: () => ({ requestContext: undefined }),
 }));
 

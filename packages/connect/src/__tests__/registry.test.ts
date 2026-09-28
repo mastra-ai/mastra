@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
 // Importing from the package entry point exercises the generated barrel at
-// src/providers/index.ts, which assembles PROVIDERS declaratively from each
+// src/providers/index.ts, which assembles TOOLS declaratively from each
 // generated provider module's exported registration const.
-import { PROVIDERS } from '../index.js';
+// eslint-disable-next-line @typescript-eslint/no-deprecated
+import { PROVIDERS, TOOLS } from '../index.js';
 
 describe('shipped provider registry', () => {
+  it('exports TOOLS as the canonical registry with PROVIDERS as a deprecated alias', () => {
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    expect(PROVIDERS).toBe(TOOLS);
+  });
+
   it('collects every provider whose directory exists under src/providers', () => {
     const integrationIds = PROVIDERS.map(p => p.integrationId).sort();
     // Extend this list when generated provider branches land.

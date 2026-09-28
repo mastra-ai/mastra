@@ -1,4 +1,5 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { link, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -1027,6 +1028,193 @@ describe('UnixSocketPubSub', () => {
 
     expect(pubsub.isBroker).toBe(true);
     expect(cb).toHaveBeenCalledTimes(1);
+  });
+
+  describe('filesystem leases', () => {
+    it('allows exactly one process-local instance to acquire a shared key', async () => {
+      const first = new UnixSocketPubSub(await socketPath('first.sock'));
+      const second = new UnixSocketPubSub(await socketPath('second.sock'));
+      pubsubs.push(first, second);
+
+      const results = await Promise.all([
+        first.acquireLease('thread-key', 'first-owner', 10_000),
+        second.acquireLease('thread-key', 'second-owner', 10_000),
+      ]);
+
+      expect(results.filter(result => result.acquired)).toHaveLength(1);
+      const winner = results.find(result => result.acquired)!.owner;
+      const loser = results.find(result => !result.acquired)!;
+      expect(loser.owner).toBe(winner);
+      await expect(first.getLeaseOwner('thread-key')).resolves.toBe(winner);
+      await expect(second.getLeaseOwner('thread-key')).resolves.toBe(winner);
+    });
+
+    it('does not reap a live mutation lock written before lock tokens were added', async () => {
+      const first = new UnixSocketPubSub(await socketPath('first.sock'));
+      const second = new UnixSocketPubSub(await socketPath('second.sock'));
+      pubsubs.push(first, second);
+      await first.acquireLease('setup-key', 'setup-owner', 10_000);
+      await first.releaseLease('setup-key', 'setup-owner');
+
+      const key = 'legacy-lock-key';
+      const fileName = createHash('sha256').update(key).digest('hex');
+      const lockPath = join(tempDir!, 'leases', 'mutations', `${fileName}.lock`);
+      const processMarker = JSON.parse(
+        await readFile(join(tempDir!, 'leases', 'processes', `${process.pid}.json`), 'utf8'),
+      );
+      await writeFile(lockPath, JSON.stringify(processMarker));
+
+      let settled = false;
+      const acquisition = second.acquireLease(key, 'second-owner', 10_000).then(result => {
+        settled = true;
+        return result;
+      });
+      await new Promise(resolve => setTimeout(resolve, 30));
+      expect(settled).toBe(false);
+
+      await rm(lockPath);
+      await expect(acquisition).resolves.toEqual({ acquired: true, owner: 'second-owner' });
+    });
+
+    it('does not let a stale recovery marker remove a replacement lock', async () => {
+      const first = new UnixSocketPubSub(await socketPath('first.sock'));
+      const second = new UnixSocketPubSub(await socketPath('second.sock'));
+      pubsubs.push(first, second);
+      await first.acquireLease('setup-key', 'setup-owner', 10_000);
+      await first.releaseLease('setup-key', 'setup-owner');
+
+      const key = 'replacement-lock-key';
+      const fileName = createHash('sha256').update(key).digest('hex');
+      const lockPath = join(tempDir!, 'leases', 'mutations', `${fileName}.lock`);
+      const recoveryDirectory = `${lockPath}.recoveries`;
+      const recoveryPath = join(recoveryDirectory, 'stale-token.marker');
+      await mkdir(recoveryDirectory, { recursive: true });
+      await writeFile(
+        lockPath,
+        JSON.stringify({ pid: 2_147_483_647, processNonce: 'dead-process', token: 'stale-token' }),
+      );
+      await link(lockPath, recoveryPath);
+      await rm(lockPath);
+
+      const processMarker = JSON.parse(
+        await readFile(join(tempDir!, 'leases', 'processes', `${process.pid}.json`), 'utf8'),
+      );
+      await writeFile(lockPath, JSON.stringify({ ...processMarker, token: 'replacement-token' }));
+
+      let settled = false;
+      const acquisition = second.acquireLease(key, 'second-owner', 10_000).then(result => {
+        settled = true;
+        return result;
+      });
+      await new Promise(resolve => setTimeout(resolve, 30));
+      expect(settled).toBe(false);
+
+      await rm(lockPath);
+      await expect(acquisition).resolves.toEqual({ acquired: true, owner: 'second-owner' });
+    });
+
+    it('completes an abandoned stale-lock recovery before admitting a new mutation', async () => {
+      const firstPath = await socketPath('first.sock');
+      const secondPath = await socketPath('second.sock');
+      const key = 'recovery-key';
+      const fileName = createHash('sha256').update(key).digest('hex');
+      const mutationDirectory = join(tempDir!, 'leases', 'mutations');
+      const lockPath = join(mutationDirectory, `${fileName}.lock`);
+      const recoveryDirectory = `${lockPath}.recoveries`;
+      const recoveryPath = join(recoveryDirectory, 'stale-token.marker');
+      await mkdir(recoveryDirectory, { recursive: true });
+      await writeFile(
+        lockPath,
+        JSON.stringify({ pid: 2_147_483_647, processNonce: 'dead-process', token: 'stale-token' }),
+      );
+      await link(lockPath, recoveryPath);
+      await writeFile(
+        `${recoveryPath}.owner`,
+        JSON.stringify({ pid: 2_147_483_647, processNonce: 'dead-recovery-owner', token: 'dead-owner-token' }),
+      );
+
+      const first = new UnixSocketPubSub(firstPath);
+      const second = new UnixSocketPubSub(secondPath);
+      pubsubs.push(first, second);
+      const results = await Promise.all([
+        first.acquireLease(key, 'first-owner', 10_000),
+        second.acquireLease(key, 'second-owner', 10_000),
+      ]);
+
+      expect(results.filter(result => result.acquired)).toHaveLength(1);
+      const winner = results.find(result => result.acquired)!.owner;
+      await expect(first.getLeaseOwner(key)).resolves.toBe(winner);
+      await expect(second.getLeaseOwner(key)).resolves.toBe(winner);
+    });
+
+    it('lets close interrupt a lease operation waiting on a held mutation lock', async () => {
+      const first = new UnixSocketPubSub(await socketPath('first.sock'));
+      const second = new UnixSocketPubSub(await socketPath('second.sock'));
+      pubsubs.push(first, second);
+      await first.acquireLease('setup-key', 'setup-owner', 10_000);
+      await first.releaseLease('setup-key', 'setup-owner');
+
+      const key = 'held-lock-key';
+      const fileName = createHash('sha256').update(key).digest('hex');
+      const lockPath = join(tempDir!, 'leases', 'mutations', `${fileName}.lock`);
+      const processMarker = JSON.parse(
+        await readFile(join(tempDir!, 'leases', 'processes', `${process.pid}.json`), 'utf8'),
+      );
+      await writeFile(lockPath, JSON.stringify({ ...processMarker, token: 'held-token' }));
+
+      const acquisitionResult = Promise.allSettled([second.acquireLease(key, 'second-owner', 10_000)]);
+      await new Promise(resolve => setTimeout(resolve, 30));
+      const closeResult = await Promise.race([
+        second.close().then(() => 'closed'),
+        new Promise<'timed-out'>(resolve => setTimeout(() => resolve('timed-out'), 50)),
+      ]);
+
+      await rm(lockPath);
+      const [acquisition] = await acquisitionResult;
+      expect(closeResult).toBe('closed');
+      expect(acquisition).toMatchObject({
+        status: 'rejected',
+        reason: new Error('UnixSocketPubSub is closed'),
+      });
+    });
+
+    it('renews, transfers, and owner-guards release without an unowned gap', async () => {
+      const first = new UnixSocketPubSub(await socketPath('first.sock'));
+      const second = new UnixSocketPubSub(await socketPath('second.sock'));
+      pubsubs.push(first, second);
+
+      await expect(first.acquireLease('thread-key', 'first-owner', 10_000)).resolves.toEqual({
+        acquired: true,
+        owner: 'first-owner',
+      });
+      await expect(second.renewLease('thread-key', 'second-owner', 10_000)).resolves.toBe(false);
+      await expect(first.transferLease('thread-key', 'first-owner', 'second-owner', 10_000)).resolves.toBe(true);
+      await expect(first.renewLease('thread-key', 'first-owner', 10_000)).resolves.toBe(false);
+
+      await first.releaseLease('thread-key', 'first-owner');
+      await expect(second.getLeaseOwner('thread-key')).resolves.toBe('second-owner');
+      await second.releaseLease('thread-key', 'second-owner');
+      await expect(first.getLeaseOwner('thread-key')).resolves.toBeUndefined();
+    });
+
+    it('reclaims an expired lease', async () => {
+      vi.useFakeTimers();
+      try {
+        const first = new UnixSocketPubSub(await socketPath('first.sock'));
+        const second = new UnixSocketPubSub(await socketPath('second.sock'));
+        pubsubs.push(first, second);
+
+        await first.acquireLease('thread-key', 'first-owner', 100);
+        await vi.advanceTimersByTimeAsync(101);
+
+        await expect(second.acquireLease('thread-key', 'second-owner', 100)).resolves.toEqual({
+          acquired: true,
+          owner: 'second-owner',
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe('local nack redelivery', () => {

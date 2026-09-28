@@ -1,4 +1,5 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
+import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import type { AvailableWorkspace } from '../hooks/use-agent-builder-tool';
@@ -11,8 +12,8 @@ import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import { useStoredWorkspaces } from '@/domains/workspace/hooks/use-stored-workspaces';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 type ToolsData = NonNullable<ReturnType<typeof useTools>['data']>;
 type AgentsData = NonNullable<ReturnType<typeof useAgents>['data']>;
@@ -53,7 +54,10 @@ export const AgentPrimitivesProvider = ({ agentId, children }: AgentPrimitivesPr
   const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(agentId, { status: 'draft' });
   const { data: toolsData, isPending: isToolsPending } = useTools({ enabled: features.tools });
   const { data: agentsData, isPending: isAgentsPending } = useAgents({ enabled: features.agents });
-  const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows({ enabled: features.workflows });
+  const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows({
+    requestContext: usePlaygroundStore().requestContext,
+    enabled: features.workflows,
+  });
   const { data: storedSkillsResponse, isPending: isSkillsPending } = useStoredSkills({
     enabled: features.skills,
   });

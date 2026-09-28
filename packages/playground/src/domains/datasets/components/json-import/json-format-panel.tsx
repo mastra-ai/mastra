@@ -1,6 +1,8 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { ExternalLinkIcon, Check, Copy } from 'lucide-react';
 
@@ -30,7 +32,9 @@ export function JSONFormatPanel() {
       <dl className="divide-y divide-border rounded-lg border border-border">
         {FIELDS.map(field => (
           <div key={field.name} className="grid grid-cols-[7rem_1fr] gap-3 px-3 py-2.5">
-            <dt className="font-mono text-meta text-foreground">{field.name}</dt>
+            <dt className="text-meta text-foreground">
+              <InlineCode>{field.name}</InlineCode>
+            </dt>
             <dd className="flex flex-col items-start gap-1.5 text-meta text-muted-foreground">
               <span>{field.description}</span>
               {field.required ? (
@@ -49,7 +53,9 @@ export function JSONFormatPanel() {
 
       <div className="overflow-hidden rounded-lg border border-border">
         <div className="flex items-center justify-between border-b border-border bg-card py-1.5 pr-1.5 pl-3">
-          <span className="font-mono text-meta text-muted-foreground">example.json</span>
+          <Txt as="span" variant="meta" tone="muted" font="mono">
+            example.json
+          </Txt>
           <Button icon={isCopied ? <Check /> : <Copy />} variant="ghost" size="sm" onClick={handleCopy}>
             {isCopied ? 'Copied' : 'Copy'}
           </Button>

@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { format } from 'date-fns';
 import type { ReactElement, ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
@@ -341,10 +340,13 @@ describe('DataListSelectCell', () => {
 });
 
 describe('DataListDateCell', () => {
-  it('says Today for today', () => {
-    const { container } = render(<DataListDateCell timestamp={new Date()} />);
+  it('shows only the date for today', () => {
+    const today = new Date();
+    const { container } = render(<DataListDateCell timestamp={today} />);
 
-    expect(container.textContent).toBe('Today');
+    expect(container.textContent).toBe(
+      new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(today),
+    );
   });
 
   it('names the month and day for any other date', () => {
@@ -368,24 +370,26 @@ describe('DataListDateCell', () => {
 });
 
 describe('DataListCreatedCell', () => {
-  it('shows a short date and 24-hour time without milliseconds', () => {
+  it('shows the date and time to seconds without requiring a hover', () => {
     const { container } = render(<DataListCreatedCell timestamp={new Date(2020, 7, 31, 13, 7, 47, 657)} />);
 
-    expect(container.textContent).toBe('Aug 31 13:07:47');
+    expect(container.textContent).toBe('Aug 31, 2020, 1:07:47 PM');
+    expect(cellOf(container).title).toBe('Aug 31, 2020, 1:07:47 PM');
   });
 
-  it('keeps the date even when the timestamp is today', () => {
+  it('keeps the time to seconds when the timestamp is today', () => {
     const today = new Date();
     today.setHours(9, 5, 3, 0);
     const { container } = render(<DataListCreatedCell timestamp={today} />);
 
-    expect(container.textContent).toBe(`${format(today, 'MMM d')} 09:05:03`);
+    expect(container.textContent).toContain('9:05:03 AM');
+    expect(container.textContent).toContain(String(today.getFullYear()));
   });
 
   it('reads a timestamp given as a string', () => {
     const { container } = render(<DataListCreatedCell timestamp={new Date(2020, 4, 19, 9, 5, 3).toISOString()} />);
 
-    expect(container.textContent).toBe('May 19 09:05:03');
+    expect(container.textContent).toBe('May 19, 2020, 9:05:03 AM');
   });
 
   it('shows nothing for a date it cannot read', () => {
@@ -396,22 +400,22 @@ describe('DataListCreatedCell', () => {
 });
 
 describe('DataListTimeCell', () => {
-  it('shows 12-hour time by default', () => {
+  it('shows the locale time with milliseconds', () => {
     const { container } = render(<DataListTimeCell timestamp={new Date(2026, 5, 1, 17, 9, 59, 665)} />);
 
-    expect(container.textContent).toBe('5:09:59.665 pm');
+    expect(container.textContent).toBe('5:09:59.665 PM');
   });
 
   it('pads the milliseconds to three digits', () => {
     const { container } = render(<DataListTimeCell timestamp={new Date(2026, 5, 1, 17, 9, 59, 7)} />);
 
-    expect(container.textContent).toBe('5:09:59.007 pm');
+    expect(container.textContent).toBe('5:09:59.007 PM');
   });
 
   it('reads a time given as a string', () => {
     const { container } = render(<DataListTimeCell timestamp={new Date(2026, 5, 1, 9, 5, 3, 40).toISOString()} />);
 
-    expect(container.textContent).toBe('9:05:03.040 am');
+    expect(container.textContent).toBe('9:05:03.040 AM');
   });
 
   it('shows nothing for a time it cannot read', () => {

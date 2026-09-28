@@ -8,10 +8,10 @@ import type { TUI } from '@earendil-works/pi-tui';
 import type { StorageBackend, ThinkingLevelSetting } from '@mastra/code-sdk/onboarding/settings';
 import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import { SettingsComponent } from '../components/settings.js';
-import type { IToolExecutionComponent } from '../components/tool-execution-interface.js';
 import { askModalQuestion } from '../modal-question.js';
 import type { NotificationMode } from '../notify.js';
 import { showModalOverlay } from '../overlay.js';
+import { applyQuietModeToRenderedComponents } from '../quiet-mode.js';
 import { handleApiKeysCommand } from './api-keys.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -176,16 +176,7 @@ async function ensureGitcrawlReady(ctx: SlashCommandContext): Promise<boolean> {
 }
 
 function applyQuietModeToRenderedTools(ctx: SlashCommandContext, enabled: boolean, previewLineLimit: number): void {
-  const tools = ctx.state.allToolComponents.filter(
-    (tool): tool is IToolExecutionComponent => typeof tool.setQuietModeDisplay === 'function',
-  );
-
-  tools.forEach(tool => {
-    tool.setCompactToolModeColor?.(getCurrentModeColor(ctx));
-    tool.setQuietModeDisplay?.(enabled ? 'quiet' : 'normal');
-    tool.setQuietPreviewLineLimit?.(previewLineLimit);
-  });
-
+  applyQuietModeToRenderedComponents(ctx.state, enabled, previewLineLimit, getCurrentModeColor(ctx));
   ctx.state.ui.requestRender();
 }
 

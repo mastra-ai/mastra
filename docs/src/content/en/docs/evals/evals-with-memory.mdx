@@ -96,7 +96,9 @@ Create the thread before running the eval. Observational memory in `thread` scop
 
 ## Dataset experiments with an inline task
 
-`dataset.startExperiment({ target: agent })` **doesn't** forward a `memory` option to the agent, only `requestContext`. To run a stored dataset against a memory-enabled agent, use an inline `task` function and stash `{ threadId, resourceId }` in each item's `metadata`. The scorer pipeline still runs as normal.
+`dataset.startExperiment()` accepts `targetType` and `targetId` for a registered target, or an inline `task` function. For a registered memory-enabled agent, the runner creates a fresh thread per item by default. See [memory-enabled experiment targets](/docs/evals/experiments#memory-enabled-agents) for resource isolation and request context options.
+
+To choose each item's thread explicitly through `agent.generate()`, use an inline `task` and store `{ threadId, resourceId }` in each item's `metadata`. The scorer pipeline still runs as normal.
 
 ```typescript title="src/mastra/evals/dataset-experiment.ts"
 import { randomUUID } from 'node:crypto'

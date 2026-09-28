@@ -53,7 +53,6 @@ describe('GlobalShortcuts', () => {
       ['o', '/tools'],
       ['k', '/workspaces'],
       ['r', '/request-context'],
-      ['e', '/evaluation'],
       ['s', '/scorers'],
       ['d', '/datasets'],
       ['x', '/experiments'],
@@ -73,7 +72,7 @@ describe('GlobalShortcuts', () => {
   });
 
   describe('when the second key is not bound', () => {
-    it.each(['z', 'i'])('g then %s stays on the current page', async key => {
+    it.each(['z', 'i', 'e'])('g then %s stays on the current page', async key => {
       renderAt('/');
 
       pressGThen(key);
