@@ -1,5 +1,6 @@
 import { coreFeatures } from '@mastra/core/features';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { TracingSettingsProvider } from '@mastra/playground-ui/domains/observability/context/tracing-settings-context';
 import { KeyboardScope } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
@@ -15,7 +16,6 @@ import { PlaygroundModelProvider } from '@/domains/agents/context/playground-mod
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
-import { cleanProviderId } from '@/domains/llm/utils';
 import { agentCrumb, navCrumb } from '@/domains/navigation/crumbs';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 import { RouteSidePanel } from '@/lib/route-side-panel';
