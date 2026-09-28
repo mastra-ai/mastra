@@ -9,3 +9,5 @@ Added numbered chart roles. Legacy hue-named chart variables remain available th
 Moved numbered accent tokens, numbered status aliases, duplicated notice aliases, and the old brand-green ramp aliases into `legacy-theme.css`, imported by `theme.css`. Migrated Studio and Factory consumers to status, focus, chart, and span roles. CodeMirror syntax colors are scoped locally. Added the seven fixed Mastra brand colors as `--color-ds-*`.
 
 Added semantic Badge status variants `success`, `destructive`, `warning`, and `info` for states. The `green`, `red`, `yellow`, and `blue` variants are now categorical tones built from the color ramps, like `purple` and `orange`.
+
+`BADGE_COLORS` and topic colors now return color ramp variables such as `var(--purple-500)` instead of hex values.

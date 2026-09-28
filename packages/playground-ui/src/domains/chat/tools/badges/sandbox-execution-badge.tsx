@@ -116,9 +116,9 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
       <pre
         ref={contentRef}
         style={{ maxHeight }}
-        className="overflow-auto bg-black p-3 text-body whitespace-pre-wrap text-neutral-300"
+        className="overflow-auto bg-muted p-3 text-body whitespace-pre-wrap text-foreground"
       >
-        {content || <span className="text-foreground italic">No output</span>}
+        {content || <span className="text-muted-foreground italic">No output</span>}
       </pre>
     </div>
   );

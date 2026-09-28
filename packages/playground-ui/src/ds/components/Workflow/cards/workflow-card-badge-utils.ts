@@ -16,20 +16,20 @@ import {
 import type { LucideIcon } from 'lucide-react';
 
 export const BADGE_COLORS = {
-  sleep: '#A855F7',
-  forEach: '#F97316',
-  map: '#F97316',
-  parallel: '#3B82F6',
-  suspend: '#EC4899',
-  after: '#14B8A6',
-  workflow: '#8B5CF6',
-  when: '#ECB047',
-  dountil: '#8B5CF6',
-  dowhile: '#06B6D4',
-  until: '#F59E0B',
-  while: '#10B981',
-  if: '#3B82F6',
-  else: '#6B7280',
+  sleep: 'var(--purple-500)',
+  forEach: 'var(--orange-500)',
+  map: 'var(--orange-500)',
+  parallel: 'var(--blue-500)',
+  suspend: 'var(--pink-500)',
+  after: 'var(--cyan-500)',
+  workflow: 'var(--purple-500)',
+  when: 'var(--yellow-500)',
+  dountil: 'var(--purple-500)',
+  dowhile: 'var(--cyan-500)',
+  until: 'var(--yellow-500)',
+  while: 'var(--green-500)',
+  if: 'var(--blue-500)',
+  else: 'var(--muted-foreground)',
 } as const;
 
 export const BADGE_ICONS = {

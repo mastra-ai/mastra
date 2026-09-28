@@ -20,7 +20,7 @@
   --info-fg: var(--blue-50);
 
   --notice-note: oklch(0.18 0 0);
-  --notice-note-fg: oklch(0.99 0.001 230);
+  --notice-note-fg: oklch(0.99 0 0);
 
   --badge-neutral-fg: var(--foreground);
   --badge-green-bg: color-mix(in oklab, var(--green-300) 22%, transparent);

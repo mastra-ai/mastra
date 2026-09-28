@@ -8,7 +8,16 @@ import type {
   TopicWithCounts,
 } from './types';
 
-const TOPIC_COLORS = ['#7C3AED', '#2563EB', '#0891B2', '#059669', '#CA8A04', '#EA580C', '#DC2626', '#DB2777'] as const;
+const TOPIC_COLORS = [
+  'var(--purple-600)',
+  'var(--blue-600)',
+  'var(--cyan-600)',
+  'var(--green-600)',
+  'var(--yellow-600)',
+  'var(--orange-600)',
+  'var(--red-600)',
+  'var(--pink-600)',
+] as const;
 
 function hashString(value: string): number {
   let hash = 0;

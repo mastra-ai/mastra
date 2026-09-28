@@ -181,7 +181,7 @@ html.light {
   --color-surface-overlay-soft: var(--surface-overlay-soft);
   --color-surface-overlay-strong: var(--surface-overlay-strong);
 
-  --shadow-focus-ring: 0 0 0 3px oklch(0.723 0.219 149.579 / 0.12);
+  --shadow-focus-ring: 0 0 0 3px color-mix(in oklab, var(--green-500) 12%, transparent);
 }
 
 /* Inline so a utility resolves var(--token) on the styled element and honors a

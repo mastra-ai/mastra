@@ -103,7 +103,7 @@ export const CodeModeBadge = ({
             <SectionLabel>Logs</SectionLabel>
             <pre
               data-testid="code-mode-logs"
-              className="max-h-60 overflow-auto rounded-md bg-black px-3 py-2 text-caption break-words whitespace-pre-wrap text-neutral-300"
+              className="max-h-60 overflow-auto rounded-md bg-muted px-3 py-2 text-caption break-words whitespace-pre-wrap"
             >
               {logs.join('\n')}
             </pre>
