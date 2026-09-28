@@ -702,10 +702,10 @@ interface ModelGenerationAttributes {
   provider?: string
 
   /**
-   * Definitions of the tools made available to the model for this generation
-   * (name, description, and JSON-schema parameters), captured once per
-   * generation. Per-step tool names live on MODEL_INFERENCE spans as
-   * `availableTools`.
+   * Definitions of the tools offered to the model during this generation
+   * (name, description, and JSON-schema parameters): the union of each step's
+   * tool set after input processors ran. Per-step tool names live on
+   * MODEL_INFERENCE spans as `availableTools`.
    */
   tools?: ModelToolDefinition[]
 

@@ -1564,6 +1564,63 @@ describe('Tracing Integration Tests', () => {
     await testExporter.assertMatchesSnapshot('model-step-timing-trace.json');
   });
 
+  it('should record only the tools offered to the model on MODEL_GENERATION when processors change them per step', async () => {
+    const offeredToolNames: string[][] = [];
+    let call = 0;
+    const model = new MockLanguageModelV2({
+      doStream: async options => {
+        offeredToolNames.push((options.tools ?? []).map(tool => tool.name));
+        const first = call++ === 0;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: `resp-${call}` },
+            ...(first
+              ? [{ type: 'tool-call' as const, toolCallId: 'call-1', toolName: 'lookup', input: '{}' }]
+              : [{ type: 'text-delta' as const, id: '1', delta: 'Done' }]),
+            {
+              type: 'finish',
+              finishReason: first ? 'tool-calls' : 'stop',
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            },
+          ]),
+        };
+      },
+    });
+    const tool = (id: string) =>
+      createTool({ id, description: id, inputSchema: z.object({}), execute: async () => ({ id }) });
+    const stepTools: Processor = {
+      id: 'step-tools',
+      processInputStep: ({ stepNumber }) => ({
+        activeTools: stepNumber === 0 ? ['lookup'] : ['lookup', 'followUp'],
+      }),
+    };
+    const agent = new Agent({
+      id: 'step-tools-agent',
+      name: 'Step Tools Agent',
+      instructions: 'You are a test agent',
+      model,
+      tools: { lookup: tool('lookup'), followUp: tool('followUp'), hidden: tool('hidden') },
+      inputProcessors: [stepTools],
+    });
+    const mastra = new Mastra({ ...getBaseMastraConfig(testExporter), agents: { agent } });
+
+    const result = await mastra.getAgent('agent').stream('Hello');
+    let text = '';
+    for await (const chunk of result.textStream) {
+      text += chunk;
+    }
+    expect(text).toBe('Done');
+
+    expect(offeredToolNames).toEqual([['lookup'], ['lookup', 'followUp']]);
+    const [generation] = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+    expect(generation?.attributes?.tools?.map(tool => tool.name)).toEqual(['lookup', 'followUp']);
+    expect(testExporter.getSpansByType(SpanType.MODEL_INFERENCE).map(span => span.attributes?.availableTools)).toEqual([
+      ['lookup'],
+      ['lookup', 'followUp'],
+    ]);
+    finalExpectations(testExporter);
+  });
+
   describe.each(agentMethods)(
     'should accumulate text from all steps in agent run span, not just last step (issue #11659) using $name',
     ({ name }) => {
