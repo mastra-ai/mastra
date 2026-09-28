@@ -1,5 +1,14 @@
 # @mastra/duckdb
 
+## 1.11.2-alpha.1
+
+### Patch Changes
+
+- Reduced storage use for ended spans in `@mastra/duckdb`. Span data returned by queries is unchanged. Fixes #25240. ([#25268](https://github.com/mastra-ai/mastra/pull/25268))
+
+- Updated dependencies:
+  - @mastra/core@1.72.0-alpha.6
+
 ## 1.11.2-alpha.0
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # @mastra/inngest
 
+## 1.10.1-alpha.4
+
+### Patch Changes
+
+- Pass prior agent steps to per-step processor hooks in Inngest workflows. ([#25217](https://github.com/mastra-ai/mastra/pull/25217))
+
+- Updated dependencies:
+  - @mastra/core@1.72.0-alpha.6
+
 ## 1.10.1-alpha.3
 
 ### Patch Changes

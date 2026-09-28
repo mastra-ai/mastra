@@ -3828,7 +3828,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
   });
 
-  it("approves a hands-off item's plan while the project switch stays off", async () => {
+  it("leaves a legacy hands-off item's plan parked while the project switch stays off", async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueRunKickoff(storage, { preapprovePlans: true });
     const { controller, session } = createSession(undefined, { suspendsOnPlan: true });
@@ -3844,14 +3844,11 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.plansPreapprovedAt).toBeInstanceOf(Date);
-    expect(session.respondToToolSuspension).toHaveBeenCalledWith({
-      resumeData: { action: 'approved' },
-      toolCallId: 'call-plan',
-    });
+    expect(session.respondToToolSuspension).not.toHaveBeenCalled();
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
   });
 
-  it("approves a hands-off item's plan on rule-started follow-up runs too", async () => {
+  it("leaves a legacy hands-off item's plan parked on rule-started follow-up runs too", async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
       type: 'invokeSkill',
@@ -3872,10 +3869,7 @@ describe('FactoryDecisionDispatcher', () => {
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
-    expect(session.respondToToolSuspension).toHaveBeenCalledWith({
-      resumeData: { action: 'approved' },
-      toolCallId: 'call-plan',
-    });
+    expect(session.respondToToolSuspension).not.toHaveBeenCalled();
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
   });
 
