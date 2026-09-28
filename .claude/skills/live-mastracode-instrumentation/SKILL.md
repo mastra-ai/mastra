@@ -20,6 +20,7 @@ Append one JSON line per event to `<cwd>/debug-token-rate.jsonl` (or a similarly
 - **Metadata only**: timestamps, event types, ids, lengths, and token counts. Never log prompt, response, or tool content.
 - Tag every record with a unique `build` marker (for example `'my-bug-diagnostics-v1'`). That lets you confirm the build you ran contains the instrumentation and find every leftover when cleaning up.
 - Wrap each append in `try {} catch {}` so logging can never break the run.
+- Take the timestamp before writing. A synchronous append adds a little latency to the path you are measuring, which is fine for millisecond-scale timing. If you are measuring anything finer, push records onto an in-memory array and write them out once when the run ends.
 - Log at the earliest and latest point of each layer you care about, so the timestamps can be lined up per step.
 
 Useful hook points, from outermost to innermost:
@@ -45,7 +46,7 @@ If `rg` finds nothing in a `dist`, the run will not produce that layer's records
 
 ## 3. Drive the TUI in tmux
 
-Use a throwaway git repo so the agent's tool calls cannot touch real work:
+Start the TUI in a throwaway git repo so the agent's tool calls default to scratch files. Setting the working directory is not a sandbox: do not grant the session extra allowed paths, and keep prompts pointed at the scratch repo.
 
 ```bash
 mkdir -p /tmp/mc-repro && git -C /tmp/mc-repro init -q
@@ -85,7 +86,7 @@ Report the evidence as a small table (normal steps vs. anomalous steps), along w
 ```bash
 tmux kill-session -t mcrepro
 rg -n "my-bug-diagnostics" mastracode packages --glob '!**/dist/**'   # must print nothing
-git diff --stat                                                        # only intended changes remain
+git diff                                                               # read it: only intended changes remain
 rm -f debug-token-rate.jsonl /tmp/mc-repro/debug-token-rate.jsonl
 ```
 
