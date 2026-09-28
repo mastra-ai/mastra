@@ -11,7 +11,6 @@ import { Controller, useWatch } from 'react-hook-form';
 import type { AgentFormValues, EntityConfig } from '../utils/form-validation';
 import { EntityAccordionItem } from '@/domains/cms';
 import { SectionTitle } from '@/domains/cms/components/section/section-title';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 interface WorkflowsSectionProps {
   control: Control<AgentFormValues>;
@@ -21,7 +20,7 @@ interface WorkflowsSectionProps {
 
 export function WorkflowsSection({ control, error, readOnly = false }: WorkflowsSectionProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const { data: workflows, isLoading } = useWorkflows({ requestContext: usePlaygroundStore().requestContext });
+  const { data: workflows, isLoading } = useWorkflows();
   const selectedWorkflows = useWatch({ control, name: 'workflows' });
   const count = Object.keys(selectedWorkflows || {}).length;
 

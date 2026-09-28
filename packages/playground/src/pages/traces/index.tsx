@@ -6,9 +6,14 @@ import { FilterBar, isFilterBarGroup } from '@mastra/playground-ui/components/Fi
 import type { FilterBarExpression, FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useFeedbackAvailable, useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
+import { AddTraceMocksToItemDialog } from '@mastra/playground-ui/domains/observability/components/add-trace-mocks-to-item-dialog';
+import { TraceAsItemDialog } from '@mastra/playground-ui/domains/observability/components/trace-as-item-dialog';
 import { useTraceSpanScores, ScoreDataPanel, TraceScoresTab } from '@mastra/playground-ui/domains/scores';
 import { NoTracesInfo } from '@mastra/playground-ui/domains/traces/components/no-traces-info';
+import { SpanFeedbackTab } from '@mastra/playground-ui/domains/traces/components/span-feedback-tab';
 import { TraceColumnsMenu } from '@mastra/playground-ui/domains/traces/components/trace-columns-menu';
+import { TraceFeedbackTab } from '@mastra/playground-ui/domains/traces/components/trace-feedback-tab';
+import { TraceSpanPanel } from '@mastra/playground-ui/domains/traces/components/trace-span-panel';
 import {
   TRACE_TIME_RANGE_FIELD,
   TRACE_TIME_RANGE_FIELD_ID,
@@ -20,7 +25,9 @@ import { TracesListView } from '@mastra/playground-ui/domains/traces/components/
 import { TracesPageSkeleton } from '@mastra/playground-ui/domains/traces/components/traces-page-skeleton';
 import { useEntityNames } from '@mastra/playground-ui/domains/traces/hooks/use-entity-names';
 import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-environments';
+import { useSpanFeedback } from '@mastra/playground-ui/domains/traces/hooks/use-span-feedback';
 import { useTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/hooks/use-trace-column-preferences';
+import { useTraceFeedback } from '@mastra/playground-ui/domains/traces/hooks/use-trace-feedback';
 import { useTraceFilterPersistence } from '@mastra/playground-ui/domains/traces/hooks/use-trace-filter-persistence';
 import { useTraceListNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-list-navigation';
 import {
@@ -51,17 +58,11 @@ import type { SpanTab } from '@mastra/playground-ui/domains/traces/types';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { useMastraClient } from '@mastra/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 import { navCrumb } from '@/domains/navigation/crumbs';
-import { AddTraceMocksToItemDialog } from '@/domains/observability/components/add-trace-mocks-to-item-dialog';
-import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
-import { SpanFeedbackTab } from '@/domains/traces/components/span-feedback-tab';
-import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
-import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
-import { useSpanFeedback } from '@/domains/traces/hooks/use-span-feedback';
-import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
+import { traceScoreLink } from '@/lib/app-routing';
 
 const crumbs = [navCrumb('/traces')];
 
@@ -78,6 +79,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // Scoped instances render inside another page (e.g. the agent Traces tab) that already owns the header.
   const breadcrumbs = isScoped ? undefined : <PageBreadcrumbs crumbs={crumbs} />;
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   // Must run before `useTraceFilterPersistence` hydrates: react-router resolves functional
   // `setSearchParams` updates against the render-time params, so within one commit the last
@@ -514,6 +516,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         isFullThreadOpen={isFullThreadOpen}
         withQueryTrace={withQueryTrace}
         withFeedback={withFeedback}
+        onOpenScore={(traceId, scoreId) => navigate(traceScoreLink(traceId, scoreId))}
         onFullThreadOpenChange={open => setFullThreadTraceId(open ? (url.traceIdParam ?? null) : null)}
         onSpanSelect={id => url.handleSpanChange(id ?? null)}
         onSaveAsDatasetItem={args => setDatasetDialogTarget(args)}

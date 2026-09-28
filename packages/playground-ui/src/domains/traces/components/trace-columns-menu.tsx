@@ -21,7 +21,7 @@ const EMPTY_KEYS: readonly string[] = [];
 const STANDARD_COLUMNS: readonly TraceOptionalColumn[] = ['type', 'input', 'duration', 'endTime', 'environment'];
 
 const COLUMN_LABELS: Record<TraceOptionalColumn, string> = {
-  type: 'Type',
+  type: 'Primitive type',
   input: 'Input',
   duration: 'Duration',
   endTime: 'End',

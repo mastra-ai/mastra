@@ -15,7 +15,7 @@ export type SettingsRowProps = Omit<FieldProps, 'children' | 'invalid' | 'orient
 };
 
 type SettingsRowLayoutProps = SettingsRowProps & {
-  layout: 'factory' | 'standalone' | 'section';
+  layout: 'factory' | 'section';
 };
 
 export function SettingsRowLayout({
@@ -52,7 +52,6 @@ export function SettingsRowLayout({
         isSectionLayout
           ? 'grid min-w-0 gap-3 group-data-[variant=factory]/section:px-3 group-data-[variant=factory]/section:py-2 group-data-[variant=flat]/section:p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:group-data-[variant=default]/section:gap-4 sm:group-data-[variant=factory]/section:gap-4 sm:group-data-[variant=flat]/section:gap-6'
           : 'min-w-0',
-        layout === 'standalone' && 'sm:justify-between',
         layout === 'factory' && 'gap-2 px-4 py-3 sm:justify-between sm:gap-4',
         className,
       )}

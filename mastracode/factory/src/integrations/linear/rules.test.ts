@@ -67,6 +67,19 @@ describe('LinearRules', () => {
     ]);
   });
 
+  it('stamps the Linear project rather than the team source on a routed issue', async () => {
+    const { project, service, workItems } = await setup();
+    await service.ingest({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      issues: [{ ...issue, sourceId: 'linear-team:team-1', projectId: 'project-1' }],
+    });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+      { decision: { metadata: { linearProjectId: 'project-1' } } },
+    ]);
+  });
+
   it('does not mint a second card while another Factory holds a live card for the issue', async () => {
     const { project, service, workItems } = await setup();
     await workItems.upsert({

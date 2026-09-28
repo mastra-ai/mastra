@@ -13,7 +13,16 @@ import { WorkflowTrigger } from '../workflow-trigger';
 import { twoStepWorkflow } from './fixtures/workflow-debug-step-controls';
 import { server } from '@/test/msw-server';
 
-const TRIGGER_PROPS = { requestContext: {}, onRequestContextChange: () => {}, canExecute: true };
+const TRIGGER_PROPS = {
+  requestContext: {},
+  canExecute: true,
+  runActionsSlot: ({ resourceId, setResourceId }: { resourceId: string; setResourceId: (id: string) => void }) => (
+    <label>
+      Resource ID
+      <input value={resourceId} onChange={event => setResourceId(event.target.value)} />
+    </label>
+  ),
+};
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -56,10 +65,7 @@ describe('WorkflowTrigger resource attribution', () => {
     it('sends it when creating and when streaming the run', async () => {
       const bodies = renderTrigger();
 
-      fireEvent.click(await screen.findByRole('button', { name: 'Run Options' }));
-      fireEvent.change(screen.getByLabelText('Resource ID'), { target: { value: 'tenant-42' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      fireEvent.change(await screen.findByLabelText('Resource ID'), { target: { value: 'tenant-42' } });
 
       fireEvent.click(screen.getByRole('button', { name: 'Run' }));
 

@@ -8,6 +8,7 @@ import { CloudUpload, Link, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useComposerAttachments } from './composer-attachments';
+import { unreadableFilesMessage } from './unreadable-files-message';
 
 /**
  * "+" composer action opening a popover to attach a file via public URL or
@@ -39,11 +40,7 @@ export const AttachFilePopover = () => {
       const fileList = (e.target as HTMLInputElement).files;
       if (fileList && fileList.length > 0) {
         const rejected = await addFiles(fileList);
-        setError(
-          rejected.length > 0
-            ? `Cannot read these files in Studio: ${rejected.join(', ')}. Export spreadsheet data as CSV or upload a text file instead.`
-            : '',
-        );
+        setError(rejected.length > 0 ? unreadableFilesMessage(rejected) : '');
         if (rejected.length === 0) setOpen(false);
       }
       cleanup();

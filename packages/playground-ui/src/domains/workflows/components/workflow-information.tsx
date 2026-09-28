@@ -9,6 +9,7 @@ import { WorkflowRunDetail } from '../runs/workflow-run-details';
 import { WorkflowRecentRuns } from '../runs/workflow-run-list';
 import { WorkflowRunStatusBadge } from '../workflow/workflow-run-header';
 import { WorkflowTrigger } from '../workflow/workflow-trigger';
+import type { WorkflowRunActionsContext } from '../workflow/workflow-trigger';
 import { panelSurfaceStyle, WorkflowPanelResizeHandle } from './workflow-layout';
 
 import { useWorkflow } from '@/domains/workflows/hooks/use-workflow';
@@ -23,7 +24,7 @@ export interface WorkflowInformationProps {
   workflowId: string;
   initialRunId?: string;
   requestContext: Record<string, any>;
-  onRequestContextChange: (values: Record<string, any>) => void;
+  runActionsSlot?: (ctx: WorkflowRunActionsContext) => ReactNode;
   canExecute: boolean;
   canDelete: boolean;
 }
@@ -41,7 +42,7 @@ type WorkflowActionProps = Pick<
 type InitialWorkflowSidebarProps = WorkflowActionProps & {
   workflowId: string;
   requestContext: Record<string, any>;
-  onRequestContextChange: (values: Record<string, any>) => void;
+  runActionsSlot?: (ctx: WorkflowRunActionsContext) => ReactNode;
   canExecute: boolean;
   workflow?: GetWorkflowResponse;
   isLoading: boolean;
@@ -163,7 +164,7 @@ export function WorkflowInformation({
   workflowId,
   initialRunId,
   requestContext,
-  onRequestContextChange,
+  runActionsSlot,
   canExecute,
   canDelete,
 }: WorkflowInformationProps) {
@@ -196,7 +197,7 @@ export function WorkflowInformation({
     isCancellingWorkflowRun,
     cancelWorkflowRun,
     requestContext,
-    onRequestContextChange,
+    runActionsSlot,
     canExecute,
   };
 

@@ -3,7 +3,7 @@ import { BracesIcon, ListFilterIcon, Search } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { flushSync } from 'react-dom';
-import { FILTER_BAR_CONTROL_SIZE, FilterBarFieldLabel } from './filter-bar-chip';
+import { FILTER_BAR_CONTROL_SIZE, FilterBarFieldLabel, alwaysHighlightProps } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
 import { FilterBarOptionLabel, FilterBarOptionList } from './filter-bar-option-list';
 import { findGroup } from './filter-bar-tree';
@@ -326,9 +326,7 @@ function FilterBarInputImpl({
           if (next) setOpen(true);
           else close();
         }}
-        // ComboboxRoot's typings narrow `autoHighlight` to boolean, but the runtime (shared with
-        // AutocompleteRoot) supports 'always': highlight the first item as soon as the list opens.
-        autoHighlight={'always' as unknown as boolean}
+        {...alwaysHighlightProps}
         modal={false}
       >
         <div

@@ -5,7 +5,6 @@ import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { DATASET_TARGET_TYPES, type DatasetTargetType } from '@/domains/datasets/components/target-type-options';
 import { useProcessors } from '@/domains/processors/hooks/use-processors';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 export const ALL_TARGETS = 'all';
 
@@ -35,7 +34,6 @@ export interface TargetFilterProps {
 export function TargetFilter({ targetType, targetId, onTargetTypeChange, onTargetIdChange }: TargetFilterProps) {
   const { data: agents, isLoading: agentsLoading } = useAgents({ enabled: targetType === 'agent' });
   const { data: workflows, isLoading: workflowsLoading } = useWorkflows({
-    requestContext: usePlaygroundStore().requestContext,
     enabled: targetType === 'workflow',
   });
   const { data: scorers, isLoading: scorersLoading } = useScorers({ enabled: targetType === 'scorer' });

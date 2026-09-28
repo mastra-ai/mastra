@@ -9,6 +9,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Slider } from '@mastra/playground-ui/components/Slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Info, Sliders, Settings2, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
@@ -97,8 +98,8 @@ const StreamSubscriptionRadio = ({ supported, disabled }: StreamSubscriptionRadi
 };
 
 export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) => {
-  const { data: agent, isLoading } = useAgent(agentId);
-  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
+  const { data: agent, isLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId, useEntityRequestContext('agent', agentId)[0]);
   const { settings, setSettings, resetAll } = useAgentSettings();
   const { canEdit } = usePermissions();
   const [advancedOpen, setAdvancedOpen] = useState(false);
