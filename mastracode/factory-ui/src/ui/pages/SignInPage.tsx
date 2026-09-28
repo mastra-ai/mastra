@@ -1,3 +1,4 @@
+import { CUSTOM_DOMAIN_UNSUPPORTED_ERROR, isPlatformAuthSupportedHost } from '@mastra/factory/platform-auth-host';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
@@ -28,6 +29,39 @@ export function safeReturnTo(raw?: string): string {
   } catch {
     return '/';
   }
+}
+
+function CustomDomainAuthError({ hostname }: { hostname: string }) {
+  return (
+    <div role="alert" className="border-destructive/30 bg-card rounded-lg border px-4 py-3">
+      <Txt as="h2" variant="subheading" className="text-destructive">
+        Mastra Platform sign-in isn&apos;t available on custom domains
+      </Txt>
+      <Txt as="p" variant="caption" tone="muted" className="mt-2 leading-5">
+        This Factory is served from {hostname}. Mastra Platform authentication only works on Mastra-hosted domains
+        (*.mastra.cloud). To use a custom domain, configure your own auth provider — for example WorkOS (WORKOS_API_KEY
+        + WORKOS_CLIENT_ID) or Better Auth — and redeploy.
+      </Txt>
+      <Txt as="p" variant="caption" tone="muted" className="mt-3 flex flex-wrap gap-x-3 gap-y-1 leading-5">
+        <a
+          href="https://mastra.ai/docs/auth/overview"
+          target="_blank"
+          rel="noreferrer"
+          className="text-accent1 hover:text-accent2 hover:underline"
+        >
+          Auth overview
+        </a>
+        <a
+          href="https://mastra.ai/integrations/auth/workos"
+          target="_blank"
+          rel="noreferrer"
+          className="text-accent1 hover:text-accent2 hover:underline"
+        >
+          WorkOS integration
+        </a>
+      </Txt>
+    </div>
+  );
 }
 
 function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; signUpDisabled: boolean }) {
@@ -137,6 +171,11 @@ export function SignInPage() {
   const accessDenied = authError === 'access_denied';
   const credentialForm = auth.data?.provider === 'better-auth';
   const studioAuth = auth.data?.provider === 'mastra-studio';
+  const customDomainBlocked =
+    studioAuth &&
+    (auth.data?.customDomainUnsupported === true ||
+      authError === CUSTOM_DOMAIN_UNSUPPORTED_ERROR ||
+      !isPlatformAuthSupportedHost(window.location.hostname));
   const hostedLoginLabel = studioAuth ? 'Sign in with Mastra Platform' : 'Continue with GitHub';
   const hostedLoginPendingLabel = studioAuth ? 'Opening Mastra Platform…' : 'Opening GitHub…';
 
@@ -162,7 +201,7 @@ export function SignInPage() {
           </Txt>
 
           <section aria-label="Authentication" className="mt-10 w-full max-w-md lg:mt-12">
-            {authError ? (
+            {authError && !customDomainBlocked ? (
               <div role="alert" className="border-destructive/30 bg-card mb-6 rounded-lg border px-4 py-3">
                 <Txt as="p" variant="subheading" className="text-destructive">
                   {accessDenied ? 'Access denied' : 'Sign-in failed'}
@@ -179,7 +218,9 @@ export function SignInPage() {
                 ) : null}
               </div>
             ) : null}
-            {credentialForm ? (
+            {customDomainBlocked ? (
+              <CustomDomainAuthError hostname={window.location.hostname} />
+            ) : credentialForm ? (
               <>
                 <div className="mb-6">
                   <h2 className="font-display text-title">Welcome back</h2>

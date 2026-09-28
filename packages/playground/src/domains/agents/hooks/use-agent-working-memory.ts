@@ -1,6 +1,5 @@
 import { useMastraClient } from '@mastra/react';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 function parseJsonString(jsonString: string): any {
   try {
@@ -10,7 +9,12 @@ function parseJsonString(jsonString: string): any {
   }
 }
 
-export function useAgentWorkingMemory(agentId: string, threadId: string, resourceId: string) {
+export function useAgentWorkingMemory(
+  agentId: string,
+  threadId: string,
+  resourceId: string,
+  requestContext?: Record<string, any>,
+) {
   const client = useMastraClient();
   const [threadExists, setThreadExists] = useState(false);
   const [workingMemoryData, setWorkingMemoryData] = useState<string | null>(null);
@@ -18,7 +22,6 @@ export function useAgentWorkingMemory(agentId: string, threadId: string, resourc
   const [workingMemoryFormat, setWorkingMemoryFormat] = useState<'json' | 'markdown'>('markdown');
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
-  const { requestContext } = usePlaygroundStore();
   const latestRequest = useRef(0);
 
   const refetch = useCallback(async () => {

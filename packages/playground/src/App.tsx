@@ -71,7 +71,6 @@ import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
 import Metrics from './pages/metrics';
 import PromptBlocks from './pages/prompt-blocks';
-import RequestContext from './pages/request-context';
 import Resources from './pages/resources';
 import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
@@ -510,7 +509,6 @@ export const routes: RouteObject[] = [
         index: true,
         element: <StudioIndexRedirect />,
       },
-      { path: '/request-context', element: <RequestContext /> },
     ],
   },
 ];

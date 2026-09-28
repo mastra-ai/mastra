@@ -769,8 +769,15 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
  * - For objects/no-schema: emits the object as JSON
  */
 export function createJsonTextStreamTransformer<OUTPUT = undefined>(schema?: StandardSchemaWithJSON<OUTPUT>) {
-  let previousArrayLength = 0;
+  let emittedCount = 0;
+  let latestArray: unknown[] = [];
   let hasStartedArray = false;
+  const emitElements = (controller: TransformStreamDefaultController<string>, array: unknown[], end: number) => {
+    for (; emittedCount < end; emittedCount++) {
+      const elementJson = JSON.stringify(array[emittedCount]);
+      controller.enqueue(emittedCount > 0 ? ',' + elementJson : elementJson);
+    }
+  };
   // The first array chunk is held back instead of being emitted immediately.
   // A single object chunk may already contain the complete array (coarse or
   // batched provider deltas), in which case it should be emitted as one closed
@@ -790,14 +797,9 @@ export function createJsonTextStreamTransformer<OUTPUT = undefined>(schema?: Sta
       if (outputSchema?.outputFormat === 'array' && Array.isArray(chunk.object)) {
         if (pendingFirstArrayChunk !== undefined) {
           // A second chunk arrived, so the buffered chunk was only the first
-          // slice. Switch to incremental mode and replay the buffered elements.
+          // slice. Switch to incremental mode.
           controller.enqueue('[');
           hasStartedArray = true;
-          for (let i = 0; i < pendingFirstArrayChunk.length; i++) {
-            const elementJson = JSON.stringify(pendingFirstArrayChunk[i]);
-            controller.enqueue(i > 0 ? ',' + elementJson : elementJson);
-          }
-          previousArrayLength = pendingFirstArrayChunk.length;
           pendingFirstArrayChunk = undefined;
         } else if (!hasStartedArray) {
           // First chunk -- buffer it and wait to see whether the stream ends here.
@@ -805,16 +807,11 @@ export function createJsonTextStreamTransformer<OUTPUT = undefined>(schema?: Sta
           return;
         }
 
-        // Emit new elements that were added
-        for (let i = previousArrayLength; i < chunk.object.length; i++) {
-          const elementJson = JSON.stringify(chunk.object[i]);
-          if (i > 0) {
-            controller.enqueue(',' + elementJson);
-          } else {
-            controller.enqueue(elementJson);
-          }
-        }
-        previousArrayLength = chunk.object.length;
+        latestArray = chunk.object;
+        // The trailing element may still be partial: a later chunk can complete
+        // it in place at the same index. Only emit elements followed by another
+        // element; the rest are emitted on flush.
+        emitElements(controller, chunk.object, chunk.object.length - 1);
       } else {
         // For non-array objects, just emit as JSON
         controller.enqueue(JSON.stringify(chunk.object));
@@ -832,7 +829,8 @@ export function createJsonTextStreamTransformer<OUTPUT = undefined>(schema?: Sta
         pendingFirstArrayChunk = undefined;
         controller.enqueue(firstChunk.length > 0 ? JSON.stringify(firstChunk) : '[]');
       } else if (hasStartedArray) {
-        // Close the incrementally-streamed array.
+        // Emit the held-back trailing element(s), then close the array.
+        emitElements(controller, latestArray, latestArray.length);
         controller.enqueue(']');
       }
     },

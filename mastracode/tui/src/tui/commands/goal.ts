@@ -14,6 +14,7 @@ import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 import { createGoalReminderSignal } from '@mastra/code-sdk/goal-signal';
 import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
+import { isSessionStartupCancelledError } from '@mastra/core/agent-controller';
 import { GoalCyclesDialogComponent } from '../components/goal-cycles-dialog.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
@@ -84,6 +85,10 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
     } catch (err) {
       goalManager.pause();
       await goalManager.saveToThread(state);
+      if (isSessionStartupCancelledError(err)) {
+        ctx.showInfo('Interrupted');
+        return;
+      }
       ctx.showError(
         `Goal paused — failed to send continuation for "${goal.objective}": ${err instanceof Error ? err.message : String(err)}`,
       );
@@ -366,6 +371,10 @@ async function startGoal(
   } catch (err) {
     goalManager.pause();
     await goalManager.saveToThread(state);
+    if (isSessionStartupCancelledError(err)) {
+      ctx.showInfo('Interrupted');
+      return;
+    }
     ctx.showError(`Goal paused — failed to start: ${err instanceof Error ? err.message : String(err)}`);
   }
 }

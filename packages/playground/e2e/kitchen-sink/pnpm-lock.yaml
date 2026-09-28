@@ -36,6 +36,7 @@ overrides:
   fast-copy@<4.1.1: 4.1.1
   ioredis@>=5.0.0 <6.0.0: 6.0.0
   zod@>=4.0.0 <4.6.5: 4.6.5
+  undici@<6.0.0: 6.29.0
 
 importers:
 
@@ -98,10 +99,6 @@ packages:
     resolution: {integrity: sha512-cmG40u10QFEUrYXWYom6Lo6DLR+pND3wWABTTT9Nf7zg9F7BD46KNj+STekndp9Kg5ZAIPA0WxmTI0IwRvKvvQ==}
     engines: {node: '>=18'}
 
-  '@fastify/busboy@2.1.1':
-    resolution: {integrity: sha512-vBZP4NlzfOlerQTnba4aqZoMhE/a9HY7HRqoOPaETQcSQuWEIyZMHGfVu6w9wGtGK5fED5qRs2DteVCjOH60sA==}
-    engines: {node: '>=14'}
-
   '@opentelemetry/api@1.9.0':
     resolution: {integrity: sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==}
     engines: {node: '>=8.0.0'}
@@ -137,9 +134,9 @@ packages:
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
-  undici@5.29.0:
-    resolution: {integrity: sha512-raqeBD6NQK4SkWhQzeYKd1KmIG6dllBOTt55Rmkt4HtI9mwdWtJljnrXjAFUBLTSN67HWrOIZ3EPF4kjUw80Bg==}
-    engines: {node: '>=14.0'}
+  undici@6.29.0:
+    resolution: {integrity: sha512-R+RODBqp6i2pPflGdq+xIOUkl+RNfGgHwoinecKu/JCuf2uO06cOKoDbI2P7Dn6KcswdKwrczbU6IYJ6K8X+wg==}
+    engines: {node: '>=18.17'}
 
   zod@4.6.5:
     resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
@@ -158,7 +155,7 @@ snapshots:
       '@ai-sdk/provider': 2.0.5
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.1.0
-      undici: 5.29.0
+      undici: 6.29.0
       zod: 4.6.5
 
   '@ai-sdk/provider@2.0.3':
@@ -168,8 +165,6 @@ snapshots:
   '@ai-sdk/provider@2.0.5':
     dependencies:
       json-schema: 0.4.0
-
-  '@fastify/busboy@2.1.1': {}
 
   '@opentelemetry/api@1.9.0': {}
 
@@ -197,8 +192,6 @@ snapshots:
 
   undici-types@6.21.0: {}
 
-  undici@5.29.0:
-    dependencies:
-      '@fastify/busboy': 2.1.1
+  undici@6.29.0: {}
 
   zod@4.6.5: {}

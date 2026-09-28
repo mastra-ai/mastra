@@ -7,7 +7,7 @@ description: "Browse Alibaba model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/alibaba.svg" alt="Alibaba logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Alibaba
 
-Access 56 Alibaba models through Mastra's model router. Authentication is handled automatically using the `DASHSCOPE_API_KEY` environment variable.
+Access 59 Alibaba models through Mastra's model router. Authentication is handled automatically using the `DASHSCOPE_API_KEY` environment variable.
 
 Learn more in the [Alibaba documentation](https://www.alibabacloud.com/help/en/model-studio/models).
 
@@ -586,6 +586,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3.6
   },
   {
+    "model": "alibaba/qwen3.5-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 65536,
+    "inputCost": 0.1,
+    "outputCost": 0.4
+  },
+  {
     "model": "alibaba/qwen3.5-plus",
     "imageInput": true,
     "audioInput": false,
@@ -658,6 +670,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3
   },
   {
+    "model": "alibaba/qwen3.7-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.03,
+    "outputCost": 0.13
+  },
+  {
     "model": "alibaba/qwen3.7-max",
     "imageInput": false,
     "audioInput": false,
@@ -678,8 +702,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 131072,
-    "inputCost": 0.5,
-    "outputCost": 3
+    "inputCost": 0.4,
+    "outputCost": 1.6
   },
   {
     "model": "alibaba/qwen3.8-flash",
@@ -704,6 +728,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 2,
     "outputCost": 6
+  },
+  {
+    "model": "alibaba/qwen3.8-omni-flash",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.15,
+    "outputCost": 0.47
   },
   {
     "model": "alibaba/qwq-plus",
