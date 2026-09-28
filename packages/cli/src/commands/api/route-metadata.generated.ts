@@ -613,6 +613,7 @@ export const API_ROUTE_METADATA = {
       "perPage",
       "resourceId",
       "status",
+      "summary",
       "toDate"
     ],
     "bodyParams": [],
@@ -2731,6 +2732,18 @@ export const API_ROUTE_METADATA = {
     "responseShape": {
       "kind": "object-property",
       "listProperty": "tags"
+    }
+  },
+  "GET /observability/capabilities": {
+    "method": "GET",
+    "path": "/observability/capabilities",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
     }
   },
   "GET /logs/transports": {
@@ -5874,6 +5887,7 @@ export const API_ROUTE_METADATA = {
       "perPage",
       "resourceId",
       "status",
+      "summary",
       "toDate"
     ],
     "bodyParams": [],

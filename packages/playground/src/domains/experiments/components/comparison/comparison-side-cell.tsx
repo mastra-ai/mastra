@@ -1,8 +1,10 @@
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import { ClockIcon } from 'lucide-react';
 import type { ComparisonRow, ComparisonSide } from './build-comparison-rows';
 import { ComparisonScoreRow } from './comparison-score-row';
@@ -22,15 +24,15 @@ function formatValue(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-function formatDuration(side: ComparisonSide): string | null {
+function sideDuration(side: ComparisonSide): string | null {
   if (!side.startedAt || !side.completedAt) return null;
   const ms = new Date(side.completedAt).getTime() - new Date(side.startedAt).getTime();
-  return Number.isFinite(ms) ? `${(ms / 1000).toFixed(2)}s` : null;
+  return formatDuration(ms) ?? null;
 }
 
 const codeBoxClass = cn(
   raisedSurfaceStyle,
-  'max-h-[30vh] overflow-y-auto rounded-xl p-4 font-mono text-body break-all whitespace-pre-wrap text-muted-foreground',
+  'max-h-[30vh] overflow-y-auto rounded-xl p-4 text-body break-all whitespace-pre-wrap text-muted-foreground',
 );
 
 /**
@@ -39,7 +41,7 @@ const codeBoxClass = cn(
  */
 export function ComparisonSideCell({ side, row, showDeltas, isLoading }: ComparisonSideCellProps) {
   const data = row[side];
-  const duration = formatDuration(data);
+  const duration = sideDuration(data);
 
   if (isLoading) {
     return (
@@ -63,7 +65,9 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
             render={
               <p className="flex items-center justify-end gap-1.5 text-body text-muted-foreground [&>svg]:size-3.5">
                 <ClockIcon />
-                {duration}
+                <Txt as="span" variant="body" font="mono">
+                  {duration}
+                </Txt>
               </p>
             }
           />
@@ -111,7 +115,11 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
             {Object.entries(data.metadata).map(([key, value]) => (
               <div key={key} className="flex items-start justify-between gap-4 text-body">
                 <dt className="text-muted-foreground">{key}</dt>
-                <dd className="font-mono break-all text-foreground">{formatValue(value)}</dd>
+                <dd className="break-all text-foreground">
+                  <Txt as="span" variant="body" font="mono">
+                    {formatValue(value)}
+                  </Txt>
+                </dd>
               </div>
             ))}
           </dl>

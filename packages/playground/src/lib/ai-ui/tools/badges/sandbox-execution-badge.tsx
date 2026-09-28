@@ -1,16 +1,19 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
 import type { ToolApprovalButtonsProps } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
 import { ToolApprovalButtons } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
 import { WORKSPACE_TOOLS } from '@mastra/playground-ui/domains/chat/tools/workspace-tool-constants';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
+import { useElapsedTime } from '@mastra/playground-ui/hooks/use-elapsed-time';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { formatDuration, formatElapsed } from '@mastra/playground-ui/utils/duration';
 import { CheckIcon, ChevronUpIcon, CopyIcon, TerminalSquare } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DataMessagePart } from '../tool-card';
-import { useLinkComponent } from '@/lib/framework';
 
 // Matches the shape returned by workspace.getInfo() — flat, not nested under "workspace"
 interface WorkspaceMetadata {
@@ -60,29 +63,6 @@ export interface SandboxExecutionBadgeProps extends Omit<ToolApprovalButtonsProp
   dataParts?: ReadonlyArray<DataMessagePart>;
 }
 
-// Hook for live elapsed time while running
-const useElapsedTime = (isRunning: boolean, startTime?: number) => {
-  const [elapsed, setElapsed] = useState(0);
-  const startRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (isRunning) {
-      setElapsed(0);
-      startRef.current = startTime || Date.now();
-      const interval = setInterval(() => {
-        if (startRef.current) {
-          setElapsed(Date.now() - startRef.current);
-        }
-      }, 100);
-      return () => clearInterval(interval);
-    } else {
-      startRef.current = null;
-    }
-  }, [isRunning, startTime]);
-
-  return elapsed;
-};
-
 interface TerminalBlockProps {
   command?: string;
   content: string;
@@ -108,7 +88,9 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
         <div className="flex items-center justify-between gap-2 border-b border-border bg-card px-3 py-2">
           <div className="flex min-w-0 items-center gap-2">
             <span className="shrink-0 text-caption text-foreground">$</span>
-            <code className="truncate font-mono text-caption text-foreground">{command}</code>
+            <Txt as="span" variant="caption" tone="ink" font="mono" className="truncate">
+              {command}
+            </Txt>
           </div>
           {onCopy && (
             <Button variant="default" size="icon-sm" tooltip="Copy output" onClick={onCopy} className="shrink-0">
@@ -134,7 +116,7 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
       <pre
         ref={contentRef}
         style={{ maxHeight }}
-        className="overflow-x-auto overflow-y-auto bg-black p-3 font-mono text-body whitespace-pre-wrap text-neutral-300"
+        className="overflow-x-auto overflow-y-auto bg-black p-3 text-body whitespace-pre-wrap text-neutral-300"
       >
         {content || <span className="text-foreground italic">No output</span>}
       </pre>
@@ -280,7 +262,7 @@ export const SandboxExecutionBadge = ({
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent6" />
                 <span className="animate-pulse">running</span>
               </span>
-              <span className="text-caption text-foreground tabular-nums">{elapsedTime}ms</span>
+              <span className="text-caption text-foreground tabular-nums">{formatElapsed(elapsedTime)}</span>
             </>
           ) : (
             <>
@@ -292,7 +274,9 @@ export const SandboxExecutionBadge = ({
                 ) : (
                   <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-meta text-red-400">exit {exitCode}</span>
                 ))}
-              {executionTime !== undefined && <span className="text-caption text-foreground">{executionTime}ms</span>}
+              {executionTime !== undefined && (
+                <span className="text-caption text-foreground">{formatDuration(executionTime)}</span>
+              )}
             </>
           )}
         </div>

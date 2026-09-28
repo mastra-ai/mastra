@@ -17,7 +17,6 @@ export const GlobalShortcuts = () => {
     'g$+o': () => navigate('/tools'),
     'g$+k': () => navigate('/workspaces'),
     'g$+r': () => navigate('/request-context'),
-    'g$+e': () => navigate('/evaluation'),
     'g$+s': () => navigate('/scorers'),
     'g$+d': () => navigate('/datasets'),
     'g$+x': () => navigate('/experiments'),

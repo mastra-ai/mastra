@@ -6,9 +6,11 @@ export interface ReasoningProps {
   text: string;
   redacted?: boolean;
   streaming?: boolean;
+  /** Whether the passage starts expanded. Defaults to `true`. */
+  defaultOpen?: boolean;
 }
 
-export const Reasoning = ({ text, redacted, streaming }: ReasoningProps) => {
+export const Reasoning = ({ text, redacted, streaming, defaultOpen = true }: ReasoningProps) => {
   const body = redacted ? 'Reasoning was redacted by the provider.' : text;
   const hasBody = body.trim().length > 0;
 
@@ -19,7 +21,7 @@ export const Reasoning = ({ text, redacted, streaming }: ReasoningProps) => {
       icon={<Brain aria-hidden />}
       label="Reasoning"
       status={streaming ? 'running' : 'idle'}
-      defaultOpen
+      defaultOpen={defaultOpen}
       aria-label="Reasoning"
     >
       {hasBody && (

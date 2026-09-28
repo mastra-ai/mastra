@@ -87,9 +87,23 @@ export function createFactory(storage: MastraFactoryConfig['storage']) {
 
 Handlers return one typed decision or `undefined`. Supported sources are `issue`, `pullRequest`, `linearIssue`, and `manual`. Each Factory instance resolves handlers from its installed definitions. To install only custom boards, set `includeDefaultBoards: false`. The IDs `work` and `review` remain reserved; they cannot be used to replace the built-ins.
 
-**Preferred intake behavior:** Work automatically invokes `factory-triage` only for linked-item materialization with `autoStartCandidate: true`. GitHub stamps that eligibility using actor trust and issue creation timing. Manual entry and noncandidate arrivals do not automatically start an investigation just because they enter Intake. Explicit issue triage remains available, and existing human-approval safeguards remain in effect. Linear intake does not automatically investigate; entering Triage invokes its existing investigation behavior. Review retains its guarded automatic first pass and explicit review behavior.
+**Preferred intake behavior:** By default, every integration arrival lands in its routed board's initial phase—Intake for Work and Review—and does not start or suggest a run. This includes GitHub, GitLab, Linear, Jira, and incident.io; Linear, Jira, and incident.io no longer land directly in Triage. Only custom routes or explicit placement rules choose a different phase. Trusted maintainer requests to review a GitHub pull request with no existing card file it directly in Reviewing.
 
-**Migration:** Remove former global `rules.work` and `rules.review` configuration. Built-in customization is deferred; there is no built-in override or replacement API. Define custom-board handlers on their phases instead. The web deployment now uses the guarded Work default rather than its former unconditional intake handler, so noncandidate or manual arrivals no longer start merely from entering Intake.
+The `authorTrusted` and `autoStartCandidate` metadata stamps remain available for custom board rules. For example, a custom board can restore guarded arrival triage on its initial phase:
+
+```typescript
+const intakeRule = context =>
+  context.cause === 'linked_item_materialized' && context.item.metadata?.autoStartCandidate === true
+    ? {
+        type: 'invokeSkill',
+        idempotencyKey: `${context.ingress.id}:factory-triage`,
+        role: 'triage',
+        skillName: 'factory-triage',
+      }
+    : undefined;
+```
+
+**Migration:** Remove former global `rules.work` and `rules.review` configuration. Built-in customization is deferred; there is no built-in override or replacement API. Define custom-board handlers on their phases instead. Deployments that relied on automatic issue triage or review proposals on arrival should add an appropriate custom-board handler.
 
 There is no global rules object. Every rule has one owner: boards own lifecycle handlers, transition policy, phase semantics, and tool-result rules; integrations own their event handlers. The runtime only executes rules.
 

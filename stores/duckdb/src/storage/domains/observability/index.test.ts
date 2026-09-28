@@ -114,12 +114,19 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(storage.getFeatures()).toEqual([
         'metrics',
         'logs',
+        'entity-type-discovery',
+        'entity-name-discovery',
+        'service-name-discovery',
+        'environment-discovery',
+        'tag-discovery',
+        'metric-discovery',
         'delta-polling',
         'trace-query',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
+        'feedback',
       ]);
 
       coreFeatures.delete('observability-delta-polling');
@@ -127,11 +134,18 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(storage.getFeatures()).toEqual([
         'metrics',
         'logs',
+        'entity-type-discovery',
+        'entity-name-discovery',
+        'service-name-discovery',
+        'environment-discovery',
+        'tag-discovery',
+        'metric-discovery',
         'trace-query',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
+        'feedback',
       ]);
       await expect(storage.listLogs({ mode: 'delta' })).rejects.toThrow(
         'This storage provider does not support observability delta polling',
@@ -153,23 +167,37 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(lazyStore.observability.getFeatures()).toEqual([
         'metrics',
         'logs',
+        'entity-type-discovery',
+        'entity-name-discovery',
+        'service-name-discovery',
+        'environment-discovery',
+        'tag-discovery',
+        'metric-discovery',
         'delta-polling',
         'trace-query',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
+        'feedback',
       ]);
 
       coreFeatures.delete('observability-delta-polling');
       expect(lazyStore.observability.getFeatures()).toEqual([
         'metrics',
         'logs',
+        'entity-type-discovery',
+        'entity-name-discovery',
+        'service-name-discovery',
+        'environment-discovery',
+        'tag-discovery',
+        'metric-discovery',
         'trace-query',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
+        'feedback',
       ]);
     } finally {
       coreFeatures.clear();
@@ -509,6 +537,142 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(span.endedAt).toBeInstanceOf(Date);
     });
 
+    it('stores an event span as a single row that ends when it starts', async () => {
+      const startedAt = new Date('2026-01-01T00:00:00Z');
+      await storage.createSpan({
+        span: {
+          traceId: 'trace-event',
+          spanId: 'span-event',
+          parentSpanId: 'span-parent',
+          name: "chunk: 'tool-result'",
+          spanType: SpanType.MODEL_CHUNK,
+          isEvent: true,
+          entityType: null,
+          entityId: null,
+          entityName: null,
+          userId: null,
+          organizationId: null,
+          resourceId: null,
+          runId: null,
+          sessionId: null,
+          threadId: null,
+          requestId: null,
+          environment: null,
+          source: null,
+          serviceName: null,
+          scope: null,
+          attributes: null,
+          metadata: null,
+          tags: null,
+          links: null,
+          input: null,
+          output: null,
+          error: null,
+          startedAt,
+          endedAt: startedAt,
+        },
+      });
+
+      const result = await storage.getSpan({ traceId: 'trace-event', spanId: 'span-event' });
+      expect(result!.span.isEvent).toBe(true);
+      expect(result!.span.endedAt?.getTime()).toBe(startedAt.getTime());
+
+      const rows = await store.db.query<{ eventType: string }>(
+        `SELECT eventType FROM span_events WHERE traceId = 'trace-event'`,
+      );
+      expect(rows.map(r => r.eventType)).toEqual(['start']);
+    });
+
+    it('reads an event span stored without an end time as ending when it starts', async () => {
+      const startedAt = new Date('2026-01-01T00:00:00Z');
+      await storage.createSpan({
+        span: {
+          traceId: 'trace-legacy-event',
+          spanId: 'span-legacy-event',
+          parentSpanId: 'span-parent',
+          name: "chunk: 'tool-result'",
+          spanType: SpanType.MODEL_CHUNK,
+          isEvent: true,
+          entityType: null,
+          entityId: null,
+          entityName: null,
+          userId: null,
+          organizationId: null,
+          resourceId: null,
+          runId: null,
+          sessionId: null,
+          threadId: null,
+          requestId: null,
+          environment: null,
+          source: null,
+          serviceName: null,
+          scope: null,
+          attributes: null,
+          metadata: null,
+          tags: null,
+          links: null,
+          input: null,
+          output: null,
+          error: null,
+          startedAt,
+          endedAt: null,
+        },
+      });
+      // Simulate a row written before event spans carried an end time.
+      await store.db.execute(`UPDATE span_events SET endedAt = NULL WHERE traceId = 'trace-legacy-event'`);
+
+      const result = await storage.getSpan({ traceId: 'trace-legacy-event', spanId: 'span-legacy-event' });
+      expect(result!.span.endedAt?.getTime()).toBe(startedAt.getTime());
+    });
+
+    it('batch-stores an event span as a single row that ends when it starts', async () => {
+      const startedAt = new Date('2026-01-01T00:00:00Z');
+      await storage.batchCreateSpans({
+        records: [
+          {
+            traceId: 'trace-batch-event',
+            spanId: 'span-batch-event',
+            parentSpanId: 'span-parent',
+            name: "chunk: 'tool-result'",
+            spanType: SpanType.MODEL_CHUNK,
+            isEvent: true,
+            entityType: null,
+            entityId: null,
+            entityName: null,
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: null,
+            source: null,
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: null,
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt,
+            endedAt: startedAt,
+          },
+        ],
+      });
+
+      const result = await storage.getSpan({ traceId: 'trace-batch-event', spanId: 'span-batch-event' });
+      expect(result!.span.isEvent).toBe(true);
+      expect(result!.span.endedAt?.getTime()).toBe(startedAt.getTime());
+
+      const rows = await store.db.query<{ eventType: string }>(
+        `SELECT eventType FROM span_events WHERE traceId = 'trace-batch-event'`,
+      );
+      expect(rows.map(r => r.eventType)).toEqual(['start']);
+    });
+
     it('does not support span updates for event-sourced tracing', async () => {
       await expect(
         storage.updateSpan({
@@ -688,6 +852,32 @@ describe('ObservabilityStorageDuckDB', () => {
         return { ids: res.branches.map(branch => branch.spanId), hasMore: res.pagination.hasMore };
       });
       expect(branchIds).toEqual(['tool-dup-4', 'tool-dup-3', 'tool-dup-2', 'tool-dup-1', 'tool-dup-0']);
+
+      // Empty and past-the-end pages must short-circuit before the page query:
+      // an empty page_roots makes the reconstruction bound NULL, forcing a
+      // full scan of span_events.
+      const querySpy = vi.spyOn(DuckDBConnection.prototype, 'query');
+      const pageQueries = () =>
+        querySpy.mock.calls.filter(([sql]) => /page_(roots|anchors) AS/.test(String(sql))).length;
+      const empty = await storage.listTraces({ filters: { startedAt: { end: new Date(0) } } });
+      expect(empty.pagination).toMatchObject({ total: 0, hasMore: false });
+      expect(empty.spans).toEqual([]);
+      const emptyLight = await storage.listTracesLight({ filters: { startedAt: { end: new Date(0) } } });
+      expect(emptyLight.spans).toEqual([]);
+      const pastEnd = await storage.listTraces({ pagination: { page: 2, perPage: 3 } });
+      expect(pastEnd.pagination).toEqual({ total: 5, page: 2, perPage: 3, hasMore: false });
+      expect(pastEnd.spans).toEqual([]);
+      const pastEndSlow = await storage.listTraces({
+        pagination: { page: 2, perPage: 3 },
+        orderBy: { field: 'endedAt', direction: 'DESC' },
+      });
+      expect(pastEndSlow.pagination).toEqual({ total: 5, page: 2, perPage: 3, hasMore: false });
+      expect(pastEndSlow.spans).toEqual([]);
+      const pastEndBranches = await storage.listBranches({ pagination: { page: 2, perPage: 3 } });
+      expect(pastEndBranches.pagination).toEqual({ total: 5, page: 2, perPage: 3, hasMore: false });
+      expect(pastEndBranches.branches).toEqual([]);
+      expect(pageQueries()).toBe(0);
+      querySpy.mockRestore();
 
       const delta = await storage.listTraces({ mode: 'delta', after: bootstrap.deltaCursor!, limit: 3 });
       expect(delta.spans.map(span => span.traceId)).toEqual(['trace-dup-0', 'trace-dup-1', 'trace-dup-2']);
@@ -1221,6 +1411,68 @@ describe('ObservabilityStorageDuckDB', () => {
         after: page.deltaCursor!,
       });
       expect(afterPageCursor.spans.map(span => span.traceId)).toEqual(['trace-delta-new']);
+    });
+
+    it('computes branch page deltaCursor with post-aggregation filters', async () => {
+      const originalFeatures = new Set(coreFeatures);
+      coreFeatures.add('observability-delta-polling');
+      const toolSpan = (id: string, tags: string[], second: number) => ({
+        traceId: `trace-${id}`,
+        spanId: `tool-${id}`,
+        parentSpanId: null,
+        name: `tool-${id}`,
+        spanType: SpanType.TOOL_CALL,
+        isEvent: false,
+        entityType: null,
+        entityId: null,
+        entityName: null,
+        userId: null,
+        organizationId: null,
+        resourceId: null,
+        runId: null,
+        sessionId: null,
+        threadId: null,
+        requestId: null,
+        environment: null,
+        source: null,
+        serviceName: null,
+        scope: null,
+        attributes: null,
+        metadata: null,
+        tags,
+        links: null,
+        input: null,
+        output: null,
+        error: null,
+        startedAt: new Date(`2026-03-01T00:00:0${second}Z`),
+        endedAt: new Date(`2026-03-01T00:00:0${second + 1}Z`),
+      });
+
+      try {
+        await storage.createSpan({ span: toolSpan('keep-1', ['keep'], 0) });
+        await storage.createSpan({ span: toolSpan('skip-1', ['skip'], 2) });
+
+        const page = await storage.listBranches({ filters: { tags: ['keep'] } });
+        expect(page.branches.map(branch => branch.spanId)).toEqual(['tool-keep-1']);
+        expect(page.deltaCursor).toBeTruthy();
+
+        const none = await storage.listBranches({ filters: { tags: ['missing'] } });
+        expect(none.branches).toEqual([]);
+        expect(none.deltaCursor).toBeTruthy();
+
+        await storage.createSpan({ span: toolSpan('keep-2', ['keep'], 4) });
+        await storage.createSpan({ span: toolSpan('skip-2', ['skip'], 6) });
+
+        const delta = await storage.listBranches({
+          mode: 'delta',
+          filters: { tags: ['keep'] },
+          after: page.deltaCursor!,
+        });
+        expect(delta.branches.map(branch => branch.spanId)).toEqual(['tool-keep-2']);
+      } finally {
+        coreFeatures.clear();
+        for (const feature of originalFeatures) coreFeatures.add(feature);
+      }
     });
 
     it('batch deletes traces', async () => {

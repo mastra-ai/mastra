@@ -290,7 +290,7 @@ export interface SessionMachinery {
     agent?: Agent;
     resourceId: string;
     threadId: string;
-  }): Promise<AgentThreadSubscription<any>>;
+  }): Promise<AgentThreadSubscription<any, true>>;
   /** Build the per-call stream options (instructions, memory, toolsets, abort signal, tracing). */
   buildStreamOptions(input: {
     requestContext?: RequestContext;
@@ -1032,7 +1032,7 @@ export class SessionThread {
  */
 export class SessionStream {
   /** The live subscription to the active thread, or null when none is open. */
-  #subscription: AgentThreadSubscription<any> | null = null;
+  #subscription: AgentThreadSubscription<any, true> | null = null;
   /** Agent that created the live subscription, or null when none is open. */
   #agent: Agent | null = null;
   /** Dedup key (`agentId:resourceId:threadId`) for the open subscription, or null. */
@@ -1077,7 +1077,7 @@ export class SessionStream {
     agent,
     key,
   }: {
-    subscription: AgentThreadSubscription<any>;
+    subscription: AgentThreadSubscription<any, true>;
     agent?: Agent;
     key: string;
   }): void {
@@ -1087,7 +1087,7 @@ export class SessionStream {
   }
 
   /** Agent that owns `subscription`, when it is the live subscription. */
-  getAgent({ subscription }: { subscription: AgentThreadSubscription<any> }): Agent | null {
+  getAgent({ subscription }: { subscription: AgentThreadSubscription<any, true> }): Agent | null {
     return this.#subscription === subscription ? this.#agent : null;
   }
 
@@ -1097,7 +1097,7 @@ export class SessionStream {
   }
 
   /** Whether `subscription` is the one currently adopted (identity check). */
-  isCurrent({ subscription }: { subscription: AgentThreadSubscription<any> }): boolean {
+  isCurrent({ subscription }: { subscription: AgentThreadSubscription<any, true> }): boolean {
     return this.#subscription === subscription;
   }
 
@@ -3306,7 +3306,7 @@ export class Session<TState = unknown> {
    * Drive the run loop for a subscribed thread stream: process each run's chunks
    * and finalize it. Delegates to the per-session run engine.
    */
-  processSubscribedThreadStream(subscription: AgentThreadSubscription<any>): Promise<void> {
+  processSubscribedThreadStream(subscription: AgentThreadSubscription<any, true>): Promise<void> {
     return this.runEngine.processSubscribedThreadStream(subscription);
   }
 
@@ -3498,6 +3498,34 @@ export class Session<TState = unknown> {
         if (category) this.grantCategory(category);
       },
     });
+  }
+
+  /**
+   * Answer an approval that is stored with a suspended run but not parked on this
+   * session's gate, e.g. a card rebuilt from thread history after a restart.
+   * Resolves the run that owns `toolCallId` and resumes it by run id. Throws when
+   * no suspended run on the current thread is waiting on that tool call.
+   */
+  async respondToPersistedToolApproval({
+    toolCallId,
+    approved,
+    requestContext,
+  }: {
+    toolCallId: string;
+    approved: boolean;
+    requestContext?: RequestContext;
+  }): Promise<void> {
+    const threadId = this.thread.getId();
+    const resourceId = this.identity.getResourceId();
+    if (!threadId) throw new Error('Cannot answer a tool approval without a current thread');
+    const { runs } = await this.machinery.getAgent().listSuspendedRuns({ threadId, resourceId });
+    const run = runs.find(candidate =>
+      candidate.toolCalls.some(call => call.requiresApproval && call.toolCallId === toolCallId),
+    );
+    if (!run) throw new Error(`No suspended run is waiting on tool call ${toolCallId}`);
+    const identity = { toolCallId, requestContext, runId: run.runId, threadId, resourceId };
+    if (approved) await this.approveToolCall(identity);
+    else await this.declineToolCall(identity);
   }
 
   // ===========================================================================
@@ -4242,11 +4270,18 @@ export class Session<TState = unknown> {
   async approveToolCall({
     toolCallId,
     requestContext: requestContextInput,
+    runId: inputRunId,
+    threadId: inputThreadId,
+    resourceId = this.identity.getResourceId(),
   }: {
     toolCallId?: string;
     requestContext?: RequestContext;
+    runId?: string;
+    threadId?: string;
+    resourceId?: string;
   }): Promise<void> {
-    const runId = this.run.getRunId();
+    const runId = inputRunId ?? this.run.getRunId();
+    const threadId = inputThreadId ?? this.thread.getId();
     if (!runId) {
       throw new Error('No active run to approve tool call for');
     }
@@ -4254,11 +4289,9 @@ export class Session<TState = unknown> {
     const agent = this.machinery.getAgent();
     const requestContext = await this.machinery.buildRequestContext(requestContextInput);
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
-    const threadId = this.thread.getId();
     if (!threadId) {
       throw new Error('Cannot approve a tool call without a current thread');
     }
-    const resourceId = this.identity.getResourceId();
     await agent.sendToolApproval({
       threadId,
       resourceId,
@@ -4281,12 +4314,19 @@ export class Session<TState = unknown> {
     toolCallId,
     requestContext: requestContextInput,
     declineContext,
+    runId: inputRunId,
+    threadId: inputThreadId,
+    resourceId = this.identity.getResourceId(),
   }: {
     toolCallId?: string;
     requestContext?: RequestContext;
     declineContext?: { reason?: string; message?: string };
+    runId?: string;
+    threadId?: string;
+    resourceId?: string;
   }): Promise<void> {
-    const runId = this.run.getRunId();
+    const runId = inputRunId ?? this.run.getRunId();
+    const threadId = inputThreadId ?? this.thread.getId();
     if (!runId) {
       throw new Error('No active run to decline tool call for');
     }
@@ -4294,11 +4334,9 @@ export class Session<TState = unknown> {
     const agent = this.machinery.getAgent();
     const requestContext = await this.machinery.buildRequestContext(requestContextInput);
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
-    const threadId = this.thread.getId();
     if (!threadId) {
       throw new Error('Cannot decline a tool call without a current thread');
     }
-    const resourceId = this.identity.getResourceId();
     await agent.sendToolApproval({
       threadId,
       resourceId,

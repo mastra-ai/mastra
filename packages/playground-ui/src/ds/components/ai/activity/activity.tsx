@@ -214,6 +214,8 @@ export interface ActivityHeadlineProps extends Omit<ComponentProps<typeof Activi
   icon: ReactNode;
   label: ReactNode;
   detail?: string;
+  /** Replaces label and detail with plain text saying what the line does. */
+  description?: string;
   detailFont?: ActivityDetailProps['font'];
   wrapDetail?: boolean;
   badges?: ReactNode;
@@ -224,6 +226,7 @@ export const ActivityHeadline = ({
   icon,
   label,
   detail,
+  description,
   detailFont,
   wrapDetail,
   badges,
@@ -235,9 +238,9 @@ export const ActivityHeadline = ({
     <ActivityHeader {...props}>
       <ActivityLeading>{leading}</ActivityLeading>
       <ActivityIcon>{icon}</ActivityIcon>
-      <ActivityLabel>{label}</ActivityLabel>
+      <ActivityLabel className={cn(description && 'max-w-none min-w-0 shrink')}>{description || label}</ActivityLabel>
       {badges}
-      {detail && (
+      {!description && detail && (
         <ActivityDetail font={detailFont} wrap={wrapDetail}>
           {detail}
         </ActivityDetail>

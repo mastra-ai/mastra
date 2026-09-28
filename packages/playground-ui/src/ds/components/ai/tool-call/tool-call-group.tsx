@@ -38,7 +38,7 @@ const MAX_KIND_GLYPHS = 4;
 
 export function ToolCallGroup({ steps, leading, children }: ToolCallGroupProps) {
   const running = steps.find(step => step.status === 'running');
-  const liveDetail = running && presentTool(running.toolName, running.args).detail;
+  const live = running && presentTool(running.toolName, running.args);
 
   return (
     <Activity status={running ? 'running' : 'idle'} aria-label={`Tool group: ${steps.length} steps`}>
@@ -49,7 +49,11 @@ export function ToolCallGroup({ steps, leading, children }: ToolCallGroupProps) 
             <FoldVertical size={14} strokeWidth={1.75} aria-hidden className="text-placeholder" />
           </ActivityIcon>
           <ActivityLabel>{steps.length} steps</ActivityLabel>
-          {liveDetail && <ActivityDetail>{liveDetail}</ActivityDetail>}
+          {live && live.description ? (
+            <ActivityLabel className="max-w-none min-w-0 shrink">{live.description}</ActivityLabel>
+          ) : (
+            live && live.detail && <ActivityDetail>{live.detail}</ActivityDetail>
+          )}
           <GroupKinds steps={steps} />
           <ActivitySpacer rule />
           <ActivityTrailing>

@@ -138,7 +138,7 @@ describe('formatSnapshotDate', () => {
 
 describe('formatSnapshotCutoff', () => {
   it('renders the UTC date and 24-hour time', () => {
-    expect(formatSnapshotCutoff('2026-03-09T14:05:00Z')).toBe('Mar 9, 2026, 14:05');
+    expect(formatSnapshotCutoff('2026-03-09T14:05:00Z')).toBe('Mar 9, 2026, 2:05 PM');
   });
 
   it('returns the raw server value when it is not a date', () => {
@@ -152,19 +152,19 @@ describe('formatSnapshotWindow', () => {
   });
 
   it('shares the month across a window inside one month', () => {
-    expect(formatSnapshotWindow('2026-03-01T00:00:00Z', '2026-03-09T00:00:00Z')).toBe('Mar 1–9, 2026');
+    expect(formatSnapshotWindow('2026-03-01T00:00:00Z', '2026-03-09T00:00:00Z')).toBe('Mar 1 – 9, 2026');
   });
 
   it('shares the year across a window spanning two months', () => {
-    expect(formatSnapshotWindow('2026-01-28T00:00:00Z', '2026-03-09T00:00:00Z')).toBe('Jan 28–Mar 9, 2026');
+    expect(formatSnapshotWindow('2026-01-28T00:00:00Z', '2026-03-09T00:00:00Z')).toBe('Jan 28 – Mar 9, 2026');
   });
 
   it('spells out both years across a window spanning a year boundary', () => {
-    expect(formatSnapshotWindow('2025-12-28T00:00:00Z', '2026-03-09T00:00:00Z')).toBe('Dec 28, 2025–Mar 9, 2026');
+    expect(formatSnapshotWindow('2025-12-28T00:00:00Z', '2026-03-09T00:00:00Z')).toBe('Dec 28, 2025 – Mar 9, 2026');
   });
 
   it('keeps the same day and month apart when the years differ', () => {
-    expect(formatSnapshotWindow('2025-03-09T00:00:00Z', '2026-03-09T00:00:00Z')).toBe('Mar 9, 2025–Mar 9, 2026');
+    expect(formatSnapshotWindow('2025-03-09T00:00:00Z', '2026-03-09T00:00:00Z')).toBe('Mar 9, 2025 – Mar 9, 2026');
   });
 
   it('returns the raw server values when either end is not a date', () => {

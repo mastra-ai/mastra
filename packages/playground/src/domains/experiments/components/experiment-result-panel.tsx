@@ -7,9 +7,10 @@ import { DataList } from '@mastra/playground-ui/components/DataList';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
-import { formatCompact, formatCost } from '@mastra/playground-ui/domains/metrics/components/metrics-utils';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
-import { format } from 'date-fns/format';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { formatCompactNumber, formatCost } from '@mastra/playground-ui/utils/cost';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { CheckCircle, ClipboardCheck, FlaskConical, FileCodeIcon, FileOutputIcon, TargetIcon, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
@@ -19,7 +20,6 @@ import { ToolMockReportSection } from './tool-mock-report-section';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
 import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
-import { useLinkComponent } from '@/lib/framework';
 
 /**
  * Structural subset of `DatasetExperimentResult` the panel renders. Review-queue
@@ -141,9 +141,7 @@ function ExperimentResultPanelBody({
           {result.createdAt && (
             <>
               <DataKeysAndValues.Key>Created</DataKeysAndValues.Key>
-              <DataKeysAndValues.Value>
-                {format(new Date(result.createdAt), "MMM d, yyyy 'at' h:mm a")}
-              </DataKeysAndValues.Value>
+              <DataKeysAndValues.Value>{formatDate(result.createdAt, 'date-time')}</DataKeysAndValues.Value>
             </>
           )}
           {result.status && (
@@ -192,11 +190,11 @@ function ExperimentResultPanelBody({
             <>
               <DataKeysAndValues.Key>Input tokens</DataKeysAndValues.Key>
               <DataKeysAndValues.Value>
-                {usage.inputTokens !== undefined ? formatCompact(usage.inputTokens) : '—'}
+                {usage.inputTokens !== undefined ? formatCompactNumber(usage.inputTokens) : '—'}
               </DataKeysAndValues.Value>
               <DataKeysAndValues.Key>Output tokens</DataKeysAndValues.Key>
               <DataKeysAndValues.Value>
-                {usage.outputTokens !== undefined ? formatCompact(usage.outputTokens) : '—'}
+                {usage.outputTokens !== undefined ? formatCompactNumber(usage.outputTokens) : '—'}
               </DataKeysAndValues.Value>
               <DataKeysAndValues.Key>Cost</DataKeysAndValues.Key>
               <DataKeysAndValues.Value>

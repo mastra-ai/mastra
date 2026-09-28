@@ -1,10 +1,10 @@
-import { format, isToday } from 'date-fns';
 import { Children, cloneElement, isValidElement } from 'react';
 import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
 import { dataListRowActionRevealStyles, dataListStickyStartStyles } from './shared';
 import type { DataListSticky } from './shared';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { cn } from '@/lib/utils';
+import { formatDate, formatTimestampPrecise } from '@/utils/date-format';
 
 export type DataListCellProps = {
   children?: ReactNode;
@@ -151,18 +151,26 @@ export type DataListNumberCellProps = DataListCellProps & {
    * primary metric in a row (e.g. a total or headline number).
    */
   highlight?: boolean;
+  font?: 'sans' | 'mono';
 };
 
 /**
  * Right-aligned numeric cell with tabular figures, for metric and summary
  * tables. Pass `highlight` for the emphasized column.
  */
-export function DataListNumberCell({ children, className, highlight, ...rest }: DataListNumberCellProps) {
+export function DataListNumberCell({
+  children,
+  className,
+  highlight,
+  font = 'sans',
+  ...rest
+}: DataListNumberCellProps) {
   return (
     <DataListCell
       className={cn(
         'justify-items-end text-right text-muted-foreground tabular-nums',
         highlight && 'text-label text-foreground',
+        font === 'mono' && 'font-mono',
         className,
       )}
       {...rest}
@@ -221,35 +229,24 @@ export function DataListSelectCell({ checked, onToggle, disabled, ...rest }: Dat
   );
 }
 
-function toDate(value: Date | string): Date | null {
-  const date = value instanceof Date ? value : new Date(value);
-  return isNaN(date.getTime()) ? null : date;
-}
-
 export interface DataListDateCellProps {
   timestamp: Date | string;
 }
 
-/** Compact date cell — `Today` or `MMM dd` (e.g. `May 19`). */
+/** Compact date cell — `Today`, `May 19` or `May 19, 2025`. */
 export function DataListDateCell({ timestamp }: DataListDateCellProps) {
-  const date = toDate(timestamp);
-  return (
-    <DataListCell className="text-muted-foreground">
-      {date ? (isToday(date) ? 'Today' : format(date, 'MMM dd')) : null}
-    </DataListCell>
-  );
+  return <DataListCell className="text-muted-foreground">{formatDate(timestamp, 'date')}</DataListCell>;
 }
 
 export interface DataListCreatedCellProps {
   timestamp: Date | string;
 }
 
-/** Compact date + time cell — always `MMM d HH:mm:ss` (e.g. `Aug 31 13:07:47`), 24h, no milliseconds. */
+/** Locale-aware date and time cell with second precision. */
 export function DataListCreatedCell({ timestamp }: DataListCreatedCellProps) {
-  const date = toDate(timestamp);
   return (
-    <DataListCell className="text-muted-foreground tabular-nums">
-      {date ? format(date, 'MMM d HH:mm:ss') : null}
+    <DataListCell className="text-muted-foreground tabular-nums" title={formatDate(timestamp, 'date-time-seconds')}>
+      {formatDate(timestamp, 'date-time-seconds')}
     </DataListCell>
   );
 }
@@ -259,17 +256,9 @@ export interface DataListTimeCellProps {
 }
 
 export function DataListTimeCell({ timestamp }: DataListTimeCellProps) {
-  const date = toDate(timestamp);
   return (
     <DataListCell className="flex text-muted-foreground tabular-nums">
-      {date ? (
-        <>
-          {format(date, 'h:mm:ss')}
-          <span className="text-placeholder">
-            .{String(date.getMilliseconds()).padStart(3, '0')} {format(date, 'aaa')}
-          </span>
-        </>
-      ) : null}
+      {formatTimestampPrecise(timestamp, { withDate: false })}
     </DataListCell>
   );
 }

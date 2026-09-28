@@ -3,6 +3,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { GitBranch, Plus } from 'lucide-react';
+import { useLayoutEffect } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import type { InstalledBoardInfo } from '../../api/types';
 import { useBoardCatalog } from '../../hooks/useBoardCatalog';
@@ -19,6 +20,7 @@ import { BoardColumn, BoardColumnHeader } from '../domains/factory/components/Bo
 import { BoardColumnEmptyState } from '../domains/factory/components/BoardColumnEmptyState';
 import { ColumnReveal } from '../domains/factory/components/ColumnReveal';
 import { BoardFilters } from '../domains/factory/components/BoardFilters';
+import { BoardSortControl } from '../domains/factory/components/BoardSortControl';
 import { CandidateCard } from '../domains/factory/components/CandidateCard';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
@@ -45,8 +47,12 @@ import {
 } from '../domains/factory/boardRelevance';
 import { boardFilterParams, boardFiltersActive, boardFiltersFromParams } from '../domains/factory/boardFilters';
 import type { BoardFilterState } from '../domains/factory/boardFilters';
+import { restoreBoardView, saveBoardView } from '../domains/factory/services/boardViews';
 import { candidatePayload } from '../domains/factory/boardDrag';
 import { cardMatchesSearch } from '../domains/factory/boardItems';
+import { orderWorkItemsForStage } from '../domains/factory/boardOrder';
+import type { BoardSort } from '../domains/factory/boardOrder';
+import { boardSortFromParams, boardSortParams } from '../domains/factory/boardSort';
 import { relatedWorkItemIndex } from '../domains/factory/services/relationships';
 import { workItemHumanActorIds } from '../domains/factory/workItemActivity';
 import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspaces/services/github';
@@ -159,13 +165,23 @@ function BoardContent({
   const review = kind === 'review';
   const builtin = kind === 'work' || review;
   const stages = definition.phases.map(phase => ({ ...phase, label: phase.title }));
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [urlParams, setSearchParams] = useSearchParams();
+  // Opening a board without filters or sort in the URL (e.g. from the sidebar) brings back the ones
+  // last used here. They apply on this render so the board never flashes unfiltered; the effect
+  // then writes them into the URL.
+  const restoredParams = restoreBoardView(factoryProjectId, kind, urlParams);
+  const searchParams = restoredParams ?? urlParams;
+  const restoredSearch = restoredParams?.toString();
+  useLayoutEffect(() => {
+    if (restoredSearch !== undefined) setSearchParams(new URLSearchParams(restoredSearch), { replace: true });
+  }, [restoredSearch, setSearchParams]);
   const targetItemId = searchParams.get('item') || undefined;
   const targetCommentId = targetItemId !== undefined ? (searchParams.get('comment') ?? undefined) : undefined;
   const filters = boardFiltersFromParams(searchParams, kind);
 
   const auth = useFactoryAuth();
-  const items = useBoardItems({ factoryProjectId, kind });
+  const sort = boardSortFromParams(searchParams, auth.data?.user?.userId);
+  const items = useBoardItems({ factoryProjectId, kind, currentUserId: auth.data?.user?.userId });
   const intake = useBoardIntake({
     factoryProjectId,
     repository,
@@ -181,7 +197,7 @@ function BoardContent({
     items: items.all,
   });
   const decisions = useBoardDecisions(factoryProjectId);
-  const composer = useBoardComposer(factoryProjectId, definition);
+  const composer = useBoardComposer(factoryProjectId, definition, auth.data?.user?.userId);
   const activityProfileActorIds = [...new Set(items.all.flatMap(workItemHumanActorIds))];
   const activity = useRecentAuditEvents(factoryProjectId, `board-${kind}-activity`, 200, activityProfileActorIds);
   const activityPage = activity.data;
@@ -204,6 +220,12 @@ function BoardContent({
   const setFilters = (next: BoardFilterState) => {
     const params = boardFilterParams(searchParams, next, kind);
     clearOpenCard(params);
+    saveBoardView(factoryProjectId, kind, params);
+    setSearchParams(params, { replace: true });
+  };
+  const setSort = (next: BoardSort) => {
+    const params = boardSortParams(searchParams, next);
+    saveBoardView(factoryProjectId, kind, params);
     setSearchParams(params, { replace: true });
   };
   const setIntakeSource = (source: IntakeSource) => {
@@ -227,14 +249,19 @@ function BoardContent({
       return false;
     });
   const workItemsForStage = (stage: (typeof stages)[number]['id']) =>
-    unfilteredWorkItemsForStage(stage).filter(item => {
-      const liveCandidate = item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined;
-      return (
-        workItemMatchesRelevance(item, activityPage, filters.participantId, filters.relevanceTypes, liveCandidate) &&
-        workItemMatchesLabels(item, filters.labels, liveCandidate) &&
-        cardMatchesSearch(item, filters.search)
-      );
-    });
+    orderWorkItemsForStage(
+      unfilteredWorkItemsForStage(stage).filter(item => {
+        const liveCandidate = item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined;
+        return (
+          workItemMatchesRelevance(item, activityPage, filters.participantId, filters.relevanceTypes, liveCandidate) &&
+          workItemMatchesLabels(item, filters.labels, liveCandidate) &&
+          cardMatchesSearch(item, filters.search)
+        );
+      }),
+      stage,
+      sort,
+      auth.data?.user?.userId,
+    );
   const boardWorkItems = stages.flatMap(stage => workItemsForStage(stage.id));
   const targetReady = !items.isPending && (!targetItemId || boardWorkItems.some(item => item.id === targetItemId));
   const loadingStages = boardLoadingStages({
@@ -283,7 +310,13 @@ function BoardContent({
       columnFeed,
       feedFailed,
       collapsed:
-        builtin && stage.id !== definition.initialPhase && !loading && !composerOpen && !feedFailed && taskCount === 0,
+        builtin &&
+        stage.id !== definition.initialPhase &&
+        !loading &&
+        !composerOpen &&
+        !feedFailed &&
+        !columnFeed?.hasNextPage &&
+        taskCount === 0,
     };
   });
 
@@ -300,20 +333,29 @@ function BoardContent({
         <div className="flex min-h-full w-max min-w-full flex-col gap-3">
           <div className="from-background via-background z-20 flex flex-col gap-3 bg-linear-to-b via-[calc(100%-1rem)] to-transparent pb-4 max-lg:contents lg:sticky lg:top-0">
             <div className="sticky left-0 flex w-[100cqw] flex-wrap items-center gap-x-4 gap-y-3 px-4 pt-4">
-              <BoardFilters
-                kind={kind}
-                participants={participants}
-                availableLabels={availableLabels}
-                currentUserId={auth.data?.user?.userId}
-                filters={filters}
-                onFiltersChange={setFilters}
-              />
-              {builtin && (
-                <BoardAutomationSettings
-                  factoryProjectId={factoryProjectId}
-                  autoRunEnabled={factory.autoRunEnabled ?? false}
-                  autoApprovePlans={factory.autoApprovePlans ?? false}
+              <div
+                role="group"
+                aria-label="Board view controls"
+                className="flex min-w-0 flex-1 basis-full flex-wrap items-center gap-x-2 gap-y-3 lg:basis-auto"
+              >
+                <BoardFilters
+                  kind={kind}
+                  participants={participants}
+                  availableLabels={availableLabels}
+                  currentUserId={auth.data?.user?.userId}
+                  filters={filters}
+                  onFiltersChange={setFilters}
                 />
+                <BoardSortControl value={sort} currentUserId={auth.data?.user?.userId} onChange={setSort} />
+              </div>
+              {builtin && (
+                <div className="ml-auto shrink-0">
+                  <BoardAutomationSettings
+                    factoryProjectId={factoryProjectId}
+                    autoRunEnabled={factory.autoRunEnabled ?? false}
+                    autoApprovePlans={factory.autoApprovePlans ?? false}
+                  />
+                </div>
               )}
             </div>
             <div className="from-background via-background sticky top-0 z-20 flex items-start gap-2 via-[calc(100%-0.75rem)] to-transparent px-4 max-lg:bg-linear-to-b max-lg:pb-3 lg:gap-3">
@@ -420,6 +462,13 @@ function BoardContent({
                         />
                       )}
                     />
+                    {stageWorkItems.length > 0 && stageCandidates.length > 0 ? (
+                      <div role="separator" aria-label="New candidates" className="flex items-center gap-2 py-1">
+                        <span aria-hidden className="bg-border h-px flex-1" />
+                        <span className="text-meta text-muted-foreground">New candidates</span>
+                        <span aria-hidden className="bg-border h-px flex-1" />
+                      </div>
+                    ) : null}
                     <ColumnReveal
                       items={stageCandidates}
                       renderItem={candidate => (
@@ -447,7 +496,7 @@ function BoardContent({
                       />
                     )}
                     {columnFeed && <IntakeFeedNotice source={intake.active} feed={columnFeed} />}
-                    {stage.id === definition.initialPhase && <IntakeColumnExtras feed={columnFeed} />}
+                    {columnFeed && <IntakeColumnExtras feed={columnFeed} currentColumnLength={taskCount} />}
                   </BoardColumn>
                 ),
               )}

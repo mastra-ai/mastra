@@ -67,7 +67,7 @@ function ToolBody({ tool, command }: { tool: ToolCall; command?: string }) {
 }
 
 export function ToolCard({ tool }: { tool: ToolCall }) {
-  const { icon: ToolIcon, label, detail, command } = presentTool(tool.toolName, tool.args);
+  const { icon: ToolIcon, label, detail, description, command } = presentTool(tool.toolName, tool.args);
 
   return (
     <Activity
@@ -82,6 +82,7 @@ export function ToolCard({ tool }: { tool: ToolCall }) {
           icon={<ToolIcon aria-hidden />}
           label={label}
           detail={detail}
+          description={description}
         />
       </ActivityTrigger>
       <ActivityContent>

@@ -2,6 +2,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
+import { Octokit } from '@octokit/rest';
 import type { Context } from 'hono';
 
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
@@ -154,6 +155,9 @@ type GithubReviewComment = GithubComment & {
 };
 
 const PAGE_SIZE = 30;
+// Open issues list newest-first; missed opens are recent, so a bounded scan
+// keeps each sweep's API cost flat on repositories with a large backlog.
+const OPEN_ISSUE_DISCOVERY_MAX_PAGES = 5;
 const API_PREFIX = '/v1/server';
 /**
  * Slug of the GitHub App this integration posts as. Platform credentials do not
@@ -804,7 +808,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
           : undefined,
         reconcileIssuesFactoryState: this.#issueReconcileEnabled
-          ? attachGithubIssueReconciler(this, ctx, input => this.fetchIssueState(input))
+          ? attachGithubIssueReconciler(
+              this,
+              ctx,
+              input => this.fetchIssueState(input),
+              input => this.listOpenIssueStates(input),
+            )
           : undefined,
         pollEventsEnabled: this.#pollingEnabled,
         intervalMs: this.#pollingIntervalMs,
@@ -934,6 +943,35 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     } catch {
       return undefined;
     }
+  }
+
+  async listOpenIssueStates(input: {
+    installationId: number;
+    repository: string;
+  }): Promise<Array<ReconcileIssueState & { number: number }>> {
+    const issues: Array<ReconcileIssueState & { number: number }> = [];
+    for (let page = 1; page <= OPEN_ISSUE_DISCOVERY_MAX_PAGES; page += 1) {
+      const query = new URLSearchParams({ state: 'open', page: String(page), per_page: String(PAGE_SIZE) });
+      const result = await this.#client.request<{ issues: GithubIssue[] }>(
+        'GET',
+        `${repositoryPath(input.repository, 'issues')}?${query}`,
+      );
+      for (const issue of result.issues) {
+        issues.push({
+          number: issue.number,
+          title: issue.title,
+          url: issue.htmlUrl,
+          state: 'open',
+          assignees: issue.assignees,
+          labels: issue.labels,
+          ...(issue.user?.login ? { author: issue.user.login } : {}),
+          createdAt: issue.createdAt,
+          updatedAt: issue.updatedAt,
+        });
+      }
+      if (result.issues.length < PAGE_SIZE) break;
+    }
+    return issues;
   }
 
   async upsertFactoryTriageComment(input: GithubTriageCommentUpsertInput): Promise<GithubTriageCommentUpsertResult> {
@@ -1277,7 +1315,39 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       },
       { actingUserId: input.actingUserId },
     );
-    return parsePullRequest(result);
+    const created = parsePullRequest(result);
+    if (input.actingUserId && input.connection.type === 'app-installation') {
+      try {
+        const user = await this.#fetchUserConnection(input.actingUserId);
+        const login = user.githubUsername;
+        if (user.connected && login) {
+          const { owner, repo } = splitRepository(input.sourceId);
+          const { token } = await this.#client.request<{ token: string }>(
+            'POST',
+            `${API_PREFIX}/github-app/installations/${input.connection.installationId}/token`,
+            { repositories: [repo], permissions: REPOSITORY_TOKEN_PERMISSIONS },
+          );
+          const octokit = new Octokit({ auth: token, request: { timeout: 15_000 } });
+          const { data } = await octokit.issues.addAssignees({
+            owner,
+            repo,
+            issue_number: result.number,
+            assignees: [login],
+          });
+          if (!data.assignees?.some(assignee => assignee.login?.toLowerCase() === login.toLowerCase())) {
+            logPlatformWarn('GitHub did not assign the PR opener', { url: created.url, login });
+          } else {
+            created.assignees = data.assignees.flatMap(assignee => (assignee.login ? [assignee.login] : []));
+          }
+        }
+      } catch (error) {
+        logPlatformWarn('Failed to assign the PR opener', {
+          url: created.url,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return created;
   }
 
   async #updatePullRequest(input: UpdatePullRequestInput) {

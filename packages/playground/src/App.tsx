@@ -1,5 +1,6 @@
 import { coreFeatures } from '@mastra/core/features';
 import { KeyboardShortcutsProvider } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
 import { useMemo } from 'react';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
@@ -58,7 +59,6 @@ import EditDatasetPage from './pages/datasets/dataset/edit';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 import CreateDatasetPage from './pages/datasets/new';
-import Evaluation from './pages/evaluation';
 import Experiments from './pages/experiments';
 import CompareExperimentsPage from './pages/experiments/compare';
 import ExperimentPage from './pages/experiments/experiment';
@@ -102,7 +102,6 @@ import { PlaygroundConfigGuard } from '@/domains/configuration/components/playgr
 import { StudioConfigProvider } from '@/domains/configuration/context/studio-config-context';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
 import { GlobalShortcuts } from '@/domains/navigation/components/global-shortcuts';
-import { LinkComponentProvider } from '@/lib/framework';
 import { PlaygroundQueryClient } from '@/lib/tanstack-query';
 import { Processors } from '@/pages/processors';
 import { Processor } from '@/pages/processors/processor';
@@ -300,7 +299,6 @@ export const routes: RouteObject[] = [
           ]),
 
       { path: '/logs', element: <Logs /> },
-      { path: '/evaluation', element: <Evaluation /> },
       { path: '/scorers', element: <Scorers /> },
       {
         path: '/scorers/:scorerId',

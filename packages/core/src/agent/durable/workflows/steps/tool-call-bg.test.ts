@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { BACKGROUND_WORK_CONTEXT } from '../../../../processors/background-work-signals';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { globalRunRegistry } from '../../run-registry';
 import { createDurableToolCallStep } from './tool-call';
@@ -65,10 +66,10 @@ function makeInitData(overrides: Record<string, any> = {}) {
 
 function makeMessageList() {
   return {
-    get: { all: { db: vi.fn().mockReturnValue([]) } },
     updateToolInvocation: vi.fn().mockReturnValue(true),
     updateMessageMetadataByToolCallId: vi.fn().mockReturnValue(true),
     add: vi.fn(),
+    get: { all: { db: vi.fn().mockReturnValue([]) } },
   };
 }
 
@@ -100,7 +101,7 @@ function setupRegistry(overrides: Record<string, any> = {}) {
   return { messageList, saveQueueManager, bgManager, entry };
 }
 
-function executeStep(pubsub: any, initData: any, input?: any, resumeData?: unknown) {
+function executeStep(pubsub: any, initData: any, input?: any, resumeData?: any) {
   const step = createDurableToolCallStep();
   return (step as any).execute({
     inputData: input ?? baseInput(),
@@ -128,18 +129,20 @@ describe('durable tool-call background task dispatch', () => {
 
     vi.mocked(resolveBackgroundConfig).mockReturnValue({
       runInBackground: true,
+      disposition: 'deferred',
       timeoutMs: 30_000,
       maxRetries: 2,
     } as any);
 
     const mockTask = { id: 'task-abc' };
+    const waitForCompletion = vi.fn();
     vi.mocked(createBackgroundTask).mockReturnValue({
       dispatch: vi.fn().mockResolvedValue({ task: mockTask, fallbackToSync: false }),
       checkIfRunning: vi.fn().mockResolvedValue(false),
       restart: vi.fn(),
       task: mockTask,
       cancel: vi.fn(),
-      waitForCompletion: vi.fn(),
+      waitForCompletion,
     } as any);
 
     const result = await executeStep(pubsub, initData);
@@ -147,12 +150,17 @@ describe('durable tool-call background task dispatch', () => {
     expect(result.result).toContain('Background task started');
     expect(result.result).toContain('task-abc');
     expect(result.result).toContain(TOOL_NAME);
+    expect(result.providerMetadata).toMatchObject({
+      mastra: { backgroundTask: { taskId: 'task-abc', status: 'running' } },
+    });
+    expect(waitForCompletion).not.toHaveBeenCalled();
   });
 
-  it('waits for fresh awaited background tasks and returns the reconciled terminal result', async () => {
+  it('waits for an awaited task and returns its authoritative result', async () => {
     const pubsub = mockPubsub();
-    setupRegistry();
+    const { messageList } = setupRegistry();
     const initData = makeInitData();
+    const authoritativeResult = { summary: 'authoritative result' };
 
     vi.mocked(resolveBackgroundConfig).mockReturnValue({
       runInBackground: true,
@@ -162,15 +170,25 @@ describe('durable tool-call background task dispatch', () => {
     } as any);
 
     let capturedOnResult: any;
-    const waitForCompletion = vi.fn().mockResolvedValue({
-      id: 'task-awaited',
-      status: 'completed',
-      result: { summary: 'finished' },
+    const waitForCompletion = vi.fn(async () => {
+      await capturedOnResult({
+        runId: RUN_ID,
+        taskId: 'task-awaited',
+        toolCallId: TOOL_CALL_ID,
+        toolName: TOOL_NAME,
+        agentId: AGENT_ID,
+        result: authoritativeResult,
+        status: 'completed',
+        startedAt: new Date(),
+        completedAt: new Date(),
+      });
+      return { id: 'task-awaited', status: 'completed', result: authoritativeResult };
     });
-    vi.mocked(createBackgroundTask).mockImplementation((_manager: any, options: any) => {
-      capturedOnResult = options.context.onResult;
+    vi.mocked(createBackgroundTask).mockImplementation((_mgr: any, opts: any) => {
+      capturedOnResult = opts.context.onResult;
       return {
         dispatch: vi.fn().mockResolvedValue({ task: { id: 'task-awaited' }, fallbackToSync: false }),
+        checkIfExisting: vi.fn().mockResolvedValue(undefined),
         checkIfRunning: vi.fn().mockResolvedValue(false),
         restart: vi.fn(),
         task: { id: 'task-awaited' },
@@ -179,39 +197,20 @@ describe('durable tool-call background task dispatch', () => {
       } as any;
     });
 
-    let settled = false;
-    const execution = executeStep(pubsub, initData).finally(() => {
-      settled = true;
-    });
-    await vi.waitFor(() => expect(waitForCompletion).toHaveBeenCalledOnce());
-    expect(settled).toBe(false);
+    const result = await executeStep(pubsub, initData);
 
-    await capturedOnResult({
-      runId: RUN_ID,
-      taskId: 'task-awaited',
-      toolCallId: TOOL_CALL_ID,
-      toolName: TOOL_NAME,
-      agentId: AGENT_ID,
-      result: { summary: 'finished' },
-      status: 'completed',
-      startedAt: new Date(),
-      completedAt: new Date(),
+    expect(waitForCompletion).toHaveBeenCalledWith({ abortSignal: undefined });
+    expect(result.result).toEqual(authoritativeResult);
+    expect(result.providerMetadata).toMatchObject({
+      mastra: { backgroundTask: { taskId: 'task-awaited', status: 'completed' } },
     });
-
-    await expect(execution).resolves.toMatchObject({ result: { summary: 'finished' } });
+    expect(messageList.updateToolInvocation).toHaveBeenCalledTimes(1);
   });
 
-  it('propagates awaited background task failures without executing the tool again', async () => {
+  it('stops awaiting background work when the durable run is aborted', async () => {
     const pubsub = mockPubsub();
-    const execute = vi.fn().mockResolvedValue({ summary: 'sync fallback' });
-    setupRegistry({
-      tools: {
-        [TOOL_NAME]: {
-          execute,
-          backgroundConfig: { enabled: true },
-        },
-      },
-    });
+    const abortController = new AbortController();
+    setupRegistry({ abortSignal: abortController.signal });
     const initData = makeInitData();
 
     vi.mocked(resolveBackgroundConfig).mockReturnValue({
@@ -221,51 +220,641 @@ describe('durable tool-call background task dispatch', () => {
       maxRetries: 0,
     } as any);
 
-    let capturedOnResult: any;
-    const waitForCompletion = vi.fn().mockResolvedValue({
-      id: 'task-failed',
-      status: 'failed',
-      error: { message: 'background failure' },
+    const waitForCompletion = vi.fn(
+      ({ abortSignal }: { abortSignal?: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          abortSignal?.addEventListener('abort', () => reject(abortSignal.reason), { once: true });
+        }),
+    );
+    vi.mocked(createBackgroundTask).mockReturnValue({
+      dispatch: vi.fn().mockResolvedValue({ task: { id: 'task-aborted' }, fallbackToSync: false }),
+      checkIfExisting: vi.fn().mockResolvedValue(undefined),
+      checkIfRunning: vi.fn().mockResolvedValue(false),
+      restart: vi.fn(),
+      task: { id: 'task-aborted' },
+      cancel: vi.fn(),
+      waitForCompletion,
+    } as any);
+
+    const execution = executeStep(pubsub, initData);
+    await vi.waitFor(() => expect(waitForCompletion).toHaveBeenCalledWith({ abortSignal: abortController.signal }));
+    abortController.abort(new Error('durable run aborted'));
+
+    await expect(execution).rejects.toThrow('durable run aborted');
+  });
+
+  it('reconciles an awaited task that completed before workflow replay without dispatching a duplicate', async () => {
+    const pubsub = mockPubsub();
+    const { messageList } = setupRegistry();
+    const initData = makeInitData();
+    const authoritativeResult = { summary: 'persisted result' };
+    const terminalTask = {
+      id: 'task-terminal',
+      status: 'completed',
+      toolName: TOOL_NAME,
+      toolCallId: TOOL_CALL_ID,
+      args: { topic: 'quantum' },
+      agentId: AGENT_ID,
+      runId: RUN_ID,
+      result: authoritativeResult,
+      createdAt: new Date('2026-09-21T12:00:00.000Z'),
+      startedAt: new Date('2026-09-21T12:00:01.000Z'),
+      completedAt: new Date('2026-09-21T12:00:02.000Z'),
+      retryCount: 0,
+      maxRetries: 0,
+      timeoutMs: 30_000,
+    } as any;
+
+    vi.mocked(resolveBackgroundConfig).mockReturnValue({
+      runInBackground: true,
+      disposition: 'awaited',
+      timeoutMs: 30_000,
+      maxRetries: 0,
+    } as any);
+
+    const dispatch = vi.fn();
+    const checkIfRunning = vi.fn();
+    const waitForCompletion = vi.fn().mockResolvedValue(terminalTask);
+    vi.mocked(createBackgroundTask).mockImplementation(
+      () =>
+        ({
+          dispatch,
+          checkIfExisting: vi.fn().mockResolvedValue(terminalTask),
+          checkIfRunning,
+          restart: vi.fn(),
+          task: terminalTask,
+          cancel: vi.fn(),
+          waitForCompletion,
+        }) as any,
+    );
+
+    const result = await executeStep(pubsub, initData);
+
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(checkIfRunning).not.toHaveBeenCalled();
+    expect(waitForCompletion).toHaveBeenCalledWith({ abortSignal: undefined });
+    expect(result.result).toEqual(authoritativeResult);
+    expect(result.providerMetadata).toMatchObject({
+      mastra: { backgroundTask: { taskId: terminalTask.id, status: 'completed' } },
     });
-    vi.mocked(createBackgroundTask).mockImplementation((_manager: any, options: any) => {
-      capturedOnResult = options.context.onResult;
+    expect(messageList.updateToolInvocation).toHaveBeenCalledTimes(1);
+  });
+
+  it('adopts an awaited task that was still pending when the workflow replayed', async () => {
+    const pubsub = mockPubsub();
+    setupRegistry();
+    const initData = makeInitData();
+    const authoritativeResult = { summary: 'persisted pending result' };
+
+    vi.mocked(resolveBackgroundConfig).mockReturnValue({
+      runInBackground: true,
+      disposition: 'awaited',
+      timeoutMs: 30_000,
+      maxRetries: 1,
+    } as any);
+
+    const pendingTask = {
+      id: 'task-pending',
+      status: 'pending',
+      toolName: TOOL_NAME,
+      toolCallId: TOOL_CALL_ID,
+      args: { topic: 'quantum' },
+      agentId: AGENT_ID,
+      runId: RUN_ID,
+      createdAt: new Date('2026-09-21T12:00:00.000Z'),
+      retryCount: 0,
+      maxRetries: 1,
+      timeoutMs: 30_000,
+    } as any;
+    const dispatch = vi.fn().mockResolvedValue({ task: { id: 'task-duplicate' }, fallbackToSync: false });
+    const restart = vi.fn().mockResolvedValue(pendingTask);
+    vi.mocked(createBackgroundTask).mockImplementation(
+      (_manager: any, options: any) =>
+        ({
+          dispatch,
+          checkIfExisting: vi.fn().mockResolvedValue(pendingTask),
+          checkIfRunning: vi.fn().mockResolvedValue(false),
+          restart,
+          task: pendingTask,
+          cancel: vi.fn(),
+          waitForCompletion: vi.fn(async () => {
+            await options.context.onResult({
+              runId: RUN_ID,
+              taskId: 'task-pending',
+              toolCallId: TOOL_CALL_ID,
+              toolName: TOOL_NAME,
+              agentId: AGENT_ID,
+              result: authoritativeResult,
+              status: 'completed',
+              startedAt: new Date(),
+              completedAt: new Date(),
+            });
+            return {
+              id: 'task-pending',
+              status: 'completed',
+              result: authoritativeResult,
+            };
+          }),
+        }) as any,
+    );
+
+    const result = await executeStep(pubsub, initData);
+
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(restart).toHaveBeenCalledTimes(1);
+    expect(result.result).toEqual(authoritativeResult);
+    expect(result.providerMetadata).toMatchObject({
+      mastra: { backgroundTask: { taskId: 'task-pending', status: 'completed' } },
+    });
+  });
+
+  it('fails closed when an adopted awaited task cannot be restarted', async () => {
+    const pubsub = mockPubsub();
+    setupRegistry();
+    const initData = makeInitData();
+    const runningTask = {
+      id: 'task-running',
+      status: 'running',
+      toolName: TOOL_NAME,
+      toolCallId: TOOL_CALL_ID,
+      args: { topic: 'quantum' },
+      agentId: AGENT_ID,
+      runId: RUN_ID,
+      createdAt: new Date('2026-09-21T12:00:00.000Z'),
+      startedAt: new Date('2026-09-21T12:00:01.000Z'),
+      retryCount: 0,
+      maxRetries: 1,
+      timeoutMs: 30_000,
+    } as any;
+
+    vi.mocked(resolveBackgroundConfig).mockReturnValue({
+      runInBackground: true,
+      disposition: 'awaited',
+      timeoutMs: 30_000,
+      maxRetries: 1,
+    } as any);
+
+    const dispatch = vi.fn();
+    vi.mocked(createBackgroundTask).mockReturnValue({
+      dispatch,
+      checkIfExisting: vi.fn().mockResolvedValue(runningTask),
+      restart: vi.fn().mockRejectedValue(new Error('restart failed')),
+      task: runningTask,
+      cancel: vi.fn(),
+      waitForCompletion: vi.fn(),
+    } as any);
+
+    await expect(executeStep(pubsub, initData)).rejects.toThrow('restart failed');
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('reconciles an adopted task that becomes terminal before restart', async () => {
+    const pubsub = mockPubsub();
+    setupRegistry();
+    const initData = makeInitData();
+    const authoritativeResult = { summary: 'raced terminal result' };
+    const runningTask = {
+      id: 'task-raced',
+      status: 'running',
+      toolName: TOOL_NAME,
+      toolCallId: TOOL_CALL_ID,
+      args: { topic: 'quantum' },
+      agentId: AGENT_ID,
+      runId: RUN_ID,
+      createdAt: new Date('2026-09-21T12:00:00.000Z'),
+      startedAt: new Date('2026-09-21T12:00:01.000Z'),
+      retryCount: 0,
+      maxRetries: 1,
+      timeoutMs: 30_000,
+    } as any;
+    const completedTask = {
+      ...runningTask,
+      status: 'completed',
+      result: authoritativeResult,
+      completedAt: new Date('2026-09-21T12:00:02.000Z'),
+    } as any;
+
+    vi.mocked(resolveBackgroundConfig).mockReturnValue({
+      runInBackground: true,
+      disposition: 'awaited',
+      timeoutMs: 30_000,
+      maxRetries: 1,
+    } as any);
+
+    const dispatch = vi.fn();
+    vi.mocked(createBackgroundTask).mockReturnValue({
+      dispatch,
+      checkIfExisting: vi.fn().mockResolvedValueOnce(runningTask).mockResolvedValueOnce(completedTask),
+      restart: vi.fn().mockRejectedValue(new Error("Cannot restart task in status 'completed'")),
+      task: completedTask,
+      cancel: vi.fn(),
+      waitForCompletion: vi.fn().mockResolvedValue(completedTask),
+    } as any);
+
+    const result = await executeStep(pubsub, initData);
+
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(result.result).toEqual(authoritativeResult);
+    expect(result.providerMetadata).toMatchObject({
+      mastra: { backgroundTask: { taskId: 'task-raced', status: 'completed' } },
+    });
+  });
+
+  it.each([
+    { status: 'failed', error: { message: 'persisted failure' }, expectedError: 'persisted failure' },
+    { status: 'cancelled', error: undefined, expectedError: 'Background task cancelled: task-cancelled' },
+    { status: 'timed_out', error: undefined, expectedError: 'Background task timed out: task-timed_out' },
+  ])('propagates a persisted awaited $status task without dispatching a duplicate', async testCase => {
+    const pubsub = mockPubsub();
+    const { messageList } = setupRegistry();
+    const initData = makeInitData();
+    const terminalTask = {
+      id: `task-${testCase.status}`,
+      status: testCase.status,
+      toolName: TOOL_NAME,
+      toolCallId: TOOL_CALL_ID,
+      args: { topic: 'quantum' },
+      agentId: AGENT_ID,
+      runId: RUN_ID,
+      error: testCase.error,
+      createdAt: new Date('2026-09-21T12:00:00.000Z'),
+      startedAt: new Date('2026-09-21T12:00:01.000Z'),
+      completedAt: new Date('2026-09-21T12:00:02.000Z'),
+      retryCount: 0,
+      maxRetries: 0,
+      timeoutMs: 30_000,
+    } as any;
+
+    vi.mocked(resolveBackgroundConfig).mockReturnValue({
+      runInBackground: true,
+      disposition: 'awaited',
+      timeoutMs: 30_000,
+      maxRetries: 0,
+    } as any);
+
+    const dispatch = vi.fn();
+    vi.mocked(createBackgroundTask).mockReturnValue({
+      dispatch,
+      checkIfExisting: vi.fn().mockResolvedValue(terminalTask),
+      checkIfRunning: vi.fn(),
+      restart: vi.fn(),
+      task: terminalTask,
+      cancel: vi.fn(),
+      waitForCompletion: vi.fn().mockResolvedValue(terminalTask),
+    } as any);
+
+    await expect(executeStep(pubsub, initData)).rejects.toThrow(testCase.expectedError);
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(messageList.updateToolInvocation).toHaveBeenCalledTimes(1);
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolInvocation: expect.objectContaining({
+          state: 'output-error',
+          errorText: `Background task failed: ${testCase.expectedError}`,
+        }),
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('does not reconcile an awaited terminal task twice after the transcript was already persisted', async () => {
+    const pubsub = mockPubsub();
+    const { messageList, saveQueueManager } = setupRegistry();
+    const initData = makeInitData();
+    const authoritativeResult = { summary: 'persisted result' };
+    const terminalTask = {
+      id: 'task-terminal',
+      status: 'completed',
+      toolName: TOOL_NAME,
+      toolCallId: TOOL_CALL_ID,
+      args: { topic: 'quantum' },
+      agentId: AGENT_ID,
+      runId: RUN_ID,
+      result: authoritativeResult,
+      createdAt: new Date('2026-09-21T12:00:00.000Z'),
+      startedAt: new Date('2026-09-21T12:00:01.000Z'),
+      completedAt: new Date('2026-09-21T12:00:02.000Z'),
+      retryCount: 0,
+      maxRetries: 0,
+      timeoutMs: 30_000,
+    } as any;
+    messageList.get.all.db.mockReturnValue([
+      {
+        role: 'assistant',
+        content: {
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: TOOL_CALL_ID,
+                toolName: TOOL_NAME,
+                args: { topic: 'quantum' },
+                result: authoritativeResult,
+              },
+              providerMetadata: {
+                mastra: { backgroundTask: { taskId: terminalTask.id, status: 'completed' } },
+              },
+            },
+          ],
+        },
+      },
+    ]);
+
+    vi.mocked(resolveBackgroundConfig).mockReturnValue({
+      runInBackground: true,
+      disposition: 'awaited',
+      timeoutMs: 30_000,
+      maxRetries: 0,
+    } as any);
+
+    const dispatch = vi.fn();
+    vi.mocked(createBackgroundTask).mockReturnValue({
+      dispatch,
+      checkIfExisting: vi.fn().mockResolvedValue(terminalTask),
+      checkIfRunning: vi.fn(),
+      restart: vi.fn(),
+      task: terminalTask,
+      cancel: vi.fn(),
+      waitForCompletion: vi.fn().mockResolvedValue(terminalTask),
+    } as any);
+
+    const result = await executeStep(pubsub, initData);
+
+    expect(result.result).toEqual(authoritativeResult);
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(messageList.updateToolInvocation).not.toHaveBeenCalled();
+    expect(messageList.add).not.toHaveBeenCalled();
+    expect(saveQueueManager.flushMessages).not.toHaveBeenCalled();
+  });
+
+  it('skips a transcript part from a different background task and applies the reconciled result', async () => {
+    // Providers reuse tool-call ids ("call_0", "call_1", ...) on every turn,
+    // so a memory-backed transcript legitimately contains parts with the same
+    // toolCallId but a different taskId — earlier dispatches, not conflicts.
+    // The identity scan must key on (toolCallId, taskId) and skip foreign
+    // parts instead of failing closed.
+    const pubsub = mockPubsub();
+    const { messageList } = setupRegistry();
+    const initData = makeInitData();
+    const authoritativeResult = { summary: 'persisted result' };
+    const terminalTask = {
+      id: 'task-terminal',
+      status: 'completed',
+      toolName: TOOL_NAME,
+      toolCallId: TOOL_CALL_ID,
+      args: { topic: 'quantum' },
+      agentId: AGENT_ID,
+      runId: RUN_ID,
+      result: authoritativeResult,
+      createdAt: new Date('2026-09-21T12:00:00.000Z'),
+      startedAt: new Date('2026-09-21T12:00:01.000Z'),
+      completedAt: new Date('2026-09-21T12:00:02.000Z'),
+      retryCount: 0,
+      maxRetries: 0,
+      timeoutMs: 30_000,
+    } as any;
+    messageList.get.all.db.mockReturnValue([
+      {
+        role: 'assistant',
+        content: {
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: TOOL_CALL_ID,
+                toolName: TOOL_NAME,
+                args: { topic: 'quantum' },
+                result: { summary: 'different result' },
+              },
+              providerMetadata: {
+                mastra: { backgroundTask: { taskId: 'task-other', status: 'completed' } },
+              },
+            },
+          ],
+        },
+      },
+    ]);
+
+    vi.mocked(resolveBackgroundConfig).mockReturnValue({
+      runInBackground: true,
+      disposition: 'awaited',
+      timeoutMs: 30_000,
+      maxRetries: 0,
+    } as any);
+
+    const dispatch = vi.fn();
+    vi.mocked(createBackgroundTask).mockReturnValue({
+      dispatch,
+      checkIfExisting: vi.fn().mockResolvedValue(terminalTask),
+      checkIfRunning: vi.fn(),
+      restart: vi.fn(),
+      task: terminalTask,
+      cancel: vi.fn(),
+      waitForCompletion: vi.fn().mockResolvedValue(terminalTask),
+    } as any);
+
+    const result = await executeStep(pubsub, initData);
+
+    // The reconciled result is returned and written as this dispatch's own
+    // record; the foreign part is left untouched and nothing re-dispatches.
+    expect(result.result).toEqual(authoritativeResult);
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(messageList.updateToolInvocation).toHaveBeenCalledTimes(1);
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolInvocation: expect.objectContaining({ toolCallId: TOOL_CALL_ID, result: authoritativeResult }),
+      }),
+      expect.objectContaining({
+        backgroundTasks: { [TOOL_CALL_ID]: expect.objectContaining({ taskId: 'task-terminal' }) },
+      }),
+    );
+  });
+
+  it('fails closed when the persisted transcript contains a conflicting terminal status', async () => {
+    const pubsub = mockPubsub();
+    const { messageList } = setupRegistry();
+    const initData = makeInitData();
+    const terminalTask = {
+      id: 'task-terminal',
+      status: 'completed',
+      toolName: TOOL_NAME,
+      toolCallId: TOOL_CALL_ID,
+      args: { topic: 'quantum' },
+      agentId: AGENT_ID,
+      runId: RUN_ID,
+      result: { summary: 'persisted result' },
+      createdAt: new Date('2026-09-21T12:00:00.000Z'),
+      startedAt: new Date('2026-09-21T12:00:01.000Z'),
+      completedAt: new Date('2026-09-21T12:00:02.000Z'),
+      retryCount: 0,
+      maxRetries: 0,
+      timeoutMs: 30_000,
+    } as any;
+    messageList.get.all.db.mockReturnValue([
+      {
+        role: 'assistant',
+        content: {
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: TOOL_CALL_ID,
+                toolName: TOOL_NAME,
+                args: { topic: 'quantum' },
+                result: { summary: 'different result' },
+              },
+              providerMetadata: {
+                mastra: { backgroundTask: { taskId: 'task-terminal', status: 'failed' } },
+              },
+            },
+          ],
+        },
+      },
+    ]);
+
+    vi.mocked(resolveBackgroundConfig).mockReturnValue({
+      runInBackground: true,
+      disposition: 'awaited',
+      timeoutMs: 30_000,
+      maxRetries: 0,
+    } as any);
+
+    const dispatch = vi.fn();
+    vi.mocked(createBackgroundTask).mockReturnValue({
+      dispatch,
+      checkIfExisting: vi.fn().mockResolvedValue(terminalTask),
+      checkIfRunning: vi.fn(),
+      restart: vi.fn(),
+      task: terminalTask,
+      cancel: vi.fn(),
+      waitForCompletion: vi.fn().mockResolvedValue(terminalTask),
+    } as any);
+
+    await expect(executeStep(pubsub, initData)).rejects.toThrow(
+      'Background task status conflict for task "task-terminal": expected "completed", found "failed"',
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(messageList.updateToolInvocation).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { outcome: 'resumed', resumeData: false, checkIfSuspended: true, checkIfRunning: false },
+    { outcome: 'restarted', resumeData: undefined, checkIfSuspended: false, checkIfRunning: true },
+  ])('waits for an awaited $outcome task and returns its authoritative result', async testCase => {
+    const pubsub = mockPubsub();
+    const { messageList } = setupRegistry();
+    const initData = makeInitData();
+    const taskId = `task-${testCase.outcome}`;
+    const authoritativeResult = { summary: `${testCase.outcome} result` };
+
+    vi.mocked(resolveBackgroundConfig).mockReturnValue({
+      runInBackground: true,
+      disposition: 'awaited',
+      timeoutMs: 30_000,
+      maxRetries: 0,
+    } as any);
+
+    let capturedOnResult: any;
+    const resume = vi.fn().mockResolvedValue({ id: taskId });
+    const restart = vi.fn().mockResolvedValue({ id: taskId });
+    const dispatch = vi.fn();
+    const waitForCompletion = vi.fn(async () => {
+      await capturedOnResult({
+        runId: RUN_ID,
+        taskId,
+        toolCallId: TOOL_CALL_ID,
+        toolName: TOOL_NAME,
+        agentId: AGENT_ID,
+        result: authoritativeResult,
+        status: 'completed',
+        startedAt: new Date(),
+        completedAt: new Date(),
+      });
+      return { id: taskId, status: 'completed', result: authoritativeResult };
+    });
+    vi.mocked(createBackgroundTask).mockImplementation((_mgr: any, opts: any) => {
+      capturedOnResult = opts.context.onResult;
       return {
-        dispatch: vi.fn().mockResolvedValue({ task: { id: 'task-failed' }, fallbackToSync: false }),
-        checkIfRunning: vi.fn().mockResolvedValue(false),
-        restart: vi.fn(),
-        task: { id: 'task-failed' },
+        dispatch,
+        resume,
+        checkIfExisting: vi.fn().mockResolvedValue(undefined),
+        checkIfSuspended: vi.fn().mockResolvedValue(testCase.checkIfSuspended),
+        checkIfRunning: vi.fn().mockResolvedValue(testCase.checkIfRunning),
+        restart,
+        task: { id: taskId },
         cancel: vi.fn(),
         waitForCompletion,
       } as any;
     });
 
-    let settled = false;
-    const execution = executeStep(pubsub, initData);
-    void execution.then(
-      () => {
-        settled = true;
-      },
-      () => {
-        settled = true;
-      },
-    );
-    await vi.waitFor(() => expect(waitForCompletion).toHaveBeenCalledOnce());
-    expect(settled).toBe(false);
+    const result = await executeStep(pubsub, initData, undefined, testCase.resumeData);
 
-    await capturedOnResult({
-      runId: RUN_ID,
-      taskId: 'task-failed',
-      toolCallId: TOOL_CALL_ID,
-      toolName: TOOL_NAME,
-      agentId: AGENT_ID,
-      error: { message: 'background failure' },
-      status: 'failed',
-      startedAt: new Date(),
-      completedAt: new Date(),
+    expect(waitForCompletion).toHaveBeenCalledWith({ abortSignal: undefined });
+    expect(result.result).toEqual(authoritativeResult);
+    expect(result.providerMetadata).toMatchObject({
+      mastra: { backgroundTask: { taskId, status: 'completed' } },
+    });
+    expect(messageList.updateToolInvocation).toHaveBeenCalledTimes(1);
+    expect(dispatch).not.toHaveBeenCalled();
+    if (testCase.outcome === 'resumed') {
+      expect(resume).toHaveBeenCalledWith(testCase.resumeData);
+      expect(restart).not.toHaveBeenCalled();
+    } else {
+      expect(restart).toHaveBeenCalledTimes(1);
+      expect(resume).not.toHaveBeenCalled();
+    }
+  });
+
+  it('passes background work identity and disposition to the durable task executor', async () => {
+    const pubsub = mockPubsub();
+    const { entry } = setupRegistry();
+    const initData = makeInitData();
+
+    vi.mocked(resolveBackgroundConfig).mockReturnValue({
+      runInBackground: true,
+      disposition: 'awaited',
+      timeoutMs: 30_000,
+      maxRetries: 0,
+    } as any);
+
+    let capturedContext: any;
+    vi.mocked(createBackgroundTask).mockImplementation((_mgr: any, opts: any) => {
+      capturedContext = opts.context;
+      return {
+        dispatch: vi.fn().mockResolvedValue({ task: { id: 'task-context' }, fallbackToSync: false }),
+        checkIfExisting: vi.fn().mockResolvedValue(undefined),
+        checkIfRunning: vi.fn().mockResolvedValue(false),
+        restart: vi.fn(),
+        task: { id: 'task-context' },
+        cancel: vi.fn(),
+        waitForCompletion: vi.fn(() => new Promise(() => {})),
+      } as any;
     });
 
-    await expect(execution).rejects.toThrow('background failure');
-    expect(execute).not.toHaveBeenCalled();
+    const execution = executeStep(pubsub, initData);
+    await vi.waitFor(() => expect(capturedContext).toBeDefined());
+    await capturedContext.executor.execute({ topic: 'quantum' }, {});
+
+    expect(entry.tools[TOOL_NAME].execute).toHaveBeenCalledWith(
+      { topic: 'quantum' },
+      expect.objectContaining({
+        isBackgroundTask: true,
+        [BACKGROUND_WORK_CONTEXT]: {
+          originRunId: RUN_ID,
+          originToolCallId: TOOL_CALL_ID,
+          taskId: 'task-context',
+          invocationKind: 'tool',
+          disposition: 'awaited',
+        },
+      }),
+    );
+
+    // The awaited step is intentionally still blocked because this test only
+    // exercises the executor context, not terminal task reconciliation.
+    void execution;
   });
 
   it('returns an awaited cancellation without waiting for result reconciliation', async () => {
@@ -291,6 +880,7 @@ describe('durable tool-call background task dispatch', () => {
     const waitForCompletion = vi.fn().mockResolvedValue({ id: 'task-cancelled', status: 'cancelled' });
     vi.mocked(createBackgroundTask).mockReturnValue({
       dispatch: vi.fn().mockResolvedValue({ task: { id: 'task-cancelled' }, fallbackToSync: false }),
+      checkIfExisting: vi.fn().mockResolvedValue(null),
       checkIfRunning: vi.fn().mockResolvedValue(false),
       restart: vi.fn(),
       task: { id: 'task-cancelled' },
@@ -300,110 +890,6 @@ describe('durable tool-call background task dispatch', () => {
 
     await expect(executeStep(pubsub, initData)).rejects.toThrow('Background task cancelled: task-cancelled');
     expect(execute).not.toHaveBeenCalled();
-  });
-
-  it('waits for resumed awaited background tasks', async () => {
-    const pubsub = mockPubsub();
-    setupRegistry();
-    const initData = makeInitData();
-
-    vi.mocked(resolveBackgroundConfig).mockReturnValue({
-      runInBackground: true,
-      disposition: 'awaited',
-      timeoutMs: 30_000,
-      maxRetries: 0,
-    } as any);
-
-    let capturedOnResult: any;
-    const resume = vi.fn().mockResolvedValue({ id: 'task-resumed' });
-    const waitForCompletion = vi.fn().mockResolvedValue({
-      id: 'task-resumed',
-      status: 'completed',
-      result: { summary: 'resumed result' },
-    });
-    vi.mocked(createBackgroundTask).mockImplementation((_manager: any, options: any) => {
-      capturedOnResult = options.context.onResult;
-      return {
-        dispatch: vi.fn(),
-        checkIfSuspended: vi.fn().mockResolvedValue(true),
-        checkIfRunning: vi.fn(),
-        resume,
-        restart: vi.fn(),
-        task: { id: 'task-resumed' },
-        cancel: vi.fn(),
-        waitForCompletion,
-      } as any;
-    });
-
-    const execution = executeStep(pubsub, initData, undefined, { approved: true });
-    await vi.waitFor(() => expect(waitForCompletion).toHaveBeenCalledOnce());
-    await capturedOnResult({
-      runId: RUN_ID,
-      taskId: 'task-resumed',
-      toolCallId: TOOL_CALL_ID,
-      toolName: TOOL_NAME,
-      agentId: AGENT_ID,
-      result: { summary: 'resumed result' },
-      status: 'completed',
-      startedAt: new Date(),
-      completedAt: new Date(),
-    });
-
-    await expect(execution).resolves.toMatchObject({ result: { summary: 'resumed result' } });
-    expect(resume).toHaveBeenCalledWith({ approved: true });
-  });
-
-  it('waits for restarted awaited background tasks', async () => {
-    const pubsub = mockPubsub();
-    setupRegistry();
-    const initData = makeInitData();
-
-    vi.mocked(resolveBackgroundConfig).mockReturnValue({
-      runInBackground: true,
-      disposition: 'awaited',
-      timeoutMs: 30_000,
-      maxRetries: 0,
-    } as any);
-
-    let capturedOnResult: any;
-    const dispatch = vi.fn();
-    const restart = vi.fn().mockResolvedValue({ id: 'task-restarted' });
-    const waitForCompletion = vi.fn().mockResolvedValue({
-      id: 'task-restarted',
-      status: 'completed',
-      result: { summary: 'restarted result' },
-    });
-    vi.mocked(createBackgroundTask).mockImplementation((_manager: any, options: any) => {
-      capturedOnResult = options.context.onResult;
-      return {
-        dispatch,
-        checkIfSuspended: vi.fn().mockResolvedValue(false),
-        checkIfRunning: vi.fn().mockResolvedValue(true),
-        resume: vi.fn(),
-        restart,
-        task: { id: 'task-restarted' },
-        cancel: vi.fn(),
-        waitForCompletion,
-      } as any;
-    });
-
-    const execution = executeStep(pubsub, initData);
-    await vi.waitFor(() => expect(waitForCompletion).toHaveBeenCalledOnce());
-    await capturedOnResult({
-      runId: RUN_ID,
-      taskId: 'task-restarted',
-      toolCallId: TOOL_CALL_ID,
-      toolName: TOOL_NAME,
-      agentId: AGENT_ID,
-      result: { summary: 'restarted result' },
-      status: 'completed',
-      startedAt: new Date(),
-      completedAt: new Date(),
-    });
-
-    await expect(execution).resolves.toMatchObject({ result: { summary: 'restarted result' } });
-    expect(restart).toHaveBeenCalledOnce();
-    expect(dispatch).not.toHaveBeenCalled();
   });
 
   it('exposes the adoption bridge to durable background tools and waits for completion', async () => {
@@ -599,7 +1085,7 @@ describe('durable tool-call background task dispatch', () => {
     );
   });
 
-  it('does not execute synchronously when status chunk emission fails after dispatch', async () => {
+  it('keeps the task dispatched when status chunk emission fails', async () => {
     const pubsub = mockPubsub();
     const execute = vi.fn().mockResolvedValue({ summary: 'sync fallback' });
     setupRegistry({
@@ -627,67 +1113,106 @@ describe('durable tool-call background task dispatch', () => {
       waitForCompletion: vi.fn(),
     } as any);
 
-    await expect(executeStep(pubsub, initData)).rejects.toThrow('status chunk failed');
+    await expect(executeStep(pubsub, initData)).resolves.toEqual(
+      expect.objectContaining({
+        result: expect.stringContaining('Background task started'),
+      }),
+    );
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it('onResult hook injects real result into MessageList and flushes to memory', async () => {
-    const pubsub = mockPubsub();
-    const { messageList, saveQueueManager } = setupRegistry();
-    const initData = makeInitData();
+  it.each([
+    { status: 'completed', existingInvocation: true },
+    { status: 'failed', existingInvocation: true },
+    { status: 'completed', existingInvocation: false },
+    { status: 'failed', existingInvocation: false },
+  ])(
+    'onResult persists $status metadata (existing invocation: $existingInvocation)',
+    async ({ status, existingInvocation }) => {
+      const pubsub = mockPubsub();
+      const { messageList, saveQueueManager } = setupRegistry();
+      const initData = makeInitData();
+      messageList.updateToolInvocation.mockReturnValue(existingInvocation);
+      const providerMetadata = { vendor: { trace: 'keep' }, mastra: { custom: 'keep' } };
 
-    let capturedOnResult: any;
-    vi.mocked(resolveBackgroundConfig).mockReturnValue({
-      runInBackground: true,
-      timeoutMs: 30_000,
-      maxRetries: 0,
-    } as any);
+      let capturedOnResult: any;
+      vi.mocked(resolveBackgroundConfig).mockReturnValue({
+        runInBackground: true,
+        timeoutMs: 30_000,
+        maxRetries: 0,
+      } as any);
 
-    vi.mocked(createBackgroundTask).mockImplementation((_mgr: any, opts: any) => {
-      capturedOnResult = opts.context.onResult;
-      return {
-        dispatch: vi.fn().mockResolvedValue({ task: { id: 't-r' }, fallbackToSync: false }),
-        checkIfRunning: vi.fn().mockResolvedValue(false),
-        restart: vi.fn(),
-        task: { id: 't-r' },
-        cancel: vi.fn(),
-        waitForCompletion: vi.fn(),
-      } as any;
-    });
+      vi.mocked(createBackgroundTask).mockImplementation((_mgr: any, opts: any) => {
+        capturedOnResult = opts.context.onResult;
+        return {
+          dispatch: vi.fn().mockResolvedValue({ task: { id: 't-r' }, fallbackToSync: false }),
+          checkIfRunning: vi.fn().mockResolvedValue(false),
+          restart: vi.fn(),
+          task: { id: 't-r' },
+          cancel: vi.fn(),
+          waitForCompletion: vi.fn(),
+        } as any;
+      });
 
-    await executeStep(pubsub, initData);
+      await executeStep(pubsub, initData, { ...baseInput(), providerMetadata });
 
-    // Simulate bg task completion
-    await capturedOnResult({
-      runId: RUN_ID,
-      taskId: 't-r',
-      toolCallId: TOOL_CALL_ID,
-      toolName: TOOL_NAME,
-      agentId: AGENT_ID,
-      result: { summary: 'real result' },
-      status: 'completed',
-      startedAt: new Date(),
-      completedAt: new Date(),
-    });
+      // Simulate bg task completion
+      await capturedOnResult({
+        runId: RUN_ID,
+        taskId: 't-r',
+        toolCallId: TOOL_CALL_ID,
+        toolName: TOOL_NAME,
+        agentId: AGENT_ID,
+        result: { summary: 'real result' },
+        status,
+        error: status === 'failed' ? { message: 'boom' } : undefined,
+        startedAt: new Date(),
+        completedAt: new Date(),
+      });
 
-    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'tool-invocation',
-        toolInvocation: expect.objectContaining({
-          state: 'result',
-          toolCallId: TOOL_CALL_ID,
-          result: { summary: 'real result' },
+      expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'tool-invocation',
+          providerMetadata: {
+            vendor: { trace: 'keep' },
+            mastra: { custom: 'keep', modelOutput: null, backgroundTask: { taskId: 't-r', status } },
+          },
+          toolInvocation: expect.objectContaining({
+            toolCallId: TOOL_CALL_ID,
+            ...(status === 'failed'
+              ? { state: 'output-error', errorText: 'Background task failed: boom' }
+              : { state: 'result', result: { summary: 'real result' } }),
+          }),
         }),
-      }),
-      expect.objectContaining({
-        backgroundTasks: expect.objectContaining({
-          [TOOL_CALL_ID]: expect.objectContaining({ taskId: 't-r' }),
+        expect.objectContaining({
+          backgroundTasks: expect.objectContaining({
+            [TOOL_CALL_ID]: expect.objectContaining({ taskId: 't-r' }),
+          }),
         }),
-      }),
-    );
+      );
 
-    expect(saveQueueManager.flushMessages).toHaveBeenCalledWith(messageList, 'thread-1', undefined);
-  });
+      if (!existingInvocation) {
+        expect(messageList.add).toHaveBeenCalledWith(
+          [
+            expect.objectContaining({
+              role: 'tool',
+              content: [
+                expect.objectContaining({
+                  type: 'tool-result',
+                  providerOptions: {
+                    vendor: { trace: 'keep' },
+                    mastra: { custom: 'keep', modelOutput: null, backgroundTask: { taskId: 't-r', status } },
+                  },
+                }),
+              ],
+            }),
+          ],
+          'response',
+        );
+      }
+      expect(saveQueueManager.flushMessages).toHaveBeenCalledWith(messageList, 'thread-1', undefined);
+    },
+  );
 
   it('onExecution hook updates message metadata with startedAt/taskId', async () => {
     const pubsub = mockPubsub();
@@ -771,6 +1296,7 @@ describe('durable tool-call background task dispatch', () => {
       type: 'background-task-completed',
       payload: {
         runId: 'run-bg-2',
+        taskId: 't-c',
         toolCallId: TOOL_CALL_ID,
         toolName: TOOL_NAME,
         result: { summary: 'done' },
@@ -781,6 +1307,9 @@ describe('durable tool-call background task dispatch', () => {
     const types = calls.map(c => c[2].type);
     expect(types).toContain('tool-call');
     expect(types).toContain('tool-result');
+    expect(calls.find(c => c[2].type === 'tool-result')?.[2]).toMatchObject({
+      payload: { providerMetadata: { mastra: { backgroundTask: { taskId: 't-c', status: 'completed' } } } },
+    });
   });
 
   it('onChunk emits tool-call + tool-error chunks via PubSub on failure', async () => {
@@ -814,6 +1343,7 @@ describe('durable tool-call background task dispatch', () => {
       type: 'background-task-failed',
       payload: {
         runId: 'run-bg-3',
+        taskId: 't-f',
         toolCallId: TOOL_CALL_ID,
         toolName: TOOL_NAME,
         error: { message: 'boom' },
@@ -824,6 +1354,9 @@ describe('durable tool-call background task dispatch', () => {
     const types = calls.map(c => c[2].type);
     expect(types).toContain('tool-call');
     expect(types).toContain('tool-error');
+    expect(calls.find(c => c[2].type === 'tool-error')?.[2]).toMatchObject({
+      payload: { providerMetadata: { mastra: { backgroundTask: { taskId: 't-f', status: 'failed' } } } },
+    });
   });
 
   it('passes threadId and resourceId in the task payload', async () => {
@@ -883,5 +1416,60 @@ describe('durable tool-call activeTools enforcement', () => {
       }),
     );
     expect(hiddenExecute).not.toHaveBeenCalled();
+  });
+});
+
+describe('durable tool-call background resume with falsy payload (#22363 parity)', () => {
+  const setupSuspendedTask = () => {
+    const pubsub = mockPubsub();
+    setupRegistry();
+    const initData = makeInitData();
+
+    vi.mocked(resolveBackgroundConfig).mockReturnValue({
+      runInBackground: true,
+      timeoutMs: 30_000,
+      maxRetries: 0,
+    } as any);
+
+    const resume = vi.fn().mockResolvedValue({ id: 'resumed-task' });
+    const dispatch = vi.fn().mockResolvedValue({ task: { id: 'brand-new-task' }, fallbackToSync: false });
+    vi.mocked(createBackgroundTask).mockReturnValue({
+      dispatch,
+      resume,
+      checkIfSuspended: vi.fn().mockResolvedValue(true),
+      checkIfRunning: vi.fn().mockResolvedValue(false),
+      restart: vi.fn(),
+      task: { id: 'suspended-task' },
+      cancel: vi.fn(),
+      waitForCompletion: vi.fn(),
+    } as any);
+
+    return { pubsub, initData, resume, dispatch };
+  };
+
+  // A tool with a primitive resumeSchema can be resumed with `false` / `0` / `''`.
+  // Treating those as "no resume data" would dispatch a second task and strand
+  // the suspended one (same bug as #22363 in the regular loop).
+  it.each([false, 0, ''])('resumes the suspended task instead of dispatching when resumeData is %j', async payload => {
+    const { pubsub, initData, resume, dispatch } = setupSuspendedTask();
+
+    const result = await executeStep(pubsub, initData, undefined, payload);
+
+    expect(resume).toHaveBeenCalledWith(payload);
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(result.result).toContain('Background task resumed');
+    expect(result.providerMetadata).toMatchObject({
+      mastra: { backgroundTask: { taskId: 'resumed-task', status: 'running' } },
+    });
+  });
+
+  it('dispatches a fresh task when resumeData is absent', async () => {
+    const { pubsub, initData, resume, dispatch } = setupSuspendedTask();
+
+    const result = await executeStep(pubsub, initData);
+
+    expect(resume).not.toHaveBeenCalled();
+    expect(dispatch).toHaveBeenCalled();
+    expect(result.result).toContain('Background task started');
   });
 });

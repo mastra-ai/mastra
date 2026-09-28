@@ -54,7 +54,7 @@ export const ToolBadge = ({
   status = 'idle',
 }: ToolBadgeProps) => {
   const { pretty: argsPretty, parsed: argsObject } = formatArgs(args);
-  const { icon: ToolIcon, label, detail } = presentTool(toolName, argsObject);
+  const { icon: ToolIcon, label, detail, description } = presentTool(toolName, argsObject);
   const resultPretty =
     result !== undefined && result !== null ? stripSerializedAnsi(stringifyToolValue(result)) : undefined;
 
@@ -79,7 +79,9 @@ export const ToolBadge = ({
   return (
     <BadgeWrapper
       data-testid="tool-badge"
-      header={<ActivityHeadline icon={<ToolIcon aria-hidden />} label={label} detail={detail} />}
+      header={
+        <ActivityHeadline icon={<ToolIcon aria-hidden />} label={label} detail={detail} description={description} />
+      }
       status={status}
       extraInfo={
         metadata?.mode === 'network' ? (

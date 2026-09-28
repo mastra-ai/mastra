@@ -159,4 +159,53 @@ describe('EmptyFactoryState', () => {
       expect(sessionStorage.getItem(ONBOARDING_FACTORY_KEY)).toBe('fp-1');
     });
   });
+
+  describe('once a Factory has been created for the picked repository', () => {
+    it('drops the back-to-vcs affordance so a second pick cannot orphan the first Factory', async () => {
+      sessionStorage.setItem(ONBOARDING_STEP_KEY, 'vcs');
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
+        http.get(`${TEST_BASE_URL}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })),
+        http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+          HttpResponse.json({ enabled: false, configured: false, reauthRequired: false, reason: 'missing_config' }),
+        ),
+        http.post(`${TEST_BASE_URL}/web/factory/projects`, () =>
+          HttpResponse.json({ project: { id: 'fp-1', name: 'hello' } }),
+        ),
+        http.post(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
+          HttpResponse.json({ connection: { id: 'conn-1' } }, { status: 201 }),
+        ),
+        http.post(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections/conn-1/repositories`, () =>
+          HttpResponse.json({
+            projectRepository: {
+              id: 'ghp-1',
+              branch: 'main',
+              sandboxWorkdir: '/workspace/hello',
+              repository: { slug: 'octo/hello', defaultBranch: 'main' },
+            },
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config: {} })),
+        http.put(`${TEST_BASE_URL}/web/intake/config`, async ({ request }) =>
+          HttpResponse.json({ config: await request.json() }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+          HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
+        ),
+      );
+      const user = userEvent.setup();
+
+      renderOnboarding();
+
+      await user.click(await screen.findByRole('button', { name: /Connect GitHub/ }));
+      await user.click(await screen.findByRole('button', { name: /octo\/hello/ }));
+
+      // Landed on project-management with a persisted Factory. Back would
+      // orphan `fp-1` if it let the user land on `vcs` and pick a new repo,
+      // so the button is not offered.
+      expect(await screen.findByRole('heading', { name: 'Connect the work behind the code.' })).toBeInTheDocument();
+      expect(sessionStorage.getItem(ONBOARDING_FACTORY_KEY)).toBe('fp-1');
+      expect(screen.queryByRole('button', { name: /Go back to previous step/ })).not.toBeInTheDocument();
+    });
+  });
 });

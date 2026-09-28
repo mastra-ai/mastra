@@ -1,0 +1,40 @@
+import type { TracingOptions } from '@mastra/core/observability';
+import type { ReactNode } from 'react';
+import { createContext, useContext } from 'react';
+import { useTracingSettingsState } from '../hooks/use-tracing-settings-state';
+
+export type TracingSettings = {
+  tracingOptions?: TracingOptions;
+};
+
+export type TracingSettingsContextType = {
+  setSettings: (settings: TracingSettings) => void;
+  resetAll: () => void;
+  settings?: TracingSettings;
+  entityType?: 'workflow' | 'agent';
+};
+
+// eslint-disable-next-line react-refresh/only-export-components -- provider and its hook share this module
+export const TracingSettingsContext = createContext<TracingSettingsContextType>({
+  setSettings: () => {},
+  resetAll: () => {},
+  settings: undefined,
+  entityType: undefined,
+});
+
+export interface TracingSettingsProviderProps {
+  children: ReactNode;
+  entityId: string;
+  entityType: 'workflow' | 'agent';
+}
+
+export const TracingSettingsProvider = ({ children, entityId, entityType }: TracingSettingsProviderProps) => {
+  const state = useTracingSettingsState({ entityId, entityType });
+
+  return <TracingSettingsContext.Provider value={state}>{children}</TracingSettingsContext.Provider>;
+};
+
+// eslint-disable-next-line react-refresh/only-export-components -- provider and its hook share this module
+export const useTracingSettings = () => {
+  return useContext(TracingSettingsContext);
+};

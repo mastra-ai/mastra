@@ -6,6 +6,7 @@ import {
   useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
 import { getShortId } from '@mastra/playground-ui/components/Text';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { Trash2 } from 'lucide-react';
 import type { MouseEvent, ReactNode, SyntheticEvent } from 'react';
@@ -19,7 +20,6 @@ import {
   experimentColumnLabels,
 } from './experiment-columns';
 import { ExperimentRowCells } from './experiment-row-cells';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface ExperimentsListProps {
   experiments: DatasetExperiment[];

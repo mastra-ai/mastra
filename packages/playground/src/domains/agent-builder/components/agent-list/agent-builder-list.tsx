@@ -3,10 +3,10 @@ import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { LockIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { FavoriteButton } from './favorite-button';
-import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/lib/utils';
 
 export type AgentBuilderListProps = {

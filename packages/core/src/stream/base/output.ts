@@ -31,6 +31,7 @@ import type {
 } from '../types';
 import { safeClose, safeEnqueue } from './input';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
+import { getChunkProducedAt, stampChunkProducedAt } from './produced-at';
 import { getTransformedSchema } from './schema';
 import { packStepMessageMirrors, unpackStepMessageMirrors } from './step-message-mirrors';
 import { dedupeStepRequests, rehydrateStepRequests } from './step-request-dedupe';
@@ -58,7 +59,17 @@ export function createDestructurableOutput<OUTPUT = undefined>(
   }) as MastraModelOutput<OUTPUT>;
 }
 
-function persistProcessorDataChunk(
+/**
+ * Persist a non-transient `data-*` chunk emitted by an output processor's
+ * `writer.custom()` onto the assistant message, so the chunk survives in
+ * thread history instead of being stream-only (#19375). Transient chunks
+ * and non-data chunks are left untouched.
+ *
+ * Exported for the durable engine, whose producer-side processor writers
+ * persist into the workflow-side MessageList (the one serialized into
+ * `messageListState` and flushed to memory at finalize).
+ */
+export function persistProcessorDataChunk(
   messageList: MessageList,
   messageId: string,
   chunk: { type: string; data?: unknown; transient?: boolean },
@@ -1818,17 +1829,25 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    */
   get elementStream(): ReadableStream<OUTPUT extends Array<infer T> ? T : never> {
     let publishedElements = 0;
+    let latestArray: unknown[] = [];
 
     return this.#createEventedStream().pipeThrough(
       new TransformStream<ChunkType<OUTPUT>, OUTPUT extends Array<infer T> ? T : never>({
         transform(chunk, controller) {
           if (chunk.type === 'object') {
             if (Array.isArray(chunk.object)) {
-              // Publish new elements of the array one by one
-              for (; publishedElements < chunk.object.length; publishedElements++) {
+              latestArray = chunk.object;
+              // The trailing element may still be partial (a later chunk can
+              // complete it in place), so only publish elements followed by another.
+              for (; publishedElements < chunk.object.length - 1; publishedElements++) {
                 controller.enqueue(chunk.object[publishedElements]);
               }
             }
+          }
+        },
+        flush(controller) {
+          for (; publishedElements < latestArray.length; publishedElements++) {
+            controller.enqueue(latestArray[publishedElements] as OUTPUT extends Array<infer T> ? T : never);
           }
         },
       }),
@@ -2051,6 +2070,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
 
   #emitChunk(chunk: ChunkType<OUTPUT>) {
+    if (getChunkProducedAt(chunk) === undefined) stampChunkProducedAt(chunk, Date.now());
     this.#bufferedChunks.push(chunk); // add to bufferedChunks for replay in new streams
     this.#emitter.emit('chunk', chunk); // emit chunk for existing listener streams
   }

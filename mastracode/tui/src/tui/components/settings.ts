@@ -385,7 +385,7 @@ export class SettingsComponent extends Box implements Focusable {
             {
               id: 'quietModeMaxToolPreviewLines',
               label: 'Quiet mode tool preview lines',
-              description: 'Maximum compact tool detail preview lines. Set to None to hide previews.',
+              description: 'Preview lines shown under each tool, including shell output. Set to None to hide previews.',
               currentValue: quietPreviewLinesLabel(config.quietModeMaxToolPreviewLines),
               submenu: (_currentValue: string, done: (value?: string) => void) =>
                 new SelectSubmenu(
@@ -394,7 +394,7 @@ export class SettingsComponent extends Box implements Focusable {
                     label: `  ${quietPreviewLinesLabel(lines)}`,
                     description:
                       lines === 0
-                        ? 'Hide compact tool detail previews'
+                        ? 'Hide tool previews and shell output'
                         : `Show up to ${lines} preview line${lines === 1 ? '' : 's'}`,
                   })),
                   String(config.quietModeMaxToolPreviewLines),

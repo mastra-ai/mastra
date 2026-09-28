@@ -239,43 +239,6 @@ describe('tsconfig-paths plugin', () => {
       expect(result.output[0].code).toContain('Mastra');
     });
 
-    it('resolves relative importers from the configured cwd', async () => {
-      const appDir = join(tempDir, 'apps', 'custom');
-      const srcDir = join(appDir, 'src');
-      fs.mkdirSync(srcDir, { recursive: true });
-      fs.writeFileSync(
-        join(appDir, 'tsconfig.json'),
-        JSON.stringify({
-          compilerOptions: {
-            baseUrl: '.',
-            paths: {
-              '@/*': ['src/*'],
-            },
-          },
-        }),
-      );
-      const valueFile = join(srcDir, 'value.js');
-      fs.writeFileSync(valueFile, `export const value = 'resolved';`);
-      fs.writeFileSync(join(srcDir, 'index.js'), `import { value } from '@/value';`);
-
-      const plugin = tsConfigPaths({ cwd: tempDir });
-      const resolveId = typeof plugin.resolveId === 'object' ? plugin.resolveId.handler : plugin.resolveId!;
-      let resolvedImporter: string | undefined;
-      await resolveId.call(
-        {
-          resolve: async (_id: string, importer: string | undefined) => {
-            resolvedImporter = importer;
-            return null;
-          },
-        } as any,
-        'unmapped-package',
-        'apps/custom/src/index.js',
-        { attributes: {}, isEntry: false },
-      );
-
-      expect(resolvedImporter).toBe(join(srcDir, 'index.js'));
-    });
-
     it('should not externalize @mastra/server imports from aliased modules', async () => {
       const tsConfigPath = join(tempDir, 'tsconfig.json');
       fs.writeFileSync(

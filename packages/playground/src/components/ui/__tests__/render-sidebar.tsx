@@ -1,5 +1,6 @@
 import type { BuilderSettingsResponse } from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { SidebarNew } from '@mastra/playground-ui/new/sidebar';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -25,7 +26,6 @@ if (typeof Element !== 'undefined' && typeof Element.prototype.getAnimations !==
 import { AppSidebar } from '../app-sidebar';
 import { RoleImpersonationProvider } from '@/domains/auth/context/role-impersonation-context';
 import type { AuthCapabilities } from '@/domains/auth/types';
-import { LinkComponentProvider } from '@/lib/framework';
 
 export const BASE_URL = 'http://localhost:4111';
 

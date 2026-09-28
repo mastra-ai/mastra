@@ -3,9 +3,8 @@ import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { GitBranch, MessageSquare } from 'lucide-react';
-
-import { useLinkComponent } from '@/lib/framework';
 
 /** Tabs that render a pill in the bar. Routes without a pill pass `'none'`. */
 export type AgentPageTab = 'chat' | 'versions' | 'traces';

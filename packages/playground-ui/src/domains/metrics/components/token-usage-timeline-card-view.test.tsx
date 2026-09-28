@@ -86,7 +86,7 @@ describe('TokenUsageTimelineCardView', () => {
     render(<TokenUsageTimelineCardView data={data} interval="1d" isLoading={false} isError={false} />);
 
     // 1200 + 800 input, 300 + 200 output — not one combined figure.
-    expect(screen.getByText('2k')).toBeTruthy();
+    expect(screen.getByText('2K')).toBeTruthy();
     expect(screen.getByText('500')).toBeTruthy();
   });
 
@@ -97,7 +97,7 @@ describe('TokenUsageTimelineCardView', () => {
     expect(screen.getByText('$0.07')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
-    expect(screen.getByText('2k')).toBeTruthy();
+    expect(screen.getByText('2K')).toBeTruthy();
     expect(screen.queryByText('$0.07')).toBeNull();
   });
 
@@ -190,7 +190,7 @@ describe('TokenUsageTimelineCardView', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Cost' }));
 
-    expect(screen.getByText('0.0700 eur')).toBeTruthy();
+    expect(screen.getByText('0.07 eur')).toBeTruthy();
   });
 
   it('shows a spinner while loading', () => {

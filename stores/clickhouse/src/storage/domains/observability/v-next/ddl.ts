@@ -381,7 +381,7 @@ function buildFallbackCursorExpr(stableKeyExpr: string): string {
   )`;
 }
 
-export function buildDeltaCursorExpr(
+function buildDeltaCursorExpr(
   strategy: ClickHouseDeltaCursorStrategy,
   counterName: string,
   stableKeyExpr: string,

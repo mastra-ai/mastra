@@ -29,7 +29,7 @@ export function CodeDisplay({
               className="absolute inset-0 z-10 rounded-md focus-visible:ring-2 focus-visible:ring-accent1 focus-visible:outline-hidden"
             />
           )}
-          <pre className="pointer-events-none font-mono text-meta whitespace-pre-wrap">{content}</pre>
+          <pre className="pointer-events-none text-meta whitespace-pre-wrap">{content}</pre>
           {isDraft && (
             <div className="mt-1.5">
               <span className="rounded-full bg-yellow-500/20 px-1.5 py-0.5 text-meta text-yellow-500">

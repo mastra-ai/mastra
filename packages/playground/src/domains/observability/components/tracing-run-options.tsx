@@ -1,10 +1,10 @@
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { FieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useTracingSettings } from '@mastra/playground-ui/domains/observability/context/tracing-settings-context';
+import { WorkflowRunOptions } from '@mastra/playground-ui/domains/workflows/workflow/workflow-run-options';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useId } from 'react';
-import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
-import { WorkflowRunOptions } from '@/domains/workflows/workflow/workflow-run-options';
 
 interface TracingRunOptionsProps {
   className?: string;

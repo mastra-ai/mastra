@@ -96,7 +96,7 @@ describe('useTokenUsageTimeSeries', () => {
     const points = result.current.data?.data;
     expect(points).toMatchObject([
       {
-        time: 'Jun 01',
+        time: 'Jun 1',
         tsMs: new Date('2026-06-01T00:00:00.000Z').getTime(),
         input: 1200,
         output: 300,
@@ -104,7 +104,7 @@ describe('useTokenUsageTimeSeries', () => {
         costUnit: 'usd',
       },
       {
-        time: 'Jun 02',
+        time: 'Jun 2',
         tsMs: new Date('2026-06-02T00:00:00.000Z').getTime(),
         input: 800,
         output: 0,
@@ -112,7 +112,7 @@ describe('useTokenUsageTimeSeries', () => {
         costUnit: 'usd',
       },
       {
-        time: 'Jun 03',
+        time: 'Jun 3',
         tsMs: new Date('2026-06-03T00:00:00.000Z').getTime(),
         input: 0,
         output: 200,
@@ -248,7 +248,7 @@ describe('useTokenUsageTimeSeries', () => {
     await waitFor(() => expect(result.current.data?.data).toHaveLength(2));
 
     // The later bucket arrived first; the chart still reads left to right.
-    expect(result.current.data?.data.map(point => point.time)).toEqual(['00:05', '13:45']);
+    expect(result.current.data?.data.map(point => point.time)).toEqual(['12:05 AM', '1:45 PM']);
   });
 
   it('drops the cost unit when two series disagree on it', async () => {
@@ -331,7 +331,7 @@ describe('useTokenUsageTimeSeries', () => {
     const hourly = renderHook(() => useTokenUsageTimeSeries(), { wrapper: wrapperWith('24h') });
     await waitFor(() => expect(hourly.result.current.data?.interval).toBe('1h'));
 
-    expect(hourly.result.current.data?.data.map(point => point.time)).toEqual(['00:05', '13:45']);
+    expect(hourly.result.current.data?.data.map(point => point.time)).toEqual(['12:05 AM', '1:45 PM']);
 
     // The window alone already tells these two apart, so the interval in the key
     // cannot be caught by behaviour — assert the shape of the key itself.

@@ -3,6 +3,7 @@ import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
+import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
 import { LogDataPanel } from '@mastra/playground-ui/domains/logs/components/log-data-panel';
 import { LogsErrorContent } from '@mastra/playground-ui/domains/logs/components/logs-error-content';
 import { LogsListView } from '@mastra/playground-ui/domains/logs/components/logs-list-view';
@@ -37,6 +38,8 @@ const DEFAULT_LOGS_SORT = { key: 'timestamp', direction: 'desc' } as const;
 export default function LogsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const url = useLogsUrlState(searchParams, setSearchParams);
+  // Servers without the trace-query API list threads through `listTracesLight` and don't expose feedback.
+  const traceQuery = useTraceQueryAvailable();
   const { sort, onSortChange } = useUrlSort({
     searchParams,
     setSearchParams,
@@ -224,6 +227,8 @@ export default function LogsPage() {
         selectedSpanId={url.featuredSpanId ?? null}
         onSpanSelect={handleSpanSelect}
         onClose={handleTraceClose}
+        withQueryTrace={traceQuery.enabled}
+        withFeedback={traceQuery.enabled}
       />
     </PageLayout>
   );

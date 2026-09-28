@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type { UpdateExperimentResultParams } from '@mastra/client-js';
+import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
@@ -17,7 +18,6 @@ import {
   resultsResponse,
   updatedResultResponse,
 } from './fixtures/dataset-review-items';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';

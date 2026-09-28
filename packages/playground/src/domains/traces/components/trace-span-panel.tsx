@@ -51,6 +51,10 @@ export interface TraceSpanPanelProps {
   isFullThreadOpen?: boolean;
   /** Enables the in-place "Open full thread" swap; without it the action falls back to a link. */
   onFullThreadOpenChange?: (open: boolean) => void;
+  /** Full-thread view: lists through the trace-query API; `false` falls back to `listTracesLight`. */
+  withQueryTrace: boolean;
+  /** Full-thread view: shows the per-trace Feedback tab. */
+  withFeedback: boolean;
   scoresTabBadge?: ReactNode;
   scoresTabSlot?: TraceDataPanelViewProps['scoresTabSlot'];
   usage?: TraceDataPanelViewProps['usage'];
@@ -99,6 +103,8 @@ export function TraceSpanPanel({
   onHighlightSpans,
   isFullThreadOpen,
   onFullThreadOpenChange,
+  withQueryTrace,
+  withFeedback,
   scoresTabBadge,
   scoresTabSlot,
   usage,
@@ -130,6 +136,8 @@ export function TraceSpanPanel({
       <TraceThreadPanel
         title={title}
         threadId={threadId}
+        withQueryTrace={withQueryTrace}
+        withFeedback={withFeedback}
         onBack={() => onFullThreadOpenChange?.(false)}
         onClose={onClose}
       />

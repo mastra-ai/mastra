@@ -38,6 +38,8 @@ type TraceColumnsMenuProps = {
   /** Top-level metadata keys observed on traces in the current time range, offered in the picker. */
   availableMetadataKeys?: readonly string[];
   usageDisabledReason?: string;
+  /** When false (server without the trace-query API), metadata columns can't be added. Defaults to true. */
+  withQueryTrace?: boolean;
   onToggleColumn: (column: TraceOptionalColumn) => void;
   onAddCustomColumn: (field: TraceCustomColumn) => void;
   onRemoveCustomColumn: (field: TraceCustomColumn) => void;
@@ -50,6 +52,7 @@ export function TraceColumnsMenu({
   preferences,
   availableMetadataKeys = EMPTY_KEYS,
   usageDisabledReason,
+  withQueryTrace = true,
   onToggleColumn,
   onAddCustomColumn,
   onRemoveCustomColumn,
@@ -148,69 +151,77 @@ export function TraceColumnsMenu({
             );
           })}
 
-          <DropdownMenu.Separator />
-          <DropdownMenu.Label>Metadata columns</DropdownMenu.Label>
-          {preferences.metadataKeys.map(key => (
-            <DropdownMenu.CheckboxItem
-              key={key}
-              checked
-              title={key}
-              onCheckedChange={() => onRemoveMetadataColumn(key)}
-            >
-              {key}
-            </DropdownMenu.CheckboxItem>
-          ))}
-          <DropdownMenu.Item onSelect={() => setIsMetadataDialogOpen(true)}>
-            <PlusIcon aria-hidden />
-            Add metadata column
-          </DropdownMenu.Item>
+          {(withQueryTrace || preferences.metadataKeys.length > 0) && (
+            <>
+              <DropdownMenu.Separator />
+              <DropdownMenu.Label>Metadata columns</DropdownMenu.Label>
+              {preferences.metadataKeys.map(key => (
+                <DropdownMenu.CheckboxItem
+                  key={key}
+                  checked
+                  title={key}
+                  onCheckedChange={() => onRemoveMetadataColumn(key)}
+                >
+                  {key}
+                </DropdownMenu.CheckboxItem>
+              ))}
+              {withQueryTrace && (
+                <DropdownMenu.Item onSelect={() => setIsMetadataDialogOpen(true)}>
+                  <PlusIcon aria-hidden />
+                  Add metadata column
+                </DropdownMenu.Item>
+              )}
+            </>
+          )}
 
           <DropdownMenu.Separator />
           <DropdownMenu.Item onSelect={onReset}>Reset to defaults</DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu>
 
-      <Dialog open={isMetadataDialogOpen} onOpenChange={handleDialogOpenChange}>
-        <DialogContent>
-          <form onSubmit={handleAddMetadata}>
-            <DialogHeader>
-              <DialogTitle>Add metadata column</DialogTitle>
-              <DialogDescription>
-                Pick a top-level trace metadata key observed in the current time range, or type one. Only the key is
-                saved, never its values.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogBody>
-              <FieldBlock.Column>
-                <FieldBlock.Label name={METADATA_KEY_FIELD_NAME}>Metadata key</FieldBlock.Label>
-                <Combobox
-                  id={`input-${METADATA_KEY_FIELD_NAME}`}
-                  name={METADATA_KEY_FIELD_NAME}
-                  options={metadataKeyOptions}
-                  value={metadataKey}
-                  onValueChange={key => {
-                    setMetadataKey(key);
-                    setMetadataError(undefined);
-                  }}
-                  allowCustomValue
-                  placeholder="Select a metadata key…"
-                  searchPlaceholder="Search metadata keys…"
-                  emptyText="No metadata keys observed. Type one to add it."
-                  error={metadataError}
-                />
-              </FieldBlock.Column>
-            </DialogBody>
-            <DialogFooter>
-              <Button icon={<X />} type="button" onClick={() => handleDialogOpenChange(false)}>
-                Cancel
-              </Button>
-              <Button icon={<Columns3 />} type="submit" variant="primary">
-                Add column
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {withQueryTrace && (
+        <Dialog open={isMetadataDialogOpen} onOpenChange={handleDialogOpenChange}>
+          <DialogContent>
+            <form onSubmit={handleAddMetadata}>
+              <DialogHeader>
+                <DialogTitle>Add metadata column</DialogTitle>
+                <DialogDescription>
+                  Pick a top-level trace metadata key observed in the current time range, or type one. Only the key is
+                  saved, never its values.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogBody>
+                <FieldBlock.Column>
+                  <FieldBlock.Label name={METADATA_KEY_FIELD_NAME}>Metadata key</FieldBlock.Label>
+                  <Combobox
+                    id={`input-${METADATA_KEY_FIELD_NAME}`}
+                    name={METADATA_KEY_FIELD_NAME}
+                    options={metadataKeyOptions}
+                    value={metadataKey}
+                    onValueChange={key => {
+                      setMetadataKey(key);
+                      setMetadataError(undefined);
+                    }}
+                    allowCustomValue
+                    placeholder="Select a metadata key…"
+                    searchPlaceholder="Search metadata keys…"
+                    emptyText="No metadata keys observed. Type one to add it."
+                    error={metadataError}
+                  />
+                </FieldBlock.Column>
+              </DialogBody>
+              <DialogFooter>
+                <Button icon={<X />} type="button" onClick={() => handleDialogOpenChange(false)}>
+                  Cancel
+                </Button>
+                <Button icon={<Columns3 />} type="submit" variant="primary">
+                  Add column
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   );
 }

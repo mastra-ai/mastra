@@ -198,6 +198,25 @@ describe('ActivityHeadline', () => {
     expect(screen.queryByRole('img', { name: 'Failed' })).toBeNull();
   });
 
+  it('shows a description alone, in place of the label and detail', () => {
+    render(
+      <Activity>
+        <ActivityTrigger>
+          <ActivityHeadline
+            icon={<Search aria-hidden />}
+            label="Run"
+            detail="rg -n processor"
+            description="Finding the processor wiring"
+          />
+        </ActivityTrigger>
+      </Activity>,
+    );
+
+    expect(screen.getByText('Finding the processor wiring')).toBeTruthy();
+    expect(screen.queryByText('Run')).toBeNull();
+    expect(screen.queryByText('rg -n processor')).toBeNull();
+  });
+
   it('marks a failed call', () => {
     render(<Presented status="error" />);
 

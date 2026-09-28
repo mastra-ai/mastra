@@ -21,6 +21,7 @@ import type { PayloadRegistry } from './span-payload-registry';
 import { Reasoning } from '@/domains/chat/messages/reasoning';
 import { Card, CardContent } from '@/ds/components/Card';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
+import { InlineCode } from '@/ds/components/InlineCode/inline-code';
 import { Notice } from '@/ds/components/Notice';
 
 function SpanTextRenderer({ value }: { value: string }) {
@@ -65,7 +66,7 @@ function SpanAgentRunResultRenderer({ value }: { value: AgentRunResult }) {
           {value.tripwire.reason && <Notice.Message>{value.tripwire.reason}</Notice.Message>}
           {value.tripwire.processorId && (
             <div className="text-caption">
-              Processor <code className="font-mono">{value.tripwire.processorId}</code>
+              Processor <InlineCode>{value.tripwire.processorId}</InlineCode>
             </div>
           )}
         </Notice>

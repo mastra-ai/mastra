@@ -11,7 +11,7 @@ import { LoginPage } from '../login-page';
 import { Login } from '@/pages/login';
 import { SignUp } from '@/pages/signup';
 import { server } from '@/test/msw-server';
-vi.mock('@mastra/playground-ui/store/playground-store', () => ({
+vi.mock('@/store/playground-store', () => ({
   usePlaygroundStore: () => ({ requestContext: undefined }),
 }));
 

@@ -16,7 +16,7 @@ import { ActivityItem } from '@mastra/playground-ui/components/ai/activity';
 
 **The `ToolCall` shell is renamed to `Activity`**
 
-The compound parts moved to `components/ai/activity` under new names: `ToolCall*` becomes `Activity*`, `ToolCallPresentedHeader` becomes `ActivityHeadline`, and `ToolCallStatus` becomes `ActivityStatus`. `ActivityHeadline` takes its icon as an element instead of a component. The tool-specific blocks stay in `components/ai/tool-call`: `ToolCallArguments`, `ToolCallOutput`, `ToolCallCommand`, `ToolCallGroup` and `presentTool`.
+The compound parts moved to `components/ai/activity` under new names: `ToolCall*` becomes `Activity*`, `ToolCallPresentedHeader` becomes `ActivityHeadline`, and `ToolCallStatus` becomes `ActivityStatus`. `ActivityHeadline` takes its icon as an element instead of a component, and keeps the `description` prop that shows a command's description in place of its label and detail. The tool-specific blocks stay in `components/ai/tool-call`: `ToolCallArguments`, `ToolCallOutput`, `ToolCallCommand`, `ToolCallGroup` and `presentTool`.
 
 ```tsx
 // Before

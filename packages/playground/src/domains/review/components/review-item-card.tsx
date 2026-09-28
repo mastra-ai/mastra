@@ -211,9 +211,9 @@ export function ReviewItemCard({
               <Txt variant="meta" tone="muted">
                 Experiment:
               </Txt>
-              <code className="rounded bg-background px-1.5 py-0.5 font-mono text-meta text-muted-foreground">
+              <Txt as="span" variant="meta" tone="muted" font="mono">
                 {item.experimentId.slice(0, 8)}
-              </code>
+              </Txt>
             </div>
           )}
           <div>

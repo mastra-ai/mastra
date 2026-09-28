@@ -7,11 +7,11 @@ import type { ToolApprovalButtonsProps } from '@mastra/playground-ui/domains/cha
 import { ToolApprovalButtons } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronUpIcon, CopyIcon, CheckIcon, FolderTree, HardDrive } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import type { DataMessagePart } from '../tool-card';
-import { useLinkComponent } from '@/lib/framework';
 
 // Matches the shape returned by workspace.getInfo()
 interface WorkspaceMetadata {
@@ -203,7 +203,7 @@ export const FileTreeBadge = ({
               </div>
 
               {/* Tree content */}
-              <pre className="text-mastra-el-6 max-h-dropdown overflow-x-auto overflow-y-auto p-3 font-mono text-caption whitespace-pre">
+              <pre className="text-mastra-el-6 max-h-dropdown overflow-x-auto overflow-y-auto p-3 text-caption whitespace-pre">
                 {treeOutput}
               </pre>
             </div>

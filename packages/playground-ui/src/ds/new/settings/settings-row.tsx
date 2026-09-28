@@ -1,5 +1,6 @@
 import { LockKeyholeIcon } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
+import { FieldBlockErrorMsg } from '@/ds/components/FormFieldBlocks/block/field-block-error-msg';
 import { Label } from '@/ds/components/Label/label';
 import { cn } from '@/lib/utils';
 
@@ -10,6 +11,8 @@ export type SettingsRowProps = Omit<ComponentProps<'div'>, 'children'> & {
   children?: ReactNode;
   tone?: 'default' | 'destructive';
   viewOnly?: boolean;
+  required?: boolean;
+  errorMsg?: ReactNode;
 };
 
 type SettingsRowLayoutProps = SettingsRowProps & {
@@ -25,6 +28,8 @@ export function SettingsRowLayout({
   layout,
   tone = 'default',
   viewOnly = false,
+  required = false,
+  errorMsg,
   ...props
 }: SettingsRowLayoutProps) {
   const isSectionLayout = layout === 'section';
@@ -64,6 +69,14 @@ export function SettingsRowLayout({
           )}
         >
           {label}
+          {required ? (
+            <>
+              <span aria-hidden className={cn('ml-0.5', viewOnly ? 'text-muted-foreground' : 'text-destructive')}>
+                *
+              </span>
+              <span className="sr-only"> (required)</span>
+            </>
+          ) : null}
         </LabelElement>
         {description != null && (
           <DescriptionElement
@@ -75,6 +88,11 @@ export function SettingsRowLayout({
             {description}
           </DescriptionElement>
         )}
+        {errorMsg ? (
+          <FieldBlockErrorMsg name={htmlFor} className={cn(isSectionLayout && 'mt-1')}>
+            {errorMsg}
+          </FieldBlockErrorMsg>
+        ) : null}
       </div>
       {children != null &&
         (isSectionLayout || viewOnly ? (

@@ -1,12 +1,11 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption } from '@mastra/playground-ui/components/Combobox';
+import { useDatasetMutations, useDataset, useDatasets } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { Check, Tag, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { getAllDatasetTags } from '../datasets-list/helpers';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
-import { useDataset, useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 const CREATE_TAG_VALUE = '__create_tag__';

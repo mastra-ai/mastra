@@ -1,9 +1,9 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { InfoIcon } from 'lucide-react';
-import { useLinkComponent } from '@/lib/framework';
 
 const sectionAccentClasses = {
   amber: '[--section-accent:var(--badge-yellow-fg)]',

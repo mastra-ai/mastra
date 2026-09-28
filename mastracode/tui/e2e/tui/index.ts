@@ -34,6 +34,8 @@ import { browserModelPickerScenario } from './browser-model-picker.js';
 import { browserProfileProviderMismatchScenario } from './browser-profile-provider-mismatch.js';
 import { browserSettingsPersistenceScenario } from './browser-settings-persistence.js';
 import { browserStartupRestoreScenario } from './browser-startup-restore.js';
+import { browserStatusChatModelScenario } from './browser-status-chat-model.js';
+import { browserStatusModelScenario } from './browser-status-model.js';
 import { browserToggleAttachScenario } from './browser-toggle-attach.js';
 import { browserToolUnavailableScenario } from './browser-tool-unavailable.js';
 import { browserViewportScenario } from './browser-viewport.js';
@@ -140,6 +142,7 @@ import {
   pluginsGithubInstallMissingCorepackScenario,
   pluginsGithubInstallPnpm10Scenario,
   pluginsGithubInstallPnpm11Scenario,
+  pluginsGithubInstallPnpm12Scenario,
   pluginsGithubPollUpdateScenario,
   pluginsGithubProviderSwapScenario,
   pluginsLocalHotReloadScenario,
@@ -156,6 +159,8 @@ import { providerHistoryRejectionRetryScenario } from './provider-history-reject
 import { pruneCommandScenario } from './prune-command.js';
 import { pruneRenderStateScenario } from './prune-render-state.js';
 import { quietSettingsScenario } from './quiet-settings.js';
+import { quietShellDescriptionScenario } from './quiet-shell-description.js';
+import { quietShellGroupedScenario } from './quiet-shell-grouped.js';
 import { quietStreamingPreviewHeightScenario } from './quiet-streaming-preview-height.js';
 import { quietToolHistoryParityScenario } from './quiet-tool-history-parity.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
@@ -251,6 +256,8 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'browser-model-picker': browserModelPickerScenario,
   'browser-viewport': browserViewportScenario,
   'browser-settings-persistence': browserSettingsPersistenceScenario,
+  'browser-status-model': browserStatusModelScenario,
+  'browser-status-chat-model': browserStatusChatModelScenario,
   'browser-startup-restore': browserStartupRestoreScenario,
   'browser-tool-unavailable': browserToolUnavailableScenario,
   'browserbase-startup-restore': browserbaseStartupRestoreScenario,
@@ -350,6 +357,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'plugins-local-hot-reload': pluginsLocalHotReloadScenario,
   'plugins-github-install-gh-cli-pnpm-10': pluginsGithubInstallPnpm10Scenario,
   'plugins-github-install-gh-cli-pnpm-11': pluginsGithubInstallPnpm11Scenario,
+  'plugins-github-install-gh-cli-pnpm-12': pluginsGithubInstallPnpm12Scenario,
   'plugins-github-install-missing-corepack': pluginsGithubInstallMissingCorepackScenario,
   'plugins-github-install-invalid-package-manager': pluginsGithubInstallInvalidPackageManagerScenario,
   'plugins-github-poll-update': pluginsGithubPollUpdateScenario,
@@ -369,6 +377,8 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'prune-render-state': pruneRenderStateScenario,
   'cross-agent-settings': crossAgentSettingsScenario,
   'quiet-settings': quietSettingsScenario,
+  'quiet-shell-description': quietShellDescriptionScenario,
+  'quiet-shell-grouped': quietShellGroupedScenario,
   'web-search-provider-settings': webSearchProviderSettingsScenario,
   'quiet-streaming-preview-height': quietStreamingPreviewHeightScenario,
   'quiet-tool-history-parity': quietToolHistoryParityScenario,

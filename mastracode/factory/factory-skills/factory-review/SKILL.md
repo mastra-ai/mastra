@@ -5,6 +5,8 @@ description: Review a pull request for a Factory work item — history and conte
 
 # Factory Review
 
+**Role guard:** only run this skill when the `factory-phase` signal shows `role="review"`. Under any other role, stop immediately: do not review, comment, label, approve, or transition the work item, and report that review skills are not available to this role.
+
 Review the pull request behind this Factory work item — build its history and context first, then judge correctness, tests, scope, and pattern-consistency — and finish by publishing the verdict on the PR, posting a verdict handoff, and requesting the stage transition.
 
 You are working in a bound Factory session. Complete the full review in one pass, then make `factory_transition_work_item` your terminal step — one transition request, repeated only if the governed transition rejects it and only with the rejection reason addressed. Never wait for or solicit human input mid-run; every judgment call is yours to resolve.
@@ -138,6 +140,8 @@ First, compose the **review handoff** — don't send it to the conversation yet;
 - **Open questions** — any decision that genuinely needs a human.
 
 End the handoff with `Review runtime: <model>, reasoning setting: <reasoning>.`, copying both values verbatim from the current `factory-phase` signal.
+
+**The head must not have moved.** Immediately before publishing, run `gh pr view <number> --json headRefOid --jq .headRefOid` and compare it with the SHA your verification ran on (`git rev-parse HEAD`). A push can land while you verify or wait on bots, and a verdict on a superseded head misleads the author. If the head moved, do not publish: refresh the checkout to the new head, review the new commits and re-run the verification they affect, revise the handoff, then check again. Name the reviewed head SHA in the handoff.
 
 Next, publish the review on the PR itself — this is part of every pass, not something to wait to be asked for. Write the handoff body to `.artifacts/factory-review/pr-<number>.md` and submit a PR review matching the verdict:
 

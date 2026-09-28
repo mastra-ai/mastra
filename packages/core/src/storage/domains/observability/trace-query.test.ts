@@ -19,6 +19,7 @@ import {
   planThreadQuery,
   planTraceQuery,
   planTraceQueryObservedFields,
+  planTraceQuerySelectionPredicate,
   planTraceQueryValues,
   TRACE_QUERY_DISCOVERY_DEFAULT_LIMIT,
   TRACE_QUERY_DISCOVERY_MAX_LIMIT,
@@ -1314,6 +1315,29 @@ describe('planTraceQuery', () => {
       ),
     );
     expect(JSON.stringify(error.issues)).not.toContain(secret);
+  });
+});
+
+describe('planTraceQuerySelectionPredicate', () => {
+  it('plans the same trusted predicate as planTraceQuery and reports issues under the given path', () => {
+    const where: TraceQueryPredicate = {
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: '${status}' }, right: { literal: 'error' } },
+        { spans: { some: { op: 'eq', left: { path: 'name' }, right: { literal: 'tool' } } } },
+      ],
+    };
+    const issues: TraceQueryValidationError['issues'] = [];
+    expect(planTraceQuerySelectionPredicate(where, issues)).toEqual(
+      planTraceQuery(parsed({ ...baseRequest, where })).where,
+    );
+    expect(issues).toEqual([]);
+
+    const invalid: TraceQueryPredicate = { op: 'eq', left: { path: 'attributes.foo' }, right: { literal: 1 } };
+    expect(planTraceQuerySelectionPredicate(invalid, issues, ['selection', 'where'])).toBeUndefined();
+    expect(issues).toEqual([
+      expect.objectContaining({ code: 'field_not_allowed', path: ['selection', 'where', 'left', 'path'] }),
+    ]);
   });
 });
 

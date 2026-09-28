@@ -5,11 +5,11 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
+import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { X } from 'lucide-react';
 import { useState } from 'react';
-import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 
 type ExpectedTrajectory = AddDatasetItemParams['expectedTrajectory'];
 
