@@ -56,74 +56,6 @@ import { defaultTypingStatus } from './typing-status';
 import type { TypingStatusContext, TypingStatusFn } from './typing-status';
 import { resolveWaitUntil } from './wait-until';
 
-type ChannelErrorDetails = {
-  name: string;
-  message: string;
-  stack?: string;
-  cause?: ChannelErrorDetails;
-};
-
-// This only recognizes labelled credentials and URL credentials, not arbitrary secrets in prose.
-function scrubChannelDiagnostic(value: string): string {
-  return value
-    .replace(/\bauthorization\b["']?\s*[:=]?\s*["']?\s*(?:bearer|basic)\s+[^\s"',;}\]]+/gi, 'Authorization [REDACTED]')
-    .replace(
-      /(\b(?:token|password|api[_-]key)\b["']?\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}\]"']+)/gi,
-      '$1[REDACTED]',
-    )
-    .replace(/\b[a-z][a-z\d+.-]*:\/\/[^\s<>"']+/gi, url =>
-      url.replace(/^(\w[\w+.-]*:\/\/)[^/?#]*@/, '$1[REDACTED]@').replace(/[?#].*$/, '[REDACTED]'),
-    );
-}
-
-function channelErrorDiagnostic(err: unknown, thread: Thread, message: Message) {
-  const readCorrelation = (read: () => unknown): string | undefined => {
-    try {
-      const value = read();
-      return typeof value === 'string' ? scrubChannelDiagnostic(value) : undefined;
-    } catch {
-      return undefined;
-    }
-  };
-  const correlation = {
-    platform: readCorrelation(() => thread.adapter.name) ?? 'unknown',
-    threadId: readCorrelation(() => thread.id),
-    messageId: readCorrelation(() => message.id),
-    authorId: readCorrelation(() => message.author?.userId),
-  };
-  let error: ChannelErrorDetails;
-  try {
-    const seen = new Set<object>();
-    const project = (value: unknown, depth: number): ChannelErrorDetails => {
-      const object = value !== null && typeof value === 'object' ? value : undefined;
-      if (object && seen.has(object)) return { name: 'Error', message: '[Circular cause]' };
-      if (depth > 5) return { name: 'Error', message: '[Cause depth limit]' };
-      if (!object) {
-        return { name: 'Error', message: typeof value === 'string' ? scrubChannelDiagnostic(value) : 'Unknown error' };
-      }
-      seen.add(object);
-      const name = Reflect.get(object, 'name');
-      const message = Reflect.get(object, 'message');
-      const stack = Reflect.get(object, 'stack');
-      const cause = Reflect.get(object, 'cause');
-      return {
-        name: typeof name === 'string' ? scrubChannelDiagnostic(name) : 'Error',
-        message: typeof message === 'string' ? scrubChannelDiagnostic(message) : 'Unknown error',
-        ...(typeof stack === 'string' ? { stack: scrubChannelDiagnostic(stack) } : {}),
-        ...(cause !== undefined ? { cause: project(cause, depth + 1) } : {}),
-      };
-    };
-    // Only the detached allowlist reaches the serializer, never the original exception or its toJSON.
-    error = JSON.parse(JSON.stringify(getErrorFromUnknown(project(err, 0), { maxDepth: 6 })));
-  } catch {
-    error = { name: 'Error', message: 'Error details unavailable' };
-  }
-  // Omit unavailable correlation consistently in both the message and structured metadata.
-  const record = JSON.parse(JSON.stringify({ ...correlation, error }));
-  const platform = JSON.stringify(correlation.platform).slice(1, -1);
-  return { record, message: `[${platform}] Error handling message ${JSON.stringify(record)}` };
-}
-
 /** Platforms whose chat-SDK adapters render interactive approval buttons. */
 const APPROVAL_BUTTON_PLATFORMS = new Set(['slack', 'discord', 'teams', 'gchat', 'google-chat', 'telegram']);
 
@@ -1242,27 +1174,33 @@ export class AgentChannels {
   }
 
   private async handleRunError(chatThread: Thread, message: Message, err: unknown): Promise<void> {
-    let refusal: ChannelSessionRejectedError | undefined;
-    try {
-      if (err instanceof ChannelSessionRejectedError) refusal = err;
-    } catch {
-      // A proxy can throw during instanceof; it must still reach the guarded diagnostic.
-    }
+    const error = err instanceof Error ? err : new Error(String(err));
     // A refused request is not a malfunction: the host decided this sender
     // gets nothing. Log it and stop — posting would echo the host's
     // authorization message into the chat thread and confirm the bot is
     // present to a sender who was just turned away.
-    if (refusal) {
+    if (err instanceof ChannelSessionRejectedError) {
       this.log('info', `[${chatThread.adapter.name}] Session resolver refused the message`, {
         messageId: message.id,
         authorId: message.author?.userId,
-        reason: refusal.message,
+        reason: error.message,
       });
       return;
     }
-    const diagnostic = channelErrorDiagnostic(err, chatThread, message);
-    this.log('error', diagnostic.message, diagnostic.record);
-    const error = err instanceof Error ? err : new Error(String(err));
+    let loggedError;
+    try {
+      loggedError = JSON.parse(JSON.stringify(getErrorFromUnknown(err)));
+    } catch {
+      loggedError = { message: error.message, serializationError: 'Error serialization failed' };
+    }
+    const diagnostic = {
+      platform: chatThread.adapter.name,
+      threadId: chatThread.id,
+      messageId: message.id,
+      authorId: message.author?.userId,
+      error: loggedError,
+    };
+    this.log('error', `[${chatThread.adapter.name}] Error handling message ${JSON.stringify(diagnostic)}`, diagnostic);
     try {
       const adapterConfig = this.adapterConfigs[chatThread.adapter.name];
       const errorMessage = adapterConfig?.formatError ? adapterConfig.formatError(error) : `❌ Error: ${error.message}`;

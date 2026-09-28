@@ -1875,7 +1875,6 @@ describe('AgentChannels', () => {
         });
         const incoming = { ...message, id: '1790610846.868069', author: { userId: 'U123' } };
         return {
-          mastra,
           thread,
           incoming,
           storage,
@@ -1886,7 +1885,7 @@ describe('AgentChannels', () => {
             const rendered = format(...output.mock.calls[0]!);
             expect(rendered).toMatch(/^\[CHANNEL\] \[/);
             const record = embeddedRecord(rendered.split('\n')[0]!);
-            expect(output.mock.calls[0]![1]).toEqual({ args: [record] });
+            expect(JSON.parse(JSON.stringify(output.mock.calls[0]![1]))).toEqual({ args: [record] });
             return record;
           },
         };
@@ -1912,167 +1911,71 @@ describe('AgentChannels', () => {
           },
         });
         expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: SYNTHETIC_PRE_SESSION_FAILURE');
-        expect(Object.hasOwn(error, 'toJSON')).toBe(false);
-        expect(Object.hasOwn(cause, 'toJSON')).toBe(false);
       });
 
-      it.each([
-        ['plain string', 'plain string'],
-        [{ message: 'object message', body: 'SENTINEL_BODY' }, 'object message'],
-        [null, 'Unknown error'],
-        [undefined, 'Unknown error'],
-        [{ body: 'SENTINEL_BODY' }, 'Unknown error'],
-      ])('safely logs non-Error throws: %j', async (thrown, expected) => {
-        const f = await fixture(thrown);
+      it('serializes a string throw with the shared error helper', async () => {
+        const f = await fixture('plain string');
         await f.run();
-        expect(f.record().error).toEqual({ name: 'Error', message: expected });
-        expect(f.thread.post).toHaveBeenCalledTimes(1);
-        expect(format(...f.output.mock.calls[0]!)).not.toContain('SENTINEL_BODY');
+        expect(f.record().error).toEqual({ name: 'Error', message: 'plain string' });
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: plain string');
       });
 
-      it.each([
-        Object.create(null),
-        {
-          toString() {
-            throw new Error('coercion failed');
-          },
-        },
-      ])('emits diagnostics before the existing non-coercible feedback conversion rejects', async thrown => {
-        const f = await fixture(thrown);
-        await expect(f.run()).rejects.toThrow();
-        expect(f.record().error.message).toBe('Unknown error');
-        expect(f.thread.post).not.toHaveBeenCalled();
-      });
-
-      it('bounds causes to five real levels and a terminal marker, with cycle detection first', async () => {
-        const nodes = Array.from({ length: 7 }, (_, i) => new Error(`level-${i}`));
-        nodes.forEach((node, i) => {
-          node.cause = nodes[i + 1];
-        });
-        const f = await fixture(nodes[0]);
+      it('passes the original Error to the custom formatter', async () => {
+        const error = new Error('failure');
+        const formatError = vi.fn(() => 'custom feedback');
+        const f = await fixture(error, { formatError });
         await f.run();
-        let node = f.record().error;
-        for (let depth = 0; depth <= 5; depth++) {
-          expect(node.message).toBe(`level-${depth}`);
-          node = node.cause;
-        }
-        expect(node).toEqual({ name: 'Error', message: '[Cause depth limit]' });
-        expect(JSON.stringify(f.record())).not.toContain('level-6');
-        f.output.mockClear();
-        nodes[5]!.cause = nodes[0];
-        await f.run();
-        node = f.record().error;
-        for (let depth = 0; depth <= 5; depth++) node = node.cause;
-        expect(node).toEqual({ name: 'Error', message: '[Circular cause]' });
-        expect(f.thread.post).toHaveBeenCalledTimes(2);
+        expect(f.record().error.message).toBe('failure');
+        expect(formatError).toHaveBeenCalledExactlyOnceWith(error);
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('custom feedback');
       });
 
-      it.each([false, true])(
-        'never invokes custom toJSON (throwing: %s), and preserves formatter identity',
-        async throws => {
-          const toJSON = vi.fn(() => {
-            if (throws) throw new Error('serialization failed');
-            return { token: 'SENTINEL_JSON' };
-          });
-          const error = Object.assign(new Error('useful message'), { toJSON, headers: { token: 'SENTINEL_HEADER' } });
-          const formatError = vi.fn(() => 'custom feedback');
-          const descriptors = Object.getOwnPropertyDescriptors(error);
-          const f = await fixture(error, { formatError });
-          await f.run();
-          expect(f.record().error).toEqual({ name: 'Error', message: error.message, stack: error.stack });
-          expect(formatError).toHaveBeenCalledExactlyOnceWith(error);
-          expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('custom feedback');
-          expect(toJSON).not.toHaveBeenCalled();
-          expect(Object.getOwnPropertyDescriptors(error)).toEqual(descriptors);
-          expect(format(...f.output.mock.calls[0]!)).not.toContain('SENTINEL');
-        },
-      );
-
-      it.each(['stack', 'cause'])(
-        'falls back when the %s getter throws without suppressing feedback',
-        async property => {
-          const error = new Error('readable message');
-          Object.defineProperty(error, property, {
-            get() {
-              throw new Error('SENTINEL_GETTER');
-            },
-          });
+      it.each(['toJSON', 'frozen', 'circular', 'bigint', 'cause', 'toString'])(
+        'keeps feedback and later senders working when %s prevents serialization',
+        async kind => {
+          const error = new Error('failure');
+          if (kind === 'toJSON') {
+            Object.assign(error, {
+              toJSON: () => {
+                throw new Error('serializer failed');
+              },
+            });
+          } else if (kind === 'frozen') {
+            Object.freeze(error);
+          } else if (kind === 'circular') {
+            Object.assign(error, { self: error });
+          } else if (kind === 'bigint') {
+            Object.assign(error, { value: 1n });
+          } else if (kind === 'toString') {
+            Object.assign(error, {
+              value: 1n,
+              toString: () => {
+                throw new Error('coercion failed');
+              },
+            });
+          } else {
+            error.cause = error;
+          }
           const f = await fixture(error);
-          await f.run();
-          expect(f.record().error).toEqual({ name: 'Error', message: 'Error details unavailable' });
-          expect(f.record().threadId).toBe(f.thread.id);
-          expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: readable message');
+          f.storage.mockImplementationOnce(() => {
+            throw error;
+          });
+          f.storage.mockImplementationOnce(() => {
+            throw new Error('later failure');
+          });
+          await expect(f.run([{ ...f.incoming, id: 'earlier', author: { userId: 'OTHER' } }])).resolves.toBeUndefined();
+          expect(f.thread.post).toHaveBeenNthCalledWith(1, '❌ Error: failure');
+          expect(f.thread.post).toHaveBeenNthCalledWith(2, '❌ Error: later failure');
+          expect(f.output).toHaveBeenCalledTimes(2);
+          const records = f.output.mock.calls.map(call => embeddedRecord(format(...call).split('\n')[0]!));
+          expect(records[0].error).toEqual({
+            message: 'failure',
+            serializationError: 'Error serialization failed',
+          });
+          expect(records[1].error.message).toBe('later failure');
+          expect(records.map(record => record.authorId)).toEqual(['OTHER', 'U123']);
         },
       );
-
-      it('falls back for a throwing proxy read and scrubs correlation even in the fallback prefix', async () => {
-        const error = new Proxy(new Error('original'), {
-          get() {
-            throw new Error('SENTINEL_PROXY');
-          },
-        });
-        const f = await fixture(error, {
-          platform: 'custom token=SENTINEL_PLATFORM',
-          threadId: 'password=SENTINEL_THREAD',
-          formatError: () => 'unchanged feedback',
-        });
-        await f.run();
-        expect(f.record().error.message).toBe('Error details unavailable');
-        expect(format(...f.output.mock.calls[0]!)).not.toContain('SENTINEL');
-        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('unchanged feedback');
-      });
-
-      it('logs before a throwing prototype check escapes feedback normalization', async () => {
-        const details = { name: 'Error', message: 'proxy failure', stack: 'proxy stack' };
-        const error = new Proxy(details, {
-          getPrototypeOf() {
-            throw new Error('SENTINEL_PROTOTYPE');
-          },
-        });
-        const f = await fixture(error);
-        f.storage.mockRestore();
-        // Mock call tracking inspects thrown values; throw this proxy without that interception.
-        f.mastra.getStorage = () => {
-          throw error;
-        };
-        await expect(f.run()).rejects.toThrow('SENTINEL_PROTOTYPE');
-        expect(f.record().error).toEqual(details);
-        expect(format(...f.output.mock.calls[0]!)).not.toContain('SENTINEL');
-        expect(f.thread.post).not.toHaveBeenCalled();
-      });
-
-      it('scrubs the bounded credential forms at every level and in correlation, retaining benign text', async () => {
-        const sensitive =
-          'useful Authorization: Bearer SENTINEL_BEARER; authorization="Basic SENTINEL_BASIC"; ' +
-          'token=SENTINEL_TOKEN password="SENTINEL_PASSWORD with spaces" "api_key": "SENTINEL_KEY" api-key=\'SENTINEL_DASH\' ' +
-          'https://user:SENTINEL_USER@host/path?x=SENTINEL_QUERY#SENTINEL_FRAGMENT';
-        const cause = Object.assign(new Error(sensitive), { stack: `cause frame\n${sensitive}` });
-        const error = Object.assign(new Error(sensitive, { cause }), {
-          stack: `root frame\n${sensitive}`,
-          token: 'SENTINEL_PROP',
-        });
-        const f = await fixture(error, {
-          platform: `custom ${sensitive}`,
-          threadId: sensitive,
-          formatError: () => 'feedback',
-        });
-        await f.run();
-        const record = f.record();
-        expect(record.error.message).toContain('useful');
-        expect(record.error.stack).toContain('root frame\n');
-        expect(record.error.cause.stack).toContain('cause frame\n');
-        expect(record.error.message).toContain('host/path');
-        expect(format(...f.output.mock.calls[0]!)).not.toContain('SENTINEL');
-        expect(JSON.stringify(record)).not.toContain('SENTINEL');
-        expect(record.messageId).toBe('1790610846.868069');
-        expect(record.authorId).toBe('U123');
-      });
-
-      it('escapes newlines in a custom platform prefix without changing the structured identifier', async () => {
-        const f = await fixture(new Error('failure'), { platform: 'custom\nplatform' });
-        await f.run();
-        expect(f.record().platform).toBe('custom\nplatform');
-      });
 
       it('retains ConsoleLogger filter and observability export envelopes', async () => {
         const filter = vi.fn<LogFilter>(() => true);
@@ -2083,7 +1986,7 @@ describe('AgentChannels', () => {
           getLogSink: () => sink,
           options: { correlation: true, export: true },
         });
-        const error = Object.assign(new Error('failure token=SENTINEL_TRANSPORT'), { body: 'SENTINEL_BODY' });
+        const error = new Error('failure');
         const f = await fixture(error, { logger });
         await f.run();
         const record = f.record();
@@ -2096,12 +1999,12 @@ describe('AgentChannels', () => {
         );
         expect(embeddedRecord(filter.mock.calls[0]![0].message)).toEqual(record);
         expect(sink.error).toHaveBeenCalledExactlyOnceWith(expect.any(String), { args: [record] });
+        expect(JSON.parse(JSON.stringify(sink.error.mock.calls[0]![1]))).toEqual({ args: [record] });
         expect(embeddedRecord(sink.error.mock.calls[0]![0])).toEqual(record);
-        expect(record.error).not.toBe(error);
-        expect(JSON.stringify([filter.mock.calls, sink.error.mock.calls])).not.toContain('SENTINEL');
+        expect(JSON.parse(JSON.stringify(filter.mock.calls[0]![0].args))).toEqual([{ args: [record] }]);
       });
 
-      it('retains the same plain record in a custom IMastraLogger', async () => {
+      it('retains structured metadata in a custom IMastraLogger', async () => {
         const capture = vi.fn();
         const logger: IMastraLogger = {
           debug: vi.fn(),
@@ -2113,21 +2016,20 @@ describe('AgentChannels', () => {
           listLogs: async () => ({ logs: [], total: 0, page: 1, perPage: 100, hasMore: false }),
           listLogsByRunId: async () => ({ logs: [], total: 0, page: 1, perPage: 100, hasMore: false }),
         };
-        const error = new Error('failure password=SENTINEL_CUSTOM');
+        const error = new Error('failure');
         const f = await fixture(error, { logger });
         await f.run();
         expect(capture).toHaveBeenCalledTimes(1);
         const [text, metadata] = capture.mock.calls[0]!;
         const record = embeddedRecord(text);
-        expect(metadata).toEqual({ args: [record] });
+        expect(JSON.parse(JSON.stringify(metadata))).toEqual({ args: [record] });
         expect(record).toMatchObject({
           platform: 'slack',
           threadId: f.thread.id,
           messageId: f.incoming.id,
           authorId: 'U123',
         });
-        expect(metadata.args[0].error).not.toBe(error);
-        expect(JSON.stringify(capture.mock.calls)).not.toContain('SENTINEL');
+        expect(metadata.args[0].error).toEqual(record.error);
       });
 
       it('keeps deliberate refusal silent and produces no ordinary error diagnostic', async () => {
