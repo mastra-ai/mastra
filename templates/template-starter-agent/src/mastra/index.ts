@@ -14,6 +14,7 @@ import { RedisServerCache } from '@mastra/redis';
 import Redis from 'ioredis';
 import { agent, hasConnectEnv } from './agents/agent';
 import { startScheduleTool, stopScheduleTool } from './tools/schedule-tools';
+import { seedWelcomeThread } from './welcome';
 import { activityDigestWorkflow } from './workflows/activity-digest';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -65,4 +66,11 @@ export const mastra = new Mastra({
       },
     },
   }),
+});
+
+// On the very first boot the agent speaks first: seed a "Welcome" thread that
+// introduces its capabilities, lists connected integrations, and explains how
+// to edit its system prompt from Studio. No-op once any thread exists.
+void seedWelcomeThread(mastra).catch(error => {
+  mastra.getLogger()?.warn('Failed to seed welcome thread', { error });
 });

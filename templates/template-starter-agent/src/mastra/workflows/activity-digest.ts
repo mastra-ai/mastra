@@ -34,7 +34,7 @@ const READ_VERBS = /(^|_)(get|list|search|retrieve|query|count)(_|$)/;
  * fall back to the first segment for MCP-discovered integrations the static
  * registry doesn't know about.
  */
-function integrationIdForToolKey(key: string): string {
+export function integrationIdForToolKey(key: string): string {
   let best: { id: string; length: number } | undefined;
   for (const { integrationId } of PROVIDERS) {
     for (const prefix of new Set([integrationId, integrationId.replace(/-/g, '_')])) {

@@ -6,6 +6,7 @@ This starter combines the general-purpose agent harness with [`@mastra/connect`]
 
 ## Features
 
+- **The agent speaks first** — on first boot it seeds a "👋 Welcome" thread where the agent introduces its capabilities, lists the integrations it can currently reach, and explains how to edit its system prompt from Studio
 - **Connect tools** — every integration attached to your Mastra platform project (Linear, Notion, …) shows up as agent tools via `tools()`; attach or detach connections on the platform and the agent picks them up without a restart
 - **Connect channels** — chat with the agent from Slack, Telegram, or Discord via `channels()`; channel connections resolve live from the platform too
 - **Durable agent** — the agentic loop runs inside a workflow with chunks flowing through PubSub and a Redis-backed event cache, so streams survive client disconnects and process restarts, and orphaned runs are re-driven on boot
