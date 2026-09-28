@@ -1037,6 +1037,16 @@ async function processOutputStream<OUTPUT = undefined>({
               if (postProcessorResult !== undefined && postProcessorResult !== chunk.payload.result) {
                 (chunk.payload as { result: unknown }).result = postProcessorResult;
               }
+              if (postProcessorResult !== undefined) {
+                // The payload transform ran on the raw result upstream; redo it so
+                // persisted transcript and emitted display state never carry the raw value.
+                const retransformed = await addToolPayloadTransformToChunk(chunk, {
+                  resolveTool,
+                  policy: toolPayloadTransform,
+                  logger,
+                });
+                chunk.metadata = retransformed.metadata;
+              }
             } catch (error) {
               if (error instanceof TripWire) {
                 toolResultTripwire = error;

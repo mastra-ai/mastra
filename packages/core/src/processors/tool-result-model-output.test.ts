@@ -191,6 +191,82 @@ describe('toModelOutput after processToolResult', () => {
     const meta = chunks.find(c => c.type === 'tool-result')?.metadata?.mastra?.toolPayloadTransform;
     expect(meta?.transcript?.['output-available']?.transformed).toBe('T:[REDACTED]');
     expect(meta?.display?.['output-available']?.transformed).toBe('T:[REDACTED]');
+    expect(JSON.stringify(meta)).not.toContain('SECRET-TOKEN');
+  });
+
+  it('default engine applies the payload transform to a rewritten deferred provider-executed result', async () => {
+    // Step 1 calls the provider tool alongside a local one, deferring the provider
+    // result to step 2's stream, where processToolResult can rewrite the call part.
+    let call = 0;
+    const model = new MockLanguageModelV2({
+      doStream: async () => {
+        call++;
+        const head = [
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: `r${call}`, modelId: 'mock', timestamp: new Date(0) },
+        ];
+        const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+        const parts =
+          call === 1
+            ? [
+                ...head,
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-provider',
+                  toolName: 'web_search',
+                  input: '{}',
+                  providerExecuted: true,
+                },
+                { type: 'tool-call', toolCallId: 'tc-1', toolName: 'getSecret', input: '{"q":"x"}' },
+                { type: 'finish', finishReason: 'tool-calls', usage },
+              ]
+            : [
+                ...head,
+                {
+                  type: 'tool-result',
+                  toolCallId: 'call-provider',
+                  toolName: 'web_search',
+                  providerExecuted: true,
+                  result: 'SECRET-TOKEN hits',
+                },
+                { type: 'text-start', id: 't' },
+                { type: 'text-delta', id: 't', delta: 'ok' },
+                { type: 'text-end', id: 't' },
+                { type: 'finish', finishReason: 'stop', usage },
+              ];
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream(parts as any[]),
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'mo-provider',
+      name: 'mo-provider',
+      instructions: 'x',
+      model: model as LanguageModelV2,
+      tools: {
+        getSecret: secretTool(),
+        web_search: { type: 'provider-defined', id: 'openai.web_search', args: {} } as any,
+      },
+      outputProcessors: [redactor as any],
+    });
+    const stream = await agent.stream('go', {
+      maxSteps: 3,
+      transform: {
+        targets: ['display', 'transcript'],
+        transformToolPayload: (ctx: any) => (ctx.phase === 'output-available' ? `T:${String(ctx.output)}` : ctx.input),
+      },
+    } as any);
+    const chunks: any[] = [];
+    for await (const c of stream.fullStream) chunks.push(c);
+
+    const meta = chunks.find(c => c.type === 'tool-result' && c.payload.toolCallId === 'call-provider')?.metadata
+      ?.mastra?.toolPayloadTransform;
+    expect(meta?.transcript?.['output-available']?.transformed).toBe('T:[REDACTED]');
+    expect(meta?.display?.['output-available']?.transformed).toBe('T:[REDACTED]');
+    expect(JSON.stringify(meta)).not.toContain('SECRET-TOKEN');
   });
 
   it('durable engine maps the processor-rewritten result', async () => {
