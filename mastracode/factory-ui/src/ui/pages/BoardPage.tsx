@@ -3,19 +3,21 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { GitBranch, Plus } from 'lucide-react';
-import { useLayoutEffect } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import type { InstalledBoardInfo } from '../../api/types';
 import { useBoardCatalog } from '../../hooks/useBoardCatalog';
 
 import { useRecentAuditEvents } from '../../hooks/useAuditEvents';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
+import { useIntakeConfigQuery } from '../../hooks/useIntakeConfig';
 import { INTAKE_SOURCES, stageContentCount } from '../domains/factory/boardCandidates';
 import type { IntakeSource } from '../domains/factory/boardCandidates';
 import { boardLoadingStages, itemAppearsInStage } from '../domains/factory/boardStages';
 import type { BoardKind } from '../domains/factory/boardStages';
 import { BoardAutomationSettings } from '../domains/factory/components/BoardAutomationSettings';
 import { BoardTooltipDelay } from '../domains/factory/components/BoardCardParts';
+import { RepositoryPickerDialog } from '../domains/factory/components/RepositoryPickerDialog';
 import { BoardColumn, BoardColumnHeader } from '../domains/factory/components/BoardColumn';
 import { BoardColumnEmptyState } from '../domains/factory/components/BoardColumnEmptyState';
 import { ColumnReveal } from '../domains/factory/components/ColumnReveal';
@@ -49,6 +51,7 @@ import { boardFilterParams, boardFiltersActive, boardFiltersFromParams } from '.
 import type { BoardFilterState } from '../domains/factory/boardFilters';
 import { restoreBoardView, saveBoardView } from '../domains/factory/services/boardViews';
 import { candidatePayload } from '../domains/factory/boardDrag';
+import type { DragPayload } from '../domains/factory/boardDrag';
 import { cardMatchesSearch } from '../domains/factory/boardItems';
 import { orderWorkItemsForStage } from '../domains/factory/boardOrder';
 import type { BoardSort } from '../domains/factory/boardOrder';
@@ -182,6 +185,59 @@ function BoardContent({
   const auth = useFactoryAuth();
   const sort = boardSortFromParams(searchParams, auth.data?.user?.userId);
   const items = useBoardItems({ factoryProjectId, kind, currentUserId: auth.data?.user?.userId });
+  const intakeConfig = useIntakeConfigQuery();
+  const [repositoryAction, setRepositoryAction] = useState<((slug: string) => void) | null>(null);
+  const chooseRepository = (
+    source: string,
+    metadata: Record<string, unknown> | null,
+    stage: string,
+    onSelect: (slug: string) => void,
+    onResolved: () => void,
+  ) => {
+    const mappedSlug =
+      source === 'linear-issue' && typeof metadata?.linearProjectId === 'string'
+        ? intakeConfig.data?.linear.repositoryByLinearProject?.[metadata.linearProjectId]
+        : undefined;
+    const knownSlug = typeof metadata?.repository === 'string' ? metadata.repository : mappedSlug;
+    if (
+      factory.repositories.length > 1 &&
+      definition.phases.find(phase => phase.id === stage)?.kind === 'working' &&
+      !factory.repositories.some(repo => repo.slug === knownSlug)
+    ) {
+      setRepositoryAction(() => onSelect);
+      return;
+    }
+    onResolved();
+  };
+  const dropWithRepository = (
+    payload: DragPayload,
+    stage: Parameters<typeof items.handleDrop>[1],
+    cause = 'board_drag',
+  ) => {
+    if (payload.kind === 'work-item' && payload.fromStage === stage) return;
+    const item = payload.kind === 'work-item' ? items.all.find(candidate => candidate.id === payload.id) : undefined;
+    const source = payload.kind === 'candidate' ? payload.candidate.source : item?.source;
+    const metadata = payload.kind === 'candidate' ? payload.candidate.metadata : item?.metadata;
+    if (!source) return;
+    chooseRepository(
+      source,
+      metadata ?? null,
+      stage,
+      slug => {
+        if (payload.kind === 'work-item') items.move(payload.id, stage, { cause, repositorySlug: slug });
+        else
+          items.handleDrop(
+            {
+              ...payload,
+              candidate: { ...payload.candidate, metadata: { ...payload.candidate.metadata, repository: slug } },
+            },
+            stage,
+            cause,
+          );
+      },
+      () => items.handleDrop(payload, stage, cause),
+    );
+  };
   const intake = useBoardIntake({
     factoryProjectId,
     repository,
@@ -322,6 +378,24 @@ function BoardContent({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {runs.repositorySelection && (
+        <RepositoryPickerDialog
+          repositories={runs.repositories}
+          onClose={runs.closeRepositorySelection}
+          onSelect={runs.selectRepository}
+        />
+      )}
+      {repositoryAction && (
+        <RepositoryPickerDialog
+          repositories={factory.repositories}
+          onClose={() => setRepositoryAction(null)}
+          onSelect={selectedRepository => {
+            const action = repositoryAction;
+            setRepositoryAction(null);
+            action(selectedRepository.slug);
+          }}
+        />
+      )}
       {mutationError !== undefined && (
         <div className="shrink-0 p-4 pb-0">
           <Notice variant="destructive">
@@ -421,7 +495,7 @@ function BoardContent({
                     stage={stage.id}
                     label={stage.label}
                     collapsed={collapsed}
-                    onDrop={items.handleDrop}
+                    onDrop={dropWithRepository}
                   >
                     {composerOpen ? (
                       <InlineWorkItemComposer
@@ -457,7 +531,15 @@ function BoardContent({
                           onDismissProposal={decisions.dismiss}
                           onRetryDecision={decisions.retry}
                           onCreateSession={() => void runs.openOrCreateSession(item)}
-                          onMove={(toStage, options) => items.move(item.id, toStage, options)}
+                          onMove={(toStage, options) =>
+                            chooseRepository(
+                              item.source,
+                              item.metadata,
+                              toStage,
+                              slug => items.move(item.id, toStage, { ...options, repositorySlug: slug }),
+                              () => items.move(item.id, toStage, options),
+                            )
+                          }
                           onRemove={() => items.remove(item.id)}
                         />
                       )}
@@ -478,7 +560,7 @@ function BoardContent({
                           projectRepositoryId={repository.projectRepositoryId}
                           factoryProjectId={factoryProjectId}
                           onRun={(move, prompt) =>
-                            items.handleDrop(candidatePayload(candidate, prompt), move.stage, 'card_action')
+                            dropWithRepository(candidatePayload(candidate, prompt), move.stage, 'card_action')
                           }
                         />
                       )}
