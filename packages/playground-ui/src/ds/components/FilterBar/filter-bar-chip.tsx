@@ -48,8 +48,7 @@ export const segmentClass = cn(
 // stay the same height by construction rather than by two call sites agreeing.
 export const FILTER_BAR_CONTROL_SIZE: ControlSize = 'sm';
 
-// ComboboxRoot types hide both, but its runtime (shared with AutocompleteRoot) honours them.
-// `keepHighlight`: Base UI resets on leaving a row for its inner text, and 'always' re-lights row 0.
+// Typed out of ComboboxRoot but honoured at runtime; keepHighlight stops Base UI re-lighting row 0 when the pointer reaches a row's text.
 export const alwaysHighlightProps = { autoHighlight: 'always', keepHighlight: true } as unknown as {
   autoHighlight: boolean;
 };
