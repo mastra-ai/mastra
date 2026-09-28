@@ -35,6 +35,33 @@ export interface ReviewSourceOutput {
     externalId: string;
     url: string | null;
   } | null;
+  /**
+   * Repository identity stamped on the review card at intake — the
+   * binding-side value for the null-`url` cross-check fallback. The skill must
+   * compare this against an identity resolved independently of the card (e.g.
+   * `gh repo view --json databaseId` for the session checkout's repository);
+   * comparing two values derived from the same checkout proves nothing.
+   * `null` when intake recorded no repository identity — in that case there
+   * is no verifiable bound repository and the fallback must not publish.
+   */
+  boundRepository:
+    | { provider: 'github'; repositoryId: number }
+    | { provider: 'gitlab'; host: string | null; projectId: number }
+    | null;
+}
+
+/**
+ * Normalize the operator-provided browser-facing UI origin (the
+ * `MASTRACODE_PUBLIC_URL` env var) into the `uiOrigin` the tool accepts.
+ *
+ * Blank counts as unset: `mastracode/web/.env.schema` ships
+ * `MASTRACODE_PUBLIC_URL=` as the operator-facing line, so an empty or
+ * whitespace-only value is the expected "not configured" state — it must map
+ * to `null` (tool omitted) rather than register the tool and publish a
+ * hostless `sessionUrl` into a public review body.
+ */
+export function resolveReviewSourceUiOrigin(raw: string | undefined): string | null {
+  return raw?.trim().replace(/\/+$/, '') || null;
 }
 
 /**
@@ -101,17 +128,18 @@ export async function createReviewSourceTool(options: {
   });
   const triggeredBy = readPullRequestAuthor(item);
   const reviewTarget = readReviewTarget(item);
+  const boundRepository = readBoundRepository(item);
   // Every field is pre-resolved server-side and returned as a plain object.
   // The tool takes no arguments and does no further I/O, so a review-role
   // session either sees a complete provenance shape or the tool is absent —
   // the skill treats those branches identically (stop-don't-publish).
-  const output: ReviewSourceOutput = { sessionUrl, triggeredBy, reviewTarget };
+  const output: ReviewSourceOutput = { sessionUrl, triggeredBy, reviewTarget, boundRepository };
 
   return {
     factory_review_source: createTool({
       id: 'factory_review_source',
       description:
-        'Read the routing facts behind this review session: a deep-link back to the Factory session that produced the review, the PR/MR author recorded on the review card, and the review target (the PR/MR the session was intake-bound to). Publish the session URL in the required `Factory Session` block of every review body so a misattributed review can always be traced back to the run that produced it. Cross-check `triggeredBy` and `reviewTarget` against the PR/MR you fetched in Phase 1; do not publish the `triggeredBy` or `reviewTarget` fields.',
+        'Read the routing facts behind this review session: a deep-link back to the Factory session that produced the review, the PR/MR author recorded on the review card, and the review target (the PR/MR the session was intake-bound to). Publish the session URL in the required `Factory Session` block of every review body so a misattributed review can always be traced back to the run that produced it. Cross-check `triggeredBy` and `reviewTarget` against the PR/MR you fetched in Phase 1, using `boundRepository` as the intake-stamped repository identity when `reviewTarget.url` is null; do not publish the `triggeredBy`, `reviewTarget`, or `boundRepository` fields.',
       inputSchema: z.object({}),
       execute: async (): Promise<ReviewSourceOutput> => output,
     }),
@@ -137,6 +165,25 @@ function readReviewTarget(item: WorkItemRow): ReviewSourceOutput['reviewTarget']
     externalId: source.externalId,
     url: typeof source.url === 'string' && source.url ? source.url : null,
   };
+}
+
+function readBoundRepository(item: WorkItemRow): ReviewSourceOutput['boundRepository'] {
+  const metadata = item.metadata;
+  if (!metadata) return null;
+  // Intake stamps repository identity on every PR/MR card:
+  // `github/default-rules.ts` writes `githubRepositoryId`, and
+  // `gitlab/default-rules.ts` writes `gitlabHost` + `gitlabProjectId`.
+  if (typeof metadata.githubRepositoryId === 'number') {
+    return { provider: 'github', repositoryId: metadata.githubRepositoryId };
+  }
+  if (typeof metadata.gitlabProjectId === 'number') {
+    return {
+      provider: 'gitlab',
+      host: typeof metadata.gitlabHost === 'string' && metadata.gitlabHost ? metadata.gitlabHost : null,
+      projectId: metadata.gitlabProjectId,
+    };
+  }
+  return null;
 }
 
 function readPullRequestAuthor(item: WorkItemRow): string | null {

@@ -75,7 +75,7 @@ import { resolveFactorySessionAddress } from './rules/binding-context.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import type { FactoryRuleActor } from './rules/index.js';
 import { FactoryPhaseStateProcessor } from './rules/processor.js';
-import { createReviewSourceTool } from './rules/review-source-tool.js';
+import { createReviewSourceTool, resolveReviewSourceUiOrigin } from './rules/review-source-tool.js';
 import { createTerminalStageCleanup } from './rules/terminal-cleanup.js';
 import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
@@ -1054,8 +1054,11 @@ export class MastraFactory {
                   // the tool is omitted from the toolset rather than fall back
                   // to the API/localhost origin and publish that URL into a
                   // public review body. The skill's tool-not-available branch
-                  // handles the absence as stop-don't-publish.
-                  const reviewSourceUiOrigin = process.env.MASTRACODE_PUBLIC_URL?.replace(/\/+$/, '') ?? null;
+                  // handles the absence as stop-don't-publish. Blank counts as
+                  // unset: `.env.schema` ships `MASTRACODE_PUBLIC_URL=`, so an
+                  // empty/whitespace value must not register the tool with a
+                  // hostless `sessionUrl`.
+                  const reviewSourceUiOrigin = resolveReviewSourceUiOrigin(process.env.MASTRACODE_PUBLIC_URL);
                   mergeTools(
                     'factory-review-source',
                     await createReviewSourceTool({

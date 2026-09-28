@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { createReviewSourceTool } from './review-source-tool.js';
+import { createReviewSourceTool, resolveReviewSourceUiOrigin } from './review-source-tool.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 const PUBLIC_ORIGIN = 'https://factory.example.com';
@@ -35,6 +35,7 @@ async function prepareReviewItem(
     externalId?: string;
     url?: string;
     role?: 'review' | 'work' | 'plan' | 'triage';
+    metadata?: Record<string, unknown>;
   } = {},
 ) {
   return storage.prepareRunStart({
@@ -55,6 +56,7 @@ async function prepareReviewItem(
         metadata: {
           authorTrusted: true,
           ...(options.author ? { author: options.author } : {}),
+          ...(options.metadata ?? {}),
         },
       },
     },
@@ -72,6 +74,7 @@ describe('factory_review_source', () => {
     await prepareReviewItem(storage, {
       author: 'octocat',
       url: 'https://github.com/acme/repo/pull/42',
+      metadata: { githubRepositoryId: 12345 },
     });
 
     const context = requestContext();
@@ -92,6 +95,7 @@ describe('factory_review_source', () => {
         externalId: 'github-pr:42',
         url: 'https://github.com/acme/repo/pull/42',
       },
+      boundRepository: { provider: 'github', repositoryId: 12345 },
     });
   });
 
@@ -99,11 +103,15 @@ describe('factory_review_source', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     // Mirror a GitLab MR card whose intake stored no `url` — the skill's
     // fallback rule (cross-check on externalId when url is null) depends on
-    // the tool exposing null here rather than an empty string.
+    // the tool exposing null here rather than an empty string. The shape
+    // mirrors intake exactly: `externalSourceForWorkItem('gitlab-pr', …)`
+    // maps to `['gitlab', 'pull-request']` (`rules/types.ts`), so the type
+    // is 'pull-request', never 'merge-request'.
     await prepareReviewItem(storage, {
       integrationId: 'gitlab',
-      type: 'merge-request',
+      type: 'pull-request',
       externalId: 'gitlab-pr:aGVsbG8=',
+      metadata: { gitlabHost: 'gitlab.example.com', gitlabProjectId: 101 },
     });
     const context = requestContext();
     const tools = await createReviewSourceTool({
@@ -114,13 +122,17 @@ describe('factory_review_source', () => {
     const output = (await (tools.factory_review_source as ExecutableTool).execute(
       {},
       { requestContext: context, agent: { toolCallId: 'tc-1' } },
-    )) as { reviewTarget: { integrationId: string; url: string | null } };
+    )) as {
+      reviewTarget: { integrationId: string; url: string | null };
+      boundRepository: unknown;
+    };
     expect(output.reviewTarget).toEqual({
       integrationId: 'gitlab',
-      type: 'merge-request',
+      type: 'pull-request',
       externalId: 'gitlab-pr:aGVsbG8=',
       url: null,
     });
+    expect(output.boundRepository).toEqual({ provider: 'gitlab', host: 'gitlab.example.com', projectId: 101 });
   });
 
   it('returns triggeredBy null when the metadata does not carry an author', async () => {
@@ -155,12 +167,24 @@ describe('factory_review_source', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepareReviewItem(storage, { author: 'octocat' });
     const context = requestContext();
-    const tools = await createReviewSourceTool({
-      requestContext: context,
-      storage,
-      uiOrigin: null,
-    });
-    expect(tools.factory_review_source).toBeUndefined();
+    // Run each env-var shape through the same guard `factory.ts` uses.
+    // `.env.schema` ships `MASTRACODE_PUBLIC_URL=`, so blank ('') is the
+    // expected "not configured" value, not an exotic one — it must omit the
+    // tool exactly like undefined does, or the review body publishes a
+    // hostless `sessionUrl` like `/factories/<id>/workspaces/...`.
+    for (const raw of [undefined, '', '   ']) {
+      const tools = await createReviewSourceTool({
+        requestContext: context,
+        storage,
+        uiOrigin: resolveReviewSourceUiOrigin(raw),
+      });
+      expect(tools.factory_review_source, `raw env value: ${JSON.stringify(raw)}`).toBeUndefined();
+    }
+  });
+
+  it('normalizes a configured UI origin: trims whitespace and strips trailing slashes', () => {
+    expect(resolveReviewSourceUiOrigin(' https://factory.example.com/ ')).toBe('https://factory.example.com');
+    expect(resolveReviewSourceUiOrigin('https://factory.example.com//')).toBe('https://factory.example.com');
   });
 
   it('strips a trailing slash from the UI origin when constructing the session URL', async () => {
