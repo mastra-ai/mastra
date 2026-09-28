@@ -22,12 +22,20 @@ const call = (toolCallId: string) => ({
   },
 });
 
+const userMessage = (id: string, text: string) => ({
+  id,
+  role: 'user' as const,
+  createdAt: new Date(),
+  content: { format: 2 as const, parts: [{ type: 'text' as const, text }] },
+});
+
+function roundTrip(list: MessageList) {
+  return new MessageList().deserialize(list.serialize());
+}
+
 function buildList(trailingReasoning: ReturnType<typeof reasoning>) {
   const list = new MessageList();
-  list.add(
-    { id: 'u1', role: 'user', createdAt: new Date(), content: { format: 2, parts: [{ type: 'text', text: 'go' }] } },
-    'memory',
-  );
+  list.add(userMessage('u1', 'go'), 'memory');
   list.add(
     {
       id: 'a1',
@@ -49,34 +57,40 @@ function buildList(trailingReasoning: ReturnType<typeof reasoning>) {
     },
     'memory',
   );
-  list.add(
-    {
-      id: 'u2',
-      role: 'user',
-      createdAt: new Date(),
-      content: { format: 2, parts: [{ type: 'text', text: 'continue' }] },
-    },
-    'memory',
-  );
-  return new MessageList().deserialize(list.serialize());
+  list.add(userMessage('u2', 'continue'), 'memory');
+  return roundTrip(list);
+}
+
+/** Role plus, per part, its type and tool call id (when present). */
+function shape(prompt: ReturnType<MessageList['get']['all']['aiV5']['prompt']>) {
+  return prompt.map(m => ({
+    role: m.role,
+    parts: Array.isArray(m.content)
+      ? m.content.map(p => ('toolCallId' in p ? `${p.type}:${p.toolCallId}` : p.type))
+      : [typeof m.content],
+  }));
 }
 
 describe('unsigned reasoning from a dead step (#24558)', () => {
-  it('does not emit a reasoning-only assistant message when the reasoning carries no provider metadata', () => {
+  it('drops the unsigned reasoning-only message and keeps the tool call/result pairs in order', () => {
     const prompt = buildList(reasoning('step died before the signature arrived')).get.all.aiV5.prompt();
 
-    const reasoningOnly = prompt.filter(
-      m =>
-        m.role === 'assistant' &&
-        Array.isArray(m.content) &&
-        m.content.length > 0 &&
-        m.content.every(p => p.type === 'reasoning'),
+    expect(shape(prompt)).toEqual([
+      { role: 'user', parts: ['text'] },
+      { role: 'assistant', parts: ['tool-call:c1'] },
+      { role: 'tool', parts: ['tool-result:c1'] },
+      { role: 'assistant', parts: ['reasoning', 'tool-call:c2'] },
+      { role: 'tool', parts: ['tool-result:c2'] },
+      { role: 'user', parts: ['text'] },
+    ]);
+    // The surviving reasoning is the signed one from the completed step.
+    expect(prompt[3]!.content).toContainEqual(
+      expect.objectContaining({
+        type: 'reasoning',
+        text: 'signed',
+        providerOptions: expect.objectContaining({ bedrock: { signature: 'sig' } }),
+      }),
     );
-    expect(reasoningOnly).toEqual([]);
-    expect(JSON.stringify(prompt)).not.toContain('step died before the signature arrived');
-    // Signed reasoning from the earlier completed step is still replayed.
-    expect(JSON.stringify(prompt)).toContain('"signed"');
-    expect(prompt.at(-1)?.role).toBe('user');
   });
 
   it('drops unsigned reasoning in prompt-with-suspended mode but keeps it in response mode', () => {
@@ -87,24 +101,53 @@ describe('unsigned reasoning from a dead step (#24558)', () => {
     expect(JSON.stringify(response)).toContain('step died before the signature arrived');
   });
 
-  it('keeps a reasoning-only block that carries a Gemini thought signature', () => {
-    const gemini = {
-      ...reasoning('gemini thinking'),
-      providerMetadata: { google: { thoughtSignature: 'gemini-sig' } },
-    };
-    const prompt = buildList(gemini).get.all.aiV5.prompt();
-    expect(JSON.stringify(prompt)).toContain('gemini thinking');
+  it('leaves adjacent user messages when the only assistant turn was unsigned reasoning', () => {
+    // Adjacent user messages are valid prompt input; providers merge or accept them.
+    const list = new MessageList();
+    list.add(userMessage('u1', 'hi'), 'memory');
+    list.add(
+      {
+        id: 'a1',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: { format: 2, parts: [{ type: 'step-start' }, reasoning('died thinking')] as any },
+      },
+      'memory',
+    );
+    list.add(userMessage('u2', 'again'), 'memory');
+
+    expect(roundTrip(list).get.all.aiV5.prompt()).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      { role: 'user', content: [{ type: 'text', text: 'again' }] },
+    ]);
   });
 
-  it('keeps a reasoning-only block when its reasoning is signed', () => {
-    const prompt = buildList(reasoning('finished thinking', 'sig2')).get.all.aiV5.prompt();
-    expect(JSON.stringify(prompt)).toContain('finished thinking');
-  });
-
-  it('keeps a reasoning-only block carrying a Gemini thought signature', () => {
+  // One case per REPLAYABLE_REASONING_KEYS entry. OpenAI itemId matters most:
+  // dropping it causes a non-retryable 400 (#22291).
+  it.each([
+    ['anthropic', 'signature'],
+    ['bedrock', 'signature'],
+    ['anthropic', 'redactedData'],
+    ['openai', 'itemId'],
+    ['openai', 'reasoningEncryptedContent'],
+    ['google', 'thoughtSignature'],
+  ])('keeps a reasoning-only message carrying %s.%s in prompt mode', (namespace, key) => {
     const prompt = buildList(
-      reasoning('gemini thinking', undefined, { google: { thoughtSignature: 'gsig' } }),
+      reasoning('replayable thinking', undefined, { [namespace]: { [key]: 'token' } }),
     ).get.all.aiV5.prompt();
-    expect(JSON.stringify(prompt)).toContain('gemini thinking');
+
+    const kept = prompt.find(
+      m =>
+        m.role === 'assistant' &&
+        Array.isArray(m.content) &&
+        m.content.some(p => p.type === 'reasoning' && p.text === 'replayable thinking'),
+    );
+    expect(kept?.content).toEqual([
+      expect.objectContaining({
+        type: 'reasoning',
+        text: 'replayable thinking',
+        providerOptions: expect.objectContaining({ [namespace]: expect.objectContaining({ [key]: 'token' }) }),
+      }),
+    ]);
   });
 });
