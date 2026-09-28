@@ -310,9 +310,20 @@ export class TeamsProvider implements ChannelProvider {
       installedAt: existing?.installedAt ?? new Date(),
     };
     await store.save(installation);
-    await this.#activateInstallation(installation);
+    // The installation is saved — post-save failures are non-fatal (the
+    // adapter is rebuilt lazily on the next webhook/initialize), and a
+    // rejected connect() here would strand the agent in "already connected".
+    try {
+      await this.#activateInstallation(installation);
+    } catch (err) {
+      console.warn(`[Teams] Failed to activate installation for agent "${agentId}":`, err);
+    }
     this.#configured = true;
-    await this.#config.onInstall?.(installation);
+    try {
+      await this.#config.onInstall?.(installation);
+    } catch (err) {
+      console.warn(`[Teams] onInstall hook failed for agent "${agentId}":`, err);
+    }
     return { type: 'immediate', installationId };
   }
 
@@ -452,14 +463,14 @@ export class TeamsProvider implements ChannelProvider {
     if (existing.entraObjectId && this.#config.tokenResolver) {
       if (existing.appId) {
         try {
-          const devPortalToken = await this.#config.tokenResolver(TEAMS_DEV_PORTAL_SCOPE);
+          const devPortalToken = await this.#config.tokenResolver(TEAMS_DEV_PORTAL_SCOPE, existing.appTenantId);
           await deleteBotRegistration(devPortalToken, existing.appId, this.#config.devPortalBaseUrl);
         } catch (err) {
           console.warn(`[Teams] Failed to delete bot registration for agent "${agentId}":`, err);
         }
       }
       try {
-        const graphToken = await this.#config.tokenResolver(TEAMS_GRAPH_SCOPE);
+        const graphToken = await this.#config.tokenResolver(TEAMS_GRAPH_SCOPE, existing.appTenantId);
         await deleteApplication(graphToken, existing.entraObjectId, this.#config.graphBaseUrl);
       } catch (err) {
         console.warn(`[Teams] Failed to delete Entra application for agent "${agentId}":`, err);

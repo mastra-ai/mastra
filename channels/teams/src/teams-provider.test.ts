@@ -213,6 +213,27 @@ describe('TeamsProvider.connect — self-managed', () => {
     await expect(provider.connect('agent-1')).rejects.toThrow(/already connected to Microsoft Teams/);
   });
 
+  it('treats post-save failures as non-fatal (retry does not strand the agent)', async () => {
+    stubCredentialMint();
+    const { provider, storage } = makeProvider({
+      appId: APP_ID,
+      appPassword: APP_PASSWORD,
+      onInstall: async () => {
+        throw new Error('user hook exploded');
+      },
+    });
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = await provider.connect('agent-1');
+      expect(result.type).toBe('immediate');
+    } finally {
+      warnSpy.mockRestore();
+    }
+    expect((await storage.getInstallationByAgent(PLATFORM, 'agent-1'))?.status).toBe('active');
+    expect(provider.isConfigured()).toBe(true);
+  });
+
   it('warns when a user-supplied client secret is persisted without an encryption key', async () => {
     stubCredentialMint();
     const { provider } = makeProvider({ appId: APP_ID, appPassword: APP_PASSWORD });
@@ -490,6 +511,35 @@ describe('TeamsProvider.disconnect', () => {
     expect(appDeleted).toBe(true);
     expect(await storage.getInstallationByAgent(PLATFORM, 'agent-1')).toBeNull();
     expect(provider.isConfigured()).toBe(false);
+  });
+
+  it('passes the stored tenant to the resolver when cleaning up a SingleTenant bot', async () => {
+    const tenant = 'customer-tenant-id';
+    stubProvisioning();
+    const tokenResolver = makeTokenResolver();
+    const { provider } = makeProvider({
+      tokenResolver,
+      encryptionKey: ENC_KEY,
+      appType: 'SingleTenant',
+      appTenantId: tenant,
+    });
+    await provider.connect('agent-1');
+
+    mockAgent
+      .get(DEV_PORTAL_ORIGIN)
+      .intercept({ path: `/api/botframework/${MINTED_APP_ID}`, method: 'DELETE' })
+      .reply(200, {});
+    mockAgent
+      .get(GRAPH_ORIGIN)
+      .intercept({ path: `/v1.0/applications/${OBJECT_ID}`, method: 'DELETE' })
+      .reply(204, '');
+
+    tokenResolver.mockClear();
+    await provider.disconnect('agent-1');
+    // A tenant-aware resolver would otherwise return default-tenant tokens
+    // that cannot delete resources living in the customer tenant.
+    expect(tokenResolver).toHaveBeenCalledWith(TEAMS_DEV_PORTAL_SCOPE, tenant);
+    expect(tokenResolver).toHaveBeenCalledWith(TEAMS_GRAPH_SCOPE, tenant);
   });
 
   it('still removes the installation when control-plane cleanup fails', async () => {
