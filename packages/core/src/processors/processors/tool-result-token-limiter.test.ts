@@ -261,4 +261,28 @@ describe('ToolResultTokenLimiter through an agent', () => {
     expect(prompt).toContain('[truncated: showing');
     expect(prompt).not.toContain('SECRET-TOKEN');
   });
+
+  it.each(['default', 'durable'] as const)('limits a tool that has a toModelOutput mapper (%s)', async engine => {
+    const { model, prompts } = createToolLoopModel();
+    const tool = createTool({
+      id: 'lookup',
+      description: 'Look something up',
+      inputSchema: z.object({ q: z.string() }),
+      execute: async () => `DATA ${'result '.repeat(3000)}`,
+      toModelOutput: (output: unknown) => ({ type: 'text', value: `mapped: ${String(output)}` }),
+    });
+    const agent = new Agent({
+      id: `mapped-limit-${engine}`,
+      name: 'mapped-limit',
+      instructions: 'Answer briefly.',
+      model,
+      tools: { lookup: tool },
+      outputProcessors: [new ToolResultTokenLimiter(50)],
+    });
+    if (engine === 'durable') await runDurable(agent);
+    else await (await agent.stream('question', { maxSteps: 3 })).consumeStream();
+    const prompt = promptText(prompts.at(-1));
+    expect(prompt).toContain('mapped: ');
+    expect(prompt).toContain('[truncated: showing');
+  });
 });
