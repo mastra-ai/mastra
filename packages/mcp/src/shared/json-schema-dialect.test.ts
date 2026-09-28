@@ -58,4 +58,16 @@ describe('toJsonSchema2020', () => {
       }),
     ).toBeUndefined();
   });
+
+  it('stops converting schemas that exceed the depth or node limits', () => {
+    const $schema = 'https://json-schema.org/draft/2019-09/schema#';
+    let deep: Record<string, unknown> = { type: 'string' };
+    for (let i = 0; i < 1_000; i++) deep = { type: 'array', items: deep };
+    expect(toJsonSchema2020({ $schema, ...deep })).toBeUndefined();
+
+    const properties = Object.fromEntries(Array.from({ length: 20_000 }, (_, i) => [`p${i}`, { type: 'string' }]));
+    expect(toJsonSchema2020({ $schema, type: 'object', properties })).toBeUndefined();
+
+    expect(toJsonSchema2020({ $schema, type: 'array', items: [{ type: 'string' }] })).toBeDefined();
+  });
 });
