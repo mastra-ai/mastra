@@ -8,7 +8,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import { useAutosaveAgent } from '../use-autosave-agent';
 import { authEnabledCapabilities } from './fixtures/auth';
-import { usePlaygroundStore } from '@/store/playground-store';
 import { server } from '@/test/msw-server';
 
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
@@ -75,7 +74,6 @@ const waitForCapabilitiesSettled = (queryClient: QueryClient) =>
 
 describe('useAutosaveAgent', () => {
   beforeEach(() => {
-    usePlaygroundStore.setState({ requestContext: {} });
     // The hook resolves a default visibility via the real auth-capabilities
     // query; drive it through MSW instead of mocking the hook.
     server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authEnabledCapabilities)));

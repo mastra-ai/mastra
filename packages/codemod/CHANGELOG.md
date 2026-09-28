@@ -1,5 +1,11 @@
 # @mastra/codemod
 
+## 1.1.5-alpha.1
+
+### Patch Changes
+
+- Fixed large codemod previews so printed and verbose output completes without hitting the process buffer limit. ([#25244](https://github.com/mastra-ai/mastra/pull/25244))
+
 ## 1.1.5-alpha.0
 
 ### Patch Changes

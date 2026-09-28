@@ -2,6 +2,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { frameSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -59,7 +60,7 @@ export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
 }
 
 function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
-  const { data: agent, isLoading } = useAgent(agentId);
+  const { data: agent, isLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
   const { mutate: reorderModelList } = useReorderModelList(agentId);
   const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList(agentId);
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();

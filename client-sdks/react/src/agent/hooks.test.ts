@@ -626,6 +626,50 @@ describe('useChat forwards clientTools', () => {
     unmount();
   });
 
+  it('approves a durable run that streams no start chunk', async () => {
+    // Inngest durable agents emit the approval without a preceding `start`.
+    nextSubscribeChunks = [
+      {
+        type: 'tool-call',
+        runId: 'run-durable',
+        from: 'AGENT',
+        payload: { toolName: 'weatherTool', toolCallId: 'tool-call-approval-1', args: { city: 'London' } },
+      },
+      {
+        type: 'tool-call-approval',
+        runId: 'run-durable',
+        from: 'AGENT',
+        payload: { toolName: 'weatherTool', toolCallId: 'tool-call-approval-1', args: { city: 'London' } },
+      },
+    ];
+    keepSubscriptionOpen = true;
+
+    const { result, unmount } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.isAwaitingToolApproval).toBe(true));
+    expect(result.current.isRunning).toBe(false);
+
+    await act(async () => {
+      await result.current.approveToolCall('tool-call-approval-1');
+    });
+
+    expect(sendToolApprovalMock).toHaveBeenCalledWith(
+      expect.objectContaining({ threadId: 'thread-1', toolCallId: 'tool-call-approval-1', approved: true }),
+    );
+    expect(result.current.isAwaitingToolApproval).toBe(false);
+
+    unmount();
+  });
+
   it('keeps subscription approval pending when the server ACK fails', async () => {
     nextSubscribeChunks = [
       {

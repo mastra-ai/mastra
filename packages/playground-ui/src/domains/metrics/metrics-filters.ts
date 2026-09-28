@@ -110,7 +110,7 @@ export function createMetricsPropertyFilterFields({
   const fields: PropertyFilterField[] = [
     {
       id: 'rootEntityType',
-      label: 'Primitive Type',
+      label: 'Primitive type',
       kind: 'pick-multi',
       searchable: false,
       options: METRICS_ROOT_ENTITY_TYPE_OPTIONS.map(o => ({ label: o.label, value: o.entityType })),
@@ -119,7 +119,7 @@ export function createMetricsPropertyFilterFields({
     },
     {
       id: 'entityName',
-      label: 'Primitive Name',
+      label: 'Primitive name',
       kind: 'pick-multi',
       options: availableEntityNames.map(name => ({ label: name, value: name })),
       placeholder: 'Choose entity names',

@@ -1,8 +1,8 @@
 import type { BuilderSettingsResponse, Provider } from '@mastra/client-js';
+import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { useMemo } from 'react';
 import type { ModelInfo } from '../../llm/hooks/use-filtered-models';
 import { useAgentBuilderAllowedModels } from './use-agent-builder-allowed-models';
-import { cleanProviderId } from '@/domains/llm';
 
 type BuilderModelPolicy = NonNullable<BuilderSettingsResponse['modelPolicy']>;
 

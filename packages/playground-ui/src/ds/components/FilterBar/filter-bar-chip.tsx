@@ -48,6 +48,11 @@ export const segmentClass = cn(
 // stay the same height by construction rather than by two call sites agreeing.
 export const FILTER_BAR_CONTROL_SIZE: ControlSize = 'sm';
 
+// Typed out of ComboboxRoot but honoured at runtime; keepHighlight stops Base UI re-lighting row 0 when the pointer reaches a row's text.
+export const alwaysHighlightProps = { autoHighlight: 'always', keepHighlight: true } as unknown as {
+  autoHighlight: boolean;
+};
+
 // A chip is a field whose value is edited in place, so it wears the field material rather than a
 // fill rung: on a light canvas a `bg-fill` chip read as a grey slab beside the white typeahead
 // pill it belongs to. The segments layer their own state over that card, which is why the chip
@@ -403,8 +408,7 @@ function SegmentCombobox<T>({
         else onQueryChange('');
         chip.setOpenSegment(next ? segment : null);
       }}
-      // See FilterBarInput: the runtime supports 'always' although ComboboxRoot types it as boolean.
-      autoHighlight={'always' as unknown as boolean}
+      {...alwaysHighlightProps}
       modal={false}
     >
       <ComboboxPrimitive.Trigger
