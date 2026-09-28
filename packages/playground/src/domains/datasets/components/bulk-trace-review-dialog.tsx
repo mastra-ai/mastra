@@ -130,7 +130,9 @@ export function BulkTraceReviewDialog({
       level={1}
     >
       <SideDialog.Top>
-        <DatabaseIcon className="size-4" /> Review {total} item{total !== 1 ? 's' : ''} → {datasetName}
+        <SideDialog.Heading as="h2">
+          <DatabaseIcon /> Review {total} item{total !== 1 ? 's' : ''} → {datasetName}
+        </SideDialog.Heading>
       </SideDialog.Top>
 
       <SideDialog.Content>
