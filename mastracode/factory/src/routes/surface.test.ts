@@ -534,6 +534,50 @@ describe('prepareFactoryRuleBinding', () => {
     expect(prepare).not.toHaveBeenCalled();
   });
 
+  it('retries an unattributed role in its existing linked repository without choosing the first', async () => {
+    const { seeded, sourceControl, project, projectRepository, installation, github } =
+      await seedFactoryWithRepository();
+    const second = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: {
+        installationId: installation.id,
+        externalId: '789',
+        slug: 'internetburrito/hydra',
+        defaultBranch: 'main',
+      },
+    });
+    const link = await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: projectRepository.connectionId,
+      repositoryId: second.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/hydra',
+    });
+    const existing = await sourceControl.sessions.create({
+      sessionId: 'sess-hydra',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'original-owner',
+      branch: 'factory/issue-49',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    const input = bindingInput(project.id);
+    (input.item as { metadata: Record<string, unknown> | null }).metadata = null;
+    (input.item as { sessions: unknown }).sessions = {
+      triage: { sessionId: existing.sessionId, branch: existing.branch, threadId: 'thread-existing' },
+    };
+    const prepare = vi.fn(async () => ({}) as never);
+
+    await prepareFactoryRuleBinding(github, { prepare }, seeded.projects, boards, input);
+
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ sessionId: existing.sessionId }));
+    await expect(
+      sourceControl.sessions.listByProjectRepository({ projectRepositoryId: projectRepository.id }),
+    ).resolves.toHaveLength(0);
+  });
+
   it('classifies a missing source-control connection', async () => {
     const { seeded, github } = await seedFactoryWithRepository();
     const disconnected = await seeded.projects.create({

@@ -144,6 +144,48 @@ function startRequest(
 }
 
 describe('FactoryStartCoordinator', () => {
+  it('retries an unattributed item only in its existing role session', async () => {
+    const seed = await createFactoryStorageForTests();
+    const item = await seed.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      input: {
+        title: 'Fix issue 1',
+        stages: ['intake'],
+        sessions: { work: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'session-1' } },
+        metadata: {},
+      },
+    });
+    const sourceControl = makeSourceControl();
+    sourceControl.projectRepositories.get.mockImplementation(async ({ id }) => ({
+      id,
+      connectionId: `connection-${id}`,
+      repositoryId: id === 'project-repository-1' ? 'repository-1' : 'repository-2',
+    }));
+    sourceControl.projectRepositories.list.mockResolvedValue([
+      { id: 'project-repository-2', repositoryId: 'repository-2' },
+      { id: 'project-repository-1', repositoryId: 'repository-1' },
+    ]);
+    sourceControl.repositories.get.mockImplementation(async ({ id }) => ({
+      id,
+      externalId: id.endsWith('2') ? '2' : '1',
+      slug: id.endsWith('2') ? 'owner/other' : 'owner/repo',
+    }));
+    const { controller } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      seed.workItems,
+      undefined,
+      sourceControl as never,
+    );
+
+    await expect(coordinator.prepare(startRequest({ id: item.item.id }))).resolves.toMatchObject({
+      sessionId: 'session-1',
+    });
+    expect(controller.createSession).toHaveBeenCalledTimes(1);
+  });
+
   it('commits the item session, exact binding, and durable pending start', async () => {
     const seed = await createFactoryStorageForTests();
     const storage = seed.workItems;

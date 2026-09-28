@@ -137,7 +137,7 @@ export class FactoryStartCoordinator {
       ? await storage.get({ orgId: request.orgId, id: request.workItem.id })
       : null;
     const intakeConfig = await this.#intake?.getConfig({ orgId: request.orgId, integrationIds: ['linear'] });
-    const repository = await resolveWorkItemRepository({
+    let repository = await resolveWorkItemRepository({
       sourceControl,
       orgId: request.orgId,
       factoryProjectId: request.factoryProjectId,
@@ -145,11 +145,34 @@ export class FactoryStartCoordinator {
       linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject,
     });
     if (repository.status === 'ambiguous') {
-      throw new WorkItemRepositoryError(
-        'repository_ambiguous',
-        `Choose a repository for this work item: ${repository.candidates.join(', ')}.`,
-        repository.candidates,
-      );
+      // A retry of this role's existing session keeps its already-chosen
+      // repository; a newly minted session must not choose for the card.
+      if (storedItem?.sessions[request.workItem.role]?.sessionId !== sourceSession.sessionId) {
+        throw new WorkItemRepositoryError(
+          'repository_ambiguous',
+          `Choose a repository for this work item: ${repository.candidates.join(', ')}.`,
+          repository.candidates,
+        );
+      }
+      const link = await sourceControl.projectRepositories.get({
+        orgId: request.orgId,
+        id: sourceSession.projectRepositoryId,
+      });
+      const linked = link && (await sourceControl.repositories.get({ orgId: request.orgId, id: link.repositoryId }));
+      const currentLinks = link
+        ? await sourceControl.projectRepositories.list({ orgId: request.orgId, connectionId: link.connectionId })
+        : [];
+      if (
+        !linked ||
+        !repository.candidates.includes(linked.slug) ||
+        !currentLinks.some(candidate => candidate.id === sourceSession.projectRepositoryId)
+      ) {
+        throw new WorkItemRepositoryError(
+          'repository_unlinked',
+          'The existing session repository is not linked to this Factory.',
+        );
+      }
+      repository = { status: 'resolved', slug: linked.slug, projectRepositoryId: sourceSession.projectRepositoryId };
     }
     if (repository.status === 'unlinked') {
       throw new WorkItemRepositoryError('repository_unlinked', repository.hint);

@@ -307,14 +307,36 @@ export async function prepareFactoryRuleBinding(
     if (!connections.some(connection => connection.integrationId === sourceControl.integrationId)) {
       throw new FactoryDispatchError('source_control_missing', 'Factory source-control connection not found.');
     }
+    // A retry may already own a role session. Check it before treating a
+    // repository-less card as ambiguous, but never override an explicit signal.
+    const boundSession = await reuseBoundSession(sourceControl, input);
     const intakeConfig = await intake?.getConfig({ orgId: input.record.orgId, integrationIds: ['linear'] });
-    const repository = await resolveWorkItemRepository({
+    let repository = await resolveWorkItemRepository({
       sourceControl,
       orgId: input.record.orgId,
       factoryProjectId: input.record.factoryProjectId,
       item: input.item,
       linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject,
     });
+    if (repository.status === 'ambiguous' && boundSession) {
+      const link = await sourceControl.projectRepositories.get({
+        orgId: input.record.orgId,
+        id: boundSession.projectRepositoryId,
+      });
+      const linked =
+        link && (await sourceControl.repositories.get({ orgId: input.record.orgId, id: link.repositoryId }));
+      if (linked && repository.candidates.includes(linked.slug)) {
+        const match = await resolveFactorySourceRepository({
+          sourceControl,
+          orgId: input.record.orgId,
+          factoryProjectId: input.record.factoryProjectId,
+          repositorySlug: linked.slug,
+        });
+        if (match.found && match.projectRepositoryId === boundSession.projectRepositoryId) {
+          repository = { status: 'resolved', slug: linked.slug, projectRepositoryId: match.projectRepositoryId };
+        }
+      }
+    }
     if (repository.status !== 'resolved') {
       const detail =
         repository.status === 'ambiguous'
@@ -327,7 +349,6 @@ export async function prepareFactoryRuleBinding(
     // the work item, flip the session's owner to the approver, and orphan the
     // previous sandbox.
     const approver = input.record.approvedBy ?? undefined;
-    const boundSession = await reuseBoundSession(sourceControl, input);
     if (boundSession && boundSession.projectRepositoryId !== repository.projectRepositoryId) {
       throw new FactoryDispatchError(
         'source_repository_ambiguous',
