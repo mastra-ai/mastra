@@ -65,6 +65,8 @@ import type {
   GetScorePercentilesArgs,
   GetScorePercentilesResponse,
 } from './scores';
+import type { TraceAggregateResponse } from './trace-aggregate';
+import type { TrustedTraceAggregatePlan } from './trace-aggregate-planner';
 import type {
   GetTraceQueryValuesResponse,
   QueryThreadsResult,
@@ -112,6 +114,7 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  *   `environment-discovery`, `tag-discovery`: the matching `get*` filter discovery method
  * - `metric-discovery`: `getMetricNames`, `getMetricLabelKeys`, `getMetricLabelValues`
  * - `trace-query`: `queryTraces`
+ * - `trace-aggregate`: `aggregateTraces`
  * - `trace-query-root-duration`: `durationMs` predicates in trace/thread queries
  * - `trace-query-discovery`: `getTraceQueryObservedFields`, `getTraceQueryValues`
  * - `thread-query`: `queryThreads`
@@ -129,6 +132,7 @@ export type ObservabilityStorageFeature =
   | 'tag-discovery'
   | 'metric-discovery'
   | 'trace-query'
+  | 'trace-aggregate'
   | 'trace-query-root-duration'
   | 'trace-query-discovery'
   | 'thread-query'
@@ -395,6 +399,18 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support advanced trace queries',
+    });
+  }
+
+  /**
+   * Executes a validated trace-aggregate plan.
+   */
+  async aggregateTraces(_plan: TrustedTraceAggregatePlan): Promise<TraceAggregateResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_AGGREGATE_TRACES_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support trace aggregation',
     });
   }
 

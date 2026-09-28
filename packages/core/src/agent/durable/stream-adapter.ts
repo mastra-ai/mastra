@@ -351,7 +351,10 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   };
 
   const handleEvent = async (event: Event) => {
-    if (!controller) return;
+    // After a terminal event the stream is closed and its callbacks have fired.
+    // A later duplicate (a replayed pre-crash FINISH plus the recovered one)
+    // must not fire onFinish/onError again.
+    if (!controller || terminated) return;
 
     // Any event proves the producer is alive — restart the idle countdown.
     armIdleTimer();

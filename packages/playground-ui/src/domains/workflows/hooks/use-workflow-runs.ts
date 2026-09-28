@@ -28,12 +28,22 @@ export function selectUniqueRuns(data: { pages: WorkflowRuns[] }) {
     });
 }
 
-export const useWorkflowRuns = (workflowId: string, { enabled = true }: { enabled?: boolean } = {}) => {
+/**
+ * `summary: true` asks the server to reduce each run snapshot to `{ status, timestamp }`,
+ * avoiding transfer of full snapshots when only list metadata is displayed.
+ */
+export const useWorkflowRuns = (
+  workflowId: string,
+  { enabled = true, summary = false }: { enabled?: boolean; summary?: boolean } = {},
+) => {
   const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
   const query = useInfiniteQuery({
-    queryKey: ['workflow-runs', workflowId],
-    queryFn: ({ pageParam }) => client.getWorkflow(workflowId).runs({ limit: PER_PAGE, offset: pageParam * PER_PAGE }),
+    queryKey: ['workflow-runs', workflowId, { summary }],
+    queryFn: ({ pageParam }) =>
+      client
+        .getWorkflow(workflowId)
+        .runs({ limit: PER_PAGE, offset: pageParam * PER_PAGE, ...(summary ? { summary: true } : {}) }),
     initialPageParam: 0,
     getNextPageParam: getWorkflowRunsNextPageParam,
     select: selectUniqueRuns,

@@ -49,6 +49,12 @@ import {
 const COLLECT_TOOL_RESULTS_STEP_ID = 'collect-tool-results';
 
 /**
+ * The outer step that publishes FINISH. Recovery reads its saved status to tell
+ * whether FINISH already went out before a crash.
+ */
+export const MAP_FINAL_OUTPUT_STEP_ID = 'map-final-output';
+
+/**
  * Options for creating a durable agentic workflow
  */
 export interface DurableAgenticWorkflowOptions {
@@ -934,7 +940,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
 
             return finalOutput;
           },
-          { id: 'map-final-output' },
+          { id: MAP_FINAL_OUTPUT_STEP_ID },
         )
         // Execute scorers (fire-and-forget, doesn't affect main result)
         .map(

@@ -263,6 +263,12 @@ export const mastraBackgroundTasksTable = defineTable({
   startedAt: v.union(v.string(), v.null()),
   suspendedAt: v.union(v.string(), v.null()),
   completedAt: v.union(v.string(), v.null()),
+  // Optional so that documents written before execution leases existed, which
+  // have no `ownerId`/`leaseExpiresAt` key at all, still validate. Convex
+  // checks every existing document against the schema on push, and a required
+  // field would reject those documents and fail `convex deploy`.
+  ownerId: v.optional(v.union(v.string(), v.null())),
+  leaseExpiresAt: v.optional(v.union(v.string(), v.null())),
 })
   .index('by_record_id', ['id'])
   .index('by_status_created', ['status', 'createdAt'])

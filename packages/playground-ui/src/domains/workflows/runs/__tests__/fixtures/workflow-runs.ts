@@ -54,17 +54,24 @@ const inputStep = {
 } as const;
 const runWithInput = workflowRun('run-with-input', 'success');
 
+/** Summary-mode list response: snapshots only carry status and timestamp. */
 export const runsWithInput: ListWorkflowRunsResponse = {
   runs: [
     {
       ...runWithInput,
-      snapshot: {
-        ...runWithInput.snapshot,
-        context: { input: inputStep },
-      },
+      snapshot: { status: runWithInput.snapshot.status, timestamp: runWithInput.snapshot.timestamp },
     },
   ],
   total: 1,
+};
+
+export const runWithInputById: GetWorkflowRunByIdResponse = {
+  runId: runWithInput.runId,
+  workflowName: WORKFLOW_NAME,
+  status: 'success',
+  createdAt: runWithInput.createdAt,
+  updatedAt: runWithInput.updatedAt,
+  payload: inputStep,
 };
 
 const RUN_BASE = new Date(2026, 4, 29, 16, 19, 44);

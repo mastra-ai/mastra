@@ -8,6 +8,14 @@ import type { TUI } from '@earendil-works/pi-tui';
 import { BOX_INDENT, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 import { CollapsibleComponent } from './collapsible.js';
+import { WidthAwareContainer } from './width-aware-container.js';
+
+/** A single-width box-drawing border sized to `width`, truncating from the right when the corners don't fit. */
+function fitBorder(width: number, left: string, right: string, fill = '─'): string {
+  const inner = Math.max(0, width - left.length - right.length);
+  const line = left + fill.repeat(inner) + right;
+  return line.length <= width ? line : line.slice(0, Math.max(0, width));
+}
 
 export interface ErrorInfo {
   message: string;
@@ -138,7 +146,7 @@ class CollapsibleStackTrace extends CollapsibleComponent {
 /**
  * Enhanced error display component
  */
-export class ErrorDisplayComponent extends Container {
+export class ErrorDisplayComponent extends WidthAwareContainer {
   constructor(
     private error: Error | string,
     private options: {
@@ -149,18 +157,19 @@ export class ErrorDisplayComponent extends Container {
     private ui: TUI,
   ) {
     super();
-    this.build();
   }
 
-  private build(): void {
+  protected rebuildForWidth(width: number): void {
+    this.clear();
     const info = parseErrorInfo(this.error);
 
     // Wrap everything in a box (borders provide structure, no extra padding)
     const box = new Box(BOX_INDENT, 0, (text: string) => text);
     this.addChild(box);
 
-    // Add a visible border around the entire error display
-    const borderTop = new Text(theme.fg('error', '╭─ Error ─' + '─'.repeat(50) + '╮'), 0, 0);
+    // Add a visible border around the entire error display, sized to the render width
+    const borderWidth = Math.max(0, width - BOX_INDENT * 2);
+    const borderTop = new Text(theme.fg('error', fitBorder(borderWidth, '╭─ Error ', '╮')), 0, 0);
     box.addChild(borderTop);
 
     // Error header container with background
@@ -204,7 +213,7 @@ export class ErrorDisplayComponent extends Container {
     }
 
     // Add bottom border
-    const borderBottom = new Text(theme.fg('error', '╰' + '─'.repeat(59) + '╯'), 0, 0);
+    const borderBottom = new Text(theme.fg('error', fitBorder(borderWidth, '╰', '╯')), 0, 0);
     box.addChild(borderBottom);
   }
 
