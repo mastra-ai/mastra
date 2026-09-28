@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { ReasoningActivity } from '@mastra/playground-ui/components/ai/activity';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Card } from '@mastra/playground-ui/components/Card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
@@ -7,7 +8,6 @@ import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRende
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
-import { Reasoning } from '@mastra/playground-ui/domains/chat/messages/reasoning';
 import { MessageText } from '@mastra/playground-ui/domains/chat/messages/renderers/message-text';
 import {
   WarningStatusRenderer,
@@ -222,7 +222,7 @@ export const MessageRow = ({ message }: MessageRowProps) => {
     Reasoning: part => {
       const state = 'state' in part ? part.state : undefined;
       if (state !== 'streaming') return null;
-      return <Reasoning text="" streaming />;
+      return <ReasoningActivity text="" streaming />;
     },
     Data: part => (part.type === 'data-signal' && isSignalData(part.data) ? <SignalBadge signal={part.data} /> : null),
     ToolInvocation: (part: ToolInvocationPart) => {

@@ -42,7 +42,7 @@ import { Activity, ActivityTrigger, ActivityHeadline, ActivityContent } from '@m
 
 The screen-reader status text is now "Running" or "Failed" instead of "Tool call running" or "Tool call failed", because the line is no longer only for tools.
 
-**Signals, notifications and skills are `Activity` presets**
+**Signals, notifications and reasoning are `Activity` presets**
 
 `components/ai/chat-event` is removed. Its presets moved into `components/ai/activity` and are named after the line they draw: `ChatSignal` is now `SignalActivity` and `ChatNotification` is now `NotificationActivity`. Each one picks the icon, badges and body for one kind of event over `ActivityItem`.
 
@@ -60,7 +60,19 @@ import { NotificationActivity } from '@mastra/playground-ui/components/ai/activi
 <NotificationActivity label="github / issue-opened" message={message} priority="high" />;
 ```
 
-`ReasoningStreamingLine` is removed. `Reasoning` covers the waiting state itself: while it streams with no text yet, it shows a busy "Reasoning" line with no disclosure.
+`Reasoning` moved out of `domains/chat/messages/reasoning` and joins them as `ReasoningActivity`, with the same props. `hasVisibleReasoning` answers whether it would render anything, so a transcript can skip an empty reasoning part without drawing it. `ReasoningStreamingLine` is removed: `ReasoningActivity` covers the waiting state itself, and while it streams with no text yet, it shows a busy "Reasoning" line with no disclosure.
+
+```tsx
+// Before
+import { Reasoning } from '@mastra/playground-ui/domains/chat/messages/reasoning';
+
+<Reasoning text={text} streaming />;
+
+// After
+import { ReasoningActivity } from '@mastra/playground-ui/components/ai/activity';
+
+<ReasoningActivity text={text} streaming />;
+```
 
 **A line only folds when its body says more than the line**
 
