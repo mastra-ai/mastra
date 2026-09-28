@@ -21,8 +21,7 @@ import type { BoardStageId } from '../stages';
 interface MoveOptions {
   /** What the server records as the reason for the move; a drag says so, a card button does not. */
   cause?: string;
-  /** Hands-off: stamp the card as pre-approving its plans before the move queues a run. */
-  preapprovePlans?: boolean;
+  repositorySlug?: string;
 }
 
 /** The board's persisted cards: the query behind them and the moves that rewrite them. */
@@ -85,9 +84,8 @@ export function useBoardItems({
 
   const move = (id: string, toStage: string, options: MoveOptions = {}) => {
     const item = all.find(candidate => candidate.id === id);
-    // Held in a ref, not in mutation state: two clicks land in the same render
-    // and both read the pre-click state, so the hands-off patch would run twice
-    // and queue two runs.
+    // Held in a ref, not in mutation state: two clicks can land in the same render
+    // and otherwise queue the same move twice.
     if (!item || movingRef.current.has(id)) return;
     const boardId = itemBoard(item);
     if (boardId !== 'work' && boardId !== 'review') {
@@ -97,17 +95,20 @@ export function useBoardItems({
     }
     movingRef.current.add(id);
     const release = () => movingRef.current.delete(id);
-    if (!options.preapprovePlans) {
+    if (!options.repositorySlug) {
       requestTransition(item, toStage, options, release);
       return;
     }
     // The patch bumps the revision, so the move has to ride the item it returned.
     void update
-      .mutateAsync({ id, patch: { plansPreapproved: true } })
+      .mutateAsync({
+        id,
+        patch: { metadata: { ...item.metadata, repository: options.repositorySlug } },
+      })
       .then(patched => requestTransition(patched, toStage, options, release))
       .catch(error => {
         release();
-        onFailure?.(error instanceof Error ? error.message : 'The card could not be stamped hands-off.');
+        onFailure?.(error instanceof Error ? error.message : 'The card could not be updated.');
       });
   };
 
@@ -156,7 +157,7 @@ export function useBoardItems({
     elsewhereSourceKeys,
     isPending: items.isPending,
     error: items.isError ? items.error : undefined,
-    mutationError: [upsert, update, transition, remove].find(mutation => mutation.isError)?.error ?? dropError,
+    mutationError: [upsert, transition, remove].find(mutation => mutation.isError)?.error ?? dropError,
     evaluatingStages: new Map(transition.pendingTransitions.map(({ itemId, stage }) => [itemId, stage])),
     transitionReasons,
     refetch: items.refetch,

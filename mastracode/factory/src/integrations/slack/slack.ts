@@ -84,9 +84,9 @@ interface SlackChannelDeps {
    * Factory projects domain. When provided (alongside `accountLinks`), a
    * linked sender's run must also resolve to a Factory project before it
    * dispatches: their link's default factory, else their tenant's only
-   * factory (stamped back onto the link), else an ephemeral "pick a default
-   * factory" card and no run. Unset → no factory routing (runs dispatch as
-   * before).
+   * factory (stamped back onto the link), else a "pick a default factory"
+   * card posted in the thread and no run. Unset → no factory routing (runs
+   * dispatch as before).
    */
   projects?: FactoryProjectsStorage;
   /**
@@ -211,21 +211,23 @@ export async function resolveLinkedSender({
   // web app authenticates the visitor, then Slack's OIDC flow proves which
   // Slack account they control. Without an origin, still block, just no card.
   if (publicUrl) {
-    await thread.postEphemeral(message.author, buildConnectCard(publicUrl), { fallbackToDM: true });
+    await thread.postEphemeral(message.author, buildConnectCard(publicUrl, thread), { fallbackToDM: true });
   }
   return { status: 'blocked' };
 }
+
+const retryHint = (thread: HandlerThread) => (thread.isDM ? 'message me again' : 'mention me again');
 
 /**
  * The "connect your account" card. The link is deliberately identity-free —
  * `/connect/slack` sends the visitor to Connections, where "Connect Slack"
  * runs the OIDC flow and Slack itself asserts the (team, user) pair.
  */
-function buildConnectCard(publicUrl: string) {
+function buildConnectCard(publicUrl: string, thread: HandlerThread) {
   return Card({
     title: 'Connect your account',
     children: [
-      CardText('Connect your account to use this agent.'),
+      CardText(`Connect your account to use this agent, then ${retryHint(thread)}.`),
       Actions([
         LinkButton({
           url: `${publicUrl}/connect/slack`,
@@ -252,19 +254,18 @@ type FactoryRouteResult =
  *    deleted factory — falls through as if unset).
  * 2. Else, the tenant's only factory, stamped back onto the link so it shows
  *    up (and stays editable) in Connected Accounts settings.
- * 3. Else — zero or several factories — an ephemeral "pick a default factory"
- *    card deep-linking to settings, and the run is blocked.
+ * 3. Else — zero or several factories — a "pick a default factory" card
+ *    posted publicly in the thread so Slack notifies the sender, and the run is
+ *    blocked.
  */
 export async function resolveFactoryForLink({
   thread,
-  message,
   link,
   key,
   accountLinks,
   projects,
 }: {
   thread: HandlerThread;
-  message: HandlerMessage;
   link: ChannelAccountLink;
   key: ChannelAccountLinkKey;
   accountLinks: ChannelIdentityStorage;
@@ -299,15 +300,14 @@ export async function resolveFactoryForLink({
 
   const publicUrl = webPublicUrl();
   if (publicUrl) {
-    await thread.postEphemeral(
-      message.author,
+    await thread.post(
       Card({
         title: 'Pick a default factory',
         children: [
           CardText(
             factories.length === 0
-              ? 'Your account has no factory yet. Create one in the web app, then message me again.'
-              : 'Your account has several factories. Pick which one Slack sessions should go to, then message me again.',
+              ? `Your account has no factory yet. Create one in the web app, then ${retryHint(thread)}.`
+              : `Your account has several factories. Pick which one Slack sessions should go to, then ${retryHint(thread)}.`,
           ),
           Actions([
             LinkButton({
@@ -317,7 +317,6 @@ export async function resolveFactoryForLink({
           ]),
         ],
       }),
-      { fallbackToDM: true },
     );
   }
   return { status: 'blocked' };
@@ -431,7 +430,12 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
             : 'Could not start a session: connect source control to this Factory project.',
         );
       }
-      const repo = await resolveFactorySourceRepository({ sourceControl, orgId, factoryProjectId });
+      const repo = await resolveFactorySourceRepository({
+        sourceControl,
+        orgId,
+        factoryProjectId,
+        firstLinkedRepository: true,
+      });
       if (!repo.found) {
         throw new SlackSessionStartError(
           repo.reason === 'connection'
@@ -714,7 +718,7 @@ async function gateDispatch(
     // credentials.
     ctx.requestContext.set('user', { id: sender.link.userId, organizationId: sender.link.orgId });
 
-    const route = await resolveFactoryForLink({ thread, message, ...sender, accountLinks, projects });
+    const route = await resolveFactoryForLink({ thread, ...sender, accountLinks, projects });
     if (route.status === 'blocked') return null;
     if (route.status === 'resolved') {
       return {

@@ -1,11 +1,13 @@
 import type { CreateStoredScorerParams, UpdateStoredScorerParams } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { usePlaygroundStore } from '@/store/playground-store';
 
-export const useStoredScorer = (scorerId?: string, options?: { status?: 'draft' | 'published' }) => {
+export const useStoredScorer = (
+  scorerId?: string,
+  options?: { status?: 'draft' | 'published' },
+  requestContext?: Record<string, any>,
+) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useQuery({
     queryKey: ['stored-scorer', scorerId, options?.status, requestContext],
@@ -14,10 +16,9 @@ export const useStoredScorer = (scorerId?: string, options?: { status?: 'draft' 
   });
 };
 
-export const useStoredScorerMutations = (scorerId?: string) => {
+export const useStoredScorerMutations = (scorerId?: string, requestContext?: Record<string, any>) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
 
   const createMutation = useMutation({
     mutationFn: (params: CreateStoredScorerParams) => client.createStoredScorer(params),

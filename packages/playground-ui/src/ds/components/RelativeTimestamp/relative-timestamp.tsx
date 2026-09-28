@@ -9,6 +9,7 @@ import { formatRelativeTime } from '@/utils/relative-time';
 
 export interface RelativeTimestampProps {
   value: DateInput;
+  label?: string;
   className?: string;
 }
 
@@ -94,7 +95,7 @@ function zoneRow(date: Date, timeZone?: string) {
   };
 }
 
-export function RelativeTimestamp({ value, className }: RelativeTimestampProps) {
+export function RelativeTimestamp({ value, label, className }: RelativeTimestampProps) {
   const date = toDate(value);
   if (!date) return null;
 
@@ -115,10 +116,11 @@ export function RelativeTimestamp({ value, className }: RelativeTimestampProps) 
         <span aria-hidden="true">
           <Relative date={date} />
         </span>
-        <span className="sr-only">{formatDate(date, 'date-time-seconds')}</span>
+        <span className="sr-only">{[label, formatDate(date, 'date-time-seconds')].filter(Boolean).join(' ')}</span>
       </TooltipTrigger>
       <TooltipContent>
         <span className="text-muted-foreground">
+          {label ? `${label} ` : null}
           <Since date={date} />
         </span>
         <table className="mt-1.5 border-t border-border font-mono tabular-nums">

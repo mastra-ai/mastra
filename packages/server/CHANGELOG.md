@@ -1,5 +1,14 @@
 # @mastra/server
 
+## 1.72.0-alpha.6
+
+### Patch Changes
+
+- Fixed an authorization gap in `resume-stream` and `resume-stream-until-idle` for durable agents. Resuming a durable run now checks that the run exists, belongs to the caller, is suspended, and matches the requested thread; otherwise the request returns 403. ([#25169](https://github.com/mastra-ai/mastra/pull/25169))
+
+- Updated dependencies:
+  - @mastra/core@1.72.0-alpha.6
+
 ## 1.72.0-alpha.5
 
 ### Patch Changes

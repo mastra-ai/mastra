@@ -5,6 +5,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/pla
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { ChevronRight } from 'lucide-react';
 import { z } from 'zod';
 import { useMemoryConfig } from '@/domains/memory/hooks';
@@ -122,7 +123,10 @@ function MemoryConfigFields({ items }: Pick<MemoryConfigSection, 'items'>) {
 }
 
 export function AgentMemoryConfig({ agentId }: { agentId: string }) {
-  const { data, isLoading, isError, isFetching, refetch } = useMemoryConfig(agentId);
+  const { data, isLoading, isError, isFetching, refetch } = useMemoryConfig(
+    agentId,
+    useEntityRequestContext('agent', agentId)[0],
+  );
 
   if (isLoading) return <Skeleton className="h-28 w-full" />;
 

@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "60.0.0-alpha.5",
+  "version": "60.0.0-alpha.6",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
@@ -186,6 +186,7 @@
     "@hello-pangea/dnd": "^18.0.1",
     "@lezer/highlight": "^1.2.3",
     "@lukeed/uuid": "^2.0.1",
+    "@mcp-ui/client": "^7.1.0",
     "@radix-ui/react-visually-hidden": "^1.2.4",
     "@tanstack/react-virtual": "^3.13.22",
     "@uiw/codemirror-theme-dracula": "^4.25.11",
@@ -212,6 +213,7 @@
     "zod": "^3.25.0"
   },
   "peerDependencies": {
+    "@mastra/ai-sdk": "workspace:^",
     "@mastra/client-js": "workspace:^",
     "@mastra/core": ">=1.7.1-0 <2.0.0-0",
     "@mastra/memory": ">=1.21.0-0 <2.0.0-0",
@@ -224,11 +226,13 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@mastra/ai-sdk": "workspace:*",
     "@mastra/client-js": "workspace:^",
     "@mastra/core": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/react": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@storybook/addon-a11y": "^10.6.0",
     "@storybook/addon-docs": "^10.6.0",
     "@storybook/addon-mcp": "^10.6.0",
