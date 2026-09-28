@@ -919,7 +919,20 @@ export class FactoryDecisionDispatcher {
             const enteredSince = current.stageHistory.filter(
               entry => entry.exitedAt === undefined && new Date(entry.enteredAt).getTime() > decidedAt,
             );
-            if (enteredSince.length === 0) return false;
+            // A run decided while the card sat outside its seat's stages (a held
+            // triage in Intake) is fulfilled, not overtaken, when the card first
+            // enters a stage that seat carries — e.g. the Investigate click.
+            const board = boardForWorkItem(current);
+            const carriesRole = (stage: string) =>
+              resolvePhaseSemantics(this.#boards, board, stage)?.role === decision.role;
+            const decidedOutsideRole = !current.stageHistory.some(
+              entry =>
+                new Date(entry.enteredAt).getTime() <= decidedAt &&
+                (entry.exitedAt === undefined || new Date(entry.exitedAt).getTime() > decidedAt) &&
+                carriesRole(entry.stage),
+            );
+            const movedOn = decidedOutsideRole ? enteredSince.filter(entry => !carriesRole(entry.stage)) : enteredSince;
+            if (movedOn.length === 0) return false;
             // A transition from the same rule evaluation lands after this decision
             // was created; entering that stage is part of this kickoff's intent.
             const siblingStages = new Set(
@@ -929,7 +942,7 @@ export class FactoryDecisionDispatcher {
                 )
                 .map(sibling => sibling.decision.stage),
             );
-            return enteredSince.some(entry => !siblingStages.has(entry.stage));
+            return movedOn.some(entry => !siblingStages.has(entry.stage));
           };
           const runStillActive = () =>
             this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
