@@ -70,4 +70,31 @@ describe('toJsonSchema2020', () => {
 
     expect(toJsonSchema2020({ $schema, type: 'array', items: [{ type: 'string' }] })).toBeDefined();
   });
+
+  it('leaves unknown annotation keywords untouched', () => {
+    const $schema = 'https://json-schema.org/draft/2019-09/schema#';
+    const ui = { widget: 'list', items: [{ label: 'a' }] };
+    const result = toJsonSchema2020({ $schema, type: 'object', 'x-ui': ui });
+    expect(result?.['x-ui']).toEqual(ui);
+  });
+
+  it('does not convert embedded dialects or contains with unevaluatedItems', () => {
+    const $schema = 'https://json-schema.org/draft/2019-09/schema#';
+    expect(
+      toJsonSchema2020({
+        $schema,
+        type: 'object',
+        properties: { a: { $schema: 'http://json-schema.org/draft-07/schema#', items: [{ type: 'string' }] } },
+      }),
+    ).toBeUndefined();
+    expect(
+      toJsonSchema2020({
+        $schema,
+        type: 'array',
+        items: [{ type: 'string' }],
+        contains: { type: 'number' },
+        unevaluatedItems: false,
+      }),
+    ).toBeUndefined();
+  });
 });

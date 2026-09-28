@@ -2,8 +2,22 @@ export const JSON_SCHEMA_2020_12 = 'https://json-schema.org/draft/2020-12/schema
 
 const JSON_SCHEMA_2019_09 = /^https?:\/\/json-schema\.org\/draft\/2019-09\/schema#?$/;
 
-/** Keywords whose values are instance data, not subschemas. */
-const DATA_KEYWORDS = new Set(['default', 'examples', 'const', 'enum']);
+/** Keywords whose value is a subschema (`items` may also be an array of subschemas). */
+const SCHEMA_KEYWORDS = new Set([
+  'items',
+  'additionalItems',
+  'contains',
+  'additionalProperties',
+  'propertyNames',
+  'unevaluatedItems',
+  'unevaluatedProperties',
+  'if',
+  'then',
+  'else',
+  'not',
+]);
+/** Keywords whose value is an array of subschemas. */
+const SCHEMA_ARRAY_KEYWORDS = new Set(['allOf', 'anyOf', 'oneOf']);
 /** Keywords whose values map arbitrary names to subschemas. */
 const SCHEMA_MAP_KEYWORDS = new Set(['properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas']);
 
@@ -20,38 +34,54 @@ class Unconvertible extends Error {}
  *
  * Returns `undefined` when the schema does not declare 2019-09, or relies on
  * features this conversion cannot preserve (`$recursiveRef`/`$recursiveAnchor`,
- * or `$ref` pointers into tuple members), or exceeds the depth/node limits.
+ * `$ref` pointers into tuple members, embedded `$schema` declarations, or
+ * `contains` combined with `unevaluatedItems`), or exceeds the depth/node limits.
  * Callers should then keep the original.
  */
 export function toJsonSchema2020<T extends { $schema?: string }>(schema: T): T | undefined {
   if (!schema.$schema || !JSON_SCHEMA_2019_09.test(schema.$schema)) return undefined;
   try {
-    return { ...(rewrite(schema, false, 0, { nodes: 0 }) as T), $schema: JSON_SCHEMA_2020_12 };
+    return { ...(rewrite(schema, 0, { nodes: 0 }, true) as T), $schema: JSON_SCHEMA_2020_12 };
   } catch (error) {
     if (error instanceof Unconvertible) return undefined;
     throw error;
   }
 }
 
-function rewrite(value: unknown, isSchemaMap: boolean, depth: number, budget: { nodes: number }): unknown {
-  if (!value || typeof value !== 'object') return value;
+function checkBudget(depth: number, budget: { nodes: number }) {
   if (depth > MAX_JSON_SCHEMA_DEPTH || ++budget.nodes > MAX_JSON_SCHEMA_NODES) throw new Unconvertible();
-  if (Array.isArray(value)) return value.map(item => rewrite(item, false, depth + 1, budget));
+}
 
-  const out: Record<string, unknown> = {};
-  for (const [key, child] of Object.entries(value)) {
-    if (!isSchemaMap) {
-      if (key === '$recursiveRef' || key === '$recursiveAnchor') throw new Unconvertible();
-      if (key === '$ref' && typeof child === 'string' && /\/(items\/\d+|additionalItems)(\/|$)/.test(child)) {
-        throw new Unconvertible();
-      }
-    }
-    out[key] =
-      !isSchemaMap && DATA_KEYWORDS.has(key)
-        ? child
-        : rewrite(child, !isSchemaMap && SCHEMA_MAP_KEYWORDS.has(key), depth + 1, budget);
+/** Rewrites a value in a subschema position. Only known schema keywords are walked; everything else is copied as-is. */
+function rewrite(schema: unknown, depth: number, budget: { nodes: number }, isRoot = false): unknown {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return schema;
+  checkBudget(depth, budget);
+
+  const out: Record<string, unknown> = { ...schema };
+  // Embedded resources may declare their own dialect; unevaluatedItems interacts with contains differently in 2020-12.
+  if (!isRoot && '$schema' in out) throw new Unconvertible();
+  if ('$recursiveRef' in out || '$recursiveAnchor' in out) throw new Unconvertible();
+  if ('contains' in out && 'unevaluatedItems' in out) throw new Unconvertible();
+  if (typeof out.$ref === 'string' && /\/(items\/\d+|additionalItems)(\/|$)/.test(out.$ref)) {
+    throw new Unconvertible();
   }
-  if (isSchemaMap || !Array.isArray(out.items)) return out;
+
+  for (const [key, child] of Object.entries(out)) {
+    if (SCHEMA_KEYWORDS.has(key)) {
+      out[key] = Array.isArray(child)
+        ? (checkBudget(depth + 1, budget), child.map(item => rewrite(item, depth + 2, budget)))
+        : rewrite(child, depth + 1, budget);
+    } else if (SCHEMA_ARRAY_KEYWORDS.has(key) && Array.isArray(child)) {
+      checkBudget(depth + 1, budget);
+      out[key] = child.map(item => rewrite(item, depth + 2, budget));
+    } else if (SCHEMA_MAP_KEYWORDS.has(key) && child && typeof child === 'object' && !Array.isArray(child)) {
+      checkBudget(depth + 1, budget);
+      out[key] = Object.fromEntries(
+        Object.entries(child).map(([name, sub]) => [name, rewrite(sub, depth + 2, budget)]),
+      );
+    }
+  }
+  if (!Array.isArray(out.items)) return out;
 
   out.prefixItems = out.items;
   if ('additionalItems' in out) out.items = out.additionalItems;
