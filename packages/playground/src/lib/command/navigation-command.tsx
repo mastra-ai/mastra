@@ -41,7 +41,6 @@ import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { useMastraPlatform } from '@/lib/mastra-platform';
 import { bottomNav, mainNav } from '@/lib/nav/nav-items';
 import type { NavItem } from '@/lib/nav/nav-items';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 type CommandScope = 'all' | 'paths' | 'agents' | 'workflows' | 'tooling' | 'evaluation' | 'observability' | 'settings';
 
@@ -471,7 +470,7 @@ export const NavigationCommand = () => {
   const [activeScope, setActiveScope] = React.useState<CommandScope>('all');
 
   const { data: agents = {} } = useAgents();
-  const { data: workflows = {} } = useWorkflows({ requestContext: usePlaygroundStore().requestContext });
+  const { data: workflows = {} } = useWorkflows();
   const { data: tools = {} } = useTools();
   const { data: processors = {} } = useProcessors();
   const { data: mcpServers = [] } = useMCPServers();

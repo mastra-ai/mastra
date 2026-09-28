@@ -1829,17 +1829,25 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    */
   get elementStream(): ReadableStream<OUTPUT extends Array<infer T> ? T : never> {
     let publishedElements = 0;
+    let latestArray: unknown[] = [];
 
     return this.#createEventedStream().pipeThrough(
       new TransformStream<ChunkType<OUTPUT>, OUTPUT extends Array<infer T> ? T : never>({
         transform(chunk, controller) {
           if (chunk.type === 'object') {
             if (Array.isArray(chunk.object)) {
-              // Publish new elements of the array one by one
-              for (; publishedElements < chunk.object.length; publishedElements++) {
+              latestArray = chunk.object;
+              // The trailing element may still be partial (a later chunk can
+              // complete it in place), so only publish elements followed by another.
+              for (; publishedElements < chunk.object.length - 1; publishedElements++) {
                 controller.enqueue(chunk.object[publishedElements]);
               }
             }
+          }
+        },
+        flush(controller) {
+          for (; publishedElements < latestArray.length; publishedElements++) {
+            controller.enqueue(latestArray[publishedElements] as OUTPUT extends Array<infer T> ? T : never);
           }
         },
       }),

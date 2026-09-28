@@ -2,6 +2,7 @@ import type { UpdateModelParams } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Lock, RotateCcw } from 'lucide-react';
@@ -9,7 +10,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useModelReset } from '../../context/model-reset-context';
 import { useBuilderModelPolicy } from '@/domains/agent-builder';
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
-import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
+import { LLMProviders, LLMModels, useLLMProviders, findProviderById } from '@/domains/llm';
 
 export interface AgentMetadataModelSwitcherProps {
   defaultProvider: string;

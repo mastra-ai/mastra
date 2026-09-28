@@ -49,6 +49,11 @@ export interface MountIncidentioRoutesOptions {
    * for everything beyond the disabled `status` route.
    */
   incidentio?: { intake: Intake; id: string };
+  /**
+   * Credential mode reported on the status route so the SPA can tell a
+   * deployment-configured API key apart from Platform-managed connections.
+   */
+  mode?: 'api-key' | 'platform';
   /** Host auth seam. Intake selections are org-owned, so the feature is inert without it. */
   auth: RouteAuth;
   /**
@@ -167,8 +172,9 @@ interface IncidentioIssuePayload {
  */
 export function buildIncidentioRoutes(options: MountIncidentioRoutesOptions): ApiRoute[] {
   const routes: ApiRoute[] = [];
-  const { incidentio, auth, intake } = options;
+  const { incidentio, auth, intake, mode } = options;
   const enabled = Boolean(incidentio) && auth.enabled();
+  const modeField = mode ? { mode } : {};
   const diagnostics = (): IncidentioFeatureDiagnostics => ({
     incidentioConfigured: Boolean(incidentio),
     factoryAuthEnabled: auth.enabled(),
@@ -184,6 +190,7 @@ export function buildIncidentioRoutes(options: MountIncidentioRoutesOptions): Ap
           return c.json({
             enabled: false,
             configured: Boolean(incidentio),
+            ...modeField,
             reason: 'missing_config',
             diagnostics: diagnostics(),
           });
@@ -195,12 +202,13 @@ export function buildIncidentioRoutes(options: MountIncidentioRoutesOptions): Ap
           return c.json({
             enabled: true,
             configured: true,
+            ...modeField,
             organizationRequired: true,
             reason: 'organization_required',
             diagnostics: diagnostics(),
           });
         }
-        return c.json({ enabled: true, configured: true, reason: 'ready', diagnostics: diagnostics() });
+        return c.json({ enabled: true, configured: true, ...modeField, reason: 'ready', diagnostics: diagnostics() });
       },
     }),
   );

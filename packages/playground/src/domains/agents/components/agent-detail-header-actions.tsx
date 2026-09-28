@@ -6,6 +6,7 @@ import { Check, Link as LinkIcon, Pencil } from 'lucide-react';
 import { useAgent } from '../hooks/use-agent';
 import { AgentConfigToggle } from './agent-config-toggle';
 import { useCanCreateAgent } from '@/domains/agent-builder/hooks/use-can-create-agent';
+import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 import { withStudioBasePath } from '@/lib/studio-base-path';
 
 export interface AgentDetailHeaderActionsProps {
@@ -14,7 +15,7 @@ export interface AgentDetailHeaderActionsProps {
 
 /** Edit / Share / Config actions shown in the route header on every agent sub-page. */
 export function AgentDetailHeaderActions({ agentId }: AgentDetailHeaderActionsProps) {
-  const { data: agent } = useAgent(agentId);
+  const { data: agent } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
   const { canCreateAgent } = useCanCreateAgent();
   const { Link: FrameworkLink, paths } = useLinkComponent();
 

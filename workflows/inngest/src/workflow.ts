@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { emitErrorEvent } from '@mastra/core/agent/durable';
 import { RequestContext } from '@mastra/core/di';
+import { getErrorFromUnknown } from '@mastra/core/error';
 import { PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
@@ -597,7 +598,7 @@ export class InngestWorkflow<
             // For durable agent workflows, emit error event on failure so the
             // client's stream can receive the error and close properly.
             if (result.status === 'failed' && inputData?.__workflowKind === 'durable-agent' && inputData?.runId) {
-              const error = result.error instanceof Error ? result.error : new Error(String(result.error));
+              const error = getErrorFromUnknown(result.error, { fallbackMessage: 'Workflow execution failed' });
               try {
                 await emitErrorEvent(pubsub, inputData.runId, error);
               } catch (e) {
@@ -632,7 +633,7 @@ export class InngestWorkflow<
 
                 if (result.status === 'failed') {
                   workflowSpan.error({
-                    error: result.error instanceof Error ? result.error : new Error(String(result.error)),
+                    error: getErrorFromUnknown(result.error, { fallbackMessage: 'Workflow execution failed' }),
                     attributes: { status: 'failed' },
                   });
                 } else {

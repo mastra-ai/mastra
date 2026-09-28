@@ -174,10 +174,10 @@ const textThemeKeys: (keyof ThemeColors)[] = [
 // Comfortable minimum contrast for TUI body text — above WCAG AA (4.5:1) for better readability
 export const TUI_MIN_CONTRAST = 5.5;
 
-/** Terminal width buffer applied at the framework level to prevent wrapping in nested terminals */
-export const TERM_WIDTH_BUFFER = 3;
-/** Get the effective terminal width (matching the framework's reduced width) */
-export const getTermWidth = () => (process.stdout.columns || 80) - TERM_WIDTH_BUFFER;
+/** Smallest width the full TUI layout renders safely at; narrower reports (e.g. while a display sleeps) are floored to this */
+export const MIN_TERM_WIDTH = 40;
+/** Get the terminal width used for rendering */
+export const getTermWidth = () => Math.max(MIN_TERM_WIDTH, process.stdout.columns || 80);
 
 /** Left indent (in spaces) applied to assistant text (Markdown body) */
 export const CHAT_INDENT = 2;

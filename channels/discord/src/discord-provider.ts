@@ -245,7 +245,10 @@ export class DiscordProvider implements ChannelProvider {
   /**
    * Provide or clear the app credentials at runtime. An object merges/overrides
    * `botToken` / `publicKey` / `applicationId` (persisted on the next `connect`);
-   * `null` clears the stored app config.
+   * `null` clears the stored app config. Supplying a **different bot token**
+   * replaces the app config instead of merging: the token identifies the
+   * Discord application, so any `publicKey`/`applicationId` from the previous
+   * application must not survive the switch.
    */
   async configure(credentials: Partial<DiscordAppConfig> | null): Promise<void> {
     if (credentials === null) {
@@ -270,13 +273,25 @@ export class DiscordProvider implements ChannelProvider {
     );
     if (!changed) return;
 
-    // Persist the rotation. Every credential consumer — #resolveAppConfig,
-    // #activateInstallation, #handleWebhook — reads the *stored* app config, so
-    // updating only #config.app would leave adapters rebuilding from the old
-    // credentials and Ed25519 still verifying against the superseded key.
     const store = await this.#getStore();
     const stored = await store.getAppConfig();
-    if (stored) {
+
+    // A different bot token means a *different Discord application*. Merging
+    // would carry the previous application's publicKey/applicationId into the
+    // new config, and its Ed25519 key would keep verifying inbound webhooks —
+    // letting the old application's owner forge interactions against the new
+    // one. Replace: keep only what this call supplied and drop the stored
+    // config so #resolveAppConfig re-derives identity from the new token.
+    const tokenSupersedes = (base: Partial<DiscordAppConfig> | null | undefined) =>
+      credentials.botToken !== undefined && base?.botToken !== undefined && base.botToken !== credentials.botToken;
+    if (tokenSupersedes(previous) || tokenSupersedes(stored)) {
+      this.#config = { ...this.#config, app: { ...credentials } };
+      await store.deleteAppConfig();
+    } else if (stored) {
+      // Persist the rotation. Every credential consumer — #resolveAppConfig,
+      // #activateInstallation, #handleWebhook — reads the *stored* app config,
+      // so updating only #config.app would leave adapters rebuilding from the
+      // old credentials and Ed25519 still verifying against the superseded key.
       const merged = { ...stored, ...credentials };
       if (merged.botToken && merged.publicKey && merged.applicationId) {
         await store.saveAppConfig(merged);
@@ -658,11 +673,24 @@ export class DiscordProvider implements ChannelProvider {
     }
   }
 
-  /** App credentials from provider config or `DISCORD_*` env, with per-field fallback. */
+  /**
+   * App credentials from provider config or `DISCORD_*` env.
+   *
+   * A config-supplied bot token defines the application identity, so
+   * `publicKey` / `applicationId` never fall back to the environment in that
+   * case — stale `DISCORD_PUBLIC_KEY` / `DISCORD_APPLICATION_ID` from a
+   * *different* application would otherwise complete the config and keep that
+   * application's Ed25519 key trusted for webhook verification (bypassing the
+   * `GET /applications/@me` backfill). Env fallback for those fields applies
+   * only when the bot token itself comes from the environment.
+   */
   #suppliedPartialAppConfig(): Partial<DiscordAppConfig> {
     const a = this.#config.app ?? {};
+    if (a.botToken != null) {
+      return { botToken: a.botToken, publicKey: a.publicKey, applicationId: a.applicationId };
+    }
     return {
-      botToken: a.botToken ?? process.env.DISCORD_BOT_TOKEN,
+      botToken: process.env.DISCORD_BOT_TOKEN,
       publicKey: a.publicKey ?? process.env.DISCORD_PUBLIC_KEY,
       applicationId: a.applicationId ?? process.env.DISCORD_APPLICATION_ID,
     };

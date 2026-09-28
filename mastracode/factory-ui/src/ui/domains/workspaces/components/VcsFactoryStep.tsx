@@ -9,8 +9,9 @@ import { useState, type ReactNode } from 'react';
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useGithubReposQuery } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
-import { gitLabProjectRepository, openMastraPlatformIntegrations } from '../../factory/services/gitlab';
+import { gitLabProjectRepository } from '../../factory/services/gitlab';
 import type { SourceControlRepository } from '../services/github';
+import { ProviderConnectControl } from '../../settings/components/PlatformProviderConnections';
 import { GitLabIcon, SearchIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 
@@ -57,14 +58,31 @@ export function VcsFactoryStep({
       ) : selectedProvider === null ? (
         <ProviderChoice
           githubRedirecting={githubRedirecting}
+          githubUnavailable={
+            githubStatus.data?.reason === 'organization_required' || githubStatus.data?.reason === 'missing_config'
+          }
+          gitlabConnected={gitlabConfigured}
+          // Personal GitLab accounts see `enabled: true` from the status endpoint but the
+          // connect-session request answers 403 with `organization_required`, so gate the
+          // tile here to keep it from starting a doomed Nango session.
+          gitlabUnavailable={!gitlabStatus.data?.enabled || gitlabStatus.data.reason === 'organization_required'}
+          gitlabUnavailableReason={
+            !gitlabStatus.data?.enabled
+              ? 'missing_config'
+              : gitlabStatus.data.reason === 'organization_required'
+                ? 'organization_required'
+                : undefined
+          }
           onChooseGithub={() => {
             if (connected) setSelectedProvider('github');
-            else if (githubStatus.data?.enabled) onConnect();
-            else openMastraPlatformIntegrations();
+            else onConnect();
+          }}
+          onGitlabConnected={() => {
+            void gitlabStatus.refetch();
+            void gitlabProjects.refetch();
           }}
           onChooseGitlab={() => {
             if (gitlabConfigured) setSelectedProvider('gitlab');
-            else openMastraPlatformIntegrations();
           }}
         />
       ) : (
@@ -133,62 +151,101 @@ export function VcsFactoryStep({
 
 function ProviderChoice({
   githubRedirecting,
+  githubUnavailable,
+  gitlabConnected,
+  gitlabUnavailable,
+  gitlabUnavailableReason,
   onChooseGithub,
   onChooseGitlab,
+  onGitlabConnected,
 }: {
   githubRedirecting: boolean;
+  githubUnavailable: boolean;
+  gitlabConnected: boolean;
+  gitlabUnavailable: boolean;
+  gitlabUnavailableReason?: 'missing_config' | 'organization_required';
   onChooseGithub: () => void;
   onChooseGitlab: () => void;
+  onGitlabConnected: () => void;
 }) {
+  const gitlabMessage = gitlabUnavailable
+    ? gitlabUnavailableReason === 'organization_required'
+      ? 'Join an organization to connect GitLab repositories.'
+      : 'GitLab is not available for this deployment.'
+    : 'Connect GitLab to choose a repository.';
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)] items-stretch gap-5">
       <ProviderConnection
         provider="GitHub"
-        message="Connect GitHub to choose a repository."
+        message={
+          githubUnavailable ? 'GitHub is not available for this deployment.' : 'Connect GitHub to choose a repository.'
+        }
         icon={<GithubIcon />}
-        buttonIcon={<GithubIcon className="size-4" />}
-        isConnecting={githubRedirecting}
-        onConnect={onChooseGithub}
+        actionSlot={
+          <Button variant="primary" disabled={githubRedirecting || githubUnavailable} onClick={onChooseGithub}>
+            {githubRedirecting ? (
+              <Spinner size="sm" aria-label="Connecting to GitHub" />
+            ) : (
+              <GithubIcon className="size-4" />
+            )}
+            Connect GitHub
+          </Button>
+        }
+        title={githubUnavailable ? 'GitHub unavailable' : 'Connect GitHub'}
       />
       <div role="separator" aria-orientation="vertical" className="bg-border h-full min-h-36 w-px" />
       <ProviderConnection
         provider="GitLab"
-        message="Connect GitLab to choose a repository."
+        message={gitlabMessage}
         icon={<GitLabIcon />}
-        buttonIcon={<GitLabIcon className="size-4" />}
-        onConnect={onChooseGitlab}
+        actionSlot={
+          gitlabUnavailable ? (
+            <Button variant="primary" disabled onClick={() => {}}>
+              <GitLabIcon className="size-4" />
+              Connect GitLab
+            </Button>
+          ) : gitlabConnected ? (
+            <Button variant="primary" onClick={onChooseGitlab}>
+              <GitLabIcon className="size-4" />
+              Choose GitLab repository
+            </Button>
+          ) : (
+            <ProviderConnectControl
+              provider="gitlab"
+              label="Connect GitLab"
+              variant="primary"
+              size="md"
+              icon={<GitLabIcon className="size-4" />}
+              onCompleted={onGitlabConnected}
+            />
+          )
+        }
+        title={gitlabUnavailable ? 'GitLab unavailable' : 'Connect GitLab'}
       />
     </div>
   );
 }
 
 function ProviderConnection({
-  provider,
+  provider: _provider,
   message,
   icon,
-  buttonIcon,
-  isConnecting = false,
-  onConnect,
+  title,
+  actionSlot,
 }: {
   provider: 'GitHub' | 'GitLab';
   message: string;
   icon: ReactNode;
-  buttonIcon: ReactNode;
-  isConnecting?: boolean;
-  onConnect: () => void;
+  title: string;
+  actionSlot: ReactNode;
 }) {
   return (
     <EmptyState
       className="min-w-0 py-8"
       iconSlot={icon}
-      titleSlot={`Connect ${provider}`}
+      titleSlot={title}
       descriptionSlot={message}
-      actionSlot={
-        <Button variant="primary" disabled={isConnecting} onClick={onConnect}>
-          {isConnecting ? <Spinner size="sm" aria-label={`Connecting to ${provider}`} /> : buttonIcon}
-          Connect {provider}
-        </Button>
-      }
+      actionSlot={actionSlot}
     />
   );
 }

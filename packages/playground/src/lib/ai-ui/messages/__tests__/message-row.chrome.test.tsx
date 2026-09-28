@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { DatasetSaveProvider } from '@mastra/playground-ui/domains/chat';
 import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -8,7 +9,6 @@ import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DatasetSaveProvider } from '../../context/dataset-save-context';
 import { MessageRow } from '../message-row';
 import { buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
 import { server } from '@/test/msw-server';

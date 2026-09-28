@@ -15,6 +15,8 @@ function renderToolExecutor(zodInputSchema: ZodType = z.object({})) {
       isExecutingTool={false}
       toolDescription="Runs without configuration"
       toolId="test-tool"
+      requestContextEntityType="tool"
+      requestContextEntityId="test-tool"
       zodInputSchema={zodInputSchema}
     />,
   );
@@ -22,10 +24,10 @@ function renderToolExecutor(zodInputSchema: ZodType = z.object({})) {
 
 describe('ToolExecutor', () => {
   describe('when the tool has no input fields or request context', () => {
-    it('does not render configuration tabs', () => {
+    it('still offers the request context popover next to Submit', () => {
       renderToolExecutor();
 
-      expect(screen.queryByRole('tab')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Request context' })).not.toBeNull();
     });
 
     it('explains that the tool can run without input', () => {
@@ -42,10 +44,11 @@ describe('ToolExecutor', () => {
   });
 
   describe('when the tool has input fields', () => {
-    it('renders the Input Data tab', () => {
+    it('renders the input form without configuration tabs', () => {
       renderToolExecutor(z.object({ query: z.string() }));
 
-      expect(screen.getByRole('tab', { name: 'Input Data' })).not.toBeNull();
+      expect(screen.queryByRole('tab')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Submit' })).not.toBeNull();
     });
   });
 });
