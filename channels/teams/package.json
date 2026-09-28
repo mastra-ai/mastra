@@ -16,13 +16,13 @@
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.ts",
+        "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
       }
     }
   },
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown && node scripts/write-cts-shim.mjs",
     "dev": "tsdown --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

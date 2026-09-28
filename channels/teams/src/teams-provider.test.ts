@@ -26,12 +26,16 @@ const MINTED_SECRET = 'minted~client~secret';
 let mockAgent: MockAgent;
 
 beforeEach(() => {
+  // The store falls back to MASTRA_ENCRYPTION_KEY — pin it so plaintext-storage
+  // assertions don't depend on the ambient shell/CI environment.
+  vi.stubEnv('MASTRA_ENCRYPTION_KEY', '');
   mockAgent = new MockAgent();
   mockAgent.disableNetConnect();
   setGlobalDispatcher(mockAgent);
 });
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await mockAgent.close();
 });
 
@@ -217,8 +221,8 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
     expect(result).toMatchObject({ type: 'deep_link', url: DEV_PORTAL_BOTS_URL });
 
     // Two audiences resolved — Graph for the Entra app, Dev Portal for the bot.
-    expect(tokenResolver).toHaveBeenCalledWith(TEAMS_GRAPH_SCOPE);
-    expect(tokenResolver).toHaveBeenCalledWith(TEAMS_DEV_PORTAL_SCOPE);
+    expect(tokenResolver).toHaveBeenCalledWith(TEAMS_GRAPH_SCOPE, undefined);
+    expect(tokenResolver).toHaveBeenCalledWith(TEAMS_DEV_PORTAL_SCOPE, undefined);
     expect(stubs.createAppAuth()).toBe('Bearer graph-token');
     expect(stubs.botRegistrationAuth()).toBe('Bearer dev-portal-token');
 
@@ -302,6 +306,109 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
       },
     });
     await expect(provider.connect('agent-1')).rejects.toThrow('platform credential fetch failed');
+  });
+
+  it('rejects SingleTenant provisioning without a tenant id', async () => {
+    const { provider } = makeProvider({ tokenResolver: makeTokenResolver(), appType: 'SingleTenant' });
+    await expect(provider.connect('agent-1')).rejects.toThrow(/no appTenantId is available/);
+  });
+
+  it('provisions SingleTenant bots with the tenant stored and passed to the resolver', async () => {
+    const tenant = 'customer-tenant-id';
+    const stubs = stubProvisioning();
+    const tokenResolver = makeTokenResolver();
+    const { provider, storage } = makeProvider({ tokenResolver, appType: 'SingleTenant', appTenantId: tenant });
+
+    await provider.connect('agent-1');
+
+    // The resolver receives the tenant for both audiences, and the Entra app
+    // is created single-tenant.
+    expect(tokenResolver).toHaveBeenCalledWith(TEAMS_GRAPH_SCOPE, tenant);
+    expect(tokenResolver).toHaveBeenCalledWith(TEAMS_DEV_PORTAL_SCOPE, tenant);
+    expect(stubs.createAppBody()).toMatchObject({ signInAudience: 'AzureADMyOrg' });
+
+    // The tenant persists on the installation so the rebuilt adapter can
+    // authenticate against the bot's own tenant after a restart.
+    const record = await storage.getInstallationByAgent(PLATFORM, 'agent-1');
+    expect(record?.data.appTenantId).toBe(tenant);
+  });
+
+  it('rolls back the bot registration and Entra app when persisting the installation fails', async () => {
+    stubProvisioning();
+    let botDeleted = false;
+    mockAgent
+      .get(DEV_PORTAL_ORIGIN)
+      .intercept({ path: `/api/botframework/${MINTED_APP_ID}`, method: 'DELETE' })
+      .reply(200, () => {
+        botDeleted = true;
+        return {};
+      });
+    let appDeleted = false;
+    mockAgent
+      .get(GRAPH_ORIGIN)
+      .intercept({ path: `/v1.0/applications/${OBJECT_ID}`, method: 'DELETE' })
+      .reply(204, () => {
+        appDeleted = true;
+        return '';
+      });
+
+    const storage = new InMemoryChannelsStorage();
+    storage.saveInstallation = async () => {
+      throw new Error('database unavailable');
+    };
+    const provider = new TeamsProvider({
+      storage,
+      baseUrl: BASE_URL,
+      tokenResolver: makeTokenResolver(),
+    } as TeamsProviderConfig);
+
+    await expect(provider.connect('agent-1')).rejects.toThrow('database unavailable');
+    expect(botDeleted).toBe(true);
+    expect(appDeleted).toBe(true);
+  });
+
+  it('treats onInstall hook failures as non-fatal once the installation is saved', async () => {
+    stubProvisioning();
+    const { provider, storage } = makeProvider({
+      tokenResolver: makeTokenResolver(),
+      onInstall: async () => {
+        throw new Error('user hook exploded');
+      },
+    });
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = await provider.connect('agent-1');
+      expect(result.type).toBe('deep_link');
+    } finally {
+      warnSpy.mockRestore();
+    }
+    expect((await storage.getInstallationByAgent(PLATFORM, 'agent-1'))?.status).toBe('active');
+  });
+
+  it('warns when the minted client secret is persisted without an encryption key', async () => {
+    stubProvisioning();
+    const { provider } = makeProvider({ tokenResolver: makeTokenResolver() });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await provider.connect('agent-1');
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('WITHOUT encryption'));
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('surfaces Mastra storage initialization failures instead of degrading to in-memory', async () => {
+    const provider = new TeamsProvider({ baseUrl: BASE_URL, tokenResolver: makeTokenResolver() });
+    provider.__attach({
+      getStorage: () => ({
+        init: async () => {
+          throw new Error('storage init failed');
+        },
+      }),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    await expect(provider.connect('agent-1')).rejects.toThrow('storage init failed');
   });
 });
 

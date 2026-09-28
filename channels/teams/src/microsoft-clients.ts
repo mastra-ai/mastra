@@ -87,7 +87,7 @@ export async function addApplicationPassword(
   graphBaseUrl: string = GRAPH_API_BASE_URL,
 ): Promise<string> {
   const response = await request(
-    `${graphBaseUrl}/v1.0/applications/${applicationObjectId}/addPassword`,
+    `${graphBaseUrl}/v1.0/applications/${encodeURIComponent(applicationObjectId)}/addPassword`,
     {
       method: 'POST',
       headers: authJson(token),
@@ -113,7 +113,7 @@ export async function deleteApplication(
   graphBaseUrl: string = GRAPH_API_BASE_URL,
 ): Promise<void> {
   await request(
-    `${graphBaseUrl}/v1.0/applications/${applicationObjectId}`,
+    `${graphBaseUrl}/v1.0/applications/${encodeURIComponent(applicationObjectId)}`,
     { method: 'DELETE', headers: { authorization: `Bearer ${token}` } },
     'Graph application delete',
   );
@@ -158,7 +158,7 @@ export async function deleteBotRegistration(
   devPortalBaseUrl: string = DEV_PORTAL_BASE_URL,
 ): Promise<void> {
   await request(
-    `${devPortalBaseUrl}/api/botframework/${botId}`,
+    `${devPortalBaseUrl}/api/botframework/${encodeURIComponent(botId)}`,
     { method: 'DELETE', headers: { authorization: `Bearer ${token}` } },
     'Dev Portal bot deletion',
   );
@@ -182,7 +182,9 @@ export async function validateBotCredentials(
   options: { appId: string; appPassword: string; appTenantId?: string },
   loginBaseUrl: string = LOGIN_BASE_URL,
 ): Promise<void> {
-  const tenant = options.appTenantId ?? 'botframework.com';
+  // Encoded: appTenantId can come from connect() options via the editor UI —
+  // a value containing `/`, `?` or `#` must not redirect the secret elsewhere.
+  const tenant = encodeURIComponent(options.appTenantId ?? 'botframework.com');
   const body = new URLSearchParams({
     grant_type: 'client_credentials',
     client_id: options.appId,

@@ -332,23 +332,33 @@ export class TeamsProvider implements ChannelProvider {
 
     const botName = options.name ?? agentId;
     const appType = this.#config.appType ?? 'MultiTenant';
+    const appTenantId = options.appTenantId ?? this.#config.appTenantId;
+    if (appType === 'SingleTenant' && !appTenantId) {
+      throw new Error(
+        'TeamsProvider is configured for SingleTenant bots but no appTenantId is available. ' +
+          'Set `appTenantId` on the provider or pass it to connect().',
+      );
+    }
     const webhookId = existing?.webhookId ?? randomUUID();
     const messagingEndpoint = `${baseUrl}/${PLATFORM}/events/${webhookId}`;
 
     // 1. Entra application + client secret (Microsoft Graph audience).
-    const graphToken = await tokenResolver(TEAMS_GRAPH_SCOPE);
+    const graphToken = await tokenResolver(TEAMS_GRAPH_SCOPE, appTenantId);
     const application = await createApplication(
       graphToken,
       { displayName: botName, signInAudience: appType === 'SingleTenant' ? 'AzureADMyOrg' : 'AzureADMultipleOrgs' },
       this.#config.graphBaseUrl,
     );
     let appPassword: string;
+    let devPortalToken: string | undefined;
+    let botRegistered = false;
+    let installation: TeamsInstallation;
     try {
       appPassword = await addApplicationPassword(graphToken, application.id, 'mastra-teams', this.#config.graphBaseUrl);
 
       // 2. Bot registration (Teams Developer Portal audience — a Graph token
       //    is not accepted here, hence the second scope-specific resolve).
-      const devPortalToken = await tokenResolver(TEAMS_DEV_PORTAL_SCOPE);
+      devPortalToken = await tokenResolver(TEAMS_DEV_PORTAL_SCOPE, appTenantId);
       await createBotRegistration(
         devPortalToken,
         {
@@ -361,9 +371,37 @@ export class TeamsProvider implements ChannelProvider {
         },
         this.#config.devPortalBaseUrl,
       );
+      botRegistered = true;
+
+      // 3. Persist while still inside the rollback scope — a failed save must
+      //    not strand a live bot registration + Entra app with no local record
+      //    (disconnect() could never find them again, and the minted secret
+      //    would be lost).
+      installation = {
+        id: existing?.id ?? randomUUID(),
+        agentId,
+        webhookId,
+        status: 'active',
+        appId: application.appId,
+        entraObjectId: application.id,
+        appPassword,
+        appTenantId,
+        appType,
+        botName,
+        messagingEndpoint,
+        installedAt: existing?.installedAt ?? new Date(),
+      };
+      await store.save(installation);
     } catch (err) {
-      // Roll back the half-provisioned Entra application so retries don't
-      // accumulate orphaned apps in the tenant.
+      // Roll back the half-provisioned resources so retries don't accumulate
+      // orphaned bot registrations / Entra apps in the tenant.
+      if (botRegistered && devPortalToken) {
+        try {
+          await deleteBotRegistration(devPortalToken, application.appId, this.#config.devPortalBaseUrl);
+        } catch (cleanupErr) {
+          console.warn(`[Teams] Failed to roll back bot registration "${application.appId}":`, cleanupErr);
+        }
+      }
       try {
         await deleteApplication(graphToken, application.id, this.#config.graphBaseUrl);
       } catch (cleanupErr) {
@@ -372,23 +410,19 @@ export class TeamsProvider implements ChannelProvider {
       throw err;
     }
 
-    const installation: TeamsInstallation = {
-      id: existing?.id ?? randomUUID(),
-      agentId,
-      webhookId,
-      status: 'active',
-      appId: application.appId,
-      entraObjectId: application.id,
-      appPassword,
-      appType,
-      botName,
-      messagingEndpoint,
-      installedAt: existing?.installedAt ?? new Date(),
-    };
-    await store.save(installation);
-    await this.#activateInstallation(installation);
+    // The installation is saved and the bot is live — post-save failures are
+    // non-fatal (the adapter is rebuilt lazily on the next webhook/initialize).
+    try {
+      await this.#activateInstallation(installation);
+    } catch (err) {
+      console.warn(`[Teams] Failed to activate installation for agent "${agentId}":`, err);
+    }
     this.#configured = true;
-    await this.#config.onInstall?.(installation);
+    try {
+      await this.#config.onInstall?.(installation);
+    } catch (err) {
+      console.warn(`[Teams] onInstall hook failed for agent "${agentId}":`, err);
+    }
     // The bot is live; the remaining human step is packaging it into a Teams
     // app (manifest + icons) in the Developer Portal for install/distribution.
     return { type: 'deep_link', url: DEV_PORTAL_BOTS_URL, installationId: installation.id };
@@ -589,16 +623,18 @@ export class TeamsProvider implements ChannelProvider {
     if (this.#config.storage) return this.#config.storage;
     const mastraStore = this.#mastra?.getStorage();
     if (mastraStore) {
-      try {
-        await mastraStore.init();
-        const channels = await mastraStore.getStore('channels');
-        if (channels) return channels;
-      } catch {
-        // Fall through to the in-memory store below.
-      }
+      // A configured store that fails to initialize must surface, not silently
+      // degrade to in-memory — delegated installs hold real Entra apps and
+      // secrets that would be orphaned when the non-persistent store is lost.
+      await mastraStore.init();
+      const channels = await mastraStore.getStore('channels');
+      if (channels) return channels;
     }
     // No persistent storage available — fall back to in-memory. Installations
     // won't survive a restart; pass `storage` or configure Mastra storage in prod.
+    console.warn(
+      '[Teams] No persistent channels storage configured — installations are stored in memory and will be lost on restart.',
+    );
     return new InMemoryChannelsStorage();
   }
 

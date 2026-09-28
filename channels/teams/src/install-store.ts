@@ -26,6 +26,8 @@ interface TeamsInstallationData {
  * at rest.
  */
 export class TeamsInstallStore {
+  #warnedPlaintext = false;
+
   constructor(
     private readonly storage: ChannelsStorage,
     private readonly encryptionKey?: string,
@@ -61,6 +63,13 @@ export class TeamsInstallStore {
   }
 
   #enc(value: string | undefined): string | undefined {
+    if (value && !this.encryptionKey && !this.#warnedPlaintext) {
+      this.#warnedPlaintext = true;
+      console.warn(
+        '[Teams] Storing the bot client secret WITHOUT encryption — no encryption key is configured. ' +
+          'Set `encryptionKey` on TeamsProvider or the MASTRA_ENCRYPTION_KEY environment variable to encrypt installation secrets at rest.',
+      );
+    }
     return value && this.encryptionKey ? encrypt(value, this.encryptionKey) : value;
   }
 
