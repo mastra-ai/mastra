@@ -1,11 +1,16 @@
 import { jsonLanguage } from '@codemirror/lang-json';
 import CodeMirror from '@uiw/react-codemirror';
-import { Check, X } from 'lucide-react';
+import { Braces, Check, CopyIcon, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { RequestContextLabel } from '@/domains/request-context/components/request-context-label';
 import { Button } from '@/ds/components/Button';
 import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Icon } from '@/ds/icons/Icon';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
+import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { cn } from '@/utils/cn';
 import { toast } from '@/utils/toast';
 
@@ -65,6 +70,17 @@ export const WorkflowTracingRunOptions = ({
     setText(serializedTracingOptions);
   };
 
+  const { handleCopy } = useCopyToClipboard({ text });
+  const buttonClass = cn(quietTextHover, controlStateColorTransition);
+
+  const handleFormat = () => {
+    try {
+      setText(JSON.stringify(JSON.parse(text), null, 2));
+    } catch {
+      toast.error('Invalid JSON');
+    }
+  };
+
   const handleSave = () => {
     if (!text) {
       setSettings({ ...settings, tracingOptions: undefined });
@@ -87,39 +103,65 @@ export const WorkflowTracingRunOptions = ({
   };
 
   return (
-    <div>
-      <div className="pb-2">
-        <RequestContextLabel as="label">Tracing Options (JSON)</RequestContextLabel>
-      </div>
+    <TooltipProvider>
+      <div>
+        <div className="flex items-center justify-between pb-2">
+          <RequestContextLabel as="label">Tracing Options (JSON)</RequestContextLabel>
 
-      <CodeMirror
-        value={text}
-        onChange={handleChange}
-        theme={theme}
-        extensions={[jsonLanguage]}
-        className={cn(
-          editorClassName,
-          'overflow-hidden overflow-y-scroll rounded-lg border border-border bg-background p-3',
-          '[&_.cm-editor]:!bg-background [&_.cm-gutters]:!bg-background',
-        )}
-      />
+          <div className="flex items-center gap-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button type="button" onClick={handleFormat} className={buttonClass}>
+                  <Icon>
+                    <Braces />
+                  </Icon>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Format the Tracing Options JSON</TooltipContent>
+            </Tooltip>
 
-      <div className="flex justify-end gap-2 pt-2">
-        {isDirty && (
-          <Button
-            variant="default"
-            size="icon-md"
-            type="button"
-            tooltip="Revert tracing options changes"
-            onClick={handleRevert}
-          >
-            <X />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button type="button" onClick={handleCopy} className={buttonClass}>
+                  <Icon>
+                    <CopyIcon />
+                  </Icon>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Copy Tracing Options</TooltipContent>
+            </Tooltip>
+          </div>
+        </div>
+
+        <CodeMirror
+          value={text}
+          onChange={handleChange}
+          theme={theme}
+          extensions={[jsonLanguage]}
+          className={cn(
+            editorClassName,
+            'overflow-hidden overflow-y-scroll rounded-lg border border-border bg-background p-3',
+            '[&_.cm-editor]:!bg-background [&_.cm-gutters]:!bg-background',
+          )}
+        />
+
+        <div className="flex justify-end gap-2 pt-2">
+          {isDirty && (
+            <Button
+              variant="default"
+              size="icon-md"
+              type="button"
+              tooltip="Revert tracing options changes"
+              onClick={handleRevert}
+            >
+              <X />
+            </Button>
+          )}
+          <Button icon={<Check />} type="button" onClick={handleSave}>
+            Save
           </Button>
-        )}
-        <Button icon={<Check />} type="button" onClick={handleSave}>
-          Save
-        </Button>
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 };
