@@ -2,7 +2,6 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Archive, Inbox, Mail } from 'lucide-react';
 import { useDeferredValue, useState } from 'react';
 import { useSearchParams } from 'react-router';
@@ -10,6 +9,7 @@ import { useSearchParams } from 'react-router';
 import { useFactoryAttentionHistory, useMarkAllFactoryAttentionRead } from '../../hooks/useFactoryAttention';
 import { dayHeading, groupByDay } from '../domains/factory/activity';
 import { AttentionItemRow, KindIcon } from '../domains/factory/components/AttentionItemRow';
+import { RepositoryPickerDialog } from '../domains/factory/components/RepositoryPickerDialog';
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
 import { DayHeading, RailRow, RAIL_LIST } from '../domains/factory/components/Timeline';
 import { useAttentionItemActions } from '../domains/factory/components/useAttentionItemActions';
@@ -106,7 +106,8 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
   const view = attentionView(searchParams.get('view'));
   const normalizedSearch = useDeferredValue(search.trim());
   const attention = useFactoryAttentionHistory(factoryId, view, normalizedSearch);
-  const rowProps = useAttentionItemActions(factoryId);
+  const actions = useAttentionItemActions(factoryId);
+  const rowProps = actions.rowProps;
   const markAllRead = useMarkAllFactoryAttentionRead(factoryId);
   const pages = attention.data?.pages ?? [];
   const summary = pages[0];
@@ -207,6 +208,14 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
           })}
         </>
       )}
+
+      {actions.repositorySelection ? (
+        <RepositoryPickerDialog
+          repositories={actions.repositories}
+          onClose={actions.closeRepositorySelection}
+          onSelect={actions.selectRepository}
+        />
+      ) : null}
 
       <LoadMoreSentinel
         hasNextPage={attention.hasNextPage}

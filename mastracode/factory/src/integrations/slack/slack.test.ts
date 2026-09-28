@@ -22,10 +22,12 @@ function handlerCtx(mastra?: unknown) {
   return { mastra: mastra as any, requestContext: new RequestContext() };
 }
 
-function makeThread() {
+function makeThread({ isDM = false } = {}) {
   return {
     adapter: { name: 'slack' },
     channelId: 'C-1',
+    isDM,
+    post: vi.fn().mockResolvedValue({ id: 'msg-1' }),
     postEphemeral: vi.fn().mockResolvedValue({ id: 'eph-1' }),
   } as any;
 }
@@ -90,9 +92,20 @@ describe('resolveLinkedSender', () => {
     // The link carries NO identity: Slack proves the account during OIDC, so
     // a forwarded card can't bind the original sender to whoever clicks it.
     const card = thread.postEphemeral.mock.calls[0][1];
+    expect(JSON.stringify(card)).toContain('then mention me again.');
     const actions = card.children.find((c: any) => c.type === 'actions');
     const linkButton = actions.children.find((c: any) => c.type === 'link-button');
     expect(linkButton.url).toBe('https://mc.example.com/connect/slack');
+  });
+
+  it('tells an unlinked sender in a DM to message the bot again', async () => {
+    process.env.MASTRACODE_CHANNELS_PUBLIC_URL = 'https://mc.example.com';
+    const thread = makeThread({ isDM: true });
+
+    await resolveLinkedSender({ thread, message: makeMessage('T-1'), accountLinks: makeStore(null) });
+
+    const card = thread.postEphemeral.mock.calls[0][1];
+    expect(JSON.stringify(card)).toContain('then message me again.');
   });
 
   it('treats a missing team id as unlinked and blocks the run, still offering the card', async () => {
@@ -141,7 +154,6 @@ describe('resolveFactoryForLink', () => {
     const thread = makeThread();
     const result = await resolveFactoryForLink({
       thread,
-      message: makeMessage('T-1'),
       link: { orgId: 'org-1', userId: 'user-1', linkedAt: new Date() },
       key: linkKey,
       accountLinks: makeLinkStore(),
@@ -157,7 +169,6 @@ describe('resolveFactoryForLink', () => {
 
     const result = await resolveFactoryForLink({
       thread,
-      message: makeMessage('T-1'),
       link: { orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-2', linkedAt: new Date() },
       key: linkKey,
       accountLinks,
@@ -178,7 +189,6 @@ describe('resolveFactoryForLink', () => {
 
     const result = await resolveFactoryForLink({
       thread,
-      message: makeMessage('T-1'),
       link: { orgId: 'org-1', userId: 'user-1', linkedAt: new Date() },
       key: linkKey,
       accountLinks,
@@ -202,7 +212,6 @@ describe('resolveFactoryForLink', () => {
 
     const result = await resolveFactoryForLink({
       thread,
-      message: makeMessage('T-1'),
       link: { orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-gone', linkedAt: new Date() },
       key: linkKey,
       accountLinks,
@@ -210,8 +219,10 @@ describe('resolveFactoryForLink', () => {
     });
 
     expect(result).toEqual({ status: 'blocked' });
-    // Ephemeral prompt deep-links to Connected Accounts settings.
-    const card = thread.postEphemeral.mock.calls[0][1];
+    // Public thread prompt deep-links to Connected Accounts settings.
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    expect(thread.postEphemeral).not.toHaveBeenCalled();
+    const card = thread.post.mock.calls[0][0];
     const actions = card.children.find((c: any) => c.type === 'actions');
     const linkButton = actions.children.find((c: any) => c.type === 'link-button');
     expect(linkButton.url).toBe('https://mc.example.com/settings/connections');
@@ -225,7 +236,6 @@ describe('resolveFactoryForLink', () => {
 
     const result = await resolveFactoryForLink({
       thread,
-      message: makeMessage('T-1'),
       link: { orgId: 'org-1', userId: 'user-1', linkedAt: new Date() },
       key: linkKey,
       accountLinks: makeLinkStore(),
@@ -233,8 +243,24 @@ describe('resolveFactoryForLink', () => {
     });
 
     expect(result).toEqual({ status: 'blocked' });
-    expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
-    expect(thread.postEphemeral.mock.calls[0][2]).toEqual({ fallbackToDM: true });
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    expect(thread.postEphemeral).not.toHaveBeenCalled();
+    expect(JSON.stringify(thread.post.mock.calls[0][0])).toContain('then mention me again.');
+  });
+
+  it('tells a sender in a DM to message the bot again after picking a factory', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const thread = makeThread({ isDM: true });
+
+    await resolveFactoryForLink({
+      thread,
+      link: { orgId: 'org-1', userId: 'user-1', linkedAt: new Date() },
+      key: linkKey,
+      accountLinks: makeLinkStore(),
+      projects: makeProjects([{ id: 'fp-1' }, { id: 'fp-2' }]),
+    });
+
+    expect(JSON.stringify(thread.post.mock.calls[0][0])).toContain('then message me again.');
   });
 
   it('a personal account (no org) has no factories and is prompted', async () => {
@@ -244,7 +270,6 @@ describe('resolveFactoryForLink', () => {
 
     const result = await resolveFactoryForLink({
       thread,
-      message: makeMessage('T-1'),
       link: { userId: 'user-1', linkedAt: new Date() },
       key: linkKey,
       accountLinks: makeLinkStore(),
@@ -254,7 +279,8 @@ describe('resolveFactoryForLink', () => {
     expect(result).toEqual({ status: 'blocked' });
     // Org-less: never lists factories (they're org-scoped).
     expect(projects.list).not.toHaveBeenCalled();
-    expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    expect(thread.postEphemeral).not.toHaveBeenCalled();
   });
 
   it('blocks without a card when no public URL is configured', async () => {
@@ -265,7 +291,6 @@ describe('resolveFactoryForLink', () => {
 
     const result = await resolveFactoryForLink({
       thread,
-      message: makeMessage('T-1'),
       link: { orgId: 'org-1', userId: 'user-1', linkedAt: new Date() },
       key: linkKey,
       accountLinks: makeLinkStore(),
@@ -273,6 +298,7 @@ describe('resolveFactoryForLink', () => {
     });
 
     expect(result).toEqual({ status: 'blocked' });
+    expect(thread.post).not.toHaveBeenCalled();
     expect(thread.postEphemeral).not.toHaveBeenCalled();
   });
 });
@@ -353,7 +379,8 @@ describe('handler dispatch gating', () => {
     await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx());
 
     expect(defaultHandler).not.toHaveBeenCalled();
-    expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    expect(thread.postEphemeral).not.toHaveBeenCalled();
   });
 
   it('mention handler blocks the same way before any session is created', async () => {
@@ -368,7 +395,8 @@ describe('handler dispatch gating', () => {
     await handlers.onMention!(thread, makeMessage('T-1'), defaultHandler, handlerCtx());
 
     expect(defaultHandler).not.toHaveBeenCalled();
-    expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    expect(thread.postEphemeral).not.toHaveBeenCalled();
   });
 
   it('keeps pre-routing behavior when only account linking is configured (no projects)', async () => {

@@ -25,7 +25,6 @@ import type { ScoresSortKey } from '@/domains/scores/components/scores-list';
 import { ScoresTools } from '@/domains/scores/components/scores-tools';
 import type { ScoreEntityOption as EntityOptions } from '@/domains/scores/components/scores-tools';
 import { useScoresColumns } from '@/domains/scores/hooks/use-scores-columns';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 const crumbs = [navCrumb('/scorers'), scorerCrumb];
 const SCORES_SORT_KEYS: readonly ScoresSortKey[] = ['date', 'score'];
@@ -47,9 +46,7 @@ export default function Scorer() {
   const columnsState = useScoresColumns();
 
   const { data: agents = {}, isLoading: isLoadingAgents, error: agentsError } = useAgents();
-  const { isLoading: isLoadingWorkflows, error: workflowsError } = useWorkflows({
-    requestContext: usePlaygroundStore().requestContext,
-  });
+  const { isLoading: isLoadingWorkflows, error: workflowsError } = useWorkflows({});
   const { sort, onSortChange } = useUrlSort({ searchParams, setSearchParams, allowedKeys: SCORES_SORT_KEYS });
   const {
     data: loadedScores = [],

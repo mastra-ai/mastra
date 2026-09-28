@@ -167,6 +167,7 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'session_unavailable',
   'source_control_missing',
   'source_repository_missing',
+  'source_repository_ambiguous',
   'unsupported_provider_item',
   'notification_delivery_failed',
   'run_terminal_event_missing',

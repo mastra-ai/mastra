@@ -1,3 +1,11 @@
+import {
+  ActivatedSkillsProvider,
+  useActivatedSkills,
+} from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
+import {
+  BrowserToolCallsProvider,
+  useBrowserToolCalls,
+} from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
@@ -12,8 +20,6 @@ import {
   traceWorkflow,
   traceWorkflowRuns,
 } from './fixtures/trace-thread-item';
-import { ActivatedSkillsProvider, useActivatedSkills } from '@/domains/agents/context/activated-skills-context';
-import { BrowserToolCallsProvider, useBrowserToolCalls } from '@/domains/agents/context/browser-tool-calls-context';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
