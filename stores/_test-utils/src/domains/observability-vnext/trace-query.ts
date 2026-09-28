@@ -135,8 +135,6 @@ const span = (
   environment: 'production',
   organizationId: null,
   runId: null,
-  sessionId: null,
-  userId: null,
   tags: null,
   serviceName: null,
   executionSource: null,
