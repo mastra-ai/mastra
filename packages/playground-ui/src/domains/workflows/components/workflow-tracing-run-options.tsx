@@ -1,11 +1,11 @@
 import { jsonLanguage } from '@codemirror/lang-json';
 import CodeMirror from '@uiw/react-codemirror';
-import { Check } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
+import { RequestContextLabel } from '@/domains/request-context/components/request-context-label';
 import { Button } from '@/ds/components/Button';
 import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
-import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/utils/cn';
 import { toast } from '@/utils/toast';
 
@@ -34,7 +34,7 @@ export interface WorkflowTracingRunOptionsProps {
  * dialog.
  */
 export const WorkflowTracingRunOptions = ({
-  editorClassName = 'h-[240px] max-h-[40vh]',
+  editorClassName = 'h-[260px]',
   onSaved,
 }: WorkflowTracingRunOptionsProps) => {
   const theme = useCodemirrorTheme();
@@ -56,6 +56,13 @@ export const WorkflowTracingRunOptions = ({
   const handleChange = (value: string) => {
     userEditedRef.current = true;
     setText(value);
+  };
+
+  const isDirty = text !== serializedTracingOptions;
+
+  const handleRevert = () => {
+    userEditedRef.current = false;
+    setText(serializedTracingOptions);
   };
 
   const handleSave = () => {
@@ -80,20 +87,35 @@ export const WorkflowTracingRunOptions = ({
   };
 
   return (
-    <div className="space-y-2 px-5 py-2">
-      <Txt as="h3" variant="body" tone="muted">
-        Tracing Options
-      </Txt>
+    <div>
+      <div className="pb-2">
+        <RequestContextLabel as="label">Tracing Options (JSON)</RequestContextLabel>
+      </div>
 
       <CodeMirror
         value={text}
         onChange={handleChange}
         theme={theme}
         extensions={[jsonLanguage]}
-        className={cn('overflow-hidden overflow-y-scroll rounded-lg bg-card p-3', editorClassName)}
+        className={cn(
+          editorClassName,
+          'overflow-hidden overflow-y-scroll rounded-lg border border-border bg-background p-3',
+          '[&_.cm-editor]:!bg-background [&_.cm-gutters]:!bg-background',
+        )}
       />
 
-      <div className="flex items-center justify-end">
+      <div className="flex justify-end gap-2 pt-2">
+        {isDirty && (
+          <Button
+            variant="default"
+            size="icon-md"
+            type="button"
+            tooltip="Revert tracing options changes"
+            onClick={handleRevert}
+          >
+            <X />
+          </Button>
+        )}
         <Button icon={<Check />} type="button" onClick={handleSave}>
           Save
         </Button>

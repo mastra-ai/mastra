@@ -13,7 +13,7 @@ import { formatJSON, isValidJson } from '@mastra/playground-ui/utils/formatting'
 import { toast } from '@mastra/playground-ui/utils/toast';
 import CodeMirror from '@uiw/react-codemirror';
 import { Braces, CopyIcon, X, Check } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { z } from 'zod/v4';
 import type { RequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
 import { useRequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
@@ -51,11 +51,12 @@ export const RequestContext = ({
   editorClassName = 'h-[400px]',
   labelTooltip,
 }: RequestContextProps) => {
-  const [requestContextValue, setRequestContextValue] = useState<string>('');
-  const [savedRequestContextValue, setSavedRequestContextValue] = useState<string>('');
+  const requestContextStr = JSON.stringify(requestContext ?? {});
+  const formattedRequestContext = JSON.stringify(requestContext ?? {}, null, 2);
+  const [requestContextValue, setRequestContextValue] = useState<string>(formattedRequestContext);
+  const [savedRequestContextValue, setSavedRequestContextValue] = useState<string>(formattedRequestContext);
   const theme = useCodemirrorTheme();
   const presets = useRequestContextPresets();
-  const requestContextStr = JSON.stringify(requestContext ?? {});
 
   const [selectedPreset, setSelectedPreset] = useState<string>(() => {
     return getMatchingPresetKey(presets, requestContextStr);
@@ -63,21 +64,14 @@ export const RequestContext = ({
 
   const { handleCopy } = useCopyToClipboard({ text: requestContextValue });
 
-  useEffect(() => {
-    const run = async () => {
-      if (!isValidJson(requestContextStr)) {
-        toast.error('Invalid JSON');
-        return;
-      }
-
-      const formatted = await formatJSON(requestContextStr);
-      setRequestContextValue(formatted);
-      setSavedRequestContextValue(formatted);
-      setSelectedPreset(getMatchingPresetKey(presets, requestContextStr));
-    };
-
-    void run();
-  }, [presets, requestContextStr]);
+  // Re-seed synchronously when the stored value changes, so the editor never flashes empty.
+  const [seededFrom, setSeededFrom] = useState(requestContextStr);
+  if (seededFrom !== requestContextStr) {
+    setSeededFrom(requestContextStr);
+    setRequestContextValue(formattedRequestContext);
+    setSavedRequestContextValue(formattedRequestContext);
+    setSelectedPreset(getMatchingPresetKey(presets, requestContextStr));
+  }
 
   const isRequestContextDirty = useMemo(() => {
     const normalizedDraftValue = normalizeJsonString(requestContextValue);
@@ -90,8 +84,6 @@ export const RequestContext = ({
   }, [requestContextStr, requestContextValue, savedRequestContextValue]);
 
   const handleSaveRequestContext = () => {
-    if (!isRequestContextDirty) return;
-
     let parsedContext: unknown;
     try {
       parsedContext = JSON.parse(requestContextValue);
@@ -217,7 +209,7 @@ export const RequestContext = ({
               <X />
             </Button>
           )}
-          <Button icon={<Check />} type="button" onClick={handleSaveRequestContext} disabled={!isRequestContextDirty}>
+          <Button icon={<Check />} type="button" onClick={handleSaveRequestContext}>
             Save
           </Button>
         </div>
