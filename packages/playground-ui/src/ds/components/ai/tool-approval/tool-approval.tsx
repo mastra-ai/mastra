@@ -21,6 +21,8 @@ export function ToolApprovalActions({
   autoFocus = false,
 }: ToolApprovalActionsProps) {
   const actionsDisabled = disabled || status !== undefined;
+  const approveLabel = status === 'approved' ? 'Approved' : 'Approve';
+  const declineLabel = status === 'declined' ? 'Declined' : 'Decline';
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -29,26 +31,26 @@ export function ToolApprovalActions({
         variant={status ? 'default' : 'primary'}
         size="sm"
         icon={<Check />}
-        aria-label={toolName ? `Approve ${toolName}` : undefined}
+        aria-label={toolName ? `${approveLabel} ${toolName}` : undefined}
         autoFocus={autoFocus}
         disabled={actionsDisabled}
         className={status === 'approved' ? 'text-success-indicator! [&_svg]:text-success-indicator!' : undefined}
         onClick={onApprove}
       >
-        {status === 'approved' ? 'Approved' : 'Approve'}
+        {approveLabel}
       </Button>
       <Button
         type="button"
         size="sm"
         icon={<X />}
-        aria-label={toolName ? `Decline ${toolName}` : undefined}
+        aria-label={toolName ? `${declineLabel} ${toolName}` : undefined}
         disabled={actionsDisabled}
         className={
           status === 'declined' ? 'text-destructive-indicator! [&_svg]:text-destructive-indicator!' : undefined
         }
         onClick={onDecline}
       >
-        {status === 'declined' ? 'Declined' : 'Decline'}
+        {declineLabel}
       </Button>
     </div>
   );
