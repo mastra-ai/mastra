@@ -252,19 +252,18 @@ type FactoryRouteResult =
  *    deleted factory — falls through as if unset).
  * 2. Else, the tenant's only factory, stamped back onto the link so it shows
  *    up (and stays editable) in Connected Accounts settings.
- * 3. Else — zero or several factories — an ephemeral "pick a default factory"
- *    card deep-linking to settings, and the run is blocked.
+ * 3. Else — zero or several factories — a "pick a default factory" card
+ *    posted publicly in the thread so Slack notifies the sender, and the run is
+ *    blocked.
  */
 export async function resolveFactoryForLink({
   thread,
-  message,
   link,
   key,
   accountLinks,
   projects,
 }: {
   thread: HandlerThread;
-  message: HandlerMessage;
   link: ChannelAccountLink;
   key: ChannelAccountLinkKey;
   accountLinks: ChannelIdentityStorage;
@@ -299,8 +298,7 @@ export async function resolveFactoryForLink({
 
   const publicUrl = webPublicUrl();
   if (publicUrl) {
-    await thread.postEphemeral(
-      message.author,
+    await thread.post(
       Card({
         title: 'Pick a default factory',
         children: [
@@ -317,7 +315,6 @@ export async function resolveFactoryForLink({
           ]),
         ],
       }),
-      { fallbackToDM: true },
     );
   }
   return { status: 'blocked' };
@@ -714,7 +711,7 @@ async function gateDispatch(
     // credentials.
     ctx.requestContext.set('user', { id: sender.link.userId, organizationId: sender.link.orgId });
 
-    const route = await resolveFactoryForLink({ thread, message, ...sender, accountLinks, projects });
+    const route = await resolveFactoryForLink({ thread, ...sender, accountLinks, projects });
     if (route.status === 'blocked') return null;
     if (route.status === 'resolved') {
       return {
