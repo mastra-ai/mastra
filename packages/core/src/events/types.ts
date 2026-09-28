@@ -5,6 +5,8 @@ export type Event = {
   data: any;
   runId: string;
   createdAt: Date;
+  /** Epoch ms at which the event's payload was produced, when it differs from publish time. */
+  producedAt?: number;
   /**
    * Sequential index for position tracking.
    * Enables efficient resume from a specific position.

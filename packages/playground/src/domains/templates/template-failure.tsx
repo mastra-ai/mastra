@@ -62,9 +62,9 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
                 <div className="font-medium text-destructive">
                   {error.type === 'typescript' ? '🔴 TypeScript Error' : '⚠️ Lint Error'}
                 </div>
-                <div className="mt-1 font-mono text-caption wrap-break-word whitespace-pre-wrap text-muted-foreground">
+                <pre className="mt-1 text-caption wrap-break-word whitespace-pre-wrap text-muted-foreground">
                   {error.message}
-                </div>
+                </pre>
               </div>
             ))}
           </div>
@@ -75,8 +75,8 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
       {errorString && !isValidationError && (
         <details className="text-caption">
           <summary className={cn(quietTextHover, 'cursor-pointer text-center select-none')}>Show Details</summary>
-          <div className="mt-4 max-h-60 overflow-auto rounded bg-muted p-3 text-left font-mono text-caption">
-            <div className="wrap-break-word whitespace-pre-wrap">{errorString}</div>
+          <div className="mt-4 max-h-60 overflow-auto rounded bg-muted p-3 text-left text-caption">
+            <pre className="wrap-break-word whitespace-pre-wrap">{errorString}</pre>
           </div>
         </details>
       )}

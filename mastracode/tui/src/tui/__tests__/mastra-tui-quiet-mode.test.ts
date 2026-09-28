@@ -23,6 +23,7 @@ vi.mock('../onboarding-inline.js', () => ({
   OnboardingInlineComponent: class {},
 }));
 
+import { NotificationComponent } from '../components/notification.js';
 import { MastraTUI } from '../mastra-tui.js';
 
 function createSettings(overrides: Partial<GlobalSettings> = {}): GlobalSettings {
@@ -86,6 +87,12 @@ function createBareTui() {
     setQuietModeDisplay: vi.fn(),
     setQuietPreviewLineLimit: vi.fn(),
   };
+  const notification = new NotificationComponent({
+    message: 'CI failed on main',
+    source: 'github',
+    priority: 'high',
+    kind: 'ci-status',
+  });
   const tui = Object.create(MastraTUI.prototype) as any;
   tui.state = {
     ui: { requestRender: vi.fn() },
@@ -93,8 +100,9 @@ function createBareTui() {
     quietModeMaxToolPreviewLines: 2,
     taskProgress: { setQuietMode: vi.fn() },
     allToolComponents: [tool],
+    messageComponentsById: new Map([['notification-1', notification]]),
   };
-  return { tui, tool };
+  return { tui, tool, notification };
 }
 
 describe('MastraTUI quiet mode preference prompt', () => {
@@ -118,7 +126,7 @@ describe('MastraTUI quiet mode preference prompt', () => {
     const settings = createSettings({
       onboarding: { quietModePreferenceSelected: false } as GlobalSettings['onboarding'],
     });
-    const { tui, tool } = createBareTui();
+    const { tui, tool, notification } = createBareTui();
     mocks.loadSettings.mockReturnValue(settings);
     mocks.askModalQuestion.mockResolvedValueOnce('Enable quiet mode').mockResolvedValueOnce('4 lines');
 
@@ -133,6 +141,7 @@ describe('MastraTUI quiet mode preference prompt', () => {
     expect(tui.state.taskProgress.setQuietMode).toHaveBeenCalledWith(true);
     expect(tool.setQuietModeDisplay).toHaveBeenCalledWith('quiet');
     expect(tool.setQuietPreviewLineLimit).toHaveBeenCalledWith(4);
+    expect(notification.render(80).join('\n')).not.toContain('high · ci-status');
     expect(mocks.saveSettings).toHaveBeenCalledWith(settings);
   });
 

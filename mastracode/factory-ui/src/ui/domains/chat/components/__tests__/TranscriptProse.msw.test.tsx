@@ -24,6 +24,16 @@ function renderEntries(entries: TimelineEntry[]) {
   return renderWithProviders(<TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />);
 }
 
+function openReasoning() {
+  fireEvent.click(screen.getByRole('button', { name: 'Reasoning' }));
+}
+
+/** A streaming passage gets its toggle once the first words are paced in. */
+function openStreamingReasoning() {
+  act(() => void vi.advanceTimersByTime(100));
+  openReasoning();
+}
+
 afterEach(() => {
   vi.useRealTimers();
 });
@@ -39,7 +49,7 @@ describe('assistant prose', () => {
     expect(screen.getByText('The valid answer remains visible.')).toBeTruthy();
   });
 
-  it('lets the reader collapse and reopen reasoning without hiding the answer', () => {
+  it('starts reasoning collapsed, and lets the reader open and close it without hiding the answer', () => {
     renderEntries([
       assistant([
         { type: 'reasoning', reasoning: 'Check `agent.stream()` first.', details: [] },
@@ -47,20 +57,23 @@ describe('assistant prose', () => {
       ]),
     ]);
 
-    expect(screen.getByText('agent.stream()').tagName).toBe('CODE');
     const toggle = screen.getByRole('button', { name: 'Reasoning' });
-
-    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(screen.queryByText('agent.stream()')).toBeNull();
     expect(screen.getByText('Here is the answer.')).toBeTruthy();
 
     fireEvent.click(toggle);
-    expect(screen.getByText('agent.stream()')).toBeTruthy();
+    expect(screen.getByText('agent.stream()').tagName).toBe('CODE');
+
+    fireEvent.click(toggle);
+    expect(screen.queryByText('agent.stream()')).toBeNull();
+    expect(screen.getByText('Here is the answer.')).toBeTruthy();
   });
 
   it('shows a redaction notice without exposing the reasoning text', () => {
     const part = { type: 'reasoning' as const, reasoning: 'Private thought', details: [], redacted: true };
     renderEntries([assistant([part])]);
+    openReasoning();
 
     expect(screen.getByText('Reasoning was redacted by the provider.')).toBeTruthy();
     expect(screen.queryByText('Private thought')).toBeNull();
@@ -69,6 +82,7 @@ describe('assistant prose', () => {
   it('shows a redaction notice when no reasoning text was supplied', () => {
     const part = { type: 'reasoning' as const, reasoning: '', details: [], redacted: true };
     renderEntries([assistant([part])]);
+    openReasoning();
 
     expect(screen.getByText('Reasoning was redacted by the provider.')).toBeTruthy();
   });
@@ -101,6 +115,7 @@ describe('assistant prose', () => {
     vi.useFakeTimers();
     const thought = Array.from({ length: 30 }, (_, index) => `thought${index + 1}`).join(' ');
     const { container } = renderEntries([assistant([{ type: 'reasoning', reasoning: thought, details: [] }], true)]);
+    openStreamingReasoning();
 
     expect(container.textContent).not.toContain('thought5');
 
@@ -123,6 +138,7 @@ describe('assistant prose', () => {
     const { container, rerender } = renderEntries([assistant(parts('Let me look at'), true)]);
 
     act(() => void vi.advanceTimersByTime(4000));
+    openReasoning();
     const thinking = () =>
       [...container.querySelectorAll('.mastra-markdown')].find(node => node.textContent?.includes('Need the core'));
     const settled = thinking();

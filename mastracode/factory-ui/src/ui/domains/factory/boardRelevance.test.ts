@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { boardFiltersFromParams } from './boardFilters';
 import {
   gitlabCandidate,
   incidentioCandidate,
@@ -101,6 +102,33 @@ describe('board relevance', () => {
       workItemMatchesRelevance(item, activityPage, 'github:monalisa', new Set(['authored', 'review-requested'])),
     ).toBe(true);
     expect(workItemMatchesRelevance(item, activityPage, undefined, new Set())).toBe(true);
+  });
+
+  it('applies URL-restored relevance types to distinct review cards', () => {
+    const authored = boardFiltersFromParams(
+      new URLSearchParams('teammate=github%3Aoctocat&relevance=authored'),
+      'review',
+    );
+    const assigned = { ...item, metadata: { ...item.metadata, author: 'another-user', assignees: ['octocat'] } };
+    expect(workItemMatchesRelevance(item, activityPage, authored.participantId, authored.relevanceTypes)).toBe(true);
+    expect(workItemMatchesRelevance(assigned, activityPage, authored.participantId, authored.relevanceTypes)).toBe(
+      false,
+    );
+
+    const either = boardFiltersFromParams(
+      new URLSearchParams('teammate=github%3Aoctocat&relevance=authored%2Cassigned'),
+      'review',
+    );
+    expect(workItemMatchesRelevance(item, activityPage, either.participantId, either.relevanceTypes)).toBe(true);
+    expect(workItemMatchesRelevance(assigned, activityPage, either.participantId, either.relevanceTypes)).toBe(true);
+    expect(
+      workItemMatchesRelevance(
+        { ...assigned, metadata: { author: 'another-user', assignees: ['hubot'] } },
+        activityPage,
+        either.participantId,
+        either.relevanceTypes,
+      ),
+    ).toBe(false);
   });
 
   it('filters intake candidates by GitHub, GitLab, and Linear provider metadata', () => {
@@ -260,7 +288,29 @@ describe('board relevance', () => {
       updatedAt: '2026-08-01T09:00:00.000Z',
     });
 
-    expect(boardLabels({ items: [labelled], candidates: [candidate] })).toEqual(['bug', 'p1', 'ux']);
+    const linear = linearCandidate({
+      id: 'linear-2',
+      identifier: 'ENG-13',
+      title: 'Linear labels',
+      url: 'https://linear.app/acme/issue/ENG-13',
+      state: 'Todo',
+      stateType: 'unstarted',
+      priorityLabel: 'High',
+      assignee: null,
+      creator: null,
+      team: 'Engineering',
+      labels: ['frontend'],
+      createdAt: '2026-08-01T09:00:00.000Z',
+      updatedAt: '2026-08-01T09:00:00.000Z',
+    });
+
+    expect(boardLabels({ items: [labelled], candidates: [candidate, linear] })).toEqual([
+      'bug',
+      'frontend',
+      'p1',
+      'ux',
+    ]);
+    expect(candidateMatchesLabels(linear, new Set(['frontend']))).toBe(true);
     expect(workItemMatchesLabels(labelled, new Set())).toBe(true);
     expect(workItemMatchesLabels(labelled, new Set(['bug', 'p1']))).toBe(true);
     expect(workItemMatchesLabels(labelled, new Set(['bug', 'missing']))).toBe(false);

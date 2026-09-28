@@ -88,7 +88,7 @@ export function WorkItemCard({
   sessionStatus?: SessionRowStatus;
   /** Fallback when the card offers no lane: open a session on it (no run). */
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
-  onMove: (toStage: string, options?: { preapprovePlans?: boolean }) => void;
+  onMove: (toStage: string) => void;
   onRemove: () => void;
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
@@ -179,9 +179,9 @@ export function WorkItemCard({
       morph.closeDetails();
       onApproveProposal(decisionId);
     },
-    onMove: (toStage, options) => {
+    onMove: toStage => {
       morph.closeDetails();
-      onMove(toStage, options);
+      onMove(toStage);
     },
     onRemove: () => {
       morph.closeDetails();

@@ -1,6 +1,8 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { useAgentMessages } from '@mastra/playground-ui/domains/agents/hooks/use-agent-messages';
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { useToolCall } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
+import { MessageRow } from '@mastra/playground-ui/domains/chat/messages/message-row';
 import { useMemoryThreadMessages } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
 import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
 import { MastraReactProvider } from '@mastra/react';
@@ -12,7 +14,6 @@ import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { MessageRow } from '../../messages/message-row';
 import { ChatProvider } from '../chat-provider';
 import {
   approvalChunks,
@@ -31,7 +32,6 @@ import { workingMemoryFixture } from './fixtures/working-memory';
 import { WorkingMemoryProvider, useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { PlaygroundModelProvider, usePlaygroundModel } from '@/domains/agents/context/playground-model-context';
 import { useMemoryConfig } from '@/domains/memory/hooks';
-import { useAgentMessages } from '@/hooks/use-agent-messages';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -351,8 +351,8 @@ describe('ChatProvider', () => {
                     .hasAttribute('disabled'),
                 ).toBe(false);
             }
-            rendered.unmount();
             stream?.close();
+            rendered.unmount();
           },
         );
       },

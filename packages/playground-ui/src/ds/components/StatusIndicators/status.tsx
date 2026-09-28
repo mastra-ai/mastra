@@ -1,22 +1,16 @@
-import type { ComponentPropsWithoutRef, ReactNode } from 'react';
+import type { ComponentPropsWithoutRef } from 'react';
 import { statusDotClass, type StatusPresentation } from './status-dot-styles';
-import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export type StatusProps = Omit<ComponentPropsWithoutRef<'span'>, 'children'> & {
   presentation: StatusPresentation;
-  children?: ReactNode;
 };
 
-export function Status({ presentation, children, className, ...props }: StatusProps) {
+export function Status({ presentation, className, ...props }: StatusProps) {
   return (
-    <span className={cn('inline-flex items-center gap-2 text-foreground', className)} {...props}>
+    <span className={cn('inline-flex items-center gap-2', className)} {...props}>
       <span className={statusDotClass(presentation)} aria-hidden />
-      {children ?? (
-        <Txt as="span" variant="meta">
-          {presentation.label}
-        </Txt>
-      )}
+      {presentation.label}
     </span>
   );
 }

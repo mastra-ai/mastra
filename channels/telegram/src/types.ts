@@ -62,6 +62,15 @@ export const BOTFATHER_DEEP_LINK = 'https://t.me/botfather';
  */
 export interface TelegramProviderConfig {
   /**
+   * BotFather bot token to use as the default for {@link TelegramProvider.connect}
+   * when the caller does not supply one per-agent. Setting this here matches the
+   * shape of {@link SlackProvider} / {@link DiscordProvider} and lets the token
+   * live on a Mastra Connect credential (or another vault) instead of on every
+   * `connect()` call site. When both are set, an explicit
+   * {@link TelegramConnectOptions.botToken} wins.
+   */
+  botToken?: string;
+  /**
    * Public HTTPS base URL used to register per-bot webhooks (`setWebhook`).
    * May be omitted and auto-detected from the Mastra server config, or set later.
    */

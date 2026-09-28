@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 import type { WorkflowStepCardViewProps } from '../../types';
 import { ClockDial, DurationDial } from './workflow-time-dial';
 import type { DurationUnit } from './workflow-time-dial';
+import { formatDate, formatShortDate } from '@/utils/date-format';
+import { formatDuration } from '@/utils/duration';
 
 const captionClasses = 'text-meta tracking-wider whitespace-nowrap text-muted-foreground uppercase';
 
@@ -19,7 +21,7 @@ function TimingReading({
   dial,
 }: {
   value: string;
-  unit: string;
+  unit?: string;
   caption: string;
   dial: ReactNode;
 }) {
@@ -28,7 +30,7 @@ function TimingReading({
       <span className="z-10 flex min-w-0 flex-col gap-2">
         <span className="flex items-baseline gap-1 text-display leading-none tracking-tighter whitespace-nowrap tabular-nums">
           {value}
-          <small className="text-meta tracking-normal text-muted-foreground">{unit}</small>
+          {unit && <small className="text-meta tracking-normal text-muted-foreground">{unit}</small>}
         </span>
         <span className={captionClasses}>{caption}</span>
       </span>
@@ -45,14 +47,9 @@ export function WorkflowTiming({ duration, date }: Pick<WorkflowStepCardViewProp
     }
     return (
       <TimingReading
-        value={scheduled.toLocaleTimeString(undefined, { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' })}
+        value={formatDate(scheduled, 'time', { timeZone: 'UTC' }) ?? ''}
         unit="UTC"
-        caption={scheduled.toLocaleDateString(undefined, {
-          timeZone: 'UTC',
-          day: 'numeric',
-          month: 'short',
-          year: 'numeric',
-        })}
+        caption={formatShortDate(scheduled, { timeZone: 'UTC', now: 0 }) ?? ''}
         dial={<ClockDial date={scheduled} />}
       />
     );
@@ -64,8 +61,7 @@ export function WorkflowTiming({ duration, date }: Pick<WorkflowStepCardViewProp
   const reading = durationReading(duration);
   return (
     <TimingReading
-      value={reading.amount.toLocaleString(undefined, { maximumFractionDigits: 3 })}
-      unit={reading.unit}
+      value={formatDuration(duration) ?? ''}
       caption="Configured delay"
       dial={<DurationDial {...reading} />}
     />

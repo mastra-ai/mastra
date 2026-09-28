@@ -291,6 +291,7 @@ export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
   protected outputDir = 'output';
   protected platform: BundlerPlatform = 'node';
+  protected defaultExternalsPreset = false;
 
   constructor(name: string, component: 'BUNDLER' | 'DEPLOYER' = 'BUNDLER') {
     super({ name, component });
@@ -470,7 +471,7 @@ export abstract class Bundler extends MastraBundler {
     mastraEntryFile: string,
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
     toolsPaths: (string | string[])[],
-    { enableSourcemap, enableMinify, enableEsmShim, externals }: BundlerOptions,
+    { enableSourcemap, enableMinify, enableEsmShim, externals, externalsPreset }: BundlerOptions,
     additionalEntries: Record<string, string>,
     projectRoot: string,
   ) {
@@ -489,7 +490,8 @@ export abstract class Bundler extends MastraBundler {
         workspaceRoot,
         projectRoot,
         enableEsmShim,
-        externalsPreset: externals === true,
+        externalsPreset: externals === true || !!externalsPreset,
+        explicitExternals: Array.isArray(externals) ? externals : [],
       },
     );
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths, projectRoot);
@@ -608,6 +610,7 @@ export abstract class Bundler extends MastraBundler {
       enableSourcemap: !!bundlerOptions.sourcemap,
       enableMinify: !!bundlerOptions.minify,
       externals: bundlerOptions.externals ?? [],
+      externalsPreset: this.defaultExternalsPreset && bundlerOptions.externals !== false,
       enableEsmShim,
       dynamicPackages: bundlerOptions.dynamicPackages,
     };
@@ -660,7 +663,7 @@ export abstract class Bundler extends MastraBundler {
     }
 
     const initialWorkspaceDependencies = new Set<string>();
-    for (const dep of analyzedBundleInfo.dependencies.keys()) {
+    for (const dep of [...analyzedBundleInfo.dependencies.keys(), ...analyzedBundleInfo.externalDependencies.keys()]) {
       const pkgName = getPackageName(dep);
       if (pkgName && analyzedBundleInfo.workspaceMap.has(pkgName)) {
         initialWorkspaceDependencies.add(pkgName);

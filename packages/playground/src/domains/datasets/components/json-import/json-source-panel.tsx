@@ -1,7 +1,8 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
-import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { FileJson, Upload, RefreshCw } from 'lucide-react';
 import { useCallback, useState } from 'react';
@@ -62,14 +63,16 @@ export function JSONSourcePanel({
       </TabContent>
 
       <TabContent value="paste" className={tabContentClassName}>
-        <Textarea
+        <CodeEditor
           aria-label="JSON items"
-          className="min-h-[200px] flex-1 resize-none font-mono text-caption"
+          language="json"
+          lineNumbers={false}
+          showCopyButton={false}
           placeholder={PASTE_PLACEHOLDER}
-          spellCheck={false}
           value={pastedText}
-          onChange={e => onPastedTextChange(e.target.value)}
-          disabled={isImporting}
+          onChange={onPastedTextChange}
+          editable={!isImporting}
+          className="min-h-50 flex-1"
         />
       </TabContent>
     </Tabs>
@@ -181,7 +184,9 @@ function FileCard({
     <div data-testid="json-file-card" className="rounded-lg border border-border">
       <div className="flex items-center gap-2 px-3 py-2">
         <FileJson className="size-4 shrink-0 text-muted-foreground" />
-        <span className="min-w-0 flex-1 truncate font-mono text-caption text-foreground">{file.name}</span>
+        <Txt as="span" variant="caption" tone="ink" font="mono" className="min-w-0 flex-1 truncate">
+          {file.name}
+        </Txt>
         <span className="shrink-0 text-meta text-muted-foreground">{formatFileSize(file.size)}</span>
         <Button icon={<RefreshCw />} variant="ghost" size="sm" onClick={onReplace} disabled={isImporting}>
           Replace
@@ -194,7 +199,9 @@ function FileCard({
           className="grid grid-cols-[2rem_1fr_auto] items-center gap-2 border-t border-border px-3 py-1.5"
         >
           <span className="text-meta text-muted-foreground">{row.index}</span>
-          <span className="truncate font-mono text-caption text-foreground">{formatInput(row.input)}</span>
+          <Txt as="span" variant="caption" tone="ink" font="mono" className="truncate">
+            {formatInput(row.input)}
+          </Txt>
           {!row.hasInput ? (
             <Badge variant="red" size="xs">
               no input

@@ -1,8 +1,8 @@
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { PromptBlockCreateContent } from '@/domains/prompt-blocks';
-import { useLinkComponent } from '@/lib/framework';
 
 const crumbs = [navCrumb('/prompts'), { id: 'create-prompt-block', label: 'Create prompt block' }];
 

@@ -22,6 +22,7 @@ import { defaultNotificationDeliveryDecision } from '@mastra/core/notifications'
 import {
   AgentsMDInjector,
   createBackgroundWorkSignalProcessor,
+  CyberRefusalHandler,
   isBadRequestError,
   PrefillErrorHandler,
   ProviderHistoryCompat,
@@ -318,6 +319,8 @@ export interface MastraCodeConfig {
   disableMcp?: boolean;
   /** Disable hooks. Default: false */
   disableHooks?: boolean;
+  /** Skip loading cwd/.env into the process environment. Useful for multi-session hosts. */
+  disableEnvFile?: boolean;
   /** Disable plugin discovery/loading. Default: false */
   disablePlugins?: boolean;
   /** Disable the polling-based GitHub signal provider even when enabled in global settings. Default: false */
@@ -475,10 +478,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   }
 
   // Load .env file from cwd if present (for observability API keys, etc.)
-  try {
-    process.loadEnvFile(path.join(cwd, '.env'));
-  } catch {
-    // No .env file — that's fine, keys may be in shell environment
+  if (!config?.disableEnvFile) {
+    try {
+      process.loadEnvFile(path.join(cwd, '.env'));
+    } catch {
+      // No .env file — that's fine, keys may be in shell environment
+    }
   }
 
   // Auth storage (shared with Claude Max / OpenAI providers and AgentController)
@@ -912,6 +917,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         const state = getInjectorSessionState(requestContext);
         return state?.untrustedCheckout !== true || typeof state?.baseRef === 'string';
       },
+      // Resolve relative tool paths against the session checkout (not the host
+      // process cwd) and never surface instruction files from outside it.
+      getBasePath: ({ requestContext }) => getInjectorSessionState(requestContext)?.projectPath ?? project.rootPath,
       getReader: ({ requestContext }) => {
         const state = getInjectorSessionState(requestContext);
         if (state?.untrustedCheckout !== true || typeof state?.baseRef !== 'string') return undefined;
@@ -1083,11 +1091,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       ...readPluginProcessors().input.map(entry => entry.value),
       ...(pluginSignalLane?.getInputProcessors() ?? []),
     ],
-    // Mastra Code contributes no output processors of its own; the lane exists
-    // so plugins can. Like the input lane, plugin processors sit last — after
-    // the layers they customize, before the channel and memory layers the
-    // Agent appends.
+    // Like the input lane, plugin processors sit last — after the layers they
+    // customize, before the channel and memory layers the Agent appends.
     outputProcessors: () => [
+      // Anthropic cyber refusals finish a step instead of throwing, so they are
+      // handled here; OpenAI's throw and are handled in the error lane below.
+      new CyberRefusalHandler(),
       ...readPluginProcessors().output.map(entry => entry.value),
       ...(pluginSignalLane?.getOutputProcessors() ?? []),
     ],
@@ -1099,6 +1108,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // short-circuit on the first `retry: true`, so a blind retry first would resend
       // the broken history and fail again.
       new ProviderHistoryCompat(),
+      // Same ordering reason: OpenAI surfaces some cyber refusals as retryable
+      // 5xx errors, and a blind retry would resend the request without the
+      // `continue` nudge and spend the one retry this handler allows.
+      new CyberRefusalHandler(),
       new StreamErrorRetryProcessor({
         matchers: [
           { match: isBadRequestError, maxRetries: 1, delayMs: 2000 },

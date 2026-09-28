@@ -1,6 +1,6 @@
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { ScoreDelta } from './score-delta';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface ComparisonScoreRowProps {
   scorerId: string;
@@ -29,7 +29,7 @@ export function ComparisonScoreRow({ scorerId, value, delta, reason }: Compariso
           <span className="min-w-0 truncate">{scorerId}</span>
         </Link>
         <div className="flex items-center gap-3">
-          <span className="font-mono text-body text-muted-foreground">{value != null ? value.toFixed(2) : '-'}</span>
+          <span className="text-body text-muted-foreground tabular-nums">{value != null ? value.toFixed(2) : '-'}</span>
           {delta != null && <ScoreDelta delta={delta} />}
         </div>
       </div>

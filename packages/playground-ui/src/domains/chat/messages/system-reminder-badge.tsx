@@ -37,7 +37,7 @@ export const SystemReminderBadge = ({ text }: SystemReminderBadgeProps) => {
 
       {isExpanded && reminder.body && (
         <div className="border-t border-border bg-sidebar px-4 py-3">
-          <pre className="font-mono text-meta break-words whitespace-pre-wrap text-foreground">{reminder.body}</pre>
+          <pre className="text-meta break-words whitespace-pre-wrap text-foreground">{reminder.body}</pre>
         </div>
       )}
     </div>

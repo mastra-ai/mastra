@@ -277,7 +277,7 @@
                         "traceId": "<trace-1>",
                         "name": "chunk: 'tool-result'",
                         "type": "model_chunk",
-                        "completed": false,
+                        "completed": true,
                         "isEvent": true,
                         "isRootSpan": false,
                         "parentId": "<span-4>",

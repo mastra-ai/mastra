@@ -183,7 +183,7 @@ function serializeSingleEntry(entry: SingleStepEntry): SerializedSingleStepEntry
       } else if (typeof m.template === 'string') {
         serialized[key] = { template: m.template };
       } else if (m.initData) {
-        serialized[key] = { initData: m.initData?.id, path: m.path };
+        serialized[key] = { initData: m.initData?.id ?? true, path: m.path };
       } else if (m.step) {
         serialized[key] = {
           step: Array.isArray(m.step) ? m.step.map((s: any) => s?.id) : m.step?.id,

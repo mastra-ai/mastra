@@ -1242,4 +1242,307 @@ describe('CachingPubSub', () => {
       expect(ackedByConsumer).toEqual([1, 1]);
     });
   });
+
+  describe('source bus following', () => {
+    const topic = 'agent.stream.run-1';
+    const flush = () => new Promise(resolve => setTimeout(resolve, 20));
+
+    /**
+     * Mimics the `mastra.pubsub` proxy: same underlying transport, different
+     * object identity, methods bound to the target. Aliasing detection must
+     * see through it via `__rawBus()`.
+     */
+    function proxyOver(raw: PubSub): PubSub {
+      return new Proxy(raw, {
+        get(target, prop) {
+          const val = Reflect.get(target, prop, target);
+          return typeof val === 'function' ? val.bind(target) : val;
+        },
+      }) as PubSub;
+    }
+
+    it('delivers and caches source-published events when source is a different transport', async () => {
+      const sourceBus = new EventEmitterPubSub();
+      const caching = new CachingPubSub(new EventEmitterPubSub(), cache, { source: sourceBus });
+
+      const received: Event[] = [];
+      await caching.subscribe(topic, event => {
+        received.push(event);
+      });
+
+      // Publish directly on the source bus — the follower must bridge it.
+      await sourceBus.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 1 } });
+      await flush();
+
+      expect(received).toHaveLength(1);
+      expect(received[0]).toMatchObject({ type: 'chunk', data: { n: 1 }, index: 0 });
+
+      const history = await caching.getHistory(topic);
+      expect(history).toHaveLength(1);
+      expect(history[0].index).toBe(0);
+    });
+
+    it('acks every source delivery, including dedup-suppressed and cache-failure paths', async () => {
+      // Pins the composition of two shipped behaviors: the source-follower
+      // wiring (transport unification) and the pubsub ack contract (#24348).
+      // On a durable source backend (Redis Streams, GCP Pub/Sub) the follower
+      // is a real consumer — every delivery it filters out or fails to cache
+      // must still be acked, or it stays pending and is redelivered forever.
+      class AckRecordingSource extends PubSub {
+        private listeners = new Map<string, Set<EventCallback>>();
+        acked: Event[] = [];
+
+        async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
+          const full: Event = { ...event, id: crypto.randomUUID(), createdAt: new Date() } as Event;
+          for (const cb of this.listeners.get(topic) ?? []) {
+            await cb(full, async () => {
+              this.acked.push(full);
+            });
+          }
+        }
+
+        async subscribe(topic: string, cb: EventCallback): Promise<void> {
+          let cbs = this.listeners.get(topic);
+          if (!cbs) {
+            cbs = new Set();
+            this.listeners.set(topic, cbs);
+          }
+          cbs.add(cb);
+        }
+
+        async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
+          this.listeners.get(topic)?.delete(cb);
+        }
+
+        async flush(): Promise<void> {}
+      }
+
+      const sourceBus = new AckRecordingSource();
+      const caching = new CachingPubSub(new EventEmitterPubSub(), cache, { source: sourceBus });
+      await caching.subscribe(topic, () => {});
+
+      // 1. Normal delivery: cached, republished, and acked.
+      await sourceBus.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 1 } });
+      expect(sourceBus.acked).toHaveLength(1);
+
+      // 2. Foreign-indexed delivery on a non-aliased source (re-cached under a
+      //    fresh index and republished): still acked.
+      await sourceBus.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 2 }, index: 5 });
+      expect(sourceBus.acked).toHaveLength(2);
+
+      // 3. Cache write failure (falls back to uncached republish): still acked.
+      const failingPush = vi.spyOn(cache, 'listPushIndexed').mockRejectedValueOnce(new Error('cache down'));
+      await sourceBus.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 3 } });
+      expect(sourceBus.acked).toHaveLength(3);
+      failingPush.mockRestore();
+    });
+
+    it('replays source-published events to late subscribers', async () => {
+      const sourceBus = new EventEmitterPubSub();
+      const caching = new CachingPubSub(new EventEmitterPubSub(), cache, { source: sourceBus });
+
+      // A first subscriber keeps the follower alive while events flow.
+      await caching.subscribe(topic, () => {});
+      await sourceBus.publish(topic, { type: 'first', runId: 'run-1', data: {} });
+      await sourceBus.publish(topic, { type: 'second', runId: 'run-1', data: {} });
+      await flush();
+
+      const replayed: string[] = [];
+      await caching.subscribeWithReplay(topic, event => {
+        replayed.push(event.type);
+      });
+      await sourceBus.publish(topic, { type: 'third', runId: 'run-1', data: {} });
+      await flush();
+
+      expect(replayed).toEqual(['first', 'second', 'third']);
+    });
+
+    it('bridges foreign-indexed events when the source is another caching tier', async () => {
+      // Supported topology: an agent with its own pubsub wraps it in its own
+      // CachingPubSub and follows `mastra.pubsub` — which is itself a
+      // user-supplied CachingPubSub over a *different* cache and transport
+      // (`new Mastra({ pubsub: new CachingPubSub(...) })`). Events published
+      // through the mastra tier arrive at the follower already carrying that
+      // tier's index. They must NOT be treated as a local echo: the foreign
+      // tier's cache is not the one this tier replays from, so dropping them
+      // loses the event for local subscribers entirely (#20646's failure
+      // mode). Expected: cached here under a fresh index and republished
+      // into inner exactly once.
+      const foreignTier = new CachingPubSub(new EventEmitterPubSub(), new InMemoryServerCache());
+      const caching = new CachingPubSub(new EventEmitterPubSub(), cache, { source: foreignTier });
+
+      // Bump the foreign tier's counter before anyone follows, so the foreign
+      // index (1) is distinguishable from this tier's fresh index (0).
+      await foreignTier.publish(topic, { type: 'warmup', runId: 'run-1', data: {} });
+
+      const received: Event[] = [];
+      await caching.subscribe(topic, event => {
+        received.push(event);
+      });
+
+      await foreignTier.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 1 } });
+      await flush();
+
+      // Exactly one live delivery, carrying this tier's index — not the
+      // foreign tier's.
+      expect(received).toHaveLength(1);
+      expect(received[0]).toMatchObject({ type: 'chunk', data: { n: 1 }, index: 0 });
+
+      // Cached in this tier, so late subscribers can replay it.
+      const history = await caching.getHistory(topic);
+      expect(history).toHaveLength(1);
+      expect(history[0]).toMatchObject({ type: 'chunk', index: 0 });
+
+      const replayed: string[] = [];
+      await caching.subscribeWithReplay(topic, event => {
+        replayed.push(event.type);
+      });
+      await flush();
+      expect(replayed).toEqual(['chunk']);
+    });
+
+    it('does not double-deliver when source and inner share the transport', async () => {
+      const shared = new EventEmitterPubSub();
+      const caching = new CachingPubSub(shared, cache, { source: proxyOver(shared) });
+
+      const received: Event[] = [];
+      await caching.subscribe(topic, event => {
+        received.push(event);
+      });
+
+      await shared.publish(topic, { type: 'chunk', runId: 'run-1', data: {} });
+      await flush();
+
+      // Exactly one live delivery (the original), but the event is cached.
+      expect(received).toHaveLength(1);
+      const history = await caching.getHistory(topic);
+      expect(history).toHaveLength(1);
+      expect(history[0].index).toBe(0);
+      // Cached copy preserves the live id — subscribeFromOffset dedups the
+      // unindexed live copy against the indexed cached copy by id.
+      expect(history[0].id).toBe(received[0].id);
+    });
+
+    it('replay+live has no duplicates on an aliased bus', async () => {
+      const shared = new EventEmitterPubSub();
+      const caching = new CachingPubSub(shared, cache, { source: proxyOver(shared) });
+
+      await caching.subscribe(topic, () => {});
+      await shared.publish(topic, { type: 'first', runId: 'run-1', data: {} });
+      await shared.publish(topic, { type: 'second', runId: 'run-1', data: {} });
+      await flush();
+
+      const replayed: string[] = [];
+      await caching.subscribeWithReplay(topic, event => {
+        replayed.push(event.type);
+      });
+      await shared.publish(topic, { type: 'third', runId: 'run-1', data: {} });
+      await flush();
+
+      expect(replayed).toEqual(['first', 'second', 'third']);
+    });
+
+    it('ignores its own indexed publishes on an aliased bus (no double cache)', async () => {
+      const shared = new EventEmitterPubSub();
+      const caching = new CachingPubSub(shared, cache, { source: proxyOver(shared) });
+
+      const received: Event[] = [];
+      await caching.subscribe(topic, event => {
+        received.push(event);
+      });
+
+      await caching.publish(topic, { type: 'chunk', runId: 'run-1', data: {} });
+      await flush();
+
+      expect(received).toHaveLength(1);
+      const history = await caching.getHistory(topic);
+      expect(history).toHaveLength(1);
+    });
+
+    it('respects the shouldCache policy for followed events', async () => {
+      const sourceBus = new EventEmitterPubSub();
+      const caching = new CachingPubSub(new EventEmitterPubSub(), cache, {
+        source: sourceBus,
+        shouldCache: () => false,
+      });
+
+      const received: Event[] = [];
+      await caching.subscribe(topic, event => {
+        received.push(event);
+      });
+
+      await sourceBus.publish(topic, { type: 'chunk', runId: 'run-1', data: {} });
+      await flush();
+
+      // Still forwarded live across the split transports, but never cached.
+      expect(received).toHaveLength(1);
+      expect(received[0].index).toBeUndefined();
+      expect(await caching.getHistory(topic)).toHaveLength(0);
+    });
+
+    it('stops following when the last local subscriber unsubscribes', async () => {
+      const sourceBus = new EventEmitterPubSub();
+      const caching = new CachingPubSub(new EventEmitterPubSub(), cache, { source: sourceBus });
+
+      const cb = vi.fn();
+      await caching.subscribe(topic, cb);
+      await caching.unsubscribe(topic, cb);
+
+      await sourceBus.publish(topic, { type: 'chunk', runId: 'run-1', data: {} });
+      await flush();
+
+      expect(cb).not.toHaveBeenCalled();
+      expect(await caching.getHistory(topic)).toHaveLength(0);
+    });
+
+    it('clearTopic tears down the follower', async () => {
+      const sourceBus = new EventEmitterPubSub();
+      const caching = new CachingPubSub(new EventEmitterPubSub(), cache, { source: sourceBus });
+
+      await caching.subscribe(topic, () => {});
+      await sourceBus.publish(topic, { type: 'before', runId: 'run-1', data: {} });
+      await flush();
+      expect(await caching.getHistory(topic)).toHaveLength(1);
+
+      await caching.clearTopic(topic);
+      await sourceBus.publish(topic, { type: 'after', runId: 'run-1', data: {} });
+      await flush();
+
+      expect(await caching.getHistory(topic)).toHaveLength(0);
+    });
+
+    it('__setSource wires a source after construction', async () => {
+      const sourceBus = new EventEmitterPubSub();
+      const caching = new CachingPubSub(new EventEmitterPubSub(), cache);
+      caching.__setSource(sourceBus);
+
+      const received: Event[] = [];
+      await caching.subscribe(topic, event => {
+        received.push(event);
+      });
+
+      await sourceBus.publish(topic, { type: 'chunk', runId: 'run-1', data: {} });
+      await flush();
+
+      expect(received).toHaveLength(1);
+      expect(await caching.getHistory(topic)).toHaveLength(1);
+    });
+
+    it('releases a follower from the source it subscribed to after source replacement', async () => {
+      const firstSource = new EventEmitterPubSub();
+      const secondSource = new EventEmitterPubSub();
+      const caching = new CachingPubSub(new EventEmitterPubSub(), cache, { source: firstSource });
+      const callback = vi.fn();
+
+      await caching.subscribe(topic, callback);
+      caching.__setSource(secondSource);
+      await caching.unsubscribe(topic, callback);
+
+      await firstSource.publish(topic, { type: 'after-unsubscribe', runId: 'run-1', data: {} });
+      await flush();
+
+      expect(callback).not.toHaveBeenCalled();
+      expect(await caching.getHistory(topic)).toHaveLength(0);
+    });
+  });
 });

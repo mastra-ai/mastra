@@ -4,10 +4,10 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { CalendarClockIcon } from 'lucide-react';
 
 import { useSchedules } from '@/domains/schedules/hooks/use-schedules';
-import { useLinkComponent } from '@/lib/framework';
 
 export type WorkflowPageTab = 'graph' | 'traces' | 'schedules';
 

@@ -171,6 +171,8 @@ export interface ToolCallPresentedHeaderProps extends Omit<ComponentProps<typeof
   icon: LucideIcon;
   label: string;
   detail?: string;
+  /** Replaces label and detail with plain text saying what the call does. */
+  description?: string;
   disclosure?: boolean;
 }
 
@@ -180,6 +182,7 @@ export const ToolCallPresentedHeader = ({
   icon: Icon,
   label,
   detail,
+  description,
   disclosure = true,
   ...props
 }: ToolCallPresentedHeaderProps) => {
@@ -196,8 +199,14 @@ export const ToolCallPresentedHeader = ({
           className={status === 'error' ? 'text-error/80' : 'text-placeholder'}
         />
       </ToolCallIcon>
-      <ToolCallLabel>{label}</ToolCallLabel>
-      {detail && <ToolCallDetail>{detail}</ToolCallDetail>}
+      {description ? (
+        <ToolCallLabel className="max-w-none min-w-0 shrink">{description}</ToolCallLabel>
+      ) : (
+        <>
+          <ToolCallLabel>{label}</ToolCallLabel>
+          {detail && <ToolCallDetail>{detail}</ToolCallDetail>}
+        </>
+      )}
       <ToolCallSpacer />
       {status === 'error' && (
         <ToolCallTrailing>

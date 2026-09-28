@@ -134,7 +134,10 @@ export function MessageBubble({
       );
     },
     Reasoning: (part: ReasoningPart) => (
-      <ReasoningPartRenderer part={{ ...part, state: part.state ?? (entry.streaming ? 'streaming' : 'done') }} />
+      <ReasoningPartRenderer
+        part={{ ...part, state: part.state ?? (entry.streaming ? 'streaming' : 'done') }}
+        defaultOpen={false}
+      />
     ),
     ToolInvocation: (part: ToolInvocationPart) => {
       const toolCallId = part.toolInvocation.toolCallId;
