@@ -1,7 +1,7 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { estimateTokenCount } from 'tokenx';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
 import { Agent } from '../../agent';
@@ -110,6 +110,20 @@ describe('ToolResultTokenLimiter', () => {
 
   it('returns an empty string when the limit is too small for the marker', async () => {
     expect(await run(new ToolResultTokenLimiter(1), 'word '.repeat(3000))).toBe('');
+  });
+
+  it('skips a same-stream provider-executed result that has no message-list entry yet', async () => {
+    const messageList = new MessageList();
+    const update = vi.spyOn(messageList, 'updateToolInvocation');
+    await new ToolResultTokenLimiter(10).processToolResult!({
+      result: 'word '.repeat(500),
+      toolCallId: TOOL_CALL_ID,
+      toolName: 'web_search',
+      args: {},
+      providerExecuted: true,
+      messageList,
+    } as any);
+    expect(update).not.toHaveBeenCalled();
   });
 
   it('limits the result an earlier processor wrote to the message list', async () => {

@@ -47,9 +47,18 @@ export class ToolResultTokenLimiter implements Processor<'tool-result-token-limi
     }
   }
 
-  async processToolResult({ result, toolCallId, toolName, args, messageList }: ProcessToolResultArgs) {
+  async processToolResult({
+    result,
+    toolCallId,
+    toolName,
+    args,
+    providerExecuted,
+    messageList,
+  }: ProcessToolResultArgs) {
     // An earlier processor may already have rewritten the result in the message list.
     const current = findResult(messageList.get.all.db(), toolCallId);
+    // A provider-executed result that arrived with its call has no message-list entry to rewrite.
+    if (providerExecuted && !current.found) return;
     const text = toText(current.found ? current.result : result);
     if (text === undefined) return;
 
