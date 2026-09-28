@@ -2,54 +2,59 @@
    timelines that pick a colour at runtime, so they generate no utility. */
 
 :root {
-  --chart-blue: var(--blue-400);
+  --chart-blue: var(--blue-300);
   --chart-blue-deep: var(--blue-600);
   --chart-yellow: var(--yellow-300);
   --chart-green: var(--green-400);
   --chart-purple: var(--purple-400);
-  --chart-orange: var(--orange-300);
-  --chart-pink: var(--pink-400);
-  --chart-red: var(--red-400);
-
-  --chart-sequential-1: var(--purple-400);
-  --chart-sequential-2: var(--purple-300);
-  --chart-sequential-3: var(--purple-200);
-  --chart-sequential-4: var(--purple-100);
-  --chart-sequential-5: var(--purple-50);
-
-  --span-agent: var(--blue-400);
-  --span-workflow: var(--cyan-400);
-  --span-model: var(--purple-300);
-  --span-mcp: var(--green-400);
-  --span-tool: var(--yellow-300);
-  --span-provider: var(--orange-300);
-  --span-memory: var(--orange-400);
-  --span-workspace: var(--red-400);
-  --span-skill: var(--green-300);
-  --span-scorer: var(--purple-300);
-  --span-other: var(--muted-foreground);
-}
-
-html.light {
-  --chart-blue: var(--blue-300);
-  --chart-blue-deep: var(--blue-400);
-  --chart-yellow: var(--yellow-300);
-  --chart-green: var(--green-300);
-  --chart-purple: var(--purple-300);
-  --chart-orange: var(--orange-300);
+  --chart-orange: var(--orange-400);
   --chart-pink: var(--pink-300);
-  --chart-red: var(--red-300);
+  --chart-red: var(--red-500);
 
-  --span-agent: var(--blue-300);
-  --span-workflow: var(--cyan-300);
+  --chart-sequential-1: var(--purple-200);
+  --chart-sequential-2: var(--purple-300);
+  --chart-sequential-3: var(--purple-400);
+  --chart-sequential-4: var(--purple-500);
+  --chart-sequential-5: var(--purple-600);
+
+  --span-agent: var(--blue-500);
+  --span-workflow: var(--cyan-400);
   --span-model: var(--purple-300);
   --span-mcp: var(--green-300);
   --span-tool: var(--yellow-300);
   --span-provider: var(--orange-300);
-  --span-memory: var(--orange-300);
-  --span-workspace: var(--red-300);
-  --span-skill: var(--green-300);
-  --span-scorer: var(--purple-300);
+  --span-memory: var(--orange-500);
+  --span-workspace: var(--red-400);
+  --span-skill: var(--green-500);
+  --span-scorer: var(--pink-500);
+  --span-other: var(--muted-foreground);
+}
+
+html.light {
+  --chart-blue: var(--blue-500);
+  --chart-blue-deep: var(--blue-800);
+  --chart-yellow: var(--yellow-500);
+  --chart-green: var(--green-500);
+  --chart-purple: var(--purple-600);
+  --chart-orange: var(--orange-600);
+  --chart-pink: var(--pink-500);
+  --chart-red: var(--red-700);
+
+  --span-agent: var(--blue-500);
+  --span-workflow: var(--cyan-500);
+  --span-model: var(--purple-600);
+  --span-mcp: var(--green-500);
+  --span-tool: var(--yellow-700);
+  --span-provider: var(--orange-500);
+  --span-memory: var(--orange-600);
+  --span-workspace: var(--red-500);
+  --span-skill: var(--green-600);
+  --span-scorer: var(--pink-500);
+  --chart-sequential-1: var(--purple-800);
+  --chart-sequential-2: var(--purple-700);
+  --chart-sequential-3: var(--purple-600);
+  --chart-sequential-4: var(--purple-500);
+  --chart-sequential-5: var(--purple-400);
 }
 
 @theme inline {

@@ -92,6 +92,19 @@ Numbered `accent*` tokens, `positive1`, `negative1`, `warning1`, `notice-success
 
 `badge-green/red/yellow/blue` are now categorical badge tones built from the ramps, with a fill (`--badge-purple`), `-muted`, `-edge`, `-fg`, and `-dot` like `badge-purple`. Badge backgrounds are solid: in dark mode the low-chroma `--{hue}-soft-900` (strong) / `--{hue}-soft-950` (subtle), in light mode `--{hue}-100` / `--{hue}-50`. The soft steps keep the lightness and hue of `900`/`950` at 75% chroma, and are available as utilities such as `bg-green-soft-900`. Use the status role with `-subtle`, `-edge`, `-fg`, or `-indicator` for its intended job. Notice variants are unchanged. Badge status variants are `success`, `destructive`, `warning`, and `info`, for states. `green`, `red`, `yellow`, and `blue` are categorical tones like `purple` and `orange`, for labels that are not states. `Badge` takes `emphasis="strong"` (the default) or `emphasis="subtle"` (a quieter tinted fill). Use `--green-*` for the shared chromatic ramp.
 
+#### Opacity and literal colors
+
+A resting color never depends on what sits behind it. Surfaces, text, borders, badges, notices, status, product, chart, and span colors are solid ramp steps in both themes, whatever layer they sit on.
+
+Opacity is allowed only through design-system tokens, for layers whose job is to show what is underneath:
+
+- State layers over an existing surface: `fill`, `fill-subtle`, `fill-hover`, `fill-active`, and `fill-strong`.
+- Scrims and overlays: `scrim`.
+- Neutral hairlines: `border`, `border-strong`, `surface-rim`, and `gray-alpha-*`.
+- Effects that fade, glow, or animate inside a design-system component, such as the Composer ring and the sidebar meter bloom.
+
+Product code does not add opacity modifiers (`bg-green-500/20`) or `color-mix()` to chromatic colors, and does not write literal colors (`#hex`, `rgb()`, `oklch()`) outside the theme. Masks, brand marks, and screens that render before the theme loads are the exceptions. `src/color-rules.test.ts` enforces this across playground-ui, Studio, and Factory.
+
 To migrate removed tokens:
 
 | Removed token          | Replacement                  |

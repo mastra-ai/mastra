@@ -1,15 +1,15 @@
 .cm-editor {
-  --syntax-string: var(--green-300);
-  --syntax-keyword: var(--red-300);
+  --syntax-string: var(--green-200);
+  --syntax-keyword: var(--red-400);
   --syntax-literal: var(--yellow-300);
   --syntax-name: var(--cyan-300);
-  --syntax-link: var(--blue-300);
+  --syntax-link: var(--blue-400);
 }
 
 html.light .cm-editor {
   --syntax-string: var(--green-700);
-  --syntax-keyword: var(--red-700);
-  --syntax-literal: var(--yellow-700);
-  --syntax-name: var(--cyan-700);
-  --syntax-link: var(--blue-700);
+  --syntax-keyword: var(--red-600);
+  --syntax-literal: var(--yellow-800);
+  --syntax-name: var(--cyan-800);
+  --syntax-link: var(--blue-600);
 }
