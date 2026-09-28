@@ -219,12 +219,18 @@ describe('ToolResultTokenLimiter through an agent', () => {
 
     const without = build([]);
     await (await without.agent.stream('question', { maxSteps: 3 })).consumeStream();
+    // TokenLimiter dropped the result, so the model never saw it and called the tool again.
+    expect(without.prompts).toHaveLength(3);
     expect(promptText(without.prompts[1])).not.toContain('tool-result');
+    expect(promptText(without.prompts[2])).not.toContain('tool-result');
 
     const withLimiter = build([new ToolResultTokenLimiter(200)]);
     await (await withLimiter.agent.stream('question', { maxSteps: 3 })).consumeStream();
     expect(withLimiter.prompts).toHaveLength(2);
-    expect(promptText(withLimiter.prompts[1])).toContain('[truncated: showing');
+    const second = promptText(withLimiter.prompts[1]);
+    expect(second).toContain('tool-result');
+    expect(second).toContain('DATA result');
+    expect(second).toContain('[truncated: showing');
   });
 
   it('lets a processor after the limiter replace the limited result with one built from the original', async () => {
@@ -284,5 +290,32 @@ describe('ToolResultTokenLimiter through an agent', () => {
     const prompt = promptText(prompts.at(-1));
     expect(prompt).toContain('mapped: ');
     expect(prompt).toContain('[truncated: showing');
+  });
+
+  it('hands toModelOutput the truncated text when an object result is limited', async () => {
+    const { model } = createToolLoopModel();
+    const seen: unknown[] = [];
+    const tool = createTool({
+      id: 'lookup',
+      description: 'Look something up',
+      inputSchema: z.object({ q: z.string() }),
+      execute: async () => ({ items: Array.from({ length: 2000 }, (_, id) => ({ id })) }),
+      toModelOutput: (output: unknown) => {
+        seen.push(output);
+        return { type: 'text', value: 'mapped' };
+      },
+    });
+    const agent = new Agent({
+      id: 'mapped-object-limit',
+      name: 'mapped-object-limit',
+      instructions: 'Answer briefly.',
+      model,
+      tools: { lookup: tool },
+      outputProcessors: [new ToolResultTokenLimiter(50)],
+    });
+    await (await agent.stream('question', { maxSteps: 3 })).consumeStream();
+    expect(seen).toHaveLength(1);
+    expect(typeof seen[0]).toBe('string');
+    expect(seen[0]).toContain('[truncated: showing');
   });
 });

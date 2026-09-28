@@ -61,6 +61,8 @@ export const agent = new Agent({
 - String results are measured directly. Other results are measured by their JSON text, and `bigint` values are converted to strings.
 - Results within the limit are left unchanged.
 - An oversized result is replaced with its leading text and a marker such as `[truncated: showing 1950 of 12000 tokens]`. If the limit is too small to fit the marker, the result becomes an empty string.
+- A truncated result is always a string, even when the tool returned an object. The truncated JSON text usually isn't valid JSON, and a tool's `toModelOutput` receives this string instead of the object, so a mapper that reads object fields must handle a string.
+- A provider-executed result that arrives in the same model response as its call can't be rewritten by output processors, so the limiter doesn't truncate it.
 - Media results shaped like `{ data, mediaType }` and results the processor can't serialize (for example circular objects) are left unchanged.
 
 ## Processor order
