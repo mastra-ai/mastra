@@ -130,7 +130,7 @@ export function isPathAllowed(
   const target = pathImpl.resolve(targetPath);
   return allowedBasePaths.some(basePath => {
     const rel = pathImpl.relative(pathImpl.resolve(basePath), target);
-    return rel === '' || (!rel.startsWith('..') && !pathImpl.isAbsolute(rel));
+    return rel === '' || (rel !== '..' && !rel.startsWith('..' + pathImpl.sep) && !pathImpl.isAbsolute(rel));
   });
 }
 
@@ -140,7 +140,8 @@ export function isPathAllowed(
  */
 export function extractBaseCommand(command: string): string {
   const trimmed = command.trim();
-  const closingQuote = trimmed.startsWith('"') ? trimmed.indexOf('"', 1) : -1;
+  const quote = trimmed[0] === '"' || trimmed[0] === "'" ? trimmed[0] : '';
+  const closingQuote = quote ? trimmed.indexOf(quote, 1) : -1;
   const firstSpace = trimmed.indexOf(' ');
   const baseCmd =
     closingQuote > 0

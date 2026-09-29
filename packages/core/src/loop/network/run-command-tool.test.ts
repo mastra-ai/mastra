@@ -12,6 +12,7 @@ describe('isPathAllowed', () => {
     expect(isPathAllowed('/base/sub/dir', ['/base'], p)).toBe(true);
     expect(isPathAllowed('/base2', ['/base'], p)).toBe(false);
     expect(isPathAllowed('/base/../etc', ['/base'], p)).toBe(false);
+    expect(isPathAllowed('/base/..cache', ['/base'], p)).toBe(true);
     expect(isPathAllowed('/anything', [], p)).toBe(true);
   });
 
@@ -38,6 +39,8 @@ describe('extractBaseCommand', () => {
     ['"rm.exe" -rf x', 'rm'],
     ['"C:/Program Files/rm.exe" x', 'rm'],
     ['rm. -rf x', 'rm'],
+    ['"rm" x', 'rm'],
+    ["'rm' x", 'rm'],
     ['rm.exe. -rf x', 'rm'],
   ])('%s -> %s', (input, expected) => {
     expect(extractBaseCommand(input)).toBe(expected);
@@ -48,6 +51,12 @@ describe('createRunCommandTool', () => {
   it('blocks Windows-path invocations of blocked commands', async () => {
     const tool = createRunCommandTool({ allowUnsafeCharacters: true });
     const res = await run(tool, { command: 'C:\\Windows\\rm.exe x' });
+    expect(res.success).toBe(false);
+    expect(res.message).toContain("'rm' is not permitted");
+  });
+
+  it.each(['"rm.exe" -rf x', '"rm" x', 'rm. x'])('blocks %s in default mode', async command => {
+    const res = await run(createRunCommandTool(), { command });
     expect(res.success).toBe(false);
     expect(res.message).toContain("'rm' is not permitted");
   });
