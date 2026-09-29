@@ -84,14 +84,14 @@ function readPid(file: string): number | null {
   }
 }
 
-/**
- * PID holding the maintenance lock, `UNKNOWN_OWNER` while its pid file is still
- * being written, or null. Stale locks are removed.
- */
 // True while this process holds maintenance.lock, so an own-PID lock can be told
 // apart from a stale leftover whose PID we reused.
 let lockHeld = false;
 
+/**
+ * PID holding the maintenance lock, `UNKNOWN_OWNER` while its pid file is still
+ * being written, or null. Stale locks are removed.
+ */
 export function getMaintenanceLockOwner(): number | null {
   const lockPath = getMaintenanceLockPath();
   if (!fs.existsSync(lockPath)) return null;
@@ -135,12 +135,13 @@ export function getLiveSessionPids(): number[] {
 // Refcounted: one process may start several sessions (e.g. repeated
 // createMastraCode() calls). The pid file exists while the count is > 0.
 let sessionRefs = 0;
+let exitHookInstalled = false;
 
-/** Test-only: drop every registration held by this process. */
+/** Test-only: drop every registration held by this process and forget lock ownership. */
 export function resetSessionRegistrationsForTesting(): void {
   while (sessionRefs > 0) unregisterSession();
+  lockHeld = false;
 }
-let exitHookInstalled = false;
 
 function getSessionPidPath(): string {
   return path.join(getSessionsDir(), `${process.pid}.pid`);
