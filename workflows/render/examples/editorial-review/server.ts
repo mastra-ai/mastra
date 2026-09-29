@@ -21,12 +21,16 @@ const server = createExampleServer(tokens as Record<string, string>, admission);
 const port = Number(process.env.PORT ?? 4318);
 const host = process.env.HOST ?? '127.0.0.1';
 server.listen(port, host, () => console.log(`Editorial review: http://${host}:${port}`));
-/** Stop accepting HTTP requests and close the example's owned storage resources. */
-async function close() {
-  server.close();
-  await persistence.close();
-  await storage.close();
-  await admission.close();
+let closing: Promise<void> | undefined;
+/** Drain HTTP handlers once before closing the example's owned storage resources. */
+function close() {
+  return (closing ??= (async () => {
+    await new Promise<void>((resolve, reject) => server.close(error => (error ? reject(error) : resolve())));
+    // Status refreshes read provider persistence, so drain them before closing that dependency.
+    await admission.close();
+    await persistence.close();
+    await storage.close();
+  })());
 }
 process.once('SIGINT', () => {
   void close();
