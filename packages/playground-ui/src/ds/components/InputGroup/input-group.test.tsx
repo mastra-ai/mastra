@@ -142,7 +142,7 @@ describe('InputGroup', () => {
       </Field>,
     );
     expect(getInput().getAttribute('aria-invalid')).toBe('true');
-    expect(getWrapper().className).toContain('has-[[aria-invalid=true]]:[--field-rim:var(--destructive)]');
+    expect(getWrapper().className).toContain('has-[[aria-invalid=true]]:[--field-rim:var(--destructive-indicator)]');
   });
 
   it('suppresses both native number spinners (WebKit + Firefox) and the WebKit search clear button', () => {

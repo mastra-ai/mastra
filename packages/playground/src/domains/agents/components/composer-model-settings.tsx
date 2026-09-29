@@ -328,7 +328,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
       </Popover>
 
       <Dialog open={advancedOpen} onOpenChange={setAdvancedOpen}>
-        <DialogContent size="lg">
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Advanced model settings</DialogTitle>
           </DialogHeader>

@@ -109,7 +109,7 @@ describe('Command', () => {
     );
 
     expect(screen.getByPlaceholderText('Search commands')).toBeDefined();
-    expect(document.querySelector('[data-slot="dialog-overlay"]')).toBeNull();
+    expect(document.querySelector('.dialog-overlay-anim')).toBeNull();
   });
 
   it('renders a custom CommandDialog overlay when requested', () => {
@@ -119,7 +119,7 @@ describe('Command', () => {
       </CommandDialog>,
     );
 
-    const overlay = document.querySelector('[data-slot="dialog-overlay"]');
+    const overlay = document.querySelector('.dialog-overlay-anim');
     expect(overlay?.className).toContain('bg-sidebar/40');
     expect(overlay?.className).toContain('backdrop-blur-none');
     expect(overlay?.className).not.toContain('backdrop-blur-xs');

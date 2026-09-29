@@ -22,22 +22,6 @@ vi.mock('@mastra/playground-ui/components/Dialog', () => {
     DialogHeader: ({ children }: PropsWithChildren) => <div>{children}</div>,
     DialogTitle: ({ children }: PropsWithChildren) => <h2>{children}</h2>,
     DialogBody: ({ children }: PropsWithChildren) => <div>{children}</div>,
-    DialogFooter: ({ children }: PropsWithChildren) => <div>{children}</div>,
-    DialogCancel: ({ children, onClick }: PropsWithChildren<{ onClick?: () => void }>) => (
-      <button type="button" onClick={onClick}>
-        {children}
-      </button>
-    ),
-    DialogAction: ({
-      children,
-      type = 'button',
-      disabled,
-      onConfirm,
-    }: PropsWithChildren<{ type?: 'button' | 'submit'; disabled?: boolean; onConfirm?: () => void }>) => (
-      <button type={type} disabled={disabled} onClick={onConfirm}>
-        {children}
-      </button>
-    ),
   };
 });
 

@@ -98,7 +98,7 @@ describe('Deleting a workspace', () => {
     await user.click(within(group).getByRole('button', { name: 'Session actions for factory/pr-20474' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Delete' }));
 
-    const dialog = await screen.findByRole('alertdialog');
+    const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText(/Threads from this workspace are kept/)).toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
 

@@ -1,7 +1,14 @@
 import { File as FileIcon, FileAudio, FileText, FileVideo } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/ds/components/Button';
-import { Dialog, DialogTitle, DialogContent, DialogHeader, DialogBody } from '@/ds/components/Dialog';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogHeader,
+  DialogDescription,
+  DialogBody,
+} from '@/ds/components/Dialog';
 
 interface PdfEntryProps {
   data: string;
@@ -9,6 +16,7 @@ interface PdfEntryProps {
 }
 
 const ctaClassName = 'h-full w-full flex items-center justify-center';
+const fileTypeIconClassName = 'text-badge-red-indicator';
 
 export const PdfEntry = ({ data, url }: PdfEntryProps) => {
   const [open, setOpen] = useState(false);
@@ -16,7 +24,7 @@ export const PdfEntry = ({ data, url }: PdfEntryProps) => {
   if (url) {
     return (
       <a href={url} className={ctaClassName} target="_blank" rel="noreferrer noopener">
-        <FileText className="text-accent2" aria-label="View PDF" />
+        <FileText className={fileTypeIconClassName} aria-label="View PDF" />
       </a>
     );
   }
@@ -24,7 +32,7 @@ export const PdfEntry = ({ data, url }: PdfEntryProps) => {
   return (
     <>
       <button onClick={() => setOpen(true)} className={ctaClassName} type="button">
-        <FileText className="text-accent2" aria-label="View PDF" />
+        <FileText className={fileTypeIconClassName} aria-label="View PDF" />
       </button>
 
       <PdfPreviewDialog data={data} open={open} onOpenChange={setOpen} />
@@ -41,9 +49,10 @@ interface PdfPreviewDialogProps {
 export const PdfPreviewDialog = ({ data, open, onOpenChange }: PdfPreviewDialogProps) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="xl">
+      <DialogContent className="max-w-4xl motion-reduce:animate-none!" overlayClassName="motion-reduce:animate-none!">
         <DialogHeader>
           <DialogTitle>PDF preview</DialogTitle>
+          <DialogDescription>Preview of the PDF document</DialogDescription>
         </DialogHeader>
         <DialogBody>{open && <iframe src={data} width="100%" height="600px"></iframe>}</DialogBody>
       </DialogContent>
@@ -65,7 +74,7 @@ const iconForContentType = (contentType?: string) => {
 };
 export const FileChipEntry = ({ name, url, contentType }: FileChipEntryProps) => {
   const { Icon, label } = iconForContentType(contentType);
-  const icon = <Icon className="text-accent2" aria-label={label} />;
+  const icon = <Icon className={fileTypeIconClassName} aria-label={label} />;
 
   if (url) {
     return (
@@ -114,9 +123,10 @@ interface ImagePreviewDialogProps {
 export const ImagePreviewDialog = ({ src, open, onOpenChange }: ImagePreviewDialogProps) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="xl">
+      <DialogContent className="max-w-4xl motion-reduce:animate-none!" overlayClassName="motion-reduce:animate-none!">
         <DialogHeader>
           <DialogTitle>Image preview</DialogTitle>
+          <DialogDescription>Preview of the image</DialogDescription>
         </DialogHeader>
         <DialogBody>{open && <img src={src} alt="Image" />}</DialogBody>
       </DialogContent>
@@ -171,9 +181,13 @@ interface TxtPreviewDialogProps {
 export const TxtPreviewDialog = ({ data, title, open, onOpenChange }: TxtPreviewDialogProps) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="xl">
+      <DialogContent
+        className="h-[80vh] max-w-4xl motion-reduce:animate-none!"
+        overlayClassName="motion-reduce:animate-none!"
+      >
         <DialogHeader>
           <DialogTitle>{title ?? 'Text preview'}</DialogTitle>
+          <DialogDescription>Preview of the text file</DialogDescription>
         </DialogHeader>
         <DialogBody>{open && <div className="whitespace-pre-wrap">{data}</div>}</DialogBody>
       </DialogContent>

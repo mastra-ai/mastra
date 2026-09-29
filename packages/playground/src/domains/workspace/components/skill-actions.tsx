@@ -25,16 +25,17 @@ export interface SkillRemoveButtonProps {
   isRemoving?: boolean;
 }
 
+/**
+ * Remove button with confirmation dialog for a single skill
+ */
 export function SkillRemoveButton({ skillName, onRemove, isRemoving }: SkillRemoveButtonProps) {
   return (
     <AlertDialog>
-      <AlertDialog.Trigger
-        render={
-          <Button variant="ghost" size="icon-md" disabled={isRemoving} tooltip={`Remove ${skillName}`}>
-            {isRemoving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-          </Button>
-        }
-      />
+      <AlertDialog.Trigger asChild>
+        <Button variant="ghost" size="icon-md" disabled={isRemoving} tooltip={`Remove ${skillName}`}>
+          {isRemoving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+        </Button>
+      </AlertDialog.Trigger>
       <AlertDialog.Content>
         <AlertDialog.Header>
           <AlertDialog.Title>Remove Skill</AlertDialog.Title>

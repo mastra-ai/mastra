@@ -130,7 +130,13 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
           <div className="space-y-2">
             <Field>
               <FieldLabel>Phase</FieldLabel>
-              <Select value={selectedPhase} onValueChange={v => setSelectedPhase(v as ProcessorPhase)}>
+              <Select
+                value={selectedPhase}
+                onValueChange={value => {
+                  const phase = processor.phases.find(phase => phase === value);
+                  if (phase) setSelectedPhase(phase);
+                }}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select phase" />
                 </SelectTrigger>
@@ -186,7 +192,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
           </Button>
 
           {selectedPhase === 'outputStream' && (
-            <Txt variant="meta" className="text-accent6">
+            <Txt variant="meta" className="text-warning-indicator">
               Output Stream phase cannot be executed directly. Use streaming instead.
             </Txt>
           )}
@@ -201,8 +207,8 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
                 {result.tripwire?.triggered && <Badge variant="blue">Tripwire Triggered</Badge>}
               </div>
               {result.tripwire?.triggered && result.tripwire.reason && (
-                <div className="mt-2 rounded-md border border-accent6/20 bg-accent6Dark p-3">
-                  <Txt variant="column" className="text-accent6">
+                <div className="mt-2 rounded-md border border-warning-edge bg-warning-subtle p-3">
+                  <Txt variant="column" className="text-warning-subtle-foreground">
                     Tripwire Reason
                   </Txt>
                   <Txt variant="caption" tone="muted" className="mt-1">

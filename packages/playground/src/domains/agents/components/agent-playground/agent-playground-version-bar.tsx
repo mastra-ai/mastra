@@ -5,14 +5,12 @@ import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import {
   Dialog,
-  DialogAction,
-  DialogBody,
-  DialogCancel,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogBody,
+  DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
@@ -25,7 +23,7 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { Check, ChevronDown, Download, GitPullRequest, Info, MessageSquare, Save } from 'lucide-react';
+import { Check, ChevronDown, Download, GitPullRequest, Info, MessageSquare, Save, X } from 'lucide-react';
 import { useMemo, useState, useCallback } from 'react';
 
 import { useAgentVersions } from '../../hooks/use-agent-versions';
@@ -97,11 +95,11 @@ export function AgentPlaygroundVersionBar({
           label: `${isCodeSourceAgent ? 'Save' : 'v'}${v.versionNumber} - ${formatDate(v.createdAt, 'date-time') ?? ''}`,
           description: v.changeMessage || undefined,
           end: isCodeSourceAgent ? (
-            <Badge variant={isPublished ? 'green' : 'blue'}>{isPublished ? 'Current' : 'Saved'}</Badge>
+            <Badge variant={isPublished ? 'success' : 'info'}>{isPublished ? 'Current' : 'Saved'}</Badge>
           ) : isPublished ? (
-            <Badge variant="green">Published</Badge>
+            <Badge variant="success">Published</Badge>
           ) : isDraftVersion ? (
-            <Badge variant="blue">Draft</Badge>
+            <Badge variant="info">Draft</Badge>
           ) : undefined,
         };
       }),
@@ -162,8 +160,8 @@ export function AgentPlaygroundVersionBar({
         </Tooltip>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          {readOnly && <Badge variant="yellow">Read-only</Badge>}
-          {!readOnly && hasDraft && !isCodeSourceAgent && <Badge variant="blue">Unpublished</Badge>}
+          {readOnly && <Badge variant="warning">Read-only</Badge>}
+          {!readOnly && hasDraft && !isCodeSourceAgent && <Badge variant="info">Unpublished</Badge>}
         </div>
       </div>
     ),
@@ -264,18 +262,19 @@ export function AgentPlaygroundVersionBar({
           </div>
         )}
 
-        <Dialog open={showMessageDialog} onOpenChange={setShowMessageDialog} pending={isSavingDraft}>
+        <Dialog open={showMessageDialog} onOpenChange={setShowMessageDialog}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Save New Version</DialogTitle>
               <DialogDescription>Add a message to describe the changes in this version.</DialogDescription>
             </DialogHeader>
-            <DialogBody>
+            <DialogBody className="py-1">
               <Field>
                 <FieldLabel>Change message</FieldLabel>
                 <Input
                   placeholder="Describe what changed..."
                   value={changeMessage}
+                  className="focus:ring-white/50"
                   onChange={e => setChangeMessage(e.target.value)}
                   onKeyDown={e => {
                     if (e.key === 'Enter') {
@@ -287,9 +286,19 @@ export function AgentPlaygroundVersionBar({
                 />
               </Field>
             </DialogBody>
-            <DialogFooter>
-              <DialogCancel>Cancel</DialogCancel>
-              <DialogAction onConfirm={handleSaveWithMessage}>Save Version</DialogAction>
+            <DialogFooter className="px-4">
+              <Button icon={<X />} variant="default" size="sm" onClick={() => setShowMessageDialog(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleSaveWithMessage}
+                disabled={isSavingDraft}
+                icon={<Save />}
+              >
+                Save Version
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

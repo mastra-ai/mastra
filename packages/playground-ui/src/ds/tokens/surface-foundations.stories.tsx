@@ -142,7 +142,7 @@ export const SurfaceFoundations: Story = {
 
       <FoundationSection
         label="Opaque ladder"
-        description="The states of a control that is a colour rather than a rung on the surface — the primary and destructive buttons. An alpha here would open a window onto the card text, row or image the control covers, widening with every louder state, so each rung is the opaque twin of the alpha it replaces: the same colour mixed toward --background by the same amount."
+        description="The states of a control that is a colour rather than a rung on the surface — the primary and destructive buttons. An alpha here would open a window onto the card text, row or image the control covers, so every rung is opaque. The inverse rungs mix --foreground toward --background; the destructive rungs step down the red ramp in both themes so the red-50 label stays legible."
       >
         <SpecimenGroup label="Inverse — primary">
           <FilledLadderRow ladder={filledInverseLadder} />
@@ -151,8 +151,8 @@ export const SurfaceFoundations: Story = {
           <FilledLadderRow ladder={filledDestructiveLadder} />
         </SpecimenGroup>
         <Txt variant="caption" tone="muted">
-          The word behind each swatch never shows. Mixing happens in sRGB, the space a browser composites alpha in, so a
-          rung lands on the exact colour its translucent predecessor painted over the canvas — same paint, no window.
+          The word behind each swatch never shows. Inverse rungs mix in sRGB, the space a browser composites alpha in,
+          so each lands on the exact colour its translucent predecessor painted over the canvas — same paint, no window.
         </Txt>
       </FoundationSection>
 
@@ -290,7 +290,7 @@ export const SurfaceFoundations: Story = {
           </div>
           <div className="w-44">
             <Specimen name="--shadow-focus-ring" note="focusRing.visible — row, link, tab">
-              <div className="h-14 rounded-md bg-fill shadow-focus-ring ring-1 ring-accent1" />
+              <div className="h-14 rounded-md bg-fill shadow-focus-ring ring-1 ring-border-focus" />
             </Specimen>
           </div>
         </div>

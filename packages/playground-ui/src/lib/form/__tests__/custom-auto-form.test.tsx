@@ -6,10 +6,10 @@ import type { PropsWithChildren } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
+import { Form } from '../components/form';
 import { CustomAutoForm } from '../custom-auto-form';
 import { DynamicForm } from '../dynamic-form';
 import { CustomZodProvider } from '../zod-provider';
-import { Form } from '@/ds/components/Form';
 
 const uiComponents = {
   Form,

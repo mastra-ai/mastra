@@ -43,17 +43,17 @@ export const WorkflowEdgeDataButton = ({
           surfaceStateLayerStyle,
           'h-7 rounded-lg px-2 text-foreground aria-pressed:before:bg-fill',
         )}
-        icon={<Database className="text-accent1" />}
+        icon={<Database className="text-muted-foreground" />}
       >
         Data
       </Button>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent size="xl">
+        <DialogContent className="w-full max-w-3xl">
           <DialogHeader>
             <DialogTitle>Step output</DialogTitle>
           </DialogHeader>
-          <DialogBody>
+          <DialogBody className="overflow-auto" style={{ maxHeight: 700 }}>
             <div className="min-w-0 rounded-lg border border-border bg-background p-3">
               <Txt variant="caption" tone="ink" className="mb-2 block">
                 {dataLabel}

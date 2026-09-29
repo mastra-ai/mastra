@@ -55,15 +55,15 @@ const surfaceTintHoverWithin = '[&:hover:not(:focus-within):not(:has(:disabled))
 const fieldRimFocus = 'focus-visible:[--surface-rim:var(--field-rim-focus)]';
 const fieldRimFocusWithin = 'focus-within:[--surface-rim:var(--field-rim-focus)]';
 export const fieldErrorRim =
-  'aria-invalid:[--field-rim:var(--destructive)] aria-invalid:[--field-rim-focus:var(--destructive)]';
+  'aria-invalid:[--field-rim:var(--destructive-indicator)] aria-invalid:[--field-rim-focus:var(--destructive-indicator)]';
 export const fieldErrorRimWithin =
-  'has-[[aria-invalid=true]]:[--field-rim:var(--destructive)] has-[[aria-invalid=true]]:[--field-rim-focus:var(--destructive)]';
+  'has-[[aria-invalid=true]]:[--field-rim:var(--destructive-indicator)] has-[[aria-invalid=true]]:[--field-rim-focus:var(--destructive-indicator)]';
 export const fieldTriggerErrorBorder =
-  'aria-invalid:border-destructive aria-invalid:hover:border-destructive aria-invalid:focus-visible:border-destructive';
+  'aria-invalid:border-destructive-indicator aria-invalid:hover:border-destructive-indicator aria-invalid:focus-visible:border-destructive-indicator';
 export const fieldTriggerStyle =
   'bg-field shadow-input ' +
   fieldRimFocus +
-  ' disabled:bg-field-disabled aria-disabled:bg-field-disabled data-[disabled]:bg-field-disabled aria-invalid:[--field-rim:var(--destructive)] aria-invalid:[--field-rim-focus:var(--destructive)]';
+  ' disabled:bg-field-disabled aria-disabled:bg-field-disabled data-[disabled]:bg-field-disabled aria-invalid:[--field-rim:var(--destructive-indicator)] aria-invalid:[--field-rim-focus:var(--destructive-indicator)]';
 
 export const inputSurfaceAndFocusStyle =
   'bg-field shadow-input text-foreground disabled:bg-field-disabled ' +

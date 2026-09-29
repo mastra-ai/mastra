@@ -1,14 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import {
-  Dialog,
-  DialogAction,
-  DialogCancel,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@mastra/playground-ui/components/Dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GitPullRequest, SquareKanban } from 'lucide-react';
@@ -250,26 +241,25 @@ export function WorkspacesSection() {
       )}
 
       {confirmDelete && (
-        <Dialog
-          open
-          onOpenChange={open => !open && setConfirmDelete(null)}
-          intent="destructive"
-          pending={deleteWorkspace.isPending}
-        >
-          <DialogContent size="sm" aria-label="Delete workspace">
-            <DialogHeader>
+        <Dialog open onOpenChange={open => !open && setConfirmDelete(null)}>
+          <DialogContent className="w-full max-w-sm" aria-label="Delete workspace">
+            <DialogHeader className="px-5 pt-4 pb-2">
               <DialogTitle>Delete workspace?</DialogTitle>
-              <DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col gap-4 px-5 pb-4">
+              <Txt as="p" variant="caption" className="text-muted-foreground m-0">
                 This deletes the <span className="text-foreground">{confirmDelete.branch}</span> checkout and its
                 uncommitted changes. This can’t be undone. Threads from this workspace are kept.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <DialogCancel>Cancel</DialogCancel>
-              <DialogAction onConfirm={confirmDeleteWorkspace}>
-                {deleteWorkspace.isPending ? 'Deleting…' : 'Delete'}
-              </DialogAction>
-            </DialogFooter>
+              </Txt>
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" onClick={() => setConfirmDelete(null)} disabled={deleteWorkspace.isPending}>
+                  Cancel
+                </Button>
+                <Button variant="destructive" onClick={confirmDeleteWorkspace} disabled={deleteWorkspace.isPending}>
+                  {deleteWorkspace.isPending ? 'Deleting…' : 'Delete'}
+                </Button>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
       )}
@@ -378,7 +368,7 @@ function WorkspaceGroup({
         ))}
       </MainSidebar.NavList>
       {visibleRows.length === 0 ? (
-        <Txt as="p" variant="caption" tone="muted" role="status" className="m-0 pl-3">
+        <Txt as="p" variant="caption" role="status" className="text-muted-foreground m-0 pl-3">
           No sessions of your own.
         </Txt>
       ) : null}

@@ -2,6 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
@@ -92,15 +93,10 @@ export const AttachFilePopover = () => {
         }}
       >
         <Form onSubmit={handleSubmit} className="flex-row items-end gap-2">
-          <Field invalid={Boolean(error)} className="w-full">
+          <Field className="w-full">
             <FieldLabel>Public URL</FieldLabel>
-            <Input
-              name="url-attachment"
-              type="url"
-              placeholder="https://placehold.co/600x400/png"
-              onChange={() => setError('')}
-            />
-            <FieldError>{error}</FieldError>
+            <Input name="url-attachment" type="url" placeholder="https://placehold.co/600x400/png" />
+            <FieldError />
           </Field>
           <Button type="submit" className="h-8!" variant="default" icon={<Link />}>
             Add
@@ -121,6 +117,11 @@ export const AttachFilePopover = () => {
             <CloudUpload className="size-8" />
             <Txt variant="heading">Add a local file</Txt>
           </button>
+          {error ? (
+            <div role="alert">
+              <Notice variant="destructive">{error}</Notice>
+            </div>
+          ) : null}
         </div>
       </PopoverContent>
     </Popover>

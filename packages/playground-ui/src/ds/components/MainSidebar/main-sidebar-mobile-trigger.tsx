@@ -36,7 +36,7 @@ export function MainSidebarMobileTrigger({
         "[[data-sidebar-mobile-present='true']_&]:invisible",
         quietTextHover,
         'hover:bg-fill-subtle',
-        'focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden',
+        'focus-visible:ring-1 focus-visible:ring-border-focus focus-visible:outline-hidden',
         className,
       )}
     >

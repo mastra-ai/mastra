@@ -54,7 +54,7 @@ export const Browser = ({ editable = true }: BrowserProps) => {
             style={switchStyle}
           />
           <FieldLabel size="smaller">Enable browser</FieldLabel>
-          <Badge variant={browserEnabled ? 'green' : 'neutral'} size="sm" indicator="dot">
+          <Badge variant={browserEnabled ? 'success' : 'neutral'} size="sm" indicator="dot">
             {browserEnabled ? 'Enabled' : 'Disabled'}
           </Badge>
         </Field>

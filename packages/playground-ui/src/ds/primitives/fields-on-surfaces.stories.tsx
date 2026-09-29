@@ -124,8 +124,8 @@ export const EverySurface: Story = {
 export const InDialog: Story = {
   render: () => (
     <div className="min-h-dvh bg-background p-8">
-      <Dialog defaultOpen>
-        <DialogContent>
+      <Dialog variant="new" defaultOpen>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Connect Anthropic</DialogTitle>
             <DialogDescription>Enter the details required to finish setting up this connection.</DialogDescription>
@@ -134,7 +134,7 @@ export const InDialog: Story = {
             <Fields />
           </DialogBody>
           <DialogFooter>
-            <Button>Back</Button>
+            <Button variant="default">Back</Button>
             <Button variant="primary">Connect Anthropic</Button>
           </DialogFooter>
         </DialogContent>

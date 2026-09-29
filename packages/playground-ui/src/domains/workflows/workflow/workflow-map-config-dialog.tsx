@@ -1,7 +1,14 @@
 import { Eye } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/ds/components/Button';
-import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/ds/components/Dialog';
 import { WorkflowCodeContent } from '@/ds/components/Workflow';
 
 export interface WorkflowMapConfigDialogProps {
@@ -19,9 +26,10 @@ export function WorkflowMapConfigDialog({ stepName, mapConfig }: WorkflowMapConf
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent size="xl">
+        <DialogContent className="w-full max-w-4xl">
           <DialogHeader>
             <DialogTitle>{stepName} config</DialogTitle>
+            <DialogDescription>View the map configuration for this step</DialogDescription>
           </DialogHeader>
           <DialogBody>
             <WorkflowCodeContent data={mapConfig} />

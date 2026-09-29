@@ -330,3 +330,48 @@ describe.each([
     expect(screen.getByRole(role, { name: 'Stream responses' }).getAttribute('aria-checked')).toBe('false');
   });
 });
+
+describe.each([
+  { kind: 'Input', role: 'textbox', renderControl: (ariaLabel?: string) => <Input aria-label={ariaLabel} /> },
+  { kind: 'Textarea', role: 'textbox', renderControl: (ariaLabel?: string) => <Textarea aria-label={ariaLabel} /> },
+  {
+    kind: 'Select',
+    role: 'combobox',
+    renderControl: (ariaLabel?: string) => (
+      <Select>
+        <SelectTrigger aria-label={ariaLabel}>
+          <SelectValue placeholder="Pick one" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="a">A</SelectItem>
+        </SelectContent>
+      </Select>
+    ),
+  },
+  { kind: 'Checkbox', role: 'checkbox', renderControl: (ariaLabel?: string) => <Checkbox aria-label={ariaLabel} /> },
+  { kind: 'Switch', role: 'switch', renderControl: (ariaLabel?: string) => <Switch aria-label={ariaLabel} /> },
+  {
+    kind: 'CodeEditor',
+    role: 'textbox',
+    renderControl: (ariaLabel?: string) => <CodeEditor value="{}" aria-label={ariaLabel} />,
+  },
+])('$kind with its own aria-label in a Field', ({ role, renderControl }) => {
+  it('keeps its own name, while a sibling row without one is named by its label', () => {
+    render(
+      <>
+        <Field>
+          <FieldLabel>Releases</FieldLabel>
+          {renderControl('Factory for Releases')}
+        </Field>
+        <Field>
+          <FieldLabel>Reviews</FieldLabel>
+          {renderControl()}
+        </Field>
+      </>,
+    );
+
+    expect(screen.getByRole(role, { name: 'Factory for Releases' })).toBeTruthy();
+    expect(screen.queryByRole(role, { name: 'Releases' })).toBeNull();
+    expect(screen.getByRole(role, { name: 'Reviews' })).toBeTruthy();
+  });
+});

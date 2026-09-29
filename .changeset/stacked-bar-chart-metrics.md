@@ -11,6 +11,6 @@ import { MetricsStackedBarChart } from '@mastra/playground-ui/components/Metrics
   data={data}
   series={series}
   valueFormatter={formatUsd}
-  referenceLine={{ value: 100, label: '100 GB included', color: 'var(--badge-red)' }}
+  referenceLine={{ value: 100, label: '100 GB included', color: 'var(--destructive-indicator)' }}
 />;
 ```

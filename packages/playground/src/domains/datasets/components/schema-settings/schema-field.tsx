@@ -98,7 +98,7 @@ export function SchemaField({ label, value, onChange, error, sourceSchema, autoP
             value={jsonText}
             onChange={handleJsonChange}
             showCopyButton={false}
-            className={cn('h-48 rounded-md border', errorMessage && 'border-destructive')}
+            className={cn('h-48 rounded-md border', errorMessage && 'border-destructive-indicator')}
           />
           <FieldError>{errorMessage}</FieldError>
         </Field>

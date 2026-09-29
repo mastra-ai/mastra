@@ -53,10 +53,11 @@
   --fill-inverse-active: color-mix(in srgb, var(--foreground) 60%, var(--background));
   --fill-inverse-disabled: color-mix(in srgb, var(--foreground) 45%, var(--background));
 
-  --fill-destructive: var(--destructive);
-  --fill-destructive-hover: color-mix(in srgb, var(--destructive) 80%, var(--background));
-  --fill-destructive-active: color-mix(in srgb, var(--destructive) 70%, var(--background));
-  --fill-destructive-disabled: color-mix(in srgb, var(--destructive) 45%, var(--background));
+  --fill-destructive: var(--red-600);
+  --fill-destructive-hover: var(--red-700);
+  --fill-destructive-active: var(--red-800);
+  --fill-destructive-disabled: var(--red-900);
+  --fill-destructive-foreground: var(--red-50);
 
   /*
    * Boundary ladder — the four states of a control's 1px edge, as alphas of
@@ -135,6 +136,9 @@
    * a small surface like a tooltip.
    */
   --elevation-lip: inset 0 1px 0 oklch(100% 0 0deg / 3%);
+  --inset-highlight: oklch(100% 0 0deg / 7%);
+  --focus-halo: var(--green-950);
+  --inset-rim: oklch(100% 0 0deg / 7%);
   --surface-rim: oklch(100% 0 0deg / 5%);
   --surface-rim-focus: oklch(100% 0 0deg / 14%);
   --elevation-raised: 0 1px 2px -1px oklch(0% 0 0deg / 22%), 0 2px 3px -2px oklch(0% 0 0deg / 14%);
@@ -150,6 +154,7 @@ html.light {
   /* Shade instead of light, at the same alphas: the whole fill and boundary
    * ladder re-resolves from here. */
   --fill-tint: 20.5%;
+  --fill-destructive-disabled: var(--red-300);
   /* Shade carries less weight than light at equal alpha, so focus needs a
    * higher one here to hold its 3:1 floor against the fill it sits on. */
   --border-focus: oklch(var(--fill-tint) 0 0 / 50%);
@@ -165,6 +170,9 @@ html.light {
    * falloff too — a shadow has room to darken here, so it reads as the same
    * height over less distance. */
   --elevation-lip: 0 0 #0000;
+  --inset-highlight: oklch(100% 0 0deg / 55%);
+  --focus-halo: var(--green-50);
+  --inset-rim: oklch(0% 0 0deg / 8%);
   --surface-rim: oklch(0% 0 0deg / 8%);
   --surface-rim-focus: oklch(0% 0 0deg / 18%);
   --elevation-raised: 0 1px 2px -1px oklch(0% 0 0deg / 5%), 0 1px 3px -2px oklch(0% 0 0deg / 4%);
@@ -181,7 +189,7 @@ html.light {
   --color-surface-overlay-soft: var(--surface-overlay-soft);
   --color-surface-overlay-strong: var(--surface-overlay-strong);
 
-  --shadow-focus-ring: 0 0 0 3px oklch(0.723 0.219 149.579 / 0.12);
+  --shadow-focus-ring: 0 0 0 3px var(--focus-halo);
 }
 
 /* Inline so a utility resolves var(--token) on the styled element and honors a
@@ -201,6 +209,7 @@ html.light {
   --color-fill-destructive-hover: var(--fill-destructive-hover);
   --color-fill-destructive-active: var(--fill-destructive-active);
   --color-fill-destructive-disabled: var(--fill-destructive-disabled);
+  --color-fill-destructive-foreground: var(--fill-destructive-foreground);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
   --color-border-hover: var(--border-hover);

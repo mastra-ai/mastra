@@ -44,7 +44,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
         <CollapsibleTrigger className="flex w-full items-center gap-1 bg-card p-3">
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
           <SectionTitle icon={<MemoryIcon className="text-muted-foreground" />}>
-            Memory{isEnabled && <span className="text-accent1">(enabled)</span>}
+            Memory{isEnabled && <span className="text-success-indicator">(enabled)</span>}
           </SectionTitle>
         </CollapsibleTrigger>
         <CollapsibleContent>
@@ -330,7 +330,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                 <Input
                                   type="number"
                                   min="1"
-                                  step="1000"
+                                  step="1"
                                   value={field.value ?? ''}
                                   onChange={e => {
                                     const v = e.target.value;
@@ -356,7 +356,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                 <Input
                                   type="number"
                                   min="1"
-                                  step="1000"
+                                  step="1"
                                   value={field.value ?? ''}
                                   onChange={e => {
                                     const v = e.target.value;
@@ -521,7 +521,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                 <Input
                                   type="number"
                                   min="1"
-                                  step="1000"
+                                  step="1"
                                   value={field.value ?? ''}
                                   onChange={e => {
                                     const v = e.target.value;

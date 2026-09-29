@@ -5,6 +5,7 @@ import * as React from 'react';
 
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
+import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
 import { ControlSizeContext, controlHeight } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
 import { fieldErrorRimWithin, inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
@@ -181,6 +182,7 @@ function InputGroupInput({ className, testId, type = 'text', ...props }: InputGr
         className,
       )}
       {...props}
+      {...keepOwnAccessibleName(props)}
     />
   );
 }
