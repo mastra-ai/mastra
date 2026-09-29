@@ -10,6 +10,7 @@ import { ProcessorRunner } from '../../processors/runner';
 import type { ProcessorState } from '../../processors/runner';
 import { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue } from '../../stream/base';
+import { createChunkMessageIdStamper } from '../../stream/base/message-id';
 import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
@@ -38,11 +39,12 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
 }: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType<OUTPUT>>({
     start: async streamController => {
+      const stampMessageId = createChunkMessageIdStamper(messageId);
       // Stamp chunks when the loop produces them; consumers may read them much later.
       const controller: ReadableStreamDefaultController<ChunkType<OUTPUT>> = {
         enqueue: chunk => {
           if (getChunkProducedAt(chunk) === undefined) stampChunkProducedAt(chunk, Date.now());
-          streamController.enqueue(chunk);
+          streamController.enqueue(stampMessageId(chunk));
         },
         close: () => streamController.close(),
         error: reason => streamController.error(reason),
@@ -104,7 +106,12 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
                 });
               }
             }
-            safeEnqueue(controller, data as ChunkType<OUTPUT>);
+            safeEnqueue(
+              controller,
+              ((writerOptions?.messageId ?? options?.messageId)
+                ? { ...data, messageId: writerOptions?.messageId ?? options?.messageId }
+                : data) as ChunkType<OUTPUT>,
+            );
           },
         };
 
