@@ -1,4 +1,4 @@
-import { FolderTree, HardDrive } from 'lucide-react';
+import { HardDrive } from 'lucide-react';
 import type { DataMessagePart } from '../tool-card';
 import { parseToolArgs, workspaceMetadata } from './workspace-data-parts';
 import { WorkspaceLink } from './workspace-link';
@@ -9,10 +9,8 @@ import type { ToolApprovalButtonsProps } from '@/domains/chat/tools/badges/tool-
 import { ToolApprovalButtons } from '@/domains/chat/tools/badges/tool-approval-buttons';
 import { ActivityHeadline } from '@/ds/components/ai/activity';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
-import { ToolCallArguments, ToolCallOutput } from '@/ds/components/ai/tool-call';
+import { presentTool, ToolCallArguments, ToolCallOutput } from '@/ds/components/ai/tool-call';
 import { Txt } from '@/ds/components/Txt';
-
-const DEFAULT_MAX_DEPTH = 3;
 
 export interface FileTreeBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   toolName: string;
@@ -26,7 +24,7 @@ export interface FileTreeBadgeProps extends Omit<ToolApprovalButtonsProps, 'tool
 
 function listingOptions(args: Record<string, unknown>): string[] {
   const options: string[] = [];
-  if (typeof args.maxDepth === 'number' && args.maxDepth !== DEFAULT_MAX_DEPTH) options.push(`depth: ${args.maxDepth}`);
+  if (typeof args.maxDepth === 'number') options.push(`depth: ${args.maxDepth}`);
   if (args.showHidden === true) options.push('hidden');
   if (args.dirsOnly === true) options.push('dirs only');
   if (typeof args.exclude === 'string' && args.exclude) options.push(`exclude: ${args.exclude}`);
@@ -55,6 +53,7 @@ export const FileTreeBadge = ({
 }: FileTreeBadgeProps) => {
   const parsedArgs = parseToolArgs(args);
   const path = typeof parsedArgs.path === 'string' && parsedArgs.path ? parsedArgs.path : '.';
+  const { icon: ToolIcon, label, detail = path } = presentTool(toolName, parsedArgs);
   const options = listingOptions(parsedArgs);
   const { tree, summary } = splitTreeResult(result);
   const toolCalled = toolCalledProp ?? Boolean(tree);
@@ -67,9 +66,9 @@ export const FileTreeBadge = ({
       data-testid="file-tree-badge"
       header={
         <ActivityHeadline
-          icon={<FolderTree aria-hidden />}
-          label="List files"
-          detail={options.length > 0 ? `${path} (${options.join(', ')})` : path}
+          icon={<ToolIcon aria-hidden />}
+          label={label}
+          detail={options.length > 0 ? `${detail} (${options.join(', ')})` : detail}
         />
       }
       status={status}

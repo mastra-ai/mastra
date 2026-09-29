@@ -124,7 +124,7 @@ function markerLine(toolName: string, state: MarkerState, omData: OmMarkerData):
     case 'failed':
       return {
         icon,
-        label: isReflection ? 'Reflection failed' : 'Observation failed',
+        label: isReflection ? 'Reflection' : 'Observation',
         status: 'error',
         body: errorBody,
       };
@@ -151,7 +151,7 @@ function markerLine(toolName: string, state: MarkerState, omData: OmMarkerData):
     case 'buffering-failed':
       return {
         icon,
-        label: isReflection ? 'Buffered reflection failed' : 'Buffered observation failed',
+        label: isReflection ? 'Buffered reflection' : 'Buffered observations',
         status: 'error',
         body: errorBody,
       };
