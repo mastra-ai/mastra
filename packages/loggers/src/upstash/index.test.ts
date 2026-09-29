@@ -91,6 +91,48 @@ describe('UpstashTransport', () => {
     });
   });
 
+  it('should send LTRIM as its own pipeline command, not as LPUSH arguments', async () => {
+    const logger = new PinoLogger({
+      name: 'test-logger',
+      level: LogLevel.INFO,
+      transports: {
+        upstash: transport,
+      },
+    });
+
+    logger.info('test message');
+
+    // Trigger flush
+    await transport._flush();
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+
+    // Upstash runs one Redis command per inner array. Appending LTRIM to the
+    // LPUSH array makes it an LPUSH *value*: the list is never trimmed, and
+    // "LTRIM", the list name and the bounds are stored as log records.
+    expect(body).toEqual([
+      ['LPUSH', defaultOptions.listName, expect.stringContaining('test message')],
+      ['LTRIM', defaultOptions.listName, 0, defaultOptions.maxListLength - 1],
+    ]);
+  });
+
+  it('should keep listLogs working now that a pipeline can hold several commands', async () => {
+    fetchMock.mockImplementationOnce(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve([{ result: [JSON.stringify({ msg: 'hello' })] }]),
+      }),
+    );
+
+    const logs = await transport.listLogs({ returnPaginationResults: false });
+
+    // LRANGE still goes out as a single command, and the first pipeline
+    // result is still the one listLogs reads.
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body).toEqual([['LRANGE', defaultOptions.listName, 0, -1]]);
+    expect(logs.logs).toEqual([{ msg: 'hello' }]);
+  });
+
   it('should properly clean up resources on destroy', () => {
     const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
     const flushSpy = vi.spyOn(transport, '_flush').mockImplementation(() => Promise.resolve());
