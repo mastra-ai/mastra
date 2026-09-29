@@ -130,7 +130,13 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
           <div className="space-y-2">
             <Field>
               <FieldLabel>Phase</FieldLabel>
-              <Select value={selectedPhase} onValueChange={v => setSelectedPhase(v as ProcessorPhase)}>
+              <Select
+                value={selectedPhase}
+                onValueChange={value => {
+                  const phase = processor.phases.find(phase => phase === value);
+                  if (phase) setSelectedPhase(phase);
+                }}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select phase" />
                 </SelectTrigger>

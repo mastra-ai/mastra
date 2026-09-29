@@ -58,9 +58,9 @@ interface FlameGraphProps {
 
 type RechartsClickState = { activeLabel?: string | number } | null | undefined;
 
-const MSG_COLOR = 'var(--color-green-500, #22c55e)';
-const OBS_COLOR = '#f59e0b';
-const REFLECT_COLOR = '#ec4899';
+const MSG_COLOR = 'var(--chart-green)';
+const OBS_COLOR = 'var(--chart-yellow)';
+const REFLECT_COLOR = 'var(--chart-pink)';
 
 function TimeAxis({ domain }: { domain: TDomain }) {
   const ticks = [0, 0.25, 0.5, 0.75, 1];
@@ -161,22 +161,16 @@ function AreaRow({ label, data, dataKey, color, gradientId, domain, zoomDomain, 
             </defs>
             <XAxis dataKey="t" type="number" domain={zoomDomain} allowDataOverflow hide />
             <YAxis type="number" domain={yMax != null ? [0, yMax] : undefined} hide />
-            <Tooltip
-              content={<FlameTooltip domain={domain} showValue />}
-              cursor={{ stroke: 'rgba(255,255,255,0.08)' }}
-            />
+            <Tooltip content={<FlameTooltip domain={domain} showValue />} cursor={{ stroke: 'var(--border)' }} />
             <Area
               type="linear"
               dataKey={dataKey}
               stroke={color}
               strokeWidth={1}
-              strokeOpacity={0.6}
               fill={`url(#${gradientId})`}
               isAnimationActive={false}
             />
-            {threshold != null && (
-              <ReferenceLine y={threshold} stroke={color} strokeDasharray="4 3" strokeOpacity={0.4} />
-            )}
+            {threshold != null && <ReferenceLine y={threshold} stroke="var(--border-strong)" strokeDasharray="4 3" />}
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -286,10 +280,9 @@ function CombinedRow({
               dataKey={areaDataKey}
               stroke={color}
               strokeWidth={1}
-              strokeOpacity={0.6}
               fill={`url(#${gradientId})`}
               isAnimationActive={false}
-              activeDot={{ r: 5, stroke: color, strokeWidth: 2, fill: '#0a0a0a' }}
+              activeDot={{ r: 5, stroke: color, strokeWidth: 2, fill: 'var(--background)' }}
               dot={(props: Record<string, unknown>) =>
                 isEventPoint(props.payload) ? (
                   <circle cx={props.cx as number} cy={props.cy as number} r={4} fill={color} />
@@ -299,7 +292,7 @@ function CombinedRow({
               }
             />
             {threshold != null && (
-              <ReferenceLine yAxisId="area" y={threshold} stroke={color} strokeDasharray="4 3" strokeOpacity={0.4} />
+              <ReferenceLine yAxisId="area" y={threshold} stroke="var(--border-strong)" strokeDasharray="4 3" />
             )}
           </ComposedChart>
         </ResponsiveContainer>

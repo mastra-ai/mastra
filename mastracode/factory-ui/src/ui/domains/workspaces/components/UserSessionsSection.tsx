@@ -195,7 +195,7 @@ export function UserSessionsSection() {
         </MainSidebar.NavList>
         {sessionsQuery.isError && (
           <div className="flex items-center gap-2 px-2 py-1">
-            <Txt as="p" variant="meta" className="text-error m-0">
+            <Txt as="p" variant="meta" className="text-destructive-indicator m-0">
               Couldn’t load sessions
             </Txt>
             <Button variant="ghost" size="sm" onClick={() => void sessionsQuery.refetch()}>
@@ -230,8 +230,7 @@ export function UserSessionsSection() {
                   Cancel
                 </Button>
                 <Button
-                  variant="primary"
-                  className="bg-red-600 text-white hover:bg-red-500"
+                  variant="destructive"
                   onClick={() => deleteSession.mutate(confirmDelete)}
                   disabled={deleteSession.isPending}
                 >

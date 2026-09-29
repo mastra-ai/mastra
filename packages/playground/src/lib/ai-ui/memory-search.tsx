@@ -241,7 +241,7 @@ export const MemorySearch = ({
         <div className={cn(raisedSurfaceStyle, 'mt-2 flex-1 overflow-y-auto rounded-lg')}>
           {error ? (
             <div className="p-4 text-center">
-              <Txt variant="caption" className="text-red-500">
+              <Txt variant="caption" className="text-destructive-indicator">
                 {error}
               </Txt>
             </div>
@@ -265,7 +265,7 @@ export const MemorySearch = ({
                   onClick={() => handleResultClick(result.id, result.threadId)}
                   className={cn(
                     'w-full border-b border-border px-4 py-3 text-left last:border-b-0 hover:bg-fill-subtle',
-                    result.threadId !== currentThreadId && 'border-l-2 border-l-blue-400',
+                    result.threadId !== currentThreadId && 'border-l-2 border-l-blue-600 dark:border-l-blue-400',
                   )}
                 >
                   <div className="flex flex-col gap-2">
@@ -289,8 +289,8 @@ export const MemorySearch = ({
                             className={cn(
                               'rounded px-2 py-0.5 text-column',
                               result.role === 'user'
-                                ? 'bg-blue-500/20 text-blue-400'
-                                : 'bg-green-500/20 text-green-400',
+                                ? 'bg-badge-blue-strong text-badge-blue-foreground'
+                                : 'bg-badge-green-strong text-badge-green-foreground',
                             )}
                           >
                             {result.role}
@@ -305,14 +305,14 @@ export const MemorySearch = ({
                                 tone={result.threadId !== currentThreadId ? undefined : 'muted'}
                                 className={cn(
                                   'max-w-[150px] truncate',
-                                  result.threadId !== currentThreadId && 'text-blue-400',
+                                  result.threadId !== currentThreadId && 'text-info-indicator',
                                 )}
                                 title={result.threadTitle}
                               >
                                 • {result.threadTitle}
                               </Txt>
                               {result.threadId !== currentThreadId && (
-                                <ExternalLink className="h-3 w-3 text-blue-400" />
+                                <ExternalLink className="h-3 w-3 text-info-indicator" />
                               )}
                             </div>
                           )}

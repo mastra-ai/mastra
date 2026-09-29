@@ -12,9 +12,8 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useTheme } from '@/ds/components/ThemeProvider';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
-const removed = 'var(--accent2)';
-const added = 'var(--accent1)';
-const tint = (color: string, pct: number) => `color-mix(in oklch, ${color} ${pct}%, transparent)`;
+const removed = 'var(--destructive-indicator)';
+const added = 'var(--success-indicator)';
 
 // GitHub-like split diff: red bands for removed lines (left), green bands for
 // added lines (right), with a stronger tint on the exact changed text.
@@ -25,20 +24,20 @@ const diffOverrides = EditorView.theme({
   '&.cm-editor .cm-changeGutter': { width: '3px', paddingLeft: '0' },
 
   '&.cm-merge-a .cm-changedLine': {
-    backgroundColor: tint(removed, 14),
+    backgroundColor: 'var(--destructive-subtle)',
     backgroundImage: 'none',
   },
   '&.cm-merge-b .cm-changedLine': {
-    backgroundColor: tint(added, 14),
+    backgroundColor: 'var(--success-subtle)',
     backgroundImage: 'none',
   },
   '&.cm-merge-a .cm-changedText': {
-    backgroundColor: tint(removed, 35),
+    backgroundColor: 'var(--destructive-edge)',
     backgroundImage: 'none',
     borderRadius: '2px',
   },
   '&.cm-merge-b .cm-changedText': {
-    backgroundColor: tint(added, 35),
+    backgroundColor: 'var(--success-edge)',
     backgroundImage: 'none',
     borderRadius: '2px',
   },
@@ -70,7 +69,7 @@ function buildDiffDarkTheme(): Extension {
       fontSize: 'var(--text-body-sm)',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
-      gutterForeground: '#939393',
+      gutterForeground: 'var(--muted-foreground)',
       background: 'transparent',
     },
     styles: [{ tag: [t.className, t.propertyName] }],
@@ -105,16 +104,16 @@ function buildDiffLightTheme(): Extension {
 
   const highlightStyle = HighlightStyle.define([
     { tag: [t.comment, t.bracket], color: 'var(--placeholder)' },
-    { tag: [t.string, t.meta, t.regexp], color: 'var(--accent1)' },
-    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--accent6)' },
-    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--accent2)' },
-    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--accent5)' },
+    { tag: [t.string, t.meta, t.regexp], color: 'var(--syntax-string)' },
+    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--syntax-literal)' },
+    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--syntax-keyword)' },
+    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--syntax-name)' },
     {
       tag: [t.definition(t.variableName), t.function(t.variableName), t.className, t.attributeName],
-      color: 'var(--accent3)',
+      color: 'var(--syntax-link)',
     },
-    { tag: [t.variableName, t.number], color: 'var(--accent5)' },
-    { tag: [t.name, t.quote], color: 'var(--accent1)' },
+    { tag: [t.variableName, t.number], color: 'var(--syntax-name)' },
+    { tag: [t.name, t.quote], color: 'var(--syntax-string)' },
   ]);
 
   return [editorTheme, syntaxHighlighting(highlightStyle)];

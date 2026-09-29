@@ -28,7 +28,9 @@ export function TraceInsightView({ traceId, onBack }: TraceInsightViewProps) {
         </Button>
       </div>
       {insightQuery.isPending && <p className="text-body text-muted-foreground">Loading trace insight…</p>}
-      {insightQuery.isError && <p className="text-body text-red-500">Unable to load the trace insight.</p>}
+      {insightQuery.isError && (
+        <p className="text-body text-destructive-indicator">Unable to load the trace insight.</p>
+      )}
       {insightQuery.data && <TraceInsightBody insight={insightQuery.data} />}
     </div>
   );
@@ -66,8 +68,8 @@ function parseTraceObservation(observation: string): ParsedObservation {
 
 const OBSERVATION_SEVERITY_CARD: Record<ObservationSeverity, string> = {
   info: raisedSurfaceStyle,
-  success: 'border border-green-400/30 bg-green-500/10',
-  problem: 'border border-red-400/30 bg-red-500/10',
+  success: 'border border-success-edge bg-success-subtle',
+  problem: 'border border-destructive-edge bg-destructive-subtle',
 };
 
 function ObservationItem({ observation }: { observation: string }) {
@@ -79,7 +81,7 @@ function ObservationItem({ observation }: { observation: string }) {
         <p className="font-mono text-meta tracking-wider text-muted-foreground uppercase">
           {severity === 'problem' && (
             <>
-              <span className="text-red-400">problem</span>
+              <span className="text-destructive-subtle-foreground">problem</span>
               <span aria-hidden="true"> · </span>
             </>
           )}
@@ -113,7 +115,9 @@ function TraceInsightBody({ insight }: { insight: TraceInsightResponse }) {
             </dl>
           )}
           {insight.summary.degenerate === true && (
-            <p className="mt-4 text-body text-red-500">This trace was flagged as degenerate or looping.</p>
+            <p className="mt-4 text-body text-destructive-indicator">
+              This trace was flagged as degenerate or looping.
+            </p>
           )}
           {insight.summary.observations.length > 0 && (
             <>

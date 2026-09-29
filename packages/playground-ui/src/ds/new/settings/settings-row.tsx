@@ -58,7 +58,7 @@ export function SettingsRowLayout({
       {...props}
     >
       <div className={cn('min-w-0', !isSectionLayout && 'flex flex-col', layout === 'factory' && 'gap-0.5')}>
-        <FieldLabel required={required} className={cn(tone === 'destructive' && 'text-destructive')}>
+        <FieldLabel required={required} className={cn(tone === 'destructive' && 'text-destructive-indicator')}>
           {label}
         </FieldLabel>
         {description != null && (
