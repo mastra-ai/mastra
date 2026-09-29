@@ -271,8 +271,7 @@ export const createKeyboardDispatcher = (): KeyboardDispatcher => {
     const first = candidates[0]?.steps[0];
     if (first) {
       event.preventDefault();
-      const armable = candidates.filter(({ layer }) => !event.repeat || layer.repeat !== false);
-      if (armable.length > 0) arm([first], armable, now);
+      arm([first], candidates, now);
       return;
     }
 
