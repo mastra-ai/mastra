@@ -1,6 +1,6 @@
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
@@ -251,44 +251,46 @@ export const ToolkitFilterPane = ({
         </button>
       </div>
 
-      <ScrollArea className="min-h-0 flex-1" viewPortClassName="pr-2">
-        <div className="flex flex-col gap-3">
-          {/* Built-in group renders immediately; it needs no async fetch. */}
-          {filteredBuiltIn.length > 0 && (
-            <ul className="flex flex-col gap-0.5">
-              {filteredBuiltIn.map(item => (
-                <ToolkitFilterRow
-                  key={item.id}
-                  item={item}
-                  checked={isChecked(item.id)}
-                  disabled={disabled}
-                  onToggle={onToggle}
-                />
-              ))}
-            </ul>
-          )}
+      <ScrollArea className="min-h-0 flex-1">
+        <ScrollAreaViewport className="pr-2">
+          <div className="flex flex-col gap-3">
+            {/* Built-in group renders immediately; it needs no async fetch. */}
+            {filteredBuiltIn.length > 0 && (
+              <ul className="flex flex-col gap-0.5">
+                {filteredBuiltIn.map(item => (
+                  <ToolkitFilterRow
+                    key={item.id}
+                    item={item}
+                    checked={isChecked(item.id)}
+                    disabled={disabled}
+                    onToggle={onToggle}
+                  />
+                ))}
+              </ul>
+            )}
 
-          {/* Each provider fetches and renders its own toolkits independently. */}
-          {providers.map(provider => (
-            <ProviderToolkitSection
-              key={provider.providerId}
-              provider={provider}
-              term={term}
-              isChecked={isChecked}
-              onToggle={onToggle}
-              disabled={disabled}
-              multipleAllowed={multipleAllowedByProvider.get(provider.providerId) ?? false}
-            />
-          ))}
+            {/* Each provider fetches and renders its own toolkits independently. */}
+            {providers.map(provider => (
+              <ProviderToolkitSection
+                key={provider.providerId}
+                provider={provider}
+                term={term}
+                isChecked={isChecked}
+                onToggle={onToggle}
+                disabled={disabled}
+                multipleAllowed={multipleAllowedByProvider.get(provider.providerId) ?? false}
+              />
+            ))}
 
-          {isProvidersLoading && (
-            <div className="flex flex-col gap-1 px-2">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-7 w-full" />
-              ))}
-            </div>
-          )}
-        </div>
+            {isProvidersLoading && (
+              <div className="flex flex-col gap-1 px-2">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-7 w-full" />
+                ))}
+              </div>
+            )}
+          </div>
+        </ScrollAreaViewport>
       </ScrollArea>
     </div>
   );

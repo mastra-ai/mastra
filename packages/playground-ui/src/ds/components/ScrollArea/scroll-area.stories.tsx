@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ScrollArea } from './scroll-area';
+import { ScrollArea, ScrollAreaViewport } from './scroll-area';
 import { Badge } from '@/ds/components/Badge';
 
 const meta: Meta<typeof ScrollArea> = {
@@ -37,6 +37,22 @@ export const WithMaxHeight: Story = {
           </p>
         ))}
       </div>
+    </ScrollArea>
+  ),
+};
+
+export const CustomViewport: Story = {
+  render: () => (
+    <ScrollArea maxHeight="150px" className="w-75 rounded-md border border-border">
+      <ScrollAreaViewport className="px-4 py-2 overscroll-contain">
+        <div className="space-y-4">
+          {Array.from({ length: 15 }).map((_, i) => (
+            <p key={i} className="text-body text-foreground">
+              Line {i + 1}
+            </p>
+          ))}
+        </div>
+      </ScrollAreaViewport>
     </ScrollArea>
   ),
 };

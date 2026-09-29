@@ -2,7 +2,7 @@ import type { ComponentPropsWithoutRef, HTMLAttributes, ReactNode } from 'react'
 
 import { CommandDialog, CommandInput, CommandItem, CommandList, CommandShortcut } from '@/ds/components/Command';
 import { Kbd } from '@/ds/components/Kbd';
-import { ScrollArea } from '@/ds/components/ScrollArea';
+import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
@@ -93,8 +93,10 @@ function CommandPaletteRail({ children, className, ...props }: CommandPaletteRai
       )}
       {...props}
     >
-      <ScrollArea className="-m-1 min-h-0 flex-1 p-1" viewPortClassName="pr-1">
-        <div className="flex flex-col gap-1">{children}</div>
+      <ScrollArea className="-m-1 min-h-0 flex-1 p-1">
+        <ScrollAreaViewport className="pr-1">
+          <div className="flex flex-col gap-1">{children}</div>
+        </ScrollAreaViewport>
       </ScrollArea>
     </aside>
   );

@@ -2,7 +2,7 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { ArrowRight, Inbox, RefreshCw } from 'lucide-react';
@@ -144,22 +144,24 @@ export function SidebarAttention() {
                 </Button>
               </div>
             ) : items.length > 0 ? (
-              <ScrollArea maxHeight="20rem" viewPortClassName="px-3.5 py-1.5">
-                <ul className="divide-border/50 divide-y">
-                  {items.map((item, index) => (
-                    <li
-                      key={item.key}
-                      className="animate-in fade-in slide-in-from-bottom-1"
-                      style={{ animationDelay: `${index * 40}ms`, animationFillMode: 'backwards' }}
-                    >
-                      <AttentionItemRow
-                        factoryId={factoryId}
-                        {...actions.rowProps(item)}
-                        onOpen={() => setOpen(false)}
-                      />
-                    </li>
-                  ))}
-                </ul>
+              <ScrollArea maxHeight="20rem">
+                <ScrollAreaViewport className="px-3.5 py-1.5">
+                  <ul className="divide-border/50 divide-y">
+                    {items.map((item, index) => (
+                      <li
+                        key={item.key}
+                        className="animate-in fade-in slide-in-from-bottom-1"
+                        style={{ animationDelay: `${index * 40}ms`, animationFillMode: 'backwards' }}
+                      >
+                        <AttentionItemRow
+                          factoryId={factoryId}
+                          {...actions.rowProps(item)}
+                          onOpen={() => setOpen(false)}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </ScrollAreaViewport>
               </ScrollArea>
             ) : (
               <div className="text-caption text-placeholder flex min-h-24 items-center justify-center px-3.5 text-center">

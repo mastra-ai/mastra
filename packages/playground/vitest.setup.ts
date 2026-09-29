@@ -9,8 +9,8 @@ import { server } from './src/test/msw-server';
 // noisy "An update to ScrollAreaRoot was not wrapped in act(...)" warnings, and
 // jsdom can't meaningfully measure overflow anyway. The component is a purely
 // presentational scroll container with no business logic to assert, so we swap
-// it for a plain div that preserves the public API (className, viewPortClassName,
-// viewportRef, children). Tests still see their content; the overlay-scrollbar
+// it for plain divs that preserve the public API (className, viewportRef,
+// children, ScrollAreaViewport). Tests still see their content; the overlay-scrollbar
 // internals are simply not exercised.
 vi.mock('@mastra/playground-ui/components/ScrollArea', () => {
   const ScrollArea = React.forwardRef<
@@ -18,7 +18,6 @@ vi.mock('@mastra/playground-ui/components/ScrollArea', () => {
     {
       children?: React.ReactNode;
       className?: string;
-      viewPortClassName?: string;
       viewportRef?: React.Ref<HTMLDivElement>;
       maxHeight?: string | number;
       autoScroll?: boolean;
@@ -32,7 +31,6 @@ vi.mock('@mastra/playground-ui/components/ScrollArea', () => {
       {
         children,
         className,
-        viewPortClassName,
         viewportRef,
         // ScrollArea-specific props are intentionally dropped so they never leak
         // onto the underlying DOM node as unknown attributes.
@@ -49,12 +47,14 @@ vi.mock('@mastra/playground-ui/components/ScrollArea', () => {
       return React.createElement(
         'div',
         { ref, className, 'data-testid': 'scroll-area', ...props },
-        React.createElement('div', { ref: viewportRef, className: viewPortClassName }, children),
+        React.createElement('div', { ref: viewportRef }, children),
       );
     },
   );
   ScrollArea.displayName = 'ScrollArea';
-  return { ScrollArea };
+  const ScrollAreaViewport = ({ children, className }: { children?: React.ReactNode; className?: string }) =>
+    React.createElement('div', { className }, children);
+  return { ScrollArea, ScrollAreaViewport };
 });
 
 // React reads this global to decide whether `act(...)` is supported. Vitest's

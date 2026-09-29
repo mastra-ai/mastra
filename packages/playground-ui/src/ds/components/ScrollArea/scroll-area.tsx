@@ -45,7 +45,6 @@ export type ScrollAreaScrollButtons =
     };
 
 export type ScrollAreaProps = React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Root> & {
-  viewPortClassName?: string;
   maxHeight?: string;
   autoScroll?: boolean;
   orientation?: Orientation;
@@ -97,8 +96,8 @@ function resolveMask(mask: ScrollAreaMask | undefined, orientation: Orientation)
 
 function maskClasses(sides: ResolvedMask) {
   return cn(
-    sides.top && 'data-[overflow-y-start]:mask-t-from-[calc(100%-2rem)]',
-    sides.bottom && 'data-[overflow-y-end]:mask-b-from-[calc(100%-2rem)]',
+    sides.top && 'data-[overflow-y-start]:mask-t-from-[calc(100%-3rem)]',
+    sides.bottom && 'data-[overflow-y-end]:mask-b-from-[calc(100%-5rem)]',
     sides.left && 'data-[overflow-x-start]:mask-l-from-[calc(100%-2rem)]',
     sides.right && 'data-[overflow-x-end]:mask-r-from-[calc(100%-2rem)]',
   );
@@ -229,12 +228,41 @@ const ScrollButtons = ({ areaRef, scrollButtons }: ScrollButtonsProps) => {
   );
 };
 
+type ScrollAreaViewportContextValue = {
+  ref: React.RefCallback<HTMLDivElement>;
+  className: string;
+  style: React.CSSProperties;
+  contentStyle: React.CSSProperties | undefined;
+};
+
+const ScrollAreaViewportContext = React.createContext<ScrollAreaViewportContextValue | null>(null);
+
+export type ScrollAreaViewportProps = {
+  className?: string;
+  children?: React.ReactNode;
+};
+
+/** Only needed to style the viewport; must be a direct child of `ScrollArea`, which otherwise renders it itself. */
+const ScrollAreaViewport = ({ className, children }: ScrollAreaViewportProps) => {
+  const viewport = React.useContext(ScrollAreaViewportContext);
+  if (!viewport) throw new Error('ScrollAreaViewport must be used within ScrollArea');
+
+  return (
+    <ScrollAreaPrimitive.Viewport
+      ref={viewport.ref}
+      className={cn(viewport.className, className)}
+      style={viewport.style}
+    >
+      <ScrollAreaPrimitive.Content style={viewport.contentStyle}>{children}</ScrollAreaPrimitive.Content>
+    </ScrollAreaPrimitive.Viewport>
+  );
+};
+
 const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
   (
     {
       className,
       children,
-      viewPortClassName,
       maxHeight,
       autoScroll = false,
       orientation = 'vertical',
@@ -250,8 +278,6 @@ const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
     const areaRef = React.useRef<HTMLDivElement>(null);
     useAutoscroll(areaRef, { enabled: autoScroll });
 
-    // Keep the internal autoscroll ref while also exposing the viewport to callers
-    // (e.g. a virtualizer's scroll element).
     const setViewportRef = React.useCallback(
       (node: HTMLDivElement | null) => {
         areaRef.current = node;
@@ -285,19 +311,25 @@ const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
           ? { minHeight: '0px' }
           : undefined;
 
+    const viewport: ScrollAreaViewportContextValue = {
+      ref: setViewportRef,
+      className: cn('size-full', maskClasses(sides)),
+      style: viewportStyle,
+      contentStyle,
+    };
+    const callerRendersViewport = React.Children.toArray(children).some(
+      child => React.isValidElement(child) && child.type === ScrollAreaViewport,
+    );
+
     return (
       <ScrollAreaPrimitive.Root
         ref={ref}
         className={cn('group/scroll-area relative overflow-hidden', className)}
         {...props}
       >
-        <ScrollAreaPrimitive.Viewport
-          ref={setViewportRef}
-          className={cn('size-full', maskClasses(sides), viewPortClassName)}
-          style={viewportStyle}
-        >
-          <ScrollAreaPrimitive.Content style={contentStyle}>{children}</ScrollAreaPrimitive.Content>
-        </ScrollAreaPrimitive.Viewport>
+        <ScrollAreaViewportContext.Provider value={viewport}>
+          {callerRendersViewport ? children : <ScrollAreaViewport>{children}</ScrollAreaViewport>}
+        </ScrollAreaViewportContext.Provider>
         {scrollButtons && orientation !== 'vertical' && (
           <ScrollButtons areaRef={areaRef} scrollButtons={scrollButtons} />
         )}
@@ -336,4 +368,4 @@ const ScrollBar = React.forwardRef<
 ));
 ScrollBar.displayName = 'ScrollBar';
 
-export { ScrollArea, ScrollBar };
+export { ScrollArea, ScrollAreaViewport, ScrollBar };

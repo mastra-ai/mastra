@@ -5,7 +5,7 @@ import type { ComponentProps } from 'react';
 import { TaskGraphLines } from './task-graph';
 import { TASK_ROW_HEIGHT, taskGraphLaneShift, taskGraphMotion, taskGraphNodeClass } from './task-graph-node';
 import { taskWindowHeight, useFocusedRowScroll } from './use-focused-row-scroll';
-import { ScrollArea } from '@/ds/components/ScrollArea';
+import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { focusRing, transitions } from '@/ds/primitives/transitions';
@@ -224,29 +224,27 @@ export const TaskList = ({
       className={cn('group/task-list relative', !open && 'cursor-pointer', className)}
       {...props}
     >
-      <ScrollArea
-        id={listId}
-        maxHeight={`${windowHeight + 2 * LIST_INSET_Y}px`}
-        mask={false}
-        viewPortClassName={cn(
-          edgeFades,
-          'transition-[max-height,mask-size]',
-          taskGraphMotion,
-          open ? edgeFadesWhenScrolled : 'overflow-hidden!',
-        )}
-        viewportRef={viewportRef}
-      >
-        <div className="px-3" style={{ paddingBlock: LIST_INSET_Y }}>
-          <div className="relative">
-            <TaskGraphLines statuses={tasks.map(task => task.status)} singleLane={!open} />
-            <ul>
-              {tasks.map((task, index) => {
-                const clippedAway = !open && index !== focusIndex;
-                return <TaskListRow key={task.id} task={task} inert={clippedAway} aria-hidden={clippedAway} />;
-              })}
-            </ul>
+      <ScrollArea id={listId} maxHeight={`${windowHeight + 2 * LIST_INSET_Y}px`} mask={false} viewportRef={viewportRef}>
+        <ScrollAreaViewport
+          className={cn(
+            edgeFades,
+            'transition-[max-height,mask-size]',
+            taskGraphMotion,
+            open ? edgeFadesWhenScrolled : 'overflow-hidden!',
+          )}
+        >
+          <div className="px-3" style={{ paddingBlock: LIST_INSET_Y }}>
+            <div className="relative">
+              <TaskGraphLines statuses={tasks.map(task => task.status)} singleLane={!open} />
+              <ul>
+                {tasks.map((task, index) => {
+                  const clippedAway = !open && index !== focusIndex;
+                  return <TaskListRow key={task.id} task={task} inert={clippedAway} aria-hidden={clippedAway} />;
+                })}
+              </ul>
+            </div>
           </div>
-        </div>
+        </ScrollAreaViewport>
       </ScrollArea>
       <div className="absolute top-2.5 right-3 flex h-7 items-center bg-linear-to-r from-transparent to-card to-[1.5rem] pl-6">
         <div

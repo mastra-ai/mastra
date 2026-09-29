@@ -7,7 +7,7 @@ import { DialogContext, dialogActionLayoutClasses, dialogActionSizeClasses, useD
 import type { DialogIntent, DialogVariant } from './dialog-context';
 import { Button } from '@/ds/components/Button';
 import type { TextButtonSize } from '@/ds/components/Button';
-import { ScrollArea } from '@/ds/components/ScrollArea';
+import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { dialogSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { asChildRenderProps } from '@/lib/as-child';
 import { cn } from '@/lib/utils';
@@ -209,17 +209,19 @@ const DialogBody = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
     const { variant } = useDialogContext();
     if (variant === 'new') {
       return (
-        <ScrollArea className="flex min-h-0 min-w-0 shrink flex-col" viewPortClassName="h-auto min-h-0" mask>
-          <div
-            ref={ref}
-            className={cn(
-              'flex flex-col gap-3 px-4 py-2 text-body [overflow-wrap:anywhere] text-muted-foreground',
-              className,
-            )}
-            {...props}
-          >
-            {children}
-          </div>
+        <ScrollArea className="flex min-h-0 min-w-0 shrink flex-col" mask>
+          <ScrollAreaViewport className="h-auto min-h-0">
+            <div
+              ref={ref}
+              className={cn(
+                'flex flex-col gap-3 px-4 py-2 text-body [overflow-wrap:anywhere] text-muted-foreground',
+                className,
+              )}
+              {...props}
+            >
+              {children}
+            </div>
+          </ScrollAreaViewport>
         </ScrollArea>
       );
     }

@@ -4,20 +4,22 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, assert, describe, expect, it, vi } from 'vitest';
 
-import { ScrollArea } from './scroll-area';
+import { ScrollArea, ScrollAreaViewport } from './scroll-area';
 
 afterEach(() => {
   cleanup();
 });
 
-const VIEWPORT_MARKER = 'test-viewport-marker';
-
+const getContent = () => {
+  const content = screen.getByTestId('child').parentElement;
+  assert(content, 'Expected scroll content');
+  return content;
+};
 const getViewport = () => {
-  const viewport = document.querySelector<HTMLElement>(`.${VIEWPORT_MARKER}`);
+  const viewport = getContent().parentElement;
   assert(viewport, 'Expected scroll viewport');
   return viewport;
 };
-const getContent = (viewport: HTMLElement) => viewport.firstElementChild as HTMLElement;
 
 /** jsdom has no layout, so the viewport never really scrolls; watch the call instead. */
 const stubScrollBy = () => {
@@ -28,8 +30,8 @@ const stubScrollBy = () => {
 
 const renderArea = (props: Partial<React.ComponentProps<typeof ScrollArea>> = {}) =>
   render(
-    <ScrollArea viewPortClassName={VIEWPORT_MARKER} {...props}>
-      <div>content</div>
+    <ScrollArea {...props}>
+      <div data-testid="child">content</div>
     </ScrollArea>,
   );
 
@@ -44,7 +46,7 @@ describe('ScrollArea', () => {
 
     it('lets the content shrink below its intrinsic width by overriding base-ui min-width: fit-content', () => {
       renderArea();
-      const content = getContent(getViewport());
+      const content = getContent();
       expect(content.style.minWidth).toBe('0px');
     });
   });
@@ -59,7 +61,7 @@ describe('ScrollArea', () => {
 
     it('lets the content shrink below its intrinsic height', () => {
       renderArea({ orientation: 'horizontal' });
-      const content = getContent(getViewport());
+      const content = getContent();
       expect(content.style.minHeight).toBe('0px');
     });
   });
@@ -74,7 +76,7 @@ describe('ScrollArea', () => {
 
     it('keeps base-ui default content min-width: fit-content so the content can grow on both axes', () => {
       renderArea({ orientation: 'both' });
-      const content = getContent(getViewport());
+      const content = getContent();
       expect(content.style.minWidth).toBe('fit-content');
       expect(content.style.minHeight).toBe('');
     });
@@ -123,25 +125,22 @@ describe('ScrollArea', () => {
     });
   });
 
-  describe('children rendering', () => {
-    it('renders children inside the viewport content wrapper', () => {
+  describe('ScrollAreaViewport', () => {
+    it('styles the single viewport the area scrolls instead of nesting a second one', () => {
+      const viewportRef = React.createRef<HTMLDivElement>();
       render(
-        <ScrollArea viewPortClassName={VIEWPORT_MARKER}>
-          <div data-testid="child">hello</div>
+        <ScrollArea maxHeight="400px" viewportRef={viewportRef}>
+          <ScrollAreaViewport className="caller-viewport">
+            <div data-testid="child">content</div>
+          </ScrollAreaViewport>
         </ScrollArea>,
       );
-      const viewport = getViewport();
-      expect(viewport.querySelector('[data-testid="child"]')?.textContent).toBe('hello');
-    });
 
-    it('keeps children inside the content wrapper even when content gets a min-width override', () => {
-      render(
-        <ScrollArea viewPortClassName={VIEWPORT_MARKER} orientation="vertical">
-          <div data-testid="child">hello</div>
-        </ScrollArea>,
-      );
-      const content = getContent(getViewport());
-      expect(content.querySelector('[data-testid="child"]')?.textContent).toBe('hello');
+      const viewport = getViewport();
+      expect(viewport.classList.contains('caller-viewport')).toBe(true);
+      expect(viewportRef.current).toBe(viewport);
+      expect(viewport.style.maxHeight).toBe('400px');
+      expect(viewport.className).toContain('data-[overflow-y-end]:mask-b-from');
     });
   });
 

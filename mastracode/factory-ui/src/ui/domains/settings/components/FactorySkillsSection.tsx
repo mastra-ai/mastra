@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChevronRight, Code, FileText } from 'lucide-react';
 import { useState } from 'react';
@@ -40,12 +40,14 @@ function SkillContent({ content }: { content: string }) {
 
   return (
     <div className="group/content relative">
-      <ScrollArea maxHeight="24rem" viewPortClassName="px-4 pb-4" revealScrollbarOnHover={false}>
-        {raw ? (
-          <pre className="text-caption text-muted-foreground m-0 font-mono whitespace-pre-wrap">{content}</pre>
-        ) : (
-          <MarkdownRenderer className="text-caption text-muted-foreground">{content}</MarkdownRenderer>
-        )}
+      <ScrollArea maxHeight="24rem" revealScrollbarOnHover={false}>
+        <ScrollAreaViewport className="px-4 pb-4">
+          {raw ? (
+            <pre className="text-caption text-muted-foreground m-0 font-mono whitespace-pre-wrap">{content}</pre>
+          ) : (
+            <MarkdownRenderer className="text-caption text-muted-foreground">{content}</MarkdownRenderer>
+          )}
+        </ScrollAreaViewport>
       </ScrollArea>
       <Button
         size="icon-sm"

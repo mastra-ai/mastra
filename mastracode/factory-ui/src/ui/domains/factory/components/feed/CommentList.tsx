@@ -1,7 +1,7 @@
 import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Comment, CommentArrival } from '@mastra/playground-ui/components/Comment';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageCircle, RefreshCw } from 'lucide-react';
@@ -177,107 +177,108 @@ export function CommentList({
       viewportRef={viewportRef}
       // The viewport fills by flex: the card it sits in has no definite height to take a percentage of.
       className={cn('flex flex-col', className)}
-      viewPortClassName="flex min-h-0 grow flex-col"
     >
-      <ArrivalScope>
-        {!showSkeleton && leading !== undefined && (
-          <div className="stream-landing" style={landingStyle(0)}>
-            {leading}
-          </div>
-        )}
-        {/* Chat anchoring: a short stream sits against the composer, not the description. */}
-        <div className="mt-auto flex min-h-40 flex-col justify-end py-2">
+      <ScrollAreaViewport className="flex min-h-0 grow flex-col">
+        <ArrivalScope>
           {!showSkeleton && leading !== undefined && (
-            <div
-              aria-hidden
-              className="text-meta text-muted-foreground stream-landing flex items-center gap-2 px-3 pb-1"
-              style={landingStyle(1)}
-            >
-              <span className="bg-border h-px flex-1" />
-              Activity
-              <span className="bg-border h-px flex-1" />
+            <div className="stream-landing" style={landingStyle(0)}>
+              {leading}
             </div>
           )}
-          {showSkeleton ? (
-            <div className="flex flex-col gap-2 px-2 py-2" role="status" aria-label="Loading comments">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-4/5" />
-              <Skeleton className="h-10 w-full" />
-            </div>
-          ) : null}
-          {comments.isError ? (
-            <div className="text-caption text-muted-foreground flex items-center gap-2 px-2 py-2">
-              <span>Unable to load comments.</span>
-              <Button type="button" variant="ghost" size="sm" onClick={() => void comments.refetch()}>
-                <RefreshCw aria-hidden />
-                Try again
-              </Button>
-            </div>
-          ) : null}
-          {!showSkeleton && !comments.isError && rows.length === 0 ? (
-            <div className="text-caption text-muted-foreground flex items-center justify-center gap-1.5 px-2 py-6">
-              <MessageCircle size={14} aria-hidden />
-              <span>No activity yet</span>
-            </div>
-          ) : null}
-          {/* Mounted through loading so the live region exists before the first addition. */}
-          <Comment
-            variant="thread"
-            role="log"
-            aria-live="polite"
-            aria-relevant="additions"
-            aria-label="Activity"
-            className="px-1 py-1"
-          >
-            {showSkeleton || nothingToShow ? null : (
-              <StreamLanding initialRows={rows.length}>
-                {landing => (
-                  <>
-                    {comments.hasNextPage ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="self-center"
-                        disabled={comments.isFetchingNextPage}
-                        onClick={() => void comments.fetchNextPage()}
-                      >
-                        {comments.isFetchingNextPage ? 'Loading…' : 'Show earlier comments'}
-                      </Button>
-                    ) : null}
-                    {rows.map((row, index) => (
-                      <div
-                        key={rowKey(row)}
-                        className={index < landing ? 'stream-landing' : undefined}
-                        style={index < landing ? landingStyle(index + 2) : undefined}
-                      >
-                        {row.kind === 'event' ? (
-                          <ActivityEvent event={row.event} actors={actors} className="px-2 py-1.5" />
-                        ) : (
-                          <CommentArrival>
-                            <CommentRow
-                              ref={row.comment.id === highlightCommentId ? centreHighlightedRow : undefined}
-                              comment={row.comment}
-                              factoryProjectId={factoryProjectId}
-                              currentUserId={currentUser?.userId}
-                              showHeader={!isContinuation(previousComment(rows, index), row.comment)}
-                              pending={row.pending}
-                              highlighted={row.comment.id === highlightCommentId}
-                              commentUrl={row.pending ? undefined : commentUrl?.(row.comment.id)}
-                              onQuote={row.pending ? undefined : onQuote}
-                              onDelete={row.pending ? undefined : () => deleteComment.mutate(row.comment.id)}
-                            />
-                          </CommentArrival>
-                        )}
-                      </div>
-                    ))}
-                  </>
-                )}
-              </StreamLanding>
+          {/* Chat anchoring: a short stream sits against the composer, not the description. */}
+          <div className="mt-auto flex min-h-40 flex-col justify-end py-2">
+            {!showSkeleton && leading !== undefined && (
+              <div
+                aria-hidden
+                className="text-meta text-muted-foreground stream-landing flex items-center gap-2 px-3 pb-1"
+                style={landingStyle(1)}
+              >
+                <span className="bg-border h-px flex-1" />
+                Activity
+                <span className="bg-border h-px flex-1" />
+              </div>
             )}
-          </Comment>
-        </div>
-      </ArrivalScope>
+            {showSkeleton ? (
+              <div className="flex flex-col gap-2 px-2 py-2" role="status" aria-label="Loading comments">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-4/5" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            ) : null}
+            {comments.isError ? (
+              <div className="text-caption text-muted-foreground flex items-center gap-2 px-2 py-2">
+                <span>Unable to load comments.</span>
+                <Button type="button" variant="ghost" size="sm" onClick={() => void comments.refetch()}>
+                  <RefreshCw aria-hidden />
+                  Try again
+                </Button>
+              </div>
+            ) : null}
+            {!showSkeleton && !comments.isError && rows.length === 0 ? (
+              <div className="text-caption text-muted-foreground flex items-center justify-center gap-1.5 px-2 py-6">
+                <MessageCircle size={14} aria-hidden />
+                <span>No activity yet</span>
+              </div>
+            ) : null}
+            {/* Mounted through loading so the live region exists before the first addition. */}
+            <Comment
+              variant="thread"
+              role="log"
+              aria-live="polite"
+              aria-relevant="additions"
+              aria-label="Activity"
+              className="px-1 py-1"
+            >
+              {showSkeleton || nothingToShow ? null : (
+                <StreamLanding initialRows={rows.length}>
+                  {landing => (
+                    <>
+                      {comments.hasNextPage ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="self-center"
+                          disabled={comments.isFetchingNextPage}
+                          onClick={() => void comments.fetchNextPage()}
+                        >
+                          {comments.isFetchingNextPage ? 'Loading…' : 'Show earlier comments'}
+                        </Button>
+                      ) : null}
+                      {rows.map((row, index) => (
+                        <div
+                          key={rowKey(row)}
+                          className={index < landing ? 'stream-landing' : undefined}
+                          style={index < landing ? landingStyle(index + 2) : undefined}
+                        >
+                          {row.kind === 'event' ? (
+                            <ActivityEvent event={row.event} actors={actors} className="px-2 py-1.5" />
+                          ) : (
+                            <CommentArrival>
+                              <CommentRow
+                                ref={row.comment.id === highlightCommentId ? centreHighlightedRow : undefined}
+                                comment={row.comment}
+                                factoryProjectId={factoryProjectId}
+                                currentUserId={currentUser?.userId}
+                                showHeader={!isContinuation(previousComment(rows, index), row.comment)}
+                                pending={row.pending}
+                                highlighted={row.comment.id === highlightCommentId}
+                                commentUrl={row.pending ? undefined : commentUrl?.(row.comment.id)}
+                                onQuote={row.pending ? undefined : onQuote}
+                                onDelete={row.pending ? undefined : () => deleteComment.mutate(row.comment.id)}
+                              />
+                            </CommentArrival>
+                          )}
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </StreamLanding>
+              )}
+            </Comment>
+          </div>
+        </ArrivalScope>
+      </ScrollAreaViewport>
     </ScrollArea>
   );
 }

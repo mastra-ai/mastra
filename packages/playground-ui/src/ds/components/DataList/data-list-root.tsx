@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode, RefObject } from 'react';
-import { ScrollArea } from '@/ds/components/ScrollArea/scroll-area';
+import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea/scroll-area';
 import type { ScrollAreaMask, ScrollAreaProps } from '@/ds/components/ScrollArea/scroll-area';
 import { FluidMenuItems, useFluidMenu } from '@/ds/primitives/fluid-menu';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -160,14 +160,13 @@ export function DataListRoot({
       // items out against the max-height-clamped container, so short lists stay
       // compact and long ones shrink the viewport and scroll. `self-start` stops
       // a grid/flex parent from stretching the root to the full row height.
-      viewPortClassName="min-h-0 flex-1 basis-auto"
       className={cn(
         'flex max-h-full w-full flex-col self-start rounded-xl p-1',
         dataListVariantClasses[variant],
         className,
       )}
     >
-      {grid}
+      <ScrollAreaViewport className="min-h-0 flex-1 basis-auto">{grid}</ScrollAreaViewport>
     </ScrollArea>
   );
 }
