@@ -151,20 +151,6 @@ export async function getInputOptions(
           }),
       enableEsmShim ? esmShim() : undefined,
       externalsPreset ? nodeModulesExtensionResolver() : nodeResolvePlugin,
-      // for debugging
-      // {
-      //   name: 'logger',
-      //   //@ts-expect-error
-      //   resolveId(id, ...args) {
-      //     console.log({ id, args });
-      //   },
-      //   // @ts-expect-error
-      // transform(code, id) {
-      //   if (code.includes('class Duplexify ')) {
-      //     console.log({ duplex: id });
-      //   }
-      // },
-      // },
       json(),
       localStorageDetector(workspaceRoot || projectRoot),
       removeDeployer(entryFile, { sourcemap }),
