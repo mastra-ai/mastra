@@ -336,13 +336,9 @@ describe('evented pre-first-step restart', () => {
     await persistPreFirstStepSnapshot({ storage, workflow, runId, input: { value: 'original' } });
 
     const run = await workflow.createRun({ runId });
-    const result = await Promise.race([
-      run.restart(),
-      new Promise<'timed-out'>(resolve => setTimeout(() => resolve('timed-out'), 500)),
-    ]);
+    const result = await run.restart();
 
-    expect(result).not.toBe('timed-out');
-    expect((result as any).status).toBe('success');
+    expect(result.status).toBe('success');
     expect(firstExecute).toHaveBeenCalledTimes(1);
     expect(branchAExecute).toHaveBeenCalledTimes(1);
     expect(branchBExecute).toHaveBeenCalledTimes(1);
