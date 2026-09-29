@@ -79,6 +79,8 @@ export type ScenarioName =
   | 'goal-fresh-thread-persistence'
   | 'goal-judge-om-model-isolation'
   | 'goal-judge-single-render'
+  | 'goal-judge-esc-loaded'
+  | 'goal-judge-esc-unloaded'
   | 'goal-max-runs-ends-goal'
   | 'goal-resume-single-render'
   | 'goal-survives-new-thread'

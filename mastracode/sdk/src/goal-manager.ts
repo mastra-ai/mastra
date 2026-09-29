@@ -336,7 +336,9 @@ export class GoalManager {
       await state.session.thread.setSetting({ key: THREAD_GOAL_KEY, value: undefined });
       this.pendingDelete = null;
     } catch {
-      // Persistence is not critical.
+      // Persistence is not critical, but keep the retry scoped to the thread
+      // this delete targeted so an empty save elsewhere cannot delete a goal.
+      this.pendingDelete = { threadId };
     }
   }
 

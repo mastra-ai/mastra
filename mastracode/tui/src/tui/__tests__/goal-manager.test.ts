@@ -480,6 +480,26 @@ describe('GoalManager adapter', () => {
     expect(agent.clearObjective).toHaveBeenCalledTimes(2);
   });
 
+  it('scopes a failed delete to its thread when clear() ran with no thread known', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+
+    manager.clear();
+    agent.clearObjective.mockRejectedValueOnce(new Error('store unavailable'));
+    await manager.deleteFromThread(state);
+    expect(agent.clearObjective).toHaveBeenCalledTimes(1);
+
+    state.session.thread.getId.mockReturnValue('other-thread');
+    await manager.saveToThread(state);
+    expect(agent.clearObjective).toHaveBeenCalledTimes(1);
+
+    state.session.thread.getId.mockReturnValue('parent-thread');
+    await manager.saveToThread(state);
+    expect(agent.clearObjective).toHaveBeenCalledTimes(2);
+    expect(agent.clearObjective).toHaveBeenLastCalledWith({ threadId: 'parent-thread' });
+  });
+
   it('does not delete on a save after clear() when a new goal was set in between', async () => {
     const agent = createAgent();
     const state = createState(agent);

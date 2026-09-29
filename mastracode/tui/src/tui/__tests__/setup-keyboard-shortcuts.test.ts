@@ -119,6 +119,7 @@ function createState(isRunning: boolean) {
       ui: { requestRender: vi.fn(), start: vi.fn(), stop: vi.fn() },
       goalManager: {
         isActive: vi.fn(() => false),
+        getGoal: vi.fn(() => ({ status: 'active' })),
         pause: vi.fn(),
         saveToThread: vi.fn(),
       },
@@ -610,6 +611,37 @@ describe('setupKeyboardShortcuts', () => {
     expect(state.goalManager.saveToThread).toHaveBeenCalledWith(state);
     expect(state.activeGoalJudge).toBeUndefined();
     expect(state.userInitiatedAbort).toBe(true);
+  });
+
+  it('pauses the stored goal when nothing is loaded in memory during goal judge evaluation', async () => {
+    const { state, actions } = createState(true);
+    const updateObjectiveOptions = vi.fn(async () => undefined);
+    state.controller.getCurrentAgent.mockReturnValue({ updateObjectiveOptions });
+    state.session.thread.getId = vi.fn(() => 'thread-1');
+    state.goalManager.getGoal.mockReturnValue(null);
+    state.activeGoalJudge = {
+      modelId: 'openai/gpt-5.5',
+      abortController: { abort: vi.fn() },
+      component: { setInterrupted: vi.fn() },
+    };
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage: vi.fn(),
+    });
+
+    actions.get('clear')?.();
+    await Promise.resolve();
+
+    expect(state.goalManager.pause).not.toHaveBeenCalled();
+    expect(state.goalManager.saveToThread).not.toHaveBeenCalled();
+    expect(updateObjectiveOptions).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      status: 'paused',
+      pausedReason: 'Judge evaluation was interrupted.',
+    });
+    expect(state.activeGoalJudge).toBeUndefined();
   });
 
   it('aborts and clears an active plan approval parked in a tool suspension', () => {

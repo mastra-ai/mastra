@@ -5,6 +5,8 @@ import stripAnsi from 'strip-ansi';
 import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
+let restartApp: (() => Promise<void>) | undefined;
+
 const OBJECTIVE = 'Complete the max-runs goal e2e objective.';
 const FOLLOW_UP = 'Looks good, please keep going.';
 
@@ -35,6 +37,18 @@ export const goalMaxRunsEndsGoalScenario: McE2eScenario = {
       goalMaxTurns: 1,
     };
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+  },
+  async inProcessApp({ startMastraCodeApp }) {
+    let currentStop: (() => Promise<void> | void) | undefined;
+    const start = async () => {
+      currentStop = (await startMastraCodeApp()).stop;
+    };
+    restartApp = async () => {
+      await currentStop?.();
+      await start();
+    };
+    await start();
+    return { stop: async () => currentStop?.() };
   },
   async run({ terminal, runtime, dbPath }) {
     runtime.startLiveOutput(terminal);
@@ -72,6 +86,22 @@ export const goalMaxRunsEndsGoalScenario: McE2eScenario = {
       );
     }
 
+    // Restart on the same app data: the pause cause must come back from
+    // storage, not from the previous process's in-memory goal.
+    const pauseLines = () => stripAnsi(terminal.serialize().view).match(/— paused: Ran\b/g)?.length ?? 0;
+    await restartApp?.();
+    await runtime.waitForScreenText(/Project:/i, terminal, 30_000);
+    await runtime.sleep(500);
+    const before = pauseLines();
+    terminal.submit('/goal status');
+    const deadline = Date.now() + 10_000;
+    while (pauseLines() <= before) {
+      if (Date.now() > deadline) {
+        throw new Error(`Expected /goal status after restart to show the pause cause:\n${terminal.serialize().view}`);
+      }
+      await runtime.sleep(200);
+    }
+
     terminal.keyCtrlC();
     await runtime.stopApp?.();
 
@@ -86,7 +116,12 @@ export const goalMaxRunsEndsGoalScenario: McE2eScenario = {
       if (rows.length !== 1) {
         throw new Error(`Expected exactly one persisted goal record, found ${rows.length}`);
       }
-      const record = JSON.parse(rows[0]!.value) as { objective?: string; status?: string; runsUsed?: number };
+      const record = JSON.parse(rows[0]!.value) as {
+        objective?: string;
+        status?: string;
+        runsUsed?: number;
+        pausedReason?: string;
+      };
       if (record.objective !== OBJECTIVE) {
         throw new Error(
           `Expected persisted objective ${JSON.stringify(OBJECTIVE)}, found ${JSON.stringify(record.objective)}`,
@@ -96,6 +131,9 @@ export const goalMaxRunsEndsGoalScenario: McE2eScenario = {
         throw new Error(
           `Expected the persisted goal to be paused after reaching max runs, found ${JSON.stringify(record.status)}`,
         );
+      }
+      if (!record.pausedReason?.startsWith('Ran')) {
+        throw new Error(`Expected the persisted pause cause, found ${JSON.stringify(record.pausedReason)}`);
       }
       if (record.runsUsed !== 1) {
         throw new Error(`Expected 1 persisted run, found ${JSON.stringify(record.runsUsed)}`);

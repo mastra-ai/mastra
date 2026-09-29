@@ -227,6 +227,17 @@ export function setupKeyboardShortcuts(
   });
 }
 
+async function pauseStoredGoal(state: TUIState, pausedReason: string): Promise<void> {
+  const threadId = state.session.thread.getId();
+  if (!threadId) return;
+  try {
+    const agent = state.controller.getCurrentAgent(state.session);
+    await agent.updateObjectiveOptions({ threadId, status: 'paused', pausedReason });
+  } catch {
+    // Persistence is best-effort, like saveToThread.
+  }
+}
+
 function abortActiveGoalJudge(state: TUIState): boolean {
   const activeGoalJudge = state.activeGoalJudge;
   if (!activeGoalJudge) return false;
@@ -244,8 +255,16 @@ function abortActiveGoalJudge(state: TUIState): boolean {
   // next save does not reload the old active objective and effectively undo the
   // pause. `saveToThread` is best-effort, so run it fire-and-forget to keep this
   // abort handler synchronous.
-  state.goalManager.pause('Judge evaluation was interrupted.');
-  void state.goalManager.saveToThread(state);
+  const pausedReason = 'Judge evaluation was interrupted.';
+  if (state.goalManager.getGoal()) {
+    state.goalManager.pause(pausedReason);
+    void state.goalManager.saveToThread(state);
+  } else {
+    // Nothing is loaded in memory (e.g. another client wrote the goal), so an
+    // empty save would not persist the pause. Pause the stored record directly;
+    // core no-ops when no record exists.
+    void pauseStoredGoal(state, pausedReason);
+  }
   state.activeGoalJudge = undefined;
   state.ui.requestRender();
   return true;
