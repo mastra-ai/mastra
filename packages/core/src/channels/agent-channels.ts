@@ -1,12 +1,14 @@
-import type { Chat, Adapter, ChatConfig, Message, StateAdapter, Thread } from 'chat';
+import type { Chat, Adapter, Attachment, ChatConfig, Message, StateAdapter, Thread } from 'chat';
 import { z } from 'zod';
 
 import type { Agent } from '../agent/agent';
 import type { MastraProviderMetadata } from '../agent/message-list/state/types';
-import type { AgentSignalContents } from '../agent/signals';
+import { createSignal } from '../agent/signals';
+import type { AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import { MastraError } from '../error';
 import type { IMastraLogger } from '../logger/logger';
 import type { Mastra } from '../mastra';
+import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
 import type {
   InputProcessor,
@@ -49,7 +51,6 @@ import type {
   ResolveResourceId,
   ResolveThreadId,
   StreamingConfig,
-  ThreadHistoryMessage,
   ToolDisplay,
   ToolDisplayFn,
 } from './types';
@@ -59,6 +60,25 @@ import { resolveWaitUntil } from './wait-until';
 
 /** Platforms whose chat-SDK adapters render interactive approval buttons. */
 const APPROVAL_BUTTON_PLATFORMS = new Set(['slack', 'discord', 'teams', 'gchat', 'google-chat', 'telegram']);
+
+/**
+ * How far past the history window the first-mention walk counts omitted
+ * messages before giving up on an exact count. Slack's backward paging fetches
+ * at least 200 per call, so this costs at most a few calls.
+ */
+const THREAD_HISTORY_OMITTED_CAP = 500;
+
+/** Prior platform messages gathered for a first mention. */
+interface ThreadHistoryWindow {
+  /** The thread's first message, when it falls outside `recent`. */
+  root: Message | undefined;
+  /** Messages between `root` and `recent` that are not included. */
+  omitted: number;
+  /** True when the walk stopped at THREAD_HISTORY_OMITTED_CAP; `omitted` is a lower bound. */
+  capped: boolean;
+  /** The most recent `maxMessages - 1` messages before the trigger, oldest first. */
+  recent: Message[];
+}
 
 /**
  * Manages a single Chat SDK instance for an agent, wiring all adapters
@@ -1343,47 +1363,40 @@ export class AgentChannels {
     // started it. Other participants' messages are still part of that thread's history.
     const threadResourceId = mastraThread.resourceId;
 
-    // Fetch recent thread history when configured, this is a non-DM mention,
-    // AND the agent isn't already subscribed to this thread. If subscribed,
-    // the agent already has history via Mastra's memory system.
-    // History is prepended to the user message text (not as a separate message)
-    // to avoid consecutive user messages which some providers reject (e.g. DeepSeek).
-    let historyBlock: string | undefined; // TODO: convert platform thread chat history into Mastra messages instead of one big text block
+    // On a non-DM first mention (not yet subscribed), persist the platform
+    // thread's prior messages into the Mastra thread as individual attributed
+    // user signals so the agent sees them as separate turns with their own
+    // author, message id, timestamp and attachments. Once subscribed, memory
+    // carries the history. Agents without memory can't persist rows, so they
+    // keep receiving the history as one text block ahead of the trigger.
+    let legacyHistoryBlock: string | undefined;
     const maxMessages = this.threadContext.maxMessages ?? 10;
     if (maxMessages > 0 && !chatThread.isDM) {
       const alreadySubscribed = await chatThread.isSubscribed();
       if (!alreadySubscribed) {
         this.logger?.debug?.(`Fetching thread history (max ${maxMessages}) for first mention in ${chatThread.id}`);
-        const history = await this.fetchThreadHistory(chatThread, historyExcludeIds, maxMessages);
-        this.logger?.debug?.(`Fetched ${history.length} messages from thread history`);
-        if (history.length > 0) {
-          const lines = ['[Thread context — messages in this thread before you joined]'];
-          for (const msg of history) {
-            const mention = msg.userId ? chatThread.mentionUser(msg.userId) : undefined;
-            let prefix = mention ? (msg.author ? `${msg.author} (${mention})` : mention) : msg.author;
-            if (msg.isBot) prefix += ' (bot)';
-            lines.push(`[${prefix}] (msg:${msg.id}): ${msg.text}`);
-          }
-          historyBlock = lines.join('\n');
+        const history = await this.collectThreadHistory(chatThread, historyExcludeIds, maxMessages);
+        this.logger?.debug?.(
+          `Fetched ${history.recent.length + (history.root ? 1 : 0)} messages from thread history (${history.omitted}${history.capped ? '+' : ''} omitted)`,
+        );
+        const hasHistory = history.root !== undefined || history.recent.length > 0;
+        if (hasHistory) {
+          const persisted = await this.persistThreadHistorySignals({
+            buildSignals: () => this.buildThreadHistorySignals({ history, chatThread, platform, mastraThread }),
+            requestContext,
+            thread: mastraThread,
+            memory: { thread: mastraThread.id, resource: threadResourceId },
+          });
+          if (!persisted) legacyHistoryBlock = this.formatLegacyHistoryBlock(history, chatThread);
         }
       } else {
         this.logger?.debug?.(`Skipping thread history fetch — already subscribed to ${chatThread.id}`);
       }
     }
 
-    const messageTexts = batch.map(m => {
-      const richText = m.formatted ? chatModule().stringifyMarkdown(m.formatted).trim() : undefined;
-      return richText || m.text;
-    });
-    const text = [historyBlock, ...messageTexts].filter(Boolean).join('\n\n');
-    const parts: Exclude<AgentSignalContents, string> = [{ type: 'text', text }];
+    const messageTexts = batch.map(m => this.messageText(m));
+    const text = [legacyHistoryBlock, ...messageTexts].filter(Boolean).join('\n\n');
     const attachments = batch.flatMap(m => m.attachments ?? []).filter(a => a.url || a.fetchData);
-
-    // Route attachments based on `inlineMedia` config (see DEFAULT_INLINE_MEDIA_TYPES).
-    // Inline types are sent as file parts (the LLM adapter converts image/* to
-    // image content automatically). Non-inline types are described as text
-    // metadata so the agent is aware of them without crashing models that
-    // reject unsupported media (e.g. OpenAI rejects video/mp4).
     this.logger?.debug('[CHANNEL] Attachments', {
       count: attachments.length,
       attachments: attachments.map(a => ({
@@ -1393,55 +1406,10 @@ export class AgentChannels {
         hasData: !!a.fetchData,
       })),
     });
-    for (const att of attachments) {
-      if (!att.url && !att.fetchData) continue;
-      const mimeType = att.mimeType || (att.type === 'image' ? 'image/png' : undefined);
-      if (!mimeType) continue;
-
-      const inline = this.shouldInline(mimeType);
-      const filename = att.name || att.url?.split('/').pop() || 'file';
-      if (inline) {
-        let data: string | undefined;
-        let fetchFailed = false;
-        if (att.fetchData) {
-          // Prefer authenticated fetch (e.g. Slack CDN requires auth)
-          try {
-            const buf = await att.fetchData();
-            const bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
-            const base64 = Buffer.from(bytes).toString('base64');
-            data = `data:${mimeType};base64,${base64}`;
-          } catch (err) {
-            this.logger?.warn('[CHANNEL] fetchData failed', { mimeType, error: String(err) });
-            fetchFailed = true;
-          }
-        } else {
-          // Public URL (e.g. Discord CDN) — let the provider fetch directly
-          data = att.url;
-        }
-        if (data) {
-          parts.push({
-            type: 'text',
-            text: `[Attached ${mimeType} file${att.name ? `: ${att.name}` : ''}]`,
-          });
-          parts.push({
-            type: 'file',
-            data,
-            mediaType: mimeType,
-            ...(att.name ? { filename: att.name } : {}),
-          });
-        } else if (fetchFailed) {
-          parts.push({
-            type: 'text',
-            text: `[Attachment unavailable: ${filename} (${mimeType}) — the file could not be loaded, it may have been deleted before processing]`,
-          });
-        }
-      } else {
-        parts.push({
-          type: 'text',
-          text: `[Attached file: ${filename} (${mimeType})${att.url ? ` — ${att.url}` : ''}]`,
-        });
-      }
-    }
+    const parts: Exclude<AgentSignalContents, string> = [
+      { type: 'text', text },
+      ...(await this.attachmentsToParts(attachments)),
+    ];
 
     // Promote URLs in message text to file parts based on `inlineLinks` config.
     if (this.inlineLinkRules && text) {
@@ -1553,42 +1521,280 @@ export class AgentChannels {
     return !richText;
   }
 
+  /** Rich text when the platform provided it, else the plain text. */
+  private messageText(message: Message): string {
+    const richText = message.formatted ? chatModule().stringifyMarkdown(message.formatted).trim() : undefined;
+    return richText || message.text;
+  }
+
   /**
-   * Fetch recent messages from the platform thread to provide context.
-   * Returns messages in chronological order (oldest first), excluding the
-   * current triggering message.
+   * Route attachments based on `inlineMedia` config (see DEFAULT_INLINE_MEDIA_TYPES).
+   * Inline types are sent as file parts (the LLM adapter converts image/* to
+   * image content automatically). Non-inline types are described as text
+   * metadata so the agent is aware of them without crashing models that
+   * reject unsupported media (e.g. OpenAI rejects video/mp4).
    */
-  private async fetchThreadHistory(
+  private async attachmentsToParts(attachments: Attachment[]): Promise<Exclude<AgentSignalContents, string>> {
+    const parts: Exclude<AgentSignalContents, string> = [];
+    for (const att of attachments) {
+      if (!att.url && !att.fetchData) continue;
+      const mimeType = att.mimeType || (att.type === 'image' ? 'image/png' : undefined);
+      if (!mimeType) continue;
+
+      const inline = this.shouldInline(mimeType);
+      const filename = att.name || att.url?.split('/').pop() || 'file';
+      if (inline) {
+        let data: string | undefined;
+        let fetchFailed = false;
+        if (att.fetchData) {
+          // Prefer authenticated fetch (e.g. Slack CDN requires auth)
+          try {
+            const buf = await att.fetchData();
+            const bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
+            const base64 = Buffer.from(bytes).toString('base64');
+            data = `data:${mimeType};base64,${base64}`;
+          } catch (err) {
+            this.logger?.warn('[CHANNEL] fetchData failed', { mimeType, error: String(err) });
+            fetchFailed = true;
+          }
+        } else {
+          // Public URL (e.g. Discord CDN) — let the provider fetch directly
+          data = att.url;
+        }
+        if (data) {
+          parts.push({
+            type: 'text',
+            text: `[Attached ${mimeType} file${att.name ? `: ${att.name}` : ''}]`,
+          });
+          parts.push({
+            type: 'file',
+            data,
+            mediaType: mimeType,
+            ...(att.name ? { filename: att.name } : {}),
+          });
+        } else if (fetchFailed) {
+          parts.push({
+            type: 'text',
+            text: `[Attachment unavailable: ${filename} (${mimeType}) — the file could not be loaded, it may have been deleted before processing]`,
+          });
+        }
+      } else {
+        parts.push({
+          type: 'text',
+          text: `[Attached file: ${filename} (${mimeType})${att.url ? ` — ${att.url}` : ''}]`,
+        });
+      }
+    }
+    return parts;
+  }
+
+  /**
+   * Collect the platform thread's prior messages for a first mention: the
+   * thread's root message, how many messages sit between it and the window,
+   * and the most recent `maxMessages - 1` messages (oldest first), excluding
+   * the messages that triggered this request.
+   *
+   * The platform exposes no reply count, so the omitted count comes from
+   * walking `chatThread.messages` (newest first) past the window. The walk
+   * stops at THREAD_HISTORY_OMITTED_CAP; beyond that the root is fetched from
+   * the front of the thread and the count renders as `${cap}+`.
+   */
+  private async collectThreadHistory(
     chatThread: Thread,
     excludeIds: ReadonlySet<string>,
     maxMessages: number,
-  ): Promise<ThreadHistoryMessage[]> {
-    const messages: ThreadHistoryMessage[] = [];
+  ): Promise<ThreadHistoryWindow> {
+    const recentLimit = Math.max(0, maxMessages - 1);
+    const recent: Message[] = []; // newest first while walking
+    const older: Message[] = []; // newest first, everything past the window
 
     try {
-      // chatThread.messages is an async iterator that yields newest-first
       for await (const msg of chatThread.messages) {
-        // Skip the messages that triggered this request
         if (excludeIds.has(msg.id)) continue;
-
-        const historyText = msg.formatted ? chatModule().stringifyMarkdown(msg.formatted).trim() : undefined;
-        messages.push({
-          id: msg.id,
-          author: msg.author.fullName || msg.author.userName || 'Unknown',
-          userId: msg.author.userId,
-          text: historyText || msg.text,
-          isBot: msg.author.isBot === true,
-        });
-
-        if (messages.length >= maxMessages) break;
+        if (recent.length < recentLimit) {
+          recent.push(msg);
+          continue;
+        }
+        older.push(msg);
+        if (older.length >= THREAD_HISTORY_OMITTED_CAP) break;
       }
     } catch (err) {
       this.logger?.warn?.(`Failed to fetch thread history: ${err}`);
-      return [];
+      return { root: undefined, omitted: 0, capped: false, recent: [] };
+    }
+    recent.reverse();
+
+    if (older.length < THREAD_HISTORY_OMITTED_CAP) {
+      // Walk exhausted: the oldest message seen is the thread root.
+      if (older.length === 0) return { root: undefined, omitted: 0, capped: false, recent };
+      return { root: older[older.length - 1], omitted: older.length - 1, capped: false, recent };
     }
 
-    // Reverse to get chronological order (oldest first)
-    return messages.reverse();
+    // Cap hit: fetch the root from the front of the thread.
+    let root: Message | undefined;
+    try {
+      for await (const msg of chatThread.allMessages) {
+        root = msg;
+        break;
+      }
+    } catch (err) {
+      this.logger?.warn?.(`Failed to fetch thread root message: ${err}`);
+      return { root: undefined, omitted: 0, capped: false, recent };
+    }
+    if (!root) return { root: undefined, omitted: 0, capped: false, recent };
+    const walked = new Set([...recent, ...older].map(m => m.id));
+    if (walked.has(root.id)) {
+      // The walk already reached the root (only possible when the thread has
+      // exactly cap + window messages); treat as exhausted.
+      const rootInRecent = recent.some(m => m.id === root!.id);
+      if (rootInRecent) return { root: undefined, omitted: 0, capped: false, recent };
+      return { root: older[older.length - 1], omitted: older.length - 1, capped: false, recent };
+    }
+    return { root, omitted: THREAD_HISTORY_OMITTED_CAP, capped: true, recent };
+  }
+
+  /**
+   * Build the history rows, in order: root, gap marker (when messages were
+   * omitted), then the recent window oldest first. Each row carries the same
+   * attribution the live path emits plus `source: 'thread-history'`, its
+   * platform timestamp, and its attachments routed like live attachments.
+   */
+  private async buildThreadHistorySignals(args: {
+    history: ThreadHistoryWindow;
+    chatThread: Thread;
+    platform: string;
+    mastraThread: Pick<StorageThreadType, 'id'>;
+  }): Promise<AgentSignalInput[]> {
+    const { history, chatThread, platform, mastraThread } = args;
+    const ordered: Array<{ message: Message; gapAfter: boolean }> = [];
+    if (history.root) ordered.push({ message: history.root, gapAfter: history.omitted > 0 });
+    for (const message of history.recent) ordered.push({ message, gapAfter: false });
+
+    const signals: AgentSignalInput[] = [];
+    // Rows without a valid platform timestamp get monotonic fallbacks that
+    // still precede the trigger (which is stamped "now" at dispatch).
+    let previousCreatedAt = new Date(Date.now() - ordered.length - 2);
+    const resolveCreatedAt = (message: Message): Date => {
+      const dateSent = message.metadata?.dateSent;
+      const valid = dateSent instanceof Date && !Number.isNaN(dateSent.getTime()) ? dateSent : undefined;
+      previousCreatedAt = valid ?? new Date(previousCreatedAt.getTime() + 1);
+      return previousCreatedAt;
+    };
+
+    for (const { message, gapAfter } of ordered) {
+      const createdAt = resolveCreatedAt(message);
+      const text = this.messageText(message);
+      const parts: Exclude<AgentSignalContents, string> = [
+        ...(text ? [{ type: 'text' as const, text }] : []),
+        ...(await this.attachmentsToParts((message.attachments ?? []).filter(a => a.url || a.fetchData))),
+      ];
+      if (parts.length > 0) {
+        const { attributes, providerOptions } = await this.buildEventContext({
+          chatThread,
+          platform,
+          eventType: 'mention',
+          messageId: message.id,
+          actor: message.author,
+        });
+        signals.push({
+          id: `thread-history:${mastraThread.id}:${message.id}`,
+          type: 'user',
+          tagName: 'user',
+          contents: parts.length === 1 && parts[0]?.type === 'text' ? parts[0].text : parts,
+          attributes: { ...attributes, source: 'thread-history' },
+          providerOptions,
+          createdAt,
+        });
+      }
+      if (gapAfter) {
+        const omitted = `${history.omitted}${history.capped ? '+' : ''}`;
+        previousCreatedAt = new Date(createdAt.getTime() + 1);
+        signals.push({
+          id: `thread-history:${mastraThread.id}:gap`,
+          type: 'user',
+          tagName: 'user',
+          contents: `[… ${omitted} messages omitted]`,
+          attributes: { source: 'thread-history', kind: 'gap', omitted },
+          createdAt: previousCreatedAt,
+        });
+      }
+    }
+    return signals;
+  }
+
+  /**
+   * Persist the history rows into the Mastra thread without waking the agent.
+   * Returns `false` when the rows cannot be persisted (the agent has no
+   * memory), in which case the caller falls back to the legacy text block.
+   * `buildSignals` downloads attachments, so it is only called once
+   * persistence is known to be possible. A failure building the rows logs
+   * and still returns `true`: rendering the legacy block as well would
+   * duplicate content. A failed write logs and drops the rows; the
+   * deterministic ids let a later re-mention write them again.
+   *
+   * The rows are written straight to memory in one batch rather than sent
+   * through `agent.sendSignal(..., { behavior: 'persist' })`: the runtime
+   * rebroadcasts every persisted signal as a short pseudo-run, and a thread
+   * subscriber that observes it marks the thread active, so the trigger that
+   * follows would attach to that pseudo-run instead of waking the agent.
+   *
+   * Overridden by `AgentControllerChannels`, which resolves memory through its
+   * session's agent and never reads `this.agent`.
+   */
+  protected async persistThreadHistorySignals(args: {
+    /** Builds the rows (downloads attachments); call only after deciding persistence is possible. */
+    buildSignals: () => Promise<AgentSignalInput[]>;
+    requestContext: RequestContext;
+    thread: StorageThreadType;
+    memory: { thread: string; resource: string };
+  }): Promise<boolean> {
+    const memory = await this.agent.getMemory({ requestContext: args.requestContext });
+    if (!memory) return false;
+    await this.saveThreadHistorySignals({ ...args, memory, target: args.memory });
+    return true;
+  }
+
+  /** Builds the rows and writes them to `memory` in one batch. Never throws. */
+  protected async saveThreadHistorySignals(args: {
+    buildSignals: () => Promise<AgentSignalInput[]>;
+    memory: MastraMemory;
+    target: { thread: string; resource: string };
+  }): Promise<void> {
+    let signals: AgentSignalInput[];
+    try {
+      signals = await args.buildSignals();
+    } catch (err) {
+      this.log('warn', `Failed to build thread history messages: ${err}`);
+      return;
+    }
+    if (signals.length === 0) return;
+    try {
+      await args.memory.saveMessages({
+        messages: signals.map(signal =>
+          createSignal(signal).toDBMessage({ resourceId: args.target.resource, threadId: args.target.thread }),
+        ),
+      });
+    } catch (err) {
+      this.log('warn', `Failed to persist ${signals.length} thread history messages: ${err}`);
+    }
+  }
+
+  /** The pre-signals history shape, kept for agents that cannot persist rows. */
+  private formatLegacyHistoryBlock(history: ThreadHistoryWindow, chatThread: Thread): string {
+    const lines = ['[Thread context — messages in this thread before you joined]'];
+    const line = (msg: Message) => {
+      const author = msg.author.fullName || msg.author.userName || 'Unknown';
+      const mention = msg.author.userId ? chatThread.mentionUser(msg.author.userId) : undefined;
+      let prefix = mention ? `${author} (${mention})` : author;
+      if (msg.author.isBot === true) prefix += ' (bot)';
+      return `[${prefix}] (msg:${msg.id}): ${this.messageText(msg)}`;
+    };
+    if (history.root) {
+      lines.push(line(history.root));
+      if (history.omitted > 0) lines.push(`[… ${history.omitted}${history.capped ? '+' : ''} messages omitted]`);
+    }
+    for (const msg of history.recent) lines.push(line(msg));
+    return lines.join('\n');
   }
 
   /**

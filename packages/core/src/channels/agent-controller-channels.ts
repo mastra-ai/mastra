@@ -2,7 +2,7 @@ import type { Message, Thread } from 'chat';
 
 import type { Agent } from '../agent/agent';
 import type { MastraProviderMetadata } from '../agent/message-list/state/types';
-import type { AgentSignalContents } from '../agent/signals';
+import type { AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type { AgentController } from '../agent-controller/agent-controller';
 import type { Session } from '../agent-controller/session';
 import type { AgentControllerRequestContext } from '../agent-controller/types';
@@ -316,6 +316,39 @@ export class AgentControllerChannels extends AgentChannels {
       { requestContext, requireDelivery: true },
     );
     await result.accepted;
+  }
+
+  /**
+   * Persist first-mention thread history into the controller session's own
+   * thread. The session is resolved once, before the rows are built, and is
+   * not guarded: a `resolveSession` refusal or resource mismatch propagates
+   * out of the hook to the handler's error boundary exactly as it would from
+   * the trigger dispatch a moment later. `onSessionStart` therefore runs
+   * before the history rows rather than at trigger dispatch.
+   *
+   * Rows are written straight to the session agent's memory (see the base
+   * class for why `session.sendSignal` cannot be used). A session agent
+   * without memory is a misconfiguration; the hook still returns `true` so
+   * the legacy block is never rendered on the controller path.
+   */
+  protected override async persistThreadHistorySignals(args: {
+    buildSignals: () => Promise<AgentSignalInput[]>;
+    requestContext: RequestContext;
+    thread: StorageThreadType;
+    memory: { thread: string; resource: string };
+  }): Promise<boolean> {
+    const session = await this.getSessionForThread(args.thread, args.requestContext);
+    const memory = await session.machinery.getAgent().getMemory({ requestContext: args.requestContext });
+    if (!memory) {
+      this.log('warn', `Session agent has no memory; thread history for ${args.memory.thread} was not persisted.`);
+      return true;
+    }
+    await this.saveThreadHistorySignals({
+      buildSignals: args.buildSignals,
+      memory,
+      target: { thread: session.thread.getId() ?? args.memory.thread, resource: session.identity.getResourceId() },
+    });
+    return true;
   }
 
   /**
