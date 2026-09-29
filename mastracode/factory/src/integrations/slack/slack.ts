@@ -819,14 +819,14 @@ function preDispatchErrorDetails(error: unknown): { message: string; cause?: { m
     const message =
       typeof value === 'string'
         ? value
-        : value && typeof value === 'object'
-          ? Reflect.get(value, 'message')
+        : value && typeof value === 'object' && 'message' in value
+          ? value.message
           : undefined;
     return typeof message === 'string' && message.length > 0 ? message : undefined;
   };
   try {
     const message = readMessage(error) ?? 'Unknown error';
-    const cause = error && typeof error === 'object' ? readMessage(Reflect.get(error, 'cause')) : undefined;
+    const cause = error && typeof error === 'object' && 'cause' in error ? readMessage(error.cause) : undefined;
     return { message, ...(cause ? { cause: { message: cause } } : {}) };
   } catch {
     return { message: 'Error details unavailable' };
