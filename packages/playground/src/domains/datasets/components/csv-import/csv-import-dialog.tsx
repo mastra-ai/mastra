@@ -2,18 +2,19 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
-  DialogBody,
-  DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useDatasetMutations, useDataset } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { Check, Upload, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import type { ColumnMapping, FieldType } from '../../hooks/use-column-mapping';
 import { useColumnMapping } from '../../hooks/use-column-mapping';
@@ -302,8 +303,6 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
   // Handle dialog close
   const handleClose = useCallback(() => {
-    if (isImporting) return;
-
     onOpenChange(false);
 
     // Reset state after close animation
@@ -315,7 +314,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       setImportProgress({ current: 0, total: 0 });
       setImportResult(null);
     }, 150);
-  }, [isImporting, onOpenChange]);
+  }, [onOpenChange]);
 
   // Handle mapping change
   const handleMappingChange = useCallback(
@@ -335,15 +334,15 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
       case 'preview':
         return parsedCSV ? (
-          <div className="flex flex-col gap-4">
+          <>
             <div className="text-body text-muted-foreground">Preview of your CSV data. Click Next to map columns.</div>
             <CSVPreviewTable headers={parsedCSV.headers} data={parsedCSV.data} maxRows={5} />
-          </div>
+          </>
         ) : null;
 
       case 'mapping':
         return parsedCSV ? (
-          <div className="flex flex-col gap-4">
+          <>
             <ColumnMappingStep
               headers={parsedCSV.headers}
               mapping={columnMapping.mapping}
@@ -357,12 +356,12 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
               <div className="mb-2 text-caption text-muted-foreground">Data Preview</div>
               <CSVPreviewTable headers={parsedCSV.headers} data={parsedCSV.data} maxRows={3} />
             </div>
-          </div>
+          </>
         ) : null;
 
       case 'validation':
         return schemaValidation ? (
-          <div className="flex flex-col gap-4">
+          <>
             <div className="text-body text-muted-foreground">
               {dataset?.inputSchema || dataset?.groundTruthSchema
                 ? 'Rows have been validated against the dataset schema.'
@@ -400,7 +399,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
             {/* Detailed validation report (only show table if there are invalid rows) */}
             {schemaValidation.invalidCount > 0 && <ValidationReport result={schemaValidation} />}
-          </div>
+          </>
         ) : null;
 
       case 'importing':
@@ -441,69 +440,43 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
   const renderFooter = () => {
     switch (step) {
       case 'upload':
-        return (
-          <Button icon={<X />} onClick={handleClose}>
-            Cancel
-          </Button>
-        );
+        return <DialogCancel>Cancel</DialogCancel>;
 
       case 'preview':
         return (
           <>
-            <Button icon={<ChevronLeft />} onClick={() => setStep('upload')}>
-              Back
-            </Button>
-            <Button icon={<ChevronRight />} variant="primary" onClick={() => setStep('mapping')}>
-              Next
-            </Button>
+            <Button onClick={() => setStep('upload')}>Back</Button>
+            <DialogAction onConfirm={() => setStep('mapping')}>Next</DialogAction>
           </>
         );
 
       case 'mapping':
         return (
           <>
-            <Button icon={<ChevronLeft />} onClick={() => setStep('preview')}>
-              Back
-            </Button>
-            <Button
-              icon={<ChevronRight />}
-              variant="primary"
-              onClick={handleValidateMapping}
-              disabled={!columnMapping.isInputMapped}
-            >
+            <Button onClick={() => setStep('preview')}>Back</Button>
+            <DialogAction onConfirm={handleValidateMapping} disabled={!columnMapping.isInputMapped}>
               {dataset?.inputSchema || dataset?.groundTruthSchema ? 'Validate' : 'Next'}
-            </Button>
+            </DialogAction>
           </>
         );
 
       case 'validation':
         return (
           <>
-            <Button icon={<ChevronLeft />} onClick={() => setStep('mapping')}>
-              Back
-            </Button>
-            <Button
-              icon={<Upload />}
-              variant="primary"
-              onClick={handleImport}
-              disabled={!schemaValidation || schemaValidation.validCount === 0}
-            >
+            <Button onClick={() => setStep('mapping')}>Back</Button>
+            <DialogAction onConfirm={handleImport} disabled={!schemaValidation || schemaValidation.validCount === 0}>
               {schemaValidation?.invalidCount
                 ? `Import ${schemaValidation.validCount} Valid Row${schemaValidation.validCount !== 1 ? 's' : ''}`
                 : `Import ${schemaValidation?.totalRows ?? 0} Row${schemaValidation?.totalRows !== 1 ? 's' : ''}`}
-            </Button>
+            </DialogAction>
           </>
         );
 
       case 'importing':
-        return null; // Cancel button is in the content
+        return null;
 
       case 'complete':
-        return (
-          <Button icon={<Check />} variant="primary" onClick={handleDone}>
-            Done
-          </Button>
-        );
+        return <DialogAction onConfirm={handleDone}>Done</DialogAction>;
     }
   };
 
@@ -517,17 +490,19 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
     complete: 'Import Complete',
   };
 
+  const footer = renderFooter();
+
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-h-[90vh] max-w-2xl">
+    <Dialog open={open} onOpenChange={handleClose} pending={isImporting}>
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>{stepTitles[step]}</DialogTitle>
           <DialogDescription>Import dataset items from a CSV file.</DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="max-h-[50vh] min-h-[200px] overflow-y-auto">{renderStepContent()}</DialogBody>
+        <DialogBody>{renderStepContent()}</DialogBody>
 
-        <DialogFooter className="flex justify-end gap-2 px-4 pt-4">{renderFooter()}</DialogFooter>
+        {footer && <DialogFooter>{footer}</DialogFooter>}
       </DialogContent>
     </Dialog>
   );

@@ -4,6 +4,9 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -23,7 +26,7 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMastraClient } from '@mastra/react';
-import { CheckCircle, EllipsisIcon, GaugeIcon, Sparkles, Trash2, XIcon, Check, X } from 'lucide-react';
+import { CheckCircle, EllipsisIcon, GaugeIcon, Sparkles, Trash2, XIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useReviewItems, useCompletedItems } from '../hooks/use-dataset-review-items';
@@ -601,7 +604,7 @@ export function DatasetReview({
             <DialogTitle>Analyze Items</DialogTitle>
             <DialogDescription>Use an LLM to automatically suggest tags for the selected items.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <DialogBody>
             <div className="grid grid-cols-2 gap-2">
               <Field className="gap-1">
                 <FieldLabel>Provider</FieldLabel>
@@ -625,28 +628,25 @@ export function DatasetReview({
                 className="text-caption"
               />
             </Field>
-          </div>
+          </DialogBody>
           <DialogFooter>
-            <Button icon={<X />} onClick={() => setShowAnalyzeDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleAnalyze} disabled={!analyzeProvider || !analyzeModel || isAnalyzing}>
-              {isAnalyzing ? <Spinner className="mr-1 h-4 w-4" /> : null}
+            <DialogCancel>Cancel</DialogCancel>
+            <DialogAction onConfirm={handleAnalyze} disabled={!analyzeProvider || !analyzeModel || isAnalyzing}>
               Analyze
-            </Button>
+            </DialogAction>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={showProposalDialog} onOpenChange={setShowProposalDialog}>
-        <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
+        <DialogContent size="lg">
           <DialogHeader>
             <DialogTitle>Review Proposed Tags</DialogTitle>
             <DialogDescription>
               {proposedAssignments.filter(p => p.accepted).length} of {proposedAssignments.length} proposals selected
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3 py-2">
+          <DialogBody>
             {proposedAssignments.map((proposal, idx) => {
               const item = items.find(i => i.id === proposal.itemId);
               return (
@@ -698,18 +698,15 @@ export function DatasetReview({
                 </div>
               );
             })}
-          </div>
+          </DialogBody>
           <DialogFooter>
-            <Button icon={<X />} onClick={() => setShowProposalDialog(false)}>
-              Cancel
-            </Button>
-            <Button
-              icon={<Check />}
-              onClick={handleAcceptProposals}
+            <DialogCancel>Cancel</DialogCancel>
+            <DialogAction
+              onConfirm={handleAcceptProposals}
               disabled={proposedAssignments.filter(p => p.accepted).length === 0}
             >
               Accept {proposedAssignments.filter(p => p.accepted).length} proposals
-            </Button>
+            </DialogAction>
           </DialogFooter>
         </DialogContent>
       </Dialog>

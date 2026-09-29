@@ -1,6 +1,7 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
+  DialogAction,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -8,7 +9,6 @@ import {
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { ChevronRight, X } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useFormContext } from 'react-hook-form';
@@ -113,7 +113,7 @@ export function usePublishAndConnectChannel(agentId: string): UsePublishAndConne
 
   const dialog = useMemo(
     () => (
-      <Dialog open={confirmOpen} onOpenChange={open => !open && handleCancel()}>
+      <Dialog open={confirmOpen} onOpenChange={open => !open && handleCancel()} pending={updateStoredAgent.isPending}>
         <DialogContent data-testid="agent-builder-publish-before-connect-dialog">
           <DialogHeader>
             <DialogTitle>Add this agent to your library to connect {platformName}?</DialogTitle>
@@ -123,24 +123,10 @@ export function usePublishAndConnectChannel(agentId: string): UsePublishAndConne
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button
-              icon={<X />}
-              variant="ghost"
-              onClick={handleCancel}
-              disabled={updateStoredAgent.isPending}
-              data-testid="agent-builder-publish-before-connect-dialog-cancel"
-            >
-              Cancel
-            </Button>
-            <Button
-              icon={<ChevronRight />}
-              variant="default"
-              onClick={handleConfirm}
-              disabled={updateStoredAgent.isPending}
-              data-testid="agent-builder-publish-before-connect-dialog-confirm"
-            >
+            <DialogCancel data-testid="agent-builder-publish-before-connect-dialog-cancel">Cancel</DialogCancel>
+            <DialogAction onConfirm={handleConfirm} data-testid="agent-builder-publish-before-connect-dialog-confirm">
               Add to library &amp; continue
-            </Button>
+            </DialogAction>
           </DialogFooter>
         </DialogContent>
       </Dialog>

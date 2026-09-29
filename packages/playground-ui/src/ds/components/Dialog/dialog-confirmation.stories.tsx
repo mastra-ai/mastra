@@ -14,9 +14,6 @@ import {
 } from './dialog';
 import { Button } from '@/ds/components/Button';
 import type { TextButtonSize } from '@/ds/components/Button';
-import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
-import { Form } from '@/ds/components/Form';
-import { Input } from '@/ds/components/Input';
 import { Notice } from '@/ds/components/Notice';
 
 function ConfirmationExample({
@@ -65,31 +62,30 @@ function ConfirmationExample({
 
   return (
     <div className="flex max-w-sm flex-col gap-4">
-      <p className="text-caption text-muted-foreground">Factory confirmation preview. No data is deleted.</p>
-      <Dialog variant="new" intent={intent} pending={pending} open={open} onOpenChange={setOpen}>
+      <p className="text-caption text-muted-foreground">Confirmation preview. No data is deleted.</p>
+      <Dialog intent={intent} pending={pending} open={open} onOpenChange={setOpen}>
         <DialogTrigger render={<Button>Open dialog</Button>} />
-        <DialogContent>
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
-          </DialogHeader>
-          <DialogBody>
             <DialogDescription>{description}</DialogDescription>
-            {longBody && (
-              <div className="flex flex-col gap-4">
-                {Array.from({ length: 8 }, (_, index) => (
+          </DialogHeader>
+          {(longBody || error) && (
+            <DialogBody>
+              {longBody &&
+                Array.from({ length: 8 }, (_, index) => (
                   <p key={index}>
                     Repository {index + 1}: its checkout and uncommitted changes will be deleted. Existing conversations
                     and remote branches are kept. Commit and push anything you need before continuing.
                   </p>
                 ))}
-              </div>
-            )}
-            {error && (
-              <div role="alert">
-                <Notice variant="destructive">The workspace could not be deleted. Try again.</Notice>
-              </div>
-            )}
-          </DialogBody>
+              {error && (
+                <div role="alert">
+                  <Notice variant="destructive">The workspace could not be deleted. Try again.</Notice>
+                </div>
+              )}
+            </DialogBody>
+          )}
           <DialogFooter>
             <DialogCancel size={buttonSize}>{cancelLabel}</DialogCancel>
             <DialogAction holdSeconds={holdSeconds} size={buttonSize} confirmation={confirmation} onConfirm={confirm}>
@@ -106,14 +102,14 @@ function ConfirmationExample({
 }
 
 const meta = {
-  title: 'Feedback/Dialog/New variant',
+  title: 'Feedback/Dialog/Confirmation',
   component: ConfirmationExample,
   parameters: {
     layout: 'centered',
     docs: {
       description: {
         component:
-          'The `variant="new"` shell of Dialog, based on Factory workspace and session confirmations. The default variant is unchanged. Compose Header, Title, Description, built-in fading scroll Body, and Footer with Cancel and Action. Intent belongs to the root; confirmation="hold" belongs to the action. Actions never close automatically: the caller owns pending, errors, and closing after success. Pending blocks dismissal. Destructive dialogs ignore outside clicks and initially focus Close. Escape cancels before submission. Hold supports primary pointer, Space, and Enter; releasing, leaving, blur, and hiding the tab cancel it. The body always renders inside a bounded, fading ScrollArea, so long copy needs no special variant.',
+          'A confirmation is a `size="sm"` Dialog with `DialogCancel` and `DialogAction` in the footer. Intent belongs to the root; `confirmation="hold"` belongs to the action. Actions never close automatically: the caller owns pending, errors, and closing after success. `pending` blocks every dismissal and disables Cancel, Close, and the action. `intent="destructive"` renders an alertdialog that ignores outside clicks and focuses Close first. Hold supports primary pointer, Space, and Enter; releasing, leaving, blur, and hiding the tab cancel it.',
       },
     },
   },
@@ -181,8 +177,7 @@ export const ScrollingBody: Story = {
   parameters: {
     docs: {
       description: {
-        story:
-          'Every new-variant body is a bounded ScrollArea with overflow fades, so long copy scrolls independently of the title and actions without a dedicated variant.',
+        story: 'Long copy scrolls inside the body with fading edges while the title and actions stay put.',
       },
     },
   },
@@ -199,54 +194,3 @@ export const ErrorAndRetry: Story = {
     },
   },
 };
-
-function FactoryForm() {
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState('Design engineering');
-  const [saved, setSaved] = useState('');
-  const [submitted, setSubmitted] = useState(false);
-  const missingName = submitted && !name.trim();
-  return (
-    <div className="flex flex-col gap-4">
-      <Dialog variant="new" open={open} onOpenChange={setOpen}>
-        <DialogTrigger render={<Button>Rename Factory</Button>} />
-        <DialogContent>
-          <Form
-            className="gap-0"
-            onSubmit={event => {
-              event.preventDefault();
-              setSubmitted(true);
-              if (name.trim()) {
-                setSaved(name.trim());
-                setOpen(false);
-              }
-            }}
-          >
-            <DialogHeader>
-              <DialogTitle>Rename Factory</DialogTitle>
-              <DialogDescription>Choose a name your team will recognize.</DialogDescription>
-            </DialogHeader>
-            <DialogBody>
-              <Field invalid={missingName}>
-                <FieldLabel required>Factory name</FieldLabel>
-                <Input required value={name} onChange={event => setName(event.target.value)} />
-                <FieldError>{missingName ? 'Enter a Factory name' : undefined}</FieldError>
-              </Field>
-            </DialogBody>
-            <DialogFooter>
-              <DialogCancel>Cancel</DialogCancel>
-              <Button size="md" type="submit" variant="primary">
-                Save name
-              </Button>
-            </DialogFooter>
-          </Form>
-        </DialogContent>
-      </Dialog>
-      <p role="status" className="text-caption text-muted-foreground">
-        {saved ? `Factory renamed to ${saved}.` : 'No changes saved.'}
-      </p>
-    </div>
-  );
-}
-
-export const WithForm: Story = { render: () => <FactoryForm /> };

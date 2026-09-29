@@ -23,12 +23,10 @@ function CommandPaletteDialog({
 }: CommandPaletteDialogProps) {
   return (
     <CommandDialog
+      size="xl"
       showOverlay={showOverlay}
       overlayClassName={cn('bg-sidebar/40 backdrop-blur-none', overlayClassName)}
-      contentClassName={cn(
-        'command-palette-popup max-w-[min(56rem,calc(100vw-2rem))] overflow-visible border-none bg-transparent p-0 shadow-none backdrop-blur-none sm:max-w-[min(56rem,calc(100vw-2rem))]',
-        contentClassName,
-      )}
+      contentClassName={cn('command-palette-popup overflow-visible bg-transparent shadow-none', contentClassName)}
       commandClassName={cn(
         // Height lives in `.command-palette-shell` — see command-palette.css.
         'command-palette-shell gap-2 overflow-visible rounded-none bg-transparent text-muted-foreground shadow-none backdrop-blur-none',

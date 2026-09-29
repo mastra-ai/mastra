@@ -22,11 +22,11 @@ export type WorkflowTreeRow =
   | (TreeRowBase & {
       kind: 'workflow';
       workflow: WorkflowListEntry;
-      /** Direct nested workflow step ids (registered or inline), for the badge and expansion. */
+      /** Direct nested workflow step ids (registered or not), for the badge and expansion. */
       nestedIds: string[];
     })
   | (TreeRowBase & {
-      kind: 'inline';
+      kind: 'unregistered';
       /** Nested workflow that is not registered standalone — rendered as a non-link leaf row. */
       stepId: string;
       description?: string;
@@ -58,7 +58,7 @@ export function buildRegistryIndex(workflowsById: Record<string, GetWorkflowResp
 /**
  * Flattens the visible rows of the workflows tree: every root, plus the
  * children of each expanded row, depth-first. Registered children recurse as
- * full workflow rows; inline-only nested workflows render as leaf rows. An
+ * full workflow rows; unregistered nested workflows render as leaf rows. An
  * ancestor guard drops a child already on its own ancestry path, so mutually
  * nested workflows cannot expand forever.
  */
@@ -93,7 +93,7 @@ export function flattenWorkflowTree(
       const registryKey = registryIndex.get(stepId);
       if (registryKey === undefined) {
         rows.push({
-          kind: 'inline',
+          kind: 'unregistered',
           stepId,
           description: entry.allSteps?.[stepId]?.description,
           pathKey: `${pathKey}/${stepId}`,

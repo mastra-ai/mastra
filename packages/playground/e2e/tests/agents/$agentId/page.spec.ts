@@ -13,7 +13,7 @@ test.describe('Agent detail page', () => {
       await expect(page).toHaveTitle(/Mastra Studio/);
 
       // Thread sidebar
-      const newChatButton = page.locator('a:has-text("New Chat")');
+      const newChatButton = page.locator('a:has-text("New Thread")');
       await expect(newChatButton).toBeVisible();
       await expect(newChatButton).toHaveAttribute('href', /agents\/weather-agent\/threads\/.*/);
       // Thread history: either stored threads or the empty state on a fresh database

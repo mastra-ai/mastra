@@ -22,6 +22,7 @@ import { SidebarNew, useSidebarNew } from '.';
 import { Avatar } from '@/ds/components/Avatar';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -85,17 +86,21 @@ type SidebarNewStoryProps = {
 function SidebarSearchDialog() {
   return (
     <Dialog>
-      <DialogTrigger asChild>
-        <SidebarNew.SearchTrigger aria-label="Search" shortcut="⌘ K">
-          <Search />
-        </SidebarNew.SearchTrigger>
-      </DialogTrigger>
-      <DialogContent className="border-border bg-popover text-foreground">
+      <DialogTrigger
+        render={
+          <SidebarNew.SearchTrigger aria-label="Search" shortcut="⌘ K">
+            <Search />
+          </SidebarNew.SearchTrigger>
+        }
+      />
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Search</DialogTitle>
           <DialogDescription>Find projects, pages, and settings.</DialogDescription>
         </DialogHeader>
-        <Input aria-label="Search projects, pages, and settings" placeholder="Search" autoFocus />
+        <DialogBody>
+          <Input aria-label="Search projects, pages, and settings" placeholder="Search" autoFocus />
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

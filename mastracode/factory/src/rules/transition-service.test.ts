@@ -321,6 +321,24 @@ describe('installed board transition policies', () => {
     expect(policy).toHaveBeenCalledTimes(2);
   });
 
+  it('lets a retry commit under the identity that lost a revision race', async () => {
+    const { item, storage, board } = await setup(() => undefined);
+    const service = new FactoryTransitionService({
+      storage,
+      configVersion: 'policy-test',
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+    });
+    expect(
+      await service.transition(
+        request(item, { stage: 'shipped', expectedRevision: item.revision - 1, identity: 'decision:merge' }),
+      ),
+    ).toMatchObject({ status: 'rejected', code: 'stale' });
+    expect(await service.transition(request(item, { stage: 'shipped', identity: 'decision:merge' }))).toMatchObject({
+      status: 'accepted',
+      stage: 'shipped',
+    });
+  });
+
   it('shares the policy/lifecycle timeout and ignores late completion', async () => {
     vi.useFakeTimers();
     try {

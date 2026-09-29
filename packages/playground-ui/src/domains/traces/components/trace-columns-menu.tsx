@@ -1,4 +1,4 @@
-import { Columns3Icon, PlusIcon, Columns3, X } from 'lucide-react';
+import { Columns3Icon, PlusIcon } from 'lucide-react';
 import { useMemo, useState, type FormEvent } from 'react';
 import { TRACE_CUSTOM_COLUMN_FIELDS, TRACE_CUSTOM_COLUMN_LABELS, TRACE_USAGE_COLUMNS } from '../trace-list-columns';
 import type { TraceColumnPreferences, TraceCustomColumn, TraceOptionalColumn } from '../trace-list-columns';
@@ -6,7 +6,9 @@ import { Button } from '@/ds/components/Button';
 import { Combobox } from '@/ds/components/Combobox';
 import {
   Dialog,
+  DialogAction,
   DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -182,7 +184,7 @@ export function TraceColumnsMenu({
       {withQueryTrace && (
         <Dialog open={isMetadataDialogOpen} onOpenChange={handleDialogOpenChange}>
           <DialogContent>
-            <Form onSubmit={handleAddMetadata} className="gap-0">
+            <Form onSubmit={handleAddMetadata}>
               <DialogHeader>
                 <DialogTitle>Add metadata column</DialogTitle>
                 <DialogDescription>
@@ -209,12 +211,8 @@ export function TraceColumnsMenu({
                 </Field>
               </DialogBody>
               <DialogFooter>
-                <Button icon={<X />} type="button" onClick={() => handleDialogOpenChange(false)}>
-                  Cancel
-                </Button>
-                <Button icon={<Columns3 />} type="submit" variant="primary">
-                  Add column
-                </Button>
+                <DialogCancel>Cancel</DialogCancel>
+                <DialogAction type="submit">Add column</DialogAction>
               </DialogFooter>
             </Form>
           </DialogContent>
