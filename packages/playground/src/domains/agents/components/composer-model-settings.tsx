@@ -162,10 +162,6 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
       <Popover
         open={popoverOpen}
         onOpenChange={(open, details) => {
-          // While the Advanced Settings dialog is open, ignore every popover
-          // dismissal — outside-press, close button, focus loss, etc. The
-          // dialog owns its own close lifecycle and is the only thing that
-          // can dismiss the popover indirectly (by being closed first).
           if (!open && advancedOpen) {
             details?.cancel?.();
             return;
@@ -372,7 +368,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
       </Popover>
 
       <Dialog open={advancedOpen} onOpenChange={setAdvancedOpen}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent size="lg">
           <DialogHeader>
             <DialogTitle>Advanced model settings</DialogTitle>
           </DialogHeader>

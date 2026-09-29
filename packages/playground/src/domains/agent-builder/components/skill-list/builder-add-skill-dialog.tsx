@@ -1,15 +1,18 @@
 import type { BuilderRegistrySkillSummary } from '@mastra/client-js';
-import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
+  DialogAction,
   DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
@@ -17,7 +20,7 @@ import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check, Download, ExternalLink, Loader2, Package, Search, X } from 'lucide-react';
+import { Check, Download, ExternalLink, Loader2, Package, Search } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 
@@ -27,10 +30,6 @@ import {
   usePopularBuilderRegistrySkills,
   useSearchBuilderRegistry,
 } from '@/domains/agent-builder/hooks/use-builder-registries';
-
-// =============================================================================
-// Helpers
-// =============================================================================
 
 /**
  * Parse a registry skill's `topSource` field to extract owner/repo. Mirrors
@@ -54,10 +53,6 @@ function parseSkillSource(topSource: string): { owner: string; repo: string } | 
 function getSkillUniqueId(skill: BuilderRegistrySkillSummary): string {
   return `${skill.topSource}/${skill.name}`;
 }
-
-// =============================================================================
-// Component
-// =============================================================================
 
 export interface BuilderAddSkillDialogProps {
   open: boolean;
@@ -154,8 +149,6 @@ export function BuilderAddSkillDialog({
       onOpenChange(false);
     } catch (err: any) {
       const message: string = err?.message ?? 'Install failed';
-      // Detect 409 from the stringified error body. The collision case is the
-      // only one we need to upgrade into a navigation hint.
       if (/409/.test(message) || /already exists/i.test(message)) {
         onCollision?.(selectedSkill.name);
         setInstallError('A skill with this name already exists. Open the existing skill instead.');
@@ -178,8 +171,8 @@ export function BuilderAddSkillDialog({
   );
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="flex h-[80vh] max-w-4xl flex-col">
+    <Dialog open={open} onOpenChange={handleOpenChange} pending={installMutation.isPending}>
+      <DialogContent size="xl" className="h-[80vh]">
         <DialogHeader>
           <DialogTitle>Browse {registryLabel}</DialogTitle>
           <DialogDescription>
@@ -187,7 +180,7 @@ export function BuilderAddSkillDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="flex max-h-none flex-1 flex-col gap-4 overflow-hidden">
+        <DialogBody layout="fill">
           <div className="relative">
             <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -200,7 +193,6 @@ export function BuilderAddSkillDialog({
           </div>
 
           <div className="flex min-h-0 flex-1 gap-4">
-            {/* Skills list */}
             <div className="flex min-h-0 w-1/2 flex-col">
               <div className="mb-2 text-column tracking-wide text-muted-foreground uppercase">
                 {hasSearchResults ? 'Search results' : 'Popular skills'}
@@ -263,7 +255,6 @@ export function BuilderAddSkillDialog({
               </ScrollArea>
             </div>
 
-            {/* Preview pane */}
             <div className="flex min-h-0 w-1/2 flex-col overflow-hidden rounded-lg border border-border">
               {!selectedSkill ? (
                 <div className="flex flex-1 flex-col items-center justify-center text-muted-foreground">
@@ -327,44 +318,19 @@ export function BuilderAddSkillDialog({
             </div>
           </div>
 
-          {selectedSkill && (
-            <div className="flex flex-col gap-3 border-t border-border pt-4">
-              {installError && (
-                <div className="rounded-md border border-destructive-edge bg-destructive-subtle px-3 py-2 text-body text-destructive-subtle-foreground">
-                  {installError}
-                </div>
-              )}
-              <div className="flex items-center justify-end gap-2">
-                <Button icon={<X />} variant="default" onClick={() => handleOpenChange(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  onClick={handleInstall}
-                  disabled={!parsedSource || installMutation.isPending || isSelectedInstalled}
-                  data-testid="builder-install-skill-button"
-                >
-                  {installMutation.isPending ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Installing...
-                    </>
-                  ) : isSelectedInstalled ? (
-                    <>
-                      <Check className="mr-2 h-4 w-4" />
-                      Already installed
-                    </>
-                  ) : (
-                    <>
-                      <Download className="mr-2 h-4 w-4" />
-                      Install
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          )}
+          {installError && <Notice variant="destructive">{installError}</Notice>}
         </DialogBody>
+
+        <DialogFooter>
+          <DialogCancel>Cancel</DialogCancel>
+          <DialogAction
+            onConfirm={handleInstall}
+            disabled={!parsedSource || isSelectedInstalled}
+            data-testid="builder-install-skill-button"
+          >
+            {installMutation.isPending ? 'Installing...' : isSelectedInstalled ? 'Already installed' : 'Install'}
+          </DialogAction>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

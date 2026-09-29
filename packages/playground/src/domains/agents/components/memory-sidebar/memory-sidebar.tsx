@@ -225,6 +225,7 @@ export function MemorySidebarBody({
               threadsSlot
             ) : hasMemory ? (
               <ChatThreads
+                key={agentId}
                 resourceId={agentId}
                 resourceType="agent"
                 threads={threads ?? []}

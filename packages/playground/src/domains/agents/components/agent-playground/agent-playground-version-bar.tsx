@@ -5,12 +5,14 @@ import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
-  DialogBody,
-  DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Input } from '@mastra/playground-ui/components/Input';
@@ -23,7 +25,7 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { Check, ChevronDown, Download, GitPullRequest, Info, MessageSquare, Save, X } from 'lucide-react';
+import { Check, ChevronDown, Download, GitPullRequest, Info, MessageSquare, Save } from 'lucide-react';
 import { useMemo, useState, useCallback } from 'react';
 
 import { useAgentVersions } from '../../hooks/use-agent-versions';
@@ -262,21 +264,19 @@ export function AgentPlaygroundVersionBar({
           </div>
         )}
 
-        {/* Change message dialog */}
-        <Dialog open={showMessageDialog} onOpenChange={setShowMessageDialog}>
+        <Dialog open={showMessageDialog} onOpenChange={setShowMessageDialog} pending={isSavingDraft}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Save New Version</DialogTitle>
               <DialogDescription>Add a message to describe the changes in this version.</DialogDescription>
             </DialogHeader>
-            <DialogBody className="py-1">
+            <DialogBody>
               <div className="grid gap-2">
                 <Label htmlFor="change-message">Change message</Label>
                 <Input
                   id="change-message"
                   placeholder="Describe what changed..."
                   value={changeMessage}
-                  className="focus:ring-white/50"
                   onChange={e => setChangeMessage(e.target.value)}
                   onKeyDown={e => {
                     if (e.key === 'Enter') {
@@ -288,19 +288,9 @@ export function AgentPlaygroundVersionBar({
                 />
               </div>
             </DialogBody>
-            <DialogFooter className="px-4">
-              <Button icon={<X />} variant="default" size="sm" onClick={() => setShowMessageDialog(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleSaveWithMessage}
-                disabled={isSavingDraft}
-                icon={<Save />}
-              >
-                Save Version
-              </Button>
+            <DialogFooter>
+              <DialogCancel>Cancel</DialogCancel>
+              <DialogAction onConfirm={handleSaveWithMessage}>Save Version</DialogAction>
             </DialogFooter>
           </DialogContent>
         </Dialog>

@@ -1,20 +1,13 @@
 import { Chunk } from '@codemirror/merge';
 import { Text } from '@codemirror/state';
-import { AlignJustifyIcon, AlignLeftIcon, ExpandIcon, XIcon } from 'lucide-react';
+import { AlignJustifyIcon, AlignLeftIcon, ExpandIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { Code } from '@/ds/components/Code/code';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { DataPanelSectionHeading } from '@/ds/components/DataPanel/data-panel-section-heading';
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/ds/components/Dialog';
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
 import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
@@ -87,8 +80,6 @@ function CodeView({ code, changed, diffSide, searchQuery }: CodeViewProps) {
     </div>
   );
 }
-
-// -- Component ----------------------------------------------------------------
 
 export interface DataCodeSectionProps {
   title: React.ReactNode;
@@ -190,65 +181,58 @@ export function DataCodeSection({
       </div>
 
       <Dialog open={expandedOpen} onOpenChange={setExpandedOpen}>
-        <DialogContent className="grid h-[calc(100vh-6rem)]! max-w-[90vw]! grid-rows-[auto_1fr] [&>.absolute]:hidden">
-          <DialogHeader className="flex-row items-center justify-between">
-            <DialogTitle className="flex min-w-0 items-center gap-1.5 truncate text-caption [&>svg]:size-3.5">
-              {dialogTitle ?? (
-                <>
-                  {icon}
-                  {title}
-                </>
-              )}
-            </DialogTitle>
-            <DialogDescription>Expanded code view</DialogDescription>
-            <div className="flex shrink-0 items-center gap-2">
-              {!expandedMultiline && (
-                <SearchFieldBlock
-                  name="expanded-code-search"
-                  label="Search code"
-                  labelIsHidden
-                  placeholder="Search..."
-                  value={expandedSearchQuery}
-                  onChange={e => setExpandedSearchQuery(e.target.value)}
-                  onReset={() => setExpandedSearchQuery('')}
-                  size="sm"
-                />
-              )}
-              <ButtonsGroup size="sm">
-                <CopyButton content={codeStr || 'No content'} />
-                {hasMultilineText && (
-                  <Button
-                    aria-label={expandedMultiline ? 'Show escaped newlines' : 'Show multiline text'}
-                    tooltip={expandedMultiline ? 'Show escaped newlines' : 'Show multiline text'}
-                    onClick={() => setExpandedMultiline(v => !v)}
-                  >
-                    {expandedMultiline ? <AlignLeftIcon /> : <AlignJustifyIcon />}
-                  </Button>
+        <DialogContent size="full">
+          <DialogHeader>
+            <div className="flex min-w-0 items-center justify-between gap-2">
+              <DialogTitle className="flex min-w-0 items-center gap-1.5 truncate [&>svg]:size-3.5">
+                {dialogTitle ?? (
+                  <>
+                    {icon}
+                    {title}
+                  </>
                 )}
-                <DialogClose asChild>
-                  <Button aria-label="Close" tooltip="Close">
-                    <XIcon />
-                  </Button>
-                </DialogClose>
-              </ButtonsGroup>
+              </DialogTitle>
+              <div className="flex shrink-0 items-center gap-2">
+                {!expandedMultiline && (
+                  <SearchFieldBlock
+                    name="expanded-code-search"
+                    label="Search code"
+                    labelIsHidden
+                    placeholder="Search..."
+                    value={expandedSearchQuery}
+                    onChange={e => setExpandedSearchQuery(e.target.value)}
+                    onReset={() => setExpandedSearchQuery('')}
+                    size="sm"
+                  />
+                )}
+                <ButtonsGroup size="sm">
+                  <CopyButton content={codeStr || 'No content'} />
+                  {hasMultilineText && (
+                    <Button
+                      aria-label={expandedMultiline ? 'Show escaped newlines' : 'Show multiline text'}
+                      tooltip={expandedMultiline ? 'Show escaped newlines' : 'Show multiline text'}
+                      onClick={() => setExpandedMultiline(v => !v)}
+                    >
+                      {expandedMultiline ? <AlignLeftIcon /> : <AlignJustifyIcon />}
+                    </Button>
+                  )}
+                </ButtonsGroup>
+              </div>
             </div>
           </DialogHeader>
-          <div className="overflow-auto px-6 pb-6">
-            {expandedMultiline ? (
-              <div
-                className={cn(
-                  raisedSurfaceStyle,
-                  'overflow-hidden overflow-y-auto rounded-lg p-3 text-caption break-all text-muted-foreground',
-                )}
-              >
-                <div className="font-mono break-all text-muted-foreground">
-                  <pre className="text-wrap">{expandedFinalCodeStr}</pre>
+          <DialogBody layout="fill">
+            <div className="min-h-0 flex-1 overflow-auto">
+              {expandedMultiline ? (
+                <div className={cn(raisedSurfaceStyle, 'rounded-lg p-3 text-caption break-all text-muted-foreground')}>
+                  <div className="font-mono break-all text-muted-foreground">
+                    <pre className="text-wrap">{expandedFinalCodeStr}</pre>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <CodeView code={codeStr} changed={changed} diffSide={diff?.side} searchQuery={expandedSearchQuery} />
-            )}
-          </div>
+              ) : (
+                <CodeView code={codeStr} changed={changed} diffSide={diff?.side} searchQuery={expandedSearchQuery} />
+              )}
+            </div>
+          </DialogBody>
         </DialogContent>
       </Dialog>
     </div>

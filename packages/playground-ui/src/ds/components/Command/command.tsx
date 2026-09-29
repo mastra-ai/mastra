@@ -3,6 +3,7 @@ import { Search } from 'lucide-react';
 import * as React from 'react';
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ds/components/Dialog';
+import type { DialogSize } from '@/ds/components/Dialog';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import type { ScrollAreaMask } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
@@ -26,6 +27,7 @@ type CommandDialogProps = Omit<React.ComponentPropsWithoutRef<typeof Dialog>, 'c
   children?: React.ReactNode;
   title?: string;
   description?: string;
+  size?: DialogSize;
   contentClassName?: string;
   commandClassName?: string;
   commandLabel?: string;
@@ -37,6 +39,7 @@ const CommandDialog = ({
   children,
   title = 'Command Palette',
   description = 'Search for commands and actions',
+  size,
   contentClassName,
   commandClassName,
   commandLabel,
@@ -44,20 +47,15 @@ const CommandDialog = ({
   overlayClassName,
   ...props
 }: CommandDialogProps) => {
-  // Custom filter that preserves DOM order by returning 1 for all matches
-  // This prevents cmdk from reordering items by match score
   const filter = React.useCallback((value: string, search: string) => {
     const normalizedValue = value.toLowerCase();
     const normalizedSearch = search.toLowerCase();
     const searchTerms = normalizedSearch.split(/\s+/).filter(Boolean);
 
-    // All search terms must be found in the value
     const matches = searchTerms.every(term => normalizedValue.includes(term));
     return matches ? 1 : 0;
   }, []);
 
-  // Stop propagation to prevent keyboard events from reaching
-  // global document-level listeners (e.g., table keyboard nav)
   const handleKeyDown = React.useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') return;
 
@@ -67,9 +65,10 @@ const CommandDialog = ({
   return (
     <Dialog {...props}>
       <DialogContent
+        size={size}
         showOverlay={showOverlay}
         overlayClassName={overlayClassName}
-        className={cn('overflow-hidden p-0', contentClassName)}
+        className={cn('overflow-hidden py-0', contentClassName)}
       >
         <DialogTitle className="sr-only">{title}</DialogTitle>
         <DialogDescription className="sr-only">{description}</DialogDescription>
@@ -226,7 +225,6 @@ const CommandItem = React.forwardRef<
       'relative flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-body-sm text-muted-foreground select-none',
       'outline-none focus:outline-none focus-visible:outline-none',
       transitions.colors,
-      // The row background is the travelling FluidMenuItems highlight in CommandList.
       'data-[selected=true]:text-foreground',
       'data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50',
       '[&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground data-[selected=true]:[&_svg]:text-foreground',

@@ -50,7 +50,10 @@ The orchestration worker requires a PubSub backend that supports pull mode (e.g.
 
 ### Scheduler worker
 
-Polls storage for due cron schedules and publishes `workflow.start` events. It's a producer only, meaning it creates work for the orchestration worker to pick up.
+Polls storage for due cron schedules and publishes a `workflow.start` event for each fire. It's a producer only, meaning it creates work for the orchestration worker to pick up:
+
+- **Split processes**: Scheduled workflows run on the evented engine, and the orchestration worker runs each fire step by step.
+- **In-process mode**: Scheduled workflows run on the default engine. The orchestration worker in the same process runs each fire in-process, the same way a direct `run.start()` does.
 
 The scheduler reads declarative `schedule` fields from your workflow definitions automatically. See [Scheduled workflows](/docs/workflows/scheduled-workflows) for how to declare schedules.
 
@@ -148,6 +151,8 @@ You can also pass a worker name to the CLI. The command sets `MASTRA_WORKERS` in
 ```bash
 mastra worker start orchestration
 ```
+
+Set `MASTRA_WORKERS` on every process in a split deployment, including `false` on the API process. Any value switches workflows that declare `schedule` to the evented engine, and every process must run those workflows on the same engine. See [Scheduled workflows](/docs/workflows/scheduled-workflows#execution-engine). `mastra worker start` without a worker name doesn't set `MASTRA_WORKERS`, so pass a name or set the variable in the process environment.
 
 ## Network architecture
 
