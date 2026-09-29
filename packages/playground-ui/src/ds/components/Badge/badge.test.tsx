@@ -26,13 +26,23 @@ afterEach(() => {
 });
 
 describe('Badge', () => {
-  it.each(['green', 'red', 'yellow', 'blue'] as const)('keeps the legacy %s variant usable', variant => {
+  it.each([
+    ['green', 'success'],
+    ['red', 'destructive'],
+    ['yellow', 'warning'],
+    ['blue', 'info'],
+  ] as const)('keeps the %s category indicator apart from the %s status indicator', (hue, status) => {
     render(
-      <Badge variant={variant} indicator="dot">
-        Legacy status
-      </Badge>,
+      <>
+        <Badge variant={hue} indicator="dot">
+          {hue}
+        </Badge>
+        <Badge variant={status} indicator="dot">
+          {status}
+        </Badge>
+      </>,
     );
-    expect(screen.getByText('Legacy status')).not.toBeNull();
+    expect(indicatorOf(screen.getByText(hue))).not.toBe(indicatorOf(screen.getByText(status)));
   });
   describe('when rendered inside text', () => {
     it('uses phrasing content and forwards span attributes', () => {
