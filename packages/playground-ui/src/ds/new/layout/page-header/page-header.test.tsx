@@ -49,6 +49,28 @@ describe('PageHeader', () => {
     expect(markup).not.toContain('Legacy icon');
   });
 
+  it('keeps the legacy title when an eyebrow is supplied', () => {
+    const markup = renderToStaticMarkup(
+      <PageHeader title="Create alert">
+        <PageHeader.Eyebrow>Alerts</PageHeader.Eyebrow>
+      </PageHeader>,
+    );
+
+    expect(markup).toContain('Alerts');
+    expect(markup).toContain('Create alert');
+  });
+
+  it('renders the title before beside metadata regardless of child order', () => {
+    const markup = renderToStaticMarkup(
+      <PageHeader>
+        <PageHeader.Meta beside>Live</PageHeader.Meta>
+        <PageHeader.Title>Production</PageHeader.Title>
+      </PageHeader>,
+    );
+
+    expect(markup.indexOf('Production')).toBeLessThan(markup.indexOf('Live'));
+  });
+
   it('supports beside metadata', () => {
     const markup = renderToStaticMarkup(<PageHeader.Meta beside>Live</PageHeader.Meta>);
 

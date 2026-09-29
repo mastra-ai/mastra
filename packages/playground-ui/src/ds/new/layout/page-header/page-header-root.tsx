@@ -26,30 +26,32 @@ export function PageHeaderRoot({
   isLoading,
   ...props
 }: PageHeaderRootProps) {
-  const useLegacyApi = children === undefined && title !== undefined;
-  const items = useLegacyApi
-    ? [
-        !isLoading && icon !== undefined && <PageHeaderIcon key="icon">{icon}</PageHeaderIcon>,
-        <PageHeaderTitle key="title" isLoading={isLoading}>
-          {title}
-        </PageHeaderTitle>,
-        description !== undefined && (
-          <PageHeaderDescription key="description" isLoading={isLoading}>
-            {description}
-          </PageHeaderDescription>
-        ),
-      ]
-    : Children.toArray(children);
+  const items = [
+    ...(title !== undefined
+      ? [
+          !isLoading && icon !== undefined && <PageHeaderIcon key="icon">{icon}</PageHeaderIcon>,
+          <PageHeaderTitle key="title" isLoading={isLoading}>
+            {title}
+          </PageHeaderTitle>,
+          description !== undefined && (
+            <PageHeaderDescription key="description" isLoading={isLoading}>
+              {description}
+            </PageHeaderDescription>
+          ),
+        ]
+      : []),
+    ...Children.toArray(children),
+  ];
 
   // Actions sit outside the title column so their height never affects title/meta/description alignment.
   const actions = items.filter(child => isValidElement(child) && child.type === PageHeaderAction);
   const eyebrows = items.filter(child => isValidElement(child) && child.type === PageHeaderEyebrow);
   const icons = items.filter(child => isValidElement(child) && child.type === PageHeaderIcon);
-  const headline = items.filter(
-    child =>
-      isValidElement<PageHeaderMetaProps>(child) &&
-      (child.type === PageHeaderTitle || (child.type === PageHeaderMeta && child.props.beside)),
+  const titles = items.filter(child => isValidElement(child) && child.type === PageHeaderTitle);
+  const beside = items.filter(
+    child => isValidElement<PageHeaderMetaProps>(child) && child.type === PageHeaderMeta && child.props.beside,
   );
+  const headline = [...titles, ...beside];
   const below = items.filter(
     child => child !== false && ![...actions, ...eyebrows, ...icons, ...headline].includes(child),
   );
