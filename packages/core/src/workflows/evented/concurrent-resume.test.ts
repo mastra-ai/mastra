@@ -143,4 +143,127 @@ describe('evented concurrent resume', () => {
       await mastra.stopWorkers();
     }
   });
+
+  it('resumes multiple suspended branches sequentially', async () => {
+    const storage = new MockStore();
+    const pubsub = new EventEmitterPubSub();
+    const createApproval = (id: string) =>
+      createStep({
+        id,
+        inputSchema: z.object({ item: z.string() }),
+        outputSchema: z.object({ item: z.string(), approvedBy: z.string() }),
+        suspendSchema: z.object({ reason: z.string() }),
+        resumeSchema: z.object({ approvedBy: z.string() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          if (!resumeData) {
+            await suspend({ reason: `Needs approval: ${id}` });
+            return { item: inputData.item, approvedBy: '' };
+          }
+          return { item: inputData.item, approvedBy: resumeData.approvedBy };
+        },
+      });
+    const firstApproval = createApproval('first-approval');
+    const secondApproval = createApproval('second-approval');
+    const workflow = createWorkflow({
+      id: 'evented-sequential-multi-resume',
+      inputSchema: z.object({ item: z.string() }),
+      outputSchema: z.array(z.object({ item: z.string(), approvedBy: z.string() })),
+      steps: [firstApproval, secondApproval],
+    })
+      .parallel([firstApproval, secondApproval])
+      .commit();
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      pubsub,
+      workflows: { [workflow.id]: workflow },
+    });
+
+    await mastra.startWorkers();
+    try {
+      const run = await workflow.createRun();
+      const startResult = await run.start({ inputData: { item: 'widget' } });
+      expect(startResult.status).toBe('suspended');
+
+      const firstResult = await run.resume({
+        step: firstApproval,
+        resumeData: { approvedBy: 'Ada' },
+      });
+      expect(firstResult.status).toBe('suspended');
+
+      const secondResult = await run.resume({
+        step: secondApproval,
+        resumeData: { approvedBy: 'Grace' },
+      });
+      expect(secondResult.status).toBe('success');
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
+  it('skips the durable claim when pending snapshots are filtered out', async () => {
+    const storage = new MockStore();
+    const pubsub = new EventEmitterPubSub();
+    const downstreamExecute = vi.fn(async () => ({ completed: true }));
+
+    const approval = createStep({
+      id: 'approval',
+      inputSchema: z.object({ item: z.string() }),
+      outputSchema: z.object({ item: z.string(), approvedBy: z.string() }),
+      suspendSchema: z.object({ reason: z.string() }),
+      resumeSchema: z.object({ approvedBy: z.string() }),
+      execute: async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData) {
+          await suspend({ reason: `Needs approval: ${inputData.item}` });
+          return { item: inputData.item, approvedBy: '' };
+        }
+        return { item: inputData.item, approvedBy: resumeData.approvedBy };
+      },
+    });
+    const downstream = createStep({
+      id: 'downstream',
+      inputSchema: z.object({ item: z.string(), approvedBy: z.string() }),
+      outputSchema: z.object({ completed: z.boolean() }),
+      execute: downstreamExecute,
+    });
+    const workflow = createWorkflow({
+      id: 'evented-filtered-resume-claim',
+      inputSchema: z.object({ item: z.string() }),
+      outputSchema: z.object({ completed: z.boolean() }),
+      steps: [approval, downstream],
+      options: {
+        shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus !== 'pending',
+      },
+    })
+      .then(approval)
+      .then(downstream)
+      .commit();
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      pubsub,
+      workflows: { [workflow.id]: workflow },
+    });
+
+    await mastra.startWorkers();
+    try {
+      const run = await workflow.createRun();
+      const startResult = await run.start({ inputData: { item: 'widget' } });
+      expect(startResult.status).toBe('suspended');
+
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      const updateSpy = vi.spyOn(workflowsStore, 'updateWorkflowState');
+      const result = await run.resume({ step: approval, resumeData: { approvedBy: 'Ada' } });
+
+      expect(result.status).toBe('success');
+      expect(downstreamExecute).toHaveBeenCalledTimes(1);
+      expect(
+        updateSpy.mock.calls.some(
+          ([args]) => args.opts.status === 'pending' && args.opts.expectedStatus === 'suspended',
+        ),
+      ).toBe(false);
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
 });

@@ -61,8 +61,8 @@ import { ChunkFrom } from '../../stream/types';
 import type { Tool } from '../../tools/tool';
 import { isMastraTool } from '../../tools/toolchecks';
 import type { ToolExecutionContext } from '../../tools/types';
-import type { DynamicArgument } from '../../types';
 import type { WorkflowsStorage } from '../../storage/domains/workflows/base';
+import type { DynamicArgument } from '../../types';
 import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
 import type { Step } from '../../workflows/step';
 import type {
@@ -2398,7 +2398,23 @@ export class EventedRun<
     return this.streamOutput;
   }
 
-  async #claimResume(workflowsStore: WorkflowsStorage): Promise<void> {
+  async #claimResume(workflowsStore: WorkflowsStorage, snapshot: WorkflowRunState): Promise<boolean> {
+    const persistsPendingState = this.executionEngine.options.shouldPersistSnapshot({
+      workflowStatus: 'pending',
+      stepResults: snapshot.context ?? {},
+    });
+
+    if (!persistsPendingState) {
+      if (!this.executionEngine.options.allowUnclaimedResumes) {
+        this.mastra
+          ?.getLogger()
+          ?.warn(
+            `[Workflow ${this.workflowId}] shouldPersistSnapshot excludes the "pending" status, so concurrent resume() calls for run ${this.runId} cannot be de-duplicated. Concurrent resumes may execute downstream steps more than once.`,
+          );
+      }
+      return false;
+    }
+
     const claimed = await workflowsStore.updateWorkflowState({
       workflowName: this.workflowId,
       runId: this.runId,
@@ -2406,7 +2422,7 @@ export class EventedRun<
     });
 
     if (claimed) {
-      return;
+      return true;
     }
 
     const current = await workflowsStore.loadWorkflowSnapshot({
@@ -2595,7 +2611,7 @@ export class EventedRun<
     }
 
     this.setupAbortHandler();
-    await this.#claimResume(workflowsStore);
+    const claimedResume = await this.#claimResume(workflowsStore, snapshot);
 
     // Extract state from snapshot - could be in context.__state or in value
     const resumeState = (snapshot?.context as any)?.__state ?? snapshot?.value ?? {};
@@ -2623,7 +2639,9 @@ export class EventedRun<
         outputOptions: params.outputOptions,
       })
       .catch(async error => {
-        await this.#releaseResumeClaim(workflowsStore);
+        if (claimedResume) {
+          await this.#releaseResumeClaim(workflowsStore);
+        }
         throw error;
       })
       .then(result => {
