@@ -7,7 +7,7 @@ packages:
 
 # ToolResultTokenLimiter
 
-The `ToolResultTokenLimiter` is an **output processor** that truncates tool results over a token limit. It runs after a tool returns and before the result is stored in the message list, streamed to clients, or sent to the model on the next step.
+The `ToolResultTokenLimiter` is an **output processor** that truncates tool results over a token limit. It runs during the agent's turn, after a tool returns and before the result is stored in the message list, streamed to clients, or sent to the model on the next step.
 
 ## Usage example
 
@@ -58,7 +58,8 @@ When you use it with [`TokenLimiterProcessor`](/reference/processors/token-limit
 
 - Results at or under the limit pass through unchanged.
 - Larger results are converted to text (objects become JSON strings), cut to fit the limit, and end with a marker such as `[truncated: showing 2,000 of 18,400 tokens]`, so the model can see the result is partial and ask for less. Token counts are estimates.
-- The truncated value replaces the stored result. The full output isn't kept in memory or message history.
+- The truncated value replaces the stored result. The full output of a truncated result isn't kept in memory or message history.
 - A tool's `toModelOutput` receives the original, untruncated result. The model sees the full mapped output. The stored result is still truncated.
-- Tool errors, background-task results, results from provider-executed tools, and results that can't be serialized to JSON pass through unchanged.
+- Results from background tasks the agent waits for are limited like any other tool result. Results that arrive after the turn ends pass through unchanged.
+- Tool errors, results from provider-executed tools, and results that can't be serialized to JSON pass through unchanged.
 - Each tool result is limited on its own. Use [`TokenLimiterProcessor`](/reference/processors/token-limiter-processor) to limit the total size of the prompt.
