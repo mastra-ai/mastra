@@ -19,6 +19,37 @@ async function makeHost(workflow: ReturnType<typeof createWorkflow>, storage: In
   return mastra;
 }
 
+async function persistPreFirstStepSnapshot({
+  storage,
+  workflow,
+  runId,
+  input,
+}: {
+  storage: InstanceType<typeof MockStore>;
+  workflow: ReturnType<typeof createWorkflow>;
+  runId: string;
+  input: unknown;
+}) {
+  const workflowsStore = (await storage.getStore('workflows'))!;
+  await workflowsStore.persistWorkflowSnapshot({
+    workflowName: workflow.id,
+    runId,
+    snapshot: {
+      activePaths: [],
+      suspendedPaths: {},
+      resumeLabels: {},
+      waitingPaths: {},
+      activeStepsPath: {},
+      serializedStepGraph: workflow.serializedStepGraph,
+      timestamp: Date.now(),
+      runId,
+      context: { input, __state: {} } as any,
+      status: 'running',
+      value: {},
+    } as any,
+  });
+}
+
 afterEach(async () => {
   await Promise.all(hosts.splice(0).map(host => host.stopWorkers()));
 });
@@ -45,23 +76,11 @@ describe('evented pre-first-step restart', () => {
     await makeHost(workflow, storage);
 
     const runId = `pre-first-step-${Date.now()}`;
-    const workflowsStore = (await storage.getStore('workflows'))!;
-    await workflowsStore.persistWorkflowSnapshot({
-      workflowName: workflow.id,
+    await persistPreFirstStepSnapshot({
+      storage,
+      workflow,
       runId,
-      snapshot: {
-        activePaths: [],
-        suspendedPaths: {},
-        resumeLabels: {},
-        waitingPaths: {},
-        activeStepsPath: {},
-        serializedStepGraph: workflow.serializedStepGraph,
-        timestamp: Date.now(),
-        runId,
-        context: { input: { value: 'original-input' }, __state: {} } as any,
-        status: 'running',
-        value: {},
-      } as any,
+      input: { value: 'original-input' },
     });
 
     const run = await workflow.createRun({ runId });
@@ -71,6 +90,105 @@ describe('evented pre-first-step restart', () => {
     expect((result as any).result).toEqual({ got: 'original-input' });
     expect(execute).toHaveBeenCalledTimes(1);
     expect(execute.mock.calls[0]![0].inputData).toEqual({ value: 'original-input' });
+  });
+
+  it('restarts a parallel first entry with its original input', async () => {
+    const storage = new MockStore();
+    const firstExecute = vi.fn(async ({ inputData }: { inputData: { value: string } }) => ({
+      branch: 'first',
+      value: inputData.value,
+    }));
+    const secondExecute = vi.fn(async ({ inputData }: { inputData: { value: string } }) => ({
+      branch: 'second',
+      value: inputData.value,
+    }));
+    const first = createStep({
+      id: 'parallel-first',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ branch: z.string(), value: z.string() }),
+      execute: firstExecute,
+    });
+    const second = createStep({
+      id: 'parallel-second',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ branch: z.string(), value: z.string() }),
+      execute: secondExecute,
+    });
+    const workflow = createWorkflow({
+      id: 'pre-first-step-parallel-restart',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.any(),
+      steps: [first, second],
+    })
+      .parallel([first, second])
+      .commit();
+
+    await makeHost(workflow, storage);
+
+    const runId = `pre-first-step-parallel-${Date.now()}`;
+    const originalInput = { value: 'parallel-original-input' };
+    await persistPreFirstStepSnapshot({ storage, workflow, runId, input: originalInput });
+
+    const run = await workflow.createRun({ runId });
+    const result = await run.restart();
+
+    expect(result.status).toBe('success');
+    expect(firstExecute).toHaveBeenCalledTimes(1);
+    expect(secondExecute).toHaveBeenCalledTimes(1);
+    expect(firstExecute.mock.calls[0]![0].inputData).toEqual(originalInput);
+    expect(secondExecute.mock.calls[0]![0].inputData).toEqual(originalInput);
+  });
+
+  it('restarts a conditional first entry with its original input', async () => {
+    const storage = new MockStore();
+    const selectedExecute = vi.fn(async ({ inputData }: { inputData: { value: string } }) => ({
+      selected: inputData.value,
+    }));
+    const skippedExecute = vi.fn(async ({ inputData }: { inputData: { value: string } }) => ({
+      skipped: inputData.value,
+    }));
+    const selected = createStep({
+      id: 'conditional-selected',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ selected: z.string() }),
+      execute: selectedExecute,
+    });
+    const skipped = createStep({
+      id: 'conditional-skipped',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ skipped: z.string() }),
+      execute: skippedExecute,
+    });
+    const condition = vi.fn(async ({ inputData }: { inputData: { value: string } }) =>
+      inputData.value.startsWith('conditional'),
+    );
+    const workflow = createWorkflow({
+      id: 'pre-first-step-conditional-restart',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.any(),
+      steps: [selected, skipped],
+    })
+      .branch([
+        [condition, selected],
+        [async () => false, skipped],
+      ])
+      .commit();
+
+    await makeHost(workflow, storage);
+
+    const runId = `pre-first-step-conditional-${Date.now()}`;
+    const originalInput = { value: 'conditional-original-input' };
+    await persistPreFirstStepSnapshot({ storage, workflow, runId, input: originalInput });
+
+    const run = await workflow.createRun({ runId });
+    const result = await run.restart();
+
+    expect(result.status).toBe('success');
+    expect(condition).toHaveBeenCalledTimes(1);
+    expect(condition.mock.calls[0]![0].inputData).toEqual(originalInput);
+    expect(selectedExecute).toHaveBeenCalledTimes(1);
+    expect(selectedExecute.mock.calls[0]![0].inputData).toEqual(originalInput);
+    expect(skippedExecute).not.toHaveBeenCalled();
   });
 
   it('restarts a nested workflow with its original input', async () => {

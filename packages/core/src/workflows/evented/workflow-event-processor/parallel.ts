@@ -34,6 +34,8 @@ export async function processWorkflowParallel(
   },
 ) {
   const pathsToRun: Record<string, boolean> = {};
+  const branchPath = (idx: number) =>
+    (restart && !restart.isPreFirstStepRestart ? executionPath.slice(0, -1) : executionPath).concat([idx]);
   // Get current state from stepResults or passed state
   const currentState = resolveCurrentState({ stepResults, state });
   for (let i = 0; i < step.steps.length; i++) {
@@ -67,7 +69,7 @@ export async function processWorkflowParallel(
         data: {
           workflowId,
           runId,
-          executionPath: restart ? executionPath.slice(0, -1).concat([idx]) : executionPath.concat([idx]),
+          executionPath: branchPath(idx),
           resumeSteps,
           stepResults,
           prevResult,
@@ -119,8 +121,9 @@ export async function processWorkflowConditional(
   // Get current state from stepResults or passed state
   const currentState = resolveCurrentState({ stepResults, state });
 
-  // On restart, executionPath already includes the persisted branch index, so replace it instead of appending.
-  const branchPath = (idx: number) => (restart ? executionPath.slice(0, -1) : executionPath).concat([idx]);
+  // On an in-flight restart, executionPath includes the persisted branch index, so replace it instead of appending.
+  const branchPath = (idx: number) =>
+    (restart && !restart.isPreFirstStepRestart ? executionPath.slice(0, -1) : executionPath).concat([idx]);
 
   // Create a proper RequestContext from the plain object passed in ProcessorArgs
   const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);
