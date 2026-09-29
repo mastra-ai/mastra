@@ -49,7 +49,7 @@ export type ScrollAreaScrollButtons =
       rightLabel?: string;
     };
 
-export type ScrollAreaProps = React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Root> & {
+export type ScrollAreaProps = React.ComponentProps<typeof ScrollAreaPrimitive.Root> & {
   maxHeight?: string;
   autoScroll?: boolean;
   orientation?: Orientation;
@@ -273,119 +273,105 @@ const ScrollAreaViewport = ({ className, children }: ScrollAreaViewportProps) =>
   );
 };
 
-const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
-  (
-    {
-      className,
-      children,
-      maxHeight,
-      autoScroll = false,
-      orientation = 'vertical',
-      scrollButtons,
-      mask,
-      showMask,
-      revealScrollbarOnHover = true,
-      viewportRef,
-      ...props
+function ScrollArea({
+  className,
+  children,
+  maxHeight,
+  autoScroll = false,
+  orientation = 'vertical',
+  scrollButtons,
+  mask,
+  showMask,
+  revealScrollbarOnHover = true,
+  viewportRef,
+  ...props
+}: ScrollAreaProps) {
+  const areaRef = React.useRef<HTMLDivElement>(null);
+  useAutoscroll(areaRef, { enabled: autoScroll });
+
+  const setViewportRef = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      areaRef.current = node;
+      if (typeof viewportRef === 'function') viewportRef(node);
+      else if (viewportRef) (viewportRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
     },
-    ref,
-  ) => {
-    const areaRef = React.useRef<HTMLDivElement>(null);
-    useAutoscroll(areaRef, { enabled: autoScroll });
+    [viewportRef],
+  );
 
-    const setViewportRef = React.useCallback(
-      (node: HTMLDivElement | null) => {
-        areaRef.current = node;
-        if (typeof viewportRef === 'function') viewportRef(node);
-        else if (viewportRef) (viewportRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
-      },
-      [viewportRef],
-    );
+  const effectiveMask: ScrollAreaMask | undefined = mask !== undefined ? mask : showMask;
+  const sides = resolveMask(effectiveMask, orientation);
 
-    const effectiveMask: ScrollAreaMask | undefined = mask !== undefined ? mask : showMask;
-    const sides = resolveMask(effectiveMask, orientation);
+  const viewportStyle: ScrollAreaViewportStyle = {
+    '--scroll-area-fade-top': sides.top || undefined,
+    '--scroll-area-fade-bottom': sides.bottom || undefined,
+    '--scroll-area-fade-left': sides.left || undefined,
+    '--scroll-area-fade-right': sides.right || undefined,
+  };
+  if (maxHeight) viewportStyle.maxHeight = maxHeight;
+  if (orientation === 'vertical') {
+    viewportStyle.overflowX = 'hidden';
+    viewportStyle.overflowY = 'scroll';
+  } else if (orientation === 'horizontal') {
+    viewportStyle.overflowX = 'scroll';
+    viewportStyle.overflowY = 'hidden';
+  }
 
-    const viewportStyle: ScrollAreaViewportStyle = {
-      '--scroll-area-fade-top': sides.top || undefined,
-      '--scroll-area-fade-bottom': sides.bottom || undefined,
-      '--scroll-area-fade-left': sides.left || undefined,
-      '--scroll-area-fade-right': sides.right || undefined,
-    };
-    if (maxHeight) viewportStyle.maxHeight = maxHeight;
-    if (orientation === 'vertical') {
-      viewportStyle.overflowX = 'hidden';
-      viewportStyle.overflowY = 'scroll';
-    } else if (orientation === 'horizontal') {
-      viewportStyle.overflowX = 'scroll';
-      viewportStyle.overflowY = 'hidden';
-    }
+  // Base UI's ScrollAreaContent forces `min-width: fit-content` so the
+  // content can grow wider than the viewport (required for horizontal scroll
+  // measurement). For vertical-only scroll we override it so children shrink
+  // to the viewport width instead of forcing horizontal scroll.
+  const contentStyle: React.CSSProperties | undefined =
+    orientation === 'vertical' ? { minWidth: '0px' } : orientation === 'horizontal' ? { minHeight: '0px' } : undefined;
 
-    // Base UI's ScrollAreaContent forces `min-width: fit-content` so the
-    // content can grow wider than the viewport (required for horizontal scroll
-    // measurement). For vertical-only scroll we override it so children shrink
-    // to the viewport width instead of forcing horizontal scroll.
-    const contentStyle: React.CSSProperties | undefined =
-      orientation === 'vertical'
-        ? { minWidth: '0px' }
-        : orientation === 'horizontal'
-          ? { minHeight: '0px' }
-          : undefined;
+  const viewport: ScrollAreaViewportContextValue = {
+    ref: setViewportRef,
+    className: cn('size-full', maskClasses(sides)),
+    style: viewportStyle,
+    contentStyle,
+  };
+  const callerRendersViewport = React.Children.toArray(children).some(
+    child => React.isValidElement(child) && child.type === ScrollAreaViewport,
+  );
 
-    const viewport: ScrollAreaViewportContextValue = {
-      ref: setViewportRef,
-      className: cn('size-full', maskClasses(sides)),
-      style: viewportStyle,
-      contentStyle,
-    };
-    const callerRendersViewport = React.Children.toArray(children).some(
-      child => React.isValidElement(child) && child.type === ScrollAreaViewport,
-    );
+  return (
+    <ScrollAreaPrimitive.Root className={cn('group/scroll-area relative overflow-hidden', className)} {...props}>
+      <ScrollAreaViewportContext.Provider value={viewport}>
+        {callerRendersViewport ? children : <ScrollAreaViewport>{children}</ScrollAreaViewport>}
+      </ScrollAreaViewportContext.Provider>
+      {scrollButtons && orientation !== 'vertical' && <ScrollButtons areaRef={areaRef} scrollButtons={scrollButtons} />}
+      {(orientation === 'vertical' || orientation === 'both') && (
+        <ScrollBar orientation="vertical" revealOnHover={revealScrollbarOnHover} />
+      )}
+      {(orientation === 'horizontal' || orientation === 'both') && (
+        <ScrollBar orientation="horizontal" revealOnHover={revealScrollbarOnHover} />
+      )}
+      {orientation === 'both' && <ScrollAreaPrimitive.Corner />}
+    </ScrollAreaPrimitive.Root>
+  );
+}
 
-    return (
-      <ScrollAreaPrimitive.Root
-        ref={ref}
-        className={cn('group/scroll-area relative overflow-hidden', className)}
-        {...props}
-      >
-        <ScrollAreaViewportContext.Provider value={viewport}>
-          {callerRendersViewport ? children : <ScrollAreaViewport>{children}</ScrollAreaViewport>}
-        </ScrollAreaViewportContext.Provider>
-        {scrollButtons && orientation !== 'vertical' && (
-          <ScrollButtons areaRef={areaRef} scrollButtons={scrollButtons} />
-        )}
-        {(orientation === 'vertical' || orientation === 'both') && (
-          <ScrollBar orientation="vertical" revealOnHover={revealScrollbarOnHover} />
-        )}
-        {(orientation === 'horizontal' || orientation === 'both') && (
-          <ScrollBar orientation="horizontal" revealOnHover={revealScrollbarOnHover} />
-        )}
-        {orientation === 'both' && <ScrollAreaPrimitive.Corner />}
-      </ScrollAreaPrimitive.Root>
-    );
-  },
-);
-ScrollArea.displayName = 'ScrollArea';
-
-const ScrollBar = React.forwardRef<
-  HTMLDivElement,
-  React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Scrollbar> & { revealOnHover?: boolean }
->(({ className, orientation = 'vertical', revealOnHover = true, ...props }, ref) => (
-  <ScrollAreaPrimitive.Scrollbar
-    ref={ref}
-    orientation={orientation}
-    className={cn(
-      'flex touch-none transition-opacity duration-normal ease-out-custom select-none',
-      'opacity-0 data-[scrolling]:opacity-100 data-[scrolling]:duration-0',
-      revealOnHover && 'data-[hovering]:opacity-100',
-      orientation === 'vertical' && 'h-full w-1.5 p-px',
-      orientation === 'horizontal' && 'h-1.5 w-full flex-col p-px',
-      className,
-    )}
-    {...props}
-  >
-    <ScrollAreaPrimitive.Thumb className="relative flex-1 rounded-full bg-muted-foreground/30 hover:bg-muted-foreground/60" />
-  </ScrollAreaPrimitive.Scrollbar>
-));
-ScrollBar.displayName = 'ScrollBar';
+function ScrollBar({
+  className,
+  orientation = 'vertical',
+  revealOnHover = true,
+  ...props
+}: React.ComponentProps<typeof ScrollAreaPrimitive.Scrollbar> & { revealOnHover?: boolean }) {
+  return (
+    <ScrollAreaPrimitive.Scrollbar
+      orientation={orientation}
+      className={cn(
+        'flex touch-none transition-opacity duration-normal ease-out-custom select-none',
+        'opacity-0 data-[scrolling]:opacity-100 data-[scrolling]:duration-0',
+        revealOnHover && 'data-[hovering]:opacity-100',
+        orientation === 'vertical' && 'h-full w-1.5 p-px',
+        orientation === 'horizontal' && 'h-1.5 w-full flex-col p-px',
+        className,
+      )}
+      {...props}
+    >
+      <ScrollAreaPrimitive.Thumb className="relative flex-1 rounded-full bg-muted-foreground/30 hover:bg-muted-foreground/60" />
+    </ScrollAreaPrimitive.Scrollbar>
+  );
+}
 
 export { ScrollArea, ScrollAreaViewport, ScrollBar };
