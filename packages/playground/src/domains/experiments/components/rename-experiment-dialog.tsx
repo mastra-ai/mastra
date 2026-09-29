@@ -1,11 +1,18 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
+import {
+  Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { Check, X } from 'lucide-react';
 import { useState } from 'react';
 
 export interface RenameExperimentDialogProps {
@@ -23,11 +30,11 @@ export function RenameExperimentDialog({ experiment, open, onOpenChange }: Renam
   const [description, setDescription] = useState(experiment.description ?? '');
   const { updateExperiment } = useDatasetMutations();
 
-  const canSave = Boolean(name.trim()) && !updateExperiment.isPending;
+  const canSave = Boolean(name.trim());
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSave || !experiment.datasetId) return;
+    if (!canSave || updateExperiment.isPending || !experiment.datasetId) return;
 
     try {
       await updateExperiment.mutateAsync({
@@ -44,13 +51,13 @@ export function RenameExperimentDialog({ experiment, open, onOpenChange }: Renam
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+    <Dialog open={open} onOpenChange={onOpenChange} pending={updateExperiment.isPending}>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Rename Experiment</DialogTitle>
         </DialogHeader>
-        <DialogBody>
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit}>
+          <DialogBody>
             <div className="space-y-2">
               <Label htmlFor="rename-experiment-name">Name *</Label>
               <Input
@@ -71,22 +78,14 @@ export function RenameExperimentDialog({ experiment, open, onOpenChange }: Renam
                 placeholder="Enter experiment description (optional)"
               />
             </div>
-
-            <div className="flex justify-end gap-2 pt-4">
-              <Button
-                icon={<X />}
-                type="button"
-                onClick={() => onOpenChange(false)}
-                disabled={updateExperiment.isPending}
-              >
-                Cancel
-              </Button>
-              <Button icon={<Check />} type="submit" variant="primary" disabled={!canSave}>
-                {updateExperiment.isPending ? 'Saving...' : 'Save'}
-              </Button>
-            </div>
-          </form>
-        </DialogBody>
+          </DialogBody>
+          <DialogFooter>
+            <DialogCancel>Cancel</DialogCancel>
+            <DialogAction type="submit" disabled={!canSave}>
+              {updateExperiment.isPending ? 'Saving...' : 'Save'}
+            </DialogAction>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

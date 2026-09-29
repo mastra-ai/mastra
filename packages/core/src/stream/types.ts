@@ -971,11 +971,7 @@ export type WorkflowStreamEvent =
         workflowStatus: WorkflowRunStatus;
         finalWorkflowResult?: unknown;
         output: {
-          usage: {
-            inputTokens: number;
-            outputTokens: number;
-            totalTokens: number;
-          };
+          usage: LanguageModelUsage;
         };
         metadata: Record<string, any>;
       };

@@ -35,7 +35,7 @@ const AddBlockButton = ({ onAddInline, onPickRef, className }: AddBlockButtonPro
           <button
             type="button"
             className={cn(
-              'flex h-6 w-6 items-center justify-center rounded-full opacity-0 transition-all duration-150 group-hover/add:opacity-100 hover:bg-fill-subtle focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden',
+              'flex h-6 w-6 items-center justify-center rounded-full opacity-0 transition-all duration-150 group-hover/add:opacity-100 hover:bg-fill-subtle focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-border-focus focus-visible:outline-hidden',
               quietTextHover,
             )}
           >

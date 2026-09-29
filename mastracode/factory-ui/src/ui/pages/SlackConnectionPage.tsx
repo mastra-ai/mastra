@@ -119,7 +119,7 @@ export function SlackConnectionSettings() {
           Loading Slack connection…
         </Txt>
       ) : accountsQuery.error ? (
-        <Txt as="p" variant="caption" className="text-notice-destructive-fg">
+        <Txt as="p" variant="caption" className="text-destructive-indicator">
           {accountsQuery.error instanceof Error ? accountsQuery.error.message : 'Failed to load Slack connection'}
         </Txt>
       ) : accountsQuery.data?.reason === 'not_registered' || accountsQuery.data?.unavailable ? (
@@ -133,16 +133,21 @@ export function SlackConnectionSettings() {
               type="button"
               disabled={!canConnect}
               onClick={connectSlack}
-              className="group hover:bg-fill focus-visible:ring-accent1 block w-full cursor-pointer rounded-xl text-left outline-hidden transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+              className="group hover:bg-fill focus-visible:ring-border-focus block w-full cursor-pointer rounded-xl text-left outline-hidden transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <SettingsRow
                 label="Slack"
                 description={canConnect ? 'Not connected' : 'Slack connection is not configured'}
               >
-                <span className="text-caption text-muted-foreground group-hover:text-foreground flex items-center gap-2">
+                <Txt
+                  as="span"
+                  variant="caption"
+                  tone="muted"
+                  className="group-hover:text-foreground flex items-center gap-2"
+                >
                   Connect Slack
                   <ChevronRight aria-hidden="true" />
-                </span>
+                </Txt>
               </SettingsRow>
             </button>
           </SettingsContainer>

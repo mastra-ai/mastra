@@ -36,16 +36,17 @@ import { getTransformedSchema } from './schema';
 import { packStepMessageMirrors, unpackStepMessageMirrors } from './step-message-mirrors';
 import { dedupeStepRequests, rehydrateStepRequests } from './step-request-dedupe';
 
-const usageCountKeys = [
-  'inputTokens',
-  'outputTokens',
-  'totalTokens',
+const primaryUsageCountKeys = ['inputTokens', 'outputTokens', 'totalTokens'] as const satisfies ReadonlyArray<
+  keyof LanguageModelUsage
+>;
+const detailUsageCountKeys = [
   'reasoningTokens',
   'cachedInputTokens',
   'cacheCreationInputTokens',
   'cacheCreationInputTokens5m',
   'cacheCreationInputTokens1h',
 ] as const satisfies ReadonlyArray<keyof LanguageModelUsage>;
+const usageCountKeys = [...primaryUsageCountKeys, ...detailUsageCountKeys] as const;
 
 /**
  * Helper function to create a destructurable version of MastraModelOutput.
@@ -305,8 +306,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     outputTokens: undefined,
     totalTokens: undefined,
   };
-  #usageCountInitialized = false;
-  #usageCountMissing = new Set<(typeof usageCountKeys)[number]>();
+  #usageCountMissing = new Set<(typeof primaryUsageCountKeys)[number]>();
   #tripwire: StepTripwireData | undefined = undefined;
   #wasSuspended = false;
   #transportRef: MastraModelOutputOptions<OUTPUT>['transportRef'] | undefined;
@@ -1631,9 +1631,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       return;
     }
 
-    // Once a contributing step omits a counter, the aggregate can no longer
-    // present that counter as complete. Explicit zeroes remain valid values.
-    for (const key of usageCountKeys) {
+    // Primary totals describe the whole request, so any omitted contribution
+    // makes that aggregate incomplete. Explicit zeroes remain valid values.
+    for (const key of primaryUsageCountKeys) {
       const value = usage[key];
       if (value === undefined) {
         this.#usageCountMissing.add(key);
@@ -1642,7 +1642,15 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
         this.#usageCount[key] = (this.#usageCount[key] ?? 0) + value;
       }
     }
-    this.#usageCountInitialized = true;
+
+    // Detail counters are present-when-reported and remain additive across
+    // providers that omit unsupported cache or reasoning measurements.
+    for (const key of detailUsageCountKeys) {
+      const value = usage[key];
+      if (value !== undefined) {
+        this.#usageCount[key] = (this.#usageCount[key] ?? 0) + value;
+      }
+    }
 
     // raw is provider-specific and not summable; keep the latest step's raw
     if (usage.raw !== undefined) {
@@ -1655,11 +1663,17 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       return;
     }
 
-    // Finish metadata can fill untouched counters, but cannot repair a counter
-    // already known to be incomplete from an earlier contributing step.
-    for (const key of usageCountKeys) {
+    // Finish metadata can fill untouched counters, but cannot repair a primary
+    // counter already known to be incomplete from an earlier contributing step.
+    for (const key of primaryUsageCountKeys) {
       const value = usage[key];
       if (value !== undefined && this.#usageCount[key] === undefined && !this.#usageCountMissing.has(key)) {
+        this.#usageCount[key] = value;
+      }
+    }
+    for (const key of detailUsageCountKeys) {
+      const value = usage[key];
+      if (value !== undefined && this.#usageCount[key] === undefined) {
         this.#usageCount[key] = value;
       }
     }
@@ -2171,7 +2185,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       finishReason: this.#finishReason,
       request: this.#request,
       usageCount: this.#usageCount,
-      usageCountInitialized: this.#usageCountInitialized,
       usageCountMissing: [...this.#usageCountMissing],
       tripwire: this.#tripwire,
       wasSuspended: this.#wasSuspended,
@@ -2198,19 +2211,18 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#finishReason = state.finishReason;
     this.#request = state.request;
     this.#usageCount = state.usageCount;
-    this.#usageCountInitialized = state.usageCountInitialized ?? false;
 
     if (state.usageCountMissing === undefined) {
       const hasPriorUsage =
         (Array.isArray(state.bufferedSteps) && state.bufferedSteps.length > 0) ||
-        usageCountKeys.some(key => state.usageCount?.[key] !== undefined);
+        primaryUsageCountKeys.some(key => state.usageCount?.[key] !== undefined);
 
-      // Legacy snapshots do not record which completed steps omitted usage
-      // counters, so existing aggregates must fail closed. An empty snapshot
-      // taken before the first step can still accumulate resumed measurements.
-      this.#usageCountMissing = hasPriorUsage ? new Set(usageCountKeys) : new Set();
+      // Legacy snapshots do not record which completed steps omitted primary
+      // usage counters, so existing primary aggregates must fail closed. An
+      // empty snapshot taken before the first step can still accumulate them.
+      this.#usageCountMissing = hasPriorUsage ? new Set(primaryUsageCountKeys) : new Set();
       if (hasPriorUsage) {
-        for (const key of usageCountKeys) {
+        for (const key of primaryUsageCountKeys) {
           this.#usageCount[key] = undefined;
         }
       }

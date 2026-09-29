@@ -46,7 +46,7 @@ export function TraceThreadItemView({ traceId, onHighlightSpans, className }: Tr
   return (
     <div className={cn('animate-in p-4 duration-300 fade-in-0', className)}>
       {/* Messages carry their own vertical margins; strip them at the edges so `p-4` is the only outer spacing. */}
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 [&>[data-slot=message]:first-child]:mt-0 [&>[data-slot=message]:last-child]:mb-0">
+      <div className="mx-auto flex w-full max-w-3xl flex-col [&>[data-slot=message]:first-child]:mt-0 [&>[data-slot=message]:last-child]:mb-0">
         <ToolCallProvider
           approveToolcall={noop}
           declineToolcall={noop}

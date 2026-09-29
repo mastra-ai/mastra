@@ -44,10 +44,16 @@ function createModelWithUsage(usage: { inputTokens: number; outputTokens: number
   });
 }
 
-function createToolThenReplyingModelWithUsage(
-  firstUsage: { inputTokens?: number; outputTokens?: number; totalTokens?: number },
-  secondUsage: { inputTokens?: number; outputTokens?: number; totalTokens?: number },
-) {
+type PartialUsage = {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  reasoningTokens?: number;
+  cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
+};
+
+function createToolThenReplyingModelWithUsage(firstUsage: PartialUsage, secondUsage: PartialUsage) {
   return new MockLanguageModelV2({
     doStream: async ({ prompt }) => {
       const sawToolResult = JSON.stringify(prompt).includes('usage-tool-result');
@@ -250,7 +256,13 @@ describe('DurableAgent usage accumulation', () => {
       tools: { usageTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-    const result = await durableAgent.stream('Run the tool', { maxSteps: 3 });
+    let callbackUsage: PartialUsage | undefined;
+    const result = await durableAgent.stream('Run the tool', {
+      maxSteps: 3,
+      onFinish: ({ usage }) => {
+        callbackUsage = usage;
+      },
+    });
 
     try {
       for await (const _chunk of result.fullStream) {
@@ -258,6 +270,11 @@ describe('DurableAgent usage accumulation', () => {
       }
       const output = await result.output.getFullOutput();
       expect(output.usage).toMatchObject({
+        inputTokens: undefined,
+        outputTokens: 25,
+        totalTokens: undefined,
+      });
+      expect(callbackUsage).toMatchObject({
         inputTokens: undefined,
         outputTokens: 25,
         totalTokens: undefined,

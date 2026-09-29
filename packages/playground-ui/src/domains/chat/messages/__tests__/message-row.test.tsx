@@ -739,7 +739,7 @@ describe('MessageRow', () => {
     );
 
     expect(screen.getByRole('button', { name: /observed/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /extractions \(1\)/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /extractions.*1 extracted/i })).toBeTruthy();
   });
 
   it('renders buffered OM extraction output when activation and completion are both present', () => {
@@ -771,7 +771,7 @@ describe('MessageRow', () => {
     renderRow(message);
 
     expect(screen.getByRole('button', { name: /buffered observations/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /extractions \(1\)/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /extractions.*1 extracted/i })).toBeTruthy();
   });
 
   it('routes a user file part into an in-message attachment preview', () => {

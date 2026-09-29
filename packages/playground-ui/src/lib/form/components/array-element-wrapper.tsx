@@ -7,6 +7,7 @@ import { useSectionDisclosure } from '../use-section-disclosure';
 import { isPlainObject } from '../utils';
 import { Button } from '@/ds/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { Txt } from '@/ds/components/Txt';
 
 const HUMAN_SUMMARY_KEYS = ['title', 'name', 'label'];
 
@@ -51,7 +52,11 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
               {summary}
             </span>
           )}
-          {invalid && <span className="ml-auto shrink-0 text-meta text-accent2">Needs input</span>}
+          {invalid && (
+            <Txt as="span" variant="meta" className="ml-auto shrink-0 text-destructive-indicator">
+              Needs input
+            </Txt>
+          )}
         </CollapsibleTrigger>
         {!readOnly && (
           <Button

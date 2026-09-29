@@ -790,7 +790,6 @@ describe('MastraModelOutput', () => {
 
       expect(restored.serializeState()).toMatchObject({
         usageCount: { inputTokens: undefined, outputTokens: 28, totalTokens: undefined },
-        usageCountInitialized: true,
         usageCountMissing: expect.arrayContaining(['inputTokens', 'totalTokens']),
       });
     });
@@ -805,7 +804,6 @@ describe('MastraModelOutput', () => {
         options: { runId },
       });
       const legacyState: any = original.serializeState();
-      delete legacyState.usageCountInitialized;
       delete legacyState.usageCountMissing;
 
       const restored = new MastraModelOutput({
@@ -820,14 +818,7 @@ describe('MastraModelOutput', () => {
 
       expect(restored.serializeState()).toMatchObject({
         usageCount: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-        usageCountInitialized: true,
-        usageCountMissing: [
-          'reasoningTokens',
-          'cachedInputTokens',
-          'cacheCreationInputTokens',
-          'cacheCreationInputTokens5m',
-          'cacheCreationInputTokens1h',
-        ],
+        usageCountMissing: [],
       });
     });
 
@@ -851,7 +842,6 @@ describe('MastraModelOutput', () => {
         cacheCreationInputTokens1h: 5,
       });
       const legacyState: any = original.serializeState();
-      delete legacyState.usageCountInitialized;
       delete legacyState.usageCountMissing;
 
       const restored = new MastraModelOutput({
@@ -877,11 +867,11 @@ describe('MastraModelOutput', () => {
         inputTokens: undefined,
         outputTokens: undefined,
         totalTokens: undefined,
-        reasoningTokens: undefined,
-        cachedInputTokens: undefined,
-        cacheCreationInputTokens: undefined,
-        cacheCreationInputTokens5m: undefined,
-        cacheCreationInputTokens1h: undefined,
+        reasoningTokens: 2,
+        cachedInputTokens: 3,
+        cacheCreationInputTokens: 4,
+        cacheCreationInputTokens5m: 5,
+        cacheCreationInputTokens1h: 6,
       });
     });
 

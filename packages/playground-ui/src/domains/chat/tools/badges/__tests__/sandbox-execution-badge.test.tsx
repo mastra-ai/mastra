@@ -4,6 +4,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { forwardRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SandboxExecutionBadge } from '../sandbox-execution-badge';
+import type { SandboxExecutionBadgeProps } from '../sandbox-execution-badge';
 import { ToolCallProvider } from '@/domains/chat/context/tool-call-context';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import type { LinkComponentProviderProps } from '@/lib/framework';
@@ -15,7 +16,7 @@ const Link = forwardRef<HTMLAnchorElement, React.AnchorHTMLAttributes<HTMLAnchor
 
 const paths = {} as LinkComponentProviderProps['paths'];
 
-const renderBadge = () =>
+const renderBadge = (props: Partial<SandboxExecutionBadgeProps> = {}) =>
   render(
     <LinkComponentProvider Link={Link} navigate={vi.fn()} paths={paths}>
       <TooltipProvider>
@@ -50,6 +51,7 @@ const renderBadge = () =>
             ]}
             toolCallId="call-command"
             toolCalled
+            {...props}
           />
         </ToolCallProvider>
       </TooltipProvider>
@@ -65,6 +67,26 @@ describe('SandboxExecutionBadge', () => {
 
       expect(screen.getByText('killed')).not.toBeNull();
       expect(screen.queryByText('exit 137')).toBeNull();
+    });
+  });
+
+  describe('when a command started but failed before any exit event arrived', () => {
+    it('reads as failed rather than still running', () => {
+      renderBadge({
+        status: 'error',
+        dataParts: [
+          { type: 'data', name: 'workspace-metadata', data: { id: 'ws', toolCallId: 'call-command' } },
+          {
+            type: 'data',
+            name: 'sandbox-stdout',
+            data: { output: 'building\n', timestamp: Date.now() - 5000, toolCallId: 'call-command' },
+          },
+        ],
+      });
+
+      const line = screen.getByTestId('sandbox-execution-badge');
+      expect(line.getAttribute('aria-busy')).toBe('false');
+      expect(line.getAttribute('aria-invalid')).toBe('true');
     });
   });
 });

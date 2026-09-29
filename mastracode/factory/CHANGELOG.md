@@ -1,5 +1,20 @@
 # @mastra/factory
 
+## 0.18.0-alpha.8
+
+### Patch Changes
+
+- Pushes to a Factory-authored pull request now start a re-review automatically. Previously, once the review card reached Done, the re-review triggered by a new push waited for approval that was never requested, so someone had to click Re-review by hand. Pull requests from other authors still wait for approval as before. ([#25371](https://github.com/mastra-ai/mastra/pull/25371))
+
+- Fixed Factory cards looking finished while a review is still asking for changes. ([#25377](https://github.com/mastra-ai/mastra/pull/25377))
+
+  - **Review cards:** a review pass now records its verdict on the card and leaves it in Reviewing. The card shows "Changes requested" or "Approved" with the reviewed commit. A merged pull request moves a Review card to Done, a pull request closed without merging moves it to Canceled, and the next push starts a re-review automatically.
+  - **Work cards:** a Work card now moves from Building to Review when its pull request opens, shows the review verdict there, and moves to Done when the pull request merges. Agents can't move a Work card to Done while its pull request is still open or while the review requests changes.
+
+- Updated dependencies [[`4d187b7`](https://github.com/mastra-ai/mastra/commit/4d187b79d7ecce4d2f357f5fe385b414a532ff19), [`2a28888`](https://github.com/mastra-ai/mastra/commit/2a28888f7dfee74f84ec548c9c222cfd1aa7f393)]:
+  - @mastra/core@1.72.0-alpha.8
+  - @mastra/code-sdk@1.9.0-alpha.8
+
 ## 0.18.0-alpha.7
 
 ### Minor Changes

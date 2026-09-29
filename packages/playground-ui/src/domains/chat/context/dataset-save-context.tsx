@@ -1,22 +1,8 @@
-import { createContext, useContext } from 'react';
+import type { ReactNode } from 'react';
 
-export interface DatasetSaveContextValue {
-  /** Whether dataset save actions should be shown on messages */
-  enabled: boolean;
-  /** Thread ID for fetching actual messages from storage */
-  threadId: string;
-  /** Agent ID for fetching messages via agent memory */
-  agentId: string;
-  /** Request context to persist with saved dataset items */
-  requestContext?: Record<string, unknown>;
-}
+import { DatasetSaveContext } from './dataset-save-context-value';
+import type { DatasetSaveContextValue } from './dataset-save-context-value';
 
-const DatasetSaveContext = createContext<DatasetSaveContextValue | null>(null);
-
-export function DatasetSaveProvider({ children, ...value }: DatasetSaveContextValue & { children: React.ReactNode }) {
+export function DatasetSaveProvider({ children, ...value }: DatasetSaveContextValue & { children: ReactNode }) {
   return <DatasetSaveContext.Provider value={value}>{children}</DatasetSaveContext.Provider>;
-}
-
-export function useDatasetSaveContext() {
-  return useContext(DatasetSaveContext);
 }

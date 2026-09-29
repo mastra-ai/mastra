@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Lock, LogIn } from 'lucide-react';
 import { useState } from 'react';
 import { useSSOLogin } from '../hooks/use-auth-actions';
@@ -111,7 +112,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
   const description = login.description ? (
     <div className="flex items-start gap-2.5 rounded-md border border-border bg-sidebar p-3">
       <Lock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-      <p className="text-body text-muted-foreground">{login.description}</p>
+      <Txt tone="muted">{login.description}</Txt>
     </div>
   ) : null;
 

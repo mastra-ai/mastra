@@ -1,6 +1,7 @@
 import type { FactoryRuleItemContext, FactoryStageRuleContext } from '../rules/types.js';
 import { workItemBranch, workItemNumber } from '../work-item-branch.js';
 import { defineBoard } from './define-board.js';
+import type { BoardTransitionPolicy } from './transition-policy.js';
 
 function sourceRef(item: FactoryRuleItemContext): string {
   const link = item.url ? ` (${item.url})` : '';
@@ -57,16 +58,30 @@ function isSafeBranchName(value: string): boolean {
   );
 }
 
+export function hasRecordedVerdict(item: FactoryRuleItemContext): boolean {
+  return typeof item.metadata?.reviewVerdict === 'string';
+}
+
+// Done means the PR merged. A review agent records its verdict and leaves the
+// card in Reviewing, so a blocking finding never reads as finished work.
+const reviewTransitionPolicy: BoardTransitionPolicy = ({ actor, toStage }) => {
+  if (toStage !== 'done' || actor.type !== 'agent') return undefined;
+  return {
+    type: 'reject',
+    code: 'invalid_transition',
+    reason:
+      'Done is reserved for merged pull requests. Record the verdict with factory_record_review_verdict; the card stays in Reviewing.',
+  };
+};
+
 function reviewPullRequest(context: FactoryStageRuleContext) {
   // Only a Review-to-Review re-entry can supersede an active pass. A card
   // returning from Done has no live review to cancel; aborting its bound session
   // would instead cancel the fresh re-review kickoff.
   const supersedes = context.fromStage === 'review';
-  // The re-review skill only applies when a prior review pass actually completed
-  // (the card is returning from `done`). A cancelled first-time review that
-  // re-enters Review from `review` itself still has no prior pass to reconcile —
-  // it gets the regular provider-specific review skill.
-  const priorReviewCompleted = context.fromStage === 'done';
+  // The re-review skill applies once a prior pass recorded a verdict. Cards
+  // closed as Done before verdicts were recorded in place also count.
+  const priorReviewCompleted = hasRecordedVerdict(context.item) || context.fromStage === 'done';
   const isGitlab = context.item.source === 'gitlab-pr';
   const skillName = isGitlab
     ? priorReviewCompleted
@@ -81,9 +96,11 @@ function reviewPullRequest(context: FactoryStageRuleContext) {
     role: 'review',
     skillName,
     arguments: `${sourceRef(context.item)}\n\n${checkoutHint(context.item)}`,
-    // Same-stage re-entry: the skill is already live in the card's session, so
-    // continue it with a compact kickoff instead of re-pasting the whole skill.
-    ...(supersedes ? { cancelInFlight: true, resume: true } : {}),
+    // Same-stage re-entry mid-pass: the skill is already live in the card's
+    // session, so continue it with a compact kickoff. After a recorded verdict
+    // the next pass is a re-review, which needs its full skill delivered.
+    ...(supersedes ? { cancelInFlight: true } : {}),
+    ...(supersedes && !priorReviewCompleted ? { resume: true } : {}),
   } as const;
 }
 
@@ -91,6 +108,7 @@ export const reviewBoard = defineBoard({
   id: 'review',
   title: 'Review',
   initialPhase: 'intake',
+  transitionPolicy: reviewTransitionPolicy,
   phases: {
     intake: {
       title: 'Intake',

@@ -93,13 +93,11 @@ export class IssueReconcileWorker extends MastraWorker {
     // an overlapping sweep partway through this one.
     const renewalTimer = setInterval(
       () => {
-        void this.#leaseProvider
-          .renewLease(this.#leaseKey, this.#leaseOwner, this.#leaseTtlMs)
-          .catch(error => {
-            this.deps?.logger.warn(`${this.#integrationId} issue reconcile lease renewal failed`, {
-              error: error instanceof Error ? error.message : String(error),
-            });
+        void this.#leaseProvider.renewLease(this.#leaseKey, this.#leaseOwner, this.#leaseTtlMs).catch(error => {
+          this.deps?.logger.warn(`${this.#integrationId} issue reconcile lease renewal failed`, {
+            error: error instanceof Error ? error.message : String(error),
           });
+        });
       },
       Math.max(1_000, Math.floor(this.#leaseTtlMs / 3)),
     );
@@ -131,7 +129,5 @@ export class IssueReconcileWorker extends MastraWorker {
 function getLeaseProvider(pubsub: PubSub): LeaseProvider {
   const getProvider = (pubsub as PubSub & { getLeaseProvider?: () => LeaseProvider | undefined }).getLeaseProvider;
   if (typeof getProvider === 'function') return getProvider.call(pubsub) ?? NoopLeaseProvider;
-  return isLeaseProvider(pubsub)
-    ? pubsub
-    : ((pubsub as PubSub & { lease?: LeaseProvider }).lease ?? NoopLeaseProvider);
+  return isLeaseProvider(pubsub) ? pubsub : ((pubsub as PubSub & { lease?: LeaseProvider }).lease ?? NoopLeaseProvider);
 }

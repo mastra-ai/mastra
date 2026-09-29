@@ -99,6 +99,9 @@ export type AccumulatedUsage = {
   inputTokens: number | undefined;
   outputTokens: number | undefined;
   totalTokens: number | undefined;
+  cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
+  reasoningTokens?: number;
 };
 
 /**
@@ -108,6 +111,9 @@ export const accumulatedUsageSchema = z.object({
   inputTokens: z.number().optional(),
   outputTokens: z.number().optional(),
   totalTokens: z.number().optional(),
+  cachedInputTokens: z.number().optional(),
+  cacheCreationInputTokens: z.number().optional(),
+  reasoningTokens: z.number().optional(),
 }) as z.ZodType<AccumulatedUsage>;
 
 /**

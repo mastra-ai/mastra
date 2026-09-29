@@ -35,16 +35,32 @@ export interface StepRecord {
  */
 export function calculateAccumulatedUsage(
   currentUsage: AccumulatedUsage,
-  executionUsage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number },
+  executionUsage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+    cachedInputTokens?: number;
+    cacheCreationInputTokens?: number;
+    reasoningTokens?: number;
+  },
 ): AccumulatedUsage {
   const accumulate = (current: number | undefined, next: number | undefined) =>
     current !== undefined && next !== undefined ? current + next : undefined;
 
-  return {
+  const usage: AccumulatedUsage = {
     inputTokens: accumulate(currentUsage.inputTokens, executionUsage?.inputTokens),
     outputTokens: accumulate(currentUsage.outputTokens, executionUsage?.outputTokens),
     totalTokens: accumulate(currentUsage.totalTokens, executionUsage?.totalTokens),
   };
+  // Only emit detail fields once some step reported them, so providers without caching don't show a misleading 0
+  for (const key of ['cachedInputTokens', 'cacheCreationInputTokens', 'reasoningTokens'] as const) {
+    const current = currentUsage[key];
+    const step = executionUsage?.[key];
+    if (current !== undefined || step !== undefined) {
+      usage[key] = (current ?? 0) + (step ?? 0);
+    }
+  }
+  return usage;
 }
 
 /**
@@ -94,7 +110,12 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
   const currentUsage =
     currentState.usageAggregationVersion === 1 || currentState.accumulatedSteps.length === 0
       ? currentState.accumulatedUsage
-      : { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
+      : {
+          ...currentState.accumulatedUsage,
+          inputTokens: undefined,
+          outputTokens: undefined,
+          totalTokens: undefined,
+        };
   const newUsage = calculateAccumulatedUsage(currentUsage, executionOutput.output.usage);
   const stepRecord = buildStepRecord(executionOutput);
   const lastStepResult = { ...executionOutput.stepResult };

@@ -96,6 +96,43 @@ describe('calculateAccumulatedUsage', () => {
       totalTokens: undefined,
     });
   });
+
+  it('sums cache and reasoning token details across steps', () => {
+    const first = calculateAccumulatedUsage(
+      { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      {
+        inputTokens: 100,
+        outputTokens: 10,
+        totalTokens: 110,
+        cachedInputTokens: 80,
+        cacheCreationInputTokens: 5,
+        reasoningTokens: 4,
+      },
+    );
+    const second = calculateAccumulatedUsage(first, {
+      inputTokens: 50,
+      outputTokens: 20,
+      totalTokens: 70,
+      cachedInputTokens: 40,
+      reasoningTokens: 6,
+    });
+    expect(second).toEqual({
+      inputTokens: 150,
+      outputTokens: 30,
+      totalTokens: 180,
+      cachedInputTokens: 120,
+      cacheCreationInputTokens: 5,
+      reasoningTokens: 10,
+    });
+  });
+
+  it('leaves detail fields undefined when no step reports them', () => {
+    const result = calculateAccumulatedUsage(
+      { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
+    );
+    expect(result).toEqual({ inputTokens: 1, outputTokens: 2, totalTokens: 3 });
+  });
 });
 
 describe('createBaseIterationStateUpdate', () => {

@@ -422,10 +422,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           await convertAsyncIterableToArray(result.objectStream);
           expect(await result.usage).toMatchInlineSnapshot(`
             {
-              "cacheCreationInputTokens": undefined,
-              "cacheCreationInputTokens1h": undefined,
-              "cacheCreationInputTokens5m": undefined,
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
@@ -435,7 +431,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             }
           `);

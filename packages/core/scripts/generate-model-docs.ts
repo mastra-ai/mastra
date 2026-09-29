@@ -662,6 +662,11 @@ function generateIndexPage(grouped: GroupedProviders): string {
       .flat()
       .reduce((sum, p) => sum + p.models.length, 0);
 
+  // Link each provider's markdown page so agents reading /models/llms.txt can reach any provider.
+  const providerLinks = [...grouped.popular, ...grouped.other]
+    .map(provider => `  - [${provider.name}](https://mastra.ai/models/providers/${provider.id})`)
+    .join('\n');
+
   return `---
 title: "Models"
 description: "Access ${totalProviders}+ AI providers and ${totalModels}+ models through Mastra's model router."
@@ -1112,7 +1117,15 @@ const agent = new Agent({
 })
 \`\`\`
 
-You can use an AI SDK model (e.g. \`groq('gemma2-9b-it')\`) anywhere that accepts a \`"provider/model"\` string, including within model router fallbacks and [scorers](/docs/evals/overview).`;
+You can use an AI SDK model (e.g. \`groq('gemma2-9b-it')\`) anywhere that accepts a \`"provider/model"\` string, including within model router fallbacks and [scorers](/docs/evals/overview).
+
+<Inject>
+  ## All providers
+
+  Every provider below works with the model router as \`provider/model\`. Read the provider page for its environment variable, setup, and model list.
+
+${providerLinks}
+</Inject>`;
 }
 
 function generateGatewaysIndexPage(grouped: GroupedProviders): string {
