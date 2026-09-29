@@ -1,15 +1,16 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
-  DialogBody,
-  DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
 import { Field, FieldLabel, Fieldset, FieldsetLegend } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
@@ -22,7 +23,7 @@ import { useDatasetItems } from '@mastra/playground-ui/domains/datasets/hooks/us
 import { DynamicForm } from '@mastra/playground-ui/lib/form/dynamic-form';
 import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronRight, X } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { DatasetCombobox } from '../dataset-combobox';
@@ -230,10 +231,8 @@ export function ExperimentTriggerDialog({
   };
 
   const handleClose = () => {
-    if (!isRunning) {
-      onOpenChange(false);
-      resetState();
-    }
+    onOpenChange(false);
+    resetState();
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -244,20 +243,16 @@ export function ExperimentTriggerDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent
-        ref={contentRef}
-        className="w-[640px] max-w-[calc(100vw-2rem)] gap-0 p-0"
-        onKeyDown={handleKeyDown}
-      >
-        <DialogHeader className="border-b border-border px-4 py-4">
+    <Dialog open={open} onOpenChange={handleClose} pending={isRunning}>
+      <DialogContent ref={contentRef} size="lg" onKeyDown={handleKeyDown}>
+        <DialogHeader>
           <DialogTitle>Run experiment</DialogTitle>
-          <DialogDescription className="not-sr-only text-caption text-muted-foreground">
+          <DialogDescription>
             Pick a dataset, choose what to run it against, and optionally score the results.
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="max-h-[70vh] space-y-6 overflow-y-auto px-4 py-5">
+        <DialogBody>
           <div className="space-y-4">
             <Field>
               <FieldLabel required>Name</FieldLabel>
@@ -364,8 +359,8 @@ export function ExperimentTriggerDialog({
           </Collapsible>
         </DialogBody>
 
-        <DialogFooter className="items-center border-t border-border px-4 py-4 sm:justify-between">
-          <p data-testid="experiment-run-status" aria-live="polite" className="flex items-center gap-2">
+        <DialogFooter>
+          <p data-testid="experiment-run-status" aria-live="polite" className="mr-auto flex items-center gap-2">
             {missing.length === 0 ? (
               <>
                 <Badge variant="green" indicator="dot">
@@ -381,27 +376,23 @@ export function ExperimentTriggerDialog({
               </Badge>
             )}
           </p>
-          <div className="flex items-center gap-2">
-            <Button icon={<X />} onClick={handleClose} disabled={isRunning}>
-              Cancel
-            </Button>
-            <Button variant="primary" onClick={handleRun} disabled={!canRun || isRunning}>
-              {isRunning ? (
-                <>
-                  <Spinner className="h-4 w-4" />
-                  Running...
-                </>
-              ) : (
-                <>
-                  Run
-                  <span className="ml-1 inline-flex gap-0.5" aria-hidden="true">
-                    <Kbd size="xs">{isMac ? '⌘' : 'Ctrl'}</Kbd>
-                    <Kbd size="xs">↵</Kbd>
-                  </span>
-                </>
-              )}
-            </Button>
-          </div>
+          <DialogCancel>Cancel</DialogCancel>
+          <DialogAction onConfirm={handleRun} disabled={!canRun}>
+            {isRunning ? (
+              <>
+                <Spinner className="h-4 w-4" />
+                Running...
+              </>
+            ) : (
+              <>
+                Run
+                <span className="ml-1 inline-flex gap-0.5" aria-hidden="true">
+                  <Kbd size="xs">{isMac ? '⌘' : 'Ctrl'}</Kbd>
+                  <Kbd size="xs">↵</Kbd>
+                </span>
+              </>
+            )}
+          </DialogAction>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -54,7 +54,7 @@ export function CopySkillDialog({
             Creates a private copy in your skills that you can edit. The original stays untouched.
           </AlertDialog.Description>
         </AlertDialog.Header>
-        <div className="px-4 py-2">
+        <AlertDialog.Body>
           <Field invalid={collides}>
             <FieldLabel>New skill name</FieldLabel>
             <Input
@@ -66,7 +66,7 @@ export function CopySkillDialog({
             />
             <FieldError>{collides ? `You already have a skill named "${trimmed}".` : undefined}</FieldError>
           </Field>
-        </div>
+        </AlertDialog.Body>
         <AlertDialog.Footer>
           <AlertDialog.Cancel disabled={isPending}>Cancel</AlertDialog.Cancel>
           <AlertDialog.Action

@@ -91,7 +91,7 @@ const BackgroundTaskMetadata = ({
           <DialogDescription>View the metadata of the background task.</DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="space-y-4">
+        <DialogBody>
           <div className="space-y-2">
             <Txt tone="muted">Background Task Duration</Txt>
             <Txt tone="ink" className="text-body">
