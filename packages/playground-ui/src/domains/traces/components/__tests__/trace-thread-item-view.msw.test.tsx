@@ -72,6 +72,30 @@ describe('TraceThreadItemView', () => {
     });
   });
 
+  describe('when the user input is a skill activation envelope', () => {
+    it('renders the Skill row instead of the raw envelope', async () => {
+      const [root, ...rest] = basicAgentTrace.spans;
+      if (!root) throw new Error('fixture missing root span');
+      const envelope = '<skill name="factory-triage">\nTriage the work item.\n</skill>';
+      const spans = [
+        { ...root, input: { messages: [{ role: 'user', content: [{ type: 'text', text: envelope }] }] } },
+        ...rest,
+      ];
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () =>
+          HttpResponse.json({ ...basicAgentTrace, spans }),
+        ),
+        http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
+      );
+
+      const { queryClient } = renderWithProviders(<TraceThreadItemView traceId={TRACE_THREAD_ITEM_ID} />);
+
+      expect(await screen.findByLabelText('Skill: factory-triage')).not.toBeNull();
+      expect(screen.queryByText(/<skill name=/)).toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+  });
+
   describe('when the trace contains a reviewed submit_plan and an observational memory cycle', () => {
     it('shows the plan decision with its feedback and the observation badge', async () => {
       const [root] = basicAgentTrace.spans;

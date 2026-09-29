@@ -1,15 +1,13 @@
-import { ActivityItem } from '@mastra/playground-ui/components/ai/activity';
-import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { BookOpen } from 'lucide-react';
-import type { SkillActivation } from './skill-activation';
 
-export type { SkillActivation } from './skill-activation';
-export { parseSkillActivation } from './skill-activation';
+import type { SkillActivation } from './skill-activation';
+import { ActivityItem, SignalActivity } from '@/ds/components/ai/activity';
+import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
+import { ScrollArea } from '@/ds/components/ScrollArea';
 
 export function SkillMessage({ activation }: { activation: SkillActivation }) {
-  const { name, arguments: args, instructions } = activation;
-  return (
+  const { name, arguments: args, instructions, feed } = activation;
+  const item = (
     <ActivityItem
       label="Skill"
       detail={args ? `${name} ${args}` : name}
@@ -21,5 +19,14 @@ export function SkillMessage({ activation }: { activation: SkillActivation }) {
         <MarkdownRenderer className="text-caption">{instructions}</MarkdownRenderer>
       </ScrollArea>
     </ActivityItem>
+  );
+
+  if (feed === undefined) return item;
+
+  return (
+    <div className="flex flex-col">
+      {item}
+      <SignalActivity kind="reactive" label="Work item feed" message={feed} />
+    </div>
   );
 }

@@ -96,10 +96,7 @@ export const ElevationFoundations: Story = {
               <Badge variant="success">Success</Badge>
             </div>
           </Specimen>
-          <Specimen
-            name="--inset-highlight / --inset-rim"
-            note="Dark: white at 7% / 7%. Light: white at 55% / black at 8%."
-          >
+          <Specimen name="Inset edge" note="Dark: white at 7% / 7%. Light: white at 55% / black at 8%.">
             <div className="flex h-20 items-center gap-3 rounded-xl bg-background p-4">
               <div className="size-12 rounded-lg bg-card shadow-inset" />
               <Txt variant="caption" tone="muted">
@@ -107,6 +104,18 @@ export const ElevationFoundations: Story = {
               </Txt>
             </div>
           </Specimen>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:max-w-80">
+          {['inset-highlight', 'inset-rim'].map(token => (
+            <Specimen key={token} name={`--${token}`}>
+              <div
+                role="img"
+                aria-label={`--${token} swatch`}
+                className="h-16 border border-border"
+                style={{ background: `var(--${token})` }}
+              />
+            </Specimen>
+          ))}
         </div>
       </FoundationSection>
     </FoundationPage>
