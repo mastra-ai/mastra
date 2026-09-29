@@ -1,7 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
-  matchesExpectedSleepTimer,
   matchesExpectedWorkflowStatus,
   WorkflowsStorage,
   TABLE_WORKFLOW_SNAPSHOT,
@@ -266,7 +265,10 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
       const { expectedStatus, expectedSleepTimer, ...state } = opts;
       if (
         !matchesExpectedWorkflowStatus(snapshot.status, expectedStatus) ||
-        !matchesExpectedSleepTimer(snapshot.sleepTimers, expectedSleepTimer)
+        (expectedSleepTimer &&
+          (snapshot.sleepTimers?.[expectedSleepTimer.id]?.status !== expectedSleepTimer.status ||
+            (expectedSleepTimer.claimToken !== undefined &&
+              snapshot.sleepTimers[expectedSleepTimer.id]?.claimToken !== expectedSleepTimer.claimToken)))
       ) {
         await transaction.rollback();
         return undefined;

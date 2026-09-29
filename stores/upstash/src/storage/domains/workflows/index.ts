@@ -345,12 +345,11 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           : JSON.stringify(Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus]);
       const expectedSleepTimerJson = expectedSleepTimer === undefined ? '' : JSON.stringify(expectedSleepTimer);
 
-      const resultJson = await this.client.eval(luaScript, [key], [
-        JSON.stringify(state),
-        now,
-        expectedStatusJson,
-        expectedSleepTimerJson,
-      ]);
+      const resultJson = await this.client.eval(
+        luaScript,
+        [key],
+        [JSON.stringify(state), now, expectedStatusJson, expectedSleepTimerJson],
+      );
 
       if (!resultJson) {
         return undefined;

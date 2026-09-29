@@ -4,7 +4,6 @@ import {
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
-  matchesExpectedSleepTimer,
   matchesExpectedWorkflowStatus,
   WorkflowsStorage,
   createStorageErrorId,
@@ -435,7 +434,10 @@ export class WorkflowsPG extends WorkflowsStorage {
         const { expectedStatus, expectedSleepTimer, ...state } = opts;
         if (
           !matchesExpectedWorkflowStatus(snapshot.status, expectedStatus) ||
-          !matchesExpectedSleepTimer(snapshot.sleepTimers, expectedSleepTimer)
+          (expectedSleepTimer &&
+            (snapshot.sleepTimers?.[expectedSleepTimer.id]?.status !== expectedSleepTimer.status ||
+              (expectedSleepTimer.claimToken !== undefined &&
+                snapshot.sleepTimers[expectedSleepTimer.id]?.claimToken !== expectedSleepTimer.claimToken)))
         ) {
           return undefined;
         }

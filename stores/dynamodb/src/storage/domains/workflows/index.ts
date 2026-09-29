@@ -3,7 +3,6 @@ import {
   createStorageErrorId,
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
-  matchesExpectedSleepTimer,
   matchesExpectedWorkflowStatus,
   WorkflowsStorage,
 } from '@mastra/core/storage';
@@ -257,7 +256,10 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
         const { expectedStatus, expectedSleepTimer, ...state } = opts;
         if (
           !matchesExpectedWorkflowStatus(existingSnapshot.status, expectedStatus) ||
-          !matchesExpectedSleepTimer(existingSnapshot.sleepTimers, expectedSleepTimer)
+          (expectedSleepTimer &&
+            (existingSnapshot.sleepTimers?.[expectedSleepTimer.id]?.status !== expectedSleepTimer.status ||
+              (expectedSleepTimer.claimToken !== undefined &&
+                existingSnapshot.sleepTimers[expectedSleepTimer.id]?.claimToken !== expectedSleepTimer.claimToken)))
         ) {
           return undefined;
         }

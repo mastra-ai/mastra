@@ -4,7 +4,6 @@ import {
   TABLE_SCHEMAS,
   WorkflowsStorage,
   normalizePerPage,
-  matchesExpectedSleepTimer,
   matchesExpectedWorkflowStatus,
 } from '@mastra/core/storage';
 import type {
@@ -258,7 +257,10 @@ export class WorkflowsMySQL extends WorkflowsStorage {
       const { expectedStatus, expectedSleepTimer, ...state } = opts;
       if (
         !matchesExpectedWorkflowStatus(existing.status, expectedStatus) ||
-        !matchesExpectedSleepTimer(existing.sleepTimers, expectedSleepTimer)
+        (expectedSleepTimer &&
+          (existing.sleepTimers?.[expectedSleepTimer.id]?.status !== expectedSleepTimer.status ||
+            (expectedSleepTimer.claimToken !== undefined &&
+              existing.sleepTimers[expectedSleepTimer.id]?.claimToken !== expectedSleepTimer.claimToken)))
       ) {
         await connection.rollback();
         return undefined;
