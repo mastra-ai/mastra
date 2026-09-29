@@ -91,6 +91,17 @@ describe('UpstashTransport', () => {
     });
   });
 
+  it('should send list trimming as a separate pipeline command', async () => {
+    transport._write({ msg: 'test message' }, 'utf8', vi.fn());
+
+    await transport._flush();
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body).toHaveLength(2);
+    expect(body[0]).toEqual(['LPUSH', defaultOptions.listName, expect.stringContaining('test message')]);
+    expect(body[1]).toEqual(['LTRIM', defaultOptions.listName, 0, defaultOptions.maxListLength - 1]);
+  });
+
   it('should properly clean up resources on destroy', () => {
     const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
     const flushSpy = vi.spyOn(transport, '_flush').mockImplementation(() => Promise.resolve());
