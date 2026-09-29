@@ -174,10 +174,11 @@ export function unregisterSession(): void {
 
 /**
  * Register this session, then wait for any running maintenance to finish.
- * Throws after `timeoutMs` naming the maintenance holder.
+ * Waits indefinitely by default: a vacuum on a multi-GB database can take
+ * minutes. With `timeoutMs`, throws after that long naming the holder.
  */
 export async function registerSessionAndWaitForMaintenance({
-  timeoutMs = 60_000,
+  timeoutMs = Infinity,
   pollMs = 250,
   onWait,
 }: { timeoutMs?: number; pollMs?: number; onWait?: (ownerPid: number) => void } = {}): Promise<void> {

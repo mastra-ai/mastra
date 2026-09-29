@@ -132,9 +132,21 @@ function journalModeFromHeader(file: string): 'wal' | 'delete' | 'unknown' {
 }
 
 /**
- * Force a full GC so statements of already-closed libsql connections are
- * finalized and release their file locks (libsql-js#228). `gc` is only global
- * under --expose-gc, so enable it at runtime and fetch it from a fresh context.
+ * Collect our own closed-but-unfinalized libsql connections before probing.
+ *
+ * libsql-js does not finalize prepared statements on `close()` (they are only
+ * released by GC; tursodatabase/libsql-js#228), so a connection we already
+ * closed can still hold the WAL lock and make the reclaim probe fail.
+ *
+ * `gc` is only global under `--expose-gc`, so we set that V8 flag at runtime
+ * and read `gc` from a fresh VM context. The flag is process-wide, but it only
+ * makes `gc` available to contexts created afterward (the main context's
+ * globals are untouched) and changes no GC behavior. A forced
+ * collection only frees unreachable objects. This runs only on the explicit
+ * vacuum path (`mastracode prune --vacuum` or `/prune vacuum`), and both exit
+ * the process right after, so the flag never outlives maintenance in practice.
+ *
+ * Remove this once libsql-js#228 lands and `close()` finalizes statements.
  */
 async function releaseClosedConnections(): Promise<void> {
   // Let pending close() callbacks settle before collecting.

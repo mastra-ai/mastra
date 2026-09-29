@@ -3,7 +3,7 @@ import type { ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   MALFORMED_PID_FILE_GRACE_MS,
@@ -234,5 +234,27 @@ describe('maintenance lock held by this process', () => {
       release();
     }
     expect(fs.existsSync(getMaintenanceLockPath())).toBe(false);
+  });
+
+  it('waits past the old 60s cap by default instead of timing out', async () => {
+    // A long vacuum must not make a starting session give up.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'Date'] });
+    try {
+      const child = spawnLiveProcess();
+      fs.mkdirSync(path.dirname(getMaintenanceLockPath()), { recursive: true });
+      fs.writeFileSync(getMaintenanceLockPath(), String(child.pid));
+      let settled = false;
+      const wait = registerSessionAndWaitForMaintenance({ pollMs: 1_000 }).finally(() => {
+        settled = true;
+      });
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+      expect(settled).toBe(false);
+      fs.rmSync(getMaintenanceLockPath());
+      await vi.advanceTimersByTimeAsync(1_000);
+      await wait;
+      expect(settled).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -591,7 +591,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     await registerSessionAndWaitForMaintenance({
       onWait: pid =>
         console.error(
-          `Waiting for storage maintenance (mastracode prune${pid === UNKNOWN_OWNER ? '' : `, PID ${pid}`}) to finish...`,
+          `Waiting for storage maintenance (mastracode prune${pid === UNKNOWN_OWNER ? '' : `, PID ${pid}`}) to finish. Press Ctrl+C to give up.`,
         ),
     });
   }

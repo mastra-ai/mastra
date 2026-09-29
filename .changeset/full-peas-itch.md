@@ -13,6 +13,6 @@ mastracode prune --vacuum        # ...then compact the files to reclaim disk
 mastracode prune --keep-memory   # ...but keep chat history
 ```
 
-`prune` refuses to run while a session is open, and a session started during `prune` waits for it to finish.
+`mastracode prune` and `/prune` refuse to run while another session is open, and a session started during either waits for it to finish. The lock lives in the app data directory, so sessions sharing one `MASTRA_DB_PATH` with different `MASTRA_APP_DATA_DIR` values don't see each other.
 
 Part of #22056.
