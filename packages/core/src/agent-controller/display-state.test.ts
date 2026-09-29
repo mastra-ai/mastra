@@ -158,6 +158,14 @@ describe('agent lifecycle', () => {
     emit(session, { type: 'agent_end', reason: 'complete' });
     expect(session.displayState.get().activeSubagents.size).toBe(0);
   });
+
+  it('preserves activeSubagents on agent_end with reason suspended', () => {
+    emit(session, { type: 'subagent_start', toolCallId: 's1', agentType: 'explore', task: 'find', modelId: 'gpt-4o' });
+    const sub = session.displayState.get().activeSubagents.get('s1');
+
+    emit(session, { type: 'agent_end', reason: 'suspended' });
+    expect(session.displayState.get().activeSubagents.get('s1')).toBe(sub);
+  });
 });
 
 // ===========================================================================

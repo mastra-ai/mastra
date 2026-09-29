@@ -190,12 +190,11 @@ describe('SessionRunEngine — subagents delegated through Agent.agents', () => 
     ];
     for (const item of afterResume) await engine.processStreamChunk(resumedRun, item, context);
 
-    // agent_end clears activeSubagents, so the resumed run opens a fresh entry for the same call.
+    // A suspended agent_end keeps activeSubagents, so the resumed run reuses the existing entry.
     expect(subagentEvents(events).map(event => event.type)).toEqual([
       'subagent_start',
       'subagent_tool_start',
       'subagent_tool_end',
-      'subagent_start',
       'subagent_tool_start',
       'subagent_tool_end',
       'subagent_text_delta',
@@ -203,7 +202,11 @@ describe('SessionRunEngine — subagents delegated through Agent.agents', () => 
     ]);
     expect(session.displayState.get().activeSubagents.get(toolCallId)).toMatchObject({
       agentType: 'helper',
-      toolCalls: [{ name: 'deleteDocs', isError: false }],
+      task: 'Research streams',
+      toolCalls: [
+        { name: 'searchDocs', isError: false },
+        { name: 'deleteDocs', isError: false },
+      ],
       textDelta: 'Done.',
       status: 'completed',
       result: 'Done.',
