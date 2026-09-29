@@ -142,6 +142,24 @@ describe('ScrollArea', () => {
       expect(viewport.style.maxHeight).toBe('400px');
       expect(viewport.className).toContain('data-[overflow-y-end]:mask-b-from');
     });
+
+    it('throws instead of nesting a second scroll container when the viewport is not a direct child', () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const WrappedViewport = ({ children }: { children: React.ReactNode }) => (
+        <ScrollAreaViewport>{children}</ScrollAreaViewport>
+      );
+
+      expect(() =>
+        render(
+          <ScrollArea>
+            <WrappedViewport>
+              <div data-testid="child">content</div>
+            </WrappedViewport>
+          </ScrollArea>,
+        ),
+      ).toThrow('ScrollAreaViewport must be a direct child of ScrollArea');
+      consoleError.mockRestore();
+    });
   });
 
   describe('scrollButtons', () => {

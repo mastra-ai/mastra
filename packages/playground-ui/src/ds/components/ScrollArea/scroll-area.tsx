@@ -242,10 +242,9 @@ export type ScrollAreaViewportProps = {
   children?: React.ReactNode;
 };
 
-/** Only needed to style the viewport; must be a direct child of `ScrollArea`, which otherwise renders it itself. */
 const ScrollAreaViewport = ({ className, children }: ScrollAreaViewportProps) => {
   const viewport = React.useContext(ScrollAreaViewportContext);
-  if (!viewport) throw new Error('ScrollAreaViewport must be used within ScrollArea');
+  if (!viewport) throw new Error('ScrollAreaViewport must be a direct child of ScrollArea');
 
   return (
     <ScrollAreaPrimitive.Viewport
@@ -253,7 +252,9 @@ const ScrollAreaViewport = ({ className, children }: ScrollAreaViewportProps) =>
       className={cn(viewport.className, className)}
       style={viewport.style}
     >
-      <ScrollAreaPrimitive.Content style={viewport.contentStyle}>{children}</ScrollAreaPrimitive.Content>
+      <ScrollAreaPrimitive.Content style={viewport.contentStyle}>
+        <ScrollAreaViewportContext.Provider value={null}>{children}</ScrollAreaViewportContext.Provider>
+      </ScrollAreaPrimitive.Content>
     </ScrollAreaPrimitive.Viewport>
   );
 };
