@@ -94,6 +94,17 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
       expect(text).toBe('Before. After.');
     });
 
+    it(`keeps all text when the final step interleaves text and tool calls (processor: ${withProcessor})`, async () => {
+      const model = scriptedModel([
+        [...textPart('t1', 'A '), askCall('c1'), ...textPart('t2', 'B'), askCall('c2'), finish('tool-calls')],
+      ]);
+      const { text, steps } = await run(makeAgent(model, withProcessor));
+
+      expect(steps).toHaveLength(1);
+      expect(steps.at(-1)!.text).toBe('A B');
+      expect(text).toBe('A B');
+    });
+
     it(`does not leak earlier-step text when the final step is tool-only (processor: ${withProcessor})`, async () => {
       const model = scriptedModel([
         [...textPart('t1', 'Let me check.'), { ...askCall('c0'), toolName: 'noop' }, finish('tool-calls')],
@@ -123,12 +134,18 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     });
   }
 
-  for (const [label, rewrite] of [
-    ['redacts', '[REDACTED]'],
-    ['clears', ''],
+  for (const [label, rewrite, step, expected] of [
+    ['redacts', '[REDACTED]', [...textPart('t1', 'SECRET'), askCall('c1'), finish('tool-calls')], '[REDACTED]'],
+    ['clears', '', [...textPart('t1', 'SECRET'), askCall('c1'), finish('tool-calls')], ''],
+    [
+      'redacts interleaved text in',
+      'X',
+      [...textPart('t1', 'A '), askCall('c1'), ...textPart('t2', 'B'), askCall('c2'), finish('tool-calls')],
+      'XX',
+    ],
   ] as const) {
     it(`uses the processed text when a processor ${label} it`, async () => {
-      const model = scriptedModel([[...textPart('t1', 'SECRET'), askCall('c1'), finish('tool-calls')]]);
+      const model = scriptedModel([[...step]]);
       const agent = new Agent({
         id: 'a',
         name: 'a',
@@ -145,8 +162,8 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
       });
       const { text, steps } = await run(agent);
 
-      expect(steps.at(-1)!.text).toBe(rewrite);
-      expect(text).toBe(rewrite);
+      expect(steps.at(-1)!.text).toBe(expected);
+      expect(text).toBe(expected);
     });
   }
 });
