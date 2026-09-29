@@ -32,14 +32,14 @@ export function ShortcutsOverlay() {
         <DialogBody>
           <ul className="flex flex-col gap-1">
             <li className="flex items-center justify-between gap-4 py-1.5">
-              <Txt as="span" variant="caption" className="text-foreground">
+              <Txt as="span" variant="body-sm" tone="ink">
                 Search and navigate
               </Txt>
               <Kbd>{searchShortcutLabel}</Kbd>
             </li>
             {SHORTCUTS.map(s => (
               <li key={s.description} className="flex items-center justify-between gap-4 py-1.5">
-                <Txt as="span" variant="caption" className="text-foreground">
+                <Txt as="span" variant="body-sm" tone="ink">
                   {s.description}
                 </Txt>
                 <span className="flex shrink-0 items-center gap-1">

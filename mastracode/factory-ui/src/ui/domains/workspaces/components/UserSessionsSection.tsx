@@ -213,7 +213,7 @@ export function UserSessionsSection() {
           </div>
         )}
         {sessionsQuery.isSuccess && sessions.length === 0 && (
-          <Txt as="p" variant="meta" role="status" className="text-muted-foreground m-0 px-2 py-1">
+          <Txt as="p" variant="meta" tone="muted" role="status" className="m-0 px-2 py-1">
             {allSessions.length === 0
               ? 'No sessions yet'
               : activeUserSessionFilterCount(filters, defaultFilters) === 0 && viewerUserId

@@ -378,7 +378,7 @@ function WorkspaceGroup({
         ))}
       </MainSidebar.NavList>
       {visibleRows.length === 0 ? (
-        <Txt as="p" variant="caption" role="status" className="text-muted-foreground m-0 pl-3">
+        <Txt as="p" variant="caption" tone="muted" role="status" className="m-0 pl-3">
           No sessions of your own.
         </Txt>
       ) : null}

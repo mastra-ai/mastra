@@ -67,7 +67,7 @@ function PasteCodeDialog({ provider, session, onClose, onComplete }: ProviderOAu
           <DialogDescription>Authorize your account and paste the returned code.</DialogDescription>
         </DialogHeader>
         <DialogBody>
-          <Txt as="p" variant="caption" className="text-muted-foreground">
+          <Txt as="p" variant="caption" tone="muted">
             {session.instructions}
           </Txt>
           <Button onClick={() => openAuthorizationUrl(session.url)}>

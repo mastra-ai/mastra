@@ -72,7 +72,7 @@ export function RepositoryPickerDialog({
               </button>
             ))}
             {visibleRepositories.length === 0 && (
-              <Txt as="p" variant="caption" className="text-muted-foreground px-2 py-2">
+              <Txt as="p" variant="caption" tone="muted" className="px-2 py-2">
                 {repositories.length === 0 ? 'No linked repositories' : 'No matching repositories'}
               </Txt>
             )}
