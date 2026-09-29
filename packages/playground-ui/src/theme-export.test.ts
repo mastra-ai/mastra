@@ -583,7 +583,7 @@ describe('theme.css export', () => {
 
     for (const variables of [darkVariables, lightVariables]) {
       const tokens = [...variables.keys()].filter(name => roles.test(name));
-      expect(tokens.length).toBe(52);
+      expect(tokens.length).toBe(58);
       for (const token of tokens) {
         const value = resolveToken(token, variables);
         expect(value).toMatch(/^oklch\(/);

@@ -22,11 +22,11 @@
   --span-model: oklch(0.75 0.15 320);
   --span-mcp: oklch(0.75 0.15 160);
   --span-tool: oklch(0.75 0.15 100);
-  --span-provider: oklch(0.75 0.15 60);
+  --span-provider: oklch(0.75 0.14 75);
   --span-memory: oklch(0.75 0.12 50);
-  --span-workspace: oklch(0.75 0.15 40);
+  --span-workspace: oklch(0.75 0.13 20);
   --span-skill: oklch(0.75 0.15 130);
-  --span-scorer: oklch(0.75 0.13 280);
+  --span-scorer: oklch(0.75 0.13 350);
   --span-other: var(--muted-foreground);
 }
 
@@ -45,11 +45,11 @@ html.light {
   --span-model: oklch(0.55 0.15 320);
   --span-mcp: oklch(0.55 0.124 160);
   --span-tool: oklch(0.55 0.114 100);
-  --span-provider: oklch(0.55 0.129 60);
+  --span-provider: oklch(0.55 0.11 75);
   --span-memory: oklch(0.55 0.12 50);
-  --span-workspace: oklch(0.55 0.15 40);
+  --span-workspace: oklch(0.55 0.15 20);
   --span-skill: oklch(0.55 0.148 130);
-  --span-scorer: oklch(0.55 0.15 280);
+  --span-scorer: oklch(0.55 0.15 350);
   --chart-sequential-1: var(--purple-800);
   --chart-sequential-2: var(--purple-700);
   --chart-sequential-3: var(--purple-600);

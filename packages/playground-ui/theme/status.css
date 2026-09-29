@@ -64,16 +64,22 @@
 
   --product-studio: var(--cyan-soft-900);
   --product-studio-foreground: var(--cyan-200);
+  --product-studio-subtle: var(--cyan-soft-950);
   --product-server: var(--blue-soft-900);
   --product-server-foreground: var(--blue-200);
+  --product-server-subtle: var(--blue-soft-950);
   --product-observability: var(--green-soft-900);
   --product-observability-foreground: var(--green-200);
+  --product-observability-subtle: var(--green-soft-950);
   --product-factory: var(--orange-soft-900);
   --product-factory-foreground: var(--orange-200);
+  --product-factory-subtle: var(--orange-soft-950);
   --product-workers: var(--yellow-soft-900);
   --product-workers-foreground: var(--yellow-200);
+  --product-workers-subtle: var(--yellow-soft-950);
   --product-persistent-server: var(--purple-soft-900);
   --product-persistent-server-foreground: var(--purple-200);
+  --product-persistent-server-subtle: var(--purple-soft-950);
 }
 
 html.light {
@@ -139,16 +145,22 @@ html.light {
 
   --product-studio: var(--cyan-100);
   --product-studio-foreground: var(--cyan-950);
+  --product-studio-subtle: var(--cyan-50);
   --product-server: var(--blue-100);
   --product-server-foreground: var(--blue-950);
+  --product-server-subtle: var(--blue-50);
   --product-observability: var(--green-100);
   --product-observability-foreground: var(--green-950);
+  --product-observability-subtle: var(--green-50);
   --product-factory: var(--orange-100);
   --product-factory-foreground: var(--orange-950);
+  --product-factory-subtle: var(--orange-50);
   --product-workers: var(--yellow-100);
   --product-workers-foreground: var(--yellow-950);
+  --product-workers-subtle: var(--yellow-50);
   --product-persistent-server: var(--purple-100);
   --product-persistent-server-foreground: var(--purple-950);
+  --product-persistent-server-subtle: var(--purple-50);
 }
 
 @theme inline {
@@ -212,14 +224,20 @@ html.light {
   --color-badge-pink-foreground: var(--badge-pink-foreground);
   --color-product-studio: var(--product-studio);
   --color-product-studio-foreground: var(--product-studio-foreground);
+  --color-product-studio-subtle: var(--product-studio-subtle);
   --color-product-server: var(--product-server);
   --color-product-server-foreground: var(--product-server-foreground);
+  --color-product-server-subtle: var(--product-server-subtle);
   --color-product-observability: var(--product-observability);
   --color-product-observability-foreground: var(--product-observability-foreground);
+  --color-product-observability-subtle: var(--product-observability-subtle);
   --color-product-factory: var(--product-factory);
   --color-product-factory-foreground: var(--product-factory-foreground);
+  --color-product-factory-subtle: var(--product-factory-subtle);
   --color-product-workers: var(--product-workers);
   --color-product-workers-foreground: var(--product-workers-foreground);
+  --color-product-workers-subtle: var(--product-workers-subtle);
   --color-product-persistent-server: var(--product-persistent-server);
   --color-product-persistent-server-foreground: var(--product-persistent-server-foreground);
+  --color-product-persistent-server-subtle: var(--product-persistent-server-subtle);
 }

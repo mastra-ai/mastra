@@ -1,7 +1,7 @@
 import type { HTMLAttributes, ReactNode } from 'react';
 
 import { Icon } from '../../icons/Icon';
-import { productColors } from '../ProductAvatar/product-identity';
+import { productColors, productSubtleColors } from '../ProductAvatar/product-identity';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -10,35 +10,56 @@ export type BadgeIndicator = 'dot' | 'pulse';
 
 type BadgeToneStyles = Record<BadgeEmphasis, string> & { indicator: string };
 
+const green = {
+  strong: 'bg-badge-green-strong text-badge-green-foreground',
+  subtle: 'bg-badge-green-subtle text-badge-green-foreground',
+  indicator: 'bg-badge-green-indicator',
+};
+const red = {
+  strong: 'bg-badge-red-strong text-badge-red-foreground',
+  subtle: 'bg-badge-red-subtle text-badge-red-foreground',
+  indicator: 'bg-badge-red-indicator',
+};
+const yellow = {
+  strong: 'bg-badge-yellow-strong text-badge-yellow-foreground',
+  subtle: 'bg-badge-yellow-subtle text-badge-yellow-foreground',
+  indicator: 'bg-badge-yellow-indicator',
+};
+const blue = {
+  strong: 'bg-badge-blue-strong text-badge-blue-foreground',
+  subtle: 'bg-badge-blue-subtle text-badge-blue-foreground',
+  indicator: 'bg-badge-blue-indicator',
+};
+
 const badgeToneStyles = {
   studio: {
-    strong: productColors['studio'],
-    subtle: productColors['studio'],
+    strong: productColors.studio,
+    subtle: productSubtleColors.studio,
     indicator: 'bg-product-studio-foreground',
   },
   server: {
-    strong: productColors['server'],
-    subtle: productColors['server'],
+    strong: productColors.server,
+    subtle: productSubtleColors.server,
     indicator: 'bg-product-server-foreground',
   },
   observability: {
-    strong: productColors['observability'],
-    subtle: productColors['observability'],
+    strong: productColors.observability,
+    subtle: productSubtleColors.observability,
     indicator: 'bg-product-observability-foreground',
   },
   factory: {
-    strong: productColors['factory'],
-    subtle: productColors['factory'],
+    strong: productColors.factory,
+    subtle: productSubtleColors.factory,
     indicator: 'bg-product-factory-foreground',
   },
   workers: {
-    strong: productColors['workers'],
-    subtle: productColors['workers'],
+    strong: productColors.workers,
+    subtle: productSubtleColors.workers,
     indicator: 'bg-product-workers-foreground',
   },
   'persistent-server': {
     strong: productColors['persistent-server'],
-    subtle: productColors['persistent-server'],
+    subtle: productSubtleColors['persistent-server'],
     indicator: 'bg-product-persistent-server-foreground',
   },
   neutral: {
@@ -46,46 +67,14 @@ const badgeToneStyles = {
     subtle: 'bg-fill-subtle text-badge-neutral-foreground',
     indicator: 'bg-muted-foreground',
   },
-  success: {
-    strong: 'bg-badge-green-strong text-badge-green-foreground',
-    subtle: 'bg-badge-green-subtle text-badge-green-foreground',
-    indicator: 'bg-success-indicator',
-  },
-  destructive: {
-    strong: 'bg-badge-red-strong text-badge-red-foreground',
-    subtle: 'bg-badge-red-subtle text-badge-red-foreground',
-    indicator: 'bg-destructive-indicator',
-  },
-  info: {
-    strong: 'bg-badge-blue-strong text-badge-blue-foreground',
-    subtle: 'bg-badge-blue-subtle text-badge-blue-foreground',
-    indicator: 'bg-info-indicator',
-  },
-  warning: {
-    strong: 'bg-badge-yellow-strong text-badge-yellow-foreground',
-    subtle: 'bg-badge-yellow-subtle text-badge-yellow-foreground',
-    indicator: 'bg-warning-indicator',
-  },
-  green: {
-    strong: 'bg-badge-green-strong text-badge-green-foreground',
-    subtle: 'bg-badge-green-subtle text-badge-green-foreground',
-    indicator: 'bg-badge-green-indicator',
-  },
-  red: {
-    strong: 'bg-badge-red-strong text-badge-red-foreground',
-    subtle: 'bg-badge-red-subtle text-badge-red-foreground',
-    indicator: 'bg-badge-red-indicator',
-  },
-  yellow: {
-    strong: 'bg-badge-yellow-strong text-badge-yellow-foreground',
-    subtle: 'bg-badge-yellow-subtle text-badge-yellow-foreground',
-    indicator: 'bg-badge-yellow-indicator',
-  },
-  blue: {
-    strong: 'bg-badge-blue-strong text-badge-blue-foreground',
-    subtle: 'bg-badge-blue-subtle text-badge-blue-foreground',
-    indicator: 'bg-badge-blue-indicator',
-  },
+  success: { ...green, indicator: 'bg-success-indicator' },
+  destructive: { ...red, indicator: 'bg-destructive-indicator' },
+  info: { ...blue, indicator: 'bg-info-indicator' },
+  warning: { ...yellow, indicator: 'bg-warning-indicator' },
+  green,
+  red,
+  yellow,
+  blue,
   purple: {
     strong: 'bg-badge-purple-strong text-badge-purple-foreground',
     subtle: 'bg-badge-purple-subtle text-badge-purple-foreground',
