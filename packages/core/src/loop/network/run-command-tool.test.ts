@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createRunCommandTool, extractBaseCommand, isPathAllowed } from './run-command-tool';
 
 const run = (tool: ReturnType<typeof createRunCommandTool>, input: { command: string; cwd?: string }) =>
@@ -58,6 +58,29 @@ describe('extractBaseCommand', () => {
 });
 
 describe('createRunCommandTool', () => {
+  describe('on win32', () => {
+    const originalPlatform = process.platform;
+    beforeEach(() => Object.defineProperty(process, 'platform', { value: 'win32' }));
+    afterEach(() => Object.defineProperty(process, 'platform', { value: originalPlatform }));
+
+    it.each(['tool.exe x', 'tool x', 'TOOL.EXE. x'])(
+      'blocks %s when additionalBlockedCommands has an extension',
+      async command => {
+        const tool = createRunCommandTool({ additionalBlockedCommands: ['tool.exe'] });
+        const res = await run(tool, { command });
+        expect(res.success).toBe(false);
+        expect(res.message).toContain("'tool' is not permitted");
+      },
+    );
+
+    it('matches allowedCommands entries that have an extension', async () => {
+      const tool = createRunCommandTool({ allowedCommands: ['node.exe'], allowedBasePaths: ['C:\\nowhere'] });
+      const res = await run(tool, { command: 'node.exe -v', cwd: 'C:\\elsewhere' });
+      // Passing the allowlist means the next check (cwd) is what rejects it.
+      expect(res.message).toContain('is not within allowed paths');
+    });
+  });
+
   it.runIf(process.platform === 'win32')('blocks Windows-path invocations of blocked commands', async () => {
     const tool = createRunCommandTool({ allowUnsafeCharacters: true });
     const res = await run(tool, { command: 'C:\\Windows\\rm.exe x' });

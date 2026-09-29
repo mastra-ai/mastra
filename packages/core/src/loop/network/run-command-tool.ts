@@ -199,7 +199,9 @@ export function createRunCommandTool(options: RunCommandToolOptions = {}) {
     allowUnsafeCharacters = false,
   } = options;
 
-  const blockedCommands = new Set([...BLOCKED_COMMANDS, ...additionalBlockedCommands.map(c => c.toLowerCase())]);
+  // Normalize configured names the same way as commands so `tool.exe` still matches on Windows.
+  const blockedCommands = new Set([...BLOCKED_COMMANDS, ...additionalBlockedCommands.map(c => extractBaseCommand(c))]);
+  const allowedNames = allowedCommands.map(c => extractBaseCommand(c));
 
   return createTool({
     id: 'run-command',
@@ -242,7 +244,7 @@ export function createRunCommandTool(options: RunCommandToolOptions = {}) {
 
       // Check allowlist if configured
       if (allowedCommands.length > 0) {
-        const isAllowed = allowedCommands.some(allowed => baseCommand === allowed.toLowerCase());
+        const isAllowed = allowedNames.includes(baseCommand);
         if (!isAllowed) {
           return {
             success: false,
