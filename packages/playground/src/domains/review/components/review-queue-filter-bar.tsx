@@ -16,7 +16,6 @@ import {
 import { getExperimentDisplayName } from '@/domains/experiments/utils/experiment-display-name';
 import { useProcessors } from '@/domains/processors/hooks/use-processors';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 export const TARGET_TYPE_FIELD_ID = 'targetType';
 export const TARGET_ID_FIELD_ID = 'targetId';
@@ -117,7 +116,6 @@ export function ReviewQueueFilterBar({
 }: ReviewQueueFilterBarProps) {
   const { data: agents } = useAgents({ enabled: targetType === 'agent' });
   const { data: workflows } = useWorkflows({
-    requestContext: usePlaygroundStore().requestContext,
     enabled: targetType === 'workflow',
   });
   const { data: scorers } = useScorers({ enabled: targetType === 'scorer' });

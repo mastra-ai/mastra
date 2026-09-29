@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
 import {
-  formatRelativeTime,
   formatGapBetweenDates,
   parseDateFromContent,
   parseDateSpan,
@@ -17,81 +16,87 @@ function daysFrom(base: Date, days: number): Date {
   return new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
-describe('formatRelativeTime', () => {
+describe('formatRelativeSpan', () => {
   const now = new Date('2025-06-15T12:00:00Z');
+  /** A single-day span on the calendar date `days` away from `now`'s, in the process time zone. */
+  const daysAway = (days: number) => {
+    const date = new Date(now);
+    date.setDate(date.getDate() + days);
+    return formatRelativeSpan({ start: date, end: date }, now);
+  };
 
   it('returns "today" for the same day', () => {
-    expect(formatRelativeTime(now, now)).toBe('today');
+    expect(daysAway(0)).toBe('today');
   });
 
   it('returns "yesterday" for 1 day ago', () => {
-    expect(formatRelativeTime(daysFrom(now, -1), now)).toBe('yesterday');
+    expect(daysAway(-1)).toBe('yesterday');
   });
 
   it('returns "N days ago" for 2-6 days', () => {
-    expect(formatRelativeTime(daysFrom(now, -3), now)).toBe('3 days ago');
-    expect(formatRelativeTime(daysFrom(now, -6), now)).toBe('6 days ago');
+    expect(daysAway(-3)).toBe('3 days ago');
+    expect(daysAway(-6)).toBe('6 days ago');
   });
 
   it('returns "1 week ago" for 7-13 days', () => {
-    expect(formatRelativeTime(daysFrom(now, -7), now)).toBe('1 week ago');
-    expect(formatRelativeTime(daysFrom(now, -13), now)).toBe('1 week ago');
+    expect(daysAway(-7)).toBe('1 week ago');
+    expect(daysAway(-13)).toBe('1 week ago');
   });
 
   it('returns "N weeks ago" for 14-29 days', () => {
-    expect(formatRelativeTime(daysFrom(now, -14), now)).toBe('2 weeks ago');
-    expect(formatRelativeTime(daysFrom(now, -21), now)).toBe('3 weeks ago');
+    expect(daysAway(-14)).toBe('2 weeks ago');
+    expect(daysAway(-21)).toBe('3 weeks ago');
   });
 
   it('returns "1 month ago" for 30-59 days', () => {
-    expect(formatRelativeTime(daysFrom(now, -30), now)).toBe('1 month ago');
-    expect(formatRelativeTime(daysFrom(now, -59), now)).toBe('1 month ago');
+    expect(daysAway(-30)).toBe('1 month ago');
+    expect(daysAway(-59)).toBe('1 month ago');
   });
 
   it('returns "N months ago" for 60-364 days', () => {
-    expect(formatRelativeTime(daysFrom(now, -90), now)).toBe('3 months ago');
-    expect(formatRelativeTime(daysFrom(now, -180), now)).toBe('6 months ago');
+    expect(daysAway(-90)).toBe('3 months ago');
+    expect(daysAway(-180)).toBe('6 months ago');
   });
 
   it('returns "1 year ago" for exactly 365 days', () => {
-    expect(formatRelativeTime(daysFrom(now, -365), now)).toBe('1 year ago');
+    expect(daysAway(-365)).toBe('1 year ago');
   });
 
   it('returns \"N years ago\" with plural for multiple years', () => {
-    expect(formatRelativeTime(daysFrom(now, -730), now)).toBe('2 years ago');
-    expect(formatRelativeTime(daysFrom(now, -1095), now)).toBe('3 years ago');
+    expect(daysAway(-730)).toBe('2 years ago');
+    expect(daysAway(-1095)).toBe('3 years ago');
   });
 
   it('returns \"tomorrow\" for 1 day in the future', () => {
-    expect(formatRelativeTime(daysFrom(now, 1), now)).toBe('tomorrow');
+    expect(daysAway(1)).toBe('tomorrow');
   });
 
   it('returns \"in N days\" for 2-6 days in the future', () => {
-    expect(formatRelativeTime(daysFrom(now, 3), now)).toBe('in 3 days');
-    expect(formatRelativeTime(daysFrom(now, 6), now)).toBe('in 6 days');
+    expect(daysAway(3)).toBe('in 3 days');
+    expect(daysAway(6)).toBe('in 6 days');
   });
 
   it('returns \"in 1 week\" for 7-13 days in the future', () => {
-    expect(formatRelativeTime(daysFrom(now, 7), now)).toBe('in 1 week');
-    expect(formatRelativeTime(daysFrom(now, 13), now)).toBe('in 1 week');
+    expect(daysAway(7)).toBe('in 1 week');
+    expect(daysAway(13)).toBe('in 1 week');
   });
 
   it('returns \"in N weeks\" for 14-29 days in the future', () => {
-    expect(formatRelativeTime(daysFrom(now, 14), now)).toBe('in 2 weeks');
-    expect(formatRelativeTime(daysFrom(now, 21), now)).toBe('in 3 weeks');
+    expect(daysAway(14)).toBe('in 2 weeks');
+    expect(daysAway(21)).toBe('in 3 weeks');
   });
 
   it('returns \"in 1 month\" for 30-59 days in the future', () => {
-    expect(formatRelativeTime(daysFrom(now, 30), now)).toBe('in 1 month');
+    expect(daysAway(30)).toBe('in 1 month');
   });
 
   it('returns \"in N months\" for 60-364 days in the future', () => {
-    expect(formatRelativeTime(daysFrom(now, 90), now)).toBe('in 3 months');
+    expect(daysAway(90)).toBe('in 3 months');
   });
 
   it('returns \"in N years\" for 365+ days in the future', () => {
-    expect(formatRelativeTime(daysFrom(now, 365), now)).toBe('in 1 year');
-    expect(formatRelativeTime(daysFrom(now, 730), now)).toBe('in 2 years');
+    expect(daysAway(365)).toBe('in 1 year');
+    expect(daysAway(730)).toBe('in 2 years');
   });
 });
 
@@ -488,6 +493,60 @@ describe('addRelativeTimeToObservations', () => {
     const result = addRelativeTimeToObservations(input, now);
     expect(result).toContain('June 1, 2025 (2 weeks ago)');
     expect(result).toContain('June 10, 2025 (5 days ago)');
+  });
+
+  describe('time zone', () => {
+    // Midnight UTC is still the previous evening in Los Angeles and already morning in Tokyo
+    const midnightUtc = new Date('2024-06-23T00:00:00Z');
+    const observations = [
+      'Date: Jun 15, 2024',
+      '- User booked the exam for June 22, 2024',
+      'Date: Jun 22, 2024',
+      '- User will call the clinic (meaning Jun 22, 2024)',
+    ].join('\n');
+
+    it('counts days from the date in the observations time zone, not the process zone', () => {
+      const result = addRelativeTimeToObservations(observations, midnightUtc, 'UTC');
+      expect(result).toContain('Date: Jun 15, 2024 (1 week ago)');
+      expect(result).toContain('June 22, 2024 (yesterday)');
+      expect(result).toContain('Date: Jun 22, 2024 (yesterday)');
+      expect(result).toContain('(meaning Jun 22, 2024 - yesterday, likely already happened)');
+    });
+
+    it('follows the observations time zone when it differs', () => {
+      const result = addRelativeTimeToObservations(observations, midnightUtc, 'America/Los_Angeles');
+      expect(result).toContain('Date: Jun 15, 2024 (1 week ago)');
+      expect(result).toContain('Date: Jun 22, 2024 (today)');
+      expect(result).toContain('(meaning Jun 22, 2024 - today)');
+      // A plan for today has not happened yet, whatever the zone's clock says
+      expect(result).not.toContain('likely already happened');
+      expect(addRelativeTimeToObservations(observations, midnightUtc, 'Asia/Tokyo')).toContain(
+        'Date: Jun 22, 2024 (yesterday)',
+      );
+    });
+
+    it('falls back to the process time zone when the zone is missing or unknown', () => {
+      const processZone = addRelativeTimeToObservations(observations, midnightUtc);
+      expect(addRelativeTimeToObservations(observations, midnightUtc, 'Not/AZone')).toBe(processZone);
+      expect(formatRelativeSpan(parseDateSpan('Jun 22, 2024')!, midnightUtc, undefined)).toBe(
+        formatRelativeSpan(parseDateSpan('Jun 22, 2024')!, midnightUtc, ''),
+      );
+    });
+  });
+
+  it('measures gaps in calendar days, so a daylight-saving change does not shorten a week', () => {
+    // US clocks sprang forward on Mar 10, 2024, so local midnights either side of that week are 7 days minus an
+    // hour apart. The gap is measured in the process zone, so pin one that observes DST; in UTC the two midnights
+    // are exactly 7 days apart and the test would pass either way.
+    const previousZone = process.env.TZ;
+    process.env.TZ = 'America/Los_Angeles';
+    try {
+      const result = addRelativeTimeToObservations('Date: Mar 5, 2024\n- a\nDate: Mar 12, 2024\n- b', now);
+      expect(result).toContain('[1 week later]');
+    } finally {
+      if (previousZone === undefined) delete process.env.TZ;
+      else process.env.TZ = previousZone;
+    }
   });
 
   it('inserts gap markers between dates with significant gaps', () => {

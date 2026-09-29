@@ -145,7 +145,7 @@ describe('AppSidebar — More menu', () => {
 
       await screen.findByRole('link', { name: /^mcp servers$/i });
       // Prompts is CMS-gated and hidden in this scaffold.
-      expect(primitiveLabels()).toEqual(['Agents', 'Workflows', 'Request Context', 'MCP Servers', 'More']);
+      expect(primitiveLabels()).toEqual(['Agents', 'Workflows', 'MCP Servers', 'More']);
     });
 
     it('reveals the folded items at the bottom, in registry order, when More is clicked', async () => {
@@ -155,15 +155,7 @@ describe('AppSidebar — More menu', () => {
 
       fireEvent.click(await screen.findByRole('button', { name: /^more$/i }));
 
-      expect(primitiveLabels()).toEqual([
-        'Agents',
-        'Workflows',
-        'Request Context',
-        'MCP Servers',
-        'Processors',
-        'Tools',
-        'Workspaces',
-      ]);
+      expect(primitiveLabels()).toEqual(['Agents', 'Workflows', 'MCP Servers', 'Processors', 'Tools', 'Workspaces']);
     });
   });
 

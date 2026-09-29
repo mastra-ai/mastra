@@ -1558,12 +1558,15 @@ export abstract class MastraBrowser extends MastraBase {
    * @param configuredProcessors - Processors already configured by the user (for deduplication)
    * @returns Array of input processors for this browser instance
    */
-  getInputProcessors(configuredProcessors: InputProcessorOrWorkflow[] = []): InputProcessor[] {
+  getInputProcessors(
+    configuredProcessors: InputProcessorOrWorkflow[] = [],
+    options: { stateSignal?: boolean } = {},
+  ): InputProcessor[] {
     const hasProcessor = configuredProcessors.some(
       p => !isProcessorWorkflow(p) && 'id' in p && p.id === 'browser-context',
     );
     if (hasProcessor) return [];
-    return [new BrowserContextProcessor()];
+    return [new BrowserContextProcessor(options)];
   }
 
   // ---------------------------------------------------------------------------

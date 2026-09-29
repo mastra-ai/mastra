@@ -5,7 +5,7 @@
  * Keyboard shortcuts:
  *   y       — approve this one call
  *   n / Esc — decline this call
- *   a       — always allow this category for the session
+ *   a       — always allow this category for this thread
  *   Y       — switch to YOLO mode (approve all)
  */
 import { Box, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';

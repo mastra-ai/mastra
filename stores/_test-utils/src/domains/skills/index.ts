@@ -81,6 +81,29 @@ export function createSkillsTests({ storage }: { storage: MastraStorage }) {
       expect(combined.total).toBe(0);
     });
 
+    it('round-trips files on create, update, and resolve', async () => {
+      const files = [
+        {
+          name: 'scripts',
+          type: 'folder' as const,
+          children: [{ name: 'setup.sh', type: 'file' as const, content: 'echo hi' }],
+        },
+      ];
+      const skill = { ...createSkill(`skill-files-${Date.now()}`), files };
+      await skillsStorage.create({ skill });
+
+      expect((await skillsStorage.getLatestVersion(skill.id))?.files).toEqual(files);
+      expect((await skillsStorage.getByIdResolved(skill.id))?.files).toEqual(files);
+
+      const updatedFiles = [{ name: 'README.md', type: 'file' as const, content: '# hi' }];
+      await skillsStorage.update({ id: skill.id, files: updatedFiles });
+
+      expect(await skillsStorage.countVersions(skill.id)).toBe(2);
+      const latest = await skillsStorage.getLatestVersion(skill.id);
+      expect(latest?.files).toEqual(updatedFiles);
+      expect(latest?.changedFields).toContain('files');
+    });
+
     it('does not create duplicate versions for semantically unchanged snapshots', async () => {
       const skill = createSkill(`skill-${Date.now()}`);
       await skillsStorage.create({ skill });

@@ -43,6 +43,9 @@ overrides:
   fast-copy@<4.1.1: 4.1.1
   ioredis@>=5.0.0 <6.0.0: 6.0.0
   zod@>=4.0.0 <4.6.5: 4.6.5
+  # Vanta 2026-09-28: nested-lock security floors
+  'shell-quote@<1.10.0': 1.10.0
+  'yargs@>=17.0.0 <17.7.3': 17.7.3
 packageExtensions:
   '@huggingface/transformers@*':
     dependencies:

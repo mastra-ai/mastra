@@ -36,7 +36,7 @@
  * ```
  */
 
-import type { Agent, AgentExecutionOptions } from '@mastra/core/agent';
+import type { Agent, AgentExecutionOptions, StructuredOutputOptions } from '@mastra/core/agent';
 import {
   AGENT_STREAM_TOPIC,
   agentThreadStreamRuntime,
@@ -53,6 +53,7 @@ import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { ActorSignal } from '@mastra/core/auth/ee';
 import { InMemoryServerCache } from '@mastra/core/cache';
 import type { MastraServerCache } from '@mastra/core/cache';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { CachingPubSub, PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
@@ -476,6 +477,28 @@ export interface InngestAgent<TOutput = undefined> {
   ): Promise<Omit<InngestAgentStreamResult<TOutput>, 'threadId' | 'resourceId'> & { runId: string }>;
 
   /**
+   * Not supported. Inngest owns durability for this agent (see the `retries`
+   * option), so Mastra never re-drives Inngest runs.
+   * Use {@link InngestAgent.observe} to reconnect to a running run's stream.
+   *
+   * @throws MastraError `INNGEST_AGENT_RECOVER_NOT_SUPPORTED` (HTTP 400)
+   */
+  recover(runId: string, options?: unknown): Promise<never>;
+
+  /**
+   * Not supported, for the same reason as {@link InngestAgent.recover}.
+   *
+   * @throws MastraError `INNGEST_AGENT_RECOVER_NOT_SUPPORTED` (HTTP 400)
+   */
+  listActiveRuns(options?: unknown): Promise<never>;
+
+  /**
+   * No-op. Inngest owns durability for its runs, so boot-time durable
+   * agent recovery has nothing to re-drive and skips Inngest agents.
+   */
+  recoverActiveRuns(options?: unknown): Promise<{ recovered: never[]; succeeded: number; failed: number }>;
+
+  /**
    * Get the durable workflows required by this agent.
    * Called by Mastra during agent registration.
    * @internal
@@ -572,10 +595,37 @@ export interface InngestAgent<TOutput = undefined> {
   /** Get the active run id for a thread. Forwarded to the underlying Agent. */
   getActiveThreadRunId: Agent<any, any, TOutput>['getActiveThreadRunId'];
   /**
+   * Abort the thread's active run, including on the Inngest worker executing it.
+   * Returns `false` when there is no matching active run.
+   */
+  abortThreadStream: Agent<any, any, TOutput>['abortThreadStream'];
+  /** Abort a run by id, including on the Inngest worker executing it. */
+  abortRunStream: Agent<any, any, TOutput>['abortRunStream'];
+  /**
    * Resume a suspended durable run and return its streaming output. Routes
    * through {@link InngestAgent.resume}; requires `runId` in `streamOptions`.
    */
   resumeStream(resumeData: any, streamOptions?: any): Promise<MastraModelOutput<TOutput>>;
+  /**
+   * @deprecated Use `stream(messages, { untilIdle: true })` instead.
+   *
+   * Runs through the durable {@link InngestAgent.stream} with `untilIdle`, so
+   * every turn executes on Inngest.
+   */
+  streamUntilIdle(
+    messages: MessageListInput,
+    streamOptions?: InngestAgentStreamOptions<TOutput> & { maxIdleMs?: number },
+  ): Promise<InngestAgentStreamResult<TOutput>>;
+  /**
+   * @deprecated Use `resumeStream(resumeData, { runId, untilIdle: true })` instead.
+   *
+   * Runs through the durable {@link InngestAgent.resumeStream} with `untilIdle`;
+   * requires `runId` in `streamOptions`.
+   */
+  resumeStreamUntilIdle(
+    resumeData: any,
+    streamOptions?: { runId?: string; maxIdleMs?: number } & Record<string, any>,
+  ): Promise<MastraModelOutput<TOutput>>;
   /** Approve a pending tool call on a suspended durable run (via {@link InngestAgent.resumeStream}). */
   approveToolCall(
     options: { runId: string; toolCallId?: string } & Record<string, any>,
@@ -807,6 +857,31 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     }
   }
 
+  // Recovery re-drives a run from Mastra's persisted snapshot. Inngest drives
+  // these runs (re-invoking and replaying memoized steps when `retries` is
+  // configured), so doing it here would race Inngest.
+  const recoverNotSupportedError = (method: 'recover' | 'listActiveRuns') =>
+    new MastraError({
+      id: 'INNGEST_AGENT_RECOVER_NOT_SUPPORTED',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.USER,
+      text: `InngestAgent.${method}() is not supported. Inngest owns durability for this agent: configure \`retries\` on createInngestAgent() to have Inngest re-invoke interrupted runs. Use observe(runId) to reconnect to a running run's stream.`,
+      details: { status: 400, agentId, method },
+    });
+
+  /**
+   * Stop `runId` wherever it is executing: the controller this process holds
+   * for it, if any, plus the abort request that reaches the Inngest step
+   * worker. Mirrors the `abort()` handed out with a stream result.
+   */
+  function abortDurableRun(runId: string): void {
+    const controller = globalRunRegistry.get(runId)?.abortController;
+    if (controller && !controller.signal.aborted) {
+      controller.abort(new Error('Aborted'));
+    }
+    void requestRemoteAbort(runId);
+  }
+
   // Return the InngestAgent object (Agent methods are added by the Proxy below)
   const inngestAgent: Pick<
     InngestAgent<TOutput>,
@@ -820,13 +895,20 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     | 'resume'
     | 'prepare'
     | 'observe'
+    | 'recover'
+    | 'listActiveRuns'
+    | 'recoverActiveRuns'
     | 'generate'
     | 'resumeGenerate'
     | 'resumeStream'
+    | 'streamUntilIdle'
+    | 'resumeStreamUntilIdle'
     | 'approveToolCall'
     | 'declineToolCall'
     | 'approveToolCallGenerate'
     | 'declineToolCallGenerate'
+    | 'abortThreadStream'
+    | 'abortRunStream'
     | '__fork'
     | 'getDurableWorkflows'
     | 'durableLoopWorkflowName'
@@ -946,6 +1028,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         },
         threadId,
         resourceId,
+        structuredOutput: registryEntry.structuredOutput as StructuredOutputOptions<TOutput> | undefined,
         onChunk: streamOptions?.onChunk,
         onStepFinish: streamOptions?.onStepFinish,
         onFinish: async result => {
@@ -1139,6 +1222,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         },
         threadId: resumeOptions?.threadId,
         resourceId: resumeOptions?.resourceId,
+        structuredOutput: existingEntry.structuredOutput as StructuredOutputOptions<TOutput> | undefined,
         onChunk: resumeOptions?.onChunk,
         onStepFinish: resumeOptions?.onStepFinish,
         onFinish: async result => {
@@ -1185,9 +1269,14 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         // persists the suspended snapshot. Resuming inside that window used to find no
         // suspended step and dispatch a fresh run whose input was the resume payload,
         // crashing with "Cannot read properties of undefined (reading 'threadId')" (#24749).
+        // After a resume re-suspends, the stored snapshot is still the previous suspended
+        // one until the new suspension is persisted, so a named tool call must also wait
+        // for its label to appear rather than failing against the stale labels (#25158).
+        const toolCallId = resumeOptions?.toolCallId;
+        const isReady = (s: any) => s?.status === 'suspended' && (!toolCallId || !!s.resumeLabels?.[toolCallId]);
         let snapshot: any = await loadSnapshot();
         const deadline = Date.now() + RESUME_SNAPSHOT_WAIT_MS;
-        while (workflowsStore && snapshot?.status !== 'suspended' && Date.now() < deadline) {
+        while (workflowsStore && !isReady(snapshot) && Date.now() < deadline) {
           await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_MS));
           snapshot = await loadSnapshot();
         }
@@ -1206,7 +1295,6 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         // packages/core/src/workflows/workflow.ts, which builds the same path).
         const suspendedStepIds = snapshot?.suspendedPaths ? Object.keys(snapshot.suspendedPaths) : [];
         const resumeLabels: Record<string, { stepId?: string } | undefined> = snapshot?.resumeLabels ?? {};
-        const toolCallId = resumeOptions?.toolCallId;
 
         const expandToLeafPath = (stepId: string): string[] => {
           const stepResult = (snapshot?.context ?? {})[stepId];
@@ -1344,6 +1432,18 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       };
     },
 
+    async recover() {
+      throw recoverNotSupportedError('recover');
+    },
+
+    async listActiveRuns() {
+      throw recoverNotSupportedError('listActiveRuns');
+    },
+
+    async recoverActiveRuns() {
+      return { recovered: [], succeeded: 0, failed: 0 };
+    },
+
     async observe(runId, observeOptions) {
       // Create the stream subscription with offset support
       const {
@@ -1360,6 +1460,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           version: 'v3',
         },
         offset: observeOptions?.offset,
+        structuredOutput: globalRunRegistry.get(runId)?.structuredOutput as
+          | StructuredOutputOptions<TOutput>
+          | undefined,
         onChunk: observeOptions?.onChunk,
         onStepFinish: observeOptions?.onStepFinish,
         onFinish: observeOptions?.onFinish,
@@ -1481,6 +1584,24 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       return result.output;
     },
 
+    // Without these, the Proxy forwards the deprecated shims to the wrapped
+    // Agent, which runs the idle loop in-process and never creates an Inngest run.
+    async streamUntilIdle(messages, streamOptions) {
+      const { maxIdleMs, ...options } = streamOptions ?? {};
+      return proxyRef!.stream(messages, {
+        ...options,
+        untilIdle: maxIdleMs === undefined ? true : { maxIdleMs },
+      });
+    },
+
+    async resumeStreamUntilIdle(resumeData, streamOptions) {
+      const { maxIdleMs, ...options } = streamOptions ?? {};
+      return proxyRef!.resumeStream(resumeData, {
+        ...options,
+        untilIdle: maxIdleMs === undefined ? true : { maxIdleMs },
+      });
+    },
+
     async approveToolCall(options) {
       return proxyRef!.resumeStream({ approved: true }, options);
     },
@@ -1508,6 +1629,27 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         { approved: false, ...(reason !== undefined ? { reason } : {}) },
         resumeOptions as InngestAgentResumeOptions<TOutput>,
       );
+    },
+
+    // The wrapped Agent's thread/run abort only reaches in-process state; an
+    // Inngest run executes on the step worker, which must be told to stop.
+    abortThreadStream(abortOptions) {
+      // Resolve the run before the base call: aborting releases the thread
+      // lease, after which the thread no longer has an active run to look up.
+      const runId = agent.getActiveThreadRunId(abortOptions);
+      const aborted = agent.abortThreadStream(abortOptions);
+      if (!aborted || !runId) return aborted;
+
+      abortDurableRun(runId);
+      return true;
+    },
+
+    abortRunStream(runId) {
+      const aborted = agent.abortRunStream(runId);
+      // Publish regardless of local knowledge: the run is normally executing
+      // on an Inngest worker this process cannot see.
+      abortDurableRun(runId);
+      return aborted || globalRunRegistry.get(runId) !== undefined;
     },
 
     __fork() {
