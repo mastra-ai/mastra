@@ -828,13 +828,13 @@ function titleGenerationTests(version: 'v1' | 'v2') {
         generateTitle: true,
       });
 
-      const originalCreateThread = mockMemory.createThread.bind(mockMemory);
-      mockMemory.createThread = async args => {
+      const originalUpdateThread = mockMemory.updateThread.bind(mockMemory);
+      mockMemory.updateThread = async args => {
         if (args.title) {
           await titleWriteGate;
           titlePersisted = true;
         }
-        return originalCreateThread(args);
+        return originalUpdateThread(args);
       };
 
       let testModel: MockLanguageModelV1 | MockLanguageModelV2;
@@ -2130,7 +2130,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
 
       const titleText = 'Generated thread title';
       const mockMemory = new MockMemory();
-      const originalSaveThread = mockMemory.saveThread.bind(mockMemory);
+      const originalUpdateThread = mockMemory.updateThread.bind(mockMemory);
       const logger = {
         debug: vi.fn(),
         info: vi.fn(),
@@ -2142,12 +2142,12 @@ function titleGenerationTests(version: 'v1' | 'v2') {
         listLogsByRunId: vi.fn().mockResolvedValue({ logs: [], total: 0, page: 1, perPage: 10, hasMore: false }),
       };
 
-      vi.spyOn(mockMemory, 'saveThread').mockImplementation(async args => {
-        if (args.thread.title === titleText) {
+      vi.spyOn(mockMemory, 'updateThread').mockImplementation(async args => {
+        if (args.title === titleText) {
           throw new Error('sqlite write failed');
         }
 
-        return originalSaveThread(args);
+        return originalUpdateThread(args);
       });
 
       const titleModel = new MockLanguageModelV2({
@@ -3504,6 +3504,77 @@ describe('onTitleGenerated callback', () => {
 
     // Should not throw — error is caught in the .catch() handler
     await new Promise(resolve => setTimeout(resolve, 200));
+  });
+
+  it('does not re-create a thread deleted while the title was being generated (#25203)', async () => {
+    const { agentModel } = createMockModels();
+    let releaseTitle!: () => void;
+    const titleGate = new Promise<void>(resolve => {
+      releaseTitle = resolve;
+    });
+    let titleRequested!: () => void;
+    const titleStarted = new Promise<void>(resolve => {
+      titleRequested = resolve;
+    });
+    const slowTitleModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        titleRequested();
+        await titleGate;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          content: [{ type: 'text' as const, text: 'Generated Title' }],
+          warnings: [],
+        };
+      },
+    });
+    const { agent, mockMemory } = createAgentWithTitleGen(agentModel, slowTitleModel);
+
+    let callbackFired = false;
+    let titlePromise: Promise<unknown> | undefined;
+
+    await agent.generate('Hello', {
+      memory: {
+        resource: 'user-1',
+        thread: { id: 'thread-deleted-during-title', title: '' },
+        onTitleGenerated: () => {
+          callbackFired = true;
+        },
+      },
+      serverless: {
+        waitUntil: promise => {
+          titlePromise = promise;
+        },
+      },
+    } as any);
+
+    await titleStarted;
+    expect(await mockMemory.getThreadById({ threadId: 'thread-deleted-during-title' })).not.toBeNull();
+
+    await mockMemory.deleteThread('thread-deleted-during-title');
+    releaseTitle();
+    await (titlePromise ?? new Promise(resolve => setTimeout(resolve, 200)));
+
+    expect(await mockMemory.getThreadById({ threadId: 'thread-deleted-during-title' })).toBeNull();
+    expect(callbackFired).toBe(false);
+  });
+
+  it('persists the generated title without clobbering thread metadata', async () => {
+    const { agentModel, titleModel } = createMockModels();
+    const { agent, mockMemory } = createAgentWithTitleGen(agentModel, titleModel);
+
+    await agent.generate('Hello', {
+      memory: {
+        resource: 'user-1',
+        thread: { id: 'thread-title-metadata', title: '', metadata: { keep: 'me' } },
+      },
+    });
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    const thread = await mockMemory.getThreadById({ threadId: 'thread-title-metadata' });
+    expect(thread?.title).toBe('Generated Title');
+    expect(thread?.metadata).toMatchObject({ keep: 'me' });
   });
 });
 

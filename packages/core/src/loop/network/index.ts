@@ -407,16 +407,11 @@ export async function prepareMemoryStep({
         promises.push(
           routingAgent
             .genTitle(userMessage, requestContext, observabilityContext, titleModel, titleInstructions)
-            .then(title => {
-              if (title) {
-                return memory.createThread({
-                  threadId: thread.id,
-                  resourceId: thread.resourceId,
-                  memoryConfig,
-                  title,
-                  metadata: thread.metadata,
-                });
-              }
+            .then(async title => {
+              if (!title) return;
+              // Update-only: the thread may have been deleted while the title was generating (#25203).
+              if (!(await memory.getThreadById({ threadId: thread.id }))) return;
+              await memory.updateThread({ id: thread.id, title, memoryConfig });
             }),
         );
       }
