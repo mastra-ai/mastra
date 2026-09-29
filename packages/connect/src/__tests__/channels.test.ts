@@ -156,15 +156,21 @@ class FakeChannelProvider {
 }
 
 function fakeSlack() {
+  // The real `@mastra/slack` SlackProvider identifies itself as `'slack'` and
+  // serves its routes under `/slack/*`, independent of the platform catalog
+  // rename. `slack-channels` is the integration id used to match the project
+  // connection, but the provider's own id — and therefore its route prefix —
+  // is unchanged. Use the real provider id here so route assertions reflect
+  // what SlackProvider actually mounts.
   return class SlackProvider extends FakeChannelProvider {
     constructor(config: Record<string, unknown>) {
-      super(config, 'slack-channels');
+      super(config, 'slack');
     }
   };
 }
 /** The constructor config the most recent fake SlackProvider was built with. */
 function slackConfig(): Record<string, unknown> & { tokenResolver?: () => Promise<string> } {
-  const call = FakeChannelProvider.configSpy.mock.calls.findLast(c => c[0] === 'slack-channels');
+  const call = FakeChannelProvider.configSpy.mock.calls.findLast(c => c[0] === 'slack');
   if (!call) throw new Error('SlackProvider was never constructed');
   return call[1] as Record<string, unknown> & { tokenResolver?: () => Promise<string> };
 }
@@ -264,7 +270,7 @@ describe('channels()', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     // All three providers exist already — that's what makes getRoutes() work.
     const constructed = FakeChannelProvider.configSpy.mock.calls.map(([id]) => id).sort();
-    expect(constructed).toEqual(['discord', 'slack-channels', 'teams', 'telegram']);
+    expect(constructed).toEqual(['discord', 'slack', 'teams', 'telegram']);
   });
 
   it('exposes getRoutes() for every non-disabled channel before any connection exists', async () => {
@@ -272,12 +278,7 @@ describe('channels()', () => {
     const channelsFn = await importChannels();
     const resolver = await channelsFn(options(fetchMock));
     const paths = resolver.getRoutes().map(route => route.path);
-    expect(paths.sort()).toEqual([
-      '/discord/webhook',
-      '/slack-channels/webhook',
-      '/teams/webhook',
-      '/telegram/webhook',
-    ]);
+    expect(paths.sort()).toEqual(['/discord/webhook', '/slack/webhook', '/teams/webhook', '/telegram/webhook']);
   });
 
   it('builds a SlackProvider with a platform-backed tokenResolver from a single active connection', async () => {
@@ -707,7 +708,7 @@ describe('channels()', () => {
     expect(providers.telegram).toBeDefined();
     expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/Skipping slack-channels channel/));
     // The broken channel contributes no routes either.
-    expect(resolver.getRoutes().map(route => route.path)).not.toContain('/slack-channels/webhook');
+    expect(resolver.getRoutes().map(route => route.path)).not.toContain('/slack/webhook');
   });
 
   it('skips channels marked disabled via per-integration overrides (no instance, no routes)', async () => {
@@ -720,7 +721,7 @@ describe('channels()', () => {
     const providers = await resolver();
     expect(providers['slack-channels']).toBeUndefined();
     expect(FakeChannelProvider.configSpy).not.toHaveBeenCalledWith('slack-channels', expect.anything());
-    expect(resolver.getRoutes().map(route => route.path)).not.toContain('/slack-channels/webhook');
+    expect(resolver.getRoutes().map(route => route.path)).not.toContain('/slack/webhook');
   });
 
   it('honors a pinned connectionId when multiple are present', async () => {
@@ -919,7 +920,7 @@ describe('channels()', () => {
       // live connection behind them.
       expect(resolver.getRoutes().map(route => route.path)).toEqual(routesBefore);
       // Exactly one SlackProvider was ever constructed.
-      expect(FakeChannelProvider.configSpy.mock.calls.filter(([id]) => id === 'slack-channels')).toHaveLength(1);
+      expect(FakeChannelProvider.configSpy.mock.calls.filter(([id]) => id === 'slack')).toHaveLength(1);
     });
 
     it('returns the same provider instance across resolutions while the connection is unchanged', async () => {
@@ -951,7 +952,7 @@ describe('channels()', () => {
       resolver.invalidate();
       await expect(resolver()).resolves.toEqual({});
       // Routes stay mounted (the instance is long-lived)…
-      expect(resolver.getRoutes().map(route => route.path)).toContain('/slack-channels/webhook');
+      expect(resolver.getRoutes().map(route => route.path)).toContain('/slack/webhook');
       // …but lazy credential fetches now fail loudly instead of using the
       // removed connection.
       await expect(tokenResolver!()).rejects.toThrow(/no active slack-channels connection/i);
@@ -994,5 +995,46 @@ describe('channels()', () => {
       await resolver();
       await expect(tokenResolver!()).resolves.toBe('token-b');
     });
+  });
+
+  it("warns once when a project has a stale 'slack' connection but no 'slack-channels' connection (rekey migration aid)", async () => {
+    // Pre-0.6 the Slack channel was keyed off the platform 'slack' integration.
+    // After the rekey, an upgrader who hasn't reconnected under 'slack-channels'
+    // gets no Slack channel — call that out loudly with a one-shot warning so
+    // it isn't a silent regression.
+    const state: PlatformState = {
+      connections: [makeConnection({ id: 'c_slack_old', integrationId: 'slack' })],
+      credentials: { c_slack_old: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null } },
+    };
+    const fetchMock = platformFetch(state);
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(fetchMock));
+    const providers = await resolver();
+
+    expect(providers['slack-channels']).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /active 'slack' connection but no 'slack-channels' connection.*Slack channel is now keyed off 'slack-channels'/i,
+      ),
+    );
+
+    // The warning fires once per resolver instance, not on every refresh.
+    resolver.invalidate();
+    await resolver();
+    const staleWarnings = warnSpy.mock.calls.filter(
+      ([msg]) =>
+        typeof msg === 'string' && msg.includes("active 'slack' connection but no 'slack-channels' connection"),
+    );
+    expect(staleWarnings).toHaveLength(1);
+
+    // Once the user reconnects under the new key, the warning stays silent and
+    // the channel resolves as expected.
+    state.connections = [makeConnection({ id: 'c_slack_new', integrationId: 'slack-channels' })];
+    state.credentials = {
+      c_slack_new: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null },
+    };
+    resolver.invalidate();
+    const providersAfter = await resolver();
+    expect(providersAfter['slack-channels']).toBeInstanceOf(FakeChannelProvider);
   });
 });

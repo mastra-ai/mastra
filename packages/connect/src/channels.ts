@@ -230,6 +230,12 @@ export async function channels(options: ChannelsOptions = {}): Promise<ChannelsR
   let cache: { providers: ResolvedChannels; fetchedAt: number } | undefined;
   let inflight: Promise<ResolvedChannels> | undefined;
   let lastFailureAt: number | undefined;
+  // `slack` was the Slack channel key before 0.6; it now backs the generated
+  // Slack tools while `slack-channels` powers the channel. Warn once per
+  // resolver instance if a project still has an active legacy `slack`
+  // connection and no `slack-channels` connection, so upgraders aren't left
+  // with a silently missing Slack channel.
+  let warnedStaleSlackConnection = false;
 
   const buildSnapshot = async (): Promise<ResolvedChannels> => {
     let connections: ProjectConnection[];
@@ -241,6 +247,18 @@ export async function channels(options: ChannelsOptions = {}): Promise<ChannelsR
     }
     const byIntegrationId = groupByIntegrationId(connections);
     const providers: ResolvedChannels = {};
+
+    if (
+      !warnedStaleSlackConnection &&
+      states.some(state => state.registration.integrationId === 'slack-channels') &&
+      (byIntegrationId.get('slack')?.length ?? 0) > 0 &&
+      (byIntegrationId.get('slack-channels')?.length ?? 0) === 0
+    ) {
+      warnedStaleSlackConnection = true;
+      console.warn(
+        `[@mastra/connect] Project ${projectId} has an active 'slack' connection but no 'slack-channels' connection: the Slack channel is now keyed off 'slack-channels'. Connect Slack again as 'slack-channels' to restore it; the existing 'slack' connection still powers the generated Slack tools.`,
+      );
+    }
 
     for (const state of states) {
       const integrationId = state.registration.integrationId;
