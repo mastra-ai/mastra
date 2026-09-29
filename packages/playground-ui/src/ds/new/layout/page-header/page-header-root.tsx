@@ -52,20 +52,19 @@ export function PageHeaderRoot({
     child => isValidElement<PageHeaderMetaProps>(child) && child.type === PageHeaderMeta && child.props.beside,
   );
   const headline = [...titles, ...beside];
+  const hasControls = icons.length > 0 || actions.length > 0;
   const below = items.filter(
     child => child !== false && ![...actions, ...eyebrows, ...icons, ...headline].includes(child),
   );
 
   return (
-    <header className={cn('relative flex w-full flex-col gap-1', className)} {...props}>
+    <header className={cn('relative flex w-full flex-col', !hasControls && 'gap-1', className)} {...props}>
       {eyebrows}
       <div className="flex w-full items-start gap-3">
         {icons}
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           {headline.length > 0 && (
-            <div className={cn('flex min-w-0 items-start gap-3', (icons.length > 0 || actions.length > 0) && 'py-1')}>
-              {headline}
-            </div>
+            <div className={cn('flex min-w-0 items-start gap-3', hasControls && 'py-1')}>{headline}</div>
           )}
           {below}
         </div>
