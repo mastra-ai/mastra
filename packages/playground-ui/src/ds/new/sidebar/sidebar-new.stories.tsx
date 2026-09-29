@@ -80,6 +80,7 @@ function SidebarNewStoryShortcuts() {
 type SidebarNewStoryProps = {
   header?: 'default' | 'command';
   version?: string;
+  variant?: 'default' | 'raised';
 };
 
 function SidebarSearchDialog() {
@@ -101,7 +102,7 @@ function SidebarSearchDialog() {
   );
 }
 
-function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) {
+function SidebarNewStory({ header = 'default', version, variant = 'default' }: SidebarNewStoryProps) {
   const { state, expand } = useSidebarNew();
   const [view, setView] = useState('root');
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
@@ -112,8 +113,8 @@ function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) 
   }
 
   return (
-    <div className="flex h-dvh w-dvw bg-background">
-      <SidebarNew className="border-r border-border">
+    <div className={variant === 'raised' ? 'flex h-dvh w-dvw bg-sidebar' : 'flex h-dvh w-dvw bg-background'}>
+      <SidebarNew variant={variant} className={variant === 'default' ? 'border-r border-border' : undefined}>
         {header === 'command' ? (
           <SidebarNew.CommandHeader>
             <a
@@ -351,6 +352,18 @@ export const SelfHostedCommandHeader: Story = {
       description: {
         story:
           'Self-hosted products may add their running version through FooterMeta without changing the sidebar root API.',
+      },
+    },
+  },
+};
+
+export const Raised: Story = {
+  render: () => <SidebarNewStory variant="raised" />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The raised variant places the sidebar contents on a raised surface that bleeds off the left edge. On mobile it falls back to the standard drawer.',
       },
     },
   },
