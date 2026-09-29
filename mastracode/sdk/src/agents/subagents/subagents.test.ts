@@ -1,4 +1,6 @@
 import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { RequestContext } from '@mastra/core/request-context';
@@ -8,12 +10,15 @@ import { convertArrayToReadableStream, MockLanguageModelV3 } from 'ai/test';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createMastraCodeAgentController } from '../../index.js';
 import { TOOL_NAME_OVERRIDES } from '../../tool-names.js';
+import { setCustomProvidersSource } from '../custom-provider-source.js';
+import { TOOL_NAME_OVERRIDES } from '../../tool-names.js';
 import { executeSubagent } from './execute.js';
 import { exploreSubagent } from './explore.js';
 import { planSubagent } from './plan.js';
 
 const directories: string[] = [];
 afterEach(async () => {
+  setCustomProvidersSource(undefined);
   await Promise.all(directories.splice(0).map(path => rm(path, { recursive: true, force: true })));
 });
 
@@ -109,6 +114,67 @@ describe('native subagents', () => {
     },
     30_000,
   );
+
+  // Issue 25395: a tenant's custom provider is only visible through the calling
+  // run's request context, so the subagent must resolve its model with it.
+  it("resolves a subagent model through the calling run's request-scoped custom provider", async () => {
+    const requests: Array<{ model: string; authorization?: string }> = [];
+    const server = createServer((req, res) => {
+      let body = '';
+      req.on('data', chunk => (body += chunk));
+      req.on('end', () => {
+        requests.push({ model: JSON.parse(body).model, authorization: req.headers.authorization });
+        const chunk = (delta: object, finish: string | null = null) =>
+          `data: ${JSON.stringify({ id: 'c', object: 'chat.completion.chunk', created: 0, model: 'tenant-model', choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
+        res.writeHead(200, { 'content-type': 'text/event-stream' });
+        res.end(
+          chunk({ role: 'assistant', content: 'Tenant provider answered.' }) + chunk({}, 'stop') + 'data: [DONE]\n\n',
+        );
+      });
+    });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address() as AddressInfo;
+    setCustomProvidersSource(tenant =>
+      tenant?.orgId === 'org-1'
+        ? [{ name: 'Tenant LLM', url: `http://127.0.0.1:${port}/v1`, apiKey: 'sk-tenant', models: ['tenant-model'] }]
+        : [],
+    );
+
+    try {
+      const directory = await mkdtemp(join(tmpdir(), 'native-subagents-'));
+      directories.push(directory);
+      const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: directory }) });
+      const { controller } = await createMastraCodeAgentController({
+        cwd: directory,
+        homeDir: directory,
+        settingsPath: join(directory, 'settings.json'),
+        storage: new InMemoryStore(),
+        storageBackend: 'libsql',
+        workspace,
+        intervalHandlers: [],
+        disableMcp: true,
+        disableHooks: true,
+        disablePlugins: true,
+        disableGithubSignals: true,
+      });
+      await controller.init();
+      const session = await controller.createSession({ id: 'tenant', ownerId: 'test' });
+      const requestContext = new RequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+      const toolsets = await controller['buildToolsets'](session, requestContext);
+
+      const result = await toolsets.controllerBuiltIn!.subagent!.execute!(
+        { agentType: 'explore', task: 'Answer', modelId: 'tenant-llm/tenant-model' },
+        { workspace, requestContext, agent: { toolCallId: 'tenant' } } as any,
+      );
+
+      expect(result, JSON.stringify(result)).toMatchObject({ isError: false });
+      expect(result).toHaveProperty('content', expect.stringContaining('Tenant provider answered.'));
+      expect(requests).toEqual([{ model: 'tenant-model', authorization: 'Bearer sk-tenant' }]);
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  }, 30_000);
 
   it('keeps isolated definitions free of parent task tools and nested delegation', () => {
     for (const definition of [exploreSubagent, planSubagent, executeSubagent]) {
