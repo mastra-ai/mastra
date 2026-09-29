@@ -361,7 +361,14 @@ export const FACTORY_ROUTE_CONTRACTS = {
       skipped: z.array(
         z.object({
           threadId: z.string(),
-          reason: z.enum(['not-running', 'work-item-missing', 'stage-inactive', 'thread-missing', 'mode-unknown']),
+          reason: z.enum([
+            'not-running',
+            'work-item-missing',
+            'stage-inactive',
+            'thread-missing',
+            'mode-unknown',
+            'apply-failed',
+          ]),
         }),
       ),
     }),

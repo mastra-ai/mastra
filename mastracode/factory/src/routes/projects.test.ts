@@ -158,6 +158,7 @@ describe('ProjectRoutes', () => {
         binding('thread-not-running', 'item-not-running', 'resource-not-running'),
         binding('thread-missing', 'item-thread-missing', 'resource-thread-missing'),
         binding('thread-mode-unknown', 'item-mode-unknown', 'resource-mode-unknown'),
+        binding('thread-apply-failed', 'item-apply-failed', 'resource-apply-failed'),
       ];
       const item = (id: string, stages = ['execute']) => ({ id, factoryProjectId: project.id, stages });
       const items = new Map([
@@ -166,8 +167,10 @@ describe('ProjectRoutes', () => {
         ['item-not-running', item('item-not-running')],
         ['item-thread-missing', item('item-thread-missing')],
         ['item-mode-unknown', item('item-mode-unknown')],
+        ['item-apply-failed', item('item-apply-failed')],
       ]);
       const setSettingOn = vi.fn().mockResolvedValue(undefined);
+      const failingSetSettingOn = vi.fn().mockRejectedValue(new Error('write failed'));
       const sessions = new Map([
         [
           'resource-applied',
@@ -180,6 +183,15 @@ describe('ProjectRoutes', () => {
         ],
         ['resource-thread-missing', { thread: { getById: vi.fn().mockResolvedValue(null), setSettingOn } }],
         ['resource-mode-unknown', { thread: { getById: vi.fn().mockResolvedValue({ metadata: {} }), setSettingOn } }],
+        [
+          'resource-apply-failed',
+          {
+            thread: {
+              getById: vi.fn().mockResolvedValue({ metadata: { currentModeId: 'plan' } }),
+              setSettingOn: failingSetSettingOn,
+            },
+          },
+        ],
       ]);
       const workItems = {
         listRunBindings: vi.fn().mockResolvedValue(bindings),
@@ -204,6 +216,7 @@ describe('ProjectRoutes', () => {
           { threadId: 'thread-not-running', reason: 'not-running' },
           { threadId: 'thread-missing', reason: 'thread-missing' },
           { threadId: 'thread-mode-unknown', reason: 'mode-unknown' },
+          { threadId: 'thread-apply-failed', reason: 'apply-failed' },
         ],
       });
       expect(setSettingOn).toHaveBeenCalledTimes(1);

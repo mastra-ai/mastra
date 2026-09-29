@@ -363,7 +363,13 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const applied: string[] = [];
           const skipped: Array<{
             threadId: string;
-            reason: 'not-running' | 'work-item-missing' | 'stage-inactive' | 'thread-missing' | 'mode-unknown';
+            reason:
+              | 'not-running'
+              | 'work-item-missing'
+              | 'stage-inactive'
+              | 'thread-missing'
+              | 'mode-unknown'
+              | 'apply-failed';
           }> = [];
 
           for (const binding of bindings) {
@@ -395,12 +401,17 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               skipped.push({ threadId: binding.threadId, reason: 'mode-unknown' });
               continue;
             }
-            await session.thread.setSettingOn({
-              threadId: binding.threadId,
-              key: `modeModelId_${modeId}`,
-              value: modelId,
-            });
-            applied.push(binding.threadId);
+            try {
+              await session.thread.setSettingOn({
+                threadId: binding.threadId,
+                key: `modeModelId_${modeId}`,
+                value: modelId,
+              });
+              applied.push(binding.threadId);
+            } catch (error) {
+              console.warn('[factory] apply-default-model failed for thread', binding.threadId, error);
+              skipped.push({ threadId: binding.threadId, reason: 'apply-failed' });
+            }
           }
 
           return context.json({ modelId, applied, skipped });

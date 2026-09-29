@@ -1402,7 +1402,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "work-item-missing",
                   "stage-inactive",
                   "thread-missing",
-                  "mode-unknown"
+                  "mode-unknown",
+                  "apply-failed"
                 ]
               }
             },
