@@ -198,6 +198,48 @@ export class WorkflowService {
 }
 ```
 
+## Start background workers
+
+`MastraModule` doesn't start Mastra's background workers. Without them, [scheduled workflows](/docs/workflows/scheduled-workflows), agent schedules, and event listeners never run. Call `mastra.startWorkers()` after the app starts listening:
+
+```typescript title="src/main.ts"
+import { NestFactory } from '@nestjs/core'
+import { MASTRA } from '@mastra/nestjs'
+import type { Mastra } from '@mastra/core/mastra'
+import { AppModule } from './app.module'
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule)
+  app.enableShutdownHooks()
+  await app.listen(3000)
+
+  await app.get<Mastra>(MASTRA).startWorkers()
+}
+
+bootstrap()
+```
+
+The module's shutdown handling drains in-flight requests but doesn't stop Mastra. To stop workers and let in-flight workflow runs finish, call `mastra.shutdown()` from a shutdown hook:
+
+```typescript title="src/mastra-lifecycle.service.ts"
+import { Inject, Injectable, type OnApplicationShutdown } from '@nestjs/common'
+import { MASTRA } from '@mastra/nestjs'
+import type { Mastra } from '@mastra/core/mastra'
+
+@Injectable()
+export class MastraLifecycleService implements OnApplicationShutdown {
+  constructor(@Inject(MASTRA) private readonly mastra: Mastra) {}
+
+  async onApplicationShutdown() {
+    await this.mastra.shutdown()
+  }
+}
+```
+
+Add `MastraLifecycleService` to the `providers` of a module that imports `MastraModule`. Shutdown hooks only run when `app.enableShutdownHooks()` is called.
+
+See [Start background workers](/docs/server/server-adapters#start-background-workers) for more details.
+
 ## MCP routes
 
 MCP endpoints are exposed under the API prefix:
