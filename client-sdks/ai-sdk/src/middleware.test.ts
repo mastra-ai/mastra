@@ -323,6 +323,51 @@ describe('withMastra middleware', () => {
       expect(chunks).toContain('response');
     });
 
+    it('should preserve unknown usage counters from output processors', async () => {
+      const usageProcessor: OutputProcessor = {
+        id: 'usage-processor',
+        async processOutputStream(args: ProcessOutputStreamArgs) {
+          if (args.part.type !== 'finish') {
+            return args.part;
+          }
+
+          return {
+            ...args.part,
+            payload: {
+              ...args.part.payload,
+              output: {
+                ...args.part.payload.output,
+                usage: {
+                  inputTokens: undefined,
+                  outputTokens: 0,
+                  totalTokens: undefined,
+                },
+              },
+            },
+          };
+        },
+      };
+
+      const model = withMastra(createMockModel(), {
+        outputProcessors: [usageProcessor],
+      });
+
+      const result = await streamText({
+        model,
+        prompt: 'Test',
+      });
+
+      for await (const _ of result.fullStream) {
+        // Consume the stream.
+      }
+
+      await expect(result.usage).resolves.toEqual({
+        inputTokens: undefined,
+        outputTokens: 0,
+        totalTokens: undefined,
+      });
+    });
+
     it('should allow processOutputStream to filter chunks', async () => {
       const filterProcessor: OutputProcessor = {
         id: 'filter',

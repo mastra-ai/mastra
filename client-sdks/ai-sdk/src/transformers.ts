@@ -70,11 +70,7 @@ export type WorkflowDataPart = {
     status: WorkflowRunStatus;
     steps: Record<string, StepResult>;
     output: {
-      usage: {
-        inputTokens: number;
-        outputTokens: number;
-        totalTokens: number;
-      };
+      usage: LanguageModelV2Usage;
     } | null;
   };
 };

@@ -1022,13 +1022,11 @@ function convertMastraChunkToAISDKStreamPart(chunk: ChunkType): LanguageModelV2S
       return {
         type: 'finish',
         finishReason: toAISDKFinishReason(chunk.payload.stepResult?.reason || 'stop'),
-        usage: usage
-          ? {
-              inputTokens: usage.inputTokens || 0,
-              outputTokens: usage.outputTokens || 0,
-              totalTokens: usage.totalTokens || 0,
-            }
-          : { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        usage: {
+          inputTokens: usage?.inputTokens,
+          outputTokens: usage?.outputTokens,
+          totalTokens: usage?.totalTokens,
+        },
         providerMetadata: chunk.payload.metadata?.providerMetadata,
       };
     }
