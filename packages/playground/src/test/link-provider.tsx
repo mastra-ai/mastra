@@ -28,7 +28,7 @@ export const StubLink = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLA
 // typechecks this file against the base branch, whose `LinkComponentPaths`
 // may not match the head branch's exactly. The assertion tolerates extra
 // keys so the stub can carry entries for both versions.
-const paths: Record<string, (...args: string[]) => string> = {
+const paths: Record<string, (...args: any[]) => string> = {
   agentLink: id => `/agents/${id}`,
   agentsLink: () => '/agents',
   agentToolLink: (agentId, toolId) => `/agents/${agentId}/tools/${toolId}`,
@@ -42,7 +42,7 @@ const paths: Record<string, (...args: string[]) => string> = {
   networkLink: id => `/networks/${id}`,
   networkNewThreadLink: id => `/networks/${id}/chat/new`,
   networkThreadLink: (networkId, threadId) => `/networks/${networkId}/chat/${threadId}`,
-  scorerLink: (id, params) => {
+  scorerLink: (id: string, params?: { scoreId?: string; entity?: string }) => {
     const query = new URLSearchParams();
     if (params?.entity) query.set('entity', params.entity);
     if (params?.scoreId) query.set('scoreId', params.scoreId);
