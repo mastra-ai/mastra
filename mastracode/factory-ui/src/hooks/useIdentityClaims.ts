@@ -113,6 +113,10 @@ export function useClaimIdentityMutation() {
       // clobber its optimistic row; reconcile once the last one settles.
       if (queryClient.isMutating({ mutationKey }) === 1) {
         void queryClient.invalidateQueries({ queryKey: identityKey });
+        // Roster feeds board participant collapse + teammate expansion; without
+        // this a mounted board keeps stale roster data until it refetches on
+        // its own.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.identityRoster(baseUrl) });
       }
     },
   });
@@ -149,6 +153,8 @@ export function useUnclaimIdentityMutation() {
     onSettled: () => {
       if (queryClient.isMutating({ mutationKey }) === 1) {
         void queryClient.invalidateQueries({ queryKey: identityKey });
+        // Mirror the roster invalidation in useClaimIdentityMutation.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.identityRoster(baseUrl) });
       }
     },
   });

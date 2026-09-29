@@ -17,7 +17,17 @@ interface PlatformInstallation {
 function makeHost(overrides: {
   installations: PlatformInstallation[];
   membersByInstallation: Record<string, Array<{ id: number; login: string; avatarUrl?: string }>>;
-}): { host: PlatformGithubIdentityHost; request: ReturnType<typeof vi.fn> } {
+  /**
+   * Installation ids the requesting org has registered in Factory storage.
+   * Defaults to every discovered installation so the common case reads
+   * naturally; individual tests override to exercise the intersection.
+   */
+  orgInstallationIds?: string[];
+}): {
+  host: PlatformGithubIdentityHost;
+  request: ReturnType<typeof vi.fn>;
+  listOrgInstallationIds: ReturnType<typeof vi.fn>;
+} {
   const request = vi.fn(async (_method: string, path: string) => {
     if (path.endsWith('/github-app/installations')) {
       return {
@@ -34,14 +44,18 @@ function makeHost(overrides: {
     const key = match ? decodeURIComponent(match[1]) : '';
     return { members: overrides.membersByInstallation[key] ?? [] };
   });
+  const orgInstallationIds =
+    overrides.orgInstallationIds ?? overrides.installations.map(entry => String(entry.installationId));
+  const listOrgInstallationIds = vi.fn(async (_orgId: string) => new Set(orgInstallationIds));
   const host: PlatformGithubIdentityHost = {
     apiPrefix: '/v1/server',
     client: () =>
       ({
         request,
       }) as unknown as PlatformApiClient,
+    listOrgInstallationIds,
   };
-  return { host, request };
+  return { host, request, listOrgInstallationIds };
 }
 
 describe('buildPlatformGithubIdentity', () => {
@@ -94,24 +108,49 @@ describe('buildPlatformGithubIdentity', () => {
     ]);
   });
 
-  it('discovers installations from the platform (not Factory storage) so unregistered orgs still surface members', async () => {
-    // A user who has connected GitHub on Platform but not yet gone through
-    // Factory's repo-picker has no rows in `source_control.installations` —
-    // but the platform installations endpoint still lists their org, so
-    // we can enumerate members and surface them here.
+  it('returns empty and skips the platform call when the org has no installations registered', async () => {
+    // Defense against a shared-deployment leak: the platform client is
+    // deployment-scoped, so discovery could otherwise surface members from
+    // installations connected by a different tenant. An org with no
+    // registered installations gets an empty list, and we never hit the
+    // platform endpoint.
     const { host, request } = makeHost({
-      installations: [{ installationId: 500, accountLogin: 'unregistered-org', accountType: 'Organization' }],
+      installations: [{ installationId: 500, accountLogin: 'other-tenant', accountType: 'Organization' }],
       membersByInstallation: {
         '500': [{ id: 7, login: 'alice' }],
       },
+      orgInstallationIds: [],
     });
 
     const identity = buildPlatformGithubIdentity(host);
     const accounts = await identity.listCandidateAccounts(ctx, { orgId: 'org-1' });
 
-    expect(accounts).toEqual([{ externalUserId: 'alice', label: 'alice', installation: 'unregistered-org' }]);
-    // Confirms the discovery path exists.
-    expect(request).toHaveBeenCalledWith('GET', '/v1/server/github-app/installations');
+    expect(accounts).toEqual([]);
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('drops platform installations the org has not registered before fetching members', async () => {
+    // Discovery returns both tenants' installations, but only the ones the
+    // requesting org has registered survive the intersection. The other
+    // tenant's `/members` endpoint is never called.
+    const { host, request } = makeHost({
+      installations: [
+        { installationId: 100, accountLogin: 'my-org', accountType: 'Organization' },
+        { installationId: 200, accountLogin: 'other-tenant', accountType: 'Organization' },
+      ],
+      membersByInstallation: {
+        '100': [{ id: 1, login: 'alice' }],
+        '200': [{ id: 2, login: 'mallory' }],
+      },
+      orgInstallationIds: ['100'],
+    });
+
+    const identity = buildPlatformGithubIdentity(host);
+    const accounts = await identity.listCandidateAccounts(ctx, { orgId: 'org-1' });
+
+    expect(accounts).toEqual([{ externalUserId: 'alice', label: 'alice', installation: 'my-org' }]);
+    const memberCalls = request.mock.calls.filter(([, path]) => (path as string).includes('/members'));
+    expect(memberCalls).toEqual([['GET', '/v1/server/github-app/installations/100/members']]);
   });
 
   it('skips suspended and unusable installations from the discovery list', async () => {

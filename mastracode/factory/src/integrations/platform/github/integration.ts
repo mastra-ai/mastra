@@ -234,6 +234,13 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   readonly identity = buildPlatformGithubIdentity({
     client: () => this.#client,
     apiPrefix: API_PREFIX,
+    listOrgInstallationIds: async (orgId: string) => {
+      // Source-control storage is the tenant boundary: intake writes an
+      // installation row for the requesting org, so the org's registered
+      // installations are exactly the ones it can legitimately introspect.
+      const installations = await this.storage.installations.list({ orgId });
+      return new Set(installations.map(installation => installation.externalId));
+    },
   });
   readonly #rules: GithubEventRules;
 
