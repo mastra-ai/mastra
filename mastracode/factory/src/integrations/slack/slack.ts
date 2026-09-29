@@ -711,6 +711,8 @@ async function prepareExistingSessionOwnerContext(
   options: { expectedOrgId?: string; requireInternalThread: boolean },
 ): Promise<void> {
   const sourceControls = configuredSourceControls(deps);
+  if (sourceControls.length === 0 && !options.requireInternalThread) return;
+
   const internalThread = await findInternalThread(ctx.mastra, thread);
   if (!internalThread) {
     if (options.requireInternalThread) {
@@ -903,7 +905,7 @@ async function reportPreDispatchError(
     messageId: message.id,
     authorId: message.author.userId,
   };
-  const logger = ctx.mastra?.getLogger();
+  const logger = typeof ctx.mastra?.getLogger === 'function' ? ctx.mastra.getLogger() : undefined;
   const logError = (line: string) => (logger ? logger.error(line) : console.error(line));
   logError(`[slack] Pre-dispatch failure ${JSON.stringify({ ...correlation, error: preDispatchErrorDetails(error) })}`);
   try {
@@ -1088,7 +1090,7 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       // resolve a factory (e.g. the default was cleared or its factory
       // deleted mid-conversation).
       try {
-        const gate = await gateDispatch(thread, message, deps, ctx);
+        const gate = await gateDispatch(thread, message, deps, ctx, { requireInternalThread: true });
         if (!gate) return;
       } catch (error) {
         await reportPreDispatchError(thread, message, ctx, error);

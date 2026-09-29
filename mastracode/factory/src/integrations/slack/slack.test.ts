@@ -18,16 +18,18 @@ import {
  * resolved tenant onto `requestContext`, so tests that drive them must pass a
  * real one — a bare `{}` throws once the sender resolves as linked.
  */
-function handlerCtx(
-  mastra: unknown = {
+function handlerCtx(mastra?: unknown) {
+  return { mastra: mastra as any, requestContext: new RequestContext() };
+}
+
+function chatOnlyMastra() {
+  return {
     getStorage: () => ({
       getStore: vi.fn().mockResolvedValue({
         listThreads: vi.fn().mockResolvedValue({ threads: [{ id: 'thread-1', resourceId: 'channel:slack-thread-1' }] }),
       }),
     }),
-  },
-) {
-  return { mastra: mastra as any, requestContext: new RequestContext() };
+  };
 }
 
 function makeThread({ isDM = false } = {}) {
@@ -332,7 +334,7 @@ describe('handler dispatch gating', () => {
     const defaultHandler = vi.fn();
     const handlers = createHandlers({ accountLinks, projects });
 
-    const ctx = handlerCtx();
+    const ctx = handlerCtx(chatOnlyMastra());
     await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, ctx);
 
     expect(defaultHandler).toHaveBeenCalledTimes(1);
@@ -392,9 +394,9 @@ describe('handler dispatch gating', () => {
     const defaultHandler = vi.fn();
     const handlers = createHandlers({ accountLinks, projects, sourceControl });
 
-    await expect(
-      handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(mastra)),
-    ).rejects.toThrow('Could not authorize the owner of Slack Factory session session-1.');
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(mastra));
+
+    expect(thread.post).toHaveBeenCalledWith(expect.stringContaining('Couldn’t start processing your message.'));
     expect(defaultHandler).not.toHaveBeenCalled();
   });
 
@@ -413,9 +415,9 @@ describe('handler dispatch gating', () => {
     const defaultHandler = vi.fn();
     const handlers = createHandlers({ accountLinks, projects, sourceControl });
 
-    await expect(
-      handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(mastra)),
-    ).rejects.toThrow(`Could not resolve the internal Slack thread for ${thread.id}.`);
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(mastra));
+
+    expect(thread.post).toHaveBeenCalledWith(expect.stringContaining('Couldn’t start processing your message.'));
     expect(sourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
     expect(defaultHandler).not.toHaveBeenCalled();
   });
@@ -433,9 +435,9 @@ describe('handler dispatch gating', () => {
     const defaultHandler = vi.fn();
     const handlers = createHandlers({ accountLinks });
 
-    await expect(
-      handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(mastra)),
-    ).rejects.toThrow(`Could not resolve the internal Slack thread for ${thread.id}.`);
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(mastra));
+
+    expect(thread.post).toHaveBeenCalledWith(expect.stringContaining('Couldn’t start processing your message.'));
     expect(defaultHandler).not.toHaveBeenCalled();
   });
 
@@ -518,7 +520,7 @@ describe('handler dispatch gating', () => {
     const defaultHandler = vi.fn();
     const handlers = createHandlers({ accountLinks });
 
-    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx());
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(chatOnlyMastra()));
 
     expect(defaultHandler).toHaveBeenCalledTimes(1);
   });
@@ -541,7 +543,14 @@ describe('pre-dispatch error feedback', () => {
     const defaultHandler = vi.fn().mockResolvedValue(undefined);
     const output = vi.fn();
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const mastra = { getLogger: () => ({ error: output }) };
+    const mastra = {
+      getLogger: () => ({ error: output }),
+      getStorage: () => ({
+        getStore: async () => ({
+          listThreads: async () => ({ threads: [{ id: 'thread-1', resourceId: 'channel:slack-thread-1' }] }),
+        }),
+      }),
+    };
     const handlers = createHandlers({ accountLinks: accountLinks as any, projects });
     const run = (overrides?: Record<string, unknown>) =>
       handlers[slot]!(thread, message, defaultHandler, handlerCtx({ ...mastra, ...overrides }));
@@ -1895,7 +1904,12 @@ describe('Slack aside ingest', () => {
 
     // The next real message still belongs to the agent alone: it already shows
     // in the bound transcript, so a comment would say the same thing twice.
-    await createHandlers(deps as any).onSubscribedMessage!(thread, makeAside('ship it'), defaultHandler, handlerCtx());
+    await createHandlers(deps as any).onSubscribedMessage!(
+      thread,
+      makeAside('ship it'),
+      defaultHandler,
+      handlerCtx(chatOnlyMastra()),
+    );
     expect(defaultHandler).toHaveBeenCalledTimes(1);
     expect(deps.feed.createComment).toHaveBeenCalledTimes(1);
   });
