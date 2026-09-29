@@ -2,29 +2,27 @@
 
 Welcome to your new [Mastra](https://mastra.ai) project! We're excited to see what you build.
 
-This starter combines the general-purpose agent harness with [`@mastra/connect`](https://mastra.ai/docs/connections/overview): a durable assistant that can research current information, manage multi-step tasks, work with workspace files, run approved commands, create recurring schedules — and whose integration tools and chat channels come live from your Mastra platform project's connections.
+This starter provides you with a general-purpose Mastra agent that can research current information, manage multi-step tasks, work with files, run approved shell commands, create recurring schedules, and use the integrations you connect from your Mastra platform project as its tools and chat channels.
 
 ## Features
 
-- **The agent speaks first** — on first boot it seeds a "👋 Welcome" thread where the agent introduces its capabilities, lists the integrations it can currently reach, and explains how to edit its system prompt from Studio
-- **Connect tools** — every integration attached to your Mastra platform project (Linear, Notion, …) shows up as agent tools via `tools()`; attach or detach connections on the platform and the agent picks them up without a restart
-- **Connect channels** — chat with the agent from Slack, Telegram, or Discord via `channels()`; channel connections resolve live from the platform too
-- **Durable agent** — the agentic loop runs inside a workflow with chunks flowing through PubSub and a Redis-backed event cache, so streams survive client disconnects and process restarts, and orphaned runs are re-driven on boot
-- **Workspace** — files and command execution with approval gates; uses `PlatformSandbox` and `PlatformFilesystem` when platform workspace env is set, and falls back to the local sandbox/filesystem otherwise
-- **Studio editing** — `@mastra/editor` with `source: 'code'`: agent overrides and workflow definitions persist as files under `./mastra/editor`, and the workflow builder lets you author and edit workflows from Studio
-- **Activity digest workflow** — a code-defined workflow that discovers connected integrations, gathers recent activity with read-only tools, and composes a cross-tool digest
-- **Postgres storage** — threads, messages, memory, and workflow snapshots live in Postgres
-- Conversation memory, generated thread titles, task tracking, web search and page fetching, and recurring schedules
+- The agent introduces itself in a "👋 Welcome" thread the first time you open Studio
+- Every integration you connect on the Mastra platform (Linear, Notion, Slack, …) shows up as tools the agent can use
+- Chat with the agent from Slack, Telegram, or Discord by connecting those channels on the platform
+- A `workspace/` for files and command execution, with approval gates for changes, deletions, and shell commands
+- Conversation memory, generated thread titles, task tracking, web search, and web page fetching
+- Recurring schedules that persist across restarts
+- Edit the agent's instructions and author new workflows from Mastra Studio; changes save as files under `./mastra/editor`
+- Streams survive client disconnects and process restarts, and unfinished runs pick back up when the server starts
 
 ## Get started
 
 1. Copy `.env.example` to `.env` and set:
    - `MASTRA_GATEWAY_API_KEY` — model access via the Mastra gateway
-   - `DATABASE_URL` — a Postgres connection string (required)
-   - `REDIS_URL` — a Redis connection string (required; powers durable resumable streams)
-2. Optionally connect integrations: create a project at [cloud.mastra.ai](https://cloud.mastra.ai), attach integrations to it, generate an access token, and set `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID`.
-3. Optionally use the platform workspace: set `MASTRA_ENVIRONMENT_ID` (sandbox) and `MASTRA_PLATFORM_BUCKET_NAME` (filesystem).
-4. Run:
+   - `DATABASE_URL` — a Postgres connection string
+   - `REDIS_URL` — a Redis connection string
+2. Optionally attach integrations at [cloud.mastra.ai](https://cloud.mastra.ai) and set `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` to make them available to the agent.
+3. Run:
 
 ```shell
 npm run dev
@@ -37,23 +35,21 @@ Select **Agent** in Mastra Studio and try one of these prompts:
 - `Get the weather forecast for Austin this weekend.`
 - `Summarize my open Linear issues.` (with a Linear connection attached)
 - `Create a landing page for a Japanese sakura festival.`
+- `Check the SPCX stock price now, then check it every minute.`
 
-The agent asks for approval before it changes files or runs commands. When it creates a schedule, it returns an ID that you can use to pause the schedule.
+The agent asks for approval before it changes files or runs commands. When it creates a schedule, it returns an ID that you can use to pause it.
 
-## How Connect resolution works
+## Making it yours
 
-`tools()` and `channels()` return live resolvers over your platform project's connections. On each agent call (and at a short TTL), the resolver fetches the project's active connections and exposes each one's actions as tools named `<integration>_<action>` (for example `linear_list_issues`). Channels mount their webhook/OAuth routes at boot and late-bind credentials, so connecting Slack or Telegram on the platform takes effect without redeploying.
+- Edit the agent's instructions, model, or memory settings from Studio, or in `src/mastra/agents/agent.ts`
+- Author new workflows from Studio, or add them under `src/mastra/workflows/`
+- Add tools under `src/mastra/tools/`
+- Register everything in `src/mastra/index.ts`
 
-Without `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` the harness still boots — the agent just runs with its built-in tools and no channels.
+## Learn more
 
-## Editing agents and workflows
+To learn more about Mastra, visit our [documentation](https://mastra.ai/docs/). If you're new to AI agents, check out our [course](https://mastra.ai/learn) and [YouTube videos](https://youtube.com/@mastra-ai). You can also join our [Discord](https://discord.gg/mastra-ai) community to get help and share your projects.
 
-The editor runs in `source: 'code'` mode: Studio edits to agents and workflows persist as deterministic JSON files under `./mastra/editor`, so they are reviewable and versionable in git. The workflow builder in Studio can author new workflows against your registered agents and tools; saved definitions land in the same directory. The `activity-digest` workflow is a code-defined example you can run from Studio's Workflows tab.
+## Deploy to the Mastra platform
 
-## Workspace safety
-
-With the local primitives, filesystem tools stay inside the `workspace/` directory (created under `src/mastra/public/workspace/` during `mastra dev`), but `LocalSandbox` does not provide operating-system isolation. With the platform primitives, commands run in an environment-scoped sandbox and files live in a platform bucket. Either way, review command approvals carefully, and do not expose this template through an unauthenticated public server.
-
-## Durable execution
-
-The agent is wrapped with `createDurableAgent()`, so the loop runs inside a workflow, events flow through PubSub, and the Redis cache replays chunks a client missed while disconnected. `recovery.durableAgents: 'auto'` re-drives orphaned running runs on boot — recovery re-issues LLM calls and re-executes tool calls, so keep side-effecting tools idempotent. See the [durable agents guide](https://mastra.ai/docs/harness/durable-agents).
+The [Mastra platform](https://projects.mastra.ai) provides two products for deploying and managing AI applications built with the Mastra framework. Learn more in the [Mastra platform documentation](https://mastra.ai/docs/mastra-platform/overview).
