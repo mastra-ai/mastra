@@ -1,5 +1,4 @@
 import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
 
 export function MetricsKpiCardNoChange({
   message = 'No previous value to compare',

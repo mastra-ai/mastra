@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
 
 export type DataListSubHeadingProps = {
   children: ReactNode;
