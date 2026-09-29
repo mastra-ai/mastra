@@ -77,6 +77,16 @@ export class TelegramProvider implements ChannelProvider {
   #connectingBotTokens = new Set<string>();
 
   constructor(config: TelegramProviderConfig = {}) {
+    // The union type in TelegramCredentialsConfig makes this a compile-time
+    // error, but callers coming in through @mastra/connect (or JS) pass
+    // Record<string, unknown> — guard at runtime so silently preferring one
+    // credential over the other can never happen.
+    if ('tokenResolver' in config && config.tokenResolver && 'botToken' in config && config.botToken) {
+      throw new Error(
+        'TelegramProvider cannot be constructed with both `botToken` and `tokenResolver` — ' +
+          'pick one credential mode (self-managed or delegated).',
+      );
+    }
     this.#config = config;
   }
 
@@ -164,10 +174,62 @@ export class TelegramProvider implements ChannelProvider {
     this.#configured = active.length > 0;
     for (const installation of active) {
       try {
-        await this.#activateInstallation(installation);
+        const prepared = await this.#migrateInstallation(installation, store);
+        if (!prepared) continue; // identity mismatch — do not activate the adapter
+        await this.#activateInstallation(prepared);
       } catch (err) {
         console.error(`[Telegram] Failed to restore installation "${installation.id}":`, err);
       }
+    }
+  }
+
+  /**
+   * Bring a stored installation up to the provider's current credential mode.
+   *
+   * When {@link TelegramProviderConfig.tokenResolver} is configured but the
+   * record was written under self-managed mode, the record still carries a
+   * `botToken` and may be missing `botUserId`. Left as-is, the adapter would
+   * keep using that stale token (bypassing rotation) and duplicate detection
+   * would fall back to token comparison. Resolve the current token, verify it
+   * points at the same bot, populate `botUserId` if missing, and drop the
+   * persisted token so future rotations flow through the resolver.
+   *
+   * A resolver failure — or an identity mismatch — is not fatal here: we log
+   * and leave the record untouched, so the operator can investigate before
+   * connect/disconnect on that installation.
+   */
+  async #migrateInstallation(
+    installation: TelegramInstallation,
+    store: TelegramInstallStore,
+  ): Promise<TelegramInstallation | null> {
+    if (!this.#config.tokenResolver) return installation;
+    const needsMigration = installation.botToken !== undefined || installation.botUserId === undefined;
+    const needsIdentityCheck = installation.botUserId !== undefined;
+    if (!needsMigration && !needsIdentityCheck) return installation;
+    try {
+      const resolved = await this.#config.tokenResolver();
+      if (!resolved) return installation;
+      const me = await getMe(resolved, this.#apiBaseUrl());
+      if (installation.botUserId !== undefined && installation.botUserId !== me.id) {
+        // The upstream credential now points at a different bot. Don't
+        // silently retarget the existing installation — the operator has to
+        // reconnect intentionally so the old bot's webhook isn't left live.
+        // Returning null skips activation, so this installation's adapter is
+        // never bound to the new bot's token.
+        console.warn(
+          `[Telegram] Delegated credential for installation "${installation.id}" now resolves to bot ${me.id} but was bot ${installation.botUserId}. ` +
+            'Disconnect and reconnect the agent to adopt the new bot.',
+        );
+        return null;
+      }
+      if (!needsMigration) return installation;
+      const { botToken: _dropped, ...rest } = installation;
+      const migrated: TelegramInstallation = { ...rest, botUserId: me.id };
+      await store.save(migrated);
+      return migrated;
+    } catch (err) {
+      console.warn(`[Telegram] Delegated-mode migration failed for installation "${installation.id}":`, err);
+      return installation;
     }
   }
 
@@ -240,9 +302,23 @@ export class TelegramProvider implements ChannelProvider {
     // callers can hold the bot token in `new TelegramProvider({ botToken })`
     // and not repeat it at every connect() site. In delegated mode the
     // resolver supplies the current externally managed token instead.
-    const botToken = this.#config.tokenResolver
-      ? await this.#config.tokenResolver()
-      : (options.botToken ?? this.#config.botToken);
+    let botToken: string | undefined;
+    if (this.#config.tokenResolver) {
+      const resolved = await this.#config.tokenResolver();
+      if (!resolved) {
+        // Delegated mode: an empty result means the platform has no credential
+        // to hand us. Falling through to the pending/deep-link branch would
+        // mask that as "no bot configured yet" — the operator needs to hear
+        // the truth so they can (re)attach the credential upstream.
+        throw new Error(
+          'TelegramProvider tokenResolver returned an empty bot token. ' +
+            'Attach a Telegram bot credential upstream before connecting an agent.',
+        );
+      }
+      botToken = resolved;
+    } else {
+      botToken = options.botToken ?? this.#config.botToken;
+    }
     if (!botToken) {
       const installationId = existing?.id ?? randomUUID();
       await store.save({
@@ -272,14 +348,16 @@ export class TelegramProvider implements ChannelProvider {
     try {
       const me = await getMe(botToken, this.#apiBaseUrl());
       if (mode === 'webhook') {
-        // Two agents on one bot would clobber each other's webhook. Compare by
-        // the stored token, or by the bot's user id when the token is not
-        // persisted (delegated mode).
+        // Two agents on one bot would clobber each other's webhook. Prefer
+        // botUserId (which we just fetched via getMe) whenever the existing
+        // record has one — token comparison alone lets a rotated-and-repasted
+        // token slip past when the same bot was previously connected with a
+        // stale token still stored.
         const duplicate = (await store.list()).find(
           i =>
             i.status === 'active' &&
             i.agentId !== agentId &&
-            (i.botToken ? i.botToken === botToken : i.botUserId === me.id),
+            (i.botUserId !== undefined ? i.botUserId === me.id : i.botToken === botToken),
         );
         if (duplicate) {
           throw new Error(
@@ -339,8 +417,29 @@ export class TelegramProvider implements ChannelProvider {
     }
     // Delegated installs don't persist the token — resolve the current one.
     // Best-effort either way: a resolver/API failure must not block removal.
+    // In delegated mode we also verify the resolved token still belongs to the
+    // bot we stored (via botUserId), so a mid-life credential swap that now
+    // points at bot B can't cause us to delete bot B's webhook while trying to
+    // disconnect bot A.
     try {
-      const botToken = existing.botToken ?? (await this.#config.tokenResolver?.());
+      let botToken: string | undefined;
+      if (existing.botToken) {
+        botToken = existing.botToken;
+      } else if (this.#config.tokenResolver) {
+        const resolved = await this.#config.tokenResolver();
+        if (resolved && existing.botUserId !== undefined) {
+          const me = await getMe(resolved, this.#apiBaseUrl());
+          if (me.id !== existing.botUserId) {
+            console.warn(
+              `[Telegram] Skipping deleteWebhook for agent "${agentId}": resolver now points at bot ${me.id} but this installation was bot ${existing.botUserId}.`,
+            );
+          } else {
+            botToken = resolved;
+          }
+        } else if (resolved) {
+          botToken = resolved;
+        }
+      }
       if (botToken) await deleteWebhook(botToken, true, this.#apiBaseUrl());
     } catch (err) {
       console.warn(`[Telegram] Failed to delete webhook for agent "${agentId}":`, err);

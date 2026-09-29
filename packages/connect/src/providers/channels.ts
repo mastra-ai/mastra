@@ -115,6 +115,14 @@ const slackChannel: ChannelProviderRegistration = {
  * install store and is re-resolved per Bot API call, so a token re-pasted on
  * the platform takes effect without a restart or `sync()`.
  *
+ * The resolver returns whatever token the current connection holds — it does
+ * not know which installation is asking. If the platform connection is
+ * repointed at a *different* bot, `TelegramProvider` catches that on the next
+ * lifecycle step (init/connect/disconnect) by comparing the resolved token's
+ * bot user id against the stored installation and refuses to retarget the
+ * existing agent's webhook. Adopting a new bot is an intentional operator
+ * action: disconnect the agent, then reconnect.
+ *
  * Reserved `providerOptions` fields (`baseUrl`, `apiBaseUrl`, `botToken`,
  * `tokenResolver`, `encryptionKey`) are rejected at the type level and
  * stripped at runtime. Non-reserved provider config (`mode`, `commands`,

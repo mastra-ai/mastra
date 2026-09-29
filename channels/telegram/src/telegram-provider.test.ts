@@ -731,9 +731,12 @@ describe('TelegramProvider — delegated credentials (tokenResolver)', () => {
     await provider.connect('agent-1');
 
     // The platform credential is swapped after connect; disconnect must use
-    // the *current* token, not a stale stored one (there is none).
+    // the *current* token, not a stale stored one (there is none). This is a
+    // rotation for the *same* bot (getMe still returns id 42), so the
+    // disconnect-time identity check passes and the webhook is deleted.
     const rotated = '777888:ROTATED';
     currentToken = rotated;
+    stubGetMe(rotated);
     const deleteBody = stubMethod(rotated, 'deleteWebhook');
 
     await provider.disconnect('agent-1');
@@ -755,6 +758,97 @@ describe('TelegramProvider — delegated credentials (tokenResolver)', () => {
     // @ts-expect-error — botToken and tokenResolver are mutually exclusive
     const invalid: import('./types').TelegramProviderConfig = { botToken: BOT_TOKEN, tokenResolver: resolver };
     expect(invalid).toBeDefined();
+  });
+
+  it('rejects a constructor config that carries both botToken and tokenResolver', () => {
+    // Simulates a caller crossing the compile-time union boundary (e.g. via
+    // @mastra/connect passing Record<string, unknown>): a static token AND a
+    // resolver must never coexist at runtime.
+    expect(
+      () =>
+        new TelegramProvider({
+          botToken: BOT_TOKEN,
+          tokenResolver: async () => BOT_TOKEN,
+        } as unknown as ConstructorParameters<typeof TelegramProvider>[0]),
+    ).toThrow(/both `botToken` and `tokenResolver`/);
+  });
+
+  it('throws when the resolver returns an empty token instead of falling through to a deep link', async () => {
+    const { provider } = makeProvider({ tokenResolver: async () => '' });
+    await expect(provider.connect('agent-1')).rejects.toThrow(/empty bot token/);
+    // No pending install should have been persisted for a delegated-mode credential error.
+    expect(await provider.listInstallations()).toHaveLength(0);
+  });
+
+  it('skips deleteWebhook on disconnect when the resolver now points at a different bot', async () => {
+    let currentToken = BOT_TOKEN;
+    const { provider } = makeProvider({ tokenResolver: async () => currentToken });
+    stubActiveConnect(BOT_TOKEN);
+    await provider.connect('agent-1'); // installation is bot id 42
+
+    // Upstream credential swapped to a bot with a different user id.
+    const otherToken = '999:OTHER';
+    currentToken = otherToken;
+    mockAgent
+      .get(API_ORIGIN)
+      .intercept({ path: `/bot${otherToken}/getMe`, method: 'GET' })
+      .reply(200, { ok: true, result: { id: 43, is_bot: true, first_name: 'Other', username: 'other_bot' } })
+      .persist();
+    // Fail loudly if disconnect tries to hit the *other* bot's webhook.
+    let otherDeleteHit = false;
+    mockAgent
+      .get(API_ORIGIN)
+      .intercept({ path: `/bot${otherToken}/deleteWebhook`, method: 'POST' })
+      .reply(200, () => {
+        otherDeleteHit = true;
+        return { ok: true, result: true };
+      })
+      .persist();
+
+    await provider.disconnect('agent-1');
+    expect(otherDeleteHit).toBe(false);
+    expect(await provider.getInstallation('agent-1')).toBeNull();
+  });
+
+  it('migrates a legacy self-managed installation to delegated mode on restore', async () => {
+    // Seed a record from before tokenResolver mode: has a stored botToken and
+    // — pre-r2 records may not — has a botUserId. Restart under a resolver.
+    const { provider: seed, storage } = makeProvider({ botToken: BOT_TOKEN });
+    stubActiveConnect(BOT_TOKEN);
+    await seed.connect('agent-1', { botToken: BOT_TOKEN });
+
+    const restored = new TelegramProvider({ storage, baseUrl: BASE_URL, tokenResolver: async () => BOT_TOKEN });
+    // getMe called by initialize() identity check, then by the adapter itself.
+    stubGetMe(BOT_TOKEN);
+    await restored.initialize();
+
+    const migrated = await restored.getInstallation('agent-1');
+    expect(migrated).not.toBeNull();
+    expect(migrated!.botToken).toBeUndefined();
+    expect(migrated!.botUserId).toBe(42);
+  });
+
+  it('skips activation when the delegated credential now points at a different bot', async () => {
+    const { provider: seed, storage } = makeProvider({ tokenResolver: async () => BOT_TOKEN });
+    stubActiveConnect(BOT_TOKEN);
+    await seed.connect('agent-1');
+
+    // Restart under a resolver that returns a *different* bot's token.
+    const otherToken = '999:OTHER';
+    const restored = new TelegramProvider({ storage, baseUrl: BASE_URL, tokenResolver: async () => otherToken });
+    mockAgent
+      .get(API_ORIGIN)
+      .intercept({ path: `/bot${otherToken}/getMe`, method: 'GET' })
+      .reply(200, { ok: true, result: { id: 43, is_bot: true, first_name: 'Other', username: 'other_bot' } })
+      .persist();
+    await restored.initialize();
+
+    // The installation record is left as-is so the operator can reconnect;
+    // the adapter is not activated (nothing was bound to the new bot).
+    const stillThere = await restored.getInstallation('agent-1');
+    expect(stillThere).not.toBeNull();
+    expect(stillThere!.botUserId).toBe(42);
+    expect(restored.getAdapter(stillThere!.id)).toBeUndefined();
   });
 });
 
