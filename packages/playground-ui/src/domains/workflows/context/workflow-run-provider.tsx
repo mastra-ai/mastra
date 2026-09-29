@@ -24,7 +24,6 @@ import type {
   WorkflowRunContextType,
 } from './workflow-run-context';
 import { WorkflowStepDetailContext } from './workflow-step-detail-context';
-import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 
 const EMPTY_REQUEST_CONTEXT: Record<string, any> = {};
 
@@ -35,6 +34,7 @@ export function WorkflowRunProvider({
   initialRunId,
   withoutTimeTravel = false,
   requestContext = EMPTY_REQUEST_CONTEXT,
+  tracingOptions,
 }: {
   children: ReactNode;
   snapshot?: WorkflowRunState;
@@ -42,11 +42,11 @@ export function WorkflowRunProvider({
   initialRunId?: string;
   withoutTimeTravel?: boolean;
   requestContext?: Record<string, any>;
+  tracingOptions?: Record<string, any>;
 }) {
   const resetStepDetail = useContext(WorkflowStepDetailContext)?.resetStepDetail;
   const [debugMode, setDebugMode] = useState(false);
   const { data: workflow, isLoading, error } = useWorkflow(workflowId, requestContext);
-  const { settings } = useTracingSettings();
   const queryClient = useQueryClient();
   const createWorkflowRun = useCreateWorkflowRun();
   const cancelWorkflowRun = useCancelWorkflowRun();
@@ -70,7 +70,7 @@ export function WorkflowRunProvider({
     resumeWorkflowStream,
     observeWorkflowStream,
     timeTravelWorkflowStream,
-  } = useStreamForRun({ runId, debugMode, tracingOptions: settings?.tracingOptions });
+  } = useStreamForRun({ runId, debugMode, tracingOptions });
 
   const liveResult = override ?? streamedResult;
   const localRunFinished = !initialRunId && isWorkflowRunFinished(liveResult?.status);

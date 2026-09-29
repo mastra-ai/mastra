@@ -1,11 +1,16 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { format } from 'node:util';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { Agent } from '../../agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
+import { ConsoleLogger } from '../../logger';
+import type { IMastraLogger, LogFilter } from '../../logger';
 import { RequestContext } from '../../request-context';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryMemory } from '../../storage/domains/memory/inmemory';
 import { AgentChannels } from '../agent-channels';
 import { getChatModule } from '../chat-lazy';
+import { ChannelSessionRejectedError } from '../errors';
 import { matchesDomain, extractUrls } from '../inline-media';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
@@ -1818,6 +1823,406 @@ describe('AgentChannels', () => {
         ...overrides,
       } as any;
     }
+
+    describe('handler error diagnostics', () => {
+      afterEach(() => vi.restoreAllMocks());
+
+      function embeddedRecord(line: string) {
+        const json = line.slice(line.indexOf('Error handling message ') + 'Error handling message '.length);
+        for (let end = 1; end <= json.length; end++) {
+          if (json[end - 1] !== '}') continue;
+          try {
+            return JSON.parse(json.slice(0, end));
+          } catch {
+            // Nested objects and trailing console metadata are not the complete record.
+          }
+        }
+        throw new Error('No complete JSON diagnostic on the first physical line');
+      }
+
+      async function fixture(
+        thrown: unknown,
+        options: {
+          platform?: string;
+          threadId?: string;
+          formatError?: (error: Error) => string;
+          logger?: IMastraLogger;
+        } = {},
+      ) {
+        const chatMod = await getChatModule();
+        let handler: (...args: any[]) => Promise<void> = async () => {
+          throw new Error('Handler not registered');
+        };
+        vi.spyOn(chatMod.Chat.prototype, 'onDirectMessage').mockImplementation(fn => {
+          handler = fn as typeof handler;
+          return chatMod.Chat.prototype;
+        });
+        const platform = options.platform ?? 'slack';
+        const channels = new AgentChannels({
+          adapters: { [platform]: { adapter: createMockAdapter(platform), formatError: options.formatError } },
+        });
+        channels.__setAgent(mockAgent);
+        const mastra = makeMastra();
+        await channels.initialize(mastra);
+        const storage = vi.spyOn(mastra, 'getStorage').mockImplementation(() => {
+          throw thrown;
+        });
+        const output = vi.spyOn(console, 'error').mockImplementation(() => {});
+        channels.__setLogger(options.logger ?? new ConsoleLogger());
+        const thread = makeChatThread({
+          id: options.threadId ?? 'slack:C123:1790610846.868069',
+          adapter: channels.adapters[platform],
+          post: vi.fn().mockResolvedValue(undefined),
+        });
+        const incoming = { ...message, id: '1790610846.868069', author: { userId: 'U123' } };
+        return {
+          thread,
+          incoming,
+          storage,
+          output,
+          run: (skipped: any[] = []) => handler(thread, incoming, {}, { skipped }),
+          record: () => {
+            expect(output).toHaveBeenCalledTimes(1);
+            const rendered = format(...output.mock.calls[0]!);
+            expect(rendered).toMatch(/^\[CHANNEL\] \[/);
+            const record = embeddedRecord(rendered.split('\n')[0]!);
+            expect(JSON.parse(JSON.stringify(output.mock.calls[0]![1]))).toEqual({ args: [record] });
+            return record;
+          },
+        };
+      }
+
+      it('puts selected pre-session error messages and exact correlation on the first console line', async () => {
+        const cause = new Error('SYNTHETIC_DATABASE_CAUSE');
+        const error = new Error('SYNTHETIC_PRE_SESSION_FAILURE', { cause });
+        const f = await fixture(error);
+        await f.run();
+        expect(f.storage).toHaveBeenCalled();
+        expect(mockAgent.sendMessage).not.toHaveBeenCalled();
+        expect(f.record()).toEqual({
+          platform: 'slack',
+          threadId: 'slack:C123:1790610846.868069',
+          messageId: '1790610846.868069',
+          authorId: 'U123',
+          error: {
+            message: error.message,
+            cause: { message: cause.message },
+          },
+        });
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: SYNTHETIC_PRE_SESSION_FAILURE');
+      });
+
+      it('logs a string throw as a message', async () => {
+        const f = await fixture('plain string');
+        await f.run();
+        expect(f.record().error).toEqual({ message: 'plain string' });
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: plain string');
+      });
+
+      it('passes the original Error to the custom formatter', async () => {
+        const error = new Error('failure');
+        const formatError = vi.fn(() => 'custom feedback');
+        const f = await fixture(error, { formatError });
+        await f.run();
+        expect(f.record().error.message).toBe('failure');
+        expect(formatError).toHaveBeenCalledExactlyOnceWith(error);
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('custom feedback');
+      });
+
+      it.each(['toJSON', 'frozen', 'circular', 'bigint', 'cause', 'toString'])(
+        'extracts selected fields and continues to later senders for %s',
+        async kind => {
+          const error = new Error('failure');
+          if (kind === 'toJSON') {
+            Object.assign(error, {
+              toJSON: () => {
+                throw new Error('serializer failed');
+              },
+            });
+          } else if (kind === 'frozen') {
+            Object.freeze(error);
+          } else if (kind === 'circular') {
+            Object.assign(error, { self: error });
+          } else if (kind === 'bigint') {
+            Object.assign(error, { value: 1n });
+          } else if (kind === 'toString') {
+            Object.assign(error, {
+              value: 1n,
+              toString: () => {
+                throw new Error('coercion failed');
+              },
+            });
+          } else {
+            error.cause = error;
+          }
+          const f = await fixture(error);
+          f.storage.mockImplementationOnce(() => {
+            throw error;
+          });
+          f.storage.mockImplementationOnce(() => {
+            throw new Error('later failure');
+          });
+          await expect(f.run([{ ...f.incoming, id: 'earlier', author: { userId: 'OTHER' } }])).resolves.toBeUndefined();
+          expect(f.thread.post).toHaveBeenNthCalledWith(1, '❌ Error: failure');
+          expect(f.thread.post).toHaveBeenNthCalledWith(2, '❌ Error: later failure');
+          expect(f.output).toHaveBeenCalledTimes(2);
+          const records = f.output.mock.calls.map(call => embeddedRecord(format(...call).split('\n')[0]!));
+          expect(records[0].error).toEqual({
+            message: 'failure',
+            ...(kind === 'cause' ? { cause: { message: 'failure' } } : {}),
+          });
+          expect(records[1].error.message).toBe('later failure');
+          expect(records.map(record => record.authorId)).toEqual(['OTHER', 'U123']);
+        },
+      );
+
+      it('omits payloads, stacks and deeper causes without invoking custom serializers', async () => {
+        const toJSON = vi.fn(() => ({ message: 'SENTINEL_SERIALIZER' }));
+        const stack = vi.fn(() => 'SENTINEL_STACK');
+        const cause = Object.assign(new Error('database unavailable'), {
+          cause: new Error('SENTINEL_DEEP_CAUSE'),
+          request: { headers: { authorization: 'SENTINEL_TOKEN' } },
+          toJSON,
+        });
+        const error = Object.assign(new Error('session failed', { cause }), {
+          details: { errorMessage: 'SENTINEL_UNUSED_FALLBACK', body: 'SENTINEL_BODY' },
+          response: { body: 'SENTINEL_RESPONSE' },
+          toJSON,
+        });
+        Object.defineProperty(error, 'stack', { get: stack });
+        Object.defineProperty(cause, 'stack', { get: stack });
+        const f = await fixture(error);
+        await f.run();
+        expect(f.record().error).toEqual({
+          message: 'session failed',
+          cause: { message: 'database unavailable' },
+        });
+        expect(toJSON).not.toHaveBeenCalled();
+        expect(stack).not.toHaveBeenCalled();
+        expect(format(...f.output.mock.calls[0]!)).not.toContain('SENTINEL');
+        expect(JSON.stringify(f.output.mock.calls[0]![1])).not.toContain('SENTINEL');
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: session failed');
+      });
+
+      it('includes Mastra classification without details or custom toJSON output', async () => {
+        const error = new MastraError(
+          {
+            id: 'CHANNEL_STORAGE_FAILED',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.SYSTEM,
+            text: 'session failed',
+            details: { errorMessage: 'SENTINEL_UNUSED_FALLBACK', token: 'SENTINEL_TOKEN' },
+          },
+          new Error('database unavailable'),
+        );
+        const toJSON = vi.spyOn(error, 'toJSON');
+        const formatError = vi.fn(() => 'custom feedback');
+        const f = await fixture(error, { formatError });
+        await f.run();
+        expect(f.record().error).toEqual({
+          message: 'session failed',
+          code: 'CHANNEL_STORAGE_FAILED',
+          domain: 'STORAGE',
+          category: 'SYSTEM',
+          cause: { message: 'database unavailable' },
+        });
+        expect(toJSON).not.toHaveBeenCalled();
+        expect(format(...f.output.mock.calls[0]!)).not.toContain('SENTINEL');
+        expect(formatError).toHaveBeenCalledExactlyOnceWith(error);
+      });
+
+      it('does not serialize non-string Mastra classification fields', async () => {
+        const toJSON = vi.fn(() => 'SENTINEL_CLASSIFICATION');
+        const error = Object.assign(
+          new MastraError({
+            id: 'INVALID_CLASSIFICATION',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.SYSTEM,
+            text: 'failure',
+          }),
+          { id: { toJSON }, domain: { toJSON }, category: { toJSON } },
+        );
+        const f = await fixture(error);
+        await f.run();
+        expect(f.record().error).toEqual({ message: 'failure' });
+        expect(toJSON).not.toHaveBeenCalled();
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: failure');
+      });
+
+      it('reads each Mastra classification field once before selecting its string value', async () => {
+        const toJSON = vi.fn(() => ({ privateData: 'SENTINEL_CLASSIFICATION' }));
+        const id = vi.fn().mockReturnValueOnce('CHANNEL_STORAGE_FAILED').mockReturnValue({ toJSON });
+        const domain = vi.fn().mockReturnValueOnce('STORAGE').mockReturnValue({ toJSON });
+        const category = vi.fn().mockReturnValueOnce('SYSTEM').mockReturnValue({ toJSON });
+        const error = new MastraError({
+          id: 'CHANNEL_STORAGE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.SYSTEM,
+          text: 'failure',
+        });
+        Object.defineProperties(error, { id: { get: id }, domain: { get: domain }, category: { get: category } });
+        const f = await fixture(error);
+        await f.run();
+        expect(f.record().error).toEqual({
+          message: 'failure',
+          code: 'CHANNEL_STORAGE_FAILED',
+          domain: 'STORAGE',
+          category: 'SYSTEM',
+        });
+        expect(id).toHaveBeenCalledTimes(1);
+        expect(domain).toHaveBeenCalledTimes(1);
+        expect(category).toHaveBeenCalledTimes(1);
+        expect(toJSON).not.toHaveBeenCalled();
+        expect(format(...f.output.mock.calls[0]!)).not.toContain('SENTINEL');
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: failure');
+      });
+
+      it.each([
+        { details: { errorMessage: 'fallback message', token: 'SENTINEL_TOKEN' } },
+        { message: '', details: { errorMessage: 'fallback message', token: 'SENTINEL_TOKEN' } },
+        new MastraError({
+          id: 'EMPTY_MESSAGE',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.SYSTEM,
+          text: '',
+          details: { errorMessage: 'fallback message', token: 'SENTINEL_TOKEN' },
+        }),
+      ])('uses only details.errorMessage when no useful message is available (%#)', async error => {
+        const f = await fixture(error, { formatError: () => 'feedback' });
+        await f.run();
+        expect(f.record().error.message).toBe('fallback message');
+        expect(f.record().error).not.toHaveProperty('details');
+        expect(format(...f.output.mock.calls[0]!)).not.toContain('SENTINEL');
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('feedback');
+      });
+
+      it.each(['cause message', { details: { errorMessage: 'cause message', token: 'SENTINEL_TOKEN' } }])(
+        'extracts only the immediate cause message (%#)',
+        async cause => {
+          const f = await fixture(new Error('failure', { cause }));
+          await f.run();
+          expect(f.record().error).toEqual({ message: 'failure', cause: { message: 'cause message' } });
+        },
+      );
+
+      it.each(['', { details: { errorMessage: '' } }])('omits an empty immediate cause message (%#)', async cause => {
+        const f = await fixture(new Error('failure', { cause }));
+        await f.run();
+        expect(f.record().error).toEqual({ message: 'failure' });
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: failure');
+      });
+
+      it.each([null, undefined, '', { details: { errorMessage: '' } }, { details: { token: 'SENTINEL_TOKEN' } }])(
+        'uses a static message for a throw without a useful message (%#)',
+        async error => {
+          const f = await fixture(error, { formatError: () => 'feedback' });
+          await f.run();
+          expect(f.record().error).toEqual({ message: 'Unknown error' });
+          expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('feedback');
+        },
+      );
+
+      it('keeps feedback working if reading the selected cause fails', async () => {
+        const error = new Error('failure');
+        Object.defineProperty(error, 'cause', {
+          get: () => {
+            throw new Error('SENTINEL_GETTER');
+          },
+        });
+        const f = await fixture(error);
+        await f.run();
+        expect(f.record().error).toEqual({ message: 'Error details unavailable' });
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: failure');
+      });
+
+      it('retains ConsoleLogger filter and observability export envelopes', async () => {
+        const filter = vi.fn<LogFilter>(() => true);
+        const sink = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        const logger = new ConsoleLogger({ filter });
+        logger.__attachObservability({
+          resolveTraceFields: () => undefined,
+          getLogSink: () => sink,
+          options: { correlation: true, export: true },
+        });
+        const error = Object.assign(new Error('failure'), { request: { authorization: 'SENTINEL_TOKEN' } });
+        const f = await fixture(error, { logger });
+        await f.run();
+        const record = f.record();
+        expect(filter).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({
+            component: 'CHANNEL',
+            level: 'error',
+            args: [{ args: [record] }],
+          }),
+        );
+        expect(embeddedRecord(filter.mock.calls[0]![0].message)).toEqual(record);
+        expect(sink.error).toHaveBeenCalledExactlyOnceWith(expect.any(String), { args: [record] });
+        expect(JSON.parse(JSON.stringify(sink.error.mock.calls[0]![1]))).toEqual({ args: [record] });
+        expect(embeddedRecord(sink.error.mock.calls[0]![0])).toEqual(record);
+        expect(JSON.parse(JSON.stringify(filter.mock.calls[0]![0].args))).toEqual([{ args: [record] }]);
+        expect(JSON.stringify(sink.error.mock.calls)).not.toContain('SENTINEL');
+        expect(JSON.stringify(filter.mock.calls)).not.toContain('SENTINEL');
+      });
+
+      it('retains structured metadata in a custom IMastraLogger', async () => {
+        const capture = vi.fn();
+        const logger: IMastraLogger = {
+          debug: vi.fn(),
+          info: vi.fn(),
+          warn: vi.fn(),
+          error: capture,
+          trackException: vi.fn(),
+          getTransports: () => new Map(),
+          listLogs: async () => ({ logs: [], total: 0, page: 1, perPage: 100, hasMore: false }),
+          listLogsByRunId: async () => ({ logs: [], total: 0, page: 1, perPage: 100, hasMore: false }),
+        };
+        const error = new Error('failure');
+        const f = await fixture(error, { logger });
+        await f.run();
+        expect(capture).toHaveBeenCalledTimes(1);
+        const [text, metadata] = capture.mock.calls[0]!;
+        const record = embeddedRecord(text);
+        expect(JSON.parse(JSON.stringify(metadata))).toEqual({ args: [record] });
+        expect(record).toMatchObject({
+          platform: 'slack',
+          threadId: f.thread.id,
+          messageId: f.incoming.id,
+          authorId: 'U123',
+        });
+        expect(metadata.args[0].error).toEqual(record.error);
+      });
+
+      it('keeps deliberate refusal silent and produces no ordinary error diagnostic', async () => {
+        const f = await fixture(new ChannelSessionRejectedError('refused'));
+        await f.run();
+        expect(f.output).not.toHaveBeenCalled();
+        expect(f.thread.post).not.toHaveBeenCalled();
+      });
+
+      it.each(['formatter', 'post'])('preserves existing %s failure behavior', async mode => {
+        const formatError = vi.fn(() => {
+          if (mode === 'formatter') throw new Error('formatter failed');
+          return 'feedback';
+        });
+        const f = await fixture(new Error('failure'), { formatError });
+        if (mode === 'post') f.thread.post.mockRejectedValue(new Error('post failed'));
+        await expect(f.run()).resolves.toBeUndefined();
+        expect(f.record().error.message).toBe('failure');
+        expect(f.thread.post).toHaveBeenCalledTimes(mode === 'post' ? 1 : 0);
+      });
+
+      it('continues to the next sender after an ordinary failed run', async () => {
+        const f = await fixture(new Error('failure'));
+        await f.run([{ ...f.incoming, id: 'earlier', author: { userId: 'OTHER' } }]);
+        expect(f.storage).toHaveBeenCalledTimes(2);
+        expect(f.thread.post).toHaveBeenCalledTimes(2);
+        expect(f.output).toHaveBeenCalledTimes(2);
+        expect(f.output.mock.calls.map(call => embeddedRecord(format(...call).split('\n')[0]!).authorId)).toEqual([
+          'OTHER',
+          'U123',
+        ]);
+      });
+    });
 
     it('passes the resolved Mastra instance to a custom handler as ctx.mastra', async () => {
       const chatMod = await getChatModule();

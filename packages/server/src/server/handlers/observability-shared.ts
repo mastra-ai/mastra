@@ -24,6 +24,8 @@ export const OBSERVABILITY_DELTA_POLLING_UPGRADE_MESSAGE =
   'Delta polling requires a newer @mastra/core with observability delta polling support. Please upgrade.';
 const OBSERVABILITY_TRACE_QUERY_STORAGE_FEATURE = 'trace-query';
 const OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE = 'trace-query-root-duration';
+const OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE = 'trace-query-context-ids';
+const TRACE_QUERY_CONTEXT_ID_FIELDS = new Set(['runId', 'sessionId', 'userId', 'organizationId']);
 const OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE = 'trace-query-discovery';
 const OBSERVABILITY_THREAD_QUERY_STORAGE_FEATURE = 'thread-query';
 const OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_STORAGE_FEATURE = 'trace-query-tenant-scope';
@@ -130,6 +132,33 @@ export function assertObservabilityTraceQueryRootDurationSupported(
   });
 }
 
+function usesContextId(predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined): boolean {
+  if (!predicate) return false;
+  if (predicate.type === 'boolean') return predicate.args.some(usesContextId);
+  if (predicate.type === 'not') return usesContextId(predicate.arg);
+  if (predicate.type === 'relation') return usesContextId(predicate.predicate);
+  return TRACE_QUERY_CONTEXT_ID_FIELDS.has(predicate.field);
+}
+
+export function supportsObservabilityTraceQueryContextIds(observabilityStore: ObservabilityStorage) {
+  return getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE) === true;
+}
+
+export function isTraceQueryContextIdField(path: string): boolean {
+  return TRACE_QUERY_CONTEXT_ID_FIELDS.has(path);
+}
+
+export function assertObservabilityTraceQueryContextIdsSupported(
+  observabilityStore: ObservabilityStorage,
+  predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined,
+) {
+  if (!usesContextId(predicate) || supportsObservabilityTraceQueryContextIds(observabilityStore)) return;
+
+  throw new HTTPException(501, {
+    message: 'Context identifier predicates are not supported by the configured observability store',
+  });
+}
+
 export function assertObservabilityTraceQueryDiscoverySupported(observabilityStore: ObservabilityStorage) {
   if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE)) return;
 
@@ -205,6 +234,7 @@ export type ObservabilityStorageCapabilities = {
   deltaPolling: boolean;
   traceQuery: boolean;
   traceQueryRootDuration: boolean;
+  traceQueryContextIds: boolean;
   traceQueryDiscovery: boolean;
   traceQueryTenantScope: boolean;
   threadQuery: boolean;
@@ -225,6 +255,7 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   deltaPolling: false,
   traceQuery: false,
   traceQueryRootDuration: false,
+  traceQueryContextIds: false,
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
   threadQuery: false,
@@ -295,6 +326,8 @@ export function getObservabilityStorageCapabilities(
     traceQuery,
     traceQueryRootDuration:
       (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE),
+    traceQueryContextIds:
+      (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE),
     traceQueryDiscovery:
       newApiCore && supportsTraceQueryDiscoveryCore() && declares(OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE),
     traceQueryTenantScope:
