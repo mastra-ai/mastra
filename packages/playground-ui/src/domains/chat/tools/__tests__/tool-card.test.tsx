@@ -301,7 +301,7 @@ describe('ToolCard dispatch', () => {
     );
 
     expect(screen.getByRole('button', { name: /observed/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /extractions \(1\)/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /extractions.*1 extracted/i })).toBeTruthy();
   });
 
   it('routes agent-* tools to the agent badge wrapper', () => {

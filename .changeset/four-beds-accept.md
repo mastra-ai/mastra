@@ -2,10 +2,11 @@
 '@mastra/playground-ui': minor
 ---
 
-Everything an agent does in a chat now renders on one `Activity` line: tool calls, reasoning, signals, notifications, skills and plain "working" rows. A body is optional, and without one the line looks the same with no chevron, so a step that returns nothing reads like one that does.
+Each thing an agent does in a chat now renders as its own `Activity` line: every tool call, reasoning step, signal, notification, skill and plain "working" row. A body is optional. Without one, the line has no chevron and otherwise looks the same, so a step that returns nothing reads like one that does.
 
 ```tsx
 import { ActivityItem } from '@mastra/playground-ui/components/ai/activity';
+import { ToolCallOutput } from '@mastra/playground-ui/components/ai/tool-call';
 
 <ActivityItem icon={<Sparkles aria-hidden />} label="Thinking" status="running" aria-label="Thinking" />;
 
@@ -88,7 +89,7 @@ import { ReasoningActivity } from '@mastra/playground-ui/components/ai/activity'
 
 A short single-line message fits in the preview, so opening a disclosure used to reveal a copy of the line above it. Such a line now has no disclosure and wraps its detail instead of clipping it, so a narrow transcript never hides the end of a sentence it offers no way to open. Because folding is now the exception, a line that folds shows a dimmed chevron at rest instead of only on hover.
 
-Notification badges wrap in narrow transcripts without squeezing the message out. Linked notifications keep their full message in the expanded body. Expanded messages preserve line breaks and wrap long URLs.
+Notification badges wrap in narrow transcripts without squeezing the message out. Linked notifications keep their full message in the expanded body. Expanded messages preserve line breaks and wrap long URLs. A notification link is now announced by its visible text followed by the message preview, for example "Open on GitHub: The pull request was merged…", so voice control can open it by what it says.
 
 The same rule covers a composed `Activity`: pass `foldable={false}` when there is nothing to open, and the line drops its disclosure button and its empty body. A tool call with no arguments, no output and no result is one example, and so is a call whose arguments are an empty object. `hasToolArguments` tells you whether `ToolCallArguments` would render anything, and `awaitsToolApproval` tells you whether `ToolApprovalButtons` would.
 
@@ -99,7 +100,7 @@ import {
   ActivityHeadline,
   ActivityTrigger,
 } from '@mastra/playground-ui/components/ai/activity';
-import { hasToolArguments, ToolCallArguments } from '@mastra/playground-ui/components/ai/tool-call';
+import { hasToolArguments, ToolCallArguments, ToolCallOutput } from '@mastra/playground-ui/components/ai/tool-call';
 
 const foldable = hasToolArguments({ toolName, args }) || output !== undefined;
 
@@ -109,6 +110,7 @@ const foldable = hasToolArguments({ toolName, args }) || output !== undefined;
   </ActivityTrigger>
   <ActivityContent>
     <ToolCallArguments toolName={toolName} args={args} />
+    {output !== undefined && <ToolCallOutput text={output} />}
   </ActivityContent>
 </Activity>;
 ```
@@ -136,3 +138,7 @@ import { TranscriptDivider } from '@mastra/playground-ui/components/ai/transcrip
 `ChatSkill` is removed: the Factory was its only consumer, so it now composes `ActivityItem` itself.
 
 `SignalActivity` and `NotificationActivity` no longer set their own width or vertical margin, so the caller places them.
+
+**Studio draws workspace and memory steps as `Activity` lines too**
+
+Listing files, running a sandbox command and observational memory used to render their own cards, so a group of tool calls mixed two styles. They now use the same line as every other tool call. A listing shows its path on the line, and its summary and filesystem link beside it. A sandbox command shows its command on the line, and its sandbox link, exit status and duration beside it. The sandbox link is no longer nested inside the toggle button. A sandbox command now starts folded like any other call, unless it waits for approval. An observation or reflection shows its token counts on the line and keeps its observations, current task, suggested response and extractions in the body. A failed one is a failed line.
