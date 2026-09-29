@@ -2,7 +2,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 export type DatabaseSettings =
-  { provider: 'libsql' } | { provider: 'postgres-local' } | { provider: 'platform'; databaseId: string };
+  | { provider: 'libsql' }
+  | { provider: 'postgres-local' }
+  | { provider: 'platform'; databaseId: string };
 
 export interface FactoryDevSettings {
   version: 1;

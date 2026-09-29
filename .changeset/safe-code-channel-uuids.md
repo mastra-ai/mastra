@@ -2,7 +2,6 @@
 '@mastra/factory': patch
 '@mastra/code-sdk': patch
 'mastracode': patch
-'mastracode-web': patch
 '@mastra/telegram': patch
 '@mastra/slack': patch
 '@mastra/github-signals': patch
