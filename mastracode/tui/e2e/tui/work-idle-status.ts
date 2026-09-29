@@ -104,13 +104,41 @@ export const workIdleStatusScenario: McE2eScenario = {
       yield { type: 'tool-result', payload: { toolCallId: 'args-1', toolName: 'view', result: 'ok' } };
       clock.mockReturnValue(startedAt + 152_000);
       yield { type: 'step-finish', payload: { output: { usage: { outputTokens: 40, inputTokens: 10 } } } };
+      // Captured live: the provider opens a thinking block, holds it ~1.2s, then delivers
+      // all 155 tokens within 43ms. Timed from the block start this reads 122 t/s, not 3,605.
+      clock.mockReturnValue(startedAt + 160_000);
+      yield { type: 'step-start', payload: { messageId: 'throughput-held-thinking', startedAt } };
+      yield { type: 'reasoning-start', payload: { id: 'held-reasoning' } };
+      clock.mockReturnValue(startedAt + 161_230);
+      yield { type: 'reasoning-delta', payload: { id: 'held-reasoning', text: 'Held thinking.' } };
+      yield { type: 'reasoning-end', payload: { id: 'held-reasoning' } };
+      yield { type: 'text-start', payload: { id: 'held-text' } };
+      clock.mockReturnValue(startedAt + 161_273);
+      yield { type: 'text-delta', payload: { id: 'held-text', text: 'Held answer.' } };
+      yield { type: 'text-end', payload: { id: 'held-text' } };
+      yield {
+        type: 'step-finish',
+        payload: { output: { usage: { outputTokens: 155, reasoningTokens: 48, inputTokens: 10 } } },
+      };
+      // Captured live: the provider held a whole 172-token response and sent it in 5ms, so
+      // its generation time cannot be observed. The reading must stay where it was.
+      clock.mockReturnValue(startedAt + 172_300);
+      yield { type: 'step-start', payload: { messageId: 'throughput-held-response', startedAt } };
+      yield { type: 'text-start', payload: { id: 'held-response' } };
+      yield { type: 'text-delta', payload: { id: 'held-response', text: 'Held' } };
+      clock.mockReturnValue(startedAt + 172_305);
+      yield { type: 'text-delta', payload: { id: 'held-response', text: ' response.' } };
+      yield { type: 'text-end', payload: { id: 'held-response' } };
+      yield { type: 'step-finish', payload: { output: { usage: { outputTokens: 172, inputTokens: 10 } } } };
       yield { type: 'finish', payload: { stepResult: { reason: 'stop' } } };
     }
+    const ratesAfterSteps: number[] = [];
     async function* deliveredStream() {
       for await (const chunk of reasoningStream()) {
         yield chunk;
         // Drain queued TUI events before advancing the fixture's wall clock.
         await runtime.sleep(0);
+        if (chunk.type === 'step-finish') ratesAfterSteps.push(tuiRef?.state?.tokensPerSec);
       }
     }
     try {
@@ -118,11 +146,13 @@ export const workIdleStatusScenario: McE2eScenario = {
     } finally {
       clock.mockRestore();
     }
-    await runtime.waitForScreenText(/\b40 t\/s\b/, terminal);
-    const rate = tuiRef?.state?.tokensPerSec;
-    if (rate !== 40) {
-      throw new Error(`Expected the argument-only step to be measured over its own second, got ${rate} t/s`);
+    // Thinking + answer: 40. Argument-only step over its own second: 40. Held thinking
+    // timed from its block start: 0.3 * 122 + 0.7 * 40 = 65. Held response: unchanged.
+    const expectedRates = [40, 40, 65, 65];
+    if (ratesAfterSteps.join() !== expectedRates.join()) {
+      throw new Error(`Expected rates ${expectedRates.join(', ')} after each step, got ${ratesAfterSteps.join(', ')}`);
     }
+    await runtime.waitForScreenText(/\b65 t\/s\b/, terminal);
 
     state.lastAgentRunDurationMs = 61_000;
     state.lastAgentRunEndReason = 'done';

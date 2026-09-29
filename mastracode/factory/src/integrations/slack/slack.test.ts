@@ -633,9 +633,10 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
       deps.projects.get
         .mockResolvedValueOnce({ id: 'fp-1', slackWorkItemsEnabled: true })
         .mockRejectedValueOnce(outage);
-    const resolverDeps = failure === 'multiple providers'
-      ? { ...deps, sourceControls: [sourceControl, makeSourceControl({ integrationId: 'gitlab' })] }
-      : deps;
+    const resolverDeps =
+      failure === 'multiple providers'
+        ? { ...deps, sourceControls: [sourceControl, makeSourceControl({ integrationId: 'gitlab' })] }
+        : deps;
     const workItems = { upsert: vi.fn() };
     const store = { listThreads: vi.fn().mockResolvedValue({ threads: [] }), saveThread: vi.fn() };
     const mastra = { getStorage: () => ({ getStore: async () => store }) };

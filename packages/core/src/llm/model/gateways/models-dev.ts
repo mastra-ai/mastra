@@ -296,15 +296,18 @@ export class ModelsDevGateway extends MastraModelGateway {
     const perModelApi = config?.modelOverrides?.[modelId]?.api;
     const template = perModelApi ?? config?.url;
 
+    // Explicit <PROVIDER>_BASE_URL override wins, even for providers without a registry url template
+    const baseUrlEnvVar = `${providerId.toUpperCase().replace(/-/g, '_')}_BASE_URL`;
+    const customBaseUrl = envVars?.[baseUrlEnvVar] || process.env[baseUrlEnvVar];
+    if (customBaseUrl) {
+      return customBaseUrl;
+    }
+
     if (!template) {
       return;
     }
 
-    // Check for custom base URL from env vars (explicit override still wins)
-    const baseUrlEnvVar = `${providerId.toUpperCase().replace(/-/g, '_')}_BASE_URL`;
-    const customBaseUrl = envVars?.[baseUrlEnvVar] || process.env[baseUrlEnvVar];
-
-    return customBaseUrl || interpolateUrlTemplate(template, envVars);
+    return interpolateUrlTemplate(template, envVars);
   }
 
   getApiKey(modelId: string): Promise<string> {

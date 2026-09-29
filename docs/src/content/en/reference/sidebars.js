@@ -185,6 +185,7 @@ const sidebars = {
       label: 'Code SDK',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'code-sdk/acp-server', label: 'ACP server' },
         {
           type: 'doc',
           id: 'code-sdk/mount-agent-controller',

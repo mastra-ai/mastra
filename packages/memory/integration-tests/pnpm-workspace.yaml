@@ -35,6 +35,13 @@ overrides:
   fast-copy@<4.1.1: 4.1.1
   ioredis@>=5.0.0 <6.0.0: 6.0.0
   zod@>=4.0.0 <4.6.5: 4.6.5
+  # Vanta 2026-09-28: nested-lock security floors
+  'undici@<6.0.0': 6.29.0
+  'undici@>=6.0.0 <6.29.0': 6.29.0
+  'undici@>=7.0.0 <7.30.0': 7.30.0
+  'postcss@<8.5.23': 8.5.23
+  'jsondiffpatch@<0.7.6': 0.7.6
+  sharp: 0.35.4
 allowBuilds:
   esbuild: false
   sharp: false
