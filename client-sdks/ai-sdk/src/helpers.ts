@@ -312,6 +312,18 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
           resumeSchema: chunk.payload.resumeSchema,
         },
       } satisfies DataChunkType;
+    case 'tool-call-resumed':
+      return {
+        type: 'data-tool-call-suspended',
+        id: chunk.payload.toolCallId,
+        data: {
+          state: 'data-tool-call-suspended',
+          runId: chunk.runId,
+          toolCallId: chunk.payload.toolCallId,
+          toolName: chunk.payload.toolName,
+          resumed: true,
+        },
+      } satisfies DataChunkType;
     case 'tool-call-input-streaming-start':
       return {
         type: 'tool-input-start',

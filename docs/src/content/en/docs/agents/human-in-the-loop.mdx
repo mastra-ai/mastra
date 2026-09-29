@@ -428,6 +428,8 @@ const handleResume = async () => {
 }
 ```
 
+When a suspended tool call resumes, the stream emits a `tool-call-resumed` chunk with the same `toolCallId` before the call's `tool-result`. With `@mastra/ai-sdk`, it arrives as a `data-tool-call-suspended` part with `resumed: true`, which replaces the original suspension part. Use this signal to mark a question as answered. Don't infer it from the shape of the tool output: when the suspension came from a sub-agent, the output of the delegation call is the sub-agent's result, not your answer.
+
 ## Automatic tool resumption
 
 When using tools that call `suspend()`, you can enable automatic resumption so the agent resumes suspended tools based on the user's next message. Set `autoResumeSuspendedTools` to `true` in the agent's default options or per-request:

@@ -1551,6 +1551,22 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       return replaceAt(result, messageIndex, withMetadata(targetMessage, nextMetadata));
     }
 
+    case 'tool-call-resumed': {
+      const resumedToolCallId = chunk.payload.toolCallId;
+      for (let i = result.length - 1; i >= 0; i--) {
+        const message = result[i];
+        if (!message || message.role !== 'assistant') continue;
+        const meta = message.content.metadata as MastraDBMessageMetadata | undefined;
+        const suspendedTools = meta?.suspendedTools;
+        if (!suspendedTools) continue;
+        const key = Object.keys(suspendedTools).find(k => suspendedTools[k]?.toolCallId === resumedToolCallId);
+        if (!key) continue;
+        const { [key]: _removed, ...remaining } = suspendedTools;
+        return replaceAt(result, i, withMetadata(message, { ...meta, suspendedTools: remaining }));
+      }
+      return result;
+    }
+
     case 'finish':
     case 'abort': {
       return finishStreamingAssistantMessage(result);

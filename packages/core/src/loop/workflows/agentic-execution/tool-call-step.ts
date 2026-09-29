@@ -882,6 +882,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           if (cleanupTarget) {
             await removeToolMetadata(cleanupTarget, resolvedSuspensionIdentity?.type ?? 'suspension');
           }
+          // Live counterpart of the persisted `resumed: true` marker. The eventual `tool-result`
+          // reuses this toolCallId, so clients need an explicit signal that the suspension was answered.
+          const resumedChunk = await transformChunk({
+            type: 'tool-call-resumed',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: { toolCallId: inputData.toolCallId, toolName: inputData.toolName },
+          });
+          safeEnqueue(controller, resumedChunk);
         }
 
         if (args === null || args === undefined) {

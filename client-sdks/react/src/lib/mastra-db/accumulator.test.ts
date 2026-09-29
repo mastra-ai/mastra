@@ -1158,6 +1158,24 @@ describe('accumulateChunk - tool calls', () => {
     });
   });
 
+  it('tool-call-resumed clears the matching suspendedTools entry (#24280)', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('tc-1', 'longRun', { x: 1 }),
+      toolCallChunk('tc-2', 'other', {}),
+      toolCallSuspendedChunk('tc-1', 'longRun', { x: 1 }, { reason: 'wait' }),
+      toolCallSuspendedChunk('tc-2', 'other', {}, { reason: 'wait' }),
+      {
+        type: 'tool-call-resumed',
+        runId: RUN_ID,
+        from: 'AGENT',
+        payload: { toolCallId: 'tc-1', toolName: 'longRun' },
+      } as unknown as ChunkType,
+    ]);
+    const suspendedTools = (out[0].content.metadata as { suspendedTools: Record<string, unknown> }).suspendedTools;
+    expect(Object.keys(suspendedTools)).toEqual(['other']);
+  });
+
   it('tool-output appends non-workflow output onto a partial-call result array', () => {
     const out = reduce([
       startChunk(),

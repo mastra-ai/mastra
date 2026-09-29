@@ -1,0 +1,7 @@
+---
+'@mastra/ai-sdk': patch
+'@mastra/react': patch
+'@mastra/core': patch
+---
+
+Added a `tool-call-resumed` stream chunk. It is emitted when a suspended tool call resumes and comes before that call's `tool-result`. Clients can now tell that a suspension was answered even when a sub-agent suspended through a delegation call and the delegation's later result replaces the tool output. Fixes [#24280](https://github.com/mastra-ai/mastra/issues/24280).
