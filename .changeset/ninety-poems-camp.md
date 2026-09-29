@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Document every shared color token in Storybook
+Show every shared color token once in its Foundations page
