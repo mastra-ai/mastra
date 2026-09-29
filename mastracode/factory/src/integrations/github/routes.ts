@@ -48,7 +48,7 @@ import type { GithubPatKind } from './pat.js';
 import { reclaimDeletedSessionSandbox } from './sandbox-release.js';
 import {
   commitAll,
-  isValidGitRef as isValidGitRefSandbox,
+  isValidGitRef,
   MaterializeError,
   pushBranch,
   SetupCommandError,
@@ -1263,7 +1263,7 @@ function buildProjectGitRoutes({
           return c.json({ error: 'Invalid baseBranch' }, 400);
         }
         const baseBranch = requestedBaseBranch ?? project.defaultBranch;
-        if (!isValidGitRefSandbox(baseBranch)) return c.json({ error: 'Invalid baseBranch' }, 400);
+        if (!isValidGitRef(baseBranch)) return c.json({ error: 'Invalid baseBranch' }, 400);
 
         const requestedSessionId = body.sessionId;
         if (
@@ -1284,7 +1284,7 @@ function buildProjectGitRoutes({
         let branch: string;
         if (requestedBranch === undefined) {
           branch = `${USER_SESSION_BRANCH_PREFIX}${sessionId}`;
-        } else if (typeof requestedBranch === 'string' && isValidGitRefSandbox(requestedBranch)) {
+        } else if (typeof requestedBranch === 'string' && isValidGitRef(requestedBranch)) {
           branch = requestedBranch;
         } else {
           return c.json({ error: 'Invalid branch' }, 400);
@@ -1509,7 +1509,7 @@ function buildProjectGitRoutes({
         const { orgId, project } = loaded;
 
         const branch = c.req.query('branch') ?? project.defaultBranch;
-        if (!isValidGitRefSandbox(branch)) return c.json({ error: 'Invalid branch' }, 400);
+        if (!isValidGitRef(branch)) return c.json({ error: 'Invalid branch' }, 400);
         // GitHub takes `per_page` as an integer, so a fractional limit would go out verbatim.
         const limit = Math.min(
           Math.max(Math.floor(Number(c.req.query('limit') ?? DEFAULT_COMMIT_PAGE)) || DEFAULT_COMMIT_PAGE, 1),
@@ -1540,7 +1540,7 @@ function buildProjectGitRoutes({
         } catch {
           return c.json({ error: 'Invalid JSON body' }, 400);
         }
-        if (!isValidGitRefSandbox(body.branch)) {
+        if (!isValidGitRef(body.branch)) {
           return c.json({ error: 'Invalid branch' }, 400);
         }
         const branch = body.branch;
@@ -1597,11 +1597,11 @@ function buildProjectGitRoutes({
         } catch {
           return c.json({ error: 'Invalid JSON body' }, 400);
         }
-        if (!isValidGitRefSandbox(body.branch)) {
+        if (!isValidGitRef(body.branch)) {
           return c.json({ error: 'Invalid branch' }, 400);
         }
         const base = body.base === undefined ? project.defaultBranch : body.base;
-        if (!isValidGitRefSandbox(base)) {
+        if (!isValidGitRef(base)) {
           return c.json({ error: 'Invalid base' }, 400);
         }
         if (typeof body.title !== 'string' || body.title.trim().length === 0 || body.title.length > 256) {
