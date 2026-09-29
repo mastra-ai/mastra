@@ -1,8 +1,8 @@
-import { ExternalLinkIcon, MessageSquareReplyIcon, MessageSquareTextIcon } from 'lucide-react';
+import { ExternalLinkIcon, MessageSquareReplyIcon, WaypointsIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTraceSpanScores, TraceScoresTab } from '@/domains/scores';
 import { ThreadTrace, useThreadTraceRow } from '@/domains/traces/components/thread-trace';
-import type { ThreadTraceSelectedSpan } from '@/domains/traces/components/thread-trace';
+import type { ThreadTraceLayout } from '@/domains/traces/components/thread-trace';
 
 import { ThreadViewSkeleton } from '@/domains/traces/components/thread-view-skeleton';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
@@ -24,24 +24,23 @@ export interface ThreadViewByTraceProps {
   withQueryTrace: boolean;
   /** Shows the per-trace Feedback tab and fetches its feedback. */
   withFeedback: boolean;
-  /** Fires when a span detail opens or closes (`null`). */
-  onSelectedSpanChange?: (selected: ThreadTraceSelectedSpan | null) => void;
-  /** Trace to expand and scroll to on mount (first page only). */
+  /** Fires when the trace or span column opens or closes. */
+  onLayoutChange?: (layout: ThreadTraceLayout) => void;
+  /** Trace to open and scroll to on mount (first page only). */
   anchorTraceId?: string;
   /** Opens a score from a trace's Scores tab; the app owns routing. */
   onOpenScore: (traceId: string, scoreId: string) => void;
 }
 
 /**
- * A memory thread rendered as its traces: one row per agent turn (oldest first), with the
- * reconstructed messages on the left and the span tree on the right. Clicking a span opens
- * its detail panel on the side so the conversation stays readable.
+ * A memory thread rendered as a conversation, one turn per trace (oldest first). A turn's trace
+ * opens in a column beside the conversation, and its spans in a third column.
  */
 export function ThreadViewByTrace({
   threadId,
   withQueryTrace,
   withFeedback,
-  onSelectedSpanChange,
+  onLayoutChange,
   anchorTraceId,
   onOpenScore,
 }: ThreadViewByTraceProps) {
@@ -85,7 +84,7 @@ export function ThreadViewByTrace({
       traceIds={traceIds}
       setEndOfListElement={setEndOfListElement}
       withFeedback={withFeedback}
-      onSelectedSpanChange={onSelectedSpanChange}
+      onLayoutChange={onLayoutChange}
       anchorTraceId={anchorTraceId}
       onOpenScore={onOpenScore}
     />
@@ -96,7 +95,7 @@ interface LoadedThreadViewByTraceProps {
   traceIds: string[];
   setEndOfListElement: (node: HTMLDivElement | null) => void;
   withFeedback: boolean;
-  onSelectedSpanChange?: (selected: ThreadTraceSelectedSpan | null) => void;
+  onLayoutChange?: (layout: ThreadTraceLayout) => void;
   anchorTraceId?: string;
   onOpenScore: (traceId: string, scoreId: string) => void;
 }
@@ -106,13 +105,14 @@ function LoadedThreadViewByTrace({
   traceIds,
   setEndOfListElement,
   withFeedback,
-  onSelectedSpanChange,
+  onLayoutChange,
   anchorTraceId: requestedAnchorTraceId,
   onOpenScore,
 }: LoadedThreadViewByTraceProps) {
   const railTurns = useThreadRailTurns(traceIds);
+  const { Link, paths } = useLinkComponent();
 
-  // "Open full thread" lands here with the originating trace: that row starts expanded and
+  // "Open full thread" lands here with the originating trace: that turn's trace opens and the row
   // scrolls into view when it mounts. Best effort on the first page only: resolved once at mount,
   // so a row that arrives on a later page is left alone.
   const [anchorTraceId] = useState(() =>
@@ -120,34 +120,57 @@ function LoadedThreadViewByTrace({
   );
 
   return (
-    <ThreadTrace traceIds={traceIds} anchorTraceId={anchorTraceId} onSelectedSpanChange={onSelectedSpanChange}>
+    <ThreadTrace traceIds={traceIds} anchorTraceId={anchorTraceId} onLayoutChange={onLayoutChange}>
       <ThreadTrace.List data-testid="thread-view-by-trace">
         <ThreadTrace.Rail turns={railTurns} />
         {traceIds.map(traceId => (
           <ThreadTrace.Row key={traceId} traceId={traceId}>
-            <ThreadTraceRowContent withFeedback={withFeedback} onOpenScore={onOpenScore} />
+            <ThreadTraceRowContent />
           </ThreadTrace.Row>
         ))}
         <ThreadTrace.LoadMoreSentinel ref={setEndOfListElement} />
       </ThreadTrace.List>
+      <ThreadTrace.TracePanel
+        actions={traceId => (
+          <Button
+            render={<Link href={paths.traceLink(traceId)} />}
+            variant="ghost"
+            size="sm"
+            icon={<ExternalLinkIcon />}
+          >
+            Go to trace
+          </Button>
+        )}
+      >
+        {traceId => <TraceColumnTabs traceId={traceId} withFeedback={withFeedback} onOpenScore={onOpenScore} />}
+      </ThreadTrace.TracePanel>
       <ThreadTrace.SpanPanel />
     </ThreadTrace>
   );
 }
 
-function ThreadTraceRowContent({
+function ThreadTraceRowContent() {
+  const { traceId, highlightSpans } = useThreadTraceRow();
+  return (
+    <>
+      <ThreadTrace.TurnDivider />
+      <TraceThreadItemView traceId={traceId} onHighlightSpans={highlightSpans} />
+    </>
+  );
+}
+
+function TraceColumnTabs({
+  traceId,
   withFeedback,
   onOpenScore,
 }: {
+  traceId: string;
   withFeedback: boolean;
   onOpenScore: (traceId: string, scoreId: string) => void;
 }) {
-  const { traceId, highlightSpans } = useThreadTraceRow();
-  const { Link, paths } = useLinkComponent();
   // First page only, for the tab badges; the Feedback and Scores bodies own their own pagination
   // and share these queries through the React Query cache.
   const { data: feedbackData } = useTraceFeedback({ traceId, enabled: withFeedback });
-  // Same query the span tree observes (passive: the tree drives refetches).
   const { data: traceData } = useTraceSpans(traceId, { passive: true });
   const rootSpanId = traceData?.spans.find(span => span.parentSpanId == null)?.spanId;
   const { data: spanScoresData } = useTraceSpanScores({ traceId, spanId: rootSpanId });
@@ -155,67 +178,48 @@ function ThreadTraceRowContent({
   const scoresTotal = spanScoresData?.pagination?.total;
 
   return (
-    <>
-      <ThreadTrace.Messages>
-        <ThreadTrace.MessagesHeader>
-          <ThreadTrace.TabList>
-            <ThreadTrace.Tab value="messages">
+    <ThreadTrace.Tabs>
+      <ThreadTrace.TabsHeader>
+        <ThreadTrace.TabList>
+          <ThreadTrace.Tab value="spans">
+            <Icon size="xs">
+              <WaypointsIcon />
+            </Icon>
+            Spans
+          </ThreadTrace.Tab>
+          {withFeedback && (
+            <ThreadTrace.Tab value="feedback">
               <Icon size="xs">
-                <MessageSquareTextIcon />
+                <MessageSquareReplyIcon />
               </Icon>
-              Messages
+              Feedback{feedbackTotal != null && <> ({feedbackTotal})</>}
             </ThreadTrace.Tab>
-            {withFeedback && (
-              <ThreadTrace.Tab value="feedback">
-                <Icon size="xs">
-                  <MessageSquareReplyIcon />
-                </Icon>
-                Feedback{feedbackTotal != null && <> ({feedbackTotal})</>}
-              </ThreadTrace.Tab>
-            )}
-            <ThreadTrace.Tab value="scores">
-              <Icon size="xs">
-                <ScorersIcon />
-              </Icon>
-              Scores{scoresTotal != null && <> ({scoresTotal})</>}
-            </ThreadTrace.Tab>
-          </ThreadTrace.TabList>
-        </ThreadTrace.MessagesHeader>
-        <ThreadTrace.TabContent value="messages" flush>
-          <TraceThreadItemView traceId={traceId} onHighlightSpans={highlightSpans} />
+          )}
+          <ThreadTrace.Tab value="scores">
+            <Icon size="xs">
+              <ScorersIcon />
+            </Icon>
+            Scores{scoresTotal != null && <> ({scoresTotal})</>}
+          </ThreadTrace.Tab>
+        </ThreadTrace.TabList>
+      </ThreadTrace.TabsHeader>
+      <ThreadTrace.TabContent value="spans" flush>
+        <ThreadTrace.Spans traceId={traceId} />
+      </ThreadTrace.TabContent>
+      {withFeedback && (
+        <ThreadTrace.TabContent value="feedback" className="px-4 py-3">
+          <TraceFeedbackTab traceId={traceId} variant="thread" />
         </ThreadTrace.TabContent>
-        {withFeedback && (
-          <ThreadTrace.TabContent value="feedback" className="min-h-0 py-3 pl-2">
-            <TraceFeedbackTab key={traceId} traceId={traceId} variant="thread" />
-          </ThreadTrace.TabContent>
-        )}
-        <ThreadTrace.TabContent value="scores" className="min-h-0 py-3 pl-2">
-          {rootSpanId ? (
-            <TraceScoresTab
-              key={traceId}
-              traceId={traceId}
-              spanId={rootSpanId}
-              onScoreSelect={scoreId => onOpenScore(traceId, scoreId)}
-            />
-          ) : null}
-        </ThreadTrace.TabContent>
-      </ThreadTrace.Messages>
-      <ThreadTrace.Details>
-        <ThreadTrace.DetailsHeader>
-          <ThreadTrace.DetailsActions>
-            <Button
-              render={<Link href={paths.traceLink(traceId)} />}
-
-              variant="ghost"
-              size="sm"
-              icon={<ExternalLinkIcon />}
-            >
-              Go to trace
-            </Button>
-          </ThreadTrace.DetailsActions>
-        </ThreadTrace.DetailsHeader>
-        <ThreadTrace.Spans />
-      </ThreadTrace.Details>
-    </>
+      )}
+      <ThreadTrace.TabContent value="scores" className="px-4 py-3">
+        {rootSpanId ? (
+          <TraceScoresTab
+            traceId={traceId}
+            spanId={rootSpanId}
+            onScoreSelect={scoreId => onOpenScore(traceId, scoreId)}
+          />
+        ) : null}
+      </ThreadTrace.TabContent>
+    </ThreadTrace.Tabs>
   );
 }

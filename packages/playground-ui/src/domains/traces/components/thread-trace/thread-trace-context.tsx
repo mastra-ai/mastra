@@ -11,19 +11,26 @@ export interface ThreadTraceHighlight {
   spanIds: string[];
 }
 
+/** Which columns are open: the conversation alone, plus a turn's trace, plus one of its spans. */
+export type ThreadTraceLayout = 'conversation' | 'trace' | 'span';
+
 export interface ThreadTraceContextValue {
   traceIds: string[];
-  /** The row the reader came from (e.g. "Open full thread"); starts expanded and scrolls into view on mount. */
+  /** The row the reader came from (e.g. "Open full thread"); its trace opens and it scrolls into view on mount. */
   anchorTraceId: string | null;
+  /** The turn whose trace is shown in the trace column. */
+  openTraceId: string | null;
+  /** Show a turn's trace in the trace column, or pass `null` to close it (and the span column). */
+  openTrace: (traceId: string | null) => void;
+  /** Opens the turn's trace, or closes it when it is already the open one. */
+  toggleTrace: (traceId: string) => void;
   selected: ThreadTraceSelectedSpan | null;
-  /** Select a span (opens the side panel) or pass `undefined` to close it. */
+  /** Select a span (opens the span column) or pass `undefined` to close it. */
   selectSpan: (traceId: string, spanId: string | undefined) => void;
-  /** Spans behind the message the user asked to highlight; scoped to one trace since each row has its own tree. */
+  /** Spans behind the message the user asked to highlight; opens that turn's trace. */
   highlight: ThreadTraceHighlight | null;
   highlightSpans: (traceId: string, spanIds: string[]) => void;
-  /** Rows whose timeline is shown in full rather than clamped to the messages column. */
-  expandedTraceIds: ReadonlySet<string>;
-  setTraceExpanded: (traceId: string, expanded: boolean) => void;
+  layout: ThreadTraceLayout;
   /** Rows currently on screen inside the list, oldest first. */
   visibleTraceIds: string[];
   /** The topmost visible row. */
