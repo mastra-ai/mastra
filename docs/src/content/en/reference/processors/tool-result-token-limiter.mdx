@@ -1,6 +1,6 @@
 ---
 title: "Reference: ToolResultTokenLimiter | Processors"
-description: "Use ToolResultTokenLimiter to truncate large tool results before they are stored or sent to the language model."
+description: "Use ToolResultTokenLimiter to truncate large tool results before they're stored or sent to the language model."
 packages:
   - "@mastra/core"
 ---
@@ -54,6 +54,6 @@ const agent = new Agent({
 ## Behavior
 
 - Results at or under the limit pass through unchanged.
-- Larger results are converted to text (objects become JSON strings), cut to fit the limit, and end with a `[truncated: ~N tokens]` marker giving the original size. A tool's `toModelOutput` receives the truncated value, and its output is not limited again. If the marker doesn't fit in the limit, it's left out. Token counts are estimates.
+- Larger results are converted to text (objects become JSON strings), cut to fit the limit, and end with a `[truncated: ~N tokens]` marker giving the original size. A tool's `toModelOutput` receives the truncated value, and its output isn't limited again. If the marker doesn't fit in the limit, it's left out. Token counts are estimates.
 - Tool errors, background-task results, results from provider-executed tools, and results that can't be serialized to JSON, pass through unchanged.
 - Each tool result is limited on its own. Use [`TokenLimiterProcessor`](/reference/processors/token-limiter-processor) to limit the total size of the prompt.
