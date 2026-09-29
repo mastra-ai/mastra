@@ -587,4 +587,82 @@ describe('toModelOutput after processToolResult', () => {
     expect(secondPrompt(prompts)).toContain('mapped: [REDACTED]');
     expect(mapper.mock.calls.map(c => c[0])).toEqual(['[REDACTED]']);
   });
+
+  // Providers can reuse tool call ids across turns (e.g. `call_0`). The value
+  // read back after processToolResult must come from this turn's call, not an
+  // older result with the same id.
+  const reusedIdHistory = [
+    { role: 'user', content: 'earlier' },
+    {
+      role: 'assistant',
+      content: [{ type: 'tool-call', toolCallId: 'tc-1', toolName: 'getSecret', input: { q: 'old' } }],
+    },
+    {
+      role: 'tool',
+      content: [
+        {
+          type: 'tool-result',
+          toolCallId: 'tc-1',
+          toolName: 'getSecret',
+          output: { type: 'text', value: 'OLD-RESULT' },
+        },
+      ],
+    },
+    { role: 'assistant', content: 'done' },
+    { role: 'user', content: 'again' },
+  ];
+  const observer = { id: 'observer', async processToolResult() {} };
+  const reusedIdTool = (mapper: (o: unknown) => { type: 'text'; value: string }) =>
+    createTool({
+      id: 'getSecret',
+      description: 'Get secret',
+      inputSchema: z.object({ q: z.string() }),
+      execute: async () => 'NEW-RESULT',
+      toModelOutput: mapper,
+    });
+
+  it('does not read back an older result that reused the tool call id', async () => {
+    const prompts: unknown[] = [];
+    const mapper = vi.fn((output: unknown) => ({ type: 'text' as const, value: `mapped: ${String(output)}` }));
+    const agent = new Agent({
+      id: 'mo-reused-id',
+      name: 'mo-reused-id',
+      instructions: 'x',
+      model: recordingModel(prompts) as LanguageModelV2,
+      tools: { getSecret: reusedIdTool(mapper) },
+      outputProcessors: [observer as any],
+    });
+    const result = await agent.stream(reusedIdHistory as any, { maxSteps: 3 });
+    const chunks: any[] = [];
+    for await (const c of result.fullStream) chunks.push(c);
+
+    expect(chunks.find(c => c.type === 'tool-result')?.payload.result).toBe('NEW-RESULT');
+    expect(mapper.mock.calls.map(c => c[0])).toEqual(['NEW-RESULT']);
+    expect(secondPrompt(prompts)).toContain('mapped: NEW-RESULT');
+  });
+
+  it('durable engine does not read back an older result that reused the tool call id', async () => {
+    const prompts: unknown[] = [];
+    const mapper = vi.fn((output: unknown) => ({ type: 'text' as const, value: `mapped: ${String(output)}` }));
+    const baseAgent = new Agent({
+      id: 'mo-durable-reused-id',
+      name: 'mo-durable-reused-id',
+      instructions: 'x',
+      model: recordingModel(prompts) as LanguageModelV2,
+      tools: { getSecret: reusedIdTool(mapper) },
+      outputProcessors: [observer as any],
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    new Mastra({
+      agents: { 'mo-durable-reused-id': durableAgent as any },
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub,
+    });
+    const result = await durableAgent.stream(reusedIdHistory as any, { maxSteps: 3 });
+    for await (const _ of result.fullStream) void _;
+
+    expect(mapper.mock.calls.map(c => c[0])).toEqual(['NEW-RESULT']);
+    expect(secondPrompt(prompts)).toContain('mapped: NEW-RESULT');
+  });
 });
