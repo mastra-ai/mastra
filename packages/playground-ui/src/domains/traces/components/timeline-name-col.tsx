@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useEffect, useRef } from 'react';
 import type { UISpan, UISpanStyle } from '../types';
 import { TimelineStructureSign } from './timeline-structure-sign';
+import { Txt } from '@/ds/components/Txt';
 import { focusRing, focusRingInset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -96,7 +97,11 @@ export function TimelineNameCol({
           >
             {span.name}
           </span>
-          {meta && <span className="shrink-0 text-meta text-muted-foreground lg:tabular-nums">{meta}</span>}
+          {meta && (
+            <Txt as="span" variant="meta" tone="muted" className="shrink-0 lg:tabular-nums">
+              {meta}
+            </Txt>
+          )}
         </span>
       </button>
 

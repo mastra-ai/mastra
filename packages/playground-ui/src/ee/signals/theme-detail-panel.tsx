@@ -18,6 +18,7 @@ import {
   DrawerTitle,
 } from '@/ds/components/Drawer';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
@@ -97,7 +98,13 @@ export function ThemeDetailPanel({
       <DrawerContent>
         <DrawerHeader className="border-b border-border">
           {signalName !== undefined && (
-            <span className="font-mono text-column tracking-widest" style={{ color: getSignalColor(signalName) }}>
+            <Txt
+              as="span"
+              variant="column"
+              font="mono"
+              className="tracking-widest"
+              style={{ color: getSignalColor(signalName) }}
+            >
               {signalDisplayDescription ? (
                 <Tooltip>
                   <TooltipTrigger aria-label={signalDisplayLabel} className="cursor-default uppercase">
@@ -108,7 +115,7 @@ export function ThemeDetailPanel({
               ) : (
                 <span className="uppercase">{signalDisplayLabel}</span>
               )}
-            </span>
+            </Txt>
           )}
           <DrawerTitle>{title}</DrawerTitle>
           <DrawerDescription className="sr-only">
@@ -121,55 +128,67 @@ export function ThemeDetailPanel({
           )}
           {insightTraceId === undefined && (
             <>
-              {detailQuery.isPending && <p className="text-body text-muted-foreground">Loading theme details…</p>}
-              {detailQuery.isError && (
-                <p className="text-body text-destructive-indicator">Unable to load theme details.</p>
-              )}
+              {detailQuery.isPending && <Txt tone="muted">Loading theme details…</Txt>}
+              {detailQuery.isError && <Txt className="text-destructive-indicator">Unable to load theme details.</Txt>}
               {detailQuery.data && !detailQuery.data.theme && (
                 <section>
-                  <h2 className="text-subheading text-foreground">Not present in this snapshot</h2>
-                  <p className="mt-2 text-body text-muted-foreground">
+                  <Txt as="h2" variant="subheading" tone="ink">
+                    Not present in this snapshot
+                  </Txt>
+                  <Txt tone="muted" className="mt-2">
                     This theme has no data in the selected snapshot.
-                  </p>
+                  </Txt>
                 </section>
               )}
               {detailQuery.data?.theme && (
                 <>
                   <section aria-labelledby="theme-summary-heading">
-                    <h2
+                    <Txt
+                      as="h2"
+                      variant="caption"
+                      tone="muted"
+                      font="mono"
                       id="theme-summary-heading"
-                      className="font-mono text-caption tracking-wider text-muted-foreground uppercase"
+                      className="tracking-wider uppercase"
                     >
                       Summary
-                    </h2>
-                    <p className="mt-3 text-body text-foreground">
+                    </Txt>
+                    <Txt tone="ink" className="mt-3">
                       {detailQuery.data.theme.description ?? 'No description available.'}
-                    </p>
-                    <p className="mt-3 font-mono text-body text-foreground tabular-nums">
+                    </Txt>
+                    <Txt tone="ink" font="mono" className="mt-3 tabular-nums">
                       {shareSentence(
                         filteredStats?.traceCount ?? detailQuery.data.theme.traceCount,
                         filteredStats?.stageShare ?? detailQuery.data.theme.coverage,
                       )}
-                    </p>
+                    </Txt>
                   </section>
 
                   <section aria-labelledby="theme-examples-heading">
-                    <h2
+                    <Txt
+                      as="h2"
+                      variant="caption"
+                      tone="muted"
+                      font="mono"
                       id="theme-examples-heading"
-                      className="font-mono text-caption tracking-wider text-muted-foreground uppercase"
+                      className="tracking-wider uppercase"
                     >
                       Examples
-                    </h2>
+                    </Txt>
                     {examplesQuery.isPending && (
-                      <p className="mt-3 text-body text-muted-foreground">Loading examples…</p>
+                      <Txt tone="muted" className="mt-3">
+                        Loading examples…
+                      </Txt>
                     )}
                     {examplesQuery.isError && (
-                      <p className="mt-3 text-body text-destructive-indicator">Unable to load examples.</p>
+                      <Txt className="mt-3 text-destructive-indicator">Unable to load examples.</Txt>
                     )}
                     {examplesQuery.data && (
                       <>
                         {examplesQuery.data.examples.length === 0 ? (
-                          <p className="mt-3 text-body text-muted-foreground">No examples in this snapshot.</p>
+                          <Txt tone="muted" className="mt-3">
+                            No examples in this snapshot.
+                          </Txt>
                         ) : (
                           <ul className="mt-3 space-y-3">
                             {examplesQuery.data.examples.map(example => (
@@ -200,26 +219,34 @@ export function ThemeDetailPanel({
 
                   {snapshotTotal > 1 && (
                     <section aria-labelledby="theme-trend-heading">
-                      <h2
+                      <Txt
+                        as="h2"
+                        variant="caption"
+                        tone="muted"
+                        font="mono"
                         id="theme-trend-heading"
-                        className="font-mono text-caption tracking-wider text-muted-foreground uppercase"
+                        className="tracking-wider uppercase"
                       >
                         Trend
-                      </h2>
-                      {historyQuery.isPending && <p className="mt-3 text-body text-muted-foreground">Loading trend…</p>}
+                      </Txt>
+                      {historyQuery.isPending && (
+                        <Txt tone="muted" className="mt-3">
+                          Loading trend…
+                        </Txt>
+                      )}
                       {historyQuery.isError && (
-                        <p className="mt-3 text-body text-destructive-indicator">Unable to load the trend.</p>
+                        <Txt className="mt-3 text-destructive-indicator">Unable to load the trend.</Txt>
                       )}
                       {oldestHistoryPoint !== undefined && (
                         <>
-                          <p className="mt-3 text-body text-foreground">
+                          <Txt tone="ink" className="mt-3">
                             {/* A nextCursor means older points exist beyond the fetched window,
                                 so the oldest loaded point is a lower bound, not the true origin. */}
                             {historyQuery.data?.nextCursor
                               ? `Active since at least ${formatSnapshotDate(oldestHistoryPoint.startedAt)} · in ${historyPoints.length}+ snapshots`
                               : `First seen ${formatSnapshotDate(oldestHistoryPoint.startedAt)} · in ${historyPoints.length} ${historyPoints.length === 1 ? 'snapshot' : 'snapshots'}`}{' '}
                             · {themeTrendDirection(historyPoints)}
-                          </p>
+                          </Txt>
                           {historyPoints.length >= 2 && (
                             <ThemeTrendChart points={historyPoints} signalName={signalName ?? 'goal'} />
                           )}

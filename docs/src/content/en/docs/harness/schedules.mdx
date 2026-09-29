@@ -85,7 +85,7 @@ Without a `threadId`, each fire is an isolated `agent.generate()` run. Nothing i
 
 ### Threaded
 
-With a `threadId`, the schedule sends a [signal](/docs/harness/signals) into that thread, so the prompt joins the agent's conversation. Threaded schedules require a `resourceId` alongside the `threadId`.
+With a `threadId`, the schedule sends a [signal](/docs/harness/signals) into that thread. The prompt joins the agent's conversation. Threaded schedules require a `resourceId` alongside the `threadId`.
 
 ```typescript title="src/mastra/schedules.ts"
 await mastra.schedules.create({

@@ -1,162 +1,77 @@
 'use client';
 
-import { json } from '@codemirror/lang-json';
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import { MergeView } from '@codemirror/merge';
-import type { Extension } from '@codemirror/state';
-import { EditorState } from '@codemirror/state';
-import { EditorView, lineNumbers } from '@codemirror/view';
-import { tags as t } from '@lezer/highlight';
-import { draculaInit } from '@uiw/codemirror-theme-dracula';
-import { useEffect, useMemo, useRef } from 'react';
+import { MultiFileDiff, PatchDiff } from '@pierre/diffs/react';
+import type { FileDiffOptions } from '@pierre/diffs/react';
 import { useTheme } from '@/ds/components/ThemeProvider';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { cn } from '@/lib/utils';
+import './code-diff.css';
 
-const removed = 'var(--destructive-indicator)';
-const added = 'var(--success-indicator)';
+export type CodeDiffProps = {
+  className?: string;
+  layout?: 'split' | 'unified';
+} & (
+  | { codeA: string; codeB: string; filename?: string; patch?: never }
+  | { patch: string; codeA?: never; codeB?: never; filename?: never }
+);
 
-// GitHub-like split diff: red bands for removed lines (left), green bands for
-// added lines (right), with a stronger tint on the exact changed text.
-const diffOverrides = EditorView.theme({
-  '&.cm-editor .cm-line': { lineHeight: '1.5' },
-  '&.cm-editor .cm-gutters': { border: 'none', backgroundColor: 'transparent' },
-  '&.cm-editor .cm-lineNumbers .cm-gutterElement': { color: 'var(--placeholder)', minWidth: '2.5rem' },
-  '&.cm-editor .cm-changeGutter': { width: '3px', paddingLeft: '0' },
+const PATCH_METADATA_PREFIXES = [
+  'Binary files ',
+  'GIT binary patch',
+  'similarity index ',
+  'rename from ',
+  'rename to ',
+  'copy from ',
+  'copy to ',
+  'new file mode ',
+  'deleted file mode ',
+  'old mode ',
+  'new mode ',
+];
 
-  '&.cm-merge-a .cm-changedLine': {
-    backgroundColor: 'var(--destructive-subtle)',
-    backgroundImage: 'none',
-  },
-  '&.cm-merge-b .cm-changedLine': {
-    backgroundColor: 'var(--success-subtle)',
-    backgroundImage: 'none',
-  },
-  '&.cm-merge-a .cm-changedText': {
-    backgroundColor: 'var(--destructive-edge)',
-    backgroundImage: 'none',
-    borderRadius: '2px',
-  },
-  '&.cm-merge-b .cm-changedText': {
-    backgroundColor: 'var(--success-edge)',
-    backgroundImage: 'none',
-    borderRadius: '2px',
-  },
-  '&.cm-merge-a .cm-changedLineGutter': { background: removed },
-  '&.cm-merge-b .cm-changedLineGutter': { background: added },
+function PatchMetadata({ patch }: { patch: string }) {
+  const lines = patch.split('\n').filter(line => PATCH_METADATA_PREFIXES.some(prefix => line.startsWith(prefix)));
 
-  '&.cm-editor .cm-collapsedLines': {
-    backgroundColor: 'var(--muted)',
-    backgroundImage: 'none',
-    color: 'var(--muted-foreground)',
-    fontSize: 'var(--text-caption)',
-    padding: '4px 12px',
-    cursor: 'pointer',
-  },
-  '&.cm-editor .cm-collapsedLines:hover': {
-    backgroundImage: 'linear-gradient(var(--fill-subtle), var(--fill-subtle))',
-  },
-});
-
-export interface CodeDiffProps {
-  codeA: string;
-  codeB: string;
-}
-
-function buildDiffDarkTheme(): Extension {
-  return draculaInit({
-    settings: {
-      fontFamily: 'var(--font-mono)',
-      fontSize: 'var(--text-body-sm)',
-      lineHighlight: 'transparent',
-      gutterBackground: 'transparent',
-      gutterForeground: 'var(--muted-foreground)',
-      background: 'transparent',
-    },
-    styles: [{ tag: [t.className, t.propertyName] }],
-  });
-}
-
-function buildDiffLightTheme(): Extension {
-  const editorTheme = EditorView.theme({
-    '&': {
-      backgroundColor: 'transparent',
-      color: 'var(--foreground)',
-      fontSize: 'var(--text-body-sm)',
-    },
-    '&.cm-editor .cm-scroller': {
-      fontFamily: 'var(--font-mono)',
-    },
-    '.cm-gutters': {
-      backgroundColor: 'transparent',
-      color: 'var(--placeholder)',
-      borderRight: 'none',
-    },
-    '.cm-content': {
-      color: 'var(--foreground)',
-    },
-    '.cm-activeLine': {
-      backgroundColor: 'transparent',
-    },
-    '.cm-activeLineGutter': {
-      backgroundColor: 'transparent',
-    },
-  });
-
-  const highlightStyle = HighlightStyle.define([
-    { tag: [t.comment, t.bracket], color: 'var(--placeholder)' },
-    { tag: [t.string, t.meta, t.regexp], color: 'var(--syntax-string)' },
-    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--syntax-literal)' },
-    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--syntax-keyword)' },
-    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--syntax-name)' },
-    {
-      tag: [t.definition(t.variableName), t.function(t.variableName), t.className, t.attributeName],
-      color: 'var(--syntax-link)',
-    },
-    { tag: [t.variableName, t.number], color: 'var(--syntax-name)' },
-    { tag: [t.name, t.quote], color: 'var(--syntax-string)' },
-  ]);
-
-  return [editorTheme, syntaxHighlighting(highlightStyle)];
-}
-
-const collapseUnchanged = { margin: 3, minSize: 4 };
-
-export function CodeDiff({ codeA, codeB }: CodeDiffProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const isDark = useTheme().resolvedTheme === 'dark';
-  const theme = useMemo(() => (isDark ? buildDiffDarkTheme() : buildDiffLightTheme()), [isDark]);
-
-  useEffect(() => {
-    const parent = containerRef.current;
-    if (!parent) return;
-
-    const extensions = [
-      json(),
-      theme,
-      diffOverrides,
-      lineNumbers(),
-      EditorView.lineWrapping,
-      EditorState.readOnly.of(true),
-    ];
-
-    const mergeView = new MergeView({
-      parent,
-      a: { doc: codeA, extensions },
-      b: { doc: codeB, extensions },
-      gutter: true,
-      highlightChanges: true,
-      collapseUnchanged,
-    });
-    return () => mergeView.destroy();
-  }, [codeA, codeB, theme]);
+  if (lines.length === 0) {
+    return <p className="p-3 text-caption text-muted-foreground">No textual changes.</p>;
+  }
 
   return (
-    <div className={`${raisedSurfaceStyle} relative overflow-auto rounded-xl`}>
-      <div className="absolute top-0 left-1/2 z-10 h-full w-px bg-border dark:bg-white/10" />
-      <div
-        ref={containerRef}
-        className="[&_.cm-editor]:bg-transparent [&_.cm-editor]:py-3 [&_.cm-gutters]:bg-transparent [&_.cm-mergeViewEditor]:flex-1"
-      />
+    <div className="p-3 font-mono text-caption">
+      {lines.map(line => (
+        <div key={line}>{line}</div>
+      ))}
+    </div>
+  );
+}
+
+function PatchContent({ patch, options }: { patch: string; options: FileDiffOptions<undefined, undefined> }) {
+  if (!/^@@ -\d/m.test(patch)) return <PatchMetadata patch={patch} />;
+  return <PatchDiff patch={patch} options={options} />;
+}
+
+export function CodeDiff({ className, layout, ...source }: CodeDiffProps) {
+  const { resolvedTheme } = useTheme();
+  const isPatch = source.patch !== undefined;
+  const options: FileDiffOptions<undefined, undefined> = {
+    theme: { dark: 'pierre-dark', light: 'pierre-light' },
+    themeType: resolvedTheme,
+    diffStyle: layout ?? (isPatch ? 'unified' : 'split'),
+    diffIndicators: 'classic',
+    disableFileHeader: true,
+    overflow: 'wrap',
+  };
+
+  return (
+    <div className={cn('code-diff min-w-0 overflow-auto rounded-md border border-border bg-card', className)}>
+      {source.patch !== undefined ? (
+        <PatchContent patch={source.patch} options={options} />
+      ) : (
+        <MultiFileDiff
+          oldFile={{ name: source.filename ?? 'content.txt', contents: source.codeA }}
+          newFile={{ name: source.filename ?? 'content.txt', contents: source.codeB }}
+          options={options}
+        />
+      )}
     </div>
   );
 }

@@ -877,6 +877,28 @@ describe('Scheduler', () => {
 
       await scheduler.stop();
     });
+
+    it('marks the fired workflow.start with its schedule trigger', async () => {
+      const { store } = makeStore();
+      const pubsub = new EventEmitterPubSub();
+      const { events } = captureWorkflowsTopic(pubsub);
+      const scheduler = new Scheduler({ schedulesStore: store, pubsub, config: { tickIntervalMs: 60_000 } });
+
+      const schedule = await makeDue(store);
+      await scheduler.tick();
+
+      expect(events).toHaveLength(1);
+      expect(events[0]!.type).toBe('workflow.start');
+      // The workflow event processor uses this to run default-engine fires in-process.
+      expect((events[0]!.data as any).scheduleTrigger).toEqual({
+        scheduleId: schedule.id,
+        scheduledFireAt: schedule.nextFireAt,
+        triggerKind: 'schedule-fire',
+      });
+      expect(events[0]!.runId).toBe(`sched_${schedule.id}_${schedule.nextFireAt}`);
+
+      await scheduler.stop();
+    });
   });
 
   it('applies defaults when config values are explicitly undefined', async () => {

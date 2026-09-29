@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
@@ -56,10 +57,12 @@ export function ReferenceViewerDialog({
               <FileText className="h-4 w-4 text-muted-foreground" />
             </div>
             <div>
-              <h2 id="reference-viewer-title" className="text-subheading text-foreground">
+              <Txt as="h2" variant="subheading" tone="ink" id="reference-viewer-title">
                 {referencePath}
-              </h2>
-              <p className="text-caption text-muted-foreground">from {skillName}</p>
+              </Txt>
+              <Txt variant="caption" tone="muted">
+                from {skillName}
+              </Txt>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -88,7 +91,7 @@ export function ReferenceViewerDialog({
           ) : error ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <p className="mb-2 text-destructive-indicator">Failed to load reference</p>
-              <p className="text-body text-muted-foreground">{error}</p>
+              <Txt tone="muted">{error}</Txt>
             </div>
           ) : content ? (
             <pre className="overflow-auto rounded-lg bg-card p-4 text-body whitespace-pre-wrap text-foreground">
