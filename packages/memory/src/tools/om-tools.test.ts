@@ -1910,44 +1910,27 @@ describe('om-tools', () => {
       });
     });
 
-    it('passes http(s) URLs through so the provider fetches them', async () => {
-      await expect(viewAttachment(0)).resolves.toEqual({
-        content: [
-          { type: 'text', text: '[File: original.png] image/png url: https://example.invalid/original.png' },
-          { type: 'file', data: 'https://example.invalid/original.png', mimeType: 'image/png' },
-        ],
-      });
+    it('does not send remote attachments, since AI SDK v5 providers cannot take a URL in a tool result', async () => {
+      const cases: Array<[number, string]> = [
+        [0, '[File: original.png] image/png url: https://example.invalid/original.png'],
+        [5, `[File: report.pdf] application/pdf url: ${signedUrl}`],
+        [6, '[Image] image/png url: https://example.invalid/photo.png'],
+        [7, '[File] image/png url: https://example.invalid/scan.png'],
+      ];
 
-      await expect(viewAttachment(5)).resolves.toEqual({
-        content: [
-          { type: 'text', text: `[File: report.pdf] application/pdf url: ${signedUrl}` },
-          { type: 'file', data: signedUrl, mimeType: 'application/pdf' },
-        ],
-      });
-    });
-
-    it('returns image parts as image media', async () => {
-      await expect(viewAttachment(6)).resolves.toEqual({
-        content: [
-          { type: 'text', text: '[Image] image/png url: https://example.invalid/photo.png' },
-          { type: 'image', data: 'https://example.invalid/photo.png', mimeType: 'image/png' },
-        ],
-      });
-    });
-
-    it('reads URL instances as remote attachments', async () => {
-      await expect(viewAttachment(7)).resolves.toEqual({
-        content: [
-          { type: 'text', text: '[File] image/png url: https://example.invalid/scan.png' },
-          { type: 'file', data: 'https://example.invalid/scan.png', mimeType: 'image/png' },
-        ],
-      });
+      for (const [partIndex, description] of cases) {
+        const result = await viewAttachment(partIndex);
+        expect(result.content).toBeUndefined();
+        expect(result.messages).toBe(
+          `${description} — This attachment is stored at a remote URL, so it can't be shown inline. Use its url if you need to reference it.`,
+        );
+      }
     });
 
     it('explains when the attachment cannot be shown', async () => {
       const providerFileId = await viewAttachment(4);
       expect(providerFileId.messages).toContain('[File: uploaded.pdf] application/pdf file id: file-abc123');
-      expect(providerFileId.messages).toContain('not inline data or an http(s) URL');
+      expect(providerFileId.messages).toContain("payload is not inline data, so it can't be shown");
       expect(providerFileId.content).toBeUndefined();
 
       const unsupportedType = await viewAttachment(1);
@@ -2087,21 +2070,8 @@ describe('om-tools', () => {
         ],
       });
 
-      // Remote attachments use the URL-shaped parts core expects; `media.data` is base64-only.
-      expect(recall.toModelOutput!(await viewAttachment(0))).toEqual({
-        type: 'content',
-        value: [
-          { type: 'text', text: '[File: original.png] image/png url: https://example.invalid/original.png' },
-          { type: 'image-url', url: 'https://example.invalid/original.png', mediaType: 'image/png' },
-        ],
-      });
-      expect(recall.toModelOutput!(await viewAttachment(5))).toEqual({
-        type: 'content',
-        value: [
-          { type: 'text', text: `[File: report.pdf] application/pdf url: ${signedUrl}` },
-          { type: 'file-url', url: signedUrl, mediaType: 'application/pdf' },
-        ],
-      });
+      // A remote attachment only gets a note, so there's nothing to map.
+      expect(recall.toModelOutput!(await viewAttachment(0))).toBeUndefined();
 
       // Regular recall output is left alone so it keeps its default JSON tool-result shape.
       const paged = await recall.execute?.({ mode: 'messages', cursor: 'msg-attachments', page: 1, detail: 'low' }, {

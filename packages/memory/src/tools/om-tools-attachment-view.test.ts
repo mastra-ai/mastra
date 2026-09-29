@@ -6,10 +6,6 @@
  */
 
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import {
-  MockLanguageModelV3,
-  convertArrayToReadableStream as convertArrayToReadableStreamV3,
-} from '@internal/ai-v6/test';
 import { Agent } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect } from 'vitest';
@@ -62,39 +58,6 @@ function createV5RecallThenAnswerModel(supportedUrls: Record<string, RegExp[]> =
   } as any);
 }
 
-function createV6RecallThenAnswerModel() {
-  let streamCall = 0;
-  const usage = {
-    inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
-    outputTokens: { total: 1, text: 1, reasoning: undefined },
-  };
-
-  return new MockLanguageModelV3({
-    // The stored user message references the same remote URL; let the "provider" fetch it so the
-    // agent doesn't try to download it before the first step.
-    supportedUrls: { 'image/*': [/^https:\/\//] },
-    doStream: async () => {
-      streamCall++;
-      const chunks: any[] = [
-        { type: 'stream-start', warnings: [] },
-        { type: 'response-metadata', id: `r${streamCall}`, modelId: 'mock', timestamp: new Date(0) },
-      ];
-
-      if (streamCall === 1) {
-        chunks.push({ type: 'tool-call', toolCallId: 'call-recall', toolName: 'recall', input: recallCallInput });
-        chunks.push({ type: 'finish', finishReason: { unified: 'tool-calls', raw: undefined }, usage });
-      } else {
-        chunks.push({ type: 'text-start', id: 't1' });
-        chunks.push({ type: 'text-delta', id: 't1', delta: 'Done' });
-        chunks.push({ type: 'text-end', id: 't1' });
-        chunks.push({ type: 'finish', finishReason: { unified: 'stop', raw: undefined }, usage });
-      }
-
-      return { stream: convertArrayToReadableStreamV3(chunks) };
-    },
-  });
-}
-
 async function viewStoredAttachment(model: any, attachmentPart: Record<string, unknown>) {
   const memory = new Memory({
     storage: new InMemoryStore(),
@@ -143,50 +106,41 @@ async function viewStoredAttachment(model: any, attachmentPart: Record<string, u
     .find((part: any) => part.type === 'tool-result');
 
   expect(toolResult).toBeDefined();
-  return toolResult.output.value as any[];
+  return toolResult.output;
 }
 
 describe('recall viewAttachment through the agent loop', () => {
   it('hands an inline image to the model as a media tool-result part', async () => {
-    const value = await viewStoredAttachment(createV5RecallThenAnswerModel(), {
+    const output = await viewStoredAttachment(createV5RecallThenAnswerModel(), {
       type: 'file',
       data: `data:image/png;base64,${base64Png}`,
       filename: 'inline.png',
     });
 
-    expect(value).toEqual([
-      { type: 'text', text: '[File: inline.png] image/png (inline data omitted)' },
-      { type: 'media', data: base64Png, mediaType: 'image/png' },
-    ]);
+    expect(output).toEqual({
+      type: 'content',
+      value: [
+        { type: 'text', text: '[File: inline.png] image/png (inline data omitted)' },
+        { type: 'media', data: base64Png, mediaType: 'image/png' },
+      ],
+    });
   });
 
-  it('never puts a remote URL in the base64-only media field', async () => {
+  it('sends only a note for a remote attachment, which AI SDK v5 providers cannot take in a tool result', async () => {
+    // The stored user message references the same URL; let the "provider" fetch it so the agent
+    // doesn't try to download it before the first step.
     const model = createV5RecallThenAnswerModel({ 'image/*': [/^https:\/\//] });
 
-    const value = await viewStoredAttachment(model, {
+    const output = await viewStoredAttachment(model, {
       type: 'file',
       data: remoteUrl,
       mimeType: 'image/png',
       filename: 'original.png',
     });
 
-    expect(value).toEqual([
-      { type: 'text', text: `[File: original.png] image/png url: ${remoteUrl}` },
-      { type: 'image-url', url: remoteUrl, mediaType: 'image/png' },
-    ]);
-  });
-
-  it('hands a remote image to an AI SDK v6 model as an image-url part', async () => {
-    const value = await viewStoredAttachment(createV6RecallThenAnswerModel(), {
-      type: 'file',
-      data: remoteUrl,
-      mimeType: 'image/png',
-      filename: 'original.png',
-    });
-
-    expect(value).toEqual([
-      { type: 'text', text: `[File: original.png] image/png url: ${remoteUrl}` },
-      { type: 'image-url', url: remoteUrl, mediaType: 'image/png' },
-    ]);
+    expect(output.type).not.toBe('content');
+    expect(JSON.stringify(output)).toContain(
+      `[File: original.png] image/png url: ${remoteUrl} — This attachment is stored at a remote URL, so it can't be shown inline.`,
+    );
   });
 });

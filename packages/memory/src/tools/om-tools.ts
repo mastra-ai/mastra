@@ -640,10 +640,9 @@ function isRecallAttachmentContent(value: unknown): value is RecallAttachmentCon
 }
 
 /**
- * Turns an attachment part into a model-viewable payload. Returns the base64 bytes for inline
- * payloads, or the http(s) URL for remote ones (the provider fetches those itself). Everything
- * else — provider file IDs, unreachable schemes, oversized payloads, unsupported media types —
- * comes back as an explanation for the agent instead.
+ * Turns an attachment part into a model-viewable payload. Only inline payloads are returned, as
+ * base64 bytes. Everything else — remote URLs, provider file IDs, oversized payloads, unsupported
+ * media types — comes back as an explanation for the agent instead.
  */
 function resolveViewableAttachment(
   part: Record<string, unknown>,
@@ -662,8 +661,12 @@ function resolveViewableAttachment(
     };
   }
 
+  // Remote URLs would need an `image-url`/`file-url` tool-result part, which AI SDK v5 providers
+  // don't support (they drop it to `null`), and the mapped output is replayed on every later turn.
   if (isHttpUrlString(payloadString)) {
-    return { data: payloadString, mimeType: mediaType };
+    return {
+      note: "This attachment is stored at a remote URL, so it can't be shown inline. Use its url if you need to reference it.",
+    };
   }
 
   if (payloadString.length * 0.75 > MAX_VIEWABLE_ATTACHMENT_BYTES) {
@@ -673,7 +676,7 @@ function resolveViewableAttachment(
   // decodeImageBuffer only recognizes a lowercase `data:` scheme.
   const bytes = decodeImageBuffer(isDataUri ? `data:${payloadString.slice(5)}` : payloadString || payload);
   if (!bytes) {
-    return { note: "This attachment's payload is not inline data or an http(s) URL, so it can't be shown." };
+    return { note: "This attachment's payload is not inline data, so it can't be shown." };
   }
 
   if (bytes.byteLength > MAX_VIEWABLE_ATTACHMENT_BYTES) {
@@ -684,25 +687,18 @@ function resolveViewableAttachment(
 }
 
 /**
- * Presents a resolved attachment to the model as a native part alongside its text description.
- * Base64 payloads become a `media` part. http(s) URLs become `image-url`/`file-url` parts, which is
- * the shape core expects for remote media (`media.data` is base64-only); AI SDK v6+ providers
- * fetch them, while v5 providers have no tool-result part for a remote URL.
+ * Presents a resolved attachment to the model as a native base64 `media` part alongside its text
+ * description.
  */
 function recallAttachmentToModelOutput(output: unknown): unknown {
   if (!isRecallAttachmentContent(output)) return undefined;
   const [textPart, attachment] = output.content;
-  const isImage = attachment.mimeType.toLowerCase().startsWith('image/');
-  const attachmentPart = isHttpUrlString(attachment.data)
-    ? {
-        type: isImage ? ('image-url' as const) : ('file-url' as const),
-        url: attachment.data,
-        mediaType: attachment.mimeType,
-      }
-    : { type: 'media' as const, data: attachment.data, mediaType: attachment.mimeType };
   return {
     type: 'content' as const,
-    value: [{ type: 'text' as const, text: textPart.text }, attachmentPart],
+    value: [
+      { type: 'text' as const, text: textPart.text },
+      { type: 'media' as const, data: attachment.data, mediaType: attachment.mimeType },
+    ],
   };
 }
 

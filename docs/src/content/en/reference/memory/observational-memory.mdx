@@ -1272,7 +1272,7 @@ Mastra also injects scope-aware usage instructions into the agent's context. For
     isOptional: true,
     defaultValue: "'low'",
     description:
-      "Controls how much content is shown per message part. `'low'` shows truncated text and tool names with positional indices (`[p0]`, `[p1]`). `'high'` shows full content including tool arguments and results, clamped to one part per call with continuation hints. Image and file parts show their filename, media type, and stored URL or provider file ID so the agent can reuse the attachment. Inline file data such as base64 or data URIs is omitted. Pass `viewAttachment` with `cursor` and `partIndex` to send the attachment itself to the model.",
+      "Controls how much content is shown per message part. `'low'` shows truncated text and tool names with positional indices (`[p0]`, `[p1]`). `'high'` shows full content including tool arguments and results, clamped to one part per call with continuation hints. Image and file parts show their filename, media type, and stored URL or provider file ID so the agent can reuse the attachment. Inline file data such as base64 or data URIs is omitted. Pass `viewAttachment` with `cursor` and `partIndex` to send inline attachment data to the model.",
   },
   {
     name: 'partType',
@@ -1308,7 +1308,7 @@ Mastra also injects scope-aware usage instructions into the agent's context. For
     isOptional: true,
     defaultValue: 'false',
     description:
-      'Show the attachment itself rather than only describing it. Requires `cursor` and `partIndex`, and applies when that part is an `image` or `file`. Inline data is sent as a native media part; an `http(s)` URL is sent as an `image-url` or `file-url` part for the model provider to fetch, which AI SDK v6 and later models support. Media types outside `image/*` and `application/pdf`, provider file IDs, and oversized payloads come back as an explanation instead.',
+      'Show the attachment itself rather than only describing it. Requires `cursor` and `partIndex`, and applies when that part is an `image` or `file`. Inline data such as base64 or data URIs is sent as a native media part. Attachments stored as remote URLs or provider file IDs, media types outside `image/*` and `application/pdf`, and oversized payloads come back as an explanation instead.',
   },
   {
     name: 'before',
