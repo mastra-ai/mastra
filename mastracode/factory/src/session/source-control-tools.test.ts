@@ -110,8 +110,12 @@ async function fixture(integrationId = 'gitlab') {
   }));
   const resolveReviewThread = vi.fn(async () => undefined);
   const listReviews = vi.fn(async () => ({ reviews: [], nextCursor: null }));
+  const getPullRequest = vi.fn(async () => ({ id: '17', headSha: 'cd1e5903851234567890abcdef1234567890abcd' }));
+  const createReview = vi.fn(async () => ({ id: 'review-1' }));
   const versionControl = {
     getRepositoryTarget,
+    getPullRequest,
+    createReview,
     createPullRequest,
     createReviewComment,
     resolveReviewThread,
@@ -126,6 +130,8 @@ async function fixture(integrationId = 'gitlab') {
     createReviewComment,
     resolveReviewThread,
     listReviews,
+    getPullRequest,
+    createReview,
     getRepositoryTarget,
     audit,
     emitAgent,
@@ -383,5 +389,76 @@ describe('createSourceControlTools', () => {
         audit: setup.audit,
       }),
     ).toEqual({});
+  });
+
+  describe('review verdict consistency', () => {
+    const head = 'cd1e5903851234567890abcdef1234567890abcd';
+    async function submit(input: Record<string, unknown>) {
+      const setup = await fixture();
+      const tools = createSourceControlTools({
+        requestContext: requestContext(),
+        providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
+        audit: setup.audit,
+      });
+      const run = (tools.source_control_review_change_request!.execute as any)({ changeRequestId: 17, ...input });
+      return { setup, run };
+    }
+
+    it('rejects an approval whose body requests changes', async () => {
+      const { setup, run } = await submit({ event: 'approve', body: 'Verdict: request changes\n\nFix it.' });
+      await expect(run).rejects.toThrow(/Verdict: request changes.*event is "approve"/);
+      expect(setup.createReview).not.toHaveBeenCalled();
+    });
+
+    it('rejects a request-changes review whose body approves', async () => {
+      const { setup, run } = await submit({ event: 'request-changes', body: 'Verdict: approve\n\nLGTM.' });
+      await expect(run).rejects.toThrow(/Verdict: approve.*event is "request-changes"/);
+      expect(setup.createReview).not.toHaveBeenCalled();
+    });
+
+    it('rejects a comment review whose body approves', async () => {
+      const { run } = await submit({ event: 'comment', body: 'Verdict: approve\n\nLGTM.' });
+      await expect(run).rejects.toThrow(/event is "comment"/);
+    });
+
+    it.each([
+      ['approve', 'Verdict: approve\n\nLGTM.'],
+      ['request-changes', 'Verdict: request changes\n\nFix it.'],
+      ['comment', 'Verdict: request changes\n\nFix it.'],
+      ['comment', 'Looks fine overall, one question inline.'],
+    ])('publishes a consistent %s review', async (event, body) => {
+      const { setup, run } = await submit({ event, body });
+      await expect(run).resolves.toEqual({ id: 'review-1' });
+      expect(setup.createReview).toHaveBeenCalledWith(expect.objectContaining({ event, body }));
+    });
+
+    it('rejects a body whose reviewed head is not the current head', async () => {
+      const { setup, run } = await submit({
+        event: 'approve',
+        body: 'Verdict: approve\nReviewed head: `ce79aaafad`\n\nLGTM.',
+      });
+      await expect(run).rejects.toThrow(/Reviewed head: ce79aaafad.*current change-request head/);
+      expect(setup.createReview).not.toHaveBeenCalled();
+    });
+
+    it('rejects a body whose reviewed head disagrees with commitId', async () => {
+      const { setup, run } = await submit({
+        event: 'approve',
+        commitId: 'ce79aaafad',
+        body: `Verdict: approve\n**Reviewed head:** ${head}\n`,
+      });
+      await expect(run).rejects.toThrow(/commitId is ce79aaafad/);
+      expect(setup.createReview).not.toHaveBeenCalled();
+    });
+
+    it('publishes when the reviewed head matches the current head', async () => {
+      const { setup, run } = await submit({
+        event: 'approve',
+        commitId: head,
+        body: `Verdict: approve\nReviewed head: ${head.slice(0, 10)}\n`,
+      });
+      await expect(run).resolves.toEqual({ id: 'review-1' });
+      expect(setup.createReview).toHaveBeenCalledOnce();
+    });
   });
 });

@@ -40,6 +40,33 @@ interface SessionTarget {
   userId: string;
 }
 
+type ReviewEvent = 'approve' | 'request-changes' | 'comment';
+
+/** Rejects a review whose leading `Verdict:` line contradicts the submitted event. */
+export function assertVerdictMatchesEvent(event: ReviewEvent, body: string | undefined): void {
+  const firstLine = body?.trimStart().split('\n', 1)[0] ?? '';
+  const verdict = /^verdict:\s*(approve|request changes)\b/i.exec(firstLine)?.[1]?.toLowerCase();
+  if (!verdict) return;
+  // GitLab has no request-changes state, so a blocking verdict is published as a comment review.
+  const allowed: ReviewEvent[] = verdict === 'approve' ? ['approve'] : ['request-changes', 'comment'];
+  if (!allowed.includes(event)) {
+    throw new Error(
+      `Review body opens with "Verdict: ${verdict}" but event is "${event}". Nothing was posted. Use event ${allowed
+        .map(e => `"${e}"`)
+        .join(' or ')} for this body, or regenerate the body for the verdict you intend.`,
+    );
+  }
+}
+
+function reviewedHeadFromBody(body: string | undefined): string | undefined {
+  return /^[\s*_>-]*reviewed head[*_]*:[*_]*\s*`?([0-9a-f]{7,40})\b/im.exec(body ?? '')?.[1]?.toLowerCase();
+}
+
+function shaMatches(reviewed: string, actual: string): boolean {
+  const full = actual.toLowerCase();
+  return full.startsWith(reviewed) || reviewed.startsWith(full);
+}
+
 function authIdentity(requestContext: RequestContext) {
   const user = getFactoryAuthUserFromContext(requestContext);
   return { orgId: getFactoryAuthOrgId(user), userId: getFactoryAuthUserId(user) };
@@ -475,7 +502,28 @@ export function createSourceControlTools({
           message: 'request-changes and comment reviews require a body.',
         }),
       execute: async input => {
+        assertVerdictMatchesEvent(input.event, input.body);
         const target = await withTarget();
+        const reviewedHead = reviewedHeadFromBody(input.body);
+        if (reviewedHead) {
+          const pullRequest = await target.provider.versionControl.getPullRequest({
+            ...(await reference(target)),
+            pullRequestId: changeRequestId(input.changeRequestId),
+          });
+          if (!pullRequest) {
+            throw new Error(`Change request ${input.changeRequestId} was not found; nothing was posted.`);
+          }
+          for (const [label, sha] of [
+            ['current change-request head', pullRequest.headSha],
+            ['commitId', input.commitId],
+          ] as const) {
+            if (sha && !shaMatches(reviewedHead, sha)) {
+              throw new Error(
+                `Review body says "Reviewed head: ${reviewedHead}" but the ${label} is ${sha}. Nothing was posted. Re-review the current head and regenerate the body before publishing.`,
+              );
+            }
+          }
+        }
         const base = {
           ...(await reference(target)),
           pullRequestId: changeRequestId(input.changeRequestId),
