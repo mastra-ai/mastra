@@ -178,7 +178,8 @@ export type FullOutput<OUTPUT = undefined> = {
  * The completionResult metadata only exists on DB-format messages, and the
  * message is converted alone so adjacent assistant messages aren't merged.
  *
- * Returns `undefined` only when there is no response message to read text from,
+ * Returns `undefined` when there is no response message to read text from, or
+ * when the last one is a tool-result message (the run stopped on a tool call),
  * so callers can distinguish "no processed output exists" from an output
  * processor deliberately clearing the text to `''`. Never collapse the two with
  * a truthiness check: a redacting processor must be able to produce empty text.
@@ -190,11 +191,15 @@ function resolveOutputTextSkippingCompletionChecks(messageList: MessageList): st
     const lastRealMessage = responseDbMessages.findLast(m => !m.content?.metadata?.completionResult);
     const converted = lastRealMessage ? convertMessages([lastRealMessage]).to('AIV4.Core') : [];
     const lastConverted = converted[converted.length - 1];
-    return lastConverted ? coreContentToString(lastConverted.content) : undefined;
+    if (!lastConverted || lastConverted.role === 'tool') return undefined;
+    return coreContentToString(lastConverted.content);
   }
   const responseMessages = messageList.get.response.aiV4.core();
   const lastResponseMessage = responseMessages[responseMessages.length - 1];
-  return lastResponseMessage ? coreContentToString(lastResponseMessage.content) : undefined;
+  // A run that stops on a tool call ends with a `tool` result message, which has
+  // no text of its own; the final step's text is not in the processed transcript.
+  if (!lastResponseMessage || lastResponseMessage.role === 'tool') return undefined;
+  return coreContentToString(lastResponseMessage.content);
 }
 
 export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
