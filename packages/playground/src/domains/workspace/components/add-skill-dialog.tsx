@@ -96,25 +96,20 @@ export function AddSkillDialog({
     writableMounts && writableMounts.length > 0 ? writableMounts[0]?.path : undefined,
   );
 
-  // Fetch popular skills (via server proxy)
   const { data: popularData, isLoading: isLoadingPopular } = usePopularSkillsSh(workspaceId);
 
-  // Search mutation (via server proxy)
   const searchMutation = useSearchSkillsSh(workspaceId);
 
-  // Parse selected skill source for install and preview URL
   const parsedSource = useMemo(() => {
     if (!selectedSkill?.topSource) return null;
     return parseSkillSource(selectedSkill.topSource, selectedSkill.name);
   }, [selectedSkill]);
 
-  // Build agentskills.io preview URL
   const skillsUrl = useMemo(() => {
     if (!parsedSource || !selectedSkill) return null;
     return `https://skills.sh/${parsedSource.owner}/${parsedSource.repo}/${selectedSkill.name}`;
   }, [parsedSource, selectedSkill]);
 
-  // Fetch skill preview markdown (via server proxy to skills.sh)
   const { data: previewContent, isLoading: isLoadingPreview } = useSkillPreview(
     workspaceId,
     parsedSource?.owner,
@@ -123,14 +118,12 @@ export function AddSkillDialog({
     { enabled: !!parsedSource && !!selectedSkill },
   );
 
-  // Debounced search to reduce API calls
   const debouncedSearch = useDebouncedCallback((query: string) => {
     if (query.trim().length >= 2) {
       searchMutation.mutate(query);
     }
   }, 300);
 
-  // Handle search input
   const handleSearch = useCallback(
     (query: string) => {
       setSearchQuery(query);
@@ -139,9 +132,6 @@ export function AddSkillDialog({
     [debouncedSearch],
   );
 
-  // Determine which skills to display
-  // When searching (query >= 2 chars), show search results (or empty if pending/error)
-  // Otherwise show popular skills
   const displaySkills = useMemo(() => {
     if (searchQuery.trim().length >= 2) {
       return searchMutation.data?.skills ?? [];
@@ -152,18 +142,14 @@ export function AddSkillDialog({
   const isSearching = searchMutation.isPending;
   const hasSearchResults = searchQuery.trim().length >= 2;
 
-  // Check if selected skill is already installed
-  // Check both precise IDs (for skills.sh installed skills) and names (for local/external skills)
   const isSelectedSkillInstalled = useMemo(() => {
     if (!selectedSkill) return false;
 
-    // Check precise match (owner/repo/name) for skills.sh installed skills
     const installedId = getInstalledSkillId(selectedSkill);
     if (installedId && installedSkillIds.includes(installedId)) {
       return true;
     }
 
-    // Check name match for local/external skills without source tracking
     if (installedSkillNames.includes(selectedSkill.name)) {
       return true;
     }
@@ -171,7 +157,6 @@ export function AddSkillDialog({
     return false;
   }, [selectedSkill, installedSkillIds, installedSkillNames]);
 
-  // Handle install
   const handleInstall = useCallback(() => {
     if (!selectedSkill || !parsedSource) return;
 
@@ -182,7 +167,6 @@ export function AddSkillDialog({
     });
   }, [selectedSkill, parsedSource, onInstall, writableMounts, selectedMount]);
 
-  // Reset state when dialog closes
   const handleOpenChange = useCallback(
     (newOpen: boolean) => {
       if (!newOpen) {
@@ -204,7 +188,6 @@ export function AddSkillDialog({
         </DialogHeader>
 
         <DialogBody layout="fill">
-          {/* Search Input */}
           <div className="relative">
             <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -216,7 +199,6 @@ export function AddSkillDialog({
           </div>
 
           <div className="flex min-h-0 flex-1 gap-4">
-            {/* Skills List */}
             <div className="flex min-h-0 w-1/2 flex-col">
               <div className="mb-2 text-column tracking-wide text-muted-foreground uppercase">
                 {hasSearchResults ? 'Search Results' : 'Popular Skills'}
@@ -243,7 +225,6 @@ export function AddSkillDialog({
                     {displaySkills.map(skill => {
                       const skillUniqueId = getSkillUniqueId(skill);
                       const installedId = getInstalledSkillId(skill);
-                      // Check precise match (skills.sh) OR name match (local/external)
                       const isInstalled =
                         (installedId && installedSkillIds.includes(installedId)) ||
                         installedSkillNames.includes(skill.name);
@@ -284,7 +265,6 @@ export function AddSkillDialog({
               </ScrollArea>
             </div>
 
-            {/* Preview Panel */}
             <div className="flex min-h-0 w-1/2 flex-col">
               <div className="mb-2 text-column tracking-wide text-muted-foreground uppercase">Preview</div>
               <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-border">
@@ -295,7 +275,6 @@ export function AddSkillDialog({
                   </div>
                 ) : (
                   <>
-                    {/* Skill Header */}
                     <div className="border-b border-border bg-card p-4">
                       <div className="flex items-start gap-3">
                         <div className="rounded-lg bg-muted p-2">
@@ -328,7 +307,6 @@ export function AddSkillDialog({
                       </div>
                     </div>
 
-                    {/* Skill Content */}
                     {isLoadingPreview ? (
                       <div className="flex flex-1 items-center justify-center">
                         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -361,7 +339,6 @@ export function AddSkillDialog({
             </div>
           </div>
 
-          {/* Mount picker - only shown when multiple writable mounts exist */}
           {selectedSkill && writableMounts && writableMounts.length > 1 && (
             <div className={cn(raisedSurfaceStyle, 'flex items-center gap-3 rounded-lg p-3')}>
               <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />

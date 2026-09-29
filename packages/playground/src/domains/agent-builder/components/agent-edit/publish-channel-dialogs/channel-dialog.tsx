@@ -26,8 +26,6 @@ export function ChannelDialog({
 }: ChannelDialogProps) {
   const [view, setView] = useState<ChannelDialogView>(initialView);
 
-  // Reset back to the publish view whenever the dialog reopens, so the next
-  // open does not flash the disconnect-confirm content.
   useEffect(() => {
     if (open) setView(initialView);
   }, [open, initialView]);

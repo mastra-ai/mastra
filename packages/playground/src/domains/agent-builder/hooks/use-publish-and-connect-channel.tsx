@@ -57,10 +57,6 @@ export function usePublishAndConnectChannel(agentId: string): UsePublishAndConne
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [activeChannelDialog, setActiveChannelDialog] = useState<PendingRequest | null>(null);
 
-  // Per-platform connect action is needed before we know which platform was
-  // clicked, so we instantiate the Slack one here (currently the only
-  // platform with a direct-connect shortcut). When more platforms gain
-  // shortcuts, this lookup can be expanded.
   const slackConnect = useConnectChannelAction('slack');
 
   const runChannelAction = useCallback(

@@ -30,10 +30,6 @@ import {
   useSearchBuilderRegistry,
 } from '@/domains/agent-builder/hooks/use-builder-registries';
 
-// =============================================================================
-// Helpers
-// =============================================================================
-
 /**
  * Parse a registry skill's `topSource` field to extract owner/repo. Mirrors
  * the workspace-side helper but kept private to the Builder dialog so the two
@@ -56,10 +52,6 @@ function parseSkillSource(topSource: string): { owner: string; repo: string } | 
 function getSkillUniqueId(skill: BuilderRegistrySkillSummary): string {
   return `${skill.topSource}/${skill.name}`;
 }
-
-// =============================================================================
-// Component
-// =============================================================================
 
 export interface BuilderAddSkillDialogProps {
   open: boolean;
@@ -156,8 +148,6 @@ export function BuilderAddSkillDialog({
       onOpenChange(false);
     } catch (err: any) {
       const message: string = err?.message ?? 'Install failed';
-      // Detect 409 from the stringified error body. The collision case is the
-      // only one we need to upgrade into a navigation hint.
       if (/409/.test(message) || /already exists/i.test(message)) {
         onCollision?.(selectedSkill.name);
         setInstallError('A skill with this name already exists. Open the existing skill instead.');
@@ -202,7 +192,6 @@ export function BuilderAddSkillDialog({
           </div>
 
           <div className="flex min-h-0 flex-1 gap-4">
-            {/* Skills list */}
             <div className="flex min-h-0 w-1/2 flex-col">
               <div className="mb-2 text-column tracking-wide text-muted-foreground uppercase">
                 {hasSearchResults ? 'Search results' : 'Popular skills'}
@@ -259,7 +248,6 @@ export function BuilderAddSkillDialog({
               </ScrollArea>
             </div>
 
-            {/* Preview pane */}
             <div className="flex min-h-0 w-1/2 flex-col overflow-hidden rounded-lg border border-border">
               {!selectedSkill ? (
                 <div className="flex flex-1 flex-col items-center justify-center text-muted-foreground">

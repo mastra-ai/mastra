@@ -58,10 +58,6 @@ const StoryLink = forwardRef<HTMLAnchorElement, LinkComponentProps>(({ href, chi
   </a>
 ));
 
-/* ------------------------------------------------------------------------- */
-/* Layout frames — plain components so `render` source shows the real markup */
-/* ------------------------------------------------------------------------- */
-
 const HelperCopy = () => (
   <>
     <p className="text-subheading text-foreground">Main content area</p>
@@ -166,11 +162,6 @@ const MobileFrame = ({ children }: { children: React.ReactNode }) => (
     </div>
   </div>
 );
-
-/* ------------------------------------------------------------------------- */
-/* Decorator — providers only (TooltipProvider + MainSidebarProvider).        */
-/* The frame lives inside `render` so Storybook's "Show code" is accurate.    */
-/* ------------------------------------------------------------------------- */
 
 const withProvider = (provider?: Omit<MainSidebarProviderProps, 'children'>) => (Story: React.ComponentType) => (
   <TooltipProvider>
@@ -477,10 +468,6 @@ export const FullSidebar: Story = {
   ),
 };
 
-/* ------------------------------------------------------------------------- */
-/* Resizable / Collapsed variants — NavLink/NavHeader auto-inherit state      */
-/* ------------------------------------------------------------------------- */
-
 const SidebarBody = () => (
   <MainSidebar className="border-r border-border bg-background">
     <MainSidebar.Nav>
@@ -558,10 +545,6 @@ export const FullyCollapsible: Story = {
   ),
 };
 
-/* ------------------------------------------------------------------------- */
-/* Floating variant — consumer composition, not a new prop                   */
-/* ------------------------------------------------------------------------- */
-
 export const Floating: Story = {
   decorators: [withProvider({ defaultWidth: 240, minWidth: 200, maxWidth: 400, collapseBelow: 180 })],
   parameters: {
@@ -593,10 +576,6 @@ export const Floating: Story = {
   ),
 };
 
-/* ------------------------------------------------------------------------- */
-/* State parity — expanded vs collapsed side-by-side                         */
-/* ------------------------------------------------------------------------- */
-
 const ParityFrame = ({ children }: { children: React.ReactNode }) => (
   <div className="flex h-125 w-210 gap-4 rounded-lg border border-border bg-sidebar p-3">{children}</div>
 );
@@ -623,8 +602,6 @@ const ParityBody = () => (
 );
 
 export const StateParity: Story = {
-  // No global decorator — each panel owns its own provider so the two
-  // sidebars can render in opposite states simultaneously.
   decorators: [Story => <TooltipProvider>{Story()}</TooltipProvider>],
   parameters: {
     docs: {
@@ -646,14 +623,6 @@ export const StateParity: Story = {
   ),
 };
 
-/* ------------------------------------------------------------------------- */
-/* Mobile drawer                                                             */
-/* ------------------------------------------------------------------------- */
-
-/* ------------------------------------------------------------------------- */
-/* asChild — slot any element (button, custom Link, anything) as the item.    */
-/* ------------------------------------------------------------------------- */
-
 export const AsChild: Story = {
   parameters: {
     docs: {
@@ -674,13 +643,11 @@ export const AsChild: Story = {
             <MainSidebar.NavSection>
               <MainSidebar.NavHeader>Navigation</MainSidebar.NavHeader>
               <MainSidebar.NavList>
-                {/* Default anchor (link={...}) */}
                 <MainSidebar.NavLink
                   link={{ name: 'Home', url: '/', icon: <Home /> }}
                   isActive={activeKey === 'home'}
                 />
 
-                {/* asChild: <button> as the item — fires onClick instead of navigating. */}
                 <MainSidebar.NavLink asChild isActive={activeKey === 'agents'}>
                   <button type="button" onClick={() => setActiveKey('agents')}>
                     <Bot />
@@ -688,7 +655,6 @@ export const AsChild: Story = {
                   </button>
                 </MainSidebar.NavLink>
 
-                {/* asChild: opens a Dialog. Replaces the old `<div onClick>` wrapper hack. */}
                 <Dialog open={supportOpen} onOpenChange={setSupportOpen}>
                   <DialogTrigger
                     render={
@@ -709,7 +675,6 @@ export const AsChild: Story = {
                   </DialogContent>
                 </Dialog>
 
-                {/* asChild: external link with custom attrs. */}
                 <MainSidebar.NavLink asChild>
                   <a href="https://mastra.ai/docs" target="_blank" rel="noreferrer">
                     <BookOpen />

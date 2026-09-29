@@ -264,7 +264,6 @@ export function AgentPlaygroundVersionBar({
           </div>
         )}
 
-        {/* Change message dialog */}
         <Dialog open={showMessageDialog} onOpenChange={setShowMessageDialog} pending={isSavingDraft}>
           <DialogContent>
             <DialogHeader>

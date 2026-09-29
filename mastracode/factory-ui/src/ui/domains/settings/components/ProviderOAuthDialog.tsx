@@ -50,9 +50,7 @@ function PasteCodeDialog({ provider, session, onClose, onComplete }: ProviderOAu
     try {
       await completeMutation.mutateAsync({ provider, sessionId: session.sessionId, code: authorizationCode });
       onComplete();
-    } catch {
-      // Mutation error is rendered below.
-    }
+    } catch {}
   };
 
   const close = () => {

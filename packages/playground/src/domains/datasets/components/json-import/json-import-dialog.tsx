@@ -45,7 +45,6 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
   const [fileError, setFileError] = useState<string | null>(null);
   const [pastedText, setPastedText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
-  // Incremented whenever the selection changes so a slow file read can't restore a discarded file.
   const readIdRef = useRef(0);
 
   const { batchInsertItems } = useDatasetMutations();
@@ -100,7 +99,6 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
 
   const handleClose = useCallback(() => {
     onOpenChange(false);
-    // Reset after the close animation
     setTimeout(resetState, 150);
   }, [onOpenChange, resetState]);
 

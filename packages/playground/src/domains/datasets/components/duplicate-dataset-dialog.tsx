@@ -47,7 +47,6 @@ export function DuplicateDatasetDialog({
   const client = useMastraClient();
   const { createDataset, addItem } = useDatasetMutations();
 
-  // Pre-populate name when dialog opens
   useEffect(() => {
     if (open) {
       setName(`${sourceDatasetName} (Copy)`);
@@ -67,7 +66,6 @@ export function DuplicateDatasetDialog({
     setProgress({ phase: 'fetching', current: 0, total: 0 });
 
     try {
-      // Fetch all items from source dataset
       const allItems: Array<{ input: unknown; groundTruth?: unknown; metadata?: Record<string, unknown> }> = [];
       let page = 0;
       const perPage = 100;
@@ -95,7 +93,6 @@ export function DuplicateDatasetDialog({
         page++;
       }
 
-      // Create the new dataset
       setProgress({ phase: 'creating', current: 0, total: allItems.length });
       const dataset = await createDataset.mutateAsync({
         name: name.trim(),
@@ -103,7 +100,6 @@ export function DuplicateDatasetDialog({
         targetType: sourceDatasetTargetType ?? undefined,
       });
 
-      // Copy items to new dataset
       setProgress({ phase: 'copying', current: 0, total: allItems.length });
       for (let i = 0; i < allItems.length; i++) {
         const item = allItems[i];
@@ -118,14 +114,12 @@ export function DuplicateDatasetDialog({
 
       toast.success(`Dataset duplicated with ${allItems.length} items`);
 
-      // Reset form
       setName('');
       setDescription('');
       setIsDuplicating(false);
       setProgress({ phase: 'idle', current: 0, total: 0 });
       onOpenChange(false);
 
-      // Navigate to new dataset
       onSuccess?.(dataset.id);
     } catch (error) {
       toast.error(`Failed to duplicate dataset: ${error instanceof Error ? error.message : 'Unknown error'}`);

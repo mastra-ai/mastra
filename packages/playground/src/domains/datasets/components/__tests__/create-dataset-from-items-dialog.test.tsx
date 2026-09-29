@@ -12,7 +12,6 @@ import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
-// Thin stub for the heavy Dialog atom so this test focuses on the real client + mutation behavior.
 vi.mock('@mastra/playground-ui/components/Dialog', () => {
   const Dialog = ({ open, children }: PropsWithChildren<{ open: boolean }>) => (open ? <div>{children}</div> : null);
 

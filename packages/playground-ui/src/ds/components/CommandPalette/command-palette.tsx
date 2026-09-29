@@ -28,7 +28,6 @@ function CommandPaletteDialog({
       overlayClassName={cn('bg-sidebar/40 backdrop-blur-none', overlayClassName)}
       contentClassName={cn('command-palette-popup overflow-visible bg-transparent shadow-none', contentClassName)}
       commandClassName={cn(
-        // Height lives in `.command-palette-shell` — see command-palette.css.
         'command-palette-shell gap-2 overflow-visible rounded-none bg-transparent text-muted-foreground shadow-none backdrop-blur-none',
         '[&_[data-slot=command-input-wrapper]_svg]:text-muted-foreground',
         '**:[[cmdk-input]]:h-full **:[[cmdk-input]]:text-body',
@@ -51,8 +50,6 @@ function CommandPaletteInput({ wrapperClassName, ...props }: CommandPaletteInput
       wrapperClassName={cn(
         'command-palette-surface command-palette-surface-input',
         inputSurfaceAndFocusWithinStyle,
-        // `border-0` because `CommandInput`'s own `border-b` is the separator of a single-panel
-        // Command; here the input is a detached pill and the material already carries its rim.
         'h-11 shrink-0 rounded-xl border-0 px-3 pr-11',
         wrapperClassName,
       )}

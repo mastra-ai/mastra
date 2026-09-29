@@ -134,7 +134,6 @@ export function ExperimentTriggerDialog({
   const [version, setVersion] = useState<number | null>(initialDatasetVersion ?? null);
   const [targetType, setTargetType] = useState<TargetType | ''>(initialTargetType ?? '');
   const [targetId, setTargetId] = useState<string>(initialTargetId ?? '');
-  // `null` means the user has not made an explicit choice yet, so the dataset defaults apply.
   const [selectedScorers, setSelectedScorers] = useState<string[] | null>(initialScorerIds ?? null);
   const [requestContextValues, setRequestContextValues] = useState<Record<string, unknown>>({});
   const [requestContextRaw, setRequestContextRaw] = useState('');
@@ -197,7 +196,6 @@ export function ExperimentTriggerDialog({
   };
 
   const handleRun = async () => {
-    // Explicit guards (rather than `canRun`) so TypeScript narrows `targetType` for the request.
     if (!datasetId || !targetType || !targetId || !name.trim()) return;
 
     let requestContext: Record<string, unknown> | undefined;

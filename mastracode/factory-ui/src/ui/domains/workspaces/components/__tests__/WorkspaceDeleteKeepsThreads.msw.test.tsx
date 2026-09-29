@@ -42,8 +42,6 @@ function renderSection() {
     <MemoryRouter initialEntries={['/factories/fp-1']}>
       <ChatSessionContext.Provider
         value={{
-          // Enabled: the sidebar holds a live controller session here, which is
-          // exactly the state in which the old cascade had something to delete.
           resourceId: 'resource-1',
           sessionEnabled: true,
           resourceReady: true,
@@ -81,9 +79,6 @@ describe('Deleting a workspace', () => {
       }),
     );
 
-    // Watch the raw network instead of a handler: any touch of the thread store
-    // at all — enumerating them to cascade, or deleting one — is a failure here,
-    // whatever URL shape the controller client happens to use.
     const recordThreadRequest = ({ request }: { request: Request }) => {
       const { pathname } = new URL(request.url);
       if (pathname.includes('/threads')) threadRequests.push(`${request.method} ${pathname}`);
@@ -103,8 +98,6 @@ describe('Deleting a workspace', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => expect(deletedSessions).toEqual([sessionId]));
-    // Let the mutation's success-side cache work settle before asserting the
-    // thread store was never touched.
     await waitForMutationsIdle(client);
     expect(threadRequests).toEqual([]);
   });

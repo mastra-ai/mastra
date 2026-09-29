@@ -43,7 +43,6 @@ function DatasetSaveDialog({
   const [groundTruth, setGroundTruth] = useState(initialGroundTruth);
   const [selectedDatasetId, setSelectedDatasetId] = useState('');
 
-  // Sync ground truth when dialog opens with new initial value
   useEffect(() => {
     if (open) {
       setGroundTruth(initialGroundTruth);
@@ -227,8 +226,6 @@ function SaveFullConversationInner({ ctx }: { ctx: DatasetSaveContextValue }) {
       });
       const messages = result?.messages ?? [];
 
-      // Split: everything up to (and including) the last user message is input,
-      // the final assistant response becomes the ground truth seed
       const lastAssistantIdx = messages.length - 1;
       const lastMessage = messages[lastAssistantIdx];
       if (lastMessage && lastMessage.role === 'assistant') {
@@ -236,7 +233,6 @@ function SaveFullConversationInner({ ctx }: { ctx: DatasetSaveContextValue }) {
         setInput(JSON.stringify(inputMessages, null, 2));
         setGroundTruth(JSON.stringify(lastMessage, null, 2));
       } else {
-        // No trailing assistant message — use all messages as input
         setInput(JSON.stringify(messages, null, 2));
         setGroundTruth('');
       }

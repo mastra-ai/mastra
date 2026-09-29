@@ -50,8 +50,6 @@ export function AddApiKeyDialog({
   const [scope, setScope] = useState<'user' | 'org'>(fixedScope ?? (canWriteOrgKey ? preferredScope : 'user'));
 
   const error = saveKeyMutation.error instanceof Error ? saveKeyMutation.error.message : undefined;
-  // A shared context wanted an org-wide key but this caller can't write one —
-  // tell them up front instead of letting teammates find out at run time.
   const personalOnlyWarning = authEnabled && preferredScope === 'org' && !canWriteOrgKey;
 
   const saveKey = async () => {
@@ -65,9 +63,7 @@ export function AddApiKeyDialog({
         ...(authEnabled ? { scope } : {}),
       });
       onClose();
-    } catch {
-      // Mutation error is rendered below.
-    }
+    } catch {}
   };
 
   const close = () => {

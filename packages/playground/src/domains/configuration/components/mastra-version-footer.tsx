@@ -134,7 +134,6 @@ function generateUpdateCommand(packages: PackageUpdateInfo[], packageManager: Pa
   if (outdatedPackages.length === 0) return null;
 
   const command = packageManagerCommands[packageManager];
-  // Use the target's prerelease tag to ensure the command installs the version shown in the UI
   const packageArgs = outdatedPackages.map(p => `${p.name}@${p.targetPrereleaseTag ?? 'latest'}`).join(' ');
 
   return `${command} ${packageArgs}`;
@@ -298,5 +297,4 @@ const PackagesModalContent = ({
   );
 };
 
-// Kept for backwards compatibility with the old export name.
 export const MastraPackagesInfo = MastraVersionFooter;

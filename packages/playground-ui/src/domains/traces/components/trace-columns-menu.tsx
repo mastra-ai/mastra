@@ -66,8 +66,6 @@ export function TraceColumnsMenu({
   const [metadataKey, setMetadataKey] = useState('');
   const [metadataError, setMetadataError] = useState<string | undefined>();
 
-  // Keys already shown as columns are left out; a typed key that discovery
-  // hasn't seen is kept in the list so the trigger can display it once picked.
   const metadataKeyOptions = useMemo(() => {
     const keys = availableMetadataKeys.filter(key => !preferences.metadataKeys.includes(key));
     if (metadataKey && !keys.includes(metadataKey)) keys.push(metadataKey);

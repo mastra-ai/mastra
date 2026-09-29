@@ -81,8 +81,6 @@ function CodeView({ code, changed, diffSide, searchQuery }: CodeViewProps) {
   );
 }
 
-// -- Component ----------------------------------------------------------------
-
 export interface DataCodeSectionProps {
   title: React.ReactNode;
   dialogTitle?: React.ReactNode;

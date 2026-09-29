@@ -47,7 +47,6 @@ export function UserSessionsSection() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
-  // Only the controls the viewer changed, so untouched ones follow the defaults once auth resolves.
   const [filterChanges, setFilterChanges] = useState<Partial<UserSessionFiltersState>>({});
   const { pinnedSessions, setPinned } = usePinnedSessions();
 
@@ -58,8 +57,6 @@ export function UserSessionsSection() {
   const viewerUserId = auth.data?.user?.userId;
   const defaultFilters = defaultUserSessionFilters(viewerUserId);
   const filters: UserSessionFiltersState = { ...defaultFilters, ...filterChanges };
-  // Pinned rows stay on top; within each pin group the viewer's own sessions
-  // sort before sessions started by other org members.
   const isOwn = (session: FactoryUserSession) => Boolean(viewerUserId) && session.userId === viewerUserId;
   const allSessions = [...(sessionsQuery.data?.userSessions ?? [])].sort(
     (a, b) =>
@@ -91,9 +88,6 @@ export function UserSessionsSection() {
 
   const deleteSession = useMutation({
     mutationFn: async (session: FactoryUserSession) => {
-      // The thread is deliberately left behind: its transcript is the record of
-      // what was worked on here, and a new session always gets a fresh id, so it
-      // can never be re-attached to a later session.
       await deleteUserSession(baseUrl, session.sessionId);
       return session;
     },
@@ -113,7 +107,6 @@ export function UserSessionsSection() {
     },
   });
 
-  // Pending is per session: the mutation itself only remembers the last row asked for.
   const [regenerating, setRegenerating] = useState<ReadonlySet<string>>(new Set());
   const regenerateTitle = useMutation({
     mutationFn: (session: FactoryUserSession) => regenerateSessionTitle(baseUrl, session.sessionId),
@@ -191,10 +184,6 @@ export function UserSessionsSection() {
                 pinned={pinnedSessions.has(session.sessionId)}
                 onSelect={() => void navigate(url)}
                 onPinChange={pinned => setPinned(session.sessionId, pinned)}
-                // The DELETE route is owner-only and 404s for non-owners, which
-                // deleteUserSession treats as an idempotent success; offering
-                // delete on a known non-owned row would fake-succeed and the
-                // row would reappear. Unknown viewer (auth disabled) keeps it.
                 onDelete={viewerUserId && !isOwn(session) ? undefined : () => setConfirmDelete(session)}
                 onRegenerateTitle={viewerUserId && !isOwn(session) ? undefined : () => regenerateTitle.mutate(session)}
                 regeneratingTitle={regenerating.has(session.sessionId)}

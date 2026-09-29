@@ -81,8 +81,6 @@ export function WorkspacesSection() {
   const scope = { agentControllerId: AGENT_CONTROLLER_ID, resourceId };
   const deleteWorkspace = useDeleteWorkspaceMutation(factoryId, projectRepositoryId, scope);
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
-  // Each sessions group starts on the viewer's own sessions and widens on its own, so showing
-  // everyone's sessions in one list never floods the other.
   const [ownerScope, setOwnerScope] = useState({ work: true, review: true });
   const auth = useFactoryAuth();
   const viewerUserId = auth.data?.user?.userId;
@@ -118,7 +116,6 @@ export function WorkspacesSection() {
     const item = workItemSession?.item;
     const pullRequest = item && latestPullRequestFor(item);
     const pullRequestNumber = pullRequest ? changeRequestNumberForItem(pullRequest) : undefined;
-    // The card names its provider; GitLab merge requests poll their own subscriptions route.
     const provider = pullRequest?.source === 'gitlab-pr' ? ('gitlab' as const) : ('github' as const);
     const active = workspace.sessionId === sessionId;
     const running = runningByPath[workspace.sessionId] === true;
@@ -154,18 +151,13 @@ export function WorkspacesSection() {
     const mineOnly = ownerScope[review ? 'review' : 'work'];
     const all = rows
       .filter(row => row.review === review)
-      // Unknown viewer (auth disabled) has no "own" sessions, so the scope stays off.
       .filter(row => !mineOnly || !viewerUserId || row.workspace.userId === viewerUserId)
       .sort(bySessionPriority);
     const visible = all.slice(0, COLLAPSED_ROW_COUNT);
-    // Deep links and board handoffs can open a session that sorts below the fold;
-    // show it rather than promote it, so the list never moves under the reader.
     const open = all.find(row => row.active);
     if (open && !visible.includes(open)) visible.push(open);
     return { visible, all };
   };
-  // Whether a group exists at all is decided before the owner scope, so an empty filtered
-  // list keeps its heading and toggle instead of stranding the reader with no way back.
   const hasWorkRows = rows.some(row => !row.review);
   const hasReviewRows = rows.some(row => row.review);
   const workRows = latestRows(false);
@@ -193,11 +185,6 @@ export function WorkspacesSection() {
   const pending = deleteWorkspace.isPending;
 
   const openWorkspaceThread = (workspace: FactoryUserSession) => {
-    // A workspace's thread id is its own session id (FactoryStartCoordinator
-    // seeds the session with threadId = sessionId), so navigate straight there
-    // instead of blocking on a session create + thread listing round-trip. The
-    // thread page brings the session online on mount and shows a skeleton while
-    // its messages load.
     void navigate(`/factories/${factoryId}/workspaces/${workspace.sessionId}/threads/${workspace.sessionId}`, {
       state: { from: location },
     });
@@ -369,10 +356,6 @@ function WorkspaceGroup({
             }}
             onSelect={() => onSelect(row.workspace)}
             onPinChange={pinned => onPinChange(row.workspace.sessionId, pinned)}
-            // The DELETE route is owner-only and 404s for non-owners, which the
-            // delete service treats as an idempotent success; offering delete
-            // on a known non-owned row would fake-succeed and the row would
-            // reappear. Unknown viewer (auth disabled) keeps it.
             onDelete={viewerUserId && row.workspace.userId !== viewerUserId ? undefined : () => onDelete(row.workspace)}
           />
         ))}

@@ -35,7 +35,6 @@ export function CopySkillDialog({
 }: CopySkillDialogProps) {
   const [name, setName] = useState('');
 
-  // Re-seed the suggested name whenever the dialog opens for a different source.
   useEffect(() => {
     if (open) setName(suggestCopyName(sourceName, existingNames));
   }, [open, sourceName, existingNames]);

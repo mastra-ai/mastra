@@ -79,8 +79,6 @@ const DeleteAgentDialog = ({
             data-testid="agent-builder-delete-agent-confirm"
             disabled={isPending || isDependentsLoading}
             onClick={() => {
-              // Use a plain button (not AlertDialog.Close) so the dialog stays
-              // open while the request is in flight and on error.
               onConfirm();
             }}
           >
