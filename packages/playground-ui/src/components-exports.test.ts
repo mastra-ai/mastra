@@ -99,12 +99,13 @@ describe('components/* subpath exports', () => {
     expect(mod.TaskList).toBeDefined();
   });
 
-  it('AI tool-call entry exports its compound components', async () => {
-    const mod = await import('./ds/components/ai/tool-call');
-    expect(mod.ToolCall).toBeDefined();
-    expect(mod.ToolCallTrigger).toBeDefined();
-    expect(mod.ToolCallHeader).toBeDefined();
-    expect(mod.ToolCallContent).toBeDefined();
-    expect(mod.ToolCallDisclosure).toBeDefined();
+  it('AI activity entry exports its compound components', async () => {
+    const mod = await import('./ds/components/ai/activity');
+    expect(mod.Activity).toBeDefined();
+    expect(mod.ActivityItem).toBeDefined();
+    expect(mod.ActivityTrigger).toBeDefined();
+    expect(mod.ActivityHeader).toBeDefined();
+    expect(mod.ActivityContent).toBeDefined();
+    expect(mod.ActivityDisclosure).toBeDefined();
   });
 });

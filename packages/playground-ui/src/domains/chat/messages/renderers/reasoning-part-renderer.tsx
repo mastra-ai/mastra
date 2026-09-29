@@ -1,7 +1,7 @@
 import type { ReasoningPart } from '@mastra/react/ui';
 
-import { Reasoning } from '../reasoning';
 import { getReasoningContent } from '../reasoning-content';
+import { ReasoningActivity } from '@/ds/components/ai/activity';
 
 export interface ReasoningPartRendererProps {
   part: ReasoningPart;
@@ -11,5 +11,5 @@ export interface ReasoningPartRendererProps {
 
 export const ReasoningPartRenderer = ({ part, defaultOpen }: ReasoningPartRendererProps) => {
   const content = getReasoningContent(part);
-  return content ? <Reasoning {...content} defaultOpen={defaultOpen} /> : null;
+  return content ? <ReasoningActivity {...content} defaultOpen={defaultOpen} /> : null;
 };
