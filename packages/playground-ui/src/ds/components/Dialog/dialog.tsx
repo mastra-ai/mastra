@@ -4,29 +4,26 @@ import * as React from 'react';
 
 import { DialogAction } from './dialog-action';
 import { DialogContext, dialogActionLayoutClasses, dialogActionSizeClasses, useDialogContext } from './dialog-context';
-import type { DialogIntent, DialogVariant } from './dialog-context';
+import type { DialogIntent } from './dialog-context';
 import { Button } from '@/ds/components/Button';
 import type { TextButtonSize } from '@/ds/components/Button';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { dialogSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { asChildRenderProps } from '@/lib/as-child';
 import { cn } from '@/lib/utils';
 
 import './dialog.css';
 
 export type DialogProps = DialogPrimitive.Root.Props & {
-  variant?: DialogVariant;
   intent?: DialogIntent;
   pending?: boolean;
 };
 
-function Dialog({ variant = 'default', intent = 'default', pending = false, onOpenChange, ...props }: DialogProps) {
-  const isNew = variant === 'new';
+function Dialog({ intent = 'default', pending = false, onOpenChange, disablePointerDismissal, ...props }: DialogProps) {
   return (
-    <DialogContext.Provider value={{ variant, intent, pending }}>
+    <DialogContext.Provider value={{ intent, pending }}>
       <DialogPrimitive.Root
         {...props}
-        disablePointerDismissal={props.disablePointerDismissal ?? (isNew && intent === 'destructive')}
+        disablePointerDismissal={disablePointerDismissal ?? intent === 'destructive'}
         onOpenChange={(open, details) => {
           if (!open && pending) {
             details.cancel();
@@ -39,128 +36,76 @@ function Dialog({ variant = 'default', intent = 'default', pending = false, onOp
   );
 }
 
-type DialogTriggerProps = DialogPrimitive.Trigger.Props & {
-  /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
-  asChild?: boolean;
-};
-
-const DialogTrigger = React.forwardRef<HTMLButtonElement, DialogTriggerProps>(
-  ({ asChild, children, ...props }, ref) => {
-    return (
-      <DialogPrimitive.Trigger ref={ref} {...asChildRenderProps(asChild, children)} {...props}>
-        {asChild ? undefined : children}
-      </DialogPrimitive.Trigger>
-    );
-  },
-);
-DialogTrigger.displayName = 'DialogTrigger';
+const DialogTrigger = DialogPrimitive.Trigger;
 
 const DialogPortal = DialogPrimitive.Portal;
 
-type DialogCloseProps = DialogPrimitive.Close.Props & {
-  /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
-  asChild?: boolean;
-};
-
-const DialogClose = React.forwardRef<HTMLButtonElement, DialogCloseProps>(({ asChild, children, ...props }, ref) => {
-  return (
-    <DialogPrimitive.Close ref={ref} {...asChildRenderProps(asChild, children)} {...props}>
-      {asChild ? undefined : children}
-    </DialogPrimitive.Close>
-  );
-});
-DialogClose.displayName = 'DialogClose';
+const DialogClose = DialogPrimitive.Close;
 
 type DialogOverlayProps = Omit<DialogPrimitive.Backdrop.Props, 'className'> & {
   className?: string;
 };
 
-const DialogOverlay = React.forwardRef<HTMLDivElement, DialogOverlayProps>(({ className, ...props }, ref) => {
-  const { variant } = useDialogContext();
-  return (
-    <DialogPrimitive.Backdrop
-      ref={ref}
-      className={cn(
-        variant === 'new'
-          ? 'transition-opacity duration-normal ease-out data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none'
-          : 'dialog-overlay-anim',
-        'fixed inset-0 z-50 bg-scrim backdrop-blur-xs',
-        className,
-      )}
-      {...props}
-    />
-  );
-});
+const DialogOverlay = React.forwardRef<HTMLDivElement, DialogOverlayProps>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Backdrop
+    ref={ref}
+    data-slot="dialog-overlay"
+    className={cn('dialog-backdrop-motion fixed inset-0 z-50 bg-scrim backdrop-blur-xs', className)}
+    {...props}
+  />
+));
 DialogOverlay.displayName = 'DialogOverlay';
+
+export type DialogSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
+
+const dialogContentSizeClasses: Record<DialogSize, string> = {
+  sm: 'max-h-[calc(100dvh-4rem)] max-w-sm',
+  md: 'max-h-[calc(100dvh-4rem)] max-w-lg',
+  lg: 'max-h-[calc(100dvh-4rem)] max-w-2xl',
+  xl: 'max-h-[calc(100dvh-4rem)] max-w-4xl',
+  full: 'h-[calc(100dvh-2rem)]',
+};
 
 type DialogContentProps = Omit<DialogPrimitive.Popup.Props, 'className'> & {
   className?: string;
+  size?: DialogSize;
   showOverlay?: boolean;
   overlayClassName?: string;
 };
 
 const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
-  ({ className, children, showOverlay = true, overlayClassName, initialFocus, ...props }, ref) => {
-    const { variant, intent, pending } = useDialogContext();
+  ({ className, children, size = 'md', showOverlay = true, overlayClassName, initialFocus, ...props }, ref) => {
+    const { intent, pending } = useDialogContext();
     const closeRef = React.useRef<HTMLButtonElement>(null);
-    if (variant === 'new') {
-      return (
-        <DialogPortal>
-          {showOverlay && <DialogOverlay className={overlayClassName} />}
-          <DialogPrimitive.Popup
-            ref={ref}
-            data-slot="dialog-content"
-            data-variant="new"
-            data-intent={intent}
-            role={intent === 'destructive' ? 'alertdialog' : 'dialog'}
-            initialFocus={initialFocus ?? (intent === 'destructive' ? closeRef : true)}
-            aria-busy={pending || undefined}
-            className={cn(
-              'fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-sm translate-[-50%] flex-col overflow-y-auto overscroll-contain rounded-xl outline-hidden',
-              dialogSurfaceStyle,
-              'data-[ending-style]:scale-0.98 data-[starting-style]:scale-0.98 transition-[opacity,scale] duration-normal ease-out data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none',
-              className,
-            )}
-            {...props}
-          >
-            {children}
-            <div className="absolute top-2.5 right-3">
-              <DialogPrimitive.Close
-                ref={closeRef}
-                disabled={pending}
-                render={
-                  <Button variant="ghost" size="icon-sm" aria-label="Close dialog">
-                    <X />
-                  </Button>
-                }
-              />
-            </div>
-          </DialogPrimitive.Popup>
-        </DialogPortal>
-      );
-    }
+    const isDestructive = intent === 'destructive';
     return (
       <DialogPortal>
         {showOverlay && <DialogOverlay className={overlayClassName} />}
         <DialogPrimitive.Popup
           ref={ref}
           data-slot="dialog-content"
-          initialFocus={initialFocus}
+          data-size={size}
+          data-intent={intent}
+          role={isDestructive ? 'alertdialog' : 'dialog'}
+          initialFocus={initialFocus ?? (isDestructive ? closeRef : true)}
+          aria-busy={pending || undefined}
           className={cn(
-            'dialog-content-anim',
-            'fixed top-[50%] left-[50%] z-50 grid translate-[-50%]',
-            'w-full max-w-[calc(100%-2rem)] sm:max-w-lg',
-            'rounded-xl backdrop-blur-md',
+            'dialog-popup-motion fixed top-1/2 left-1/2 z-50 flex w-[calc(100%-2rem)] -translate-1/2 flex-col rounded-xl py-3 outline-hidden',
+            '[&>form]:flex [&>form]:min-h-0 [&>form]:flex-1 [&>form]:flex-col [&>form]:gap-0',
             dialogSurfaceStyle,
-            'focus-visible:outline-hidden',
+            dialogContentSizeClasses[size],
             className,
           )}
           {...props}
         >
           {children}
           <DialogPrimitive.Close
+            ref={closeRef}
+            disabled={pending}
+            data-slot="dialog-close"
+            className="absolute top-4 right-4"
             render={
-              <Button variant="ghost" size="sm" className="absolute top-3 right-3" aria-label="Close">
+              <Button variant="ghost" size="icon-sm" aria-label="Close">
                 <X />
               </Button>
             }
@@ -172,61 +117,51 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
 );
 DialogContent.displayName = 'DialogContent';
 
-const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => {
-  const { variant } = useDialogContext();
-  return (
-    <div
-      className={cn(
-        variant === 'new'
-          ? 'flex min-w-0 shrink-0 flex-col gap-2 px-4 pt-3 pb-2'
-          : 'flex flex-col gap-0.5 px-3 py-2.5 text-left',
-        className,
-      )}
-      {...props}
-    />
-  );
-};
+const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
+  <div
+    data-slot="dialog-header"
+    className={cn('flex min-w-0 shrink-0 flex-col gap-1 py-2 pr-12 pl-5', className)}
+    {...props}
+  />
+);
 DialogHeader.displayName = 'DialogHeader';
 
-const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => {
-  const { variant } = useDialogContext();
-  return (
-    <div
-      className={cn(
-        variant === 'new'
-          ? 'flex shrink-0 flex-wrap justify-end gap-2 px-4 pt-2 pb-3'
-          : 'flex flex-col-reverse gap-1.5 px-3 py-2 sm:flex-row sm:justify-end',
-        className,
-      )}
-      {...props}
-    />
-  );
-};
+const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
+  <div
+    data-slot="dialog-footer"
+    className={cn('flex shrink-0 flex-wrap items-center justify-end gap-2 px-5 py-2', className)}
+    {...props}
+  />
+);
 DialogFooter.displayName = 'DialogFooter';
 
-const DialogBody = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, children, ...props }, ref) => {
-    const { variant } = useDialogContext();
-    if (variant === 'new') {
+export type DialogBodyProps = React.HTMLAttributes<HTMLDivElement> & {
+  /** `scroll` fades and scrolls long content; `fill` takes the remaining height and leaves scrolling to its children. */
+  layout?: 'scroll' | 'fill';
+  /** Drops the inset so content such as split panes or code reaches the dialog's edges. */
+  flush?: boolean;
+};
+
+const DialogBody = React.forwardRef<HTMLDivElement, DialogBodyProps>(
+  ({ className, layout = 'scroll', flush = false, children, ...props }, ref) => {
+    const bodyClassName = cn(
+      'flex min-w-0 flex-col gap-4 text-body wrap-break-word text-muted-foreground',
+      !flush && 'px-5 py-2',
+      className,
+    );
+    if (layout === 'fill') {
       return (
-        <ScrollArea className="flex min-h-0 min-w-0 shrink flex-col" viewPortClassName="h-auto min-h-0" mask>
-          <div
-            ref={ref}
-            className={cn(
-              'flex flex-col gap-3 px-4 py-2 text-body [overflow-wrap:anywhere] text-muted-foreground',
-              className,
-            )}
-            {...props}
-          >
-            {children}
-          </div>
-        </ScrollArea>
+        <div ref={ref} data-slot="dialog-body" className={cn('min-h-0 flex-1', bodyClassName)} {...props}>
+          {children}
+        </div>
       );
     }
     return (
-      <div ref={ref} className={cn('max-h-[50vh] overflow-y-auto p-3', className)} {...props}>
-        {children}
-      </div>
+      <ScrollArea className="flex min-h-0 min-w-0 flex-1 flex-col" viewPortClassName="h-auto min-h-0" mask>
+        <div ref={ref} data-slot="dialog-body" className={bodyClassName} {...props}>
+          {children}
+        </div>
+      </ScrollArea>
     );
   },
 );
@@ -236,16 +171,13 @@ type DialogTitleProps = Omit<DialogPrimitive.Title.Props, 'className'> & {
   className?: string;
 };
 
-const DialogTitle = React.forwardRef<HTMLHeadingElement, DialogTitleProps>(({ className, ...props }, ref) => {
-  const { variant } = useDialogContext();
-  return (
-    <DialogPrimitive.Title
-      ref={ref}
-      className={cn('text-subheading text-foreground', variant === 'new' && 'pr-8 [overflow-wrap:anywhere]', className)}
-      {...props}
-    />
-  );
-});
+const DialogTitle = React.forwardRef<HTMLHeadingElement, DialogTitleProps>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Title
+    ref={ref}
+    className={cn('text-subheading wrap-break-word text-foreground', className)}
+    {...props}
+  />
+));
 DialogTitle.displayName = 'DialogTitle';
 
 type DialogDescriptionProps = Omit<DialogPrimitive.Description.Props, 'className'> & {
@@ -253,19 +185,13 @@ type DialogDescriptionProps = Omit<DialogPrimitive.Description.Props, 'className
 };
 
 const DialogDescription = React.forwardRef<HTMLParagraphElement, DialogDescriptionProps>(
-  ({ className, ...props }, ref) => {
-    const { variant } = useDialogContext();
-    return (
-      <DialogPrimitive.Description
-        ref={ref}
-        className={cn(
-          variant === 'new' ? cn('text-caption text-muted-foreground', '[overflow-wrap:anywhere]') : 'sr-only',
-          className,
-        )}
-        {...props}
-      />
-    );
-  },
+  ({ className, ...props }, ref) => (
+    <DialogPrimitive.Description
+      ref={ref}
+      className={cn('text-caption wrap-break-word text-muted-foreground', className)}
+      {...props}
+    />
+  ),
 );
 DialogDescription.displayName = 'DialogDescription';
 

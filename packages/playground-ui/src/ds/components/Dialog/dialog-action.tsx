@@ -5,16 +5,29 @@ import { Button } from '@/ds/components/Button';
 import type { TextButtonSize } from '@/ds/components/Button';
 import { cn } from '@/lib/utils';
 
-export type DialogActionProps = Omit<ComponentProps<typeof Button>, 'onClick' | 'variant' | 'as' | 'type' | 'size'> & {
+type DialogActionButtonProps = Omit<ComponentProps<typeof Button>, 'onClick' | 'variant' | 'as' | 'type' | 'size'> & {
   size?: TextButtonSize;
+};
+
+type DialogConfirmActionProps = DialogActionButtonProps & {
+  type?: 'button';
   onConfirm: () => void;
   confirmation?: 'click' | 'hold';
   holdSeconds?: number;
 };
 
+type DialogSubmitActionProps = DialogActionButtonProps & {
+  type: 'submit';
+  onConfirm?: never;
+  confirmation?: never;
+  holdSeconds?: never;
+};
+
+export type DialogActionProps = DialogConfirmActionProps | DialogSubmitActionProps;
+
 const ARM_WINDOW_MS = 4000;
 
-const HoldAction = forwardRef<HTMLButtonElement, Omit<DialogActionProps, 'confirmation'>>(
+const HoldAction = forwardRef<HTMLButtonElement, Omit<DialogConfirmActionProps, 'confirmation' | 'type'>>(
   ({ onConfirm, children, disabled, holdSeconds = 1.5, ...props }, ref) => {
     const { intent, pending } = useDialogContext();
     const [holding, setHolding] = useState(false);
@@ -162,10 +175,10 @@ const HoldAction = forwardRef<HTMLButtonElement, Omit<DialogActionProps, 'confir
 HoldAction.displayName = 'DialogHoldAction';
 
 export const DialogAction = forwardRef<HTMLButtonElement, DialogActionProps>(
-  ({ confirmation = 'click', holdSeconds = 1.5, onConfirm, disabled, ...props }, ref) => {
+  ({ confirmation = 'click', holdSeconds = 1.5, onConfirm, disabled, type = 'button', ...props }, ref) => {
     const { intent, pending } = useDialogContext();
     const isDisabled = disabled || pending;
-    if (confirmation === 'hold') {
+    if (onConfirm && confirmation === 'hold') {
       return (
         <HoldAction
           key={`${isDisabled}-${holdSeconds}`}
@@ -183,7 +196,7 @@ export const DialogAction = forwardRef<HTMLButtonElement, DialogActionProps>(
         {...props}
         className={cn(dialogActionLayoutClasses, dialogActionSizeClasses[props.size ?? 'md'], props.className)}
         ref={ref}
-        type="button"
+        type={type}
         variant={intent === 'destructive' ? 'destructive' : 'primary'}
         disabled={isDisabled}
         onClick={onConfirm}

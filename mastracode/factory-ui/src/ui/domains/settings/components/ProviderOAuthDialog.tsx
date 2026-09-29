@@ -2,7 +2,9 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import {
   Dialog,
+  DialogAction,
   DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -58,13 +60,13 @@ function PasteCodeDialog({ provider, session, onClose, onComplete }: ProviderOAu
   };
 
   return (
-    <Dialog open onOpenChange={open => !open && close()}>
+    <Dialog open onOpenChange={open => !open && close()} pending={completeMutation.isPending}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Sign in to {displayName}</DialogTitle>
           <DialogDescription>Authorize your account and paste the returned code.</DialogDescription>
         </DialogHeader>
-        <DialogBody className="flex flex-col gap-4">
+        <DialogBody>
           <Txt as="p" variant="caption" className="text-muted-foreground">
             {session.instructions}
           </Txt>
@@ -89,16 +91,10 @@ function PasteCodeDialog({ provider, session, onClose, onComplete }: ProviderOAu
           )}
         </DialogBody>
         <DialogFooter>
-          <Button disabled={completeMutation.isPending} onClick={close}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            disabled={!code.trim() || completeMutation.isPending}
-            onClick={() => void complete()}
-          >
+          <DialogCancel>Cancel</DialogCancel>
+          <DialogAction disabled={!code.trim()} onConfirm={() => void complete()}>
             {completeMutation.isPending ? 'Completing…' : 'Complete sign in'}
-          </Button>
+          </DialogAction>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -155,7 +151,7 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOA
           <DialogTitle>Sign in to {displayName}</DialogTitle>
           <DialogDescription>Enter the device code on the provider authorization page.</DialogDescription>
         </DialogHeader>
-        <DialogBody className="flex flex-col items-center gap-4 text-center">
+        <DialogBody className="items-center text-center">
           {session.userCode && (
             <div className="flex w-full min-w-0 items-center justify-center gap-2">
               <span className="text-title min-w-0 flex-1 font-mono tracking-widest break-all select-all">
@@ -169,22 +165,20 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOA
             Open authorization page
           </Button>
         </DialogBody>
-        <DialogFooter className="sm:justify-between">
+        <DialogFooter>
           {flowError ? (
-            <Txt as="p" variant="caption" className="text-notice-destructive-fg min-w-0 break-words">
+            <Txt as="p" variant="caption" className="text-notice-destructive-fg mr-auto min-w-0 break-words">
               {flowError}
             </Txt>
           ) : (
-            <div className="text-muted-foreground flex items-center gap-2" role="status">
+            <div className="text-muted-foreground mr-auto flex items-center gap-2" role="status">
               <Loader2 size={14} className="motion-safe:animate-spin motion-reduce:animate-none" />
               <Txt as="span" variant="caption">
                 Waiting for authorization…
               </Txt>
             </div>
           )}
-          <Button disabled={pollMutation.isPending} onClick={close}>
-            Cancel
-          </Button>
+          <DialogCancel disabled={pollMutation.isPending}>Cancel</DialogCancel>
         </DialogFooter>
       </DialogContent>
     </Dialog>

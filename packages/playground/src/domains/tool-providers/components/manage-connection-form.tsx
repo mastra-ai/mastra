@@ -59,7 +59,7 @@ export const ManageConnectionForm = ({
 
   return (
     <>
-      <DialogBody className="flex flex-col gap-3">
+      <DialogBody>
         {showBack && (
           <Button
             type="button"
