@@ -49,11 +49,13 @@ function rungLabel(stage: string): string {
 function Row({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
     <>
-      <span className="text-meta text-muted-foreground flex items-center gap-1.5">
+      <Txt as="span" variant="meta" tone="muted" className="flex items-center gap-1.5">
         <Icon aria-hidden className="text-placeholder size-3.5 shrink-0" />
         {label}
-      </span>
-      <span className="text-meta text-foreground text-right tabular-nums">{value}</span>
+      </Txt>
+      <Txt as="span" variant="meta" tone="ink" className="text-right tabular-nums">
+        {value}
+      </Txt>
     </>
   );
 }
@@ -152,10 +154,10 @@ function Readout({ cursor, children }: { cursor: Cursor; children: ReactNode }) 
 
 function Key({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <span className="text-meta text-muted-foreground flex items-center gap-1.5">
+    <Txt as="span" variant="meta" tone="muted" className="flex items-center gap-1.5">
       {children}
       {label}
-    </span>
+    </Txt>
   );
 }
 

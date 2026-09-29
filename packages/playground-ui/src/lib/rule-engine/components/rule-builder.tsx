@@ -7,6 +7,7 @@ import { isRule, createDefaultRule, createDefaultRuleGroup } from '../utils';
 import { RuleRow } from './rule-row';
 import type { RuleBuilderProps, RuleGroupViewProps } from './types';
 import { Button } from '@/ds/components/Button';
+import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
@@ -59,7 +60,9 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
       {/* Non-root group header */}
       {!isRoot && (
         <div className="flex items-center justify-between border-b border-dashed border-border py-1.5 pr-4 pl-3">
-          <span className="text-meta text-muted-foreground">Group</span>
+          <Txt as="span" variant="meta" tone="muted">
+            Group
+          </Txt>
           {onRemove && (
             <Button type="button" onClick={onRemove} tooltip="Remove group" size="icon-sm" variant="ghost">
               <X />

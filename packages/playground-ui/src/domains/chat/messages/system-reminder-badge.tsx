@@ -1,6 +1,7 @@
 import { ChevronDown, ChevronRight, FileText } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { parseSystemReminder } from './system-reminder-utils';
+import { Txt } from '@/ds/components/Txt';
 
 export interface SystemReminderBadgeProps {
   text: string;
@@ -25,8 +26,12 @@ export const SystemReminderBadge = ({ text }: SystemReminderBadgeProps) => {
       >
         <FileText className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <div className="min-w-0 flex-1">
-          <p className="text-column text-foreground">System reminder</p>
-          <p className="mt-1 text-meta break-all text-muted-foreground">{title}</p>
+          <Txt variant="column" tone="ink">
+            System reminder
+          </Txt>
+          <Txt variant="meta" tone="muted" className="mt-1 break-all">
+            {title}
+          </Txt>
         </div>
         {isExpanded ? (
           <ChevronDown className="size-4 shrink-0 text-muted-foreground" />

@@ -3,6 +3,7 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useDataset } from '@mastra/playground-ui/domains/datasets';
@@ -140,9 +141,9 @@ function DatasetPage() {
               onAddItemClick={() => setAddItemDialogOpen(true)}
               belowToolbarSlot={<DatasetTagsEditor datasetId={datasetId} />}
               leftSlot={
-                <span className="mr-3 text-caption whitespace-nowrap text-muted-foreground">
+                <Txt as="span" variant="caption" tone="muted" className="mr-3 whitespace-nowrap">
                   {dataset?.createdAt ? `Created ${formatDate(dataset.createdAt, 'date-time')}` : ''}
-                </span>
+                </Txt>
               }
               rightSlot={
                 <div className="flex items-center gap-2">

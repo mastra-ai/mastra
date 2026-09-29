@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export type DataListSubHeadingProps = {
@@ -7,5 +8,9 @@ export type DataListSubHeadingProps = {
 };
 
 export function DataListSubHeading({ children, className }: DataListSubHeadingProps) {
-  return <span className={cn('text-caption text-placeholder', className)}>{children}</span>;
+  return (
+    <Txt as="span" variant="caption" tone="faint" className={className}>
+      {children}
+    </Txt>
+  );
 }

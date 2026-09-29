@@ -32,6 +32,7 @@ import {
   TimeGap,
 } from './TranscriptSignals';
 import type { MastraErrorPart } from '@mastra/core/agent/message-list';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 function steeringLabel(entry: MessageEntry): string | undefined {
   if (!entry.steer) return undefined;
@@ -90,12 +91,15 @@ export function MessageBubble({
         footer={
           <>
             {steeringStatus && (
-              <span
-                className={cn('text-meta text-muted-foreground', steeringFailed && 'text-notice-destructive-fg')}
+              <Txt
+                as="span"
+                variant="meta"
+                tone="muted"
+                className={cn(steeringFailed && 'text-notice-destructive-fg')}
                 aria-live="polite"
               >
                 {steeringStatus}
-              </span>
+              </Txt>
             )}
             {origin && <ChannelOriginBadge origin={origin} />}
             {messageActions}

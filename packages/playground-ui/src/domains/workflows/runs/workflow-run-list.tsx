@@ -12,6 +12,7 @@ import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Spinner } from '@/ds/components/Spinner';
 import { ThreadList, ThreadListEmpty, ThreadListItem, ThreadListItems } from '@/ds/components/ThreadList';
+import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { useLinkComponent } from '@/lib/framework';
 import { formatDate } from '@/utils/date-format';
@@ -56,7 +57,7 @@ function WorkflowRunMeta({ timestamp, resourceId }: { timestamp?: number; resour
   if (timestamp === undefined && !resourceId) return null;
 
   return (
-    <span className="flex w-full min-w-0 items-center gap-1.5 text-meta text-muted-foreground">
+    <Txt as="span" variant="meta" tone="muted" className="flex w-full min-w-0 items-center gap-1.5">
       {timestamp !== undefined && (
         <time className="shrink-0" dateTime={new Date(timestamp).toISOString()}>
           {formatDate(timestamp, 'date-time')}
@@ -67,7 +68,7 @@ function WorkflowRunMeta({ timestamp, resourceId }: { timestamp?: number; resour
           {timestamp === undefined ? resourceId : `· ${resourceId}`}
         </span>
       )}
-    </span>
+    </Txt>
   );
 }
 
@@ -108,10 +109,10 @@ export const WorkflowRecentRuns = ({ workflowId, runId, canDelete: canDeleteRun 
           <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground motion-reduce:transition-none" />
           <span>Recent runs</span>
           {!isLoading && !error && (
-            <span className="text-meta text-muted-foreground">
+            <Txt as="span" variant="meta" tone="muted">
               {runList.length}
               {hasNextPage ? '+' : ''}
-            </span>
+            </Txt>
           )}
         </CollapsibleTrigger>
         <CollapsibleContent keepMounted fill className="flex min-h-0 flex-col">
@@ -152,19 +153,19 @@ export const WorkflowRecentRuns = ({ workflowId, runId, canDelete: canDeleteRun 
                               </span>
                             )}
                             <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-                              <span className="flex w-full min-w-0 items-center gap-2 text-caption">
+                              <Txt as="span" variant="caption" className="flex w-full min-w-0 items-center gap-2">
                                 <span className="min-w-0 flex-1 truncate font-medium text-foreground" title={run.runId}>
                                   {run.runId}
                                 </span>
-                              </span>
+                              </Txt>
                               <WorkflowRunMeta
                                 timestamp={getRunTimestamp(snapshot?.timestamp)}
                                 resourceId={getRunResourceId(run)}
                               />
                               {runInput && (
-                                <span className="block w-full min-w-0 truncate text-caption text-muted-foreground">
+                                <Txt as="span" variant="caption" tone="muted" className="block w-full min-w-0 truncate">
                                   {runInput}
-                                </span>
+                                </Txt>
                               )}
                             </span>
                           </span>

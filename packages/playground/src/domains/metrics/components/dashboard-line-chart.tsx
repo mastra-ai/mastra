@@ -1,3 +1,4 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { CHART_TICK_FONT_SIZE } from '@mastra/playground-ui/tokens';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { CustomTooltip } from './chart-card';
@@ -30,13 +31,20 @@ export function DashboardLineChart({
             <div key={s.dataKey}>
               <div className="flex items-center gap-2">
                 <div className="h-0.5 w-3 rounded-full" style={{ backgroundColor: s.color }} />
-                <span className="text-meta text-muted-foreground uppercase">{s.label}</span>
+                <Txt as="span" variant="meta" tone="muted" className="uppercase">
+                  {s.label}
+                </Txt>
               </div>
               {aggregated && (
-                <p className="pl-5 text-body text-muted-foreground">
+                <Txt tone="muted" className="pl-5">
                   {aggregated.value}
-                  {aggregated.suffix && <span className="text-caption text-placeholder"> {aggregated.suffix}</span>}
-                </p>
+                  {aggregated.suffix && (
+                    <Txt as="span" variant="caption" tone="faint">
+                      {' '}
+                      {aggregated.suffix}
+                    </Txt>
+                  )}
+                </Txt>
               )}
             </div>
           );

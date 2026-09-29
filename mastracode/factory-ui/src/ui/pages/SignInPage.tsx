@@ -223,7 +223,9 @@ export function SignInPage() {
             ) : credentialForm ? (
               <>
                 <div className="mb-6">
-                  <h2 className="font-display text-title">Welcome back</h2>
+                  <Txt as="h2" variant="title" className="font-display">
+                    Welcome back
+                  </Txt>
                   <Txt as="p" variant="body" tone="muted" className="mt-2 leading-6">
                     Sign in to continue building with your team.
                   </Txt>

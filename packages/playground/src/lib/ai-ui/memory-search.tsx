@@ -285,16 +285,18 @@ export const MemorySearch = ({
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <div className="mb-1 flex items-center gap-2">
-                          <span
+                          <Txt
+                            as="span"
+                            variant="column"
                             className={cn(
-                              'rounded px-2 py-0.5 text-column',
+                              'rounded px-2 py-0.5',
                               result.role === 'user'
                                 ? 'bg-blue-500/20 text-blue-400'
                                 : 'bg-green-500/20 text-green-400',
                             )}
                           >
                             {result.role}
-                          </span>
+                          </Txt>
                           <Txt variant="meta" tone="muted" title={formatDate(result.createdAt, 'date-time')}>
                             {formatRelativeTime(result.createdAt)}
                           </Txt>

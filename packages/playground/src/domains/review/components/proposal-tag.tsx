@@ -1,3 +1,4 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Pencil, Check, X } from 'lucide-react';
@@ -66,7 +67,12 @@ export function ProposalTag({
   }
 
   return (
-    <span className="group inline-flex items-center gap-0.5 rounded-md border border-border bg-card px-1.5 py-0.5 text-caption text-muted-foreground">
+    <Txt
+      as="span"
+      variant="caption"
+      tone="muted"
+      className="group inline-flex items-center gap-0.5 rounded-md border border-border bg-card px-1.5 py-0.5"
+    >
       {tag}
       <button
         type="button"
@@ -87,6 +93,6 @@ export function ProposalTag({
       >
         <X className="h-3 w-3" />
       </button>
-    </span>
+    </Txt>
   );
 }

@@ -5,6 +5,7 @@ import * as React from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ds/components/Dialog';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import type { ScrollAreaMask } from '@/ds/components/ScrollArea';
+import { Txt } from '@/ds/components/Txt';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -238,7 +239,13 @@ CommandItem.displayName = CommandPrimitive.Item.displayName;
 
 const CommandShortcut = ({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {
   return (
-    <span className={cn('ml-auto text-meta tracking-wider text-muted-foreground tabular-nums', className)} {...props} />
+    <Txt
+      as="span"
+      variant="meta"
+      tone="muted"
+      className={cn('ml-auto tracking-wider tabular-nums', className)}
+      {...props}
+    />
   );
 };
 CommandShortcut.displayName = 'CommandShortcut';

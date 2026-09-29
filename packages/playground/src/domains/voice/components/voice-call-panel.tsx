@@ -1,3 +1,4 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { VoiceAgentState, VoiceCallControls, VoiceCaptionSegment } from '../types';
@@ -41,17 +42,19 @@ export const VoiceCallPanel = ({ voiceCall }: VoiceCallPanelProps) => {
             voiceCall.status === 'active' && voiceCall.agentState !== 'speaking' && 'bg-green-500',
           )}
         />
-        <span className="text-caption text-muted-foreground">{stateLabel}</span>
+        <Txt as="span" variant="caption" tone="muted">
+          {stateLabel}
+        </Txt>
       </div>
       {lastUserCaption && (
-        <p className="mt-2 truncate text-caption text-muted-foreground" data-testid="voice-caption-user">
+        <Txt variant="caption" tone="muted" className="mt-2 truncate" data-testid="voice-caption-user">
           {lastUserCaption.text}
-        </p>
+        </Txt>
       )}
       {lastAgentCaption && (
-        <p className="mt-1 text-caption text-foreground" data-testid="voice-caption-agent">
+        <Txt variant="caption" tone="ink" className="mt-1" data-testid="voice-caption-agent">
           {lastAgentCaption.text}
-        </p>
+        </Txt>
       )}
     </div>
   );

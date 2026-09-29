@@ -1,4 +1,5 @@
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { BookIcon, EarthIcon, MessageSquareIcon, ExternalLinkIcon, CloudUploadIcon, BuildingIcon } from 'lucide-react';
@@ -70,12 +71,16 @@ export default function Resources() {
                 <resource.icon
                   className={cn('h-5 w-5 text-muted-foreground group-hover:text-accent1', controlStateColorTransition)}
                 />
-                <span className="text-subheading text-foreground">{resource.title}</span>
+                <Txt as="span" variant="subheading" tone="ink">
+                  {resource.title}
+                </Txt>
                 {resource.external && (
                   <ExternalLinkIcon className="ml-auto h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                 )}
               </div>
-              <p className="text-text3 text-caption">{resource.description}</p>
+              <Txt variant="caption" className="text-text3">
+                {resource.description}
+              </Txt>
             </a>
           ))}
         </div>

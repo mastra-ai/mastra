@@ -139,7 +139,9 @@ export default function SchedulePage() {
                 {schedule.cron}
               </Txt>
               {schedule.timezone ? (
-                <span className="ml-2 text-caption text-muted-foreground">{schedule.timezone}</span>
+                <Txt as="span" variant="caption" tone="muted" className="ml-2">
+                  {schedule.timezone}
+                </Txt>
               ) : null}
             </MetaItem>
             <MetaItem label="Status">

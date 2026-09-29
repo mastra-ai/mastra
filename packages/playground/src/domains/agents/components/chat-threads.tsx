@@ -10,6 +10,7 @@ import {
   ThreadListSeparator,
 } from '@mastra/playground-ui/components/ThreadList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { PanelEdgeIcon } from '@mastra/playground-ui/resize/panel-edge-icon';
@@ -181,5 +182,9 @@ function ThreadTitle({ title, id, createdAt }: { title?: string; id?: string; cr
         ? formatDate(createdAt, 'date-time-seconds')
         : `Thread ${id ? id.substring(id.length - 5) : ''}`;
 
-  return <span className="block truncate text-body-sm">{titleText}</span>;
+  return (
+    <Txt as="span" variant="body-sm" className="block truncate">
+      {titleText}
+    </Txt>
+  );
 }

@@ -1,3 +1,4 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { FrownIcon, AlertTriangleIcon } from 'lucide-react';
@@ -45,8 +46,10 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
       <div className={cn('grid content-center items-center justify-items-center gap-4', '[&>svg]:h-8 [&>svg]:w-8')}>
         {icon}
         <div className="space-y-2 text-center">
-          <p className="text-subheading text-foreground">{title}</p>
-          <p className="text-body text-muted-foreground">{getUserFriendlyMessage()}</p>
+          <Txt variant="subheading" tone="ink">
+            {title}
+          </Txt>
+          <Txt tone="muted">{getUserFriendlyMessage()}</Txt>
         </div>
       </div>
 

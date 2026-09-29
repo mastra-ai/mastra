@@ -87,7 +87,9 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
       {command && (
         <div className="flex items-center justify-between gap-2 border-b border-border bg-card px-3 py-2">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="shrink-0 text-caption text-foreground">$</span>
+            <Txt as="span" variant="caption" tone="ink" className="shrink-0">
+              $
+            </Txt>
             <Txt as="span" variant="caption" tone="ink" font="mono" className="truncate">
               {command}
             </Txt>
@@ -258,11 +260,13 @@ export const SandboxExecutionBadge = ({
         <div className="flex items-center gap-2">
           {isRunning ? (
             <>
-              <span className="flex items-center gap-1.5 text-caption text-accent6">
+              <Txt as="span" variant="caption" className="flex items-center gap-1.5 text-accent6">
                 <span className="size-1.5 animate-pulse rounded-full bg-accent6" />
                 <span className="animate-pulse">running</span>
-              </span>
-              <span className="text-caption text-foreground tabular-nums">{formatElapsed(elapsedTime)}</span>
+              </Txt>
+              <Txt as="span" variant="caption" tone="ink" className="tabular-nums">
+                {formatElapsed(elapsedTime)}
+              </Txt>
             </>
           ) : (
             <>
@@ -270,12 +274,18 @@ export const SandboxExecutionBadge = ({
                 (exitSuccess ? (
                   <CheckIcon className="text-green-400" size={14} />
                 ) : wasKilled ? (
-                  <span className="rounded bg-orange-500/20 px-1.5 py-0.5 text-meta text-orange-400">killed</span>
+                  <Txt as="span" variant="meta" className="rounded bg-orange-500/20 px-1.5 py-0.5 text-orange-400">
+                    killed
+                  </Txt>
                 ) : (
-                  <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-meta text-red-400">exit {exitCode}</span>
+                  <Txt as="span" variant="meta" className="rounded bg-red-500/20 px-1.5 py-0.5 text-red-400">
+                    exit {exitCode}
+                  </Txt>
                 ))}
               {executionTime !== undefined && (
-                <span className="text-caption text-foreground">{formatDuration(executionTime)}</span>
+                <Txt as="span" variant="caption" tone="ink">
+                  {formatDuration(executionTime)}
+                </Txt>
               )}
             </>
           )}

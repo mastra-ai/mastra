@@ -27,7 +27,9 @@ export function JSONFormatPanel() {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="flex h-8 items-center text-column text-foreground">Each item looks like this</p>
+      <Txt variant="column" tone="ink" className="flex h-8 items-center">
+        Each item looks like this
+      </Txt>
 
       <dl className="divide-y divide-border rounded-lg border border-border">
         {FIELDS.map(field => (

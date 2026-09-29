@@ -6,6 +6,7 @@ import type { ThemeSelection } from './theme-drilldown-data';
 import { useTraceIntelligence } from './use-trace-intelligence';
 import { Button } from '@/ds/components/Button';
 import { nodeColor } from '@/ds/components/SankeyChart';
+import { Txt } from '@/ds/components/Txt';
 
 function selectionLabel(catalog: readonly SignalCatalogEntry[], selection: ThemeSelection) {
   return `${signalLabel(catalog, selection.signalName)} · ${selection.kind === 'theme' ? selection.label : 'Noise'}`;
@@ -87,9 +88,9 @@ export function ThemeFilterBanner({
           </button>
         );
       })}
-      <span className="text-caption text-muted-foreground">
+      <Txt as="span" variant="caption" tone="muted">
         {filterSummary({ selections, filteredTraceCount, totalTraceCount, isUnavailable })}
-      </span>
+      </Txt>
       {!isUnavailable && filteredTraceCount !== undefined && latestSelection ? (
         <Button
           icon={<Eye />}

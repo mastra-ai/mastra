@@ -5,6 +5,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
 import { toast } from '@mastra/playground-ui/utils/toast';
@@ -175,9 +176,9 @@ export function CreateDatasetFromItemsDialog({
               />
             </div>
 
-            <p className="text-body text-muted-foreground">
+            <Txt tone="muted">
               {items.length} item{items.length !== 1 ? 's' : ''} will be copied to the new dataset
-            </p>
+            </Txt>
 
             {isCreating && (
               <div className="space-y-2">
@@ -187,9 +188,9 @@ export function CreateDatasetFromItemsDialog({
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
-                <p className="text-body text-muted-foreground">
+                <Txt tone="muted">
                   Copying items: {progress} / {items.length}
-                </p>
+                </Txt>
               </div>
             )}
 

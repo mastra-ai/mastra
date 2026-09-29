@@ -1,6 +1,7 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useDataset } from '@mastra/playground-ui/domains/datasets';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
@@ -57,7 +58,9 @@ function Stage({
       </div>
       <div className="grid min-w-0 gap-0.5">
         <div className="flex min-h-5 items-center text-caption text-foreground">{subject}</div>
-        <p className="text-meta text-placeholder">{description}</p>
+        <Txt variant="meta" tone="faint">
+          {description}
+        </Txt>
       </div>
     </li>
   );

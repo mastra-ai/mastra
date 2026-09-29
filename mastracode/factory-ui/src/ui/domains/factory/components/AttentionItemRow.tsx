@@ -26,6 +26,7 @@ import { attentionAuthorName, factoryAttentionTargetPath } from '../services/att
 import type { FactoryAttentionItem } from '../services/attention';
 import { TIMESTAMP } from './panel';
 import { RAIL_ROW_BODY } from './Timeline';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 /** What landed: the glyph the rail hangs the row off, and the word the row's badge wears. */
 const KIND = {
@@ -128,7 +129,9 @@ export function AttentionItemRow({
       />
       <span className="flex w-full items-center gap-2">
         <span className="sr-only">{item.read ? 'Read' : 'Unread'}</span>
-        <span className="text-column text-foreground min-w-0 flex-1 truncate">{item.title}</span>
+        <Txt as="span" variant="column" tone="ink" className="min-w-0 flex-1 truncate">
+          {item.title}
+        </Txt>
         <Badge
           variant={KIND[item.kind].badge}
           emphasis={item.read ? 'muted' : 'default'}
@@ -216,10 +219,10 @@ export function AttentionItemRow({
           </span>
         </span>
       </span>
-      <span className="text-meta text-muted-foreground truncate">
+      <Txt as="span" variant="meta" tone="muted" className="truncate">
         {author ? <span className="text-muted-foreground font-medium">{author} </span> : null}
         {item.detail}
-      </span>
+      </Txt>
     </div>
   );
 }

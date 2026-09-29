@@ -1,5 +1,6 @@
 import type { ComponentPropsWithoutRef } from 'react';
 
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export interface PageHeaderDescriptionProps extends ComponentPropsWithoutRef<'p'> {
@@ -8,16 +9,18 @@ export interface PageHeaderDescriptionProps extends ComponentPropsWithoutRef<'p'
 
 export function PageHeaderDescription({ children, className, isLoading, ...props }: PageHeaderDescriptionProps) {
   return (
-    <p
+    <Txt
+      variant="caption"
+      tone="muted"
       data-slot="page-header-description"
       className={cn(
-        'col-[title/end] flex max-w-140 flex-wrap gap-x-4 gap-y-1 text-caption text-muted-foreground',
+        'col-[title/end] flex max-w-140 flex-wrap gap-x-4 gap-y-1',
         isLoading && 'w-160 max-w-[80%] animate-pulse rounded-md bg-muted',
         className,
       )}
       {...props}
     >
       {isLoading ? <>&nbsp;</> : children}
-    </p>
+    </Txt>
   );
 }

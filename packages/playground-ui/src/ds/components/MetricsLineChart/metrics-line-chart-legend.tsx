@@ -1,4 +1,5 @@
 import type { MetricsLineChartSeries } from './metrics-line-chart';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export function MetricsLineChartLegend({
@@ -17,12 +18,19 @@ export function MetricsLineChartLegend({
         return (
           <div key={s.dataKey} className="inline-flex items-center gap-2">
             <div className="size-2 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
-            <span className="max-w-24 truncate text-caption text-muted-foreground">{s.label}</span>
+            <Txt as="span" variant="caption" tone="muted" className="max-w-24 truncate">
+              {s.label}
+            </Txt>
             {aggregated && (
-              <span className="text-caption text-muted-foreground">
+              <Txt as="span" variant="caption" tone="muted">
                 {aggregated.value}
-                {aggregated.suffix && <span className="text-caption text-placeholder"> {aggregated.suffix}</span>}
-              </span>
+                {aggregated.suffix && (
+                  <Txt as="span" variant="caption" tone="faint">
+                    {' '}
+                    {aggregated.suffix}
+                  </Txt>
+                )}
+              </Txt>
             )}
           </div>
         );

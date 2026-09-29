@@ -442,7 +442,10 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
 
           {isExpanded && error && (
             <div className="mt-1 ml-4 rounded-md border border-red-500/10 bg-red-500/5 p-2 text-caption text-red-700">
-              <span className="text-column">Error:</span> {error}
+              <Txt as="span" variant="column">
+                Error:
+              </Txt>{' '}
+              {error}
             </div>
           )}
         </div>
@@ -540,7 +543,10 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
 
           {isExpanded && error && (
             <div className="mt-1 ml-4 rounded-md border border-red-500/10 bg-red-500/5 p-2 text-caption text-red-700">
-              <span className="text-column">Error:</span> {error}
+              <Txt as="span" variant="column">
+                Error:
+              </Txt>{' '}
+              {error}
             </div>
           )}
         </div>

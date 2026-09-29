@@ -7,6 +7,7 @@ import { TASK_ROW_HEIGHT, taskGraphLaneShift, taskGraphMotion, taskGraphNodeClas
 import { taskWindowHeight, useFocusedRowScroll } from './use-focused-row-scroll';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { focusRing, transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -100,7 +101,7 @@ export const TaskListStatusIcon = ({ status, className, ...props }: TaskListStat
 const TaskListLabel = ({ task }: { task: TaskListItem }) => {
   const active = task.status === 'in_progress';
   return (
-    <span className="grid min-w-0 text-caption">
+    <Txt as="span" variant="caption" className="grid min-w-0">
       <span
         aria-hidden={active}
         className={cn(
@@ -134,7 +135,7 @@ const TaskListLabel = ({ task }: { task: TaskListItem }) => {
       >
         {task.activeForm}
       </span>
-    </span>
+    </Txt>
   );
 };
 

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export interface CardHeadingProps {
@@ -21,9 +22,9 @@ export function CardHeading({
   const danger = tone === 'danger';
   return (
     <>
-      <h3 id={id} className={cn('text-heading text-foreground', danger && 'text-accent2', className)}>
+      <Txt as="h3" variant="heading" tone="ink" id={id} className={cn(danger && 'text-accent2', className)}>
         {title}
-      </h3>
+      </Txt>
       {description != null && (
         <p
           className={cn(

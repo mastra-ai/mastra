@@ -1,4 +1,5 @@
 import { CircleAlertIcon } from 'lucide-react';
+import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { cn } from '@/lib/utils';
 
@@ -15,18 +16,19 @@ export type FieldBlockErrorMsgProps = {
 
 export function FieldBlockErrorMsg({ children, name, className }: FieldBlockErrorMsgProps) {
   return (
-    <p
+    <Txt
+      variant="caption"
       // `role="alert"` lives here rather than in a wrapper at every call site, so an
       // error announces itself wherever it is used instead of depending on each caller
       // remembering to wrap it.
       role="alert"
       id={name !== undefined ? `error-${name}` : undefined}
-      className={cn('flex gap-1 text-caption text-destructive', className)}
+      className={cn('flex gap-1 text-destructive', className)}
     >
       <Icon size="xs" className="mt-0.75 shrink-0" aria-hidden>
         <CircleAlertIcon />
       </Icon>
       <span>{children}</span>
-    </p>
+    </Txt>
   );
 }

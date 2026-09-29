@@ -8,6 +8,7 @@ import { ToolApprovalButtons } from '@/domains/chat/tools/badges/tool-approval-b
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
+import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { useLinkComponent } from '@/lib/framework';
@@ -155,7 +156,11 @@ export const FileTreeBadge = ({
         )}
 
         {/* Summary - show in header when collapsed */}
-        {isCollapsed && hasResult && summary && <span className="text-caption text-foreground">{summary}</span>}
+        {isCollapsed && hasResult && summary && (
+          <Txt as="span" variant="caption" tone="ink">
+            {summary}
+          </Txt>
+        )}
       </div>
 
       {/* Content area */}
@@ -183,7 +188,11 @@ export const FileTreeBadge = ({
             <div className="overflow-hidden rounded-md border border-border bg-background">
               {/* Panel header with summary and copy button */}
               <div className="flex items-center justify-between border-b border-border bg-card px-3 py-1.5">
-                {summary && <span className="text-caption text-foreground">{summary}</span>}
+                {summary && (
+                  <Txt as="span" variant="caption" tone="ink">
+                    {summary}
+                  </Txt>
+                )}
                 <Button variant="default" size="icon-sm" tooltip="Copy tree" onClick={onCopy} disabled={!treeOutput}>
                   <span className="grid">
                     <span
@@ -212,7 +221,9 @@ export const FileTreeBadge = ({
           {/* Loading state */}
           {toolCalled && !hasResult && (
             <div className="rounded-md border border-border bg-background px-3 py-2">
-              <span className="text-caption text-foreground">Loading...</span>
+              <Txt as="span" variant="caption" tone="ink">
+                Loading...
+              </Txt>
             </div>
           )}
         </div>

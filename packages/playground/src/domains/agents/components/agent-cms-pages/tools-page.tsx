@@ -4,6 +4,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
@@ -236,8 +237,14 @@ export function ToolsPage() {
                       onClick={() => handleAddTool(tool.value)}
                       className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left hover:bg-white/10 focus:bg-white/10 focus-visible:ring-0 focus-visible:outline-hidden"
                     >
-                      <span className="text-body text-foreground">{tool.label}</span>
-                      {tool.description && <span className="text-meta text-muted-foreground">{tool.description}</span>}
+                      <Txt as="span" tone="ink">
+                        {tool.label}
+                      </Txt>
+                      {tool.description && (
+                        <Txt as="span" variant="meta" tone="muted">
+                          {tool.description}
+                        </Txt>
+                      )}
                     </button>
                   ))}
                 </PopoverContent>

@@ -26,6 +26,7 @@ import { useChatConnection } from '../../context/useChatConnection';
 import { useChatModels } from '../../context/useChatModels';
 import { useChatModes } from '../../context/useChatModes';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 function titleCase(value: string): string {
   return value ? `${value[0]?.toUpperCase()}${value.slice(1).toLowerCase()}` : value;
@@ -217,7 +218,9 @@ export function ModelPicker() {
                           </Badge>
                         ) : null}
                       </span>
-                      <span className="text-meta text-muted-foreground truncate">{packSummary(pack)}</span>
+                      <Txt as="span" variant="meta" tone="muted" className="truncate">
+                        {packSummary(pack)}
+                      </Txt>
                     </div>
                     {pack.id === selectedPackId && !packModelDeviates ? (
                       <Check aria-hidden className="ml-auto shrink-0" />
@@ -278,10 +281,10 @@ export function ModelPicker() {
             ) : null}
           </CommandList>
           {modeKey ? (
-            <p className="text-meta text-muted-foreground border-border border-t px-3 py-2">
+            <Txt variant="meta" tone="muted" className="border-border border-t px-3 py-2">
               Model choices apply to {titleCase(modeKey)} mode only.
               {showPacks ? ' Packs set all three modes.' : ''}
-            </p>
+            </Txt>
           ) : null}
         </Command>
       </PopoverContent>

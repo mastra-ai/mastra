@@ -91,16 +91,25 @@ export function ScheduleTriggersList({
             <DataList.Cell>
               <span className="inline-flex items-center gap-2">
                 {isPublishFailure ? (
-                  <span className="inline-flex items-center gap-1.5 text-caption whitespace-nowrap text-accent2">
+                  <Txt
+                    as="span"
+                    variant="caption"
+                    className="inline-flex items-center gap-1.5 whitespace-nowrap text-accent2"
+                  >
                     <AlertTriangleIcon size={14} />
                     publish failed
-                  </span>
+                  </Txt>
                 ) : t.run ? (
                   <WorkflowRunStatusInline status={t.run.status} />
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 text-caption whitespace-nowrap text-muted-foreground">
+                  <Txt
+                    as="span"
+                    variant="caption"
+                    tone="muted"
+                    className="inline-flex items-center gap-1.5 whitespace-nowrap"
+                  >
                     pending
-                  </span>
+                  </Txt>
                 )}
                 {errorMessage ? (
                   <Tooltip>

@@ -95,7 +95,9 @@ export function SearchWorkspacePanel({
 
           {/* Top K */}
           <div className="flex items-center gap-1.5">
-            <span className="text-caption text-muted-foreground">Top</span>
+            <Txt as="span" variant="caption" tone="muted">
+              Top
+            </Txt>
             <Input
               type="number"
               min={1}
@@ -183,7 +185,9 @@ function WorkspaceSearchResultItem({ result, rank, onClick }: WorkspaceSearchRes
   return (
     <li className="border-t border-border first:border-t-0">
       <button onClick={onClick} className="flex w-full gap-3 px-4 py-3 text-left hover:bg-fill-subtle">
-        <span className="w-4 shrink-0 text-caption text-muted-foreground tabular-nums">{rank}</span>
+        <Txt as="span" variant="caption" tone="muted" className="w-4 shrink-0 tabular-nums">
+          {rank}
+        </Txt>
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-2">
             <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -194,14 +198,18 @@ function WorkspaceSearchResultItem({ result, rank, onClick }: WorkspaceSearchRes
               <div className="h-1 w-12 overflow-hidden rounded-full bg-background">
                 <div className="h-full rounded-full bg-accent1" style={{ width: `${scorePercent}%` }} />
               </div>
-              <span className="text-meta text-muted-foreground tabular-nums">{result.score.toFixed(2)}</span>
+              <Txt as="span" variant="meta" tone="muted" className="tabular-nums">
+                {result.score.toFixed(2)}
+              </Txt>
             </div>
           </div>
-          <p className="line-clamp-2 text-caption text-muted-foreground">{result.content}</p>
+          <Txt variant="caption" tone="muted" className="line-clamp-2">
+            {result.content}
+          </Txt>
           {result.lineRange && (
-            <p className="mt-1 text-caption text-muted-foreground">
+            <Txt variant="caption" tone="muted" className="mt-1">
               Lines {result.lineRange.start}–{result.lineRange.end}
-            </p>
+            </Txt>
           )}
         </div>
       </button>
@@ -284,9 +292,9 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
       {/* Results */}
       {results.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-subheading text-foreground">
+          <Txt as="h3" variant="subheading" tone="ink">
             Found {results.length} result{results.length !== 1 ? 's' : ''}
-          </h3>
+          </Txt>
           <div className="space-y-2">
             {results.map((result, index) => (
               <SkillSearchResultCard
@@ -321,17 +329,21 @@ function SkillSearchResultCard({ result, onClick }: { result: SkillSearchResult;
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-2">
             <span className="font-medium text-foreground">{result.skillName}</span>
-            <span className="text-caption text-muted-foreground">{result.source}</span>
-            <span className="ml-auto text-caption text-muted-foreground">Score: {result.score.toFixed(3)}</span>
+            <Txt as="span" variant="caption" tone="muted">
+              {result.source}
+            </Txt>
+            <Txt as="span" variant="caption" tone="muted" className="ml-auto">
+              Score: {result.score.toFixed(3)}
+            </Txt>
           </div>
-          <p className="line-clamp-3 text-body whitespace-pre-wrap text-muted-foreground">
+          <Txt tone="muted" className="line-clamp-3 whitespace-pre-wrap">
             {result.content.slice(0, 300)}
             {result.content.length > 300 && '...'}
-          </p>
+          </Txt>
           {result.lineRange && (
-            <p className="mt-2 text-caption text-muted-foreground">
+            <Txt variant="caption" tone="muted" className="mt-2">
               Lines {result.lineRange.start}–{result.lineRange.end}
-            </p>
+            </Txt>
           )}
         </div>
       </div>

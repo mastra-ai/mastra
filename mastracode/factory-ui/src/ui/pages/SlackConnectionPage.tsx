@@ -139,10 +139,15 @@ export function SlackConnectionSettings() {
                 label="Slack"
                 description={canConnect ? 'Not connected' : 'Slack connection is not configured'}
               >
-                <span className="text-caption text-muted-foreground group-hover:text-foreground flex items-center gap-2">
+                <Txt
+                  as="span"
+                  variant="caption"
+                  tone="muted"
+                  className="group-hover:text-foreground flex items-center gap-2"
+                >
                   Connect Slack
                   <ChevronRight aria-hidden="true" />
-                </span>
+                </Txt>
               </SettingsRow>
             </button>
           </SettingsContainer>

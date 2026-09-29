@@ -27,14 +27,25 @@ export function ChatSignal({ kind, label, message, mode, variant = 'row', defaul
           <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-column text-foreground">{label}</p>
+              <Txt variant="column" tone="ink">
+                {label}
+              </Txt>
               {mode && (
-                <span className="inline-flex items-center rounded-full border border-border px-1.5 py-0.5 text-caption leading-none text-muted-foreground">
+                <Txt
+                  as="span"
+                  variant="caption"
+                  tone="muted"
+                  className="inline-flex items-center rounded-full border border-border px-1.5 py-0.5 leading-none"
+                >
                   {mode}
-                </span>
+                </Txt>
               )}
             </div>
-            {message && <p className="mt-2 text-caption break-words whitespace-pre-wrap">{message}</p>}
+            {message && (
+              <Txt variant="caption" className="mt-2 break-words whitespace-pre-wrap">
+                {message}
+              </Txt>
+            )}
           </div>
         </div>
       </div>

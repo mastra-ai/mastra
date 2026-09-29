@@ -1,4 +1,5 @@
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useBrowserFrame, useBrowserSession } from '../../context/browser-session-context';
@@ -170,7 +171,9 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
         <div className="absolute inset-0 flex items-center justify-center bg-sidebar/80">
           <div className="flex flex-col items-center gap-2">
             <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
-            <span className="text-body text-muted-foreground">Reconnecting...</span>
+            <Txt as="span" tone="muted">
+              Reconnecting...
+            </Txt>
           </div>
         </div>
       )}
@@ -195,8 +198,12 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
               </svg>
             </div>
             <div className="flex flex-col gap-1">
-              <span className="text-heading text-white">Connection Error</span>
-              <span className="text-body text-white/70">Failed to connect to browser</span>
+              <Txt as="span" variant="heading" className="text-white">
+                Connection Error
+              </Txt>
+              <Txt as="span" className="text-white/70">
+                Failed to connect to browser
+              </Txt>
             </div>
           </div>
         </div>

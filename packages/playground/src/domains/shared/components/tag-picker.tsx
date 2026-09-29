@@ -42,15 +42,17 @@ export function TagPicker({
   return (
     <div className="flex flex-wrap items-center gap-1">
       {tags.map(tag => (
-        <span
+        <Txt
+          as="span"
+          variant="meta"
           key={tag}
-          className="inline-flex items-center gap-0.5 rounded-md bg-accent1/10 px-1.5 py-0.5 text-meta text-accent1"
+          className="inline-flex items-center gap-0.5 rounded-md bg-accent1/10 px-1.5 py-0.5 text-accent1"
         >
           {tag}
           <button type="button" onClick={() => removeTag(tag)} className="hover:text-accent1/70">
             <X className="h-2.5 w-2.5" />
           </button>
-        </span>
+        </Txt>
       ))}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>

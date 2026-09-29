@@ -2,6 +2,7 @@ import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 import { forwardRef } from 'react';
 import { useMaybeSidebarState } from '@/ds/components/MainSidebar/main-sidebar-context';
 import type { SidebarState } from '@/ds/components/MainSidebar/main-sidebar-context';
+import { Txt } from '@/ds/components/Txt';
 import { surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
@@ -146,7 +147,9 @@ export const SidebarNewMeter = forwardRef<HTMLDivElement, SidebarNewMeterProps>(
       >
         <Bloom tone={tone} />
         {href ? <Link href={href} className="absolute inset-0 rounded-lg" aria-label={linkLabel} /> : null}
-        <span className="pointer-events-none relative text-meta text-foreground tabular-nums">{value}</span>
+        <Txt as="span" variant="meta" tone="ink" className="pointer-events-none relative tabular-nums">
+          {value}
+        </Txt>
       </div>
     );
   }
@@ -171,11 +174,15 @@ export const SidebarNewMeter = forwardRef<HTMLDivElement, SidebarNewMeterProps>(
       <div className="pointer-events-none relative">
         <div className="flex items-center gap-1.5">
           {tone === 'neutral' ? null : icon}
-          <span className="text-column text-muted-foreground">{label}</span>
+          <Txt as="span" variant="column" tone="muted">
+            {label}
+          </Txt>
           {action ? <span className="pointer-events-auto">{action}</span> : null}
         </div>
 
-        <p className="mt-0.5 text-heading leading-tight text-foreground tabular-nums">{value}</p>
+        <Txt variant="heading" tone="ink" className="mt-0.5 leading-tight tabular-nums">
+          {value}
+        </Txt>
 
         {status ? (
           <div className="mt-1 text-meta">

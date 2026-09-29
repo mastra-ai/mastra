@@ -59,18 +59,18 @@ export function RepositoryPickerDialog({
                   onClick={() => onSelect(repository)}
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="text-body text-foreground flex items-center gap-1.5">
+                    <Txt as="span" tone="ink" className="flex items-center gap-1.5">
                       {repository.provider === 'gitlab' ? (
                         <GitLabIcon className="text-muted-foreground size-3.5 shrink-0" />
                       ) : (
                         <GithubIcon className="text-muted-foreground size-3.5 shrink-0" />
                       )}
                       <span className="min-w-0 truncate">{repository.slug}</span>
-                    </span>
+                    </Txt>
                     {repository.gitBranch && (
-                      <span className="text-caption text-muted-foreground block truncate">
+                      <Txt as="span" variant="caption" tone="muted" className="block truncate">
                         Default branch: {repository.gitBranch}
-                      </span>
+                      </Txt>
                     )}
                   </span>
                 </button>
