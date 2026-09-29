@@ -366,6 +366,26 @@ describe('channels()', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("'oauth2' credential"));
   });
 
+  it('skips Discord with a warning when the api_key credential has an empty bot token', async () => {
+    // `DiscordProvider.configure()` marks itself configured on any non-null
+    // `botToken`, including `""`. That would surface later as a mystery 401
+    // on every tool call — reject the empty token here and skip the channel
+    // with an actionable warning.
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_dc', integrationId: 'discord' })],
+      credentials: { c_dc: { type: 'api_key', apiKey: '' } },
+    });
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(fetchMock));
+    const providers = await resolver();
+    expect(providers['discord']).toBeUndefined();
+    expect(FakeChannelProvider.configureSpy).not.toHaveBeenCalledWith(
+      'discord',
+      expect.objectContaining({ botToken: expect.anything() }),
+    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('has no bot token'));
+  });
+
   it('syncs Discord from the credential alone — the provider backfills applicationId/publicKey', async () => {
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_dc', integrationId: 'discord' })],

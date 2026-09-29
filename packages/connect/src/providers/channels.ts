@@ -214,6 +214,16 @@ const discordChannel: ChannelProviderRegistration<DiscordProviderOptions> = {
           );
         }
         const botToken = credential.apiKey;
+        // `DiscordProvider.configure()` marks itself configured on any
+        // non-null `botToken`, including `""`. An empty string would later
+        // surface as a mystery 401 at every tool call, so treat it as no
+        // connection at all here.
+        if (typeof botToken !== 'string' || botToken.length === 0) {
+          throw new MastraConnectError(
+            'no_active_connection',
+            `Discord connection ${runtime.getConnectionId()} has no bot token on its credential.`,
+          );
+        }
         const metadata = ((await runtime.getConnectionContext())?.metadata ?? {}) as Record<string, unknown>;
         const applicationId =
           optionsAppId ??
