@@ -62,7 +62,7 @@ const badgeTokenHue: Partial<Record<BadgeVariant, string>> = {
 };
 
 const statusRoles = ['success', 'destructive', 'warning', 'info'];
-const statusParts = ['subtle', 'edge', 'indicator', 'subtle-foreground'];
+const statusParts = ['subtle', 'edge', 'indicator', 'bright', 'subtle-foreground'];
 const badgeParts = ['strong', 'subtle', 'edge', 'indicator', 'foreground'];
 
 const StatusSwatch = ({ token }: { token: string }) => (
@@ -143,7 +143,7 @@ export const StatusFoundations: Story = {
 
       <FoundationSection
         label="Status roles"
-        description="Each notice has a fill, edge, indicator, and foreground. Destructive controls also have a pressed subtle fill."
+        description="Each notice has a fill, edge, indicator, and foreground. Bright is a lighter indicator for small live marks such as progress dots and activity belts. Destructive controls also have a pressed subtle fill."
       >
         {statusRoles.map(role => (
           <SpecimenGroup key={role} label={role}>
@@ -155,6 +155,11 @@ export const StatusFoundations: Story = {
             </div>
           </SpecimenGroup>
         ))}
+        <SpecimenGroup label="session">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+            <StatusSwatch token="session-initializing" />
+          </div>
+        </SpecimenGroup>
       </FoundationSection>
 
       <FoundationSection

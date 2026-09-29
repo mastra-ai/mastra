@@ -16,6 +16,7 @@
   --chart-sequential-3: var(--purple-400);
   --chart-sequential-4: var(--purple-500);
   --chart-sequential-5: var(--purple-600);
+  --chart-sequential-pale: var(--purple-200);
 
   --span-agent: oklch(0.75 0.133 250);
   --span-workflow: oklch(0.75 0.127 200);
@@ -71,6 +72,7 @@ html.light {
   --color-chart-sequential-3: var(--chart-sequential-3);
   --color-chart-sequential-4: var(--chart-sequential-4);
   --color-chart-sequential-5: var(--chart-sequential-5);
+  --color-chart-sequential-pale: var(--chart-sequential-pale);
   --color-span-agent: var(--span-agent);
   --color-span-workflow: var(--span-workflow);
   --color-span-model: var(--span-model);
