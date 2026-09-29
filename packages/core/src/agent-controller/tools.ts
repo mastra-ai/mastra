@@ -69,7 +69,7 @@ export { TaskStateProcessor } from '../tools/builtin/task-state-processor';
 
 export interface CreateSubagentToolOptions {
   subagents: AgentControllerSubagent[];
-  resolveModel: (modelId: string, options: { requestContext?: RequestContext }) => MastraModelConfig;
+  resolveModel: (modelId: string) => MastraModelConfig;
   /** Resolved controller tools (already evaluated from DynamicArgument) */
   controllerTools?: ToolsInput;
   /** Fallback model ID when subagent definition has no defaultModelId */
@@ -313,7 +313,7 @@ Use this tool when:
 
         let model: MastraModelConfig;
         try {
-          model = resolveModel(resolvedModelId, { requestContext: context?.requestContext });
+          model = resolveModel(resolvedModelId);
         } catch (err) {
           return {
             content: `Failed to resolve model "${resolvedModelId}": ${err instanceof Error ? err.message : String(err)}`,
