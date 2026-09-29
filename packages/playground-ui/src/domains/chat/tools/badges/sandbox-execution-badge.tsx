@@ -80,7 +80,7 @@ export const SandboxExecutionBadge = ({
 
   const exit: SandboxExit | undefined = toolDataParts(dataParts, 'sandbox-exit', toolCallId)[0]?.data;
   const workspace = workspaceMetadata(dataParts, toolCallId);
-  const isRunning = status === 'running' && !exit;
+  const isRunning = status === 'running' && Boolean(workspace) && !exit;
   const toolCalled = toolCalledProp ?? (Boolean(workspace) || Boolean(exit) || typeof result === 'string');
   const elapsedTime = useElapsedTime(isRunning, outputChunks[0]?.data?.timestamp);
 
