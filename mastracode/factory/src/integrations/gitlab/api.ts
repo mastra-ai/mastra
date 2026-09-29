@@ -1,4 +1,4 @@
-import type { PlatformApiClient} from '../platform/api-client.js';
+import type { PlatformApiClient } from '../platform/api-client.js';
 import { PlatformApiError } from '../platform/api-client.js';
 
 export const GITLAB_PROJECTS_PAGE_SIZE = 100;

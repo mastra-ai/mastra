@@ -10,7 +10,7 @@ import type { FactoryProjectsStorage } from '../../../storage/domains/projects/b
 import type { WorkItemsStorage } from '../../../storage/domains/work-items/base.js';
 import type { IssueReconciler } from '../../issue-reconciler.js';
 import type { LinearIssueIngress, LinearRulesIngress } from '../../linear/rules.js';
-import type { PlatformApiClient} from '../api-client.js';
+import type { PlatformApiClient } from '../api-client.js';
 import { PlatformApiError } from '../api-client.js';
 
 const API_PREFIX = '/v1/server/linear';
