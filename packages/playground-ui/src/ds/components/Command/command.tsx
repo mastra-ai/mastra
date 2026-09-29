@@ -3,6 +3,7 @@ import { Search } from 'lucide-react';
 import * as React from 'react';
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ds/components/Dialog';
+import type { DialogSize } from '@/ds/components/Dialog';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import type { ScrollAreaMask } from '@/ds/components/ScrollArea';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
@@ -25,6 +26,7 @@ type CommandDialogProps = Omit<React.ComponentPropsWithoutRef<typeof Dialog>, 'c
   children?: React.ReactNode;
   title?: string;
   description?: string;
+  size?: DialogSize;
   contentClassName?: string;
   commandClassName?: string;
   commandLabel?: string;
@@ -36,6 +38,7 @@ const CommandDialog = ({
   children,
   title = 'Command Palette',
   description = 'Search for commands and actions',
+  size,
   contentClassName,
   commandClassName,
   commandLabel,
@@ -66,9 +69,10 @@ const CommandDialog = ({
   return (
     <Dialog {...props}>
       <DialogContent
+        size={size}
         showOverlay={showOverlay}
         overlayClassName={overlayClassName}
-        className={cn('overflow-hidden p-0', contentClassName)}
+        className={cn('overflow-hidden py-0', contentClassName)}
       >
         <DialogTitle className="sr-only">{title}</DialogTitle>
         <DialogDescription className="sr-only">{description}</DialogDescription>

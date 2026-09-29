@@ -4,12 +4,14 @@ import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { ContentBlock } from '@mastra/playground-ui/components/ContentBlocks';
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
-  DialogBody,
-  DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
 import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Notice } from '@mastra/playground-ui/components/Notice';
@@ -21,7 +23,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
-import { GripVertical, X, BookmarkPlus, Check } from 'lucide-react';
+import { GripVertical, X, BookmarkPlus } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { InstructionBlock, InlineInstructionBlock } from '../agent-edit-page/utils/form-validation';
@@ -90,14 +92,14 @@ const SaveAsPromptBlockDialog = ({
   }, [open]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+    <Dialog open={open} onOpenChange={onOpenChange} pending={isPending}>
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>Save as prompt block</DialogTitle>
           <DialogDescription>Create a reusable prompt block from this content.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
-          <DialogBody className="space-y-3">
+          <DialogBody>
             <TextFieldBlock
               name="prompt-block-name"
               label="Name"
@@ -119,13 +121,11 @@ const SaveAsPromptBlockDialog = ({
               </div>
             ) : null}
           </DialogBody>
-          <DialogFooter className="px-4 pt-4">
-            <Button icon={<X />} type="button" size="sm" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button icon={<Check />} type="submit" variant="primary" size="sm" disabled={!name.trim() || isPending}>
+          <DialogFooter>
+            <DialogCancel>Cancel</DialogCancel>
+            <DialogAction type="submit" disabled={!name.trim()}>
               {isPending ? 'Saving...' : 'Save'}
-            </Button>
+            </DialogAction>
           </DialogFooter>
         </form>
       </DialogContent>

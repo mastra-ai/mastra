@@ -1,5 +1,14 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
+import {
+  Dialog,
+  DialogAction,
+  DialogCancel,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@mastra/playground-ui/components/Dialog';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -204,7 +213,7 @@ export function UserSessionsSection() {
           </div>
         )}
         {sessionsQuery.isSuccess && sessions.length === 0 && (
-          <Txt as="p" variant="meta" role="status" className="text-muted-foreground m-0 px-2 py-1">
+          <Txt as="p" variant="meta" tone="muted" role="status" className="m-0 px-2 py-1">
             {allSessions.length === 0
               ? 'No sessions yet'
               : activeUserSessionFilterCount(filters, defaultFilters) === 0 && viewerUserId
@@ -215,30 +224,26 @@ export function UserSessionsSection() {
       </div>
 
       {confirmDelete && (
-        <Dialog open onOpenChange={open => !open && setConfirmDelete(null)}>
-          <DialogContent className="w-full max-w-sm" aria-label="Delete user session">
-            <DialogHeader className="px-5 pt-4 pb-2">
+        <Dialog
+          open
+          onOpenChange={open => !open && setConfirmDelete(null)}
+          intent="destructive"
+          pending={deleteSession.isPending}
+        >
+          <DialogContent size="sm" aria-label="Delete user session">
+            <DialogHeader>
               <DialogTitle>Delete session?</DialogTitle>
-            </DialogHeader>
-            <div className="flex flex-col gap-4 px-5 pb-4">
-              <Txt as="p" variant="caption" className="text-muted-foreground m-0">
+              <DialogDescription>
                 This deletes the <span className="text-foreground">{getUserSessionLabel(confirmDelete)}</span> session
                 and its checkout with any uncommitted changes. This can’t be undone. Its conversation is kept.
-              </Txt>
-              <div className="flex justify-end gap-2">
-                <Button variant="ghost" onClick={() => setConfirmDelete(null)} disabled={deleteSession.isPending}>
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  className="bg-red-600 text-white hover:bg-red-500"
-                  onClick={() => deleteSession.mutate(confirmDelete)}
-                  disabled={deleteSession.isPending}
-                >
-                  {deleteSession.isPending ? 'Deleting…' : 'Delete'}
-                </Button>
-              </div>
-            </div>
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <DialogCancel>Cancel</DialogCancel>
+              <DialogAction onConfirm={() => deleteSession.mutate(confirmDelete)}>
+                {deleteSession.isPending ? 'Deleting…' : 'Delete'}
+              </DialogAction>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       )}
