@@ -214,6 +214,16 @@ function describeEmbedding(config?: { path: string; model: string } | null): str
   return config ? `autoEmbed (path "${config.path}", model "${config.model}")` : 'client-side vectors';
 }
 
+/**
+ * Whether Atlas refused a `$vectorSearch` because the index is still in its initial sync. The
+ * server reports it as a generic `UnknownError`, so the state named in the message is the only
+ * thing that tells it apart from other failures with the same code.
+ */
+function isInitialSyncError(error: unknown): boolean {
+  const message = (error as { message?: unknown } | null)?.message;
+  return typeof message === 'string' && message.includes('while in state INITIAL_SYNC');
+}
+
 // Define the document interface
 interface MongoDBDocument extends Document {
   _id: string; // Explicitly declare '_id' as string
@@ -264,6 +274,13 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * collection is never polluted with mastra bookkeeping. Excluded from `listIndexes`.
    */
   private static readonly REGISTRY_COLLECTION = '__mastra_vector_indexes__';
+  /**
+   * Waits between attempts while a queried index is in INITIAL_SYNC, about six seconds in all.
+   * On a live Atlas cluster the window lasted around two seconds for both a regular and an
+   * autoEmbed index; the budget leaves room for a slower build without holding a failing query
+   * for long.
+   */
+  private static readonly INITIAL_SYNC_RETRY_DELAYS_MS = [250, 500, 1000, 2000, 2000];
   /**
    * MongoDB query operators supported inside `$vectorSearch.filter`. Intentionally
    * conservative: filters using any operator outside this set fall back to the
@@ -1687,7 +1704,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         ...this.buildProjection(metadataMode, includeVector, 'vectorSearchScore', autoEmbed?.path),
       ];
 
-      const results = await collection.aggregate(pipeline).toArray();
+      const results = await this.aggregateVectorSearch(collection, pipeline);
 
       return results.map((result: any) => ({
         id: this.idToString(result._id),
@@ -1709,6 +1726,30 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         error,
       );
     }
+  }
+
+  /**
+   * Runs a `$vectorSearch` pipeline, retrying while the index is in INITIAL_SYNC.
+   *
+   * While Atlas first builds a vector search index it usually answers with an empty result, but
+   * for a few seconds it fails with "cannot query vector index ... while in state INITIAL_SYNC"
+   * instead. A caller that creates an index and queries it straight away, as `Memory` does on a
+   * fresh database, can land in that window. Any other error, and an INITIAL_SYNC that outlasts
+   * the retry budget, is thrown unchanged.
+   */
+  private async aggregateVectorSearch<T extends Document>(
+    collection: Collection<T>,
+    pipeline: Document[],
+  ): Promise<Document[]> {
+    for (const delayMs of MongoDBVector.INITIAL_SYNC_RETRY_DELAYS_MS) {
+      try {
+        return await collection.aggregate(pipeline).toArray();
+      } catch (error) {
+        if (!isInitialSyncError(error)) throw error;
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+    return collection.aggregate(pipeline).toArray();
   }
 
   /**
