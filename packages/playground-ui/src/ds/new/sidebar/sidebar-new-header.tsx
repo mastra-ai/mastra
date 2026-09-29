@@ -3,6 +3,8 @@ import { SidebarNewTrigger } from './sidebar-new-trigger';
 import { useMaybeSidebarState } from '@/ds/components/MainSidebar/main-sidebar-context';
 import { cn } from '@/lib/utils';
 
+import './sidebar-new-header.css';
+
 export type SidebarNewHeaderProps = ComponentPropsWithoutRef<'header'> & {
   /** Logo for the collapsed rail. Replaces the children when collapsed and swaps to the toggle on hover. */
   collapsedLogo?: ReactNode;
