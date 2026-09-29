@@ -1112,7 +1112,8 @@ export class SessionStream {
 
   /** Whether the open subscription already targets `key` (so it can be reused). */
   matches({ key }: { key: string }): boolean {
-    return this.#key === key && this.#subscription !== null;
+    // A subscription whose run loop failed can't process further runs; re-attach.
+    return this.#key === key && this.#subscription !== null && this.#consumerFailure === null;
   }
 
   /** Adopt `subscription` as the live one, recording its owning agent and dedup `key`. */
@@ -1579,6 +1580,8 @@ export class SessionRun {
   #abortController: AbortController | null = null;
   /** Whether an abort has been requested for the current run. */
   #abortRequested = false;
+  /** Incremented on every abort request, so waiters can ignore earlier ones. */
+  #abortGeneration = 0;
   readonly #teardownWaiters = new Set<() => void>();
   readonly #abortRequestWaiters = new Set<() => void>();
 
@@ -1610,11 +1613,18 @@ export class SessionRun {
     for (const waiter of waiters) waiter();
   }
 
+  /** Generation of the latest abort request; pass to {@link waitForAbortRequest} as `after`. */
+  getAbortGeneration(): number {
+    return this.#abortGeneration;
+  }
+
   /**
    * Resolves once an abort is requested for the current run (immediately if
-   * one already was), or when `signal` cancels the wait.
+   * one already was), or when `signal` cancels the wait. With `after`, only an
+   * abort requested after that generation counts.
    */
-  waitForAbortRequest(signal: AbortSignal): Promise<void> {
+  waitForAbortRequest(signal: AbortSignal, { after }: { after?: number } = {}): Promise<void> {
+    const requested = () => (after === undefined ? this.#abortRequested : this.#abortGeneration > after);
     return new Promise(resolve => {
       const done = () => {
         signal.removeEventListener('abort', abort);
@@ -1624,7 +1634,7 @@ export class SessionRun {
         this.#abortRequestWaiters.delete(done);
         resolve();
       };
-      if (this.#abortRequested || signal.aborted) return resolve();
+      if (requested() || signal.aborted) return resolve();
       this.#abortRequestWaiters.add(done);
       signal.addEventListener('abort', abort, { once: true });
     });
@@ -1737,6 +1747,7 @@ export class SessionRun {
    */
   requestAbort({ deferSignal }: { deferSignal?: boolean } = {}): void {
     this.#abortRequested = true;
+    this.#abortGeneration++;
     if (deferSignal) {
       this.#notifyAbortRequested();
       return;
@@ -3353,16 +3364,14 @@ export class Session<TState = unknown> {
     const teardown = this.stream.waitForTeardown(waitersController.signal).then(() => {
       tornDown = true;
     });
-    // Likewise for aborts: an abort already pending here is left over from an
-    // earlier run and must not release this caller, but one arriving while
-    // acceptance is pending belongs to this run.
-    const staleAbort = this.run.isAbortRequested();
+    // Likewise for aborts: one already requested is left over from an earlier
+    // run and must not release this caller; any requested from here on counts.
     let aborted = false;
-    const abortRequest = staleAbort
-      ? undefined
-      : this.run.waitForAbortRequest(waitersController.signal).then(() => {
-          aborted = true;
-        });
+    const abortRequest = this.run
+      .waitForAbortRequest(waitersController.signal, { after: this.run.getAbortGeneration() })
+      .then(() => {
+        aborted = true;
+      });
 
     try {
       const result = await accepted;
@@ -3377,9 +3386,8 @@ export class Session<TState = unknown> {
         completion,
         this.stream.waitForConsumerFailure(waitersController.signal),
         tornDown ? this.stream.waitForTeardown(waitersController.signal) : teardown,
+        abortRequest,
       ];
-      if (abortRequest) waits.push(abortRequest);
-      else if (!this.run.isAbortRequested()) waits.push(this.run.waitForAbortRequest(waitersController.signal));
       await Promise.race(waits);
     } finally {
       waitersController.abort();

@@ -60,7 +60,7 @@ function settleWithin<T>(promise: Promise<T>, ms = 5_000): Promise<T | typeof TI
 
 describe('Session.sendMessage settles', () => {
   it('settles every concurrent sendMessage on sessions sharing one thread', async () => {
-    const { controller, session: first } = await createController();
+    const { agent, controller, session: first } = await createController();
     const threadId = first.thread.getId()!;
     const sessions = [first];
     for (let i = 0; i < 3; i++) {
@@ -74,10 +74,22 @@ describe('Session.sendMessage settles', () => {
       sessions.push(session);
     }
 
+    const original = agent.sendSignal.bind(agent);
+    let acceptedCount = 0;
+    vi.spyOn(agent, 'sendSignal').mockImplementation((...args: Parameters<typeof original>) => {
+      const result = original(...args);
+      void result.accepted.then(() => acceptedCount++);
+      return result;
+    });
+
     const results = await settleWithin(
       Promise.allSettled(sessions.map((session, i) => session.sendMessage({ content: `message ${i}` }))),
     );
     expect(results).not.toBe(TIMED_OUT);
+    expect((results as PromiseSettledResult<void>[]).map(result => result.status)).toEqual(
+      sessions.map(() => 'fulfilled'),
+    );
+    expect(acceptedCount).toBe(sessions.length);
   });
 
   it('rejects when the stream consumer fails before the run ends', async () => {
@@ -87,6 +99,25 @@ describe('Session.sendMessage settles', () => {
     session.thread.cleanupSubscription();
 
     await expect(settleWithin(session.sendMessage({ content: 'hello' }))).rejects.toBe(error);
+  });
+
+  it('opens a fresh subscription for the next send after the consumer fails', async () => {
+    const { agent, session } = await createController();
+    const error = new Error('consumer blew up');
+    const consume = vi
+      .spyOn(session, 'processSubscribedThreadStream')
+      .mockRejectedValueOnce(error)
+      .mockReturnValue(new Promise(() => {}));
+    session.thread.cleanupSubscription();
+    await expect(settleWithin(session.sendMessage({ content: 'first' }))).rejects.toBe(error);
+
+    const accepted = onNextAcceptance(agent);
+    const pending = session.sendMessage({ content: 'second' });
+    await accepted;
+    expect(consume).toHaveBeenCalledTimes(2);
+    session.abort();
+
+    expect(await settleWithin(pending)).toBeUndefined();
   });
 
   it('resolves when the subscription is torn down before the run ends', async () => {
@@ -149,6 +180,33 @@ describe('Session.sendMessage settles', () => {
 
     const pending = session.sendMessage({ content: 'hello' });
     await sent;
+    session.abort();
+    releaseAcceptance();
+
+    expect(await settleWithin(pending)).toBeUndefined();
+  });
+
+  it('resolves when the run is aborted after a stale abort clears during acceptance', async () => {
+    const { agent, session } = await createController();
+    vi.spyOn(session, 'processSubscribedThreadStream').mockReturnValue(new Promise(() => {}));
+    session.thread.cleanupSubscription();
+
+    let releaseAcceptance!: () => void;
+    const gate = new Promise<void>(resolve => (releaseAcceptance = resolve));
+    const original = agent.sendSignal.bind(agent);
+    let signalSent!: () => void;
+    const sent = new Promise<void>(resolve => (signalSent = resolve));
+    vi.spyOn(agent, 'sendSignal').mockImplementationOnce((...args: Parameters<typeof original>) => {
+      const result = original(...args);
+      signalSent();
+      return { ...result, accepted: gate.then(() => result.accepted) };
+    });
+
+    // An earlier run's abort is still flagged when this send starts.
+    session.run.requestAbort();
+    const pending = session.sendMessage({ content: 'hello' });
+    await sent;
+    session.run.clearAbortRequested();
     session.abort();
     releaseAcceptance();
 
