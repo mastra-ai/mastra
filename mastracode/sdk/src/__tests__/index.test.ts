@@ -59,6 +59,8 @@ vi.mock('@mastra/core/coding-agent', () => ({
 vi.mock('@mastra/core/agent/durable', () => ({
   createDurableAgent: createDurableAgentMock,
   createEventedAgent: createEventedAgentMock,
+  isDurableAgent: (agent: unknown) => agent === durableAgentMock || agent === eventedAgentMock,
+  isEventedAgent: (agent: unknown) => agent === eventedAgentMock,
 }));
 
 const agentConstructorMock = vi.fn();
@@ -374,6 +376,7 @@ vi.mock('../onboarding/om-settings.js', () => ({
 
 vi.mock('../onboarding/settings.js', () => ({
   getCustomProviderId: vi.fn(),
+  getExperimentalAgentSettingsError: vi.fn(),
   loadSettings: loadSettingsMock,
   MASTRA_GATEWAY_PROVIDER: 'mastra',
   resolveModelDefaults: vi.fn(() => ({ build: '', plan: '', fast: '' })),
@@ -569,6 +572,7 @@ describe('createMastraCode', () => {
     expect(createDurableAgentMock).not.toHaveBeenCalled();
     expect(createEventedAgentMock).not.toHaveBeenCalled();
     expect(controllerConstructorMock.mock.calls[0]![0].agent).toBe(result.codeAgent);
+    expect(result).not.toHaveProperty('validateExperimentalAgent');
   }, 15_000);
 
   it.each([

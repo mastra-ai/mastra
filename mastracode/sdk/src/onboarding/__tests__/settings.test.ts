@@ -3,10 +3,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
+import { resolveExperimentalAgent } from '../../experimental-agent.js';
 import { applyOMDefaultIfUnconfigured, hasExplicitOMConfiguration } from '../om-settings.js';
 import {
   createBrowserFromSettings,
   getCustomProviderId,
+  getExperimentalAgentSettingsError,
   loadSettings,
   migrateAccountPreferences,
   migrateLegacyVariedPack,
@@ -1486,13 +1488,60 @@ describe('experimental agent settings', () => {
     });
   });
 
-  it('rejects invalid persisted values with instructions for repairing the settings file', () => {
+  it('loads invalid persisted values without discarding unrelated settings', () => {
     withTempSettingsFile(filePath => {
-      writeFileSync(filePath, JSON.stringify({ experimentalAgent: 'default' }), 'utf-8');
-      expect(() => loadSettings(filePath)).toThrow(
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          experimentalAgent: 'default',
+          storage: { backend: 'pg', pg: { connectionString: 'postgresql://localhost/mastracode' } },
+        }),
+        'utf-8',
+      );
+
+      const settings = loadSettings(filePath);
+
+      expect(settings.experimentalAgent).toBeNull();
+      expect(settings.storage).toMatchObject({
+        backend: 'pg',
+        pg: { connectionString: 'postgresql://localhost/mastracode' },
+      });
+      expect(getExperimentalAgentSettingsError(settings)?.message).toBe(
         `Invalid "experimentalAgent" setting in ${filePath}: "default". ` +
           `Remove the "experimentalAgent" key or set it to "durable", "evented", or null.`,
       );
+    });
+  });
+
+  it('rejects invalid persisted values when resolving the runtime', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ experimentalAgent: 'default' }), 'utf-8');
+      const settings = loadSettings(filePath);
+
+      expect(() => resolveExperimentalAgent(settings, {})).toThrow(
+        `Invalid "experimentalAgent" setting in ${filePath}: "default". ` +
+          `Remove the "experimentalAgent" key or set it to "durable", "evented", or null.`,
+      );
+    });
+  });
+
+  it('lets a valid environment value override an invalid persisted value', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ experimentalAgent: 'default' }), 'utf-8');
+      const settings = loadSettings(filePath);
+
+      expect(resolveExperimentalAgent(settings, { MASTRACODE_EXPERIMENTAL_AGENT: 'evented' })).toBe('evented');
+    });
+  });
+
+  it('preserves an invalid persisted value without serializing internal diagnostics', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ experimentalAgent: 'default' }), 'utf-8');
+      const settings = loadSettings(filePath);
+
+      saveSettings(settings, filePath);
+
+      expect(JSON.parse(readFileSync(filePath, 'utf-8'))).toMatchObject({ experimentalAgent: 'default' });
     });
   });
 });

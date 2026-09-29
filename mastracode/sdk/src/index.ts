@@ -1494,7 +1494,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // orchestration to it — code-agent already has full workspace / MCP / web
     // access via its dynamic tool factory.
     codeAgent,
-    validateExperimentalAgent: () => validateExperimentalAgent(experimentalAgent, codeAgent, controller.getMastra()),
     // Lets the composition layer publish the created session back into the
     // config closures (e.g. notification stream options read it lazily).
     setActiveSession: (session: Session<MastraCodeState>) => {
@@ -1630,7 +1629,7 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
   const { controller, sessionId, ownerId, projectPath, codeAgent, mcpManager } = base;
 
   await controller.init();
-  base.validateExperimentalAgent();
+  validateExperimentalAgent(codeAgent, controller.getMastra());
   // Register workflow primitives (sub-agent + workspace tools + code-agent
   // + web + notification_inbox + snapshot of MCP tools) on the controller's
   // Mastra so the dynamic-workflow loading in startWorkers() can rehydrate
@@ -1774,7 +1773,7 @@ export async function prepareAgentControllerMount(
 
   const finalize = async () => {
     await controller.init();
-    base.validateExperimentalAgent();
+    validateExperimentalAgent(codeAgent, controller.getMastra());
     if (weOwnTheMastra) {
       const mastra = controller.getMastra();
       if (mastra) await registerWorkflowBuilderPrimitives(mastra, { projectPath, codeAgent, mcpManager });

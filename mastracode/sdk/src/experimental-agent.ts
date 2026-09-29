@@ -1,8 +1,12 @@
 import type { Agent } from '@mastra/core/agent';
-import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
+import { createDurableAgent, createEventedAgent, isDurableAgent, isEventedAgent } from '@mastra/core/agent/durable';
 import type { Mastra } from '@mastra/core/mastra';
 
-import type { ExperimentalAgent, GlobalSettings } from './onboarding/settings.js';
+import {
+  getExperimentalAgentSettingsError,
+  type ExperimentalAgent,
+  type GlobalSettings,
+} from './onboarding/settings.js';
 
 export interface ExperimentalAgentEnvironment {
   MASTRACODE_EXPERIMENTAL_AGENT?: string;
@@ -24,7 +28,12 @@ export function resolveExperimentalAgent(
   env: ExperimentalAgentEnvironment = process.env,
 ): ExperimentalAgent | null {
   const environmentSelection = parseExperimentalAgentEnvironment(env);
-  return environmentSelection ?? settings.experimentalAgent;
+  if (environmentSelection) return environmentSelection;
+
+  const settingsError = getExperimentalAgentSettingsError(settings);
+  if (settingsError) throw settingsError;
+
+  return settings.experimentalAgent;
 }
 
 export function wrapExperimentalAgent(agent: Agent, selection: ExperimentalAgent | null): Agent {
@@ -38,29 +47,31 @@ interface WorkflowBackedAgent extends Agent {
 }
 
 export function validateExperimentalAgent(
-  selection: ExperimentalAgent | null,
   agent: Agent,
   mastra: Mastra | undefined,
   report: (message: string) => void = console.info,
 ): void {
+  const selection: ExperimentalAgent | null = isEventedAgent(agent)
+    ? 'evented'
+    : isDurableAgent(agent)
+      ? 'durable'
+      : null;
   if (!selection) return;
 
-  if (selection === 'evented') {
-    if (!mastra || agent.getMastraInstance() !== mastra) {
-      throw new Error(
-        'Experimental agent "evented" requires the coding agent to be registered on a Mastra host before startup.',
-      );
-    }
+  if (selection === 'evented' && (!mastra || agent.getMastraInstance() !== mastra)) {
+    throw new Error(
+      'Experimental agent "evented" requires the coding agent to be registered on a Mastra host before startup.',
+    );
+  }
 
-    const workflowsStore = mastra.getStorage()?.stores?.workflows;
-    if (!workflowsStore) {
-      throw new Error('Experimental agent "evented" requires a configured workflow storage domain.');
-    }
-    if (workflowsStore.supportsConcurrentUpdates?.() !== true) {
-      throw new Error(
-        'Experimental agent "evented" requires workflow storage with atomic concurrent updates (supportsConcurrentUpdates() must return true).',
-      );
-    }
+  const workflowsStore = mastra?.getStorage()?.stores?.workflows;
+  if (!workflowsStore) {
+    throw new Error(`Experimental agent "${selection}" requires a configured workflow storage domain.`);
+  }
+  if (selection === 'evented' && workflowsStore.supportsConcurrentUpdates?.() !== true) {
+    throw new Error(
+      'Experimental agent "evented" requires workflow storage with atomic concurrent updates (supportsConcurrentUpdates() must return true).',
+    );
   }
 
   const engineType = (agent as WorkflowBackedAgent).getWorkflow().engineType;

@@ -52,12 +52,15 @@ export type StorageBackend = 'libsql' | 'pg';
 export type ExperimentalAgent = 'durable' | 'evented';
 
 export class ExperimentalAgentSettingsError extends Error {
+  readonly value: unknown;
+
   constructor(value: unknown, settingsPath?: string) {
     super(
       `Invalid "experimentalAgent" setting${settingsPath ? ` in ${settingsPath}` : ''}: ${JSON.stringify(value)}. ` +
         `Remove the "experimentalAgent" key or set it to "durable", "evented", or null.`,
     );
     this.name = 'ExperimentalAgentSettingsError';
+    this.value = value;
   }
 }
 
@@ -498,6 +501,18 @@ const DEFAULTS: GlobalSettings = {
 export const WEB_SEARCH_PROVIDER_VALUES: WebSearchProviderSetting[] = ['auto', 'tavily', 'parallel'];
 const QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX = 8;
 const loadedSignalSettings = new WeakMap<GlobalSettings, SignalSettings>();
+const experimentalAgentSettingsErrors = new WeakMap<object, ExperimentalAgentSettingsError>();
+
+export function getExperimentalAgentSettingsError(settings: object): ExperimentalAgentSettingsError | undefined {
+  return experimentalAgentSettingsErrors.get(settings);
+}
+
+function rememberExperimentalAgentSettingsError(
+  settings: GlobalSettings,
+  error: ExperimentalAgentSettingsError | undefined,
+): void {
+  if (error) experimentalAgentSettingsErrors.set(settings, error);
+}
 
 function cloneSignalSettings(signals: SignalSettings): SignalSettings {
   return { ...signals };
@@ -651,6 +666,20 @@ export function parseExperimentalAgentSetting(value: unknown, settingsPath?: str
   if (value === undefined || value === null) return null;
   if (value === 'durable' || value === 'evented') return value;
   throw new ExperimentalAgentSettingsError(value, settingsPath);
+}
+
+function loadExperimentalAgentSetting(
+  value: unknown,
+  settingsPath: string,
+): { selection: ExperimentalAgent | null; error?: ExperimentalAgentSettingsError } {
+  try {
+    return { selection: parseExperimentalAgentSetting(value, settingsPath) };
+  } catch (error) {
+    if (error instanceof ExperimentalAgentSettingsError) {
+      return { selection: null, error };
+    }
+    throw error;
+  }
 }
 
 function parseBackgroundToolSettings(rawBackgroundTools: unknown): BackgroundToolSettings {
@@ -989,6 +1018,7 @@ function migrateFromAuth(settingsPath: string): boolean {
       const raw = JSON.parse(readFileSync(settingsPath, 'utf-8'));
       const rawCustomPacks: CustomPack[] = Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [];
       const modePackOverrides = parseModePackOverrides(raw.models?.modePackOverrides);
+      const experimentalAgentSetting = loadExperimentalAgentSetting(raw.experimentalAgent, settingsPath);
       settings = {
         onboarding: { ...DEFAULTS.onboarding, ...raw.onboarding },
         models: {
@@ -1019,15 +1049,15 @@ function migrateFromAuth(settingsPath: string): boolean {
         browser: parseBrowserSettings(raw.browser),
         shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
         voice: parseVoiceSettings(raw.voice),
-        experimentalAgent: parseExperimentalAgentSetting(raw.experimentalAgent, settingsPath),
+        experimentalAgent: experimentalAgentSetting.selection,
         backgroundTools: parseBackgroundToolSettings(raw.backgroundTools),
         signals: parseSignalSettings(raw.signals),
         mcp: parseMcpDiscoverySettings(raw.mcp),
         observability: parseObservabilitySettings(raw.observability),
       };
+      rememberExperimentalAgentSettingsError(settings, experimentalAgentSetting.error);
       applyQuietModePreferenceRollout(settings, raw.onboarding);
-    } catch (error) {
-      if (error instanceof ExperimentalAgentSettingsError) throw error;
+    } catch {
       settings = structuredClone(DEFAULTS);
     }
   } else {
@@ -1126,6 +1156,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
     const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
     const rawCustomPacks: CustomPack[] = Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [];
     const modePackOverrides = parseModePackOverrides(raw.models?.modePackOverrides);
+    const experimentalAgentSetting = loadExperimentalAgentSetting(raw.experimentalAgent, filePath);
     // Spread raw first to preserve unknown top-level keys (forward-compatibility),
     // then overlay with parsed/typed fields so known keys are always correct.
     const settings: GlobalSettings = {
@@ -1159,12 +1190,13 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       browser: parseBrowserSettings(raw.browser),
       shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
       voice: parseVoiceSettings(raw.voice),
-      experimentalAgent: parseExperimentalAgentSetting(raw.experimentalAgent, filePath),
+      experimentalAgent: experimentalAgentSetting.selection,
       backgroundTools: parseBackgroundToolSettings(raw.backgroundTools),
       signals: parseSignalSettings(raw.signals),
       mcp: parseMcpDiscoverySettings(raw.mcp),
       observability: parseObservabilitySettings(raw.observability),
     };
+    rememberExperimentalAgentSettingsError(settings, experimentalAgentSetting.error);
 
     // Migrate legacy omModelId → omModelOverride
     let settingsChanged = false;
@@ -1186,8 +1218,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
     }
 
     return rememberLoadedSettings(settings);
-  } catch (error) {
-    if (error instanceof ExperimentalAgentSettingsError) throw error;
+  } catch {
     return rememberLoadedSettings(structuredClone(DEFAULTS));
   }
 }
@@ -1431,7 +1462,11 @@ export function saveSettings(settings: GlobalSettings, filePath: string = getSet
   const signals = getSignalSettingsForSave(settings, filePath);
   settings.signals = signals;
   loadedSignalSettings.set(settings, cloneSignalSettings(signals));
-  writeFileAtomically(filePath, JSON.stringify(settings, null, 2));
+  const experimentalAgentError = getExperimentalAgentSettingsError(settings);
+  const settingsToSave = experimentalAgentError
+    ? { ...settings, experimentalAgent: experimentalAgentError.value }
+    : settings;
+  writeFileAtomically(filePath, JSON.stringify(settingsToSave, null, 2));
 }
 
 /** Marker file name to track which provider last used a profile. */
