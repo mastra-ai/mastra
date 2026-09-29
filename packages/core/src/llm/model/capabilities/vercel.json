@@ -41,6 +41,7 @@
     "anthropic/claude-sonnet-4.5",
     "anthropic/claude-sonnet-4.6",
     "anthropic/claude-sonnet-5",
+    "anthropic/claude-sonnet-5.5",
     "bytedance/seed-2.1-turbo",
     "bytedance/seedance-2.0",
     "bytedance/seedance-2.0-fast",

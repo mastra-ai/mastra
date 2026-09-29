@@ -293,11 +293,11 @@ Hono and Fastify enforce the request-body limit before JSON parsing. Express and
 
 | Predicate context | Fields | Operators |
 | - | - | - |
-| Trace | `traceId`, `threadId`, `resourceId`, `entityName`, `entityType`, `environment`, `status` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Trace | `traceId`, `threadId`, `resourceId`, `runId`, `sessionId`, `userId`, `organizationId`, `entityName`, `entityType`, `environment`, `status` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Trace metadata | `metadata.<key>` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Trace | `startedAt`, `endedAt`, `durationMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Trace | `tags` | `includes`, `notIncludes`, `exists`, `notExists` |
-| Span | `name`, `spanType`, `model`, `provider`, `status`, `entityType`, `entityId`, `entityName`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Span | `name`, `spanType`, `model`, `provider`, `status`, `entityType`, `entityId`, `entityName`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId`, `runId`, `sessionId`, `userId`, `organizationId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Span | `startedAt`, `endedAt`, `durationMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Span | `error` | `exists`, `notExists` |
 | Score | `scorerId`, `scorerVersion`, `scoreSource`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
@@ -326,6 +326,27 @@ const slowRootTraces = {
 This top-level predicate doesn't inspect child spans. In contrast, `spans.some` with a `durationMs` predicate examines the current root span and current child spans, so a long child can satisfy that clause even when its root is shorter.
 
 Trace queries exclude incomplete roots before evaluating predicates. As a result, `{ op: 'notExists', path: 'durationMs' }` doesn't find running traces or malformed roots without a usable `endedAt`.
+
+### Filter by context identifiers
+
+`runId`, `sessionId`, `userId`, and `organizationId` are available at trace scope and inside `spans.some` / `spans.none`. Trace-scope predicates read the current root span. Span-scope predicates bind to one related current span, so a run recorded only on a child span is found through `spans.some`:
+
+```typescript
+const sessionTracesWithRun = {
+  op: 'and',
+  args: [
+    { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-123' } },
+    { op: 'eq', left: { path: 'sessionId' }, right: { literal: 'session-123' } },
+    {
+      spans: {
+        some: { op: 'eq', left: { path: 'runId' }, right: { literal: 'run-42' } },
+      },
+    },
+  ],
+}
+```
+
+These identifiers support `eq`, `ne`, `in`, `notIn`, `exists`, and `notExists`. Field discovery lists them, but value discovery doesn't return their recorded values. Stores advertise support through the `trace-query-context-ids` feature. A predicate on one of these fields against an older store returns `501` before storage runs, and field discovery omits them for that store.
 
 ### Filter by span properties
 
@@ -687,7 +708,7 @@ const plan = planTraceQuery(parseTraceQueryRequest(request), {
 })
 ```
 
-`resourceId` is optional and narrows within the organization. Keyset and delta cursors are bound to the scope, so a cursor minted under one scope and reused under another returns `409` before storage runs. A scoped request against an observability store or `@mastra/core` that predates tenant scope returns `501` instead of running unscoped. Stores advertise support through the `trace-query-tenant-scope` feature. Callers can't name `organizationId` or `projectId` in predicates. Without a scope the routes behave as before, so self-hosted installations keep their own tenant model.
+`resourceId` is optional and narrows within the organization. Keyset and delta cursors are bound to the scope, so a cursor minted under one scope and reused under another returns `409` before storage runs. A scoped request against an observability store or `@mastra/core` that predates tenant scope returns `501` instead of running unscoped. Stores advertise support through the `trace-query-tenant-scope` feature. Callers can't name `projectId` in predicates. An `organizationId` predicate compares recorded data and is ANDed with the scope, so it can only narrow the tenant's own traces and never widens it. Without a scope the routes behave as before, so self-hosted installations keep their own tenant model.
 
 Cursor pagination is deterministic, but it isn't a database snapshot. Traces or replacement signals written between page requests can change later pages.
 
