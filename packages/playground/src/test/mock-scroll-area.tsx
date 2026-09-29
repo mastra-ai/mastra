@@ -5,7 +5,7 @@
  *
  * Usage: `vi.mock('@mastra/playground-ui/components/ScrollArea', () => import('@/test/mock-scroll-area'));`
  */
-import type { ScrollAreaProps, ScrollAreaViewportProps } from '@mastra/playground-ui/components/ScrollArea';
+import type { ScrollAreaProps } from '@mastra/playground-ui/components/ScrollArea';
 import { Children, createContext, isValidElement, use } from 'react';
 import type { ComponentProps, Ref } from 'react';
 
@@ -24,7 +24,7 @@ type MockScrollAreaProps = ComponentProps<'div'> &
 
 const ViewportRefContext = createContext<Ref<HTMLDivElement> | undefined>(undefined);
 
-export function ScrollAreaViewport({ className, children }: ScrollAreaViewportProps) {
+export function ScrollAreaViewport({ className, children }: Pick<ComponentProps<'div'>, 'className' | 'children'>) {
   return (
     <div ref={use(ViewportRefContext)} className={className}>
       {children}
