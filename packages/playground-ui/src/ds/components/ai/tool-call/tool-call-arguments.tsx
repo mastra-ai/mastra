@@ -1,5 +1,5 @@
-import { ToolCallMono } from './tool-call';
 import { ToolCallEdit } from './tool-call-edit';
+import { ToolCallMono } from './tool-call-mono';
 import { toolEdit, visibleToolArgumentsText } from './tool-presentation';
 import type { ToolArgumentsInput } from './tool-presentation';
 

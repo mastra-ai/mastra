@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { Activity, ActivityContent, ActivityHeadline, ActivityTrigger } from '../activity';
-import { ToolCallCommand } from './tool-call';
 import { ToolCallArguments } from './tool-call-arguments';
 import { ToolCallGroup } from './tool-call-group';
 import type { ToolCallGroupStep } from './tool-call-group';
+import { ToolCallCommand } from './tool-call-mono';
 import { ToolCallOutput } from './tool-call-output';
 import { hasToolArguments, presentTool } from './tool-presentation';
 

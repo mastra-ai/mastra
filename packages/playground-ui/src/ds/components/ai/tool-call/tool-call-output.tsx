@@ -1,4 +1,4 @@
-import { ToolCallMono } from './tool-call';
+import { ToolCallMono } from './tool-call-mono';
 
 export interface ToolCallOutputProps {
   text: string;
