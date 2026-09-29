@@ -15,6 +15,7 @@ interface Reply {
   result?: { result: { revisedDraft: string; findings: unknown[]; mode: string } };
   error?: string;
 }
+/** Call the configured hosted example with synthetic inputs and the authorized tester token. */
 async function request(path: string, credential: string | undefined = token, body?: unknown) {
   const response = await fetch(`${base}${path}`, {
     method: body === undefined ? 'GET' : 'POST',
@@ -24,6 +25,7 @@ async function request(path: string, credential: string | undefined = token, bod
   });
   return { status: response.status, body: (await response.json()) as Reply };
 }
+/** Poll one accepted hosted run to a terminal outcome without creating a replacement. */
 async function terminal(id: string) {
   const deadline = performance.now() + 300000;
   while (performance.now() < deadline) {
@@ -35,6 +37,7 @@ async function terminal(id: string) {
   throw new Error(`Timed out waiting for ${id}; reconnect using this ID before submitting again`);
 }
 const observations: unknown[] = [];
+/** Retrieve the persisted synthetic run binding for native lineage and retry assertions. */
 function record(value: unknown) {
   observations.push(value);
   console.log(JSON.stringify(value));
@@ -72,7 +75,10 @@ record({ check: 'success, duplicate acceptance and ownership', passed: true, ...
 
 const failureId = randomUUID();
 record({ check: 'failure submission identity', runId: failureId });
-assert.equal((await request('/api/jobs', token, { runId: failureId, draft: 'Failure demonstration.', demoFailure: true })).status, 202);
+assert.equal(
+  (await request('/api/jobs', token, { runId: failureId, draft: 'Failure demonstration.', demoFailure: true })).status,
+  202,
+);
 const failure = await terminal(failureId);
 assert.equal(failure.status, 'failed', JSON.stringify(failure));
 assert.match(failure.error ?? '', /failure/i);

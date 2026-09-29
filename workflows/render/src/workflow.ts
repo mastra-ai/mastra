@@ -16,6 +16,7 @@ export class RenderWorkflow<
   TContext = unknown,
 > extends Workflow<DefaultEngineType, TSteps, TId, TState, TInput, TOutput, TInput, TContext> {
   readonly binding: WorkflowBinding;
+  /** Install the Render execution engine while disabling unsafe framework replay and retries. */
   constructor(
     config: WorkflowConfig<TId, TState, TInput, TOutput, TSteps, TContext>,
     provider: RenderProvider,
@@ -43,6 +44,7 @@ export class RenderWorkflow<
     this.binding = binding = provider.register(this, root);
   }
 
+  /** Create a typed Render-backed run only after the workflow manifest compiles successfully. */
   override async createRun(
     options?: Parameters<Workflow['createRun']>[0],
   ): Promise<Run<DefaultEngineType, TSteps, TState, TInput, TOutput, TContext>> {
@@ -78,6 +80,7 @@ export class RenderWorkflow<
     return run;
   }
 
+  /** Merge stored Mastra snapshots with authoritative provider status, without management API calls during worker hydration. */
   override async getWorkflowRunById(
     runId: string,
     options?: Parameters<Workflow['getWorkflowRunById']>[1],
@@ -109,15 +112,19 @@ export class RenderWorkflow<
       ...(record.error ? { error: record.error } : {}),
     };
   }
+  /** Reject automatic restart of Render workflows because this provider does not implement its required semantics. */
   override restartAllActiveWorkflowRuns(): never {
     return unsupported('automatic restart of Render workflows');
   }
+  /** Reject provider-wide run listing; retain application job IDs and retrieve individual runs because this provider does not implement its required semantics. */
   override listWorkflowRuns(): never {
     return unsupported('provider-wide run listing; retain application job IDs and retrieve individual runs');
   }
+  /** Reject provider-wide active run listing because this provider does not implement its required semantics. */
   override listActiveWorkflowRuns(): never {
     return unsupported('provider-wide active run listing');
   }
+  /** Reject deleting a run without coordinating provider history and snapshots because this provider does not implement its required semantics. */
   override deleteWorkflowRunById(): never {
     return unsupported('deleting a run without coordinating provider history and snapshots');
   }

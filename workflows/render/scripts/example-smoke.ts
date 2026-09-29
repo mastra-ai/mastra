@@ -15,6 +15,7 @@ interface Reply {
   error?: string;
 }
 let backend: ChildProcess | undefined;
+/** Poll an HTTP fixture condition to a bounded deadline. */
 async function until<T>(operation: () => Promise<T>, check: (value: T) => boolean): Promise<T> {
   const deadline = performance.now() + 60000;
   while (performance.now() < deadline) {
@@ -24,6 +25,7 @@ async function until<T>(operation: () => Promise<T>, check: (value: T) => boolea
   }
   throw new Error('Example HTTP check timed out');
 }
+/** Call the local example API with an explicit test owner token. */
 async function request(path: string, user: keyof typeof tokens | undefined, body?: unknown) {
   const response = await fetch(`${base}${path}`, {
     method: body === undefined ? 'GET' : 'POST',
@@ -32,6 +34,7 @@ async function request(path: string, user: keyof typeof tokens | undefined, body
   });
   return { status: response.status, body: (await response.json()) as Reply };
 }
+/** Start the isolated HTTP example process using the test configuration. */
 async function start() {
   const log = openSync('.scratch/example-http.log', 'a');
   backend = spawn(process.execPath, ['node_modules/tsx/dist/cli.mjs', 'server.ts'], {
@@ -50,6 +53,7 @@ async function start() {
   }, Boolean);
   return backend.pid;
 }
+/** Stop the owned example process before testing reconnect or cleanup. */
 async function stop() {
   if (!backend || backend.exitCode !== null) return;
   const child = backend;

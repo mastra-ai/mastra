@@ -11,6 +11,7 @@ interface Runtime {
   authorize?: (envelope: StepEnvelope) => StepEnvelope;
 }
 const runtime = new AsyncLocalStorage<Runtime>();
+/** Scope native task context and dispatch authority to this asynchronous worker execution. */
 export function withTaskRuntime<T>(value: Runtime, execute: () => Promise<T>): Promise<T> {
   return runtime.run(value, execute);
 }
@@ -26,6 +27,7 @@ export function getRenderTaskContext(): TaskContext {
   return runtime.getStore()?.context ?? unsupported('accessing Render task context outside a worker execution');
 }
 
+/** Authorize a complete child payload and run its registered native definition under the root concurrency bound. */
 export function dispatchChild(name: string, envelope: StepEnvelope): Promise<unknown> {
   const active = runtime.getStore();
   const definition = active?.tasks.get(name);

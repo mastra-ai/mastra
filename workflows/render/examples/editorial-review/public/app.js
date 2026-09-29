@@ -5,6 +5,7 @@ let timer;
 let connected = false;
 element('token').value = token;
 const terminal = status => ['success', 'failed', 'canceled'].includes(status);
+/** Call the authenticated job API and preserve uncertain run identity rather than resubmitting. */
 async function api(path, options = {}) {
   const response = await fetch(path, {
     ...options,
@@ -23,6 +24,7 @@ async function api(path, options = {}) {
   }
   return body;
 }
+/** Persist the current run ID across refreshes and encode it in the browser URL. */
 function remember(id) {
   runId = id;
   localStorage.setItem('review-run', id);
@@ -30,6 +32,7 @@ function remember(id) {
   url.searchParams.set('run', id);
   history.replaceState({}, '', url);
 }
+/** Render authoritative job state and enable only valid submission/cancellation controls. */
 function show(job) {
   element('status').textContent = job.status;
   element('status').dataset.state = job.status;
@@ -58,6 +61,7 @@ function show(job) {
   clearTimeout(timer);
   if (!terminal(job.status) && job.status !== 'submission-unknown') timer = setTimeout(refresh, 1000);
 }
+/** Reload the current job and keep polling only while its outcome remains unsettled. */
 async function refresh() {
   if (!runId || !connected) return;
   try {

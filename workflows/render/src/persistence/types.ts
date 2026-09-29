@@ -42,6 +42,7 @@ export interface RenderPersistence {
 
 export const terminal = (status: RunStatus) => status === 'success' || status === 'failed' || status === 'canceled';
 
+/** Apply a bounded compare-and-swap update without modifying an already terminal record. */
 export async function updateRun(
   store: RenderPersistence,
   workflowId: string,

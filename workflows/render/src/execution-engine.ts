@@ -15,6 +15,7 @@ const localMapping = new AsyncLocalStorage<boolean>();
 const readOnly = new AsyncLocalStorage<boolean>();
 
 export class RenderExecutionEngine extends DefaultExecutionEngine {
+  /** Bind Mastra's graph engine to the worker manifest and allowed request-context keys. */
   constructor(
     private readonly binding: EngineBinding,
     options: ConstructorParameters<typeof DefaultExecutionEngine>[0],
@@ -22,6 +23,7 @@ export class RenderExecutionEngine extends DefaultExecutionEngine {
     super(options);
   }
 
+  /** Keep mappings local and dispatch business steps with signed, JSON-safe execution context. */
   override async executeStep(params: Parameters<DefaultExecutionEngine['executeStep']>[0]) {
     if (localMapping.getStore())
       return super.executeStep({
@@ -79,12 +81,15 @@ export class RenderExecutionEngine extends DefaultExecutionEngine {
     });
   }
 
+  /** Execute pure mappings in the coordinator rather than creating native task definitions. */
   override executeMapping(params: Parameters<DefaultExecutionEngine['executeMapping']>[0]) {
     return localMapping.run(true, () => super.executeMapping(params));
   }
+  /** Run parallel branches with shared state and request-context mutation disabled. */
   override executeParallel(params: Parameters<DefaultExecutionEngine['executeParallel']>[0]) {
     return readOnly.run(true, () => super.executeParallel(params));
   }
+  /** Evaluate pure branch conditions and keep selected branch state read-only. */
   override executeConditional(params: Parameters<DefaultExecutionEngine['executeConditional']>[0]) {
     return readOnly.run(true, () =>
       super.executeConditional({
@@ -100,9 +105,11 @@ export class RenderExecutionEngine extends DefaultExecutionEngine {
       }),
     );
   }
+  /** Use Mastra's iteration scheduling while preventing shared mutation between items. */
   override executeForeach(params: Parameters<DefaultExecutionEngine['executeForeach']>[0]) {
     return readOnly.run(true, () => super.executeForeach(params));
   }
+  /** Preserve Mastra loop scheduling and expose a pure context to each loop condition. */
   override executeLoop(params: Parameters<DefaultExecutionEngine['executeLoop']>[0]) {
     return super.executeLoop({
       ...params,

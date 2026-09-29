@@ -8,7 +8,10 @@ import { z } from 'zod';
 const base = process.env.DEMO_BASE_URL;
 const token = process.env.DEMO_TEST_TOKEN;
 if (!base || !token) throw new Error('Set DEMO_BASE_URL and DEMO_TEST_TOKEN');
-const runId = z.string().uuid().parse(process.env.DEMO_AGENT_RUN_ID ?? randomUUID());
+const runId = z
+  .string()
+  .uuid()
+  .parse(process.env.DEMO_AGENT_RUN_ID ?? randomUUID());
 const draft =
   'Our museum was opened in 1998. Every Friday at 3 p.m., our museum has a free repair clinic. ' +
   'The clinic is free. Tickets are not required. People who want to visit can just come. ' +
@@ -18,6 +21,7 @@ const criteria =
   'the free repair clinic and no-ticket requirement. Remove repetition and commentary about the writing. ' +
   'Each review should give one or two sentences of actionable feedback.';
 
+/** Call the hosted real-agent example with the authorized tester token. */
 async function request(path: string, body?: unknown) {
   const response = await fetch(`${base}${path}`, {
     method: body === undefined ? 'GET' : 'POST',
@@ -25,11 +29,11 @@ async function request(path: string, body?: unknown) {
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     signal: AbortSignal.timeout(90000),
   });
-  return { status: response.status, body: await response.json() as unknown };
+  return { status: response.status, body: (await response.json()) as unknown };
 }
+/** Retrieve the synthetic agent run binding for native lineage verification. */
 function record(value: unknown) {
-  if (process.env.DEMO_RESULTS_FILE)
-    writeFileSync(process.env.DEMO_RESULTS_FILE, JSON.stringify(value, null, 2));
+  if (process.env.DEMO_RESULTS_FILE) writeFileSync(process.env.DEMO_RESULTS_FILE, JSON.stringify(value, null, 2));
   console.log(JSON.stringify(value));
 }
 const config = await request('/api/config');
@@ -61,16 +65,18 @@ while (performance.now() < deadline) {
 }
 assert.ok(completed, `Timed out; reconnect to ${runId} before submitting another job`);
 record({ check: 'real-agent terminal response', runId, response: completed });
-const result = z.object({
-  status: z.literal('success'),
-  result: z.object({
+const result = z
+  .object({
+    status: z.literal('success'),
     result: z.object({
-      mode: z.literal('agent'),
-      revisedDraft: z.string().min(1),
-      findings: z.array(z.object({ focus: z.string().min(1), feedback: z.string().min(1) })).length(3),
+      result: z.object({
+        mode: z.literal('agent'),
+        revisedDraft: z.string().min(1),
+        findings: z.array(z.object({ focus: z.string().min(1), feedback: z.string().min(1) })).length(3),
+      }),
     }),
-  }),
-}).parse(completed).result.result;
+  })
+  .parse(completed).result.result;
 assert.notEqual(result.revisedDraft, draft, 'The editor must perform a real revision');
 assert.match(result.revisedDraft, /1998/);
 assert.match(result.revisedDraft, /Friday/i);

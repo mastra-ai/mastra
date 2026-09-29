@@ -18,6 +18,7 @@ export type TaskPolicy = z.infer<typeof taskPolicySchema>;
 export const DEFAULT_RETRY = { maxRetries: 3, waitDurationMs: 1000, backoffScaling: 2 };
 export const NO_RETRY = { maxRetries: 0, waitDurationMs: 1000, backoffScaling: 2 };
 
+/** Merge and validate native task policy, with explicit overrides taking precedence over defaults. */
 export function taskPolicy(value?: TaskPolicy, defaults?: TaskPolicy): TaskPolicy {
   return taskPolicySchema.parse({ plan: 'flex', ...defaults, ...value });
 }

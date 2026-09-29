@@ -47,6 +47,7 @@ export function registerRenderTasks({
       throw new RenderProtocolError('Caller/worker manifest or build mismatch. Deploy matching application builds.');
     }
   };
+  /** Add one native definition and reject duplicate task names before worker registration completes. */
   function add(name: string, definition: TaskDefinition<[unknown], unknown>) {
     if (definitions.has(name)) throw new RenderProtocolError(`Task name collision ${name}`);
     definitions.set(name, definition);

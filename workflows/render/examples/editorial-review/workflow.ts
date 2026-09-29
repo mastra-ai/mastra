@@ -18,6 +18,7 @@ export const outputSchema = z.object({
   mode: z.enum(['deterministic', 'agent']),
 });
 
+/** Create a focused review step using deterministic fixtures or the configured Mastra agent. */
 function reviewer<const Id extends string>(id: Id, focus: string) {
   return createStep({
     id,

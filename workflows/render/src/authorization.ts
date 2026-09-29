@@ -4,6 +4,7 @@ import { json, type Json, type RootEnvelope, type StepEnvelope } from './protoco
 import type { RunRecord } from './persistence/types.js';
 
 // Render may reorder JSON object keys in transit. Arrays retain their order.
+/** Serialize JSON with sorted object keys so transport key ordering cannot alter dispatch signatures. */
 function canonical(value: Json): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (value !== null && typeof value === 'object')

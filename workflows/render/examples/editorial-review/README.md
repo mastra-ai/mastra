@@ -75,3 +75,33 @@ Configure `SUBMISSION_WINDOW_MS`, `SUBMISSIONS_PER_OWNER`, `SUBMISSIONS_GLOBAL`,
 Accepted reservations remain active until the existing workflow status proves success, failure or cancellation. A cancellation request, missing binding or ambiguous submission does not release capacity. If a process dies between reservation and submission, an operator must reconcile that run ID and verify no native execution was accepted before settling the reservation. Never release an uncertain reservation based solely on its age or retry it as a new job. The additive `mastra_render_admissions` table contains namespace, run ID, owner, input hash and timestamps, not drafts or credentials. Include it in the application's retention/backup policy.
 
 Run the real PostgreSQL admission regression with `DATABASE_URL=... node node_modules/tsx/dist/cli.mjs scripts/admission-smoke.ts` from the package directory. It uses isolated namespaces and deletes only its synthetic reservation rows.
+
+Reconciliation shares at most three concurrent status lookups per admission instance. Simultaneous requests share the current pass. All started lookups finish before a failed pass rejects; unknown statuses remain reserved, and failures do not admit another run. Separate application processes each have their own three-lookup bound. Terminal settlement is still decided by the existing provider state.
+
+### Operator recovery for an interrupted reservation
+
+Use this only for a specific reservation whose provider binding is absent. A binding in `submitting` or `submission-unknown` can represent an accepted native execution and must remain reserved until reconciled with Render. Increasing the cap or releasing by age is not reconciliation.
+
+1. Set `SUBMISSIONS_ENABLED=false` on every caller, deploy it, and drain or stop all in-flight submission handlers. Verify new submissions return 503 while reads and cancellation work. The database lock below cannot by itself stop a handler that already reserved capacity and is about to submit.
+2. Inspect the exact namespace/run ID, persisted provider binding, application logs, and Render task history. Record the operator, timestamp, run ID, and evidence in the incident record. If acceptance or a live submitting handler cannot be ruled out, stop and keep the reservation active.
+3. After proving the caller cannot resume and there is no provider binding, run this transaction with explicit `psql` variables `namespace`, `workflow_id`, and `run_id`. It touches at most one reservation, retains the row for idempotency and rate accounting, and prints the settlement for the audit record.
+
+```sql
+BEGIN;
+SELECT pg_advisory_xact_lock(hashtextextended('mastra-admission:' || :'namespace', 0));
+UPDATE mastra_render_admissions AS admission
+SET settled_at = now()
+WHERE admission.namespace = :'namespace'
+  AND admission.run_id = :'run_id'
+  AND admission.settled_at IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM mastra_render_runs
+    WHERE workflow_id = :'workflow_id' AND run_id = admission.run_id
+  )
+RETURNING namespace, run_id, created_at, settled_at;
+COMMIT;
+```
+
+4. Verify the expected single row was settled, save the output with the evidence, then reopen submissions. Do not delete the reservation or retry the original ID. Any new work requires an explicit new submission; this procedure does not perform one.
+
+On deployment, keep model keys in the worker, Render caller credentials in the backend, and use HTTPS for browser traffic. Rotate configured demo bearer tokens by updating all callers; they have no automatic expiry or revocation service. Draftroom's separate application uses server-side sessions instead. Cancellation requests Render to stop in-flight tasks, but cannot undo an external effect that already occurred. Check the terminal native outcome before releasing capacity or claiming cancellation succeeded.

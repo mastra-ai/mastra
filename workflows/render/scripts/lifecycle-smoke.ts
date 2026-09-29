@@ -10,6 +10,7 @@ const client = new Render({
   useLocalDev: true,
   localDevUrl: process.env.RENDER_LOCAL_DEV_URL ?? 'http://127.0.0.1:8138',
 });
+/** Invoke the synthetic fixture through the configured local Render API. */
 async function call(...args: string[]) {
   const { stdout } = await exec(
     process.execPath,
@@ -18,6 +19,7 @@ async function call(...args: string[]) {
   );
   return JSON.parse(stdout.trim().split('\n').at(-1)!);
 }
+/** Poll a fixture condition until its bounded deadline, failing when it never becomes true. */
 async function until<T>(operation: () => Promise<T>, check: (value: T) => boolean): Promise<T> {
   const deadline = performance.now() + 45000;
   while (performance.now() < deadline) {
@@ -50,10 +52,15 @@ for (const mode of ['reconnect', 'cancel', 'root-loss']) {
       status => status.record.status === 'canceled',
     );
     assert.equal(ended.snapshot.status, 'canceled');
-    const descendants = (await client.workflows.listTaskRuns({ rootTaskRunId: [active.record.providerId], limit: 100 }))
-      .filter(row => row.taskRun.rootTaskRunId === active.record.providerId)
-      .map(row => ({ id: row.taskRun.id, status: row.taskRun.status }));
-    assert(descendants.every(task => !['pending', 'running'].includes(task.status)));
+    // Native cancellation propagates asynchronously after the root becomes terminal.
+    const descendants = await until(
+      async () =>
+        (await client.workflows.listTaskRuns({ rootTaskRunId: [active.record.providerId], limit: 100 }))
+          .filter(row => row.taskRun.rootTaskRunId === active.record.providerId)
+          .map(row => ({ id: row.taskRun.id, status: row.taskRun.status })),
+      tasks =>
+        tasks.length > 1 && tasks.every(task => ['canceled', 'completed', 'succeeded', 'failed'].includes(task.status)),
+    );
     evidence.push({ mode, submitted, ended, descendants });
   } else if (mode === 'root-loss') {
     const rows = await until(

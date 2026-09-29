@@ -26,6 +26,7 @@ const unavailable = new Set([
 /** Mapping and routing run in the root and must be pure transformations. */
 export function pureContext<T extends object>(context: T): T {
   return new Proxy(context, {
+    /** Expose supported context members while enforcing this execution context's mutation and capability restrictions. */
     get(target, property, receiver) {
       if (unavailable.has(String(property)) || property === 'setState')
         return unsupported(`local mapping or condition context.${String(property)}`);
@@ -43,6 +44,7 @@ export function pureContext<T extends object>(context: T): T {
           [...source.entries()].map(([key, entry]) => [key, freeze(json(entry))]),
         );
         return new Proxy(copy, {
+          /** Expose supported context members while enforcing this execution context's mutation and capability restrictions. */
           get(object, key) {
             if (['set', 'setRaw', 'delete', 'deleteRaw', 'clear'].includes(String(key)))
               return () => unsupported('request-context mutation in a mapping or condition');
@@ -56,6 +58,7 @@ export function pureContext<T extends object>(context: T): T {
   });
 }
 
+/** Recursively freeze validated JSON copies to prevent shared state mutation. */
 export function freeze<T>(value: T): T {
   if (value && typeof value === 'object') {
     for (const child of Object.values(value)) freeze(child);
@@ -64,6 +67,7 @@ export function freeze<T>(value: T): T {
   return value;
 }
 
+/** Copy only explicitly allowlisted JSON context entries; reject unknown keys before dispatch. */
 export function encodeRequestContext(
   context: { entries(): IterableIterator<[unknown, unknown]> },
   allowed: readonly string[],
@@ -77,6 +81,7 @@ export function encodeRequestContext(
   return result;
 }
 
+/** Validate a value through its Standard Schema and report boundary failures as protocol errors. */
 export async function validate(
   schema: Step['inputSchema'] | undefined,
   value: unknown,
@@ -88,6 +93,7 @@ export async function validate(
   return result.value;
 }
 
+/** Validate a child envelope and execute its step with supported Mastra context and guarded state updates. */
 export async function executeRemoteStep(
   step: Step,
   envelope: StepEnvelope,
@@ -105,6 +111,7 @@ export async function executeRemoteStep(
     if (envelope.readOnly) unsupported('shared state or request-context mutation inside parallel, branch or foreach');
   };
   const contextProxy = new Proxy(requestContext, {
+    /** Expose supported context members while enforcing this execution context's mutation and capability restrictions. */
     get(target, property) {
       if (['set', 'setRaw', 'delete', 'deleteRaw', 'clear'].includes(String(property))) {
         return (key?: string, value?: unknown) => {
@@ -141,6 +148,7 @@ export async function executeRemoteStep(
     },
   };
   const context = new Proxy(supported, {
+    /** Expose supported context members while enforcing this execution context's mutation and capability restrictions. */
     get(target, property, receiver) {
       if (unavailable.has(String(property))) return unsupported(`remote step context.${String(property)}`);
       return Reflect.get(target, property, receiver);

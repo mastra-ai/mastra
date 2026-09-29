@@ -18,6 +18,7 @@ export interface Manifest {
   steps: Map<string, RegisteredStep>;
 }
 
+/** Serialize normalized manifest JSON deterministically for caller/worker compatibility hashing. */
 function stable(value: Json): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
   if (value && typeof value === 'object')
@@ -28,12 +29,14 @@ function stable(value: Json): string {
   return JSON.stringify(value);
 }
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+/** Create a bounded native task name that separates root and step identities. */
 function name(workflowId: string, stepId: string, role: 'root' | 'step' = 'step'): string {
   const identity = JSON.stringify([role, workflowId, stepId]);
   const prefix = `${workflowId}-${stepId}`.replace(/[^A-Za-z0-9_-]/g, '-').slice(0, 39);
   return `mastra-${prefix}-${digest(identity).slice(0, 16)}`;
 }
 
+/** Validate a committed supported graph and compile native definitions plus a deterministic compatibility hash. */
 export function compileManifest(
   workflow: AnyWorkflow,
   buildId: string,

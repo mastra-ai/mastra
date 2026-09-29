@@ -33,8 +33,10 @@ type RenderStepParams<
   ) => Promise<InferPublicSchema<O>>;
 };
 
+/** Create provider-bound Mastra factories; configuration is shared by every workflow created here. */
 export function init(options: RenderOptions) {
   const provider = new RenderProvider(options);
+  /** Create a schema-validated Mastra step with native Render retry and compute policy. */
   function createStep<
     Id extends string,
     S extends PublicSchema | undefined,
@@ -47,6 +49,7 @@ export function init(options: RenderOptions) {
     stepPolicies.set(step, taskPolicySchema.parse(render ?? {}));
     return step;
   }
+  /** Create a Mastra-authored graph whose explicit steps execute as Render tasks. */
   function createWorkflow<
     Id extends string,
     S extends PublicSchema | undefined,
