@@ -179,7 +179,7 @@ Next, publish the re-review on the PR itself — this is part of every pass, not
 
 **Author-identity misconfiguration must be visible, never silent.** GitHub refuses both approve and request changes from the PR's author, so a review token that authored the PR can never record a verdict in `reviewDecision` or satisfy branch protection. Before submitting, compare the reviewing identity (`gh api user --jq .login`; for an App installation token that call may fail — then treat a submission rejected with GitHub's "Can not approve/request changes on your own pull request" error as the same signal) with the PR's `.author.login`. When they match:
 
-1. Prepend this line to the published body: `> ⚠️ **Factory misconfiguration:** the review token is the PR author, so GitHub cannot record this verdict as an approving or changes-requested review (it will not satisfy branch protection or trigger review-based automation). Configure a separate reviewer token for Factory reviews.`
+1. Add this line to the published body immediately after the verdict line (the verdict line stays first): `> ⚠️ **Factory misconfiguration:** the review token is the PR author, so GitHub cannot record this verdict as an approving or changes-requested review (it will not satisfy branch protection or workflows that require an approving or changes-requested review). Configure a separate reviewer token for Factory reviews.`
 2. Publish as a submitted comment review: `gh pr review <number> --comment --body-file <file>`. Only if that also fails, fall back to `gh pr comment <number> --body-file <file>`.
 3. Report the misconfiguration and the publish method under **Verification** and in the **Factory routing** block of the handoff.
 
