@@ -16,7 +16,7 @@ import type {
 } from './sankey-chart-utils';
 import { useSankeyRenderContext } from './sankey-context';
 import { SankeyPortalTooltip } from './sankey-portal-tooltip';
-import { nodeColor, nodeColorVivid } from './sankeyColor';
+import { nodeColor, nodeColorMuted, nodeColorMutedVivid, nodeColorVivid } from './sankeyColor';
 import { useSankeyChartMeasurements } from './use-sankey-chart-measurements';
 import { useSankeyGeometryTransition } from './use-sankey-geometry-transition';
 import { useSankeyHoverTooltip } from './use-sankey-hover-tooltip';
@@ -53,7 +53,7 @@ export function SankeyChart({
   hideColumnLabels = false,
   geometryTransitionKey,
 }: SankeyChartProps) {
-  const { graph, enabledColumns, hueMap, usesFixedGeometry } = useSankeyRenderContext();
+  const { graph, enabledColumns, hueMap, mutedNodeIds, usesFixedGeometry } = useSankeyRenderContext();
   const { chartContainerRef, fixedGeometry, labelWidths } = useSankeyChartMeasurements({
     graph,
     height,
@@ -117,6 +117,7 @@ export function SankeyChart({
                     y={nodeGeometry?.y ?? props.y}
                     height={nodeGeometry?.height ?? props.height}
                     hueMap={hueMap}
+                    muted={node !== undefined && mutedNodeIds.has(String(node.value))}
                     columnLabel={node?.column.label}
                     columnDescription={node ? getColumnDescription?.(node.column) : undefined}
                     label={node?.label}
@@ -154,6 +155,7 @@ export function SankeyChart({
                     sourceWidth={linkGeometry?.sourceWidth}
                     targetWidth={linkGeometry?.targetWidth}
                     hueMap={hueMap}
+                    mutedNodeIds={mutedNodeIds}
                     highlighted={String(props.payload.source.name ?? '') === activeSourceName}
                     displayValue={link?.displayValue}
                     layoutValue={link?.value}
@@ -196,6 +198,7 @@ type SankeyLinkRendererProps = {
 
 type SankeyNodeProps = SankeyNodeRendererProps & {
   hueMap: Record<string, number>;
+  muted: boolean;
   columnLabel?: string;
   columnDescription?: string;
   label?: string;
@@ -219,6 +222,7 @@ function SankeyNode({
   height,
   payload,
   hueMap,
+  muted,
   columnLabel,
   columnDescription,
   label,
@@ -259,6 +263,7 @@ function SankeyNode({
   const textAnchor = isFirstColumn ? 'start' : isLastColumn ? 'end' : 'middle';
   const labelX = isFirstColumn ? x : isLastColumn ? x + width : x + width / 2;
   const hue = hueMap[name] ?? 0;
+  const fill = muted ? nodeColorMuted() : nodeColor(hue);
   const handleKeyDown = (event: KeyboardEvent<SVGGElement>) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
@@ -306,7 +311,7 @@ function SankeyNode({
       >
         {/* The custom tooltip covers described nodes; a native title there would stack a second popup. */}
         {description ? null : <title>{displayLabel}</title>}
-        <rect x={x} y={visibleY} width={width} height={visibleHeight} rx={3} fill={nodeColor(hue)} />
+        <rect x={x} y={visibleY} width={width} height={visibleHeight} rx={3} fill={fill} />
         <text
           x={labelX}
           y={y - 24}
@@ -397,6 +402,7 @@ function scaleSankeyDimension(size: number, displayValue: number | undefined, la
 
 type SankeyLinkProps = SankeyLinkRendererProps & {
   hueMap: Record<string, number>;
+  mutedNodeIds: ReadonlySet<string>;
   highlighted: boolean;
   displayValue?: number;
   layoutValue?: number;
@@ -418,6 +424,7 @@ function SankeyLink({
   index,
   payload,
   hueMap,
+  mutedNodeIds,
   highlighted,
   displayValue,
   layoutValue,
@@ -439,6 +446,14 @@ function SankeyLink({
   ].join(' ');
   const sourceName = String(payload.source.name ?? '');
   const targetName = String(payload.target.name ?? '');
+  const sourceColor = mutedNodeIds.has(sourceName) ? nodeColorMuted() : nodeColor(hueMap[sourceName] ?? 0);
+  const targetColor = mutedNodeIds.has(targetName) ? nodeColorMuted() : nodeColor(hueMap[targetName] ?? 0);
+  const sourceColorVivid = mutedNodeIds.has(sourceName)
+    ? nodeColorMutedVivid()
+    : nodeColorVivid(hueMap[sourceName] ?? 0);
+  const targetColorVivid = mutedNodeIds.has(targetName)
+    ? nodeColorMutedVivid()
+    : nodeColorVivid(hueMap[targetName] ?? 0);
   const gradientId = `sankey-grad-${index}`;
   const vividGradientId = `${gradientId}-vivid`;
   const handleKeyDown = (event: KeyboardEvent<SVGPathElement>) => {
@@ -451,12 +466,12 @@ function SankeyLink({
     <g>
       <defs>
         <linearGradient id={gradientId} gradientUnits="userSpaceOnUse" x1={sourceX} x2={targetX}>
-          <stop offset="0%" stopColor={nodeColor(hueMap[sourceName] ?? 0)} />
-          <stop offset="100%" stopColor={nodeColor(hueMap[targetName] ?? 0)} />
+          <stop offset="0%" stopColor={sourceColor} />
+          <stop offset="100%" stopColor={targetColor} />
         </linearGradient>
         <linearGradient id={vividGradientId} gradientUnits="userSpaceOnUse" x1={sourceX} x2={targetX}>
-          <stop offset="0%" stopColor={nodeColorVivid(hueMap[sourceName] ?? 0)} />
-          <stop offset="100%" stopColor={nodeColorVivid(hueMap[targetName] ?? 0)} />
+          <stop offset="0%" stopColor={sourceColorVivid} />
+          <stop offset="100%" stopColor={targetColorVivid} />
         </linearGradient>
       </defs>
       <path
