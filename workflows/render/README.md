@@ -16,7 +16,7 @@ From this package directory:
 mkdir -p .scratch/tmp .scratch/npm-cache
 export TMPDIR="$PWD/.scratch/tmp"
 export npm_config_cache="$PWD/.scratch/npm-cache"
-npm ci --workspaces=false --ignore-scripts --no-audit --no-fund
+npm ci --workspaces=false --include=dev --ignore-scripts --no-audit --no-fund
 npm run build --workspaces=false
 npm pack --workspaces=false --pack-destination .scratch
 ```
