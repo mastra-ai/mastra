@@ -121,8 +121,15 @@ export function registerRenderTasks({
                 requestContext: new RequestContext<unknown>(Object.entries(envelope.requestContext)),
               });
               const serialized = frameworkJson(result);
-              await updateRun(store, envelope.workflowId, envelope.runId, () => ({
+              await updateRun(store, envelope.workflowId, envelope.runId, current => ({
                 result: serialized,
+                dispatchClosed: true,
+                // A lost submission response can leave this completed root without a native binding.
+                ...(!current.providerId
+                  ? {
+                      status: result.status === 'success' ? ('success' as const) : ('failed' as const),
+                    }
+                  : {}),
                 ...(result.status === 'failed' ? { error: errorRecord(result.error) } : {}),
               }));
               if (result.status !== 'success')
@@ -133,6 +140,8 @@ export function registerRenderTasks({
         } catch (error) {
           await updateRun(store, envelope.workflowId, envelope.runId, current => ({
             error: current.error ?? errorRecord(error),
+            dispatchClosed: true,
+            ...(!current.providerId ? { status: 'failed' as const } : {}),
           }));
           throw error;
         } finally {

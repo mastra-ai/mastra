@@ -103,19 +103,32 @@ export class RenderProvider {
     } catch (error) {
       const rejected =
         error instanceof ClientError && error.statusCode >= 400 && error.statusCode < 500 && error.statusCode !== 408;
-      await updateRun(this.store, record.workflowId, record.runId, () => ({
-        status: rejected ? 'failed' : 'submission-unknown',
-        error: errorRecord(error),
+      await updateRun(this.store, record.workflowId, record.runId, current => ({
+        // A worker claim proves acceptance; a lost response must not revoke its dispatch authority.
+        status: current.workerClaim ? current.status : rejected ? 'failed' : 'submission-unknown',
+        error: current.error ?? errorRecord(error),
       }));
       if (rejected) throw error;
       throw new RenderSubmissionUnknownError(record.runId, { cause: error });
     }
     try {
-      // The root may already be running or complete. Binding must never regress that state.
-      return await updateRun(this.store, record.workflowId, record.runId, current => ({
-        providerId,
-        status: current.status === 'submitting' ? 'pending' : current.status,
-      }));
+      // The root may have completed without a binding. Attach the accepted ID even to a
+      // terminal record, preserving its outcome and closed dispatch authority.
+      for (let attempt = 0; attempt < 12; attempt++) {
+        const current = await this.store.get(record.workflowId, record.runId);
+        if (!current) throw new RenderRunConflictError(`Unknown run ${record.runId}`);
+        if (current.providerId && current.providerId !== providerId)
+          throw new RenderRunConflictError(`Run ${record.runId} already has another provider binding`);
+        const bound: RunRecord = {
+          ...current,
+          providerId,
+          status: current.status === 'submitting' ? 'pending' : current.status,
+          revision: current.revision + 1,
+          updatedAt: Date.now(),
+        };
+        if (await this.store.compareAndSwap(bound, current.revision)) return bound;
+      }
+      throw new RenderRunConflictError(`Concurrent binding updates did not settle for ${record.runId}`);
     } catch (error) {
       throw new RenderSubmissionUnknownError(record.runId, { cause: error });
     }

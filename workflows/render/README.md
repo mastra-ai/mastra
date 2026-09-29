@@ -178,3 +178,9 @@ Generated roots and business-step tasks are internal adapter entrypoints. Submit
 Render SDK 1.1.0 exposes no authenticated parent ID inside `TaskContext`. The proof establishes coordinator authorization of the payload; it does not attest native Render parent identity. A trusted workspace operator who can read task arguments can replay an authorized payload while its coordinator remains active. Native retries deliberately reuse that payload. This is not exactly-once execution or a security boundary against database/worker administrators. Business effects should remain idempotent where retries require it.
 
 The root binding now includes a submission hash and dispatch lifetime fields inside the existing JSON record. Existing completed history remains readable. Drain active runs and deploy matching caller/worker builds together; do not reuse a build ID for changed adapter code. Old pending submissions without the new binding must be reconciled, not blindly resubmitted. No core Mastra APIs, native retry policies, or graph authoring APIs changed.
+
+### Completion after an uncertain submission
+
+If Render accepts a root but its response or the provider-binding write is lost, do not resubmit the run. A worker claim keeps the accepted coordinator authorized even if the caller later reports submission uncertainty. If that worker finishes without a persisted native task ID, it atomically records the Mastra terminal outcome and closes child dispatch. Status reads and waits can then finish, and admission capacity can be released. Bound runs continue to use Render's native terminal state, including cancellation.
+
+This does not recover a coordinator that dies before storing its outcome. Native cancellation remains unavailable while the task ID is unknown, and a worker-completed unbound run reports its recorded Mastra outcome without a native terminal-state lookup. Root retries and replay remain unsupported.

@@ -4,7 +4,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { createStep as coreCreateStep, type AnyWorkflow } from '@mastra/core/workflows';
 import { task } from '@renderinc/sdk/workflows';
 import type { TaskContext, TaskDefinition } from '@renderinc/sdk/workflows';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { init, createMemoryPersistence } from './index.js';
 import type { ProviderRun, RenderOptions, RenderTransport } from './index.js';
@@ -510,4 +510,129 @@ describe('JSON transport', () => {
   it('does not leak a task context to callers', () => {
     expect(() => getRenderTaskContext()).toThrow('outside');
   });
+});
+
+describe('accepted roots without a saved provider binding', () => {
+  it.each(['before-claim', 'after-claim', 'binding-write'] as const)(
+    'finishes an accepted root after a %s submission failure without resubmitting',
+    async failure => {
+      const h = harness();
+      let release!: () => void;
+      let entered!: () => void;
+      const running = new Promise<void>(resolve => {
+        entered = resolve;
+      });
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      let effects = 0;
+      const step = h.createStep({
+        id: 'work',
+        inputSchema: z.number(),
+        outputSchema: z.number(),
+        execute: async ({ inputData }) => {
+          effects++;
+          entered();
+          await gate;
+          return inputData + 1;
+        },
+      });
+      const workflow = h
+        .createWorkflow({ id: randomUUID(), inputSchema: z.number(), outputSchema: z.number() })
+        .then(step)
+        .commit();
+      h.register(workflow);
+      const start = h.transport.start.bind(h.transport);
+      const starts = vi.spyOn(h.transport, 'start').mockImplementation(async (slug, input) => {
+        const id = await start(slug, input);
+        if (failure === 'after-claim') await running;
+        if (failure !== 'binding-write') throw new Error('response lost after acceptance');
+        return id;
+      });
+      const swap = h.provider.store.compareAndSwap.bind(h.provider.store);
+      vi.spyOn(h.provider.store, 'compareAndSwap').mockImplementation(async (record, revision) => {
+        if (failure === 'binding-write' && record.providerId) throw new Error('binding write failed');
+        return swap(record, revision);
+      });
+      const run = await workflow.createRun();
+      try {
+        await expect(run.startAsync({ inputData: 1 })).rejects.toMatchObject({ name: 'RenderSubmissionUnknownError' });
+        await running;
+        const active = await h.provider.store.get(workflow.id, run.runId);
+        expect(active?.status).toBe('running');
+        expect(active?.providerId).toBeUndefined();
+        await expect(h.provider.cancel(workflow.id, run.runId)).rejects.toMatchObject({
+          name: 'RenderSubmissionUnknownError',
+        });
+        release();
+        await vi.waitFor(async () => expect((await h.provider.getRun(workflow.id, run.runId))?.status).toBe('success'));
+        const terminal = await h.provider.wait(workflow.id, run.runId, AbortSignal.timeout(1000));
+        expect(terminal.result).toMatchObject({ status: 'success', result: 2 });
+        expect(terminal.dispatchClosed).toBe(true);
+        expect((await workflow.getWorkflowRunById(run.runId))?.status).toBe('success');
+        await expect(run.startAsync({ inputData: 1 })).rejects.toThrow('already exists');
+        expect(starts).toHaveBeenCalledTimes(1);
+        expect(effects).toBe(1);
+      } finally {
+        release();
+        vi.restoreAllMocks();
+      }
+    },
+  );
+
+  it('retains a failed unbound root outcome instead of polling it forever', async () => {
+    const h = harness();
+    const step = h.createStep({
+      id: 'fail',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      execute: async () => {
+        throw new Error('business failure');
+      },
+    });
+    const workflow = h
+      .createWorkflow({ id: randomUUID(), inputSchema: z.number(), outputSchema: z.number() })
+      .then(step)
+      .commit();
+    h.register(workflow);
+    const start = h.transport.start.bind(h.transport);
+    h.transport.start = async (slug, input) => {
+      await start(slug, input);
+      throw new Error('response lost');
+    };
+    const run = await workflow.createRun();
+    await expect(run.startAsync({ inputData: 1 })).rejects.toMatchObject({ name: 'RenderSubmissionUnknownError' });
+    await vi.waitFor(async () => expect((await h.provider.getRun(workflow.id, run.runId))?.status).toBe('failed'));
+    const result = await h.provider.wait(workflow.id, run.runId, AbortSignal.timeout(1000));
+    expect(result.dispatchClosed).toBe(true);
+    expect(result.error?.message).toContain('business failure');
+  });
+});
+
+it('keeps the native binding when the worker finishes before the submission response arrives', async () => {
+  const h = harness();
+  const step = h.createStep({
+    id: 'fast',
+    inputSchema: z.number(),
+    outputSchema: z.number(),
+    execute: async ({ inputData }) => inputData,
+  });
+  const workflow = h
+    .createWorkflow({ id: randomUUID(), inputSchema: z.number(), outputSchema: z.number() })
+    .then(step)
+    .commit();
+  h.register(workflow);
+  const start = h.transport.start.bind(h.transport);
+  h.transport.start = async (slug, input) => {
+    const id = await start(slug, input);
+    await vi.waitFor(() => expect(h.runs.get(id)?.status).toBe('completed'));
+    return id;
+  };
+  const run = await workflow.createRun();
+  const result = await run.start({ inputData: 3 });
+  expect(result.status).toBe('success');
+  const record = await h.provider.store.get(workflow.id, run.runId);
+  expect(record?.providerId).toBe([...h.runs.keys()][0]);
+  expect(record?.dispatchClosed).toBe(true);
+  expect(record?.result).toMatchObject({ status: 'success', result: 3 });
 });
