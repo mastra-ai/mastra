@@ -6,8 +6,11 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  MALFORMED_PID_FILE_GRACE_MS,
   MaintenanceLockError,
+  UNKNOWN_OWNER,
   acquireMaintenanceLock,
+  getMaintenanceLockOwner,
   getMaintenanceLockPath,
   registerSessionAndWaitForMaintenance,
   unregisterSession,
@@ -119,5 +122,59 @@ describe('maintenance lock', () => {
 
     release();
     expect(fs.existsSync(getMaintenanceLockPath())).toBe(false);
+  });
+});
+
+describe('pid files that are still being written', () => {
+  function backdate(file: string): void {
+    const past = new Date(Date.now() - MALFORMED_PID_FILE_GRACE_MS - 1_000);
+    fs.utimesSync(file, past, past);
+  }
+
+  it('treats a fresh empty maintenance lock as held, not stale', () => {
+    fs.writeFileSync(getMaintenanceLockPath(), '');
+
+    expect(getMaintenanceLockOwner()).toBe(UNKNOWN_OWNER);
+    expect(() => acquireMaintenanceLock()).toThrow(MaintenanceLockError);
+    expect(() => acquireMaintenanceLock()).toThrow('Another mastracode prune is already running.');
+    expect(fs.existsSync(getMaintenanceLockPath())).toBe(true);
+  });
+
+  it('keeps a starting session waiting on a fresh empty maintenance lock', async () => {
+    fs.writeFileSync(getMaintenanceLockPath(), '');
+
+    await expect(registerSessionAndWaitForMaintenance({ timeoutMs: 50, pollMs: 10 })).rejects.toThrow(
+      'Storage maintenance (mastracode prune) is still running',
+    );
+  });
+
+  it('reaps an empty maintenance lock once it is past the grace period', () => {
+    fs.writeFileSync(getMaintenanceLockPath(), '');
+    backdate(getMaintenanceLockPath());
+
+    const release = acquireMaintenanceLock();
+    expect(fs.readFileSync(getMaintenanceLockPath(), 'utf-8')).toBe(String(process.pid));
+    release();
+  });
+
+  it('refuses prune on a fresh empty session registration and keeps it', () => {
+    const sessionFile = path.join(sessionsDir(), '999999.pid');
+    fs.mkdirSync(sessionsDir(), { recursive: true });
+    fs.writeFileSync(sessionFile, '');
+
+    expect(() => acquireMaintenanceLock()).toThrow('mastracode is running. Exit every mastracode session');
+    expect(fs.existsSync(sessionFile)).toBe(true);
+    expect(fs.existsSync(getMaintenanceLockPath())).toBe(false);
+  });
+
+  it('reaps an empty session registration once it is past the grace period', () => {
+    const sessionFile = path.join(sessionsDir(), '999999.pid');
+    fs.mkdirSync(sessionsDir(), { recursive: true });
+    fs.writeFileSync(sessionFile, '');
+    backdate(sessionFile);
+
+    const release = acquireMaintenanceLock();
+    expect(fs.existsSync(sessionFile)).toBe(false);
+    release();
   });
 });

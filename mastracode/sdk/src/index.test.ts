@@ -204,6 +204,8 @@ vi.mock('./utils/thread-lock.js', () => ({
 
 vi.mock('./utils/maintenance-lock.js', () => ({
   registerSessionAndWaitForMaintenance: vi.fn(async () => {}),
+  unregisterSession: vi.fn(),
+  UNKNOWN_OWNER: -1,
 }));
 
 describe('createMastraCode startup performance', () => {
@@ -245,18 +247,46 @@ describe('storage maintenance exclusion', () => {
       import('./utils/storage-factory.js'),
     ]);
     const order: string[] = [];
-    vi.mocked(registerSessionAndWaitForMaintenance).mockImplementationOnce(async () => {
-      order.push('wait');
-    });
+    let finishMaintenance!: () => void;
+    vi.mocked(registerSessionAndWaitForMaintenance).mockImplementationOnce(
+      () =>
+        new Promise<void>(resolve => {
+          order.push('wait');
+          finishMaintenance = () => {
+            order.push('maintenance-done');
+            resolve();
+          };
+        }),
+    );
     vi.mocked(createStorage).mockImplementationOnce((async () => {
       order.push('storage');
       return { storage: {}, backend: 'memory' };
     }) as never);
     const { createMastraCode } = await import('./index.js');
 
-    await createMastraCode();
+    const started = createMastraCode();
+    await vi.waitFor(() => expect(order).toEqual(['wait']));
+    // Give startup ample turns to (incorrectly) open storage while maintenance is pending.
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(order).not.toContain('storage');
 
-    expect(order).toEqual(['wait', 'storage']);
+    finishMaintenance();
+    await started;
+
+    expect(order).toEqual(['wait', 'maintenance-done', 'storage']);
+  });
+
+  it('unregisters the session when opening storage fails', async () => {
+    const [{ unregisterSession }, { createStorage }] = await Promise.all([
+      import('./utils/maintenance-lock.js'),
+      import('./utils/storage-factory.js'),
+    ]);
+    const failure = new Error('storage unavailable');
+    vi.mocked(createStorage).mockRejectedValueOnce(failure);
+    const { createMastraCode } = await import('./index.js');
+
+    await expect(createMastraCode()).rejects.toBe(failure);
+    expect(unregisterSession).toHaveBeenCalled();
   });
 });
 

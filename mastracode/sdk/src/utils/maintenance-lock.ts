@@ -41,14 +41,38 @@ export function getMaintenanceLockPath(): string {
   return path.join(getLocksDir(), 'maintenance.lock');
 }
 
+/** Owner of a lock whose pid file is still being written (PID not known yet). */
+export const UNKNOWN_OWNER = -1;
+
+/**
+ * Creating a pid file (open, then write) is not atomic, so an empty or
+ * unparseable file may belong to a process that is mid-write. Only treat it as
+ * stale once it is older than this.
+ */
+export const MALFORMED_PID_FILE_GRACE_MS = 5_000;
+
 function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
   } catch (error) {
-    // EPERM: the process exists but belongs to another user.
-    return (error as NodeJS.ErrnoException).code === 'EPERM';
+    // Only ESRCH proves the process is gone; EPERM etc. mean it exists.
+    return (error as NodeJS.ErrnoException).code !== 'ESRCH';
   }
+}
+
+/** Whether a pid file with no readable PID is old enough to reap. Missing files count as reapable. */
+function isMalformedPidFileStale(file: string): boolean {
+  try {
+    return Date.now() - fs.statSync(file).mtimeMs > MALFORMED_PID_FILE_GRACE_MS;
+  } catch {
+    return true;
+  }
+}
+
+function describeOwners(pids: number[]): string {
+  const known = pids.filter(pid => pid !== UNKNOWN_OWNER);
+  return known.length > 0 ? ` (PID ${known.join(', ')})` : '';
 }
 
 function readPid(file: string): number | null {
@@ -60,13 +84,17 @@ function readPid(file: string): number | null {
   }
 }
 
-/** PID holding the maintenance lock, or null. Stale locks are removed. */
+/**
+ * PID holding the maintenance lock, `UNKNOWN_OWNER` while its pid file is still
+ * being written, or null. Stale locks are removed.
+ */
 export function getMaintenanceLockOwner(): number | null {
   const lockPath = getMaintenanceLockPath();
   if (!fs.existsSync(lockPath)) return null;
   const pid = readPid(lockPath);
   if (pid === process.pid) return null;
   if (pid !== null && isProcessAlive(pid)) return pid;
+  if (pid === null && !isMalformedPidFileStale(lockPath)) return UNKNOWN_OWNER;
   try {
     fs.unlinkSync(lockPath);
   } catch {}
@@ -84,6 +112,8 @@ export function getLiveSessionPids(): number[] {
     if (pid === process.pid) continue;
     if (pid !== null && isProcessAlive(pid)) {
       live.push(pid);
+    } else if (pid === null && !isMalformedPidFileStale(filePath)) {
+      live.push(UNKNOWN_OWNER);
     } else {
       try {
         fs.unlinkSync(filePath);
@@ -133,7 +163,7 @@ export async function registerSessionAndWaitForMaintenance({
     if (Date.now() >= deadline) {
       unregisterSession();
       throw new MaintenanceLockError(
-        `Storage maintenance (mastracode prune, PID ${owner}) is still running after ${Math.round(timeoutMs / 1000)}s. ` +
+        `Storage maintenance (mastracode prune${describeOwners([owner])}) is still running after ${Math.round(timeoutMs / 1000)}s. ` +
           `Wait for it to finish, or stop it, then start mastracode again.`,
         [owner],
       );
@@ -159,8 +189,8 @@ export function acquireMaintenanceLock(): () => void {
       const owner = getMaintenanceLockOwner();
       if (owner !== null || attempt > 0) {
         throw new MaintenanceLockError(
-          `Another mastracode prune is already running${owner ? ` (PID ${owner})` : ''}.`,
-          owner ? [owner] : [],
+          `Another mastracode prune is already running${owner === null ? '' : describeOwners([owner])}.`,
+          owner === null ? [] : [owner],
         );
       }
     }
@@ -178,7 +208,7 @@ export function acquireMaintenanceLock(): () => void {
   if (sessions.length > 0) {
     release();
     throw new MaintenanceLockError(
-      `mastracode is running (PID ${sessions.join(', ')}). Exit every mastracode session before running prune.`,
+      `mastracode is running${describeOwners(sessions)}. Exit every mastracode session before running prune.`,
       sessions,
     );
   }

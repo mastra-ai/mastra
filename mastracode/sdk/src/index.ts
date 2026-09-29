@@ -103,7 +103,7 @@ import type { MastraCodeState } from './schema.js';
 import { mastraBrand } from './theme-palette.js';
 import { DiscardingScoresStorage } from './utils/discarding-scores-storage.js';
 import { syncGateways } from './utils/gateway-sync.js';
-import { registerSessionAndWaitForMaintenance } from './utils/maintenance-lock.js';
+import { registerSessionAndWaitForMaintenance, UNKNOWN_OWNER, unregisterSession } from './utils/maintenance-lock.js';
 import {
   detectProject,
   getObservabilityDatabasePath,
@@ -526,12 +526,27 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // Register first, then check the maintenance lock, so `mastracode prune`
     // (lock first, then sessions) can never run against an open session.
     await registerSessionAndWaitForMaintenance({
-      onWait: pid => console.error(`Waiting for storage maintenance (mastracode prune, PID ${pid}) to finish...`),
+      onWait: pid =>
+        console.error(
+          `Waiting for storage maintenance (mastracode prune${pid === UNKNOWN_OWNER ? '' : `, PID ${pid}`}) to finish...`,
+        ),
     });
   }
-  const storageResult: StorageResult = injectedStorage
-    ? { storage: injectedStorage, backend: resolveInjectedStorageBackend(injectedStorage, config?.storageBackend) }
-    : await createStorage(storageConfig!);
+  let storageResult: StorageResult;
+  if (injectedStorage) {
+    storageResult = {
+      storage: injectedStorage,
+      backend: resolveInjectedStorageBackend(injectedStorage, config?.storageBackend),
+    };
+  } else {
+    try {
+      storageResult = await createStorage(storageConfig!);
+    } catch (error) {
+      // A still-alive process that failed to open storage must not block prune.
+      unregisterSession();
+      throw error;
+    }
+  }
   const storageWarning = storageResult.warning;
 
   // Observability storage (DuckDB — separate file for OLAP-style trace/score/feedback queries).
