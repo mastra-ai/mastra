@@ -52,7 +52,7 @@ export function ThemeTrendChart({ points, signalName }: { points: ThemeHistoryPo
             <Tooltip key={point.snapshotId}>
               <TooltipTrigger
                 aria-label={label}
-                className="absolute size-2 -translate-1/2 cursor-default rounded-full"
+                className="absolute size-2 -translate-1/2 cursor-default rounded-full transition-transform hover:scale-150"
                 style={{
                   left: `${x(point)}%`,
                   top: `${(y(point) / TREND_CHART_HEIGHT) * 100}%`,

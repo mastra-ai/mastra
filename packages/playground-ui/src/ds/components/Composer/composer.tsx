@@ -130,9 +130,9 @@ ComposerActions.displayName = 'ComposerActions';
 
 const ComposerGradientColumn = ({ className }: { className?: string }) => (
   <div className={cn('flex size-full flex-col -space-y-3', className)}>
-    <div className="w-full flex-1 bg-ds-green blur-xl" />
+    <div className="w-full flex-1 bg-brand-green blur-xl" />
     <div className="w-full flex-1 bg-product-observability blur-xl" />
-    <div className="w-full flex-1 bg-ds-green blur-xl" />
+    <div className="w-full flex-1 bg-brand-green blur-xl" />
     <div className="w-full flex-1 bg-product-observability blur-xl" />
   </div>
 );

@@ -58,7 +58,7 @@ const DeleteSkillDialog = ({ open, onOpenChange, skillName, isPending, onConfirm
         </AlertDialog.Cancel>
         <Button
           icon={<Trash2 />}
-          variant="primary"
+          variant="destructive"
           data-testid="skill-builder-delete-skill-confirm"
           disabled={isPending}
           onClick={() => {

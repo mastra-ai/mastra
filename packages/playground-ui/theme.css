@@ -7,8 +7,8 @@
  *
  * The layers live in `theme/`, each holding both themes of one subject:
  *
- *   colors      raw ramps — background, gray, gray-alpha, accents, brand green
- *   status      notice and badge tones
+ *   colors      raw ramps — background, gray, gray-alpha, chromatic hues, Mastra brand
+ *   status      status, badge, and product roles
  *   data-viz    chart series and span-type hues
  *   surfaces    fill ladder, boundary ladder, elevation, scrim
  *   typography  text roles and font families
@@ -45,22 +45,6 @@
      text read as a second ink instead of stepping back. */
   --muted-foreground: var(--gray-8);
   --placeholder: var(--gray-7);
-
-  --destructive: var(--red-600);
-  --destructive-foreground: var(--red-50);
-  /* Lightness for hue-only generated accents (e.g. per-filter colors) — legible on each theme. */
-  --generated-accent-lightness: 72%;
-
-  /* Semantic color aliases. Theme-agnostic: the ramps they point at flip. */
-}
-
-html.light {
-  --destructive: var(--red-600);
-  --destructive-foreground: var(--red-50);
-  --generated-accent-lightness: 38%;
-}
-
-@theme {
 }
 
 /* Semantic aliases stay inline so utilities resolve var(--token) on the styled
@@ -77,6 +61,4 @@ html.light {
   --color-foreground: var(--foreground);
   --color-muted-foreground: var(--muted-foreground);
   --color-placeholder: var(--placeholder);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
 }

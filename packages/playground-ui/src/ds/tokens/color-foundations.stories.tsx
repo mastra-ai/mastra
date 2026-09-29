@@ -252,13 +252,13 @@ export const SemanticColors: Story = {
       >
         <div className="flex flex-wrap items-center gap-4">
           <div className="w-40">
-            <Specimen name="--destructive" note="Destructive action fill">
-              <Swatch value={Colors.destructive} />
+            <Specimen name="--fill-destructive" note="Destructive action fill">
+              <Swatch value={Colors['fill-destructive']} />
             </Specimen>
           </div>
           <div className="w-40">
-            <Specimen name="--destructive-foreground" note="Only on a destructive fill">
-              <Swatch value={Colors['destructive-foreground']} />
+            <Specimen name="--fill-destructive-foreground" note="Only on a destructive fill">
+              <Swatch value={Colors['fill-destructive-foreground']} />
             </Specimen>
           </div>
         </div>
@@ -271,7 +271,7 @@ export const SemanticColors: Story = {
         {statusRoles.map(role => (
           <SpecimenGroup key={role} label={role}>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {['bg', 'border', 'indicator', 'fg'].map(part => (
+              {['subtle', 'edge', 'indicator', 'subtle-foreground'].map(part => (
                 <Specimen key={part} name={`--${role}-${part}`}>
                   <Swatch value={`var(--${role}-${part})`} />
                 </Specimen>
@@ -303,9 +303,9 @@ export const ProductColors: Story = {
           {products.map(({ role, label }) => (
             <SpecimenGroup key={role} label={label}>
               <div className="grid grid-cols-2 gap-3">
-                {['bg', 'fg'].map(part => (
-                  <Specimen key={part} name={`--product-${role}-${part}`}>
-                    <Swatch value={`var(--product-${role}-${part})`} />
+                {[`--product-${role}`, `--product-${role}-foreground`].map(token => (
+                  <Specimen key={token} name={token}>
+                    <Swatch value={`var(${token})`} />
                   </Specimen>
                 ))}
               </div>
@@ -373,13 +373,13 @@ export const SpanTypes: Story = {
 };
 
 const brandColors = [
-  { name: 'Green', token: 'ds-green', hex: '#7aff78' },
-  { name: 'Orange', token: 'ds-orange', hex: '#fdac53' },
-  { name: 'Pink', token: 'ds-pink', hex: '#ff69cc' },
-  { name: 'Purple', token: 'ds-purple', hex: '#b588fe' },
-  { name: 'Blue', token: 'ds-blue', hex: '#6ccdfb' },
-  { name: 'Red', token: 'ds-red', hex: '#ff4758' },
-  { name: 'Yellow', token: 'ds-yellow', hex: '#e7e67b' },
+  { name: 'Green', token: 'brand-green', hex: '#7aff78' },
+  { name: 'Orange', token: 'brand-orange', hex: '#fdac53' },
+  { name: 'Pink', token: 'brand-pink', hex: '#ff69cc' },
+  { name: 'Purple', token: 'brand-purple', hex: '#b588fe' },
+  { name: 'Blue', token: 'brand-blue', hex: '#6ccdfb' },
+  { name: 'Red', token: 'brand-red', hex: '#ff4758' },
+  { name: 'Yellow', token: 'brand-yellow', hex: '#e7e67b' },
 ];
 
 export const BrandColors: Story = {

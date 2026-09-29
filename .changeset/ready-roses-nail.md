@@ -2,24 +2,112 @@
 '@mastra/playground-ui': minor
 ---
 
-Added chromatic ramps and theme-aware status, product, and visualization colors. Notices and badges use solid backgrounds. Added low-chroma `--{hue}-soft-900` and `--{hue}-soft-950` steps (utilities such as `bg-green-soft-900`). Badges and product avatars use them in dark mode and `100`/`50` in light mode, and badges and product avatars share a neutral `shadow-inset` edge built from `--inset-highlight` and `--inset-rim`. Product avatars and badges use the same soft steps in dark mode. Component tints no longer use opacity or `color-mix()`: they point at status, badge, or ramp tokens, and destructive buttons step through `--red-*` for hover, pressed, and disabled states, with a new `--destructive-subtle-active` token for pressed ghost states. Added ProductAvatar and ProductBadge components with product icons and theme-aware inset highlights, product Badge variants and optional SankeyChart color callbacks.
+Added chromatic color ramps and theme-aware status, badge, product, chart, and span colors. Every resting color is now a solid ramp step in both themes, so a badge or notice looks the same whatever surface it sits on.
 
-Chart roles keep their hue names (`--chart-blue`, `--chart-green`, and so on) and now resolve from the color ramps. Replace `var(--chart-soft-1)` with `var(--chart-sequential-1)`, and `var(--span-type-agent)` with `var(--span-agent)`. See the playground-ui README for the complete mapping.
+**What you get**
 
-**Breaking:** removed the numbered accent tokens (`accent1`–`accent6` and their `Dark`/`Darker` variants), `positive1`, `negative1`, `warning1`, the `notice-success/destructive/warning/info` aliases, `--brand-green-*`, `--chart-soft-*`, `--span-type-*`, and `error`, along with their `Colors` entries. Use the status, chart, and span roles instead. Standalone status text, invalid-field borders, and icons use `{status}-indicator`; `-fg` is for text on a `{status}-subtle` surface. `destructive` stays as the filled-button color, paired with `destructive-foreground`. Migrated Studio and Factory consumers to status, focus, chart, and span roles. CodeMirror syntax colors are scoped locally. Added the seven fixed Mastra brand colors as `--color-ds-*`.
+- Eight ramps (`red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `purple`, `pink`) from `50` to `950`, plus low-chroma `--{hue}-soft-300/600/900/950` steps. Utilities such as `bg-green-soft-900` are generated.
+- Status roles for states: `{status}-subtle`, `-subtle-active`, `-edge`, `-indicator`, and `-subtle-foreground`, where `{status}` is `success`, `destructive`, `warning`, or `info`.
+- Categorical badge roles for labels that are not states: `badge-{hue}-strong`, `-subtle`, `-edge`, `-foreground`, and `-indicator`.
+- Product roles: `product-{name}`, `-subtle`, and `-foreground` for `studio`, `server`, `observability`, `factory`, `workers`, and `persistent-server`, with new `ProductAvatar` and `ProductBadge` components and product `Badge` variants.
+- The fixed Mastra brand palette as `--color-brand-{hue}` (utilities such as `bg-brand-green`). It does not change with the theme.
+- Chart roles keep their hue names (`--chart-blue`, `--chart-green`, …) plus `--chart-sequential-1` to `-5`, and resolve from the ramps. Span roles are `--span-agent`, `--span-workflow`, and so on, each on its own hue.
+- `Badge` status variants `success`, `destructive`, `warning`, and `info`. `green`, `red`, `yellow`, and `blue` are categorical tones like `purple` and `orange`.
+- Optional `getNodeColor` and `getLinkColor` callbacks on `SankeyChart`.
 
-Added semantic Badge status variants `success`, `destructive`, `warning`, and `info` for states. The `green`, `red`, `yellow`, and `blue` variants are now categorical tones built from the color ramps, like `purple` and `orange`.
+```css
+.status {
+  background: var(--success-subtle);
+  border: 1px solid var(--success-edge);
+  color: var(--success-subtle-foreground);
+}
 
-`BADGE_COLORS` and topic colors now return color ramp variables such as `var(--purple-500)` instead of hex values.
+.status-dot {
+  background: var(--success-indicator);
+}
+```
 
-Status roles are `{status}-subtle`, `{status}-edge`, `{status}-fg`, and `{status}-indicator`. Badge roles are `--badge-{hue}` (fill), `--badge-{hue}-muted`, `--badge-{hue}-edge`, `--badge-{hue}-fg`, and `--badge-{hue}-indicator`. `--badge-{hue}` used to be the indicator color; use `--badge-{hue}-indicator` for dots, icons, and labels.
+**Breaking: removed color tokens**
 
-**Breaking:** `Badge` `emphasis` values are now `strong` and `subtle` instead of `default` and `muted`. `strong` is the default when `emphasis` is omitted. Replace `emphasis="muted"` with `emphasis="subtle"` and `emphasis="default"` with `emphasis="strong"` (or drop it). `subtle` badges use a quieter tinted fill.
+The numbered accent tokens (`accent1`–`accent6` and their `Dark`/`Darker` variants), `positive1`, `negative1`, `warning1`, `error`, the `notice-*` tokens, `--brand-green-*`, `--chart-soft-*`, `--span-type-*`, `destructive`, and `destructive-foreground` are removed, along with their `Colors` entries. The old `badge-{hue}` fill and `badge-{hue}-fg` tokens are renamed. See the playground-ui README for the full table.
 
-Ramp steps now stay inside sRGB, so neighbouring steps no longer flatten together on sRGB screens. Chart, span, and syntax roles point at steps chosen to stay distinguishable under common colour-vision deficiencies and to meet 3:1 against the page in both themes; the sequential chart scale runs light-to-dark in light mode and dark-to-light in dark mode. `scorer` spans are now pink. Status indicators use `400` in dark mode, and light `success-indicator` uses `green-700`.
+```tsx
+// Before
+<span className="bg-notice-success text-notice-success-fg">Saved</span>
+<span className="bg-badge-green text-badge-green-fg">Label</span>
+<button className="bg-destructive text-destructive-foreground">Delete</button>
+<path stroke="var(--chart-soft-1)" />
+<Icon style={{ color: 'var(--span-type-agent)' }} />
 
-**Breaking:** `SankeyChart` colors nodes and ribbons from the chart series tokens. `buildSankeyHueMap`, `hashHue`, `nodeColor`, and `nodeColorVivid` are replaced by `buildSankeyColorMap` and `sankeySeriesColors`, and `Sankey`'s `getColumnHue` is now `getColumnColor`, which returns a CSS color.
+// After
+<span className="bg-success-subtle text-success-subtle-foreground">Saved</span>
+<span className="bg-badge-green-strong text-badge-green-foreground">Label</span>
+<Button variant="destructive">Delete</Button>
+<path stroke="var(--chart-sequential-1)" />
+<Icon style={{ color: 'var(--span-agent)' }} />
+```
 
-**Breaking:** `@mastra/playground-ui/utils/colors` no longer generates `hsl()` colors. `stringToColor`, `themedHueColor`, and `stringToThemedColor` are replaced by `hueForName` (a stable categorical hue for any name), `hueFillClass`, `hueAccentColor`, and `hueColors`, which resolve to theme-aware badge tokens.
+Standalone status text, icons, dots, bars, and invalid-field borders use `{status}-indicator`. `{status}-subtle-foreground` is only for text on a `{status}-subtle` surface. A filled destructive control uses `fill-destructive` and its `-hover`, `-active`, `-disabled`, and `-foreground` steps.
 
-`badge-{hue}-indicator` uses new even-chroma `--{hue}-soft-300` (dark) and `--{hue}-soft-600` (light) steps, so every hue has the same intensity.
+**Breaking: `Badge` emphasis**
+
+`emphasis` values are now `strong` (the default) and `subtle`, instead of `default` and `muted`. `subtle` now also applies to product variants.
+
+```tsx
+// Before
+<Badge variant="purple" emphasis="muted">Draft</Badge>
+
+// After
+<Badge variant="purple" emphasis="subtle">Draft</Badge>
+```
+
+**Breaking: `@mastra/playground-ui/utils/colors`**
+
+Generated `hsl()` colors are gone. `stringToColor`, `themedHueColor`, and `stringToThemedColor` are replaced by `hueForName`, which returns a stable categorical hue for any name, and `hueFillClass`, `hueAccentColor`, and `hueColors`, which resolve to theme-aware badge tokens. `hueForName` never returns `red`, so a hashed label cannot be mistaken for an error.
+
+```tsx
+// Before
+import { stringToColor } from '@mastra/playground-ui/utils/colors';
+<span style={{ backgroundColor: stringToColor(tag) }}>{tag}</span>;
+
+// After
+import { hueFillClass, hueForName } from '@mastra/playground-ui/utils/colors';
+<span className={hueFillClass(hueForName(tag))}>{tag}</span>;
+```
+
+`BADGE_COLORS` and topic colors return theme variables such as `var(--badge-purple-indicator)` instead of hex values.
+
+**Breaking: `SankeyChart`**
+
+Nodes and ribbons are colored from the chart series tokens, and a label keeps its color when other nodes are added or removed. `buildSankeyHueMap`, `hashHue`, `nodeColor`, and `nodeColorVivid` are replaced by `buildSankeyColorMap` and `sankeySeriesColors`. `Sankey`'s `getColumnHue` is now `getColumnColor` and returns a CSS color.
+
+```tsx
+// Before
+<Sankey getColumnHue={column => getSignalHue(column.id)} />
+
+// After
+<Sankey getColumnColor={column => getSignalColor(column.id)} />
+```
+
+**Breaking: `@mastra/playground-ui/ee/signals/signal-colors`**
+
+`SIGNAL_HUES` and `getSignalHue` are no longer exported. Use `getSignalColor` for a CSS color, and `getSignalAreaClass` or `getSignalConnectorClass` for SVG fill and stroke classes.
+
+```tsx
+// Before
+import { getSignalHue } from '@mastra/playground-ui/ee/signals/signal-colors';
+const hue = getSignalHue('goal');
+
+// After
+import { getSignalColor } from '@mastra/playground-ui/ee/signals/signal-colors';
+const color = getSignalColor('goal');
+```
+
+**Other changes**
+
+- Tool approval buttons read `Approved` or `Declined` after a decision, and their accessible names follow (`Approved search`, `Declined search`).
+- Ramp steps stay inside sRGB. Chart, span, and syntax roles are picked to stay distinguishable under common color-vision deficiencies and to meet 3:1 against the page in both themes. The sequential chart scale runs light-to-dark in light mode and dark-to-light in dark mode.
+- Scorer spans are pink, and workspace, memory, and provider spans are now on clearly separate hues.
+- Light-mode destructive buttons darken on hover and press, like dark mode.
+- Notes in `Notice` use the neutral `muted` surface.
+- CodeMirror syntax colors are scoped to `.cm-editor`.

@@ -1,35 +1,12 @@
 'use client';
 
 import { useMemo } from 'react';
+import { observationPriorityByEmoji, observationPriorityTone } from '@/domains/memory/lib/observation-priority';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Txt } from '@/ds/components/Txt/Txt';
 import { cn } from '@/utils/cn';
 
-// Priority emoji to color mapping
-// P1 (🔴) = highest priority = purple theme
-// P2 (🟡) = medium priority = blue theme
-// P3 (🟢) = lower priority = green theme
-const PRIORITY_COLORS = {
-  '🔴': 'text-foreground',
-  '🟡': 'text-foreground',
-  '🟢': 'text-foreground',
-} as const;
-
-// Dark backgrounds for all priorities
-const PRIORITY_BG = {
-  '🔴': 'bg-badge-purple-muted',
-  '🟡': 'bg-badge-blue-muted',
-  '🟢': 'bg-badge-green-muted',
-} as const;
-
-// Full color left border accent
-const PRIORITY_BORDER = {
-  '🔴': 'border-l-purple-500',
-  '🟡': 'border-l-blue-500',
-  '🟢': 'border-l-green-500',
-} as const;
-
-type Priority = keyof typeof PRIORITY_COLORS;
+type Priority = '🔴' | '🟡' | '🟢';
 
 interface ParsedObservation {
   priority: Priority | null;
@@ -232,15 +209,16 @@ function ObservationItem({
   useInheritedTextColor?: boolean;
 }) {
   // When useInheritedTextColor is true, don't apply priority colors - inherit from parent
-  const priorityColor = useInheritedTextColor
+  const priorityColor = useInheritedTextColor ? '' : observation.priority ? 'text-foreground' : 'text-muted-foreground';
+  const bgColor = useInheritedTextColor
     ? ''
     : observation.priority
-      ? PRIORITY_COLORS[observation.priority]
-      : 'text-muted-foreground';
-  const bgColor = useInheritedTextColor ? '' : observation.priority ? PRIORITY_BG[observation.priority] : '';
+      ? observationPriorityTone[observationPriorityByEmoji[observation.priority]].fill
+      : '';
 
-  // Get a subtle left border color based on priority (using blue shades for visual hierarchy)
-  const borderColor = observation.priority ? PRIORITY_BORDER[observation.priority] : 'border-l-transparent';
+  const borderColor = observation.priority
+    ? observationPriorityTone[observationPriorityByEmoji[observation.priority]].accentBorder
+    : 'border-l-transparent';
 
   return (
     <div className={cn('py-0.5', observation.isNested && 'ml-4 border-l border-border/50 pl-2')}>

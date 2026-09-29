@@ -7,7 +7,7 @@ export function expectComputedTag(element: HTMLElement | null, value: string) {
   expect(element, `expected a computed tag for "${value}"`).not.toBeNull();
   const tag = element as HTMLElement;
   expect(tag.getAttribute('data-testid')).toBe('computed-tag');
-  expect(tag.className).toMatch(/(^|\s)bg-badge-[a-z]+(\s|$)/);
+  expect(tag.className).toMatch(/(^|\s)bg-badge-[a-z]+-strong(\s|$)/);
 }
 
 /**

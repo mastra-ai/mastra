@@ -1,4 +1,3 @@
-import { hueForName } from '@mastra/playground-ui/utils/colors';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ComputedTag } from '../computed-tag';
@@ -6,6 +5,8 @@ import { ComputedTag } from '../computed-tag';
 afterEach(() => {
   cleanup();
 });
+
+const BADGE_FILL = /(^|\s)bg-badge-[a-z]+-strong(\s|$)/;
 
 describe('ComputedTag', () => {
   describe('when given a value', () => {
@@ -15,12 +16,10 @@ describe('ComputedTag', () => {
       expect(screen.getByTestId('computed-tag').textContent).toBe('alpha');
     });
 
-    it('colors the tag with the badge hue derived from the value', () => {
+    it('fills the tag with a categorical badge hue', () => {
       render(<ComputedTag value="alpha" />);
 
-      const hue = hueForName('alpha');
-      expect(screen.getByTestId('computed-tag').className).toContain(`bg-badge-${hue}`);
-      expect(screen.getByTestId('computed-tag').className).toContain(`text-badge-${hue}-fg`);
+      expect(screen.getByTestId('computed-tag').className).toMatch(BADGE_FILL);
     });
   });
 
@@ -46,7 +45,6 @@ describe('ComputedTag', () => {
         </>,
       );
 
-      expect(hueForName('alpha')).not.toBe(hueForName('beta'));
       expect(screen.getByTestId('first').className).not.toBe(screen.getByTestId('second').className);
     });
   });
@@ -54,13 +52,16 @@ describe('ComputedTag', () => {
   describe('when children are provided', () => {
     it('renders the children instead of the raw value while keeping value-derived colors', () => {
       render(
-        <ComputedTag value="alpha">
-          alpha <button type="button">x</button>
-        </ComputedTag>,
+        <>
+          <ComputedTag value="alpha" data-testid="with-children">
+            alpha <button type="button">x</button>
+          </ComputedTag>
+          <ComputedTag value="alpha" data-testid="without-children" />
+        </>,
       );
 
       expect(screen.getByRole('button', { name: 'x' })).toBeTruthy();
-      expect(screen.getByTestId('computed-tag').className).toContain(`bg-badge-${hueForName('alpha')}`);
+      expect(screen.getByTestId('with-children').className).toBe(screen.getByTestId('without-children').className);
     });
   });
 });

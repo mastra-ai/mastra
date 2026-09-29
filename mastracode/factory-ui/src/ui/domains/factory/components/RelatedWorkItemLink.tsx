@@ -45,7 +45,7 @@ export function RelatedWorkItemLink({
         <MessageSquare
           data-live-session-indicator
           size={11}
-          className="shrink-0 text-green-700 dark:text-green-400"
+          className="text-badge-green-indicator shrink-0"
           aria-hidden
         />
       )}

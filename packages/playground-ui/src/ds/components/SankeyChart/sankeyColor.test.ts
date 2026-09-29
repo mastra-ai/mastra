@@ -16,8 +16,10 @@ describe('buildSankeyColorMap', () => {
     for (const label of labels) expect(sankeySeriesColors).toContain(colors[label]);
   });
 
-  it('gives up to eight labels distinct colors', () => {
-    expect(new Set(Object.values(buildSankeyColorMap(labels))).size).toBe(labels.length);
+  it('keeps other labels colors when one label is removed', () => {
+    const colors = buildSankeyColorMap(labels);
+    const withoutEurope = buildSankeyColorMap(labels.filter(label => label !== 'Europe'));
+    for (const label of labels.filter(label => label !== 'Europe')) expect(withoutEurope[label]).toBe(colors[label]);
   });
 
   it('does not depend on input order or duplicates', () => {

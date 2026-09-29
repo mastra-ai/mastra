@@ -182,10 +182,10 @@ function WorkflowRow({
         <EntityList.TextCell className="text-center">
           {runningCount > 0 ? (
             <span
-              className="inline-flex items-center gap-1.5 text-success-indicator"
+              className="inline-flex items-center gap-1.5 text-info-indicator"
               aria-label={`${runningCount} run${runningCount === 1 ? '' : 's'} in progress`}
             >
-              <span aria-hidden className="size-2 rounded-full bg-success-indicator motion-safe:animate-pulse" />
+              <span aria-hidden className="size-2 rounded-full bg-info-indicator motion-safe:animate-pulse" />
               {runningCount}
             </span>
           ) : (

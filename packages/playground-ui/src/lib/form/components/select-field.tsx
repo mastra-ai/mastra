@@ -27,7 +27,7 @@ export const SelectField: React.FC<AutoFormFieldProps> = ({ field, inputProps, e
     >
       <SelectTrigger
         id={id}
-        className={error ? 'border-destructive-edge' : ''}
+        className={error ? 'border-destructive-indicator' : ''}
         aria-invalid={ariaInvalid}
         aria-describedby={ariaDescribedBy}
       >

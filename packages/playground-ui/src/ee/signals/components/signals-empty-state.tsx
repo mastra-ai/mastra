@@ -25,7 +25,7 @@ const signalStyle = (label: string): CSSProperties => ({
 const PipelineConnector = () => (
   <div aria-hidden="true" className="relative hidden h-full items-center lg:flex">
     <div className="w-full border-t border-dashed border-border" />
-    <span className="signals-pipeline-connector absolute left-1/2 size-2.5 -translate-x-1/2 rounded-full bg-success-indicator shadow-[0_0_12px_currentColor]" />
+    <span className="signals-pipeline-connector absolute left-1/2 size-2.5 -translate-x-1/2 rounded-full bg-brand-green shadow-[0_0_12px_currentColor]" />
   </div>
 );
 
@@ -192,7 +192,7 @@ export const SignalsEmptyState = ({
       <div className="mx-auto w-full max-w-260">
         <header>
           <p className="flex items-center gap-2 font-mono text-caption tracking-wider text-muted-foreground uppercase">
-            <span aria-hidden="true" className="size-2 rounded-full bg-success-indicator" />
+            <span aria-hidden="true" className="size-2 rounded-full bg-brand-green" />
             Trace Intelligence
           </p>
           <h1 className="mt-2 text-display tracking-tight text-foreground">
@@ -239,10 +239,10 @@ export const SignalsEmptyState = ({
             <h2 className="text-heading text-foreground">Trace Intelligence</h2>
             <p className="mt-0.5 text-caption text-muted-foreground">Finds recurring themes</p>
             <div aria-hidden="true" className="relative mt-5 flex size-20 items-center justify-center">
-              <span className="signals-engine-pulse absolute size-20 rounded-full border border-success-edge" />
-              <span className="absolute size-14 rounded-full border border-success-edge" />
-              <span className="absolute size-9 rounded-full border border-success-edge bg-success-subtle" />
-              <CpuIcon className="relative size-4 text-success-indicator" />
+              <span className="signals-engine-pulse absolute size-20 rounded-full border border-brand-green" />
+              <span className="absolute size-14 rounded-full border border-brand-green" />
+              <span className="absolute size-9 rounded-full border border-brand-green bg-fill-subtle" />
+              <CpuIcon className="relative size-4 text-brand-green" />
             </div>
             <p className="mt-3 max-w-40 text-meta text-muted-foreground">
               Clusters similar trace signals into themes for each dimension

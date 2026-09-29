@@ -322,7 +322,7 @@ function RepositoryRows({
               <Spinner
                 size="sm"
                 aria-label={`Connecting ${repo.fullName}`}
-                className="shrink-0 text-green-700 dark:text-green-400"
+                className="text-badge-green-indicator shrink-0"
               />
             ) : (
               <span className="text-meta text-placeholder opacity-0 transition-opacity group-hover:opacity-100">

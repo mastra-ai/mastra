@@ -1,5 +1,5 @@
 import { LifelinePoint } from './lifeline-point';
-import { getSignalAreaClass, getSignalConnectorClass } from './signal-colors';
+import { getSignalAreaClass, getSignalColor, getSignalConnectorClass } from './signal-colors';
 import { formatSnapshotCutoff } from './signal-formatting';
 import type { ThemeSelection } from './theme-drilldown-data';
 import { lifelineConnectors, lifelineSegments } from './theme-lifelines-data';
@@ -42,14 +42,12 @@ export function LifelineRow({
   signalName,
   snapshots,
   positions,
-  color,
   onThemeSelect,
 }: {
   row: ThemeLifeline;
   signalName: TraceSignalName;
   snapshots: ThemeSnapshot[];
   positions: number[];
-  color: string;
   onThemeSelect: (selection: ThemeSelection, snapshotIndex: number) => void;
 }) {
   const isPersistent = row.points.length * 2 >= snapshots.length;
@@ -110,7 +108,7 @@ export function LifelineRow({
               title={title}
               positionPercent={positions[point.snapshotIndex]}
               height={barHeight(point.share)}
-              color={color}
+              color={getSignalColor(signalName)}
               onSelect={
                 themeId === undefined
                   ? undefined

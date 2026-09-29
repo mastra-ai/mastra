@@ -89,8 +89,8 @@ export function ReviewItemCard({
     <div
       className={cn(
         'rounded-lg border border-border p-3 transition-colors',
-        isSelected && 'ring-1 ring-success-indicator',
-        item.tags.length > 0 && 'border-l-2 border-l-success-indicator',
+        isSelected && 'ring-1 ring-border-strong',
+        item.tags.length > 0 && 'border-l-2 border-l-border-strong',
       )}
     >
       {/* Header row */}

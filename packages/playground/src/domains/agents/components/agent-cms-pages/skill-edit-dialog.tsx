@@ -104,8 +104,7 @@ export function SkillEditDialog({
 
   const builderDefaultWorkspaceId = useMemo(() => {
     const ws = (builderSettings?.configuration?.agent as Record<string, unknown> | undefined)?.workspace as
-      | { type: string; workspaceId?: string }
-      | undefined;
+      { type: string; workspaceId?: string } | undefined;
     return ws?.type === 'id' ? ws.workspaceId : undefined;
   }, [builderSettings]);
 
@@ -380,7 +379,7 @@ export function SkillEditDialog({
                 </button>
 
                 {isAdmin && (!hasFilesystem || !workspaceId) && (
-                  <div className="mb-4 flex items-start gap-2 rounded-lg bg-warning-subtle p-3 text-caption text-warning-fg">
+                  <div className="mb-4 flex items-start gap-2 rounded-lg bg-warning-subtle p-3 text-caption text-warning-subtle-foreground">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                     <span>
                       {!workspaceId

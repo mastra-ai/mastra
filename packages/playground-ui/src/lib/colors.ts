@@ -1,4 +1,4 @@
-export const categoricalHues = ['blue', 'green', 'orange', 'purple', 'pink', 'red', 'yellow', 'cyan'] as const;
+export const categoricalHues = ['blue', 'green', 'orange', 'purple', 'pink', 'yellow', 'cyan'] as const;
 
 export type CategoricalHue = (typeof categoricalHues)[number];
 
@@ -19,20 +19,19 @@ export const hueForName = (name: string): CategoricalHue =>
 export const hueAccentColor = (hue: CategoricalHue) => `var(--badge-${hue}-indicator)`;
 
 const HUE_FILL_CLASS: Record<CategoricalHue, string> = {
-  blue: 'bg-badge-blue text-badge-blue-fg',
-  green: 'bg-badge-green text-badge-green-fg',
-  orange: 'bg-badge-orange text-badge-orange-fg',
-  purple: 'bg-badge-purple text-badge-purple-fg',
-  pink: 'bg-badge-pink text-badge-pink-fg',
-  red: 'bg-badge-red text-badge-red-fg',
-  yellow: 'bg-badge-yellow text-badge-yellow-fg',
-  cyan: 'bg-badge-cyan text-badge-cyan-fg',
+  blue: 'bg-badge-blue-strong text-badge-blue-foreground',
+  green: 'bg-badge-green-strong text-badge-green-foreground',
+  orange: 'bg-badge-orange-strong text-badge-orange-foreground',
+  purple: 'bg-badge-purple-strong text-badge-purple-foreground',
+  pink: 'bg-badge-pink-strong text-badge-pink-foreground',
+  yellow: 'bg-badge-yellow-strong text-badge-yellow-foreground',
+  cyan: 'bg-badge-cyan-strong text-badge-cyan-foreground',
 };
 
 export const hueFillClass = (hue: CategoricalHue) => HUE_FILL_CLASS[hue];
 
 export const hueColors = (hue: CategoricalHue) => ({
-  background: `var(--badge-${hue})`,
-  foreground: `var(--badge-${hue}-fg)`,
+  background: `var(--badge-${hue}-strong)`,
+  foreground: `var(--badge-${hue}-foreground)`,
   tint: `var(--badge-${hue}-indicator)`,
 });

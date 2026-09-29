@@ -57,7 +57,7 @@ export function ProposalTag({
             e.preventDefault();
             handleConfirm();
           }}
-          className="p-0.5 text-success-indicator hover:text-success-indicator"
+          className={cn(quietTextHover, 'p-0.5')}
         >
           <Check className="h-3 w-3" />
         </button>

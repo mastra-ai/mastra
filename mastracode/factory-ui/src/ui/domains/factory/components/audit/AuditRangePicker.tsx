@@ -27,7 +27,7 @@ const EDGE_LABELS_FIT_ABOVE = 8;
 const LABEL_CLEARANCE = 6;
 const LABEL_INSET = '1.5rem';
 const EDGE_FADE = '[mask-image:linear-gradient(to_right,transparent,black_3%,black_97%,transparent)]';
-const LENS_SHADOW = 'shadow-overlay';
+const LENS_SHADOW = 'shadow-[var(--elevation-overlay)]';
 
 interface AuditDrag {
   mode: AuditBoundary | 'pan';

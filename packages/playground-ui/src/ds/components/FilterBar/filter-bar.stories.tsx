@@ -24,7 +24,7 @@ const FIELDS: FilterBarField[] = [
     id: 'status',
     label: 'Status',
     icon: CircleIcon,
-    color: hueAccentColor('red'),
+    color: hueAccentColor('orange'),
     operators: ['is', 'is-not', 'in', 'is-empty', 'is-not-empty'],
     suggestions: [
       { value: 'running', label: 'Running' },

@@ -58,7 +58,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
               {/* Zone header */}
               <div className="flex items-center gap-2">
                 <span className="text-subheading text-placeholder">{zone.label}</span>
-                {zone.required && <span className="text-caption text-success-indicator">*</span>}
+                {zone.required && <span className="text-caption text-muted-foreground">*</span>}
                 <span className="text-caption text-muted-foreground">{zone.description}</span>
               </div>
 
@@ -68,7 +68,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
                   <div
                     ref={provided.innerRef}
                     {...provided.droppableProps}
-                    className={`flex min-h-header-default flex-wrap items-center gap-2 rounded-lg border-2 border-dashed p-2 transition-colors ${snapshot.isDraggingOver ? 'border-success-edge bg-success-subtle' : 'border-border'} ${needsAttention ? 'border-warning-edge bg-warning-subtle' : ''} `}
+                    className={`flex min-h-header-default flex-wrap items-center gap-2 rounded-lg border-2 border-dashed p-2 transition-colors ${snapshot.isDraggingOver ? 'border-border-strong bg-fill-subtle' : 'border-border'} ${needsAttention ? 'border-warning-edge bg-warning-subtle' : ''} `}
                   >
                     {isEmpty && !snapshot.isDraggingOver && (
                       <span className="text-caption text-muted-foreground italic">
@@ -84,7 +84,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
                               ref={provided.innerRef}
                               {...provided.draggableProps}
                               style={provided.draggableProps.style}
-                              className={`inline-flex items-center gap-1.5 rounded-md bg-background px-2.5 py-1.5 text-subheading text-placeholder ${snapshot.isDragging ? 'ring-2 shadow-overlay ring-success-edge' : 'hover:bg-fill-subtle'}`}
+                              className={`inline-flex items-center gap-1.5 rounded-md bg-background px-2.5 py-1.5 text-subheading text-placeholder ${snapshot.isDragging ? 'ring-2 shadow-overlay ring-border-strong' : 'hover:bg-fill-subtle'}`}
                             >
                               <span
                                 {...provided.dragHandleProps}

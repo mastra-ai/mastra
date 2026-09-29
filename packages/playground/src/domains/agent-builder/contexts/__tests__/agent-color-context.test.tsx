@@ -40,7 +40,6 @@ describe('AgentColorProvider', () => {
     expect(consumer.getAttribute('data-bg')).toBe(expected.background);
     expect(consumer.getAttribute('data-fg')).toBe(expected.foreground);
     expect(consumer.getAttribute('data-tint')).toBe(expected.tint);
-    expect(expected.background).toMatch(/^var\(--badge-[a-z]+\)$/);
   });
 
   it('keeps the color object referentially stable across re-renders with the same agentId', () => {

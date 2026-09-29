@@ -7,29 +7,10 @@ import type {
   TopicTraceSummary,
   TopicWithCounts,
 } from './types';
-
-const TOPIC_COLORS = [
-  'var(--purple-600)',
-  'var(--blue-600)',
-  'var(--cyan-600)',
-  'var(--green-600)',
-  'var(--yellow-600)',
-  'var(--orange-600)',
-  'var(--red-600)',
-  'var(--pink-600)',
-] as const;
-
-function hashString(value: string): number {
-  let hash = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash << 5) - hash + value.charCodeAt(index);
-    hash |= 0;
-  }
-  return Math.abs(hash);
-}
+import { hueAccentColor, hueForName } from '@/lib/colors';
 
 export function getTopicColor(id: string): string {
-  return TOPIC_COLORS[hashString(id) % TOPIC_COLORS.length] ?? TOPIC_COLORS[0];
+  return hueAccentColor(hueForName(id));
 }
 
 export function getTraceCount(subtopic: Pick<TopicSubtopic, 'traceSummaries'>): number {

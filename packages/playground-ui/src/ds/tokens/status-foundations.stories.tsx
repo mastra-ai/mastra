@@ -88,7 +88,7 @@ export const StatusFoundations: Story = {
         </Txt>
       }
       note="Light is not the dark value dimmed: the base keeps its saturation while the foreground flips to a deep tint, because ink has to darken when the surface turns white."
-      noteAside="Utilities: bg-{status}-subtle, border-{status}-edge, text-{status}-fg, bg-badge-*, text-badge-*-fg."
+      noteAside="Utilities: bg-{status}-subtle, border-{status}-edge, text-{status}-subtle-foreground, bg-badge-{hue}-strong, text-badge-{hue}-foreground."
     >
       <FoundationSection
         label="Notice"
@@ -100,8 +100,8 @@ export const StatusFoundations: Story = {
               key={entry.variant}
               name={
                 entry.variant === 'note'
-                  ? '--notice-note / --notice-note-fg'
-                  : `--${entry.variant}-subtle / --${entry.variant}-fg`
+                  ? '--muted / --foreground'
+                  : `--${entry.variant}-subtle / --${entry.variant}-subtle-foreground`
               }
               note={entry.note}
             >
@@ -115,12 +115,12 @@ export const StatusFoundations: Story = {
 
       <FoundationSection
         label="Badge"
-        description="One row's worth of status. Badges tint their color ramp and muted softens the tint; the indicator has its own stronger color."
+        description="One row's worth of status. Badges tint their color ramp and subtle softens the tint; the indicator has its own stronger color."
         surface="sidebar"
       >
         <SpecimenGroup label="Neutral">
           <div className="max-w-80">
-            <Specimen name="--badge-neutral-fg" note="Ink only — the fill is --fill, no hue to pair with">
+            <Specimen name="--badge-neutral-foreground" note="Ink only — the fill is --fill, no hue to pair with">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge>Draft</Badge>
                 <Badge emphasis="subtle">Draft</Badge>
@@ -134,7 +134,7 @@ export const StatusFoundations: Story = {
             {badgeHues.map(hue => (
               <Specimen
                 key={hue}
-                name={`--badge-${badgeTokenHue[hue] ?? hue} / --badge-${badgeTokenHue[hue] ?? hue}-fg`}
+                name={`--badge-${badgeTokenHue[hue] ?? hue}-strong / --badge-${badgeTokenHue[hue] ?? hue}-foreground`}
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant={hue}>{hue}</Badge>
@@ -168,7 +168,7 @@ export const StatusFoundations: Story = {
           ))}
         </div>
         <Txt variant="caption" tone="muted">
-          Success indicators use step 500 in dark mode and step 600 in light mode.
+          Success indicators use step 400 in dark mode and step 700 in light mode.
         </Txt>
       </FoundationSection>
 

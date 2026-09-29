@@ -85,7 +85,7 @@ export function CreateFactoryPalette({
               aria-current={item === step ? 'step' : undefined}
               className={cn(
                 'h-1 w-6 rounded-full transition-colors',
-                index <= stepIndex ? 'bg-green-600 dark:bg-green-400' : 'bg-fill',
+                index <= stepIndex ? 'bg-success-indicator' : 'bg-fill',
               )}
             />
           ))}

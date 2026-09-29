@@ -12,12 +12,9 @@ export const sankeySeriesColors: readonly string[] = [
 ];
 
 export function buildSankeyColorMap(names: string[]) {
-  const ordered = [...new Set(names)].sort(
-    (left, right) => hashLabel(left) - hashLabel(right) || left.localeCompare(right),
-  );
   const colors: Record<string, string> = {};
-  ordered.forEach((name, index) => {
-    colors[name] = sankeySeriesColors[index % sankeySeriesColors.length] ?? 'var(--chart-blue)';
-  });
+  for (const name of names) {
+    colors[name] = sankeySeriesColors[hashLabel(name) % sankeySeriesColors.length] ?? 'var(--chart-blue)';
+  }
   return colors;
 }

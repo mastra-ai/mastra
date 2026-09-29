@@ -31,8 +31,8 @@ const statusLineClasses: Partial<Record<ReportedStatus, string>> = {
   success: 'after:bg-success-indicator',
   failed: 'after:bg-destructive-indicator',
   tripwire: 'after:bg-warning-indicator',
-  waiting: 'after:bg-info-indicator',
-  paused: 'after:bg-muted-foreground',
+  waiting: 'after:bg-warning-indicator',
+  paused: 'after:bg-warning-indicator',
   skipped: 'after:bg-muted-foreground',
 };
 

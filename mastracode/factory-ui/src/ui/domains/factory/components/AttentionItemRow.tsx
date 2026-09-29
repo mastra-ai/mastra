@@ -29,7 +29,7 @@ import { RAIL_ROW_BODY } from './Timeline';
 
 /** What landed: the glyph the rail hangs the row off, and the word the row's badge wears. */
 const KIND = {
-  mention: { glyph: MessageSquare, label: 'mention', tone: 'text-green-700 dark:text-green-400', badge: 'green' },
+  mention: { glyph: MessageSquare, label: 'mention', tone: 'text-badge-green-indicator', badge: 'green' },
   activity: { glyph: MessagesSquare, label: 'comment', tone: 'text-muted-foreground', badge: 'neutral' },
   'automation-failed': {
     glyph: TriangleAlert,
@@ -40,14 +40,14 @@ const KIND = {
   'automation-proposed': {
     glyph: Sparkles,
     label: 'suggested',
-    tone: 'text-yellow-700 dark:text-yellow-400',
+    tone: 'text-warning-indicator',
     badge: 'orange',
   },
-  'supervisor-finding': { glyph: Brain, label: 'finding', tone: 'text-green-700 dark:text-green-400', badge: 'blue' },
+  'supervisor-finding': { glyph: Brain, label: 'finding', tone: 'text-badge-green-indicator', badge: 'blue' },
   'agent-waiting': {
     glyph: Hourglass,
     label: 'waiting',
-    tone: 'text-yellow-700 dark:text-yellow-400',
+    tone: 'text-warning-indicator',
     badge: 'orange',
   },
 } satisfies Record<

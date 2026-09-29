@@ -107,8 +107,8 @@ const SidebarLink = ({
         )}
       >
         {done ? (
-          <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-info-subtle">
-            <Check className="size-3.5 text-white" />
+          <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-success-subtle text-success-subtle-foreground">
+            <Check className="size-3.5" />
           </div>
         ) : (
           <Txt

@@ -211,7 +211,7 @@ const PackagesModalContent = ({
                     href={`https://www.npmjs.com/package/${pkg.name}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="group inline-flex items-center gap-1 hover:text-success-indicator hover:underline"
+                    className="group inline-flex items-center gap-1 hover:underline"
                   >
                     <Txt as="span" variant="body" font="mono">
                       {pkg.name}

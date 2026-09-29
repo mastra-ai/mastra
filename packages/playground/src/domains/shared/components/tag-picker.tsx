@@ -6,6 +6,7 @@ import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Plus, X } from 'lucide-react';
 import { useState, useRef } from 'react';
+import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 export function TagPicker({
   tags,
@@ -42,15 +43,17 @@ export function TagPicker({
   return (
     <div className="flex flex-wrap items-center gap-1">
       {tags.map(tag => (
-        <span
-          key={tag}
-          className="inline-flex items-center gap-0.5 rounded-md bg-info-subtle px-1.5 py-0.5 text-meta text-info-fg"
-        >
+        <ComputedTag key={tag} value={tag} className="gap-0.5 pr-1">
           {tag}
-          <button type="button" onClick={() => removeTag(tag)} className="hover:text-info-fg">
+          <button
+            type="button"
+            aria-label={`Remove tag ${tag}`}
+            onClick={() => removeTag(tag)}
+            className="cursor-pointer hover:opacity-70"
+          >
             <X className="h-2.5 w-2.5" />
           </button>
-        </span>
+        </ComputedTag>
       ))}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
