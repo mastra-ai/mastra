@@ -32,7 +32,7 @@ afterEach(() => {
   delete (window as typeof window & { MASTRA_REQUEST_CONTEXT_PRESETS?: string }).MASTRA_REQUEST_CONTEXT_PRESETS;
 });
 
-const renderWithProviders = (ui: React.ReactNode, entityType: 'agent' | 'workflow', entityId: string) => {
+const renderWithProviders = (ui: React.ReactNode) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <MastraReactProvider baseUrl={BASE_URL}>
@@ -56,7 +56,7 @@ describe('RequestContextPopover', () => {
     it('persists it for the entity, toasts and closes', async () => {
       (window as typeof window & { MASTRA_REQUEST_CONTEXT_PRESETS?: string }).MASTRA_REQUEST_CONTEXT_PRESETS =
         JSON.stringify({ French: { locale: 'fr' } });
-      renderWithProviders(<RequestContextPopover entityType="agent" entityId={AGENT_ID} />, 'agent', AGENT_ID);
+      renderWithProviders(<RequestContextPopover entityType="agent" entityId={AGENT_ID} />);
 
       await open('Request context');
       expect(await screen.findByText('Request Context (JSON)', undefined, { timeout: 10_000 })).not.toBeNull();
@@ -96,7 +96,7 @@ function WorkflowTriggerHarness({ onSubmit }: { onSubmit: () => void }) {
 describe('WorkflowRunActions', () => {
   describe('when the workflow has no request context schema', () => {
     it('still exposes the request context popover', async () => {
-      renderWithProviders(<WorkflowTriggerHarness onSubmit={vi.fn()} />, 'workflow', WORKFLOW_ID);
+      renderWithProviders(<WorkflowTriggerHarness onSubmit={vi.fn()} />);
 
       expect(await screen.findByRole('button', { name: 'Request context' })).not.toBeNull();
     });
@@ -105,7 +105,7 @@ describe('WorkflowRunActions', () => {
   describe('when the user saves run options with a resource ID', () => {
     it('commits the draft, toasts, closes and does not submit the workflow form', async () => {
       const onSubmit = vi.fn();
-      renderWithProviders(<WorkflowTriggerHarness onSubmit={onSubmit} />, 'workflow', WORKFLOW_ID);
+      renderWithProviders(<WorkflowTriggerHarness onSubmit={onSubmit} />);
 
       await open('Run options');
       fireEvent.change(await screen.findByLabelText('Resource ID'), { target: { value: 'tenant-42' } });

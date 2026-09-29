@@ -230,7 +230,7 @@ describe('AppSidebar — More menu', () => {
 
       renderSidebar('/processors');
 
-      const link = await screen.findByRole('link', { name: /^processors$/i });
+      await screen.findByRole('link', { name: /^processors$/i });
       await waitFor(() => {
         expect(localStorage.getItem('mastra:nav-recent:/processors')).not.toBeNull();
       });

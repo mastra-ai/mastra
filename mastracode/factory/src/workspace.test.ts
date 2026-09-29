@@ -145,14 +145,6 @@ function lastGhToken(): string | undefined {
   return update?.({}).GH_TOKEN;
 }
 
-function lastSandboxEnv(): Record<string, string | undefined> {
-  const calls = mocks.setEnv.mock.calls;
-  const update = calls[calls.length - 1]?.[0] as
-    | ((env: Record<string, string | undefined>) => Record<string, string | undefined>)
-    | undefined;
-  return update?.({}) ?? {};
-}
-
 afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map(tempDir => fs.rm(tempDir, { recursive: true, force: true })));
   mocks.projects.splice(0);

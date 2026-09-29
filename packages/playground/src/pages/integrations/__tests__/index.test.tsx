@@ -10,7 +10,6 @@ import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 const PROVIDER = 'composio';
-const TOOLKIT = 'gmail';
 
 const Wrap = ({ children }: { children: ReactNode }) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });

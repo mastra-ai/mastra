@@ -26,7 +26,7 @@ import { seedSessionOrg } from './org-seed.js';
 // Bare-specifier mock: captures the controller mount config. Does NOT
 // intercept the deep import `@mastra/code-sdk/agents/memory` (vitest mocks by
 // specifier), so `getDynamicMemory` stays real — which is the point.
-const prepareMock = vi.fn(async (config: Record<string, unknown>) => ({
+const prepareMock = vi.fn(async (_config: Record<string, unknown>) => ({
   base: { controller: { onSessionCreated: vi.fn(), setChannels: vi.fn() } },
   mastraArgs: {},
   finalize: vi.fn(async () => {}),

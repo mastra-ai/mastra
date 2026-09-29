@@ -19,8 +19,6 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-type MockedCommand = (file: string, args: string[]) => Promise<{ stdout: string; stderr: string }>;
-
 /**
  * Stub the `gh` and `gitcrawl` commands these tests drive. Keys are matched as
  * prefixes of `file argv...`, longest first; anything unmatched fails the test.

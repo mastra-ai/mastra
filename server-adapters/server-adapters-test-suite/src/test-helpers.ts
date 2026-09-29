@@ -728,7 +728,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     // Add test stored scorer for stored scorers routes
     const scorers = await storage.getStore('scorerDefinitions');
     if (scorers) {
-      const storedScorer = await scorers.create({
+      await scorers.create({
         scorerDefinition: {
           id: 'test-stored-scorer',
           name: 'Test Stored Scorer',

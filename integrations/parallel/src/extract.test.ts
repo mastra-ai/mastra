@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockSearch, mockExtract, mockParallel } = vi.hoisted(() => {
+const { mockExtract, mockParallel } = vi.hoisted(() => {
   const mockSearch = vi.fn();
   const mockExtract = vi.fn();
   return {

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { reviewBoard } from '../boards/review.js';
 import { workBoard } from '../boards/work.js';
 import { defaultGithubRules } from '../integrations/github/default-rules.js';
@@ -10,7 +10,6 @@ import type {
   FactoryToolResultRuleContext,
 } from './types.js';
 
-const passThrough = vi.fn(() => undefined);
 const base = {
   tenant: { orgId: 'org-1', projectId: 'project-1' },
   ingress: { type: 'github' as const, id: 'delivery-1' },
@@ -28,10 +27,6 @@ const item = {
   stages: ['intake'],
   metadata: null as Record<string, unknown> | null,
 };
-
-function reject() {
-  return { type: 'reject', code: 'forbidden', reason: 'Not allowed.' } as const;
-}
 
 function stageContext(actor: FactoryStageRuleContext['actor'], board: 'work' | 'review'): FactoryStageRuleContext {
   const source = board === 'work' ? 'issue' : 'pullRequest';

@@ -8,7 +8,6 @@ import { server } from '@/test/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '@/test/render';
 
 const namedExperiment = experiments[0];
-const unnamedExperiment = experiments[2];
 
 describe('ExperimentTopArea', () => {
   afterEach(cleanup);
