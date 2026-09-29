@@ -44,14 +44,19 @@ export class UpstashTransport extends LoggerTransport {
     }, this.flushInterval);
   }
 
-  private async executeUpstashCommand(command: any[]): Promise<any> {
+  /**
+   * Upstash's pipeline endpoint takes a two-dimensional array: one inner
+   * array per Redis command. Anything appended to a command's own array is
+   * treated as an argument of *that* command, not as a follow-up command.
+   */
+  private async executeUpstashPipeline(commands: any[][]): Promise<any> {
     const response = await fetch(`${this.upstashUrl}/pipeline`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.upstashToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify([command]),
+      body: JSON.stringify(commands),
     });
 
     if (!response.ok) {
@@ -70,16 +75,19 @@ export class UpstashTransport extends LoggerTransport {
     const logs = this.logBuffer.splice(0, this.batchSize);
 
     try {
-      // Prepare the Upstash Redis command
-      const command = ['LPUSH', this.listName, ...logs.map(log => JSON.stringify(log))];
+      // One inner array per Redis command -- LTRIM appended to the LPUSH
+      // array would be pushed as a log value instead of trimming the list.
+      const commands: any[][] = [
+        ['LPUSH', this.listName, ...logs.map(log => JSON.stringify(log))],
+      ];
 
       // Trim the list if it exceeds maxListLength
       if (this.maxListLength > 0) {
-        command.push('LTRIM', this.listName, 0 as any, (this.maxListLength - 1) as any);
+        commands.push(['LTRIM', this.listName, 0, this.maxListLength - 1]);
       }
 
       // Send logs to Upstash Redis
-      await this.executeUpstashCommand(command);
+      await this.executeUpstashPipeline(commands);
       this.lastFlush = now;
     } catch (error) {
       // On error, put logs back in the buffer
@@ -161,7 +169,7 @@ export class UpstashTransport extends LoggerTransport {
     try {
       // Get all logs from the list
       const command = ['LRANGE', this.listName, 0, -1];
-      const response = await this.executeUpstashCommand(command);
+      const response = await this.executeUpstashPipeline([command]);
 
       const logs =
         (response?.[0]?.result?.map((log: string) => {
