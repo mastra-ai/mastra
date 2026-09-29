@@ -186,12 +186,14 @@ test.describe('Observational Memory - Behavior Tests', () => {
       // ASSERT: Observation completion marker should show compression stats
       // With mock observer model, we expect: "Observed X→Y tokens"
       // Use .first() because multiple observation cycles may trigger across messages
-      const observationMarker = threadWrapper.getByText(/Observed.*→.*tokens/i).first();
+      const observationMarker = threadWrapper.getByRole('button', { name: /Observed .*→.*tokens/ }).first();
       await expect(observationMarker).toBeVisible({ timeout: 15000 });
 
-      // ASSERT: Extracted values from the fixture are visible when the marker is expanded.
-      await observationMarker.click();
-      await expect(threadWrapper.getByText(/Extractions \([1-9]\d*\)/).first()).toBeVisible({ timeout: 10000 });
+      // ASSERT: A marker with extracted values opens itself and lists them.
+      await expect(observationMarker).toHaveAttribute('aria-expanded', 'true');
+      await expect(threadWrapper.getByRole('group', { name: 'Extractions' }).first()).toContainText(
+        /[1-9]\d* extracted/,
+      );
     });
   });
 
@@ -213,7 +215,12 @@ test.describe('Observational Memory - Behavior Tests', () => {
       await chatInput.press('Enter');
 
       // ASSERT: The failure marker is visible in the timeline.
-      await expect(threadWrapper.getByText('Observation failed').first()).toBeVisible({ timeout: 15000 });
+      await expect(
+        threadWrapper
+          .getByRole('group', { name: 'Observation', exact: true })
+          .getByRole('img', { name: 'Failed' })
+          .first(),
+      ).toBeVisible({ timeout: 15000 });
     });
   });
 
@@ -240,7 +247,9 @@ test.describe('Observational Memory - Behavior Tests', () => {
       await page.waitForTimeout(3000);
 
       // Verify observation marker appeared before reload
-      await expect(threadWrapper.getByText(/Observed.*→.*tokens/i).first()).toBeVisible({ timeout: 10000 });
+      await expect(threadWrapper.getByRole('button', { name: /Observed .*→.*tokens/ }).first()).toBeVisible({
+        timeout: 10000,
+      });
       await page.screenshot({ path: 'test-results/persistence-before-reload.png' });
 
       // Grab the thread URL so we can check it reloads to the same thread
@@ -265,12 +274,16 @@ test.describe('Observational Memory - Behavior Tests', () => {
       // ASSERT: The observation marker should still be visible after reload
       // This verifies the data-om-* parts were persisted to storage
       const reloadedThreadWrapper = page.locator('[data-testid="thread-wrapper"]');
-      const reloadedObservationMarker = reloadedThreadWrapper.getByText(/Observed.*→.*tokens/i).first();
+      const reloadedObservationMarker = reloadedThreadWrapper
+        .getByRole('button', { name: /Observed .*→.*tokens/ })
+        .first();
       await expect(reloadedObservationMarker).toBeVisible({
         timeout: 10000,
       });
-      await reloadedObservationMarker.click();
-      await expect(reloadedThreadWrapper.getByText(/Extractions \([1-9]\d*\)/).first()).toBeVisible({ timeout: 10000 });
+      await expect(reloadedObservationMarker).toHaveAttribute('aria-expanded', 'true');
+      await expect(reloadedThreadWrapper.getByRole('group', { name: 'Extractions' }).first()).toContainText(
+        /[1-9]\d* extracted/,
+      );
 
       // ASSERT: OM sidebar should show the observations
       await openMemorySidebar(page);
