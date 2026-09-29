@@ -115,7 +115,7 @@ const foldable = hasToolArguments({ toolName, args }) || output !== undefined;
 
 A line that gains a body as its arguments stream in keeps its headline mounted: its shimmer does not restart, its detail does not fade in again, and the chevron fades into a slot that was already reserved, so the text does not shift sideways.
 
-Because the disclosure button now lies over the whole line, put anything that needs its own hover, such as a timestamp with a `title`, in `ActivityLeading`. It stays reachable above the button, so the tooltip still shows. `ActivityHeadline` and `ToolCallGroup` already wrap their `leading` content in it. `ActivityTrigger` is now a wrapper around that button rather than the button itself, so props such as `onClick` or `disabled` no longer reach it: drive the line through `open`, `onOpenChange` and `foldable` on `Activity`.
+Because the disclosure button now lies over the whole line, put anything that needs its own hover, such as a timestamp with a `title`, in `ActivityLeading`. It stays reachable above the button, so the tooltip still shows, and a click on it still opens the line. `ActivityHeadline` and `ToolCallGroup` already wrap their `leading` content in it. `ActivityTrigger` is now a wrapper around that button rather than the button itself, so props such as `onClick` or `disabled` no longer reach it: drive the line through `open`, `onOpenChange` and `foldable` on `Activity`.
 
 **`ChatTimeGap` is replaced by `TranscriptDivider`**
 

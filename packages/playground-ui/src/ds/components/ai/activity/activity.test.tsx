@@ -235,6 +235,22 @@ describe('ActivityHeadline', () => {
     const label = screen.getByText('Searched files');
     expect(leading.compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
+
+  it('opens the line from a click on its leading slot', () => {
+    render(
+      <Activity>
+        <ActivityTrigger>
+          <ActivityHeadline icon={<Search aria-hidden />} label="Searched files" leading={<time>3:42:05 PM</time>} />
+        </ActivityTrigger>
+        <ActivityContent>3 matches</ActivityContent>
+      </Activity>,
+    );
+
+    fireEvent.click(screen.getByText('3:42:05 PM'));
+
+    expect(screen.getByRole('button', { name: /Searched files/ }).getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('3 matches')).toBeTruthy();
+  });
 });
 
 describe('ActivityDetail arrival', () => {

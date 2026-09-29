@@ -13,6 +13,7 @@ interface ActivityContextValue {
   open: boolean;
   foldable: boolean;
   status: ActivityStatus;
+  toggle: () => void;
 }
 
 const ActivityContext = createContext<ActivityContextValue | undefined>(undefined);
@@ -57,7 +58,7 @@ export function Activity({
   };
 
   return (
-    <ActivityContext.Provider value={{ open, foldable, status }}>
+    <ActivityContext.Provider value={{ open, foldable, status, toggle: () => handleOpenChange(!open) }}>
       <Collapsible
         open={open}
         onOpenChange={handleOpenChange}
@@ -121,10 +122,16 @@ export const ActivityHeader = ({ className, children, ...props }: ComponentProps
 };
 
 export const ActivityLeading = ({ className, children, ...props }: ComponentProps<'span'>) => {
+  const { foldable, toggle } = useActivity();
+
   if (!children) return null;
 
   return (
-    <span className={cn('pointer-events-auto flex shrink-0', className)} {...props}>
+    <span
+      className={cn('pointer-events-auto flex shrink-0 empty:hidden', foldable && 'cursor-pointer', className)}
+      onClick={foldable ? toggle : undefined}
+      {...props}
+    >
       {children}
     </span>
   );
