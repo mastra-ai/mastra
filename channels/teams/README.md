@@ -10,36 +10,26 @@ npm install @mastra/teams
 
 ## Usage
 
+Set `TEAMS_APP_ID` and `TEAMS_APP_PASSWORD` to the credentials of an existing Azure Bot registration whose messaging endpoint points at your Mastra server.
+
 ```typescript
-import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { TeamsProvider } from '@mastra/teams';
 
-const supportAgent = new Agent({
-  id: 'support',
-  name: 'Support agent',
-  instructions: 'Help users with product questions.',
-  model: 'openai/gpt-5-mini',
-});
-
-// Self-managed: bring your own Azure Bot registration.
 const teams = new TeamsProvider({
-  appId: process.env.TEAMS_APP_ID!,
-  appPassword: process.env.TEAMS_APP_PASSWORD!,
+  appId: process.env.TEAMS_APP_ID,
+  appPassword: process.env.TEAMS_APP_PASSWORD,
   baseUrl: 'https://your-app.example.com',
 });
 
 export const mastra = new Mastra({
-  agents: { supportAgent },
   channels: { teams },
 });
-
-await teams.connect('support');
 ```
 
 ## Documentation
 
-- [`TeamsProvider` reference](https://mastra.ai/reference/channels/teams-provider)
+- [Reference: TeamsProvider](https://mastra.ai/reference/channels/teams-provider)
 
 ## Changelog
 
