@@ -1,5 +1,4 @@
 import { Mastra } from '@mastra/core/mastra';
-import { LibSQLStore } from '@mastra/libsql';
 import { PinoLogger } from '@mastra/loggers';
 import {
   Observability,
@@ -7,13 +6,17 @@ import {
   MastraPlatformExporter,
   SensitiveDataFilter,
 } from '@mastra/observability';
+import { PostgresStore } from '@mastra/pg';
 import { connectAgent } from './agents/connect-agent';
 import { activityDigestWorkflow } from './workflows/activity-digest';
 
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL is required (Postgres connection string).');
+}
+
 export const mastra = new Mastra({
-  storage: new LibSQLStore({
-    id: 'mastra-storage',
-    url: 'file:./mastra.db',
+  storage: new PostgresStore({
+    connectionString: process.env.DATABASE_URL,
   }),
   agents: { connectAgent },
   workflows: { activityDigestWorkflow },
