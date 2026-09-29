@@ -58,6 +58,7 @@ function supervisorModel() {
 describe("toolCallConcurrency strategy: 'called' across resume (#24581)", () => {
   it('resumes all suspended sibling calls concurrently with the recomputed limit', async () => {
     const tracker = { running: 0, peak: 0, resumed: 0 };
+    let ask1Resuspended = false;
 
     // Like sub-agent delegation tools: no suspend schema, but they suspend at runtime.
     const askTool = (id: string) =>
@@ -68,6 +69,12 @@ describe("toolCallConcurrency strategy: 'called' across resume (#24581)", () => 
         execute: async (_input, context) => {
           if (!context?.agent?.resumeData) {
             return await context?.agent?.suspend({ question: id });
+          }
+          // ask-1 asks a follow-up question once; its siblings must still run.
+          if (id === 'ask-1' && !ask1Resuspended) {
+            ask1Resuspended = true;
+            await delay(10);
+            return await context?.agent?.suspend({ question: `${id} follow-up` });
           }
           tracker.running++;
           tracker.resumed++;
@@ -111,11 +118,19 @@ describe("toolCallConcurrency strategy: 'called' across resume (#24581)", () => 
     expect(suspended).toHaveLength(3);
 
     const resumed = await agent.resumeStream({ answer: 'yes' }, { runId: stream.runId, toolCallConcurrency });
-    for await (const _ of resumed.fullStream) {
+    const resuspended: string[] = [];
+    for await (const chunk of resumed.fullStream) {
+      if (chunk.type === 'tool-call-suspended') resuspended.push(chunk.payload.toolCallId);
+    }
+    expect(resuspended).toHaveLength(1);
+    expect(tracker.resumed).toBe(2);
+    expect(tracker.peak).toBe(2);
+
+    const resumedAgain = await agent.resumeStream({ answer: 'yes' }, { runId: stream.runId, toolCallConcurrency });
+    for await (const _ of resumedAgain.fullStream) {
       /* drain */
     }
 
     expect(tracker.resumed).toBe(3);
-    expect(tracker.peak).toBe(3);
   });
 });
