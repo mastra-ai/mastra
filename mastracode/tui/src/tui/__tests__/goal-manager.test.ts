@@ -400,6 +400,72 @@ describe('GoalManager adapter', () => {
     expect(state.session.thread.setSetting).toHaveBeenCalledWith({ key: 'goal', value: undefined });
   });
 
+  it('reports whether the delete landed', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+    manager.clear();
+    agent.clearObjective.mockRejectedValueOnce(new Error('storage down'));
+    expect(await manager.deleteFromThread(state)).toBe(false);
+    expect(await manager.deleteFromThread(state)).toBe(true);
+  });
+
+  it('retries a failed clear when switching back to the thread', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+    const goal = await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+    const stored = makeRecord({ id: goal!.id });
+    manager.clear();
+    agent.clearObjective.mockRejectedValueOnce(new Error('storage down'));
+    expect(await manager.deleteFromThread(state)).toBe(false);
+
+    agent.getObjective.mockResolvedValue(stored);
+    agent.clearObjective.mockImplementation(async () => {
+      agent.getObjective.mockResolvedValue(undefined);
+    });
+    await manager.loadFromThread(state);
+
+    expect(agent.clearObjective).toHaveBeenCalledTimes(2);
+    expect(manager.getGoal()).toBeNull();
+    agent.clearObjective.mockClear();
+    await manager.loadFromThread(state);
+    expect(agent.clearObjective).not.toHaveBeenCalled();
+  });
+
+  it('loads, and does not delete, a stored goal with a different id than the cleared one', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+    manager.clear();
+    agent.clearObjective.mockRejectedValueOnce(new Error('storage down'));
+    await manager.deleteFromThread(state);
+
+    agent.getObjective.mockResolvedValue(makeRecord({ id: 'other-goal', objective: 'new goal' }));
+    await manager.loadFromThread(state);
+
+    expect(agent.clearObjective).toHaveBeenCalledTimes(1);
+    expect(manager.getGoal()?.objective).toBe('new goal');
+  });
+
+  it('loads the goal when the retried delete fails again', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+    const goal = await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+    manager.clear();
+    agent.clearObjective.mockRejectedValue(new Error('storage down'));
+    await manager.deleteFromThread(state);
+
+    agent.getObjective.mockResolvedValue(makeRecord({ id: goal!.id }));
+    await manager.loadFromThread(state);
+
+    expect(agent.clearObjective).toHaveBeenCalledTimes(2);
+    expect(manager.getGoal()?.objective).toBe('finish the task');
+  });
+
   it('deletes on an explicit clear even when the mirror is already empty', async () => {
     const agent = createAgent();
     const state = createState(agent);

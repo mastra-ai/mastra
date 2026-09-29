@@ -75,7 +75,7 @@ export class GoalManager {
    * from legacy metadata has no known thread, so its clear applies to whichever
    * thread the next save runs on (the pre-existing behaviour).
    */
-  private pendingDelete: { threadId: string | undefined } | null = null;
+  private pendingDelete: { threadId: string | undefined; goalId?: string } | null = null;
 
   // ---------------------------------------------------------------------------
   // Synchronous TUI surface
@@ -211,7 +211,7 @@ export class GoalManager {
   }
 
   clear(): void {
-    this.pendingDelete = { threadId: this.threadId };
+    this.pendingDelete = { threadId: this.threadId, goalId: this.record?.id };
     this.record = null;
     this.threadId = undefined;
     this.agentId = undefined;
@@ -324,9 +324,10 @@ export class GoalManager {
    * pre-migration goal must not resurface from the legacy key after a clear.
    * Like the save, this is best-effort: a failed durable delete also skips the
    * legacy wipe. A pending {@link clear} stays pending until both writes
-   * succeed, so a later save retries it.
+   * succeed, so a later save or load retries it. Resolves to whether the delete
+   * landed.
    */
-  async deleteFromThread(state: GoalManagerState): Promise<void> {
+  async deleteFromThread(state: GoalManagerState): Promise<boolean> {
     const threadId = state.session.thread.getId();
     const agent = this.getAgent(state);
     try {
@@ -335,26 +336,35 @@ export class GoalManager {
       }
       await state.session.thread.setSetting({ key: THREAD_GOAL_KEY, value: undefined });
       this.pendingDelete = null;
+      return true;
     } catch {
       // Persistence is not critical, but keep the retry scoped to the thread
       // this delete targeted so an empty save elsewhere cannot delete a goal.
       // An unknown thread would widen the retry to every thread, so keep the old scope then.
-      if (threadId) this.pendingDelete = { threadId };
+      if (threadId) this.pendingDelete = { threadId, goalId: this.pendingDelete?.goalId };
+      return false;
     }
   }
 
   /**
    * Load the objective from ThreadState (called on thread switch). Falls back to
    * the legacy thread-metadata goal for threads created before this migration.
+   *
+   * A clear whose delete failed is retried here when it targeted this thread and
+   * the stored goal is the one that was cleared; otherwise the stored goal loads,
+   * so the mirror never hides a goal core is still judging.
    */
   async loadFromThread(state: GoalManagerState, isCurrent: () => boolean = () => true): Promise<void> {
+    const pending = this.pendingDelete;
     const threadId = state.session.thread.getId();
     const agent = this.getAgent(state);
     let nextRecord: typeof this.record = null;
+    let storedId: string | undefined;
     if (agent && threadId) {
       try {
         const record = await agent.getObjective({ threadId });
         if (record) {
+          storedId = record.id;
           nextRecord = {
             ...record,
             id: record.id ?? randomUUID(),
@@ -366,6 +376,10 @@ export class GoalManager {
       }
     }
     if (!isCurrent()) return;
+    if (pending?.goalId && pending.threadId === threadId && storedId === pending.goalId) {
+      if (await this.deleteFromThread(state)) nextRecord = null;
+      if (!isCurrent()) return;
+    }
     this.persistGoalOnNextThreadCreate = false;
     this.pendingDelete = null;
     this.threadId = threadId ?? undefined;

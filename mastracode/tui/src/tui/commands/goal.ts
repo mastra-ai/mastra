@@ -101,7 +101,12 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
   if (subCommand === 'clear') {
     goalManager.clear();
     state.planStartedGoalId = undefined;
-    await goalManager.deleteFromThread(state);
+    if (!(await goalManager.deleteFromThread(state))) {
+      await goalManager.loadFromThread(state);
+      ctx.updateStatusLine();
+      ctx.showError('Could not clear the goal; it is still active. Try /goal clear again.');
+      return;
+    }
     // Abort any in-flight turn. The cleared objective stops the core loop from
     // driving *new* goal continuations, but a turn that was already running when
     // the user cleared keeps going to completion — which reads as "it's still
