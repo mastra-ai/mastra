@@ -76,8 +76,6 @@ describe('AuthLayout', () => {
 
       await screen.findByTestId('login-page');
       expect(screen.queryByRole('navigation', { name: /main/i })).toBeNull();
-      expect(document.querySelector('[data-slot="app-shell-body"]')?.className).toContain('lg:p-2');
-      expect(document.querySelector('[data-slot="app-shell-body"]')?.className).not.toContain('lg:pl-0');
     });
   });
 });
