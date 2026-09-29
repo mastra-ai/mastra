@@ -1,3 +1,4 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
@@ -80,10 +81,10 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
                   '[&_svg]:h-[1em] [&_svg]:w-[1em] [&_svg]:text-muted-foreground',
                 )}
               >
-                <h2 className="text-body text-foreground">{template.title}</h2>
-                <p className={cn('text-body', quietTextHoverInGroup, controlStateColorTransition)}>
-                  {template.description}
-                </p>
+                <Txt as="h2" tone="ink">
+                  {template.title}
+                </Txt>
+                <Txt className={cn(quietTextHoverInGroup, controlStateColorTransition)}>{template.description}</Txt>
                 <div className="mt-3 hidden flex-wrap items-center gap-4 text-body text-muted-foreground 2xl:flex">
                   {hasMetaInfo && (
                     <ul

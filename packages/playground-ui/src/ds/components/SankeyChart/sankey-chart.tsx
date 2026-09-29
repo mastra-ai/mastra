@@ -16,7 +16,6 @@ import type {
 } from './sankey-chart-utils';
 import { useSankeyRenderContext } from './sankey-context';
 import { SankeyPortalTooltip } from './sankey-portal-tooltip';
-import { nodeColor, nodeColorVivid } from './sankeyColor';
 import { useSankeyChartMeasurements } from './use-sankey-chart-measurements';
 import { useSankeyGeometryTransition } from './use-sankey-geometry-transition';
 import { useSankeyHoverTooltip } from './use-sankey-hover-tooltip';
@@ -30,6 +29,8 @@ const NODE_LABEL_MAX_CHARACTERS = 23;
 
 export type SankeyChartProps = {
   height?: CSSProperties['height'];
+  getNodeColor?: (selection: SankeyChartNodeSelection) => string;
+  getLinkColor?: (selection: SankeyChartCurveSelection) => string;
   className?: string;
   margin?: ComponentProps<typeof RechartsSankey>['margin'];
   onCurveClick?: (selection: SankeyChartCurveSelection) => void;
@@ -52,8 +53,10 @@ export function SankeyChart({
   getColumnDescription,
   hideColumnLabels = false,
   geometryTransitionKey,
+  getNodeColor,
+  getLinkColor,
 }: SankeyChartProps) {
-  const { graph, enabledColumns, hueMap, usesFixedGeometry } = useSankeyRenderContext();
+  const { graph, enabledColumns, colorMap, usesFixedGeometry } = useSankeyRenderContext();
   const { chartContainerRef, fixedGeometry, labelWidths } = useSankeyChartMeasurements({
     graph,
     height,
@@ -116,7 +119,8 @@ export function SankeyChart({
                     x={nodeGeometry?.x ?? props.x}
                     y={nodeGeometry?.y ?? props.y}
                     height={nodeGeometry?.height ?? props.height}
-                    hueMap={hueMap}
+                    colorMap={colorMap}
+                    color={selection ? getNodeColor?.(selection) : undefined}
                     columnLabel={node?.column.label}
                     columnDescription={node ? getColumnDescription?.(node.column) : undefined}
                     label={node?.label}
@@ -138,6 +142,7 @@ export function SankeyChart({
               }}
               link={(props: SankeyLinkRendererProps) => {
                 const link = graph.links[props.index];
+                const selection = link ? getSankeyChartCurveSelection(link) : undefined;
                 const linkGeometry = link ? animatedGeometry?.links.get(link.id) : undefined;
                 const sourceX = linkGeometry?.sourceX ?? props.sourceX;
                 const targetX = linkGeometry?.targetX ?? props.targetX;
@@ -153,8 +158,11 @@ export function SankeyChart({
                     targetY={linkGeometry?.targetY ?? props.targetY}
                     sourceWidth={linkGeometry?.sourceWidth}
                     targetWidth={linkGeometry?.targetWidth}
-                    hueMap={hueMap}
+                    colorMap={colorMap}
                     highlighted={String(props.payload.source.name ?? '') === activeSourceName}
+                    color={selection ? getLinkColor?.(selection) : undefined}
+                    sourceColor={selection ? getNodeColor?.(selection.source) : undefined}
+                    targetColor={selection ? getNodeColor?.(selection.target) : undefined}
                     displayValue={link?.displayValue}
                     layoutValue={link?.value}
                     onHoverChange={setHoveredSourceName}
@@ -195,7 +203,8 @@ type SankeyLinkRendererProps = {
 };
 
 type SankeyNodeProps = SankeyNodeRendererProps & {
-  hueMap: Record<string, number>;
+  colorMap: Record<string, string>;
+  color?: string;
   columnLabel?: string;
   columnDescription?: string;
   label?: string;
@@ -218,7 +227,8 @@ function SankeyNode({
   width,
   height,
   payload,
-  hueMap,
+  colorMap,
+  color,
   columnLabel,
   columnDescription,
   label,
@@ -258,7 +268,7 @@ function SankeyNode({
   const visibleY = y + (height - visibleHeight) / 2;
   const textAnchor = isFirstColumn ? 'start' : isLastColumn ? 'end' : 'middle';
   const labelX = isFirstColumn ? x : isLastColumn ? x + width : x + width / 2;
-  const hue = hueMap[name] ?? 0;
+  const nodeFill = colorMap[name] ?? 'var(--chart-blue)';
   const handleKeyDown = (event: KeyboardEvent<SVGGElement>) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
@@ -272,7 +282,7 @@ function SankeyNode({
         <SankeyColumnHeader
           x={labelX}
           textAnchor={textAnchor}
-          fill={nodeColor(hue)}
+          fill={color ? Colors.foreground : nodeFill}
           label={visibleColumnLabel}
           fullLabel={columnLabel}
           description={columnDescription}
@@ -306,7 +316,7 @@ function SankeyNode({
       >
         {/* The custom tooltip covers described nodes; a native title there would stack a second popup. */}
         {description ? null : <title>{displayLabel}</title>}
-        <rect x={x} y={visibleY} width={width} height={visibleHeight} rx={3} fill={nodeColor(hue)} />
+        <rect x={x} y={visibleY} width={width} height={visibleHeight} rx={3} fill={color ?? nodeFill} />
         <text
           x={labelX}
           y={y - 24}
@@ -396,7 +406,10 @@ function scaleSankeyDimension(size: number, displayValue: number | undefined, la
 }
 
 type SankeyLinkProps = SankeyLinkRendererProps & {
-  hueMap: Record<string, number>;
+  colorMap: Record<string, string>;
+  color?: string;
+  sourceColor?: string;
+  targetColor?: string;
   highlighted: boolean;
   displayValue?: number;
   layoutValue?: number;
@@ -417,7 +430,10 @@ function SankeyLink({
   linkWidth,
   index,
   payload,
-  hueMap,
+  colorMap,
+  color,
+  sourceColor,
+  targetColor,
   highlighted,
   displayValue,
   layoutValue,
@@ -440,7 +456,6 @@ function SankeyLink({
   const sourceName = String(payload.source.name ?? '');
   const targetName = String(payload.target.name ?? '');
   const gradientId = `sankey-grad-${index}`;
-  const vividGradientId = `${gradientId}-vivid`;
   const handleKeyDown = (event: KeyboardEvent<SVGPathElement>) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
@@ -451,17 +466,13 @@ function SankeyLink({
     <g>
       <defs>
         <linearGradient id={gradientId} gradientUnits="userSpaceOnUse" x1={sourceX} x2={targetX}>
-          <stop offset="0%" stopColor={nodeColor(hueMap[sourceName] ?? 0)} />
-          <stop offset="100%" stopColor={nodeColor(hueMap[targetName] ?? 0)} />
-        </linearGradient>
-        <linearGradient id={vividGradientId} gradientUnits="userSpaceOnUse" x1={sourceX} x2={targetX}>
-          <stop offset="0%" stopColor={nodeColorVivid(hueMap[sourceName] ?? 0)} />
-          <stop offset="100%" stopColor={nodeColorVivid(hueMap[targetName] ?? 0)} />
+          <stop offset="0%" stopColor={sourceColor ?? colorMap[sourceName] ?? 'var(--chart-blue)'} />
+          <stop offset="100%" stopColor={targetColor ?? colorMap[targetName] ?? 'var(--chart-blue)'} />
         </linearGradient>
       </defs>
       <path
         d={path}
-        fill={`url(#${highlighted ? vividGradientId : gradientId})`}
+        fill={color ?? `url(#${gradientId})`}
         fillOpacity={highlighted ? 0.75 : 0.32}
         stroke="none"
         role={clickable ? 'button' : undefined}

@@ -24,7 +24,7 @@ export type LinkComponentPaths = {
   networkNewThreadLink: (networkId: string) => string;
   networkThreadLink: (networkId: string, threadId: string) => string;
 
-  scorerLink: (scorerId: string) => string;
+  scorerLink: (scorerId: string, params?: { scoreId?: string; entity?: string }) => string;
   cmsScorersCreateLink: () => string;
   cmsScorerEditLink: (scorerId: string) => string;
 

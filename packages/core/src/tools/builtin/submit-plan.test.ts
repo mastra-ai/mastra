@@ -41,7 +41,7 @@ describe('submitPlanTool (native suspend)', () => {
       toolId: 'submit_plan',
       content: 'Plan approved. Proceed with implementation following the approved plan.',
       isError: false,
-      submittedPlan: { title: 'Ship it', path: '.mastracode/plans/ship-it.md', plan: 'Do it' },
+      submittedPlan: { title: 'Ship it', path: '.mastracode/plans/ship-it.md', plan: 'Do it', action: 'approved' },
     });
   });
 
@@ -65,6 +65,7 @@ describe('submitPlanTool (native suspend)', () => {
       title: 'Ship it',
       path: '.mastracode/plans/ship-it.md',
       plan: 'Do it',
+      action: 'rejected',
       feedback: 'Add tests',
     });
   });
@@ -79,6 +80,7 @@ describe('submitPlanTool (native suspend)', () => {
     expect(result.content).toContain('Stop now');
     expect(result.content).toContain('next message');
     expect(result.content).not.toContain('User feedback:');
+    expect(result.submittedPlan).toEqual({ action: 'rejected' });
   });
 
   it('falls back to readable text when no agent suspend is available', async () => {

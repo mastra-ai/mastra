@@ -1,5 +1,7 @@
 import type { ProjectConnection } from './client.js';
 import { MastraConnectError } from './errors.js';
+import type { NamedConnection } from './multi-connection.js';
+import { toNamedConnections } from './multi-connection.js';
 
 /** Identifies one provider's connection-resolution inputs. */
 export interface ConnectionRequest {
@@ -80,4 +82,64 @@ export function resolveConnection(request: ConnectionRequest, candidates: Projec
     `[@mastra/connect] Skipping ${integrationId}: ${active.length} active connections; pin one with connectionId or ${request.envVar}.`,
   );
   return undefined;
+}
+
+/**
+ * Discriminated resolution of one provider request against its candidate
+ * connections. `single` maps to unwrapped tools with the connection id baked
+ * in; `multi` triggers connection_name wrapping so the agent picks a
+ * connection per call. `skip` means warn-and-continue.
+ */
+export type ProviderResolution =
+  | { kind: 'single'; connectionId: string }
+  | { kind: 'multi'; connections: NamedConnection[] }
+  | { kind: 'skip' };
+
+/**
+ * Resolves how to configure one provider given its candidate connections:
+ *   - An explicit pin (option or env var) forces `single` at that id.
+ *   - Exactly one active connection → `single`.
+ *   - Two or more active connections → `multi`; the caller wraps tools with
+ *     `connection_name` so the agent chooses per call at execute time.
+ *   - No active candidate at all → `skip` with a warning.
+ * A `needs_reauth` connection is never silently mapped.
+ */
+export function resolveProviderConnection(
+  request: ConnectionRequest,
+  candidates: ProjectConnection[],
+): ProviderResolution {
+  const integrationId = request.integrationId;
+  const directed = request.connectionId?.trim() || process.env[request.envVar]?.trim() || undefined;
+  if (directed) {
+    const match = candidates.find(connection => connection.id === directed);
+    if (!match) {
+      console.warn(
+        `[@mastra/connect] Skipping ${integrationId}: pinned connection ${directed} is not attached to this project.`,
+      );
+      return { kind: 'skip' };
+    }
+    if (match.status === 'needs_reauth') {
+      console.warn(`[@mastra/connect] Skipping ${integrationId}: connection ${directed} needs re-auth.`);
+      return { kind: 'skip' };
+    }
+    if (match.status !== 'active') {
+      console.warn(
+        `[@mastra/connect] Skipping ${integrationId}: connection ${directed} is not active (status '${match.status}').`,
+      );
+      return { kind: 'skip' };
+    }
+    return { kind: 'single', connectionId: directed };
+  }
+
+  const active = candidates.filter(connection => connection.status === 'active');
+  if (active.length === 1) return { kind: 'single', connectionId: active[0]!.id };
+  if (active.length === 0) {
+    console.warn(
+      `[@mastra/connect] Skipping ${integrationId}: no active connections (found ${candidates.length} in other states).`,
+    );
+    return { kind: 'skip' };
+  }
+  // Multiple active connections: expose all of them through the wrapped
+  // toolset so the agent disambiguates per call via `connection_name`.
+  return { kind: 'multi', connections: toNamedConnections(active) };
 }

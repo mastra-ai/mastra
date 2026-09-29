@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI overused verb: '%s'. Say the item is unchanged, or name what it avoids. Disable this rule for lodging or travel prose."
+message: "AI overused verb: '%s'. Say the item is unchanged, or state what it avoids. Disable this rule for lodging or travel prose."
 level: error
 nonword: true
 ignorecase: true

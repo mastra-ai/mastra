@@ -1,14 +1,21 @@
 'use client';
 
 import type { AddDatasetItemParams, DatasetItem } from '@mastra/client-js';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
+import {
+  Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
-import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { X } from 'lucide-react';
 import { useState } from 'react';
 
 type ExpectedTrajectory = AddDatasetItemParams['expectedTrajectory'];
@@ -135,23 +142,16 @@ export function CreateDatasetFromItemsDialog({
     }
   };
 
-  const handleCancel = () => {
-    if (isCreating) return;
-    setName('');
-    setDescription('');
-    onOpenChange(false);
-  };
-
   const progressPercent = items.length > 0 ? (progress / items.length) * 100 : 0;
 
   return (
-    <Dialog open={open} onOpenChange={isCreating ? undefined : onOpenChange}>
-      <DialogContent className="max-w-md">
+    <Dialog open={open} onOpenChange={onOpenChange} pending={isCreating}>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Create Dataset from Items</DialogTitle>
         </DialogHeader>
-        <DialogBody>
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit}>
+          <DialogBody>
             <div className="space-y-2">
               <Label htmlFor="dataset-name">Name *</Label>
               <Input
@@ -175,9 +175,9 @@ export function CreateDatasetFromItemsDialog({
               />
             </div>
 
-            <p className="text-body text-muted-foreground">
+            <Txt tone="muted">
               {items.length} item{items.length !== 1 ? 's' : ''} will be copied to the new dataset
-            </p>
+            </Txt>
 
             {isCreating && (
               <div className="space-y-2">
@@ -187,22 +187,26 @@ export function CreateDatasetFromItemsDialog({
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
-                <p className="text-body text-muted-foreground">
+                <Txt tone="muted">
                   Copying items: {progress} / {items.length}
-                </p>
+                </Txt>
               </div>
             )}
-
-            <div className="flex justify-end gap-2 pt-4">
-              <Button icon={<X />} type="button" onClick={handleCancel} disabled={isCreating}>
-                Cancel
-              </Button>
-              <Button icon={<DatasetsIcon />} type="submit" variant="primary" disabled={isCreating || !name.trim()}>
-                {isCreating ? `Creating... (${progress}/${items.length})` : 'Create Dataset'}
-              </Button>
-            </div>
-          </form>
-        </DialogBody>
+          </DialogBody>
+          <DialogFooter>
+            <DialogCancel
+              onClick={() => {
+                setName('');
+                setDescription('');
+              }}
+            >
+              Cancel
+            </DialogCancel>
+            <DialogAction type="submit" disabled={!name.trim()}>
+              {isCreating ? `Creating... (${progress}/${items.length})` : 'Create Dataset'}
+            </DialogAction>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

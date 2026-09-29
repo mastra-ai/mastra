@@ -334,6 +334,12 @@ export interface HydrateFactorySessionArgs {
   /** The factory project's default model. Without it the session keeps the SDK's built-in mode default. */
   defaultModelId?: string;
   /**
+   * Model whose provider supplies the observational-memory fallback. Defaults
+   * to the factory model, but channel sessions can use the sender's model so OM
+   * resolves against that sender's credentials.
+   */
+  observationalMemoryModelId?: string;
+  /**
    * When provided, the factory project's stored memory-settings row is
    * applied. When omitted (or no row exists) the session is reset to the
    * built-in memory defaults.
@@ -364,8 +370,11 @@ export async function hydrateFactorySession(session: FactorySession, args: Hydra
     // Without a stored row, fall back to the low-cost OM model of the factory
     // default model's provider — a factory connected only to Anthropic should
     // not observe with the (uncredentialed) built-in Google default.
-    const provider = args.defaultModelId?.split('/')[0];
-    const fallbackOmModelId = provider ? resolveProviderOMDefault(provider, args.defaultModelId).modelId : undefined;
+    const observationalMemoryModelId = args.observationalMemoryModelId ?? args.defaultModelId;
+    const provider = observationalMemoryModelId?.split('/')[0];
+    const fallbackOmModelId = provider
+      ? resolveProviderOMDefault(provider, observationalMemoryModelId).modelId
+      : undefined;
     await applyStoredMemorySettings(session, record, fallbackOmModelId);
   } catch (error) {
     console.warn('[Factory Start] Failed to apply observational-memory settings', {

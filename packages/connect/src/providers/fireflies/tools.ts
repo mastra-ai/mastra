@@ -1,7 +1,7 @@
 // AUTO-GENERATED from NangoHQ/integration-templates @ c3091db1e8a6 — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
-import { applyAllowTools } from '../../toolset.js';
+import { applyToolFilter } from '../../toolset.js';
 import { addToLiveTool } from './tools/add-to-live.js';
 import { continueAskfredThreadTool } from './tools/continue-askfred-thread.js';
 import { createAskfredThreadTool } from './tools/create-askfred-thread.js';
@@ -61,5 +61,5 @@ export function createFirefliesTools(options?: ProviderToolsOptions) {
     fireflies_update_meeting_state: updateMeetingStateTool(platformProxy),
     fireflies_upload_audio: uploadAudioTool(platformProxy),
   };
-  return applyAllowTools(tools, options?.allowTools);
+  return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
 }

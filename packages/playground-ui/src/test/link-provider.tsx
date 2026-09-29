@@ -28,7 +28,7 @@ export const StubLink = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLA
 // typechecks this file against the base branch, whose `LinkComponentPaths`
 // may not match the head branch's exactly. The assertion tolerates extra
 // keys so the stub can carry entries for both versions.
-const paths: Record<string, (...args: string[]) => string> = {
+const paths: Record<string, (...args: any[]) => string> = {
   agentLink: id => `/agents/${id}`,
   agentsLink: () => '/agents',
   agentToolLink: (agentId, toolId) => `/agents/${agentId}/tools/${toolId}`,
@@ -42,7 +42,12 @@ const paths: Record<string, (...args: string[]) => string> = {
   networkLink: id => `/networks/${id}`,
   networkNewThreadLink: id => `/networks/${id}/chat/new`,
   networkThreadLink: (networkId, threadId) => `/networks/${networkId}/chat/${threadId}`,
-  scorerLink: id => `/scorers/${id}`,
+  scorerLink: (id: string, params?: { scoreId?: string; entity?: string }) => {
+    const query = new URLSearchParams(
+      Object.entries(params ?? {}).filter((entry): entry is [string, string] => Boolean(entry[1])),
+    ).toString();
+    return query ? `/scorers/${id}?${query}` : `/scorers/${id}`;
+  },
   cmsScorersCreateLink: () => '/cms/scorers/create',
   cmsScorerEditLink: id => `/cms/scorers/${id}`,
   cmsAgentCreateLink: () => '/cms/agents/create',
@@ -74,9 +79,16 @@ const paths: Record<string, (...args: string[]) => string> = {
 export const stubLinkPaths = paths as LinkComponentProviderProps['paths'];
 
 /** Wraps children in a `LinkComponentProvider` backed by {@link StubLink}. */
-export function TestLinkProvider({ children }: { children: ReactNode }) {
+export function TestLinkProvider({
+  children,
+  paths: overrides,
+}: {
+  children: ReactNode;
+  /** Overrides individual paths, e.g. `() => ''` to simulate an app without that route. */
+  paths?: Partial<LinkComponentProviderProps['paths']>;
+}) {
   return (
-    <LinkComponentProvider Link={StubLink} navigate={() => {}} paths={stubLinkPaths}>
+    <LinkComponentProvider Link={StubLink} navigate={() => {}} paths={{ ...stubLinkPaths, ...overrides }}>
       {children}
     </LinkComponentProvider>
   );

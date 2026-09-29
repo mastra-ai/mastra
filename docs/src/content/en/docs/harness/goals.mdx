@@ -75,11 +75,26 @@ A goal step runs inside the agentic execution loop, right after `isTaskComplete`
 
 The step is a no-op for background-task, mid-tool-loop, and working-memory-only iterations, the same gating as `isTaskComplete`.
 
-**The judge model is the activation switch.** If no judge resolves (neither the per-objective override nor the agent's `goal.judge`), the goal step performs no scoring or budget consumption and emits no `goal` chunk.
+Each evaluation emits a typed `goal` stream chunk (`GoalEvaluationPayload`: `objective`, `iteration`, `maxRuns`, `passed`, `status`, `results`, `reason`, `duration`, `timedOut`, `maxRunsReached`, `suppressFeedback`) so a UI can show goal progress mid-run.
 
-Effective settings resolve as per-objective record value → agent `goal` config → built-in default (`maxRuns` `50`, a default judge prompt).
+**The judge model is the activation switch.** If no judge resolves, from either the per-objective override or the agent's `goal.judge`, the goal step performs no scoring or budget consumption and emits no `goal` chunk. The gate covers every scorer: Mastra checks it before selecting a scorer, so a custom `goal.scorer` still needs a judge to resolve.
 
-By default the step uses a built-in LLM-as-judge scorer that returns `1` when the objective is achieved and `0` otherwise. Supply your own scorer with `goal.scorer` to customize judging.
+Effective settings resolve as per-objective record value, then agent `goal` config, then a built-in default (`maxRuns` `50` and the default judge prompt).
+
+### Judge and scorer
+
+`goal.judge` and `goal.scorer` work at different levels. `goal.scorer` is the evaluation pipeline that produces the score the loop gates on. `goal.judge` is the model the default pipeline calls to reach that score.
+
+Omit `scorer` and Mastra builds a default LLM-as-judge scorer, which returns `1` when the objective is achieved and `0` otherwise. Configure it with these settings:
+
+- `goal.judge`: The model that decides whether the objective is met.
+- `goal.prompt`: Extra instructions for the judge. Defaults to the built-in goal judge prompt.
+- `goal.tools`: Read-only verification tools the judge can call before deciding, so it can confirm the work instead of grading the agent's text alone.
+- `goal.maxSteps`: Step budget for the judge's own agentic loop. Defaults to `5`.
+
+Pass `goal.scorer` to replace the pipeline with your own [scorer](/reference/evals/create-scorer), either a scorer instance or a registered scorer id. The custom scorer brings its own judging, so `goal.prompt`, `goal.tools`, and `goal.maxSteps` no longer apply, and Mastra stops resolving the judge model for judging. A `goal.judge` resolver function still runs, and its return value is discarded.
+
+Configure the default scorer with `judge`, `maxRuns`, and `prompt`:
 
 ```typescript title="src/mastra/agents/worker.ts"
 const worker = new Agent({
@@ -99,7 +114,15 @@ const worker = new Agent({
 })
 ```
 
-Each evaluation emits a typed `goal` stream chunk (`GoalEvaluationPayload`: `objective`, `iteration`, `maxRuns`, `passed`, `status`, `results`, `reason`, `duration`, `timedOut`, `maxRunsReached`, `suppressFeedback`) so a UI can show goal progress mid-run.
+To hand the decision to your own scorer, pass it as `scorer` and keep `judge` set, because the activation gate still applies:
+
+```typescript oxfmt:false
+goal: {
+  judge: '__GATEWAY_OPENAI_MODEL_MINI__',
+  // Replaces the built-in judge pipeline. `prompt`, `tools`, and `maxSteps` no longer apply.
+  scorer: 'tests-pass',
+}
+```
 
 ## Managing the objective
 

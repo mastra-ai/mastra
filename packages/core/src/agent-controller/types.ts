@@ -626,6 +626,7 @@ export interface ActiveSubagentState {
   toolCalls: Array<{ name: string; isError: boolean }>;
   textDelta: string;
   status: 'running' | 'completed' | 'error';
+  startedAt?: number;
   durationMs?: number;
   result?: string;
 }

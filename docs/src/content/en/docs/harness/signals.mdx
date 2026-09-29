@@ -231,7 +231,7 @@ export const agentsMdReminderProcessor: Processor = {
 }
 ```
 
-Reactive signals default to `tagName: 'system-reminder'`, so the model receives this context as
+Reactive signals default to `tagName: 'system-reminder'`. The model receives this context as
 
 ```xml
 <system-reminder type="dynamic-agents-md" path="packages/ui/AGENTS.md">
@@ -424,7 +424,7 @@ export const mastra = new Mastra({
 })
 ```
 
-`RedisStreamsPubSub` implements both the event delivery contract and distributed leasing, so a single backend handles cross-instance signal delivery and lease ownership. Vercel's managed Redis integration and Upstash Redis both work well. For more on when a distributed pub/sub is needed, see the [PubSub guide](/docs/server/pubsub) and the [`RedisStreamsPubSub` reference](/reference/pubsub/redis-streams).
+`RedisStreamsPubSub` implements both the event delivery contract and distributed leasing. A single backend handles cross-instance signal delivery and lease ownership. Vercel's managed Redis integration and Upstash Redis both work well. For more on when a distributed pub/sub is needed, see the [PubSub guide](/docs/server/pubsub) and the [`RedisStreamsPubSub` reference](/reference/pubsub/redis-streams).
 
 ## Compatibility and APIs
 
