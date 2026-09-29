@@ -1,81 +1,13 @@
 import { Agent } from '../agent';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '../agent/goal/objective';
 import type { AgentConfig } from '../agent/types';
-import {
-  CyberRefusalHandler,
-  isBadRequestError,
-  PrefillErrorHandler,
-  ProviderHistoryCompat,
-  StreamErrorRetryProcessor,
-} from '../processors';
+import { CyberRefusalHandler } from '../processors';
 import { DEFAULT_MAX_PROCESSOR_RETRIES } from '../processors/retry-budget';
 import { defaultStabilityErrorProcessors } from '../processors/stability-defaults';
 import { TaskSignalProvider } from '../signals';
 import { LocalFilesystem, LocalSandbox, Workspace } from '../workspace';
 
 export { buildBasePrompt, type PromptContext } from './prompt';
-
-/**
- * Retry policy for transient network resets (e.g. provider sockets dropping
- * mid-stream). Applied centrally to every model call via the default
- * `StreamErrorRetryProcessor` so all modes/subagents benefit from a short wait
- * before retrying an ECONNRESET. Delay uses exponential backoff:
- * `initialDelay * 2^retryCount`, capped at `maxDelay`.
- */
-const ECONNRESET_MAX_RETRIES = 2;
-const ECONNRESET_RETRY_INITIAL_DELAY_MS = 1000;
-const ECONNRESET_RETRY_MAX_DELAY_MS = 30000;
-
-const ECONNRESET_MESSAGE_PATTERN = /econnreset|socket hang up/i;
-
-/**
- * Matcher for transient network-reset failures. Checks the immediate error for
- * an `ECONNRESET` code or a `socket hang up` message. Cause-chain traversal is
- * handled by `StreamErrorRetryProcessor.isRetryableStreamError`, which calls
- * each matcher at every level of the cause chain.
- */
-function isECONNRESETError(error: unknown): boolean {
-  if (!error) return false;
-
-  const code = typeof error === 'object' && 'code' in error ? error.code : undefined;
-  if (typeof code === 'string' && code.toUpperCase() === 'ECONNRESET') return true;
-
-  const message = error instanceof Error ? error.message : undefined;
-  if (typeof message === 'string' && ECONNRESET_MESSAGE_PATTERN.test(message)) return true;
-
-  return false;
-}
-
-/**
- * Builds the portable default error processors: provider-history compatibility,
- * prefill-error recovery, and cyber-refusal recovery first, then catch-all
- * stream retries with specialized ECONNRESET and bad-request policies.
- */
-function defaultErrorProcessors(): NonNullable<AgentConfig['errorProcessors']> {
-  return [
-    // Repairs must run before StreamErrorRetryProcessor: error processors
-    // short-circuit on the first `retry: true`, and the retry below claims the
-    // same errors these repair. A blind retry first resends the unrepaired
-    // request, and all of these decline once `retryCount > 0`.
-    new ProviderHistoryCompat(),
-    new PrefillErrorHandler(),
-    new CyberRefusalHandler(),
-    new StreamErrorRetryProcessor({
-      retryUnknownErrors: true,
-      maxRetries: 2,
-      delayMs: 3000,
-      matchers: [
-        { match: isBadRequestError, maxRetries: 1, delayMs: 2000 },
-        {
-          match: isECONNRESETError,
-          maxRetries: ECONNRESET_MAX_RETRIES,
-          delayMs: ({ retryCount }) =>
-            Math.min(ECONNRESET_RETRY_INITIAL_DELAY_MS * Math.pow(2, retryCount), ECONNRESET_RETRY_MAX_DELAY_MS),
-        },
-      ],
-    }),
-  ];
-}
 
 /**
  * Builds a portable default workspace from core's local primitives, rooted at
@@ -124,6 +56,7 @@ export interface CreateCodingAgentConfig extends AgentConfig {
  *   {@link CyberRefusalHandler}, which retries once after an Anthropic cyber
  *   classifier stop.
  * - `errorProcessors` is passed through when provided; otherwise it defaults to
+ *   a {@link CyberRefusalHandler} followed by
  *   {@link defaultStabilityErrorProcessors} — provider-history compatibility,
  *   then prefill-error recovery, then catch-all stream retries with specialized
  *   ECONNRESET/bad-request policies. The repairs run before the retry because
@@ -132,9 +65,7 @@ export interface CreateCodingAgentConfig extends AgentConfig {
  *   agent's defaults, this stack also retries unmatched errors, which is the
  *   portable coding agent's long-standing behavior. A provided list is merged
  *   with the shared defaults by the agent, like any `errorProcessors` list;
- *   `errorProcessorDefaults: false` runs only the provided list, or none. When
- *   the caller configures `outputProcessors`, cyber-refusal recovery is added
- *   as a `CyberRefusalHandler` ahead of the shared defaults.
+ *   `errorProcessorDefaults: false` runs only the provided list, or none.
  * - `maxProcessorRetries` defaults to {@link DEFAULT_MAX_PROCESSOR_RETRIES} so
  *   the default output-lane cyber-refusal retry has a budget. Output-step
  *   retries only read this option, so the implicit error-lane cap does not
