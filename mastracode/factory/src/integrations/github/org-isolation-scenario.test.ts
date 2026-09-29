@@ -214,6 +214,7 @@ const stateSigner = {
 
 const materializeRepo = vi.fn(async (_opts: any) => {});
 const commitAll = vi.fn(async () => ({ committed: true }));
+const addCommitCoAuthorBeforePush = vi.fn(async () => {});
 const pushBranch = vi.fn(async () => {});
 const createPullRequest = vi.fn(async () => ({ url: 'https://github.com/octo/hello/pull/1' }));
 /** DI-injected sandbox callback stub — presence signals "configured". */
@@ -235,6 +236,7 @@ vi.mock('./sandbox', () => {
   }
   return {
     materializeRepo: (opts: any) => materializeRepo(opts),
+    addCommitCoAuthorBeforePush: (...args: any[]) => addCommitCoAuthorBeforePush(...(args as [])),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
     createPullRequest: (...args: any[]) => createPullRequest(...(args as [])),
@@ -377,6 +379,7 @@ beforeEach(() => {
   bootstrapSucceeds = true;
   mintCount = 0;
   materializeRepo.mockClear();
+  addCommitCoAuthorBeforePush.mockClear();
   commitAll.mockClear();
   pushBranch.mockClear();
   createPullRequest.mockClear();

@@ -3,6 +3,7 @@ import type {
   SourceControlRepository,
   SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
+import type { FactoryArtifactAttribution } from './artifact-attribution.js';
 import type { IntegrationConnection } from './connection.js';
 
 export interface InstallationInput {
@@ -81,6 +82,8 @@ export interface CreatePullRequestInput {
   draft?: boolean;
   /** End user the write should be attributed to, when the provider supports acting on a user's behalf. */
   actingUserId?: string;
+  /** Server-resolved provenance. This must never be populated from tool/client input. */
+  attribution: FactoryArtifactAttribution;
 }
 
 export interface UpdatePullRequestInput extends PullRequestRef {
@@ -88,6 +91,7 @@ export interface UpdatePullRequestInput extends PullRequestRef {
   body?: string | null;
   baseBranch?: string;
   state?: PullRequestState;
+  attribution?: FactoryArtifactAttribution;
 }
 
 export interface MergePullRequestInput extends PullRequestRef {
@@ -122,6 +126,7 @@ export interface ListPullRequestCommentsInput extends PullRequestRef {
 
 export interface CreatePullRequestCommentInput extends PullRequestRef {
   body: string;
+  attribution: FactoryArtifactAttribution;
 }
 
 export interface UpdatePullRequestCommentInput {
@@ -130,6 +135,7 @@ export interface UpdatePullRequestCommentInput {
   commentId: string;
   body: string;
   actingUserId?: string;
+  attribution: FactoryArtifactAttribution;
 }
 
 export interface DeletePullRequestCommentInput {
@@ -160,7 +166,7 @@ export interface ListReviewsInput extends PullRequestRef {
   cursor?: string;
 }
 
-type CreateReviewBase = PullRequestRef & { commitId?: string };
+type CreateReviewBase = PullRequestRef & { commitId?: string; attribution: FactoryArtifactAttribution };
 
 type ReviewSubmission = { event: 'approve'; body?: string } | { event: 'request-changes' | 'comment'; body: string };
 
@@ -172,12 +178,14 @@ export interface ReviewRef extends PullRequestRef {
 
 export interface UpdateReviewInput extends ReviewRef {
   body: string;
+  attribution?: FactoryArtifactAttribution;
 }
 
-export type SubmitReviewInput = ReviewRef & ReviewSubmission;
+export type SubmitReviewInput = ReviewRef & ReviewSubmission & { attribution: FactoryArtifactAttribution };
 
 export interface DismissReviewInput extends ReviewRef {
   message: string;
+  attribution?: FactoryArtifactAttribution;
 }
 
 export interface ReviewComment extends PullRequestComment {
@@ -199,6 +207,7 @@ export interface ListReviewCommentsInput extends PullRequestRef {
 
 interface CreateReviewCommentBase extends PullRequestRef {
   body: string;
+  attribution: FactoryArtifactAttribution;
 }
 
 export type CreateReviewCommentInput = CreateReviewCommentBase &

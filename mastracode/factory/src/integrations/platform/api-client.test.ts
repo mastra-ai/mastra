@@ -116,6 +116,29 @@ describe('PlatformApiClient', () => {
     expect(fetchImpl.mock.calls[0]?.[1]).not.toHaveProperty('credentials');
   });
 
+  it('marks server-attributed Factory writes without putting provenance in client input', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } }),
+      );
+
+    await client(fetchImpl).request(
+      'POST',
+      '/v1/server/github/repos/acme/app/pulls',
+      {},
+      {
+        actingUserId: 'user-42',
+        factoryAttributionApplied: true,
+      },
+    );
+
+    expect(fetchImpl.mock.calls[0]?.[1]?.headers).toMatchObject({
+      'x-acting-user-id': 'user-42',
+      'x-mastra-factory-attribution': 'applied',
+    });
+  });
+
   it('returns manual redirect locations without following them', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()

@@ -11,6 +11,7 @@ import type {
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
 import {
+  addCommitCoAuthorBeforePush,
   checkoutSessionBranch,
   configureGitIdentity,
   createPullRequest,
@@ -912,6 +913,43 @@ describe('pushRepositoryBranch', () => {
     expect(error).toBeInstanceOf(MaterializeError);
     expect(error.code).toBe('push-failed');
     expect(sandbox.calls).toHaveLength(0);
+  });
+});
+
+describe('addCommitCoAuthorBeforePush', () => {
+  it('amends only a local unpushed tip with the authenticated human trailer', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.endsWith('rev-parse HEAD')) return { ...OK, stdout: 'local-sha\n' };
+      if (script.includes('rev-parse --verify')) return { exitCode: 0, stdout: 'remote-sha\n', stderr: '' };
+      if (script.includes('log -1')) return { ...OK, stdout: 'Factory change\n' };
+      return OK;
+    });
+
+    await addCommitCoAuthorBeforePush(sandbox, '/workspace/hello', {
+      name: 'Ada Lovelace',
+      email: 'ada@example.test',
+    });
+
+    expect(sandbox.executions.at(-1)?.args).toEqual([
+      '-C',
+      '/workspace/hello',
+      'commit',
+      '--amend',
+      '--no-edit',
+      '--trailer',
+      'Co-authored-by: Ada Lovelace <ada@example.test>',
+    ]);
+  });
+
+  it('does not rewrite a tip that already matches its upstream', async () => {
+    const sandbox = new FakeSandbox(script => (script.includes('rev-parse') ? { ...OK, stdout: 'same-sha\n' } : OK));
+
+    await addCommitCoAuthorBeforePush(sandbox, '/workspace/hello', {
+      name: 'Ada Lovelace',
+      email: 'ada@example.test',
+    });
+
+    expect(sandbox.calls.some(call => call.includes('commit --amend'))).toBe(false);
   });
 });
 

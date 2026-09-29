@@ -1,3 +1,4 @@
+import type { FactoryArtifactAttribution } from './artifact-attribution.js';
 import type { IntegrationConnection } from './connection.js';
 
 export interface IntakeSource {
@@ -104,6 +105,8 @@ export interface CreateIntakeCommentInput extends GetIntakeIssueInput {
   body: string;
   /** End user the comment should be attributed to, when the provider supports acting on a user's behalf. */
   actingUserId?: string;
+  /** Server-resolved provenance required by source-control issue adapters. */
+  attribution?: FactoryArtifactAttribution;
 }
 
 export interface CreatedIntakeComment {

@@ -2,6 +2,10 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
 
+import {
+  appendArtifactAttributionFooter,
+  requireFactoryArtifactAttribution,
+} from '../../capabilities/artifact-attribution.js';
 import type { IntegrationConnection } from '../../capabilities/connection.js';
 import type {
   CreateIntakeCommentInput,
@@ -586,7 +590,11 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
     const resolved = await this.#resolveRequest(input);
     try {
       const issue = await resolved.context.api.getIssue(resolved.projectId, resolved.issueIid);
-      const note = await resolved.context.api.createNote(resolved.projectId, resolved.issueIid, input.body);
+      const note = await resolved.context.api.createNote(
+        resolved.projectId,
+        resolved.issueIid,
+        appendArtifactAttributionFooter(input.body, requireFactoryArtifactAttribution(input.attribution)),
+      );
       return { id: String(note.id), url: `${issue.web_url}#note_${note.id}` };
     } catch (error) {
       if (error instanceof GitLabApiError && error.status === 404) return null;

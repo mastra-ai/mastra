@@ -207,6 +207,7 @@ vi.mock('./subscriptions', () => ({
 
 const materializeRepo = vi.fn(async (_opts: any) => {});
 const commitAll = vi.fn(async () => ({ committed: true }));
+const addCommitCoAuthorBeforePush = vi.fn(async () => {});
 // pushBranch is overridable per-test so S2 can make it block on a deferred.
 let pushImpl: (...args: any[]) => Promise<void> = async () => {};
 const pushBranch = vi.fn((...args: any[]) => pushImpl(...args));
@@ -233,6 +234,7 @@ vi.mock('./sandbox', () => {
   }
   return {
     materializeRepo: (opts: any) => materializeRepo(opts),
+    addCommitCoAuthorBeforePush: (...args: any[]) => addCommitCoAuthorBeforePush(...(args as [])),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
     createPullRequest: (...args: any[]) => createPullRequest(...(args as [])),
@@ -381,6 +383,7 @@ beforeEach(() => {
   pushImpl = async () => {};
   sandboxCallback.mockClear();
   materializeRepo.mockClear();
+  addCommitCoAuthorBeforePush.mockClear();
   commitAll.mockClear();
   pushBranch.mockClear();
   createPullRequest.mockClear();

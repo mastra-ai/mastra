@@ -19,6 +19,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import { UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { Context } from 'hono';
+import { commitCoAuthor, resolveFactoryArtifactAttribution } from '../../capabilities/artifact-attribution.js';
 import type { RouteAuth } from '../../routes/route.js';
 import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '../../rules/types.js';
 import { requireExec } from '../../sandbox/materialization.js';
@@ -46,6 +47,7 @@ import type { GithubPatKind } from './pat.js';
 
 import { reclaimDeletedSessionSandbox } from './sandbox-release.js';
 import {
+  addCommitCoAuthorBeforePush,
   commitAll,
   isValidGitRef as isValidGitRefSandbox,
   MaterializeError,
@@ -56,6 +58,7 @@ import type { GitIdentity } from './sandbox.js';
 
 const sessionOperationLocks = new Map<string, Promise<unknown>>();
 const USER_SESSION_BRANCH_PREFIX = 'user/session-';
+const FACTORY_COMMIT_IDENTITY: GitIdentity = { name: 'Mastra Factory', email: 'noreply@mastra.ai' };
 // lowercase only (crypto.randomUUID output), so casing cannot fork one logical ID into two sessions
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 /**
@@ -1038,12 +1041,6 @@ async function loadOrgProject(options: {
   return { project, orgId, userId };
 }
 
-/** Derive a commit/author identity from the authenticated host user. */
-function identityFromUser(user: unknown): GitIdentity {
-  const u = user as { name?: string; email?: string } | null | undefined;
-  return { name: u?.name ?? null, email: u?.email ?? null };
-}
-
 /** Map a sandbox/setup-command error to an actionable HTTP response. */
 function gitErrorResponse(c: Context, err: unknown) {
   if (err instanceof SetupCommandError) {
@@ -1486,7 +1483,7 @@ function buildProjectGitRoutes({
               sessionSandbox,
               workdir,
               body.message as string,
-              identityFromUser(await auth.ensureUser(loose(c))),
+              FACTORY_COMMIT_IDENTITY,
             );
             if (result.committed) {
               await emitAudit?.({
@@ -1566,6 +1563,19 @@ function buildProjectGitRoutes({
               repositoryId: project.repository.id,
             });
             if (!access.authorization) throw new Error('Repository access did not include a bearer token.');
+            const authenticatedUser = (await auth.ensureUser(loose(c))) as
+              | { name?: string; email?: string }
+              | undefined;
+            const attribution = resolveFactoryArtifactAttribution({
+              user: authenticatedUser,
+              userId,
+              session: {
+                role: 'manual',
+                workItemRef: project.id,
+                runId: sessionWorkspace.session.sessionId,
+              },
+            });
+            await addCommitCoAuthorBeforePush(sessionSandbox, workdir, commitCoAuthor(attribution));
             await pushBranch(sessionSandbox, workdir, branch, access.authorization.token, project.repository.slug);
             await emitAudit?.({
               context: loose(c),
@@ -1629,6 +1639,8 @@ function buildProjectGitRoutes({
 
         try {
           return await withSessionOperationLock(sessionWorkspace.session.sessionId, async () => {
+            const authenticatedUser = (await auth.ensureUser(loose(c))) as
+              { name?: string; email?: string } | undefined;
             const result = await github.versionControl.createPullRequest({
               connection: {
                 type: 'app-installation',
@@ -1640,6 +1652,15 @@ function buildProjectGitRoutes({
               title,
               body: prBody,
               actingUserId: userId,
+              attribution: resolveFactoryArtifactAttribution({
+                user: authenticatedUser,
+                userId,
+                session: {
+                  role: 'manual',
+                  workItemRef: project.id,
+                  runId: sessionWorkspace.session.sessionId,
+                },
+              }),
             });
             await emitAudit?.({
               context: loose(c),

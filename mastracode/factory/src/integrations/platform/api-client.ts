@@ -81,7 +81,7 @@ export class PlatformApiClient {
     method: string,
     path: string,
     body?: unknown,
-    options?: { signal?: AbortSignal; actingUserId?: string },
+    options?: { signal?: AbortSignal; actingUserId?: string; factoryAttributionApplied?: boolean },
   ): Promise<T> {
     const response = await this.#send(method, path, body, options);
     if (!response.ok) {
@@ -126,18 +126,22 @@ export class PlatformApiClient {
     method: string,
     path: string,
     body?: unknown,
-    options?: { signal?: AbortSignal; actingUserId?: string },
+    options?: { signal?: AbortSignal; actingUserId?: string; factoryAttributionApplied?: boolean },
     redirect?: RequestInit['redirect'],
   ): Promise<Response> {
     const headers: Record<string, string> = {
       accept: 'application/json',
       authorization: `Bearer ${this.#accessToken}`,
     };
-    // Acting end-user for platform GitHub writes: the platform resolves this
-    // user's GitHub OAuth connection (org-scoped) so issues/PRs are authored
-    // by the human instead of the App bot. Ignored by older platforms.
+    // The platform uses this server-resolved id for visible attribution. It is
+    // not authorization and Factory writes remain installation-authored.
     if (options?.actingUserId) {
       headers['x-acting-user-id'] = options.actingUserId;
+    }
+    // Factory already rendered its provider-neutral provenance block/footer.
+    // API-key authentication is what makes this marker trustworthy upstream.
+    if (options?.factoryAttributionApplied) {
+      headers['x-mastra-factory-attribution'] = 'applied';
     }
     const timeoutSignal = AbortSignal.timeout(15_000);
     const init: RequestInit = {

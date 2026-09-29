@@ -6,6 +6,14 @@ import { createStateSigner } from '../../state-signing.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { GithubIntegration, normalizePrivateKey } from './integration.js';
 
+const ATTRIBUTION = {
+  kind: 'human' as const,
+  userId: 'user-42',
+  displayName: 'Ada Lovelace',
+  email: 'ada@example.test',
+  session: { role: 'work', workItemRef: 'FACT-276', runId: 'run-42' },
+};
+
 // Real RSA key so we can prove Node's PEM decoder accepts the normalized
 // output (the failure mode is `error:1E08010C:DECODER routines::unsupported`).
 const { privateKey: pem } = generateKeyPairSync('rsa', {
@@ -395,8 +403,17 @@ describe('GithubIntegration capability surface', () => {
       comments: [{ author: 'grace', body: 'Looking now' }],
     });
     await expect(
-      github.intake.createComment({ connection, sourceId: 'acme/app', issueId: '12', body: 'Done' }),
+      github.intake.createComment({
+        connection,
+        sourceId: 'acme/app',
+        issueId: '12',
+        body: 'Done',
+        attribution: ATTRIBUTION,
+      }),
     ).resolves.toEqual({ id: '99', url: 'https://github.com/acme/app/issues/12#issuecomment-99' });
+    expect(createComment).toHaveBeenCalledWith(
+      expect.objectContaining({ body: 'Done\n\n— via Mastra Factory · actor: Ada Lovelace' }),
+    );
   });
 
   it('maps byType stateTypes to open/closed and updates the GitHub issue', async () => {
@@ -531,6 +548,7 @@ describe('GithubIntegration capability surface', () => {
         baseBranch: 'main',
         headBranch: 'feat/intake',
         draft: true,
+        attribution: ATTRIBUTION,
       }),
     ).resolves.toMatchObject({ id: '34' });
     await github.versionControl.updatePullRequest({ ...ref, title: 'Ship all intake', body: null });
@@ -542,7 +560,14 @@ describe('GithubIntegration capability surface', () => {
     });
 
     expect(create).toHaveBeenCalledWith(
-      expect.objectContaining({ owner: 'acme', repo: 'app', base: 'main', head: 'feat/intake', draft: true }),
+      expect.objectContaining({
+        owner: 'acme',
+        repo: 'app',
+        base: 'main',
+        head: 'feat/intake',
+        draft: true,
+        body: expect.stringContaining('Actor: Ada Lovelace (user-42)'),
+      }),
     );
     expect(update).toHaveBeenNthCalledWith(1, expect.objectContaining({ pull_number: 34, body: '' }));
     expect(update).toHaveBeenNthCalledWith(2, expect.objectContaining({ pull_number: 34, state: 'closed' }));
@@ -568,11 +593,17 @@ describe('GithubIntegration capability surface', () => {
     };
     vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ issues, pulls } as any);
     const connection = { type: 'app-installation' as const, installationId: 7 };
-    const ref = { connection, sourceId: 'acme/app', pullRequestId: '34' };
+    const ref = { connection, sourceId: 'acme/app', pullRequestId: '34', attribution: ATTRIBUTION };
 
     await expect(github.versionControl.listComments(ref)).resolves.toMatchObject({ comments: [{ id: '91' }] });
     await github.versionControl.createComment({ ...ref, body: 'Looks good' });
-    await github.versionControl.updateComment({ connection, sourceId: 'acme/app', commentId: '91', body: 'Updated' });
+    await github.versionControl.updateComment({
+      connection,
+      sourceId: 'acme/app',
+      commentId: '91',
+      body: 'Updated',
+      attribution: ATTRIBUTION,
+    });
     await github.versionControl.deleteComment({ connection, sourceId: 'acme/app', commentId: '91' });
     await expect(github.versionControl.listReviewComments(ref)).resolves.toMatchObject({
       comments: [{ id: '91', path: 'src/app.ts', line: 12, side: 'right' }],
@@ -598,6 +629,9 @@ describe('GithubIntegration capability surface', () => {
       expect.objectContaining({ pull_number: 34, commit_id: 'abc123', path: 'src/app.ts', line: 12, side: 'RIGHT' }),
     );
     expect(pulls.createReplyForReviewComment).toHaveBeenCalledWith(expect.objectContaining({ comment_id: 91 }));
+    expect(issues.createComment).toHaveBeenCalledWith(
+      expect.objectContaining({ body: expect.stringContaining('— via Mastra Factory · actor: Ada Lovelace') }),
+    );
   });
 
   it('implements reviews and reviewer requests through VersionControl', async () => {
@@ -627,7 +661,7 @@ describe('GithubIntegration capability surface', () => {
     };
     vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ pulls } as any);
     const connection = { type: 'app-installation' as const, installationId: 7 };
-    const ref = { connection, sourceId: 'acme/app', pullRequestId: '34' };
+    const ref = { connection, sourceId: 'acme/app', pullRequestId: '34', attribution: ATTRIBUTION };
 
     await expect(github.versionControl.listReviews(ref)).resolves.toMatchObject({ reviews: [{ state: 'approved' }] });
     await expect(github.versionControl.getReview({ ...ref, reviewId: '55' })).resolves.toMatchObject({ id: '55' });
@@ -651,7 +685,12 @@ describe('GithubIntegration capability surface', () => {
       teams: [],
     });
 
-    expect(pulls.createReview).toHaveBeenCalledWith(expect.objectContaining({ event: 'APPROVE' }));
+    expect(pulls.createReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'APPROVE',
+        body: expect.stringContaining('— via Mastra Factory · actor: Ada Lovelace'),
+      }),
+    );
     expect(pulls.dismissReview).toHaveBeenCalledWith(expect.objectContaining({ review_id: 55 }));
   });
 });

@@ -11,6 +11,13 @@ import {
   GitLabIntegration,
 } from './integration.js';
 
+const ATTRIBUTION = {
+  kind: 'human' as const,
+  userId: 'user-42',
+  displayName: 'Ada Lovelace',
+  session: { role: 'work', workItemRef: 'FACT-276', runId: 'run-42' },
+};
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 }
@@ -297,6 +304,7 @@ describe('GitLabIntegration', () => {
       sourceId,
       issueId: '42',
       body: 'done',
+      attribution: ATTRIBUTION,
     });
     const updated = await gitlab.intake.updateIssue({
       connection: { type: 'oauth', accessToken: 'group-token' },
@@ -314,6 +322,9 @@ describe('GitLabIntegration', () => {
       comments: [{ author: 'Lin', body: 'ship it' }],
     });
     expect(comment).toEqual({ id: '3', url: 'https://gitlab.com/mastra/platform/-/issues/42#note_3' });
+    expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body))).toEqual({
+      body: 'done\n\n— via Mastra Factory · actor: Ada Lovelace',
+    });
     expect(updated).toMatchObject({ state: 'closed', stateType: 'completed' });
   });
 

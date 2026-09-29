@@ -300,6 +300,14 @@ function factoryRequestContext(input: {
   const { session, binding, userId, orgId } = input;
   const requestContext = new RequestContext();
   requestContext.set('user', { workosId: userId, organizationId: orgId });
+  if (userId === 'factory-rule-dispatcher') {
+    requestContext.set('factoryArtifactTrigger', { source: 'factory rule', id: binding.id });
+  }
+  requestContext.set('factoryArtifactSession', {
+    role: binding.role,
+    workItemRef: binding.workItemId,
+    runId: binding.threadId,
+  });
   const modeId = session.mode.get();
   requestContext.set('controller', {
     state: session.state.get(),

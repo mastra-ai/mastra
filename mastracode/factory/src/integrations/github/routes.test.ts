@@ -467,6 +467,7 @@ const materializeRepo = vi.fn(async (opts: { onProgress?: (e: any) => void }) =>
 const runSetupCommand = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
 const runTeardownCommand = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
 const commitAll = vi.fn(async () => ({ committed: true }));
+const addCommitCoAuthorBeforePush = vi.fn(async () => {});
 const pushBranch = vi.fn(async () => {});
 const createPullRequest = vi.fn(async (_input: CreatePullRequestInput) => ({
   url: 'https://github.com/octo/hello/pull/1',
@@ -498,6 +499,7 @@ vi.mock('./sandbox', () => {
     runSetupCommand: (sb: any, worktreePath: string, command: string) => runSetupCommand(sb, worktreePath, command),
     runTeardownCommand: (sb: any, worktreePath: string, command: string, options?: { timeoutMs?: number }) =>
       runTeardownCommand(sb, worktreePath, command, options),
+    addCommitCoAuthorBeforePush: (...args: any[]) => addCommitCoAuthorBeforePush(...(args as [])),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
     createPullRequest: (input: any) => createPullRequest(input),
@@ -645,7 +647,7 @@ subscriptionsRef = githubSignalSubscriptions;
 
 // ── Test harness ─────────────────────────────────────────────────────────
 function buildApp(
-  user: { workosId: string; organizationId?: string } | null,
+  user: { workosId: string; organizationId?: string; name?: string; email?: string } | null,
   options: {
     controller?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'];
     memorySettings?: Parameters<typeof buildGithubRoutes>[0]['memorySettings'];
@@ -731,6 +733,7 @@ beforeEach(() => {
   sandboxCallback.mockClear();
   runSetupCommand.mockClear();
   runTeardownCommand.mockClear();
+  addCommitCoAuthorBeforePush.mockClear();
   commitAll.mockClear();
   pushBranch.mockClear();
   createPullRequest.mockClear();
@@ -2430,6 +2433,10 @@ describe('commit route', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ committed: true });
     expect((commitAll.mock.calls[0] as unknown as any[])[1]).toBe('/workspace/worktrees/feat-x');
+    expect((commitAll.mock.calls[0] as unknown as any[])[3]).toEqual({
+      name: 'Mastra Factory',
+      email: 'noreply@mastra.ai',
+    });
   });
 });
 
@@ -2453,10 +2460,14 @@ describe('push route', () => {
 
   it('uses repository-scoped access to push the branch', async () => {
     seedMaterializedSession();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/push', {
-      branch: 'feat/x',
-      sessionId: 'session-1',
-    });
+    const res = await postJson(
+      buildApp({ workosId: 'u1', name: 'Ada Lovelace', email: 'ada@example.com' }),
+      '/web/github/projects/p1/push',
+      {
+        branch: 'feat/x',
+        sessionId: 'session-1',
+      },
+    );
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ pushed: true, branch: 'feat/x' });
     expect(githubStub.versionControl.getRepositoryAccess).toHaveBeenCalledWith({
@@ -2464,6 +2475,11 @@ describe('push route', () => {
       repositoryId: 'repository-99',
     });
     expect(githubStub.mintInstallationToken).not.toHaveBeenCalled();
+    expect(addCommitCoAuthorBeforePush).toHaveBeenCalledWith(
+      expect.anything(),
+      '/workspace/worktrees/feat-x',
+      { name: 'Ada Lovelace', email: 'ada@example.com' },
+    );
     expect(pushBranch).toHaveBeenCalledOnce();
     // pushBranch(sandbox, workdir, branch, token, repoFullName)
     const call = pushBranch.mock.calls[0] as unknown as any[];
@@ -2513,6 +2529,12 @@ describe('pr route', () => {
       title: 'My PR',
       body: 'Adds a thing',
       actingUserId: 'u1',
+      attribution: {
+        kind: 'human',
+        userId: 'u1',
+        displayName: 'u1',
+        session: { role: 'manual', workItemRef: 'p1', runId: 'session-1' },
+      },
     });
   });
 

@@ -847,6 +847,59 @@ export async function pushRepositoryBranch(
   );
 }
 
+/**
+ * Add the authenticated human as a co-author to the local commit that is
+ * about to be pushed. This intentionally runs before the credentialed push:
+ * rewriting a provider branch after opening a PR can overwrite a concurrent
+ * remote update. Already-pushed tips and duplicate trailers are left alone.
+ */
+export async function addCommitCoAuthorBeforePush(
+  sandbox: ExecutableSandbox,
+  workdir: string,
+  coAuthor: { name: string; email: string } | undefined,
+): Promise<void> {
+  if (!coAuthor) return;
+  const name = coAuthor.name.replace(/[\r\n<>]+/g, ' ').trim();
+  const email = coAuthor.email.trim();
+  if (!name || !/^[^\s<>@]+@[^\s<>@]+$/.test(email)) return;
+
+  const head = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', 'HEAD']);
+  if (head.exitCode !== 0 || !head.stdout.trim()) return;
+  const upstream = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', '--verify', '@{upstream}']);
+  if (upstream.exitCode === 0 && upstream.stdout.trim() === head.stdout.trim()) return;
+  if (upstream.exitCode === 0 && upstream.stdout.trim()) {
+    const fastForward = await execute(sandbox, 'git', [
+      '-C',
+      workdir,
+      'merge-base',
+      '--is-ancestor',
+      upstream.stdout.trim(),
+      head.stdout.trim(),
+    ]);
+    if (fastForward.exitCode !== 0) {
+      throw new MaterializeError('Refusing to rewrite a commit whose upstream branch has diverged.', 'push-failed');
+    }
+  }
+
+  const message = await execute(sandbox, 'git', ['-C', workdir, 'log', '-1', '--format=%B']);
+  if (message.exitCode !== 0) return;
+  const escapedEmail = email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (new RegExp(`^Co-authored-by:.*<${escapedEmail}>\\s*$`, 'im').test(message.stdout)) return;
+
+  const amend = await execute(sandbox, 'git', [
+    '-C',
+    workdir,
+    'commit',
+    '--amend',
+    '--no-edit',
+    '--trailer',
+    `Co-authored-by: ${name} <${email}>`,
+  ]);
+  if (amend.exitCode !== 0) {
+    throw new MaterializeError(`Failed to add commit co-author: ${amend.stderr.trim()}`, 'commit-failed');
+  }
+}
+
 export interface CommitResult {
   /** True when a commit was created; false when there was nothing to commit. */
   committed: boolean;

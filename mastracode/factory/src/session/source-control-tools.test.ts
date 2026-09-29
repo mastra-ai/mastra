@@ -7,9 +7,26 @@ import type { AuditAgentEmitter } from '../storage/domains/audit/domain.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
 import { createSourceControlTools } from './source-control-tools.js';
 
-function requestContext({ orgId = 'org-1', userId = 'user-1' } = {}) {
+const ATTRIBUTION = {
+  kind: 'human' as const,
+  userId: 'user-1',
+  displayName: 'Ada Lovelace',
+  email: 'ada@example.test',
+  session: { role: 'session', workItemRef: 'session-1', runId: 'thread-1' },
+};
+
+function requestContext({
+  orgId = 'org-1',
+  userId = 'user-1',
+  trigger,
+}: { orgId?: string; userId?: string; trigger?: { source: string; id: string } } = {}) {
   const requestContext = new RequestContext();
-  requestContext.set('user', { workosId: userId, organizationId: orgId });
+  requestContext.set('user', {
+    workosId: userId,
+    organizationId: orgId,
+    name: 'Ada Lovelace',
+    email: 'ada@example.test',
+  });
   requestContext.set('controller', {
     resourceId: 'session-1',
     threadId: 'thread-1',
@@ -17,6 +34,14 @@ function requestContext({ orgId = 'org-1', userId = 'user-1' } = {}) {
     session: { id: 'session-1', ownerId: userId },
     getState: () => ({ factoryProjectId: 'project-1', projectRepositoryId: 'repo-link-1' }),
   } as unknown as AgentControllerRequestContext);
+  if (trigger) {
+    requestContext.set('factoryArtifactTrigger', trigger);
+    requestContext.set('factoryArtifactSession', {
+      role: 'work',
+      workItemRef: 'FACT-276',
+      runId: 'run-automation-1',
+    });
+  }
   return requestContext;
 }
 
@@ -180,6 +205,7 @@ describe('createSourceControlTools', () => {
       connection: { type: 'oauth', accessToken: 'server-opaque-connection' },
       sourceId: 'acme/repo',
       actingUserId: 'user-1',
+      attribution: ATTRIBUTION,
       title: 'Ship it',
       body: 'Body',
       baseBranch: 'main',
@@ -188,6 +214,28 @@ describe('createSourceControlTools', () => {
     expect(setup.emitAgent).toHaveBeenCalledWith(
       expect.objectContaining({
         input: expect.objectContaining({ action: 'factory.agent.pr_opened' }),
+      }),
+    );
+  });
+
+  it('uses trusted dispatcher context for automation attribution', async () => {
+    const setup = await fixture();
+    const tools = createSourceControlTools({
+      requestContext: requestContext({ trigger: { source: 'factory rule', id: 'rule-42' } }),
+      providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
+      audit: setup.audit,
+    });
+
+    await (tools.source_control_create_change_request!.execute as any)({ title: 'Automated update' });
+
+    expect(setup.createPullRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attribution: {
+          kind: 'automation',
+          source: 'factory rule',
+          id: 'rule-42',
+          session: { role: 'work', workItemRef: 'FACT-276', runId: 'run-automation-1' },
+        },
       }),
     );
   });
@@ -218,6 +266,7 @@ describe('createSourceControlTools', () => {
       connection: { type: 'oauth', accessToken: 'server-opaque-connection' },
       sourceId: 'acme/repo',
       actingUserId: 'user-1',
+      attribution: ATTRIBUTION,
       pullRequestId: '17',
       body: 'Please cover this branch.',
       commitId: 'abc',
@@ -229,6 +278,7 @@ describe('createSourceControlTools', () => {
       connection: { type: 'oauth', accessToken: 'server-opaque-connection' },
       sourceId: 'acme/repo',
       actingUserId: 'user-1',
+      attribution: ATTRIBUTION,
       pullRequestId: '17',
       body: 'Addressed.',
       replyToId: 'discussion-note-1',

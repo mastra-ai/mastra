@@ -6,6 +6,12 @@ import type { GitLabDiscussionPosition, GitLabMergeRequest, GitLabNote } from '.
 import { buildGitLabVersionControl } from './version-control.js';
 
 const CONNECTION = { type: 'oauth' as const, accessToken: 'glpat-secret' };
+const AUTOMATION_ATTRIBUTION = {
+  kind: 'automation' as const,
+  source: 'nightly sweep',
+  id: 'rule-42',
+  session: { role: 'work', workItemRef: 'FACT-276', runId: 'run-42' },
+};
 const POSITION: GitLabDiscussionPosition = {
   position_type: 'text',
   base_sha: 'base-sha',
@@ -278,6 +284,7 @@ describe('buildGitLabVersionControl', () => {
       baseBranch: 'main',
       headBranch: 'feature',
       draft: true,
+      attribution: AUTOMATION_ATTRIBUTION,
     });
     await result.versionControl.closePullRequest({
       connection: CONNECTION,
@@ -307,7 +314,7 @@ describe('buildGitLabVersionControl', () => {
       sourceBranch: 'feature',
       targetBranch: 'main',
       title: 'Draft: Add feature',
-      description: 'Details',
+      description: expect.stringContaining('Trigger: nightly sweep · rule-42'),
     });
     expect(update).toHaveBeenCalledWith('acme/app', 17, {
       title: undefined,
@@ -369,6 +376,7 @@ describe('buildGitLabVersionControl', () => {
         sourceId: 'acme/app',
         pullRequestId: '17',
         body: 'New comment',
+        attribution: AUTOMATION_ATTRIBUTION,
       }),
     ).resolves.toMatchObject({ id: '17:92', body: 'New comment' });
     await result.versionControl.updateComment({
@@ -376,6 +384,7 @@ describe('buildGitLabVersionControl', () => {
       sourceId: 'acme/app',
       commentId: '17:91',
       body: 'Updated comment',
+      attribution: AUTOMATION_ATTRIBUTION,
     });
     await result.versionControl.deleteComment({
       connection: CONNECTION,
@@ -383,7 +392,12 @@ describe('buildGitLabVersionControl', () => {
       commentId: '17:91',
     });
 
-    expect(result.api.updateMergeRequestNote).toHaveBeenCalledWith('acme/app', 17, 91, 'Updated comment');
+    expect(result.api.updateMergeRequestNote).toHaveBeenCalledWith(
+      'acme/app',
+      17,
+      91,
+      expect.stringContaining('— via Mastra Factory · trigger: nightly sweep rule-42'),
+    );
     expect(result.api.deleteMergeRequestNote).toHaveBeenCalledWith('acme/app', 17, 91);
     await expect(
       result.versionControl.updateComment({
@@ -426,8 +440,12 @@ describe('buildGitLabVersionControl', () => {
         event: 'approve',
         body: ' Approved with note ',
         commitId: 'head-sha',
+        attribution: AUTOMATION_ATTRIBUTION,
       }),
-    ).resolves.toMatchObject({ state: 'approved', body: 'Approved with note' });
+    ).resolves.toMatchObject({
+      state: 'approved',
+      body: expect.stringContaining('— via Mastra Factory · trigger: nightly sweep rule-42'),
+    });
     await expect(
       result.versionControl.submitReview({
         connection: CONNECTION,
@@ -436,12 +454,27 @@ describe('buildGitLabVersionControl', () => {
         reviewId: '17:pending',
         event: 'comment',
         body: ' Reviewed ',
+        attribution: AUTOMATION_ATTRIBUTION,
       }),
-    ).resolves.toMatchObject({ id: '17:comment:94', state: 'commented', body: 'Reviewed' });
+    ).resolves.toMatchObject({
+      id: '17:comment:94',
+      state: 'commented',
+      body: expect.stringContaining('— via Mastra Factory · trigger: nightly sweep rule-42'),
+    });
 
     expect(approve).toHaveBeenCalledWith('acme/app', 17, 'head-sha');
-    expect(createNote).toHaveBeenNthCalledWith(1, 'acme/app', 17, 'Approved with note');
-    expect(createNote).toHaveBeenNthCalledWith(2, 'acme/app', 17, 'Reviewed');
+    expect(createNote).toHaveBeenNthCalledWith(
+      1,
+      'acme/app',
+      17,
+      expect.stringContaining('— via Mastra Factory · trigger: nightly sweep rule-42'),
+    );
+    expect(createNote).toHaveBeenNthCalledWith(
+      2,
+      'acme/app',
+      17,
+      expect.stringContaining('— via Mastra Factory · trigger: nightly sweep rule-42'),
+    );
     expect(approve.mock.invocationCallOrder[0]!).toBeLessThan(createNote.mock.invocationCallOrder[0]!);
   });
 
@@ -551,6 +584,7 @@ describe('buildGitLabVersionControl', () => {
         side: 'right',
         startLine: 40,
         startSide: 'right',
+        attribution: AUTOMATION_ATTRIBUTION,
       }),
     ).resolves.toMatchObject({
       id: '17:discussion-1:201',
@@ -560,7 +594,7 @@ describe('buildGitLabVersionControl', () => {
       commitId: 'head-sha',
     });
     expect(createDiscussion).toHaveBeenCalledWith('acme/app', 17, {
-      body: 'Please revise',
+      body: expect.stringContaining('— via Mastra Factory · trigger: nightly sweep rule-42'),
       commitId: 'head-sha',
       position: {
         position_type: 'text',

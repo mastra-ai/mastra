@@ -29,6 +29,11 @@ import type { MastraWorker } from '@mastra/core/worker';
 import { createAppAuth } from '@octokit/auth-app';
 import { Octokit } from '@octokit/rest';
 
+import {
+  appendArtifactAttributionFooter,
+  appendPullRequestAttribution,
+  requireFactoryArtifactAttribution,
+} from '../../capabilities/artifact-attribution.js';
 import type { IntegrationConnection } from '../../capabilities/connection.js';
 import type {
   CreateIntakeCommentInput,
@@ -765,7 +770,7 @@ export class GithubIntegration implements FactoryIntegration {
         owner: parts.owner,
         repo: parts.repo,
         issue_number: issueNumber,
-        body: input.body,
+        body: appendArtifactAttributionFooter(input.body, requireFactoryArtifactAttribution(input.attribution)),
       });
       return { id: String(data.id), url: data.html_url };
     } catch (err) {
@@ -816,7 +821,7 @@ export class GithubIntegration implements FactoryIntegration {
     const { data } = await octokit.pulls.create({
       ...parts,
       title: input.title,
-      body: input.body,
+      body: appendPullRequestAttribution(input.body, input.attribution),
       base: input.baseBranch,
       head: input.headBranch,
       draft: input.draft,
@@ -830,7 +835,10 @@ export class GithubIntegration implements FactoryIntegration {
       ...parts,
       pull_number: requirePullRequestNumber(input.pullRequestId),
       title: input.title,
-      body: input.body === null ? '' : input.body,
+      body:
+        input.body === undefined
+          ? undefined
+          : appendPullRequestAttribution(input.body === null ? '' : input.body, input.attribution),
       base: input.baseBranch,
       state: input.state,
     });
@@ -873,7 +881,7 @@ export class GithubIntegration implements FactoryIntegration {
     const { data } = await octokit.issues.createComment({
       ...parts,
       issue_number: requirePullRequestNumber(input.pullRequestId),
-      body: input.body,
+      body: appendArtifactAttributionFooter(input.body, input.attribution),
     });
     return parsePullRequestComment(data);
   }
@@ -883,7 +891,7 @@ export class GithubIntegration implements FactoryIntegration {
     const { data } = await octokit.issues.updateComment({
       ...parts,
       comment_id: requirePositiveId(input.commentId, 'comment'),
-      body: input.body,
+      body: appendArtifactAttributionFooter(input.body, input.attribution),
     });
     return parsePullRequestComment(data);
   }
@@ -928,7 +936,7 @@ export class GithubIntegration implements FactoryIntegration {
     const { data } = await octokit.pulls.createReview({
       ...parts,
       pull_number: requirePullRequestNumber(input.pullRequestId),
-      body: input.body,
+      body: appendArtifactAttributionFooter(input.body, input.attribution),
       commit_id: input.commitId,
       event: input.event ? reviewEventToGithub(input.event) : undefined,
     });
@@ -941,7 +949,7 @@ export class GithubIntegration implements FactoryIntegration {
       ...parts,
       pull_number: requirePullRequestNumber(input.pullRequestId),
       review_id: requirePositiveId(input.reviewId, 'review'),
-      body: input.body,
+      body: appendArtifactAttributionFooter(input.body, input.attribution),
     });
     return parseReview(data);
   }
@@ -952,7 +960,7 @@ export class GithubIntegration implements FactoryIntegration {
       ...parts,
       pull_number: requirePullRequestNumber(input.pullRequestId),
       review_id: requirePositiveId(input.reviewId, 'review'),
-      body: input.body,
+      body: appendArtifactAttributionFooter(input.body, input.attribution),
       event: reviewEventToGithub(input.event),
     });
     return parseReview(data);
@@ -964,7 +972,7 @@ export class GithubIntegration implements FactoryIntegration {
       ...parts,
       pull_number: requirePullRequestNumber(input.pullRequestId),
       review_id: requirePositiveId(input.reviewId, 'review'),
-      message: input.message,
+      message: appendArtifactAttributionFooter(input.message, input.attribution),
     });
     return parseReview(data);
   }
@@ -1001,7 +1009,7 @@ export class GithubIntegration implements FactoryIntegration {
         ...parts,
         pull_number: pullNumber,
         comment_id: requirePositiveId(input.replyToId, 'review comment'),
-        body: input.body,
+        body: appendArtifactAttributionFooter(input.body, input.attribution),
       });
       return parseReviewComment(data);
     }
@@ -1014,7 +1022,7 @@ export class GithubIntegration implements FactoryIntegration {
     const { data } = await octokit.pulls.createReviewComment({
       ...parts,
       pull_number: pullNumber,
-      body: input.body,
+      body: appendArtifactAttributionFooter(input.body, input.attribution),
       commit_id: input.commitId,
       path: input.path,
       line: input.line,
@@ -1030,7 +1038,7 @@ export class GithubIntegration implements FactoryIntegration {
     const { data } = await octokit.pulls.updateReviewComment({
       ...parts,
       comment_id: requirePositiveId(input.commentId, 'review comment'),
-      body: input.body,
+      body: appendArtifactAttributionFooter(input.body, input.attribution),
     });
     return parseReviewComment(data);
   }

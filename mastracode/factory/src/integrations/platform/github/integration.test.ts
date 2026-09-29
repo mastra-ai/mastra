@@ -13,6 +13,12 @@ const config = {
   baseUrl: 'https://platform.example.com',
   accessToken: 'platform-token',
 };
+const ATTRIBUTION = {
+  kind: 'human' as const,
+  userId: 'user-42',
+  displayName: 'Ada Lovelace',
+  session: { role: 'review', workItemRef: 'FACT-276', runId: 'run-42' },
+};
 
 function fakeAuth(tenant: { orgId?: string; userId: string } | undefined = { orgId: 'org-1', userId: 'user-1' }) {
   return {
@@ -319,8 +325,20 @@ describe('PlatformGithubIntegration', () => {
       }),
     );
     await expect(
-      integration.intake.createComment({ connection, sourceId: 'acme/app', issueId: '12', body: 'Done' }),
+      integration.intake.createComment({
+        connection,
+        sourceId: 'acme/app',
+        issueId: '12',
+        body: 'Done',
+        attribution: ATTRIBUTION,
+      }),
     ).resolves.toEqual({ id: '91', url: comment.htmlUrl });
+    expect(JSON.parse(String(fetchImpl.mock.calls[2]?.[1]?.body))).toEqual({
+      body: 'Done\n\n— via Mastra Factory · actor: Ada Lovelace',
+    });
+    expect((fetchImpl.mock.calls[2]?.[1] as RequestInit).headers).toMatchObject({
+      'x-mastra-factory-attribution': 'applied',
+    });
     await expect(integration.intake.getIssue({ connection, sourceId: 'acme/app', issueId: '99' })).resolves.toBeNull();
   });
 
@@ -438,6 +456,7 @@ describe('PlatformGithubIntegration', () => {
       connection: { type: 'app-installation' as const, installationId: 7 },
       sourceId: 'acme/app',
       pullRequestId: '34',
+      attribution: ATTRIBUTION,
     };
 
     await integration.versionControl.createPullRequest({
@@ -446,6 +465,7 @@ describe('PlatformGithubIntegration', () => {
       title: 'Ship intake',
       baseBranch: 'main',
       headBranch: 'feat/intake',
+      attribution: ATTRIBUTION,
     });
     await integration.versionControl.createReview({ ...ref, event: 'approve', body: 'Ship it' });
     await integration.versionControl.createReviewComment({
@@ -471,6 +491,15 @@ describe('PlatformGithubIntegration', () => {
     ]);
     expect(JSON.parse(String((fetchImpl.mock.calls[1]?.[1] as RequestInit).body))).toMatchObject({ event: 'APPROVE' });
     expect(JSON.parse(String((fetchImpl.mock.calls[2]?.[1] as RequestInit).body))).toMatchObject({ side: 'RIGHT' });
+    expect(JSON.parse(String((fetchImpl.mock.calls[0]?.[1] as RequestInit).body)).body).toContain(
+      'Actor: Ada Lovelace (user-42)',
+    );
+    expect(JSON.parse(String((fetchImpl.mock.calls[1]?.[1] as RequestInit).body)).body).toContain(
+      '— via Mastra Factory · actor: Ada Lovelace',
+    );
+    expect(JSON.parse(String((fetchImpl.mock.calls[2]?.[1] as RequestInit).body)).body).toContain(
+      '— via Mastra Factory · actor: Ada Lovelace',
+    );
     for (const call of fetchImpl.mock.calls) {
       expect((call[1] as RequestInit).headers).not.toHaveProperty('x-acting-user-id');
     }
@@ -501,6 +530,7 @@ describe('PlatformGithubIntegration', () => {
       baseBranch: 'main',
       headBranch: 'feat/intake',
       actingUserId: 'user-42',
+      attribution: ATTRIBUTION,
     });
     await integration.intake.createComment({
       connection,
@@ -508,6 +538,7 @@ describe('PlatformGithubIntegration', () => {
       issueId: '12',
       body: 'Done',
       actingUserId: 'user-42',
+      attribution: ATTRIBUTION,
     });
 
     expect((fetchImpl.mock.calls[0]?.[1] as RequestInit).headers).toMatchObject({ 'x-acting-user-id': 'user-42' });

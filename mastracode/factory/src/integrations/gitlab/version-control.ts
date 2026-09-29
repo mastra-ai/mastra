@@ -1,3 +1,8 @@
+import {
+  appendArtifactAttributionFooter,
+  appendPullRequestAttribution,
+  type FactoryArtifactAttribution,
+} from '../../capabilities/artifact-attribution.js';
 import type { IntegrationConnection } from '../../capabilities/connection.js';
 import type {
   PullRequest,
@@ -85,7 +90,7 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
         sourceBranch: input.headBranch,
         targetBranch: input.baseBranch,
         title,
-        description: input.body,
+        description: appendPullRequestAttribution(input.body, input.attribution),
       }),
     );
   };
@@ -95,7 +100,10 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
     return toPullRequest(
       await context.api.updateMergeRequest(input.sourceId, requirePositiveId(input.pullRequestId, 'merge request'), {
         title: input.title,
-        description: input.body === null ? '' : input.body,
+        description:
+          input.body === undefined
+            ? undefined
+            : appendPullRequestAttribution(input.body === null ? '' : input.body, input.attribution),
         targetBranch: input.baseBranch,
         stateEvent: input.state === 'closed' ? 'close' : input.state === 'open' ? 'reopen' : undefined,
       }),
@@ -144,14 +152,23 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
   const createComment: VersionControl['createComment'] = async input => {
     const context = await deps.contextForConnection(input.connection);
     const mergeRequestIid = requirePositiveId(input.pullRequestId, 'merge request');
-    const note = await context.api.createMergeRequestNote(input.sourceId, mergeRequestIid, input.body);
+    const note = await context.api.createMergeRequestNote(
+      input.sourceId,
+      mergeRequestIid,
+      appendArtifactAttributionFooter(input.body, input.attribution),
+    );
     return toPullRequestComment(webBaseUrl(context), input.sourceId, mergeRequestIid, note);
   };
 
   const updateComment: VersionControl['updateComment'] = async input => {
     const context = await deps.contextForConnection(input.connection);
     const { mergeRequestIid, noteId } = parseNoteId(input.commentId);
-    const note = await context.api.updateMergeRequestNote(input.sourceId, mergeRequestIid, noteId, input.body);
+    const note = await context.api.updateMergeRequestNote(
+      input.sourceId,
+      mergeRequestIid,
+      noteId,
+      appendArtifactAttributionFooter(input.body, input.attribution),
+    );
     return toPullRequestComment(webBaseUrl(context), input.sourceId, mergeRequestIid, note);
   };
 
@@ -220,6 +237,7 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
       event: input.event,
       body: input.body,
       commitId: input.commitId,
+      attribution: input.attribution,
     });
 
   const updateReview: VersionControl['updateReview'] = async () => {
@@ -234,6 +252,7 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
       pullRequestId: input.pullRequestId,
       event: input.event,
       body: input.body,
+      attribution: input.attribution,
     });
 
   const dismissReview: VersionControl['dismissReview'] = async () => {
@@ -296,7 +315,7 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
         input.sourceId,
         mergeRequestIid,
         thread.discussionId,
-        input.body,
+        appendArtifactAttributionFooter(input.body, input.attribution),
       );
       return toReviewComment(
         webBaseUrl(context),
@@ -340,7 +359,7 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
         : {}),
     };
     const discussion = await context.api.createMergeRequestDiscussion(input.sourceId, mergeRequestIid, {
-      body: input.body,
+      body: appendArtifactAttributionFooter(input.body, input.attribution),
       commitId: input.commitId,
       position,
     });
@@ -366,7 +385,7 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
       reference.mergeRequestIid,
       reference.discussionId,
       reference.noteId,
-      input.body,
+      appendArtifactAttributionFooter(input.body, input.attribution),
     );
     return toReviewComment(
       webBaseUrl(context),
@@ -559,6 +578,7 @@ async function submitReviewAction(
     event: 'approve' | 'request-changes' | 'comment' | undefined;
     body?: string;
     commitId?: string;
+    attribution: FactoryArtifactAttribution;
   },
 ): Promise<Review> {
   const context = await deps.contextForConnection(input.connection);
@@ -572,16 +592,14 @@ async function submitReviewAction(
     throw notSupported('GitLab has no first-class pending review object.');
   }
   if (input.event === 'approve') {
-    const body = input.body?.trim();
+    const body = appendArtifactAttributionFooter(input.body?.trim(), input.attribution);
     await context.api.approveMergeRequest(input.sourceId, mergeRequestIid, input.commitId);
-    const comment = body
-      ? toPullRequestComment(
-          webBaseUrl(context),
-          input.sourceId,
-          mergeRequestIid,
-          await context.api.createMergeRequestNote(input.sourceId, mergeRequestIid, body),
-        )
-      : null;
+    const comment = toPullRequestComment(
+      webBaseUrl(context),
+      input.sourceId,
+      mergeRequestIid,
+      await context.api.createMergeRequestNote(input.sourceId, mergeRequestIid, body),
+    );
     return {
       id: String(mergeRequestIid) + ':approval',
       url: comment?.url ?? mergeRequestUrl(webBaseUrl(context), input.sourceId, mergeRequestIid),
@@ -592,8 +610,7 @@ async function submitReviewAction(
       submittedAt: comment?.createdAt ?? null,
     };
   }
-  const body = input.body?.trim();
-  if (!body) throw new GitLabApiError('GitLab comment reviews require a body.', 400);
+  const body = appendArtifactAttributionFooter(input.body?.trim(), input.attribution);
   const note = await context.api.createMergeRequestNote(input.sourceId, mergeRequestIid, body);
   return toCommentReview(webBaseUrl(context), input.sourceId, mergeRequestIid, note);
 }
