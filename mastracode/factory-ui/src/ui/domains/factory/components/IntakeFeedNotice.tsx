@@ -1,5 +1,4 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
@@ -29,11 +28,11 @@ export function IntakeFeedNotice({ source, feed }: { source?: IntakeSource; feed
 
 export function PlatformKeyRejectedNotice() {
   return (
-    <Notice variant="destructive" title="Mastra Platform key rejected">
+    <Notice variant="destructive" title="Mastra Platform rejected this Factory">
       <Notice.Message>
-        This Factory server's Platform key is invalid or revoked, so the board can't load issues or pull requests.
-        Whoever runs the server needs to set a valid <InlineCode>MASTRA_PLATFORM_SECRET_KEY</InlineCode> (or{' '}
-        <InlineCode>MASTRA_PLATFORM_ACCESS_TOKEN</InlineCode>) and restart it. The board reloads on its own after.
+        This Factory's Mastra Platform credentials were rejected, so the board can't load issues or pull requests.
+        Whoever manages this Factory needs to check its Platform connection; the server logs name the rejected
+        credential. The board reloads on its own once it's fixed.
       </Notice.Message>
     </Notice>
   );

@@ -1,6 +1,9 @@
+export type PlatformCredentialEnvVar = 'MASTRA_PLATFORM_ACCESS_TOKEN' | 'MASTRA_PLATFORM_SECRET_KEY';
+
 export interface PlatformApiClientConfig {
   baseUrl: string;
   accessToken: string;
+  credentialEnvVar?: PlatformCredentialEnvVar;
   fetchImpl?: typeof fetch;
 }
 
@@ -10,23 +13,25 @@ const REGIONAL_INTEGRATIONS_URLS: Record<'us' | 'eu', string> = {
   eu: 'https://integrations.eu.mastra.ai',
 };
 
-export function platformApiClientConfigFromEnv(): PlatformApiClientConfig {
+export function platformApiClientConfigFromEnv(env: NodeJS.ProcessEnv = process.env): PlatformApiClientConfig {
   // MASTRA_INTEGRATIONS_API_URL is the dedicated override for the
   // integrations service and takes precedence over MASTRA_PLATFORM_REGION.
   // MASTRA_SHARED_API_URL is deliberately not consulted: it configures the
   // shared platform API, and integrations routing is independent of it.
-  const integrationsApiUrl = process.env.MASTRA_INTEGRATIONS_API_URL?.trim() || resolveIntegrationsUrl();
+  const integrationsApiUrl = env.MASTRA_INTEGRATIONS_API_URL?.trim() || resolveIntegrationsUrl(env);
   // MASTRA_PLATFORM_ACCESS_TOKEN is the credential Mastra Platform injects
   // into deployed projects; MASTRA_PLATFORM_SECRET_KEY is the org secret key
   // written by project scaffolding. The platform API accepts both forms.
-  const accessToken =
-    process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim();
+  const credentialEnvVar: PlatformCredentialEnvVar = env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim()
+    ? 'MASTRA_PLATFORM_ACCESS_TOKEN'
+    : 'MASTRA_PLATFORM_SECRET_KEY';
+  const accessToken = env[credentialEnvVar]?.trim();
   if (!accessToken) {
     throw new Error(
       'Platform integration: missing required environment variable MASTRA_PLATFORM_ACCESS_TOKEN (or MASTRA_PLATFORM_SECRET_KEY).',
     );
   }
-  return { baseUrl: normalizeIntegrationsApiUrl(integrationsApiUrl), accessToken };
+  return { baseUrl: normalizeIntegrationsApiUrl(integrationsApiUrl), accessToken, credentialEnvVar };
 }
 
 /**
@@ -34,8 +39,8 @@ export function platformApiClientConfigFromEnv(): PlatformApiClientConfig {
  * (case-insensitive `us` or `eu`), falling back to the global default.
  * Unknown region values fall through to the global default.
  */
-function resolveIntegrationsUrl(): string {
-  const region = process.env.MASTRA_PLATFORM_REGION?.trim().toLowerCase();
+function resolveIntegrationsUrl(env: NodeJS.ProcessEnv): string {
+  const region = env.MASTRA_PLATFORM_REGION?.trim().toLowerCase();
   if (region === 'us' || region === 'eu') return REGIONAL_INTEGRATIONS_URLS[region];
   return DEFAULT_INTEGRATIONS_URL;
 }
@@ -80,6 +85,7 @@ export function isPlatformKeyRejected(error: unknown): error is PlatformApiError
 export class PlatformApiClient {
   readonly #baseUrl: string;
   readonly #accessToken: string;
+  readonly #credentialEnvVar: PlatformCredentialEnvVar | undefined;
   readonly #fetch: typeof fetch;
 
   constructor(config: PlatformApiClientConfig) {
@@ -89,6 +95,7 @@ export class PlatformApiClient {
     }
     this.#baseUrl = config.baseUrl.replace(/\/+$/, '');
     this.#accessToken = config.accessToken;
+    this.#credentialEnvVar = config.credentialEnvVar;
     this.#fetch = config.fetchImpl ?? globalThis.fetch;
   }
 
@@ -119,15 +126,17 @@ export class PlatformApiClient {
     const problem = await readProblem(response);
     const message = redact(problem.message, this.#accessToken);
     const retryAfterSeconds = parseRetryAfter(response.headers.get('retry-after'));
+    const error = new PlatformApiError(message, response.status, { problemType: problem.problemType, retryAfterSeconds });
     logPlatformError(logMessage, {
       method,
       path,
       status: response.status,
       problemType: problem.problemType,
+      rejectedCredential: isPlatformKeyRejected(error) ? this.#credentialEnvVar : undefined,
       retryAfterSeconds,
       message,
     });
-    return new PlatformApiError(message, response.status, { problemType: problem.problemType, retryAfterSeconds });
+    return error;
   }
 
   async #send(

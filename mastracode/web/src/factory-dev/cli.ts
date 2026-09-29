@@ -21,6 +21,7 @@ import {
   saveEnvironment,
   saveSettings,
 } from './settings.js';
+import { checkSavedPlatformKey } from './platform-key.js';
 import { queueTokenRotation, reconcileTokenOwnership, retryPendingTokenRevocations } from './token-lifecycle.js';
 
 interface Project {
@@ -253,6 +254,15 @@ async function run() {
       : undefined;
   if (platformSecretKey && persistedOwnership && reconcileTokenOwnership(settings, persistedOwnership)) {
     await saveSettings(root, settings);
+  }
+  if (platformSecretKey) {
+    const check = await checkSavedPlatformKey({ secretKey: platformSecretKey, env, envFile });
+    if (check.outcome === 'rejected') {
+      p.log.warn('Mastra Platform rejected the saved platform API key. Creating a new one.');
+      platformSecretKey = undefined;
+    } else if (check.outcome === 'unchecked') {
+      p.log.warn(`Could not check the saved platform API key, starting with it: ${check.reason}`);
+    }
   }
   const originalAuth = structuredClone(settings.auth);
   let createdToken: { id: string; secret: string } | undefined;

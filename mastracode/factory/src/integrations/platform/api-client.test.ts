@@ -28,6 +28,7 @@ describe('PlatformApiClient', () => {
     expect(platformApiClientConfigFromEnv()).toEqual({
       baseUrl: 'https://platform.example.com',
       accessToken,
+      credentialEnvVar: 'MASTRA_PLATFORM_SECRET_KEY',
     });
   });
 
@@ -39,6 +40,7 @@ describe('PlatformApiClient', () => {
     expect(platformApiClientConfigFromEnv()).toEqual({
       baseUrl: 'https://platform.example.com',
       accessToken,
+      credentialEnvVar: 'MASTRA_PLATFORM_SECRET_KEY',
     });
   });
 
@@ -187,6 +189,26 @@ describe('PlatformApiClient', () => {
       false,
     );
     expect(isPlatformKeyRejected(await failWith({ detail: 'Unauthorized' }))).toBe(false);
+  });
+
+  it('names the credential variable the Platform rejected in the server log', async () => {
+    const errorLog = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const rejectKey = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ type: 'authentication_error', status: 401, detail: 'Invalid API key' }), {
+        status: 401,
+        headers: { 'content-type': 'application/problem+json' },
+      }),
+    );
+    const config = platformApiClientConfigFromEnv({
+      MASTRA_PLATFORM_ACCESS_TOKEN: 'injected-token',
+      MASTRA_PLATFORM_SECRET_KEY: 'sk_scaffolded',
+    });
+
+    await new PlatformApiClient({ ...config, fetchImpl: rejectKey })
+      .request('GET', '/v2/connections')
+      .catch(() => undefined);
+
+    expect(String(errorLog.mock.calls[0]?.[0])).toContain('"rejectedCredential":"MASTRA_PLATFORM_ACCESS_TOKEN"');
   });
 
   it('redacts the access token from HTTP, transport errors, and logs', async () => {

@@ -156,10 +156,10 @@ describe('Intake column when the candidate feed fails', () => {
     );
     renderWorkBoard();
 
-    expect(await screen.findByText('Mastra Platform key rejected')).toBeInTheDocument();
+    expect(await screen.findByText('Mastra Platform rejected this Factory')).toBeInTheDocument();
     const intake = screen.getByTestId('board-column-intake');
     const triage = screen.getByTestId('board-column-triage');
-    await waitFor(() => expect(screen.getAllByText('Mastra Platform key rejected')).toHaveLength(1));
+    await waitFor(() => expect(screen.getAllByText('Mastra Platform rejected this Factory')).toHaveLength(1));
     for (const column of [intake, triage]) {
       expect(within(column).queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
       expect(within(column).queryByText('Invalid API key')).not.toBeInTheDocument();
