@@ -368,6 +368,8 @@ export interface GlobalSettings {
   voice: VoiceSettings;
   // Experimental coding agent implementation. Null keeps the plain Agent.
   experimentalAgent: ExperimentalAgent | null;
+  // Internal load diagnostic retained on clones until the user repairs the setting.
+  _experimentalAgentSettingsPath?: string;
   // Native background execution for eligible Mastra Code tools
   backgroundTools: BackgroundToolSettings;
   // Signal routing configuration
@@ -501,23 +503,6 @@ const DEFAULTS: GlobalSettings = {
 export const WEB_SEARCH_PROVIDER_VALUES: WebSearchProviderSetting[] = ['auto', 'tavily', 'parallel'];
 const QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX = 8;
 const loadedSignalSettings = new WeakMap<GlobalSettings, SignalSettings>();
-const experimentalAgentSettingsErrors = new WeakMap<object, ExperimentalAgentSettingsError>();
-
-export function getExperimentalAgentSettingsError(settings: object): ExperimentalAgentSettingsError | undefined {
-  return experimentalAgentSettingsErrors.get(settings);
-}
-
-export function setExperimentalAgentSetting(settings: GlobalSettings, selection: ExperimentalAgent | null): void {
-  settings.experimentalAgent = selection;
-  experimentalAgentSettingsErrors.delete(settings);
-}
-
-function rememberExperimentalAgentSettingsError(
-  settings: GlobalSettings,
-  error: ExperimentalAgentSettingsError | undefined,
-): void {
-  if (error) experimentalAgentSettingsErrors.set(settings, error);
-}
 
 function cloneSignalSettings(signals: SignalSettings): SignalSettings {
   return { ...signals };
@@ -676,12 +661,12 @@ export function parseExperimentalAgentSetting(value: unknown, settingsPath?: str
 function loadExperimentalAgentSetting(
   value: unknown,
   settingsPath: string,
-): { selection: ExperimentalAgent | null; error?: ExperimentalAgentSettingsError } {
+): { selection: ExperimentalAgent | null; settingsPath?: string } {
   try {
     return { selection: parseExperimentalAgentSetting(value, settingsPath) };
   } catch (error) {
     if (error instanceof ExperimentalAgentSettingsError) {
-      return { selection: null, error };
+      return { selection: error.value as ExperimentalAgent | null, settingsPath };
     }
     throw error;
   }
@@ -1055,12 +1040,12 @@ function migrateFromAuth(settingsPath: string): boolean {
         shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
         voice: parseVoiceSettings(raw.voice),
         experimentalAgent: experimentalAgentSetting.selection,
+        _experimentalAgentSettingsPath: experimentalAgentSetting.settingsPath,
         backgroundTools: parseBackgroundToolSettings(raw.backgroundTools),
         signals: parseSignalSettings(raw.signals),
         mcp: parseMcpDiscoverySettings(raw.mcp),
         observability: parseObservabilitySettings(raw.observability),
       };
-      rememberExperimentalAgentSettingsError(settings, experimentalAgentSetting.error);
       applyQuietModePreferenceRollout(settings, raw.onboarding);
     } catch {
       settings = structuredClone(DEFAULTS);
@@ -1196,12 +1181,12 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
       voice: parseVoiceSettings(raw.voice),
       experimentalAgent: experimentalAgentSetting.selection,
+      _experimentalAgentSettingsPath: experimentalAgentSetting.settingsPath,
       backgroundTools: parseBackgroundToolSettings(raw.backgroundTools),
       signals: parseSignalSettings(raw.signals),
       mcp: parseMcpDiscoverySettings(raw.mcp),
       observability: parseObservabilitySettings(raw.observability),
     };
-    rememberExperimentalAgentSettingsError(settings, experimentalAgentSetting.error);
 
     // Migrate legacy omModelId → omModelOverride
     let settingsChanged = false;
@@ -1467,10 +1452,8 @@ export function saveSettings(settings: GlobalSettings, filePath: string = getSet
   const signals = getSignalSettingsForSave(settings, filePath);
   settings.signals = signals;
   loadedSignalSettings.set(settings, cloneSignalSettings(signals));
-  const experimentalAgentError = getExperimentalAgentSettingsError(settings);
-  const settingsToSave = experimentalAgentError
-    ? { ...settings, experimentalAgent: experimentalAgentError.value }
-    : settings;
+  const settingsToSave: Record<string, unknown> = { ...settings };
+  delete settingsToSave._experimentalAgentSettingsPath;
   writeFileAtomically(filePath, JSON.stringify(settingsToSave, null, 2));
 }
 

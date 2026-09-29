@@ -376,7 +376,7 @@ vi.mock('../onboarding/om-settings.js', () => ({
 
 vi.mock('../onboarding/settings.js', () => ({
   getCustomProviderId: vi.fn(),
-  getExperimentalAgentSettingsError: vi.fn(),
+  parseExperimentalAgentSetting: vi.fn(value => value ?? null),
   loadSettings: loadSettingsMock,
   MASTRA_GATEWAY_PROVIDER: 'mastra',
   resolveModelDefaults: vi.fn(() => ({ build: '', plan: '', fast: '' })),

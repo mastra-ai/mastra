@@ -132,7 +132,7 @@ vi.mock('./onboarding/om-settings.js', () => ({
 vi.mock('./onboarding/settings.js', () => ({
   OBSERVABILITY_AUTH_PREFIX: 'observability:',
   getCustomProviderId: vi.fn(),
-  getExperimentalAgentSettingsError: vi.fn(),
+  parseExperimentalAgentSetting: vi.fn(value => value ?? null),
   loadSettings: vi.fn(() => ({
     onboarding: { completedAt: null, skippedAt: null, version: 0, modePackId: null, omPackId: null },
     models: {

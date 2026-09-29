@@ -4,16 +4,12 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 const mocks = vi.hoisted(() => ({
   loadSettings: vi.fn(),
   saveSettings: vi.fn(),
-  setExperimentalAgentSetting: vi.fn((settings: { experimentalAgent: string | null }, selection: string | null) => {
-    settings.experimentalAgent = selection;
-  }),
   callbacks: null as any,
 }));
 
 vi.mock('@mastra/code-sdk/onboarding/settings', () => ({
   loadSettings: mocks.loadSettings,
   saveSettings: mocks.saveSettings,
-  setExperimentalAgentSetting: mocks.setExperimentalAgentSetting,
 }));
 
 vi.mock('../../components/settings.js', () => ({
@@ -94,7 +90,6 @@ describe('/settings quiet mode callbacks', () => {
     mocks.callbacks = null;
     mocks.loadSettings.mockReset();
     mocks.saveSettings.mockReset();
-    mocks.setExperimentalAgentSetting.mockClear();
     mocks.loadSettings.mockImplementation(() => createSettings());
   });
 
@@ -132,7 +127,6 @@ describe('/settings quiet mode callbacks', () => {
 
     mocks.callbacks.onExperimentalAgentChange('evented');
 
-    expect(mocks.setExperimentalAgentSetting).toHaveBeenCalledWith(expect.any(Object), 'evented');
     expect(mocks.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ experimentalAgent: 'evented' }));
     expect(ctx.showInfo).toHaveBeenCalledWith('Experimental agent: evented (restart required)');
   });

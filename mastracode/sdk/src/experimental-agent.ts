@@ -2,11 +2,7 @@ import type { Agent } from '@mastra/core/agent';
 import { createDurableAgent, createEventedAgent, isDurableAgent, isEventedAgent } from '@mastra/core/agent/durable';
 import type { Mastra } from '@mastra/core/mastra';
 
-import {
-  getExperimentalAgentSettingsError,
-  type ExperimentalAgent,
-  type GlobalSettings,
-} from './onboarding/settings.js';
+import { parseExperimentalAgentSetting, type ExperimentalAgent, type GlobalSettings } from './onboarding/settings.js';
 
 export interface ExperimentalAgentEnvironment {
   MASTRACODE_EXPERIMENTAL_AGENT?: string;
@@ -24,16 +20,13 @@ export function parseExperimentalAgentEnvironment(
 }
 
 export function resolveExperimentalAgent(
-  settings: Pick<GlobalSettings, 'experimentalAgent'>,
+  settings: Pick<GlobalSettings, 'experimentalAgent' | '_experimentalAgentSettingsPath'>,
   env: ExperimentalAgentEnvironment = process.env,
 ): ExperimentalAgent | null {
   const environmentSelection = parseExperimentalAgentEnvironment(env);
   if (environmentSelection) return environmentSelection;
 
-  const settingsError = getExperimentalAgentSettingsError(settings);
-  if (settingsError) throw settingsError;
-
-  return settings.experimentalAgent;
+  return parseExperimentalAgentSetting(settings.experimentalAgent, settings._experimentalAgentSettingsPath);
 }
 
 export function wrapExperimentalAgent(agent: Agent, selection: ExperimentalAgent | null): Agent {

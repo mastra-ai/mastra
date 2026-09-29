@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { Box, Spacer, Text, matchesKey } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
 import type { ExperimentalAgent, StorageBackend, ThinkingLevelSetting } from '@mastra/code-sdk/onboarding/settings';
-import { loadSettings, saveSettings, setExperimentalAgentSetting } from '@mastra/code-sdk/onboarding/settings';
+import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import { SettingsComponent } from '../components/settings.js';
 import { askModalQuestion } from '../modal-question.js';
 import type { NotificationMode } from '../notify.js';
@@ -281,7 +281,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
       },
       onExperimentalAgentChange: (agent: ExperimentalAgent | null) => {
         const current = loadSettings();
-        setExperimentalAgentSetting(current, agent);
+        current.experimentalAgent = agent;
         saveSettings(current);
         ctx.showInfo(`Experimental agent: ${agent ?? 'off'} (restart required)`);
       },
