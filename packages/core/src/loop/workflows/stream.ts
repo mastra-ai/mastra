@@ -196,7 +196,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             }
             // Announce the id the part was saved under; it may differ from the stamper's current id
             // after a processor rotation. Transient parts are not saved and keep the stamper's id.
-            processedChunk = withChunkMessageId(processedChunk, responseMessageId);
+            processedChunk = withChunkMessageId(processedChunk, responseMessageId, { savedInResponse: true });
           }
 
           safeEnqueue(controller, processedChunk);

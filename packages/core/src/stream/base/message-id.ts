@@ -29,14 +29,20 @@ export function createChunkMessageIdStamper(initialMessageId?: string) {
 
 /**
  * Stamps `messageId` on a content chunk unless it already carries one. Signal parts get their own
- * signal id. Run-lifecycle chunks are returned unchanged. Preserves the chunk's `producedAt` stamp.
+ * signal id, unless `savedInResponse` is set because the part was persisted into the response
+ * message itself. Run-lifecycle chunks are returned unchanged. Preserves the `producedAt` stamp.
  */
-export function withChunkMessageId<T>(chunk: T, responseMessageId: string | undefined): T {
+export function withChunkMessageId<T>(
+  chunk: T,
+  responseMessageId: string | undefined,
+  options?: { savedInResponse?: boolean },
+): T {
   if (!chunk || typeof chunk !== 'object') return chunk;
   const c = chunk as { type?: unknown; messageId?: unknown; data?: { id?: unknown } };
   if (typeof c.type !== 'string' || RUN_LIFECYCLE_CHUNK_TYPES.has(c.type)) return chunk;
   if (typeof c.messageId === 'string') return chunk;
-  const messageId = SIGNAL_CHUNK_TYPES.has(c.type) && typeof c.data?.id === 'string' ? c.data.id : responseMessageId;
+  const isSignalRow = !options?.savedInResponse && SIGNAL_CHUNK_TYPES.has(c.type) && typeof c.data?.id === 'string';
+  const messageId = isSignalRow ? (c.data!.id as string) : responseMessageId;
   if (!messageId) return chunk;
 
   const stamped = { ...c, messageId } as T;
