@@ -59,7 +59,6 @@ import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
 import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
-import { neutralizePromptTags } from './neutralize-prompt-tags';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
 import { KnowledgeSemanticIndexCoordinator, Subconscious } from './processors/observational-memory/subconscious';
 import { createKnowledgeTools } from './processors/observational-memory/subconscious/knowledge-tools';
@@ -1854,15 +1853,12 @@ ${workingMemory}`;
     const workingMemoryTemplate = runState
       ? await runState.load('working-memory:template', loadTemplate)
       : await loadTemplate();
-    const storedWorkingMemory = await this.getWorkingMemory({
+    const workingMemoryData = await this.getWorkingMemory({
       threadId,
       resourceId,
       memoryConfig: config,
       runState,
     });
-    const workingMemoryData = storedWorkingMemory
-      ? neutralizePromptTags(storedWorkingMemory, ['working_memory_data', 'working_memory_template'])
-      : storedWorkingMemory;
 
     if (!workingMemoryTemplate) {
       return null;

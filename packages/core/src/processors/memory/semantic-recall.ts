@@ -10,10 +10,8 @@ import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../../vector';
 import { globalEmbeddingCache } from './embedding-cache';
-import { neutralizePromptTags } from './neutralize-prompt-tags';
 
 const DEFAULT_TOP_K = 4;
-const RECALL_PROMPT_TAGS = ['remembered_from_other_conversation', 'end_remembered_from_other_conversation'];
 const DEFAULT_MESSAGE_RANGE = 1; // Will be used for both before and after
 
 export interface SemanticRecallOptions {
@@ -315,11 +313,7 @@ export class SemanticRecall implements Processor {
         contentText = textParts.map((p: any) => p.text).join(' ');
       }
 
-      // Indent continuation lines so recalled content can't start a line that
-      // reads like a renderer-produced "Message ..." or date header line.
-      const safeContent = neutralizePromptTags(contentText, RECALL_PROMPT_TAGS).replace(/\r\n?|\n/g, '\n  ');
-
-      result += `Message ${msg.threadId && msg.threadId !== currentThreadId ? 'from previous conversation' : ''} at ${timeofday}: ${roleLabel}: ${safeContent}\n`;
+      result += `Message ${msg.threadId && msg.threadId !== currentThreadId ? 'from previous conversation' : ''} at ${timeofday}: ${roleLabel}: ${contentText}\n`;
 
       lastYmd = ymd;
     }
