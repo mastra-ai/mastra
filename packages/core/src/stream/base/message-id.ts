@@ -19,12 +19,22 @@ export function createChunkMessageIdStamper(initialMessageId?: string) {
       currentMessageId = c.payload.messageId;
     }
 
-    if (!currentMessageId || typeof c.type !== 'string' || RUN_LIFECYCLE_CHUNK_TYPES.has(c.type)) return chunk;
-    if (typeof c.messageId === 'string') return chunk;
-
-    const stamped = { ...c, messageId: currentMessageId } as T;
-    const producedAt = getChunkProducedAt(chunk);
-    if (producedAt !== undefined) stampChunkProducedAt(stamped, producedAt);
-    return stamped;
+    return withChunkMessageId(chunk, currentMessageId);
   };
+}
+
+/**
+ * Stamps `messageId` on a content chunk unless it already carries one. Run-lifecycle chunks are
+ * returned unchanged. Preserves the chunk's `producedAt` stamp.
+ */
+export function withChunkMessageId<T>(chunk: T, messageId: string | undefined): T {
+  if (!messageId || !chunk || typeof chunk !== 'object') return chunk;
+  const c = chunk as { type?: unknown; messageId?: unknown };
+  if (typeof c.type !== 'string' || RUN_LIFECYCLE_CHUNK_TYPES.has(c.type)) return chunk;
+  if (typeof c.messageId === 'string') return chunk;
+
+  const stamped = { ...c, messageId } as T;
+  const producedAt = getChunkProducedAt(chunk);
+  if (producedAt !== undefined) stampChunkProducedAt(stamped, producedAt);
+  return stamped;
 }

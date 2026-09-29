@@ -101,12 +101,12 @@ export function createDurableGoalStep() {
         rotateMessageId: current => list().rotateResponseMessageId(current),
         writeSignal: pubsub
           ? async data => {
-              await emitChunkEvent(pubsub, state.runId, data as ChunkType);
+              await emitChunkEvent(pubsub, state.runId, data as ChunkType, state.messageId);
             }
           : undefined,
         emitChunk: chunk => {
           if (!pubsub) return;
-          return emitChunkEvent(pubsub, state.runId, chunk as any);
+          return emitChunkEvent(pubsub, state.runId, chunk as any, state.messageId);
         },
       });
 

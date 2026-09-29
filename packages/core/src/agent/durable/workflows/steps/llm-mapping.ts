@@ -447,7 +447,7 @@ export function createDurableLLMMappingStep() {
               _durableStepContent: stepContent,
             },
           };
-          await emitChunkEvent(pubsub, _runId, enrichedChunk);
+          await emitChunkEvent(pubsub, _runId, enrichedChunk, messageId);
         } catch (error) {
           mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to emit deferred step-finish: ${error}`);
         }

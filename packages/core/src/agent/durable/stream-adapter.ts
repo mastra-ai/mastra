@@ -7,7 +7,7 @@ import type { TracingContext } from '../../observability';
 import type { OutputProcessorOrWorkflow } from '../../processors';
 import type { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue } from '../../stream/base';
-import { createChunkMessageIdStamper } from '../../stream/base/message-id';
+import { withChunkMessageId } from '../../stream/base/message-id';
 import { MastraModelOutput } from '../../stream/base/output';
 import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
 import { ChunkFrom } from '../../stream/types';
@@ -694,31 +694,22 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   };
 }
 
-// Per-run message id tracking for chunks published from this process; see createChunkMessageIdStamper.
-const runMessageIdStampers = new Map<string, ReturnType<typeof createChunkMessageIdStamper>>();
-
-function stampRunChunk<T>(runId: string, chunk: T): T {
-  let stamp = runMessageIdStampers.get(runId);
-  if (!stamp) {
-    stamp = createChunkMessageIdStamper();
-    runMessageIdStampers.set(runId, stamp);
-  }
-  return stamp(chunk);
-}
-
 /**
- * Helper to emit a chunk event to pubsub
+ * Helper to emit a chunk event to pubsub.
+ * `messageId` is the persisted assistant message the chunk belongs to; callers take it from
+ * durable step input/state so it survives a resume in another process.
  */
 export async function emitChunkEvent<OUTPUT = undefined>(
   pubsub: PubSub,
   runId: string,
   chunk: ChunkType<OUTPUT>,
+  messageId?: string,
 ): Promise<void> {
   const topic = AGENT_STREAM_TOPIC(runId);
   await pubsub.publish(topic, {
     type: AgentStreamEventTypes.CHUNK,
     runId,
-    data: stampRunChunk(runId, chunk),
+    data: withChunkMessageId(chunk, messageId),
     // The chunk crosses the pubsub as JSON; keep when it was produced.
     producedAt: getChunkProducedAt(chunk) ?? Date.now(),
   });
@@ -760,7 +751,7 @@ export async function emitStepStartEvent(
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.STEP_START,
     runId,
-    data: stampRunChunk(runId, chunk),
+    data: withChunkMessageId(chunk, data.messageId),
   });
 }
 
@@ -783,7 +774,6 @@ export async function emitStepFinishEvent(
  * Helper to emit a finish event to pubsub
  */
 export async function emitFinishEvent(pubsub: PubSub, runId: string, data: AgentFinishEventData): Promise<void> {
-  runMessageIdStampers.delete(runId);
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.FINISH,
     runId,
@@ -795,7 +785,6 @@ export async function emitFinishEvent(pubsub: PubSub, runId: string, data: Agent
  * Helper to emit an error event to pubsub
  */
 export async function emitErrorEvent(pubsub: PubSub, runId: string, error: Error): Promise<void> {
-  runMessageIdStampers.delete(runId);
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.ERROR,
     runId,
@@ -824,7 +813,6 @@ export async function emitSuspendedEvent(pubsub: PubSub, runId: string, data: Ag
  * Helper to emit an abort event to pubsub
  */
 export async function emitAbortEvent(pubsub: PubSub, runId: string, data: AgentAbortEventData): Promise<void> {
-  runMessageIdStampers.delete(runId);
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.ABORT,
     runId,
