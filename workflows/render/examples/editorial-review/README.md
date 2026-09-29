@@ -80,11 +80,11 @@ Reconciliation shares at most three concurrent status lookups per admission inst
 
 ### Operator recovery for an interrupted reservation
 
-Use this only for a specific reservation whose provider binding is absent. A binding in `submitting` or `submission-unknown` can represent an accepted native execution and must remain reserved until reconciled with Render. Increasing the cap or releasing by age is not reconciliation.
+Use this only for a specific reservation with no native provider binding. The provider creates its run record before calling Render, so a record may exist without a `providerId`. An unbound record in `submitting` or `submission-unknown` can still represent an accepted native execution. Neither that status nor a missing task ID proves non-acceptance. Keep the reservation active unless independent evidence establishes that Render accepted no execution. Increasing the cap or releasing by age is not reconciliation.
 
 1. Set `SUBMISSIONS_ENABLED=false` on every caller, deploy it, and drain or stop all in-flight submission handlers. Verify new submissions return 503 while reads and cancellation work. The database lock below cannot by itself stop a handler that already reserved capacity and is about to submit.
-2. Inspect the exact namespace/run ID, persisted provider binding, application logs, and Render task history. Record the operator, timestamp, run ID, and evidence in the incident record. If acceptance or a live submitting handler cannot be ruled out, stop and keep the reservation active.
-3. After proving the caller cannot resume and there is no provider binding, run this transaction with explicit `psql` variables `namespace`, `workflow_id`, and `run_id`. It touches at most one reservation, retains the row for idempotency and rate accounting, and prints the settlement for the audit record.
+2. Inspect the exact namespace/run ID, persisted run record, application logs, and Render task history. Record the operator, timestamp, run ID, and evidence in the incident record. If acceptance or a live submitting handler cannot be ruled out, stop and keep the reservation active. A `providerId` or `workerClaim` rules out this procedure; reconcile that execution through the provider instead.
+3. After proving the caller cannot resume and Render accepted no execution, run this transaction with explicit `psql` variables `namespace`, `workflow_id`, and `run_id`. It permits an absent record or an unbound, unclaimed record still in `submitting` or `submission-unknown`. It touches at most one reservation, retains the row for idempotency and rate accounting, and prints the settlement for the audit record. The SQL guards do not replace the operator's evidence of non-acceptance.
 
 ```sql
 BEGIN;
@@ -97,11 +97,18 @@ WHERE admission.namespace = :'namespace'
   AND NOT EXISTS (
     SELECT 1 FROM mastra_render_runs
     WHERE workflow_id = :'workflow_id' AND run_id = admission.run_id
+      AND (
+        record->>'providerId' IS NOT NULL
+        OR record->>'workerClaim' IS NOT NULL
+        OR COALESCE(record->>'status', '') NOT IN ('submitting', 'submission-unknown')
+      )
   )
 RETURNING namespace, run_id, created_at, settled_at;
 COMMIT;
 ```
 
-4. Verify the expected single row was settled, save the output with the evidence, then reopen submissions. Do not delete the reservation or retry the original ID. Any new work requires an explicit new submission; this procedure does not perform one.
+4. Verify the expected single row was settled, save the output with the evidence, then reopen submissions. Do not delete the reservation or retry the original ID. Any unbound run record is retained unchanged and may still display its original submission status; this operation only releases admission capacity. Any new work requires an explicit new submission; this procedure does not perform one.
+
+Run `scripts/recovery-sql-smoke.ts` with a disposable PostgreSQL connection to test the exact SQL above. It uses temporary tables and checks unbound recovery, protection of bound/claimed runs, namespace/workflow isolation, idempotency, and preservation of run records and results. Operator evidence and draining remain manual prerequisites.
 
 On deployment, keep model keys in the worker, Render caller credentials in the backend, and use HTTPS for browser traffic. Rotate configured demo bearer tokens by updating all callers; they have no automatic expiry or revocation service. Draftroom's separate application uses server-side sessions instead. Cancellation requests Render to stop in-flight tasks, but cannot undo an external effect that already occurred. Check the terminal native outcome before releasing capacity or claiming cancellation succeeded.
