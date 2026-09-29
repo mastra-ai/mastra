@@ -25,20 +25,20 @@ export const deployStates = {
 
 const TONE_FILL: Record<StatusTone, string> = {
   success: 'bg-success-indicator',
-  progress: 'bg-warning-indicator',
+  progress: 'bg-yellow-400 dark:bg-yellow-300',
   error: 'bg-destructive-indicator',
   neutral: 'bg-muted-foreground',
 };
 
 const TONE_RING: Record<StatusTone, string> = {
   success: 'border-success-indicator',
-  progress: 'border-warning-indicator',
+  progress: 'border-yellow-400 dark:border-yellow-300',
   error: 'border-destructive-indicator',
   neutral: 'border-muted-foreground',
 };
 
 const PROGRESS_DECORATION =
-  "relative motion-safe:animate-pulse before:absolute before:-inset-1 before:rounded-full before:border before:border-warning-edge before:border-t-warning-indicator before:content-[''] motion-safe:before:animate-spin motion-reduce:before:animate-none";
+  "relative motion-safe:animate-pulse before:absolute before:-inset-1 before:rounded-full before:border before:border-border before:border-t-yellow-400 dark:before:border-t-yellow-300 before:content-[''] motion-safe:before:animate-spin motion-reduce:before:animate-none";
 
 export function statusToneFill(tone: StatusTone): string {
   return TONE_FILL[tone];

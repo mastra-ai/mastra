@@ -593,6 +593,18 @@ describe('theme.css export', () => {
     expect(resolveToken('chart-blue', darkVariables)).not.toBe(resolveToken('chart-blue', lightVariables));
   });
 
+  it('keeps the brand green indicator readable as text on light surfaces', () => {
+    const { lightVariables } = getThemeVariables(themeCss);
+    const brandGreen = resolveToken('brand-green-indicator', lightVariables);
+    const brandLightness = Number(brandGreen.match(/^oklch\(([\d.]+)\s/)?.[1]);
+
+    expect(oklchAlpha(brandGreen)).toBe(1);
+    for (const background of ['background', 'card']) {
+      const backgroundLightness = oklchLightness(resolveToken(background, lightVariables));
+      expect(wcagContrast(brandLightness, backgroundLightness)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it('registers every @theme color with tailwind-merge, so cn() can resolve a conflict between two of them', () => {
     const exported = new Set(Object.keys({ ...Colors, ...BorderColors }));
     const themed = [...themeCss.matchAll(/--color-([\w-]+):/g)]

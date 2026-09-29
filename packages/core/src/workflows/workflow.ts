@@ -3170,7 +3170,49 @@ export class Workflow<
 
     let res: WorkflowResult<TState, TInput, TOutput, TSteps>;
 
+    // The parent and nested snapshots are written separately, so a crash can leave them out of
+    // sync. Trust the nested run's status: an active nested run must be restarted, and a nested
+    // run that never claimed its resume must be resumed. See https://github.com/mastra-ai/mastra/issues/25187
     try {
+      let restartNested = !!restart;
+      let resumeNested = isResume;
+      if ((restart || isResume) && !isTimeTravel) {
+        const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+        const nestedSnapshot = await workflowsStore?.loadWorkflowSnapshot({
+          workflowName: this.id,
+          runId: run.runId,
+        });
+        let nestedStatus = nestedSnapshot?.status;
+        // A crash between the nested run's resume claim and its resumed step starting leaves a
+        // `running` snapshot that still only has suspended steps. Restarting it would drop the
+        // resume data, so hand it back to `suspended` and resume it with the parent's saved data.
+        if (
+          nestedSnapshot &&
+          (nestedStatus === 'running' || nestedStatus === 'waiting') &&
+          Object.keys(nestedSnapshot.activeStepsPath ?? {}).length === 0 &&
+          Object.keys(nestedSnapshot.suspendedPaths ?? {}).length > 0
+        ) {
+          // The resume claim is only written by stores with atomic updates, so a claim-only
+          // snapshot implies one; compare-and-set so a concurrent caller's claim is not re-armed.
+          const released = await workflowsStore!.updateWorkflowState({
+            workflowName: this.id,
+            runId: run.runId,
+            opts: { status: 'suspended', expectedStatus: nestedStatus },
+          });
+          if (released) {
+            nestedStatus = 'suspended';
+            restartNested = false;
+            resumeNested = true;
+          }
+        }
+        if (isResume && (nestedStatus === 'running' || nestedStatus === 'waiting')) {
+          restartNested = true;
+        } else if (restart && nestedStatus === 'suspended') {
+          restartNested = false;
+          resumeNested = true;
+        }
+      }
+
       if (isTimeTravel) {
         res = await run.timeTravel({
           inputData: timeTravel?.inputData,
@@ -3186,18 +3228,18 @@ export class Workflow<
           outputOptions: { includeState: true, includeResumeLabels: true },
           perStep,
         });
-      } else if (restart) {
+      } else if (restartNested) {
         res = await run.restart({ requestContext, actor, ...observabilityContext, outputWriter });
-      } else if (isResume) {
+      } else if (resumeNested) {
         res = await run.resume({
           resumeData,
-          step: resume.steps?.length > 0 ? (resume.steps as any) : undefined,
+          step: resume?.steps?.length ? (resume.steps as any) : undefined,
           requestContext,
           actor,
           ...observabilityContext,
           outputWriter,
           outputOptions: { includeState: true, includeResumeLabels: true },
-          label: resume.label,
+          label: resume?.label,
           perStep,
         });
       } else {

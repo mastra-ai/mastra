@@ -1,9 +1,5 @@
 import type { McpServerListResponse } from '@mastra/client-js';
-import {
-  DataList as EntityList,
-  DataListSkeleton as EntityListSkeleton,
-  useDataListKeyboard,
-} from '@mastra/playground-ui/components/DataList';
+import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import type { DataListSort } from '@mastra/playground-ui/components/DataList';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
@@ -52,13 +48,13 @@ function McpServerRow({ server, rowProps }: { server: McpServer; rowProps?: Reco
   const name = truncateString(server.name, 50);
 
   return (
-    <EntityList.RowLink to={paths.mcpServerLink(server.id)} LinkComponent={Link} {...rowProps}>
-      <EntityList.NameCell>{name}</EntityList.NameCell>
-      <EntityList.DescriptionCell>{serverUrl}</EntityList.DescriptionCell>
-      <EntityList.TextCell className="text-center">{agentToolsCount || ''}</EntityList.TextCell>
-      <EntityList.TextCell className="text-center">{toolsCount || ''}</EntityList.TextCell>
-      <EntityList.TextCell className="text-center">{workflowToolsCount || ''}</EntityList.TextCell>
-    </EntityList.RowLink>
+    <DataList.RowLink to={paths.mcpServerLink(server.id)} LinkComponent={Link} {...rowProps}>
+      <DataList.NameCell>{name}</DataList.NameCell>
+      <DataList.DescriptionCell>{serverUrl}</DataList.DescriptionCell>
+      <DataList.TextCell className="text-center">{agentToolsCount || ''}</DataList.TextCell>
+      <DataList.TextCell className="text-center">{toolsCount || ''}</DataList.TextCell>
+      <DataList.TextCell className="text-center">{workflowToolsCount || ''}</DataList.TextCell>
+    </DataList.RowLink>
   );
 }
 
@@ -75,39 +71,39 @@ export function McpServersList({ mcpServers, isLoading, search = '', sort, onSor
   const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length, global: true });
 
   if (isLoading) {
-    return <EntityListSkeleton columns="auto 1fr auto auto auto" />;
+    return <DataListSkeleton columns="auto 1fr auto auto auto" />;
   }
 
   return (
-    <EntityList columns="auto 1fr auto auto auto" scrollRef={containerRef}>
-      <EntityList.Top>
+    <DataList columns="auto 1fr auto auto auto" scrollRef={containerRef}>
+      <DataList.Top>
         {onSortChange ? (
-          <EntityList.SortableTopCell
+          <DataList.SortableTopCell
             sortKey="name"
             sort={sort?.key === 'name' ? sort.direction : undefined}
             onSortChange={onSortChange}
           >
             Name
-          </EntityList.SortableTopCell>
+          </DataList.SortableTopCell>
         ) : (
-          <EntityList.TopCell>Name</EntityList.TopCell>
+          <DataList.TopCell>Name</DataList.TopCell>
         )}
-        <EntityList.TopCell>URL</EntityList.TopCell>
-        <EntityList.TopCellSmart long="Agents" short={<AgentIcon />} tooltip="Agent Tools" className="text-center" />
-        <EntityList.TopCellSmart long="Tools" short={<ToolsIcon />} tooltip="Tools" className="text-center" />
-        <EntityList.TopCellSmart
+        <DataList.TopCell>URL</DataList.TopCell>
+        <DataList.TopCellSmart long="Agents" short={<AgentIcon />} tooltip="Agent Tools" className="text-center" />
+        <DataList.TopCellSmart long="Tools" short={<ToolsIcon />} tooltip="Tools" className="text-center" />
+        <DataList.TopCellSmart
           long="Workflows"
           short={<WorkflowIcon />}
           tooltip="Workflow Tools"
           className="text-center"
         />
-      </EntityList.Top>
+      </DataList.Top>
 
-      {filteredData.length === 0 && search ? <EntityList.NoMatch message="No MCP Servers match your search" /> : null}
+      {filteredData.length === 0 && search ? <DataList.NoMatch message="No MCP Servers match your search" /> : null}
 
       {filteredData.map((server, index) => (
         <McpServerRow key={server.id} server={server} rowProps={getRowProps(index)} />
       ))}
-    </EntityList>
+    </DataList>
   );
 }

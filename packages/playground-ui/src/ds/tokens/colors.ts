@@ -138,6 +138,7 @@ export const Colors = {
   'badge-yellow-indicator': 'var(--badge-yellow-indicator)',
   'badge-yellow-foreground': 'var(--badge-yellow-foreground)',
   'brand-green': 'var(--color-brand-green)',
+  'brand-green-indicator': 'var(--brand-green-indicator)',
   'brand-orange': 'var(--color-brand-orange)',
   'brand-pink': 'var(--color-brand-pink)',
   'brand-purple': 'var(--color-brand-purple)',

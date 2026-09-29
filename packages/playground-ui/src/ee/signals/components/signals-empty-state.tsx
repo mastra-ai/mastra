@@ -25,7 +25,7 @@ const signalStyle = (label: string): CSSProperties => ({
 const PipelineConnector = () => (
   <div aria-hidden="true" className="relative hidden h-full items-center lg:flex">
     <div className="w-full border-t border-dashed border-border" />
-    <span className="absolute left-1/2 size-2.5 -translate-x-1/2 rounded-full bg-brand-green" />
+    <span className="absolute left-1/2 size-2.5 -translate-x-1/2 rounded-full bg-brand-green-indicator" />
   </div>
 );
 
@@ -198,7 +198,7 @@ export const SignalsEmptyState = ({
       <div className="mx-auto w-full max-w-260">
         <header>
           <Txt variant="caption" tone="muted" font="mono" className="flex items-center gap-2 tracking-wider uppercase">
-            <span aria-hidden="true" className="size-2 rounded-full bg-brand-green" />
+            <span aria-hidden="true" className="size-2 rounded-full bg-brand-green-indicator" />
             Trace Intelligence
           </Txt>
           <Txt as="h1" variant="display" tone="ink" className="mt-2 tracking-tight">
@@ -256,9 +256,9 @@ export const SignalsEmptyState = ({
             </Txt>
             <div
               aria-hidden="true"
-              className="mt-5 flex size-14 items-center justify-center rounded-full border border-brand-green bg-fill-subtle"
+              className="mt-5 flex size-14 items-center justify-center rounded-full border border-brand-green-indicator bg-fill-subtle"
             >
-              <CpuIcon className="size-4 text-brand-green" />
+              <CpuIcon className="size-4 text-brand-green-indicator" />
             </div>
             <Txt variant="meta" tone="muted" className="mt-3 max-w-40">
               Clusters similar trace signals into themes for each dimension
