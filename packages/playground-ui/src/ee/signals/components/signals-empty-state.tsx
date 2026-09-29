@@ -2,7 +2,6 @@ import type { EntityLearningProgressResponse, SignalCatalogEntry } from '@mastra
 import { CpuIcon, ExternalLink } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 
-import './signals-empty-state.css';
 import { Button } from '../../../ds/components/Button';
 import { Card } from '../../../ds/components/Card';
 import type { LinkComponent } from '../../../ds/types/link-component';
@@ -25,7 +24,7 @@ const signalStyle = (label: string): CSSProperties => ({
 const PipelineConnector = () => (
   <div aria-hidden="true" className="relative hidden h-full items-center lg:flex">
     <div className="w-full border-t border-dashed border-border" />
-    <span className="signals-pipeline-connector absolute left-1/2 size-2.5 -translate-x-1/2 rounded-full bg-brand-green shadow-[0_0_12px_currentColor]" />
+    <span className="absolute left-1/2 size-2.5 -translate-x-1/2 rounded-full bg-brand-green" />
   </div>
 );
 
@@ -238,11 +237,11 @@ export const SignalsEmptyState = ({
           >
             <h2 className="text-heading text-foreground">Trace Intelligence</h2>
             <p className="mt-0.5 text-caption text-muted-foreground">Finds recurring themes</p>
-            <div aria-hidden="true" className="relative mt-5 flex size-20 items-center justify-center">
-              <span className="signals-engine-pulse absolute size-20 rounded-full border border-brand-green" />
-              <span className="absolute size-14 rounded-full border border-brand-green" />
-              <span className="absolute size-9 rounded-full border border-brand-green bg-fill-subtle" />
-              <CpuIcon className="relative size-4 text-brand-green" />
+            <div
+              aria-hidden="true"
+              className="mt-5 flex size-14 items-center justify-center rounded-full border border-brand-green bg-fill-subtle"
+            >
+              <CpuIcon className="size-4 text-brand-green" />
             </div>
             <p className="mt-3 max-w-40 text-meta text-muted-foreground">
               Clusters similar trace signals into themes for each dimension
@@ -258,11 +257,11 @@ export const SignalsEmptyState = ({
             <div className="mt-3 flex flex-wrap gap-2">
               {signalDefinitions.map(signal => (
                 <span
-                  className="signals-chip inline-flex items-center gap-2 rounded border border-border bg-card px-2.5 py-1.5 text-column"
+                  className="inline-flex items-center gap-2 rounded border border-border bg-card px-2.5 py-1.5 text-column"
                   key={signal.key}
                   style={signalStyle(signal.key)}
                 >
-                  <span aria-hidden="true" className="size-1.5 rounded-full bg-current shadow-[0_0_7px_currentColor]" />
+                  <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />
                   {signal.label}
                 </span>
               ))}
@@ -290,10 +289,7 @@ export const SignalsEmptyState = ({
 
         <aside className="mt-9 rounded-md border border-border bg-background px-5 py-4">
           <div className="flex min-w-0 items-start gap-3">
-            <span
-              aria-hidden="true"
-              className="mt-1.5 size-2 shrink-0 rounded-full bg-warning-indicator shadow-[0_0_9px_currentColor]"
-            />
+            <span aria-hidden="true" className="mt-1.5 size-2 shrink-0 rounded-full bg-warning-indicator" />
             <div className="min-w-0 flex-1">
               <p className="text-caption text-muted-foreground">
                 <strong className="font-medium text-foreground">{copy.title}</strong> {copy.body}

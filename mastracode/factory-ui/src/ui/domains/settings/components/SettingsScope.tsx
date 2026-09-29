@@ -76,7 +76,7 @@ function ScopeOption({
       className={cn(
         'text-muted-foreground hover:text-foreground inline-flex h-5 cursor-pointer items-center rounded-[7px] outline-none',
         'aria-disabled:hover:text-muted-foreground aria-disabled:cursor-not-allowed aria-disabled:opacity-50',
-        focusRing.visible,
+        focusRing,
         transitions.colors,
       )}
     >

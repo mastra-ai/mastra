@@ -121,6 +121,11 @@ To migrate removed tokens:
 | `destructive`, `destructive-foreground` | `fill-destructive`, `fill-destructive-foreground` |
 | `badge-HUE`, `badge-HUE-fg`             | `badge-HUE-strong`, `badge-HUE-foreground`        |
 | `notice-note`, `notice-note-fg`         | `muted`, `foreground`                             |
+| `--ring`, `ring-ring`                   | `--border-focus`, `ring-border-focus`             |
+| `--shadow-focus-ring`, `--focus-halo`   | none; focus has no halo                           |
+| `focusRing.visible` and siblings        | `focusRing`, or `focusRingInset` in clipped rows  |
+
+Anything focusable that has no edge of its own, such as a row, link, or tab, takes `focusRing` from `primitives/transitions`: a 1px `--border-focus` ring on `:focus-visible`. Fields and raised surfaces keep their own focus edge.
 
 `SankeyChart` accepts `getNodeColor` and `getLinkColor` callbacks returning CSS colors. Explicit link colors keep the default link transparency and hover emphasis:
 

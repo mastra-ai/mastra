@@ -274,7 +274,7 @@ export const TaskList = ({
           className={cn(
             'grid size-6 cursor-pointer place-items-center rounded-md text-muted-foreground hover:text-foreground',
             transitions.colors,
-            focusRing.visible,
+            focusRing,
             !open && 'group-hover/task-list:text-foreground',
           )}
         >

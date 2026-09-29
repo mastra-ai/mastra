@@ -6,6 +6,7 @@ import type { ThreadRailTurn } from './thread-rail-turns';
 import { useOptionalMessageScroller, useOptionalMessageScrollerVisibility } from '@/ds/components/MessageScroller';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
+import { focusRing } from '@/ds/primitives/transitions';
 import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
 import { cn } from '@/lib/utils';
 
@@ -287,7 +288,7 @@ function ThreadRailItem({
         className={cn(
           'relative block h-px cursor-pointer rounded-full transition-[width,background-color] duration-normal ease-out',
           "before:absolute before:inset-x-0 before:-inset-y-1 before:content-['']",
-          'focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-hidden',
+          focusRing,
           size,
           tone,
         )}

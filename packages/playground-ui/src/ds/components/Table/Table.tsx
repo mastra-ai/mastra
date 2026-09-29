@@ -1,5 +1,6 @@
 import type { CSSProperties, HTMLAttributes, ReactNode, ThHTMLAttributes } from 'react';
 import { forwardRef, useEffect, useRef } from 'react';
+import { focusRingInset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export interface TableProps {
@@ -114,8 +115,8 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
           // Smooth hover transition
           'transition-colors duration-normal ease-out-custom',
           'hover:bg-fill-subtle',
-          // Focus state
-          'focus:bg-fill-subtle focus:ring-1 focus:ring-border-focus focus:outline-hidden focus:ring-inset',
+          'focus:bg-fill-subtle',
+          focusRingInset,
           selected && 'bg-fill-hover',
           onClick && 'cursor-pointer',
           className,

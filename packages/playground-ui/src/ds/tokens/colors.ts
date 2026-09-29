@@ -208,7 +208,6 @@ export const Colors = {
   foreground: 'var(--foreground)',
   'muted-foreground': 'var(--muted-foreground)',
   placeholder: 'var(--placeholder)',
-  ring: 'var(--ring)',
 
   scrim: 'var(--scrim)',
 

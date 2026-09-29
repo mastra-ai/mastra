@@ -15,6 +15,7 @@ import {
   useDataListKeyboard,
 } from '@/ds/components/DataList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { focusRing } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/utils/cn';
@@ -316,7 +317,7 @@ export function WorkflowsList({
                         render={<span />}
                         role="note"
                         tabIndex={0}
-                        className="shrink-0 rounded-sm text-body-sm text-muted-foreground focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-border-focus focus-visible:outline-solid"
+                        className={cn('shrink-0 rounded-sm text-body-sm text-muted-foreground', focusRing)}
                       >
                         not registered
                       </TooltipTrigger>

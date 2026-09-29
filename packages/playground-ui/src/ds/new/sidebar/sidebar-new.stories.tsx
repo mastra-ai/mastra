@@ -33,8 +33,10 @@ import { Input } from '@/ds/components/Input';
 import { LogoWithoutText } from '@/ds/components/Logo';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { LogsIcon, MetricsIcon, TraceIcon } from '@/ds/icons';
+import { focusRing } from '@/ds/primitives/transitions';
 import { KeyboardShortcutsProvider } from '@/lib/keyboard/keyboard-shortcuts-context';
 import { useKeydown } from '@/lib/keyboard/use-keydown';
+import { cn } from '@/lib/utils';
 
 const meta: Meta<typeof SidebarNew> = {
   title: 'New/SidebarNew',
@@ -116,11 +118,7 @@ function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) 
       <SidebarNew className="border-r border-border">
         {header === 'command' ? (
           <SidebarNew.CommandHeader>
-            <a
-              href="/projects"
-              aria-label="Project list"
-              className="flex min-w-0 flex-1 rounded-md focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-border-focus focus-visible:outline-hidden"
-            >
+            <a href="/projects" aria-label="Project list" className={cn('flex min-w-0 flex-1 rounded-md', focusRing)}>
               <SidebarNew.Brand
                 logo={<LogoWithoutText className="size-6" />}
                 title={
@@ -149,7 +147,7 @@ function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) 
                 <a
                   href="/projects"
                   aria-label="Project list"
-                  className="flex min-w-0 flex-1 rounded-md focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-border-focus focus-visible:outline-hidden"
+                  className={cn('flex min-w-0 flex-1 rounded-md', focusRing)}
                 >
                   <SidebarNew.Brand logo={<LogoWithoutText className="size-6" />} title="Mastra Platform" />
                 </a>

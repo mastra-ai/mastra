@@ -40,17 +40,10 @@ export const hoverEffects = {
   lift: 'hover:bg-foreground/10',
 } as const;
 
-// Focus ring styles
-export const focusRing = {
-  // Standard focus ring with glow
-  default: 'focus:outline-hidden focus:ring-1 focus:ring-border-focus focus:shadow-focus-ring',
-  // Focus ring without glow
-  simple: 'focus:outline-hidden focus:ring-1 focus:ring-border-focus',
-  // Focus visible only (keyboard navigation)
-  visible:
-    'focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-border-focus focus-visible:shadow-focus-ring',
-} as const;
+export const focusRing = 'focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-border-focus';
+
+// For focusables whose outer edge is clipped by an overflow container or a neighbour, such as full-bleed rows.
+export const focusRingInset = `${focusRing} focus-visible:ring-inset`;
 
 export type TransitionPreset = keyof typeof transitions;
 export type HoverEffect = keyof typeof hoverEffects;
-export type FocusRingStyle = keyof typeof focusRing;

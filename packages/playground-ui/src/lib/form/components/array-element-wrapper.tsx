@@ -42,7 +42,7 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
         <CollapsibleTrigger
           ref={triggerRef}
           aria-label={invalid ? `${itemLabel}, Needs input` : itemLabel}
-          className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-3 text-left text-caption focus-visible:shadow-none focus-visible:ring-inset"
+          className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-3 text-left text-caption focus-visible:ring-inset"
         >
           <ChevronRight aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
           <span className="shrink-0 text-muted-foreground">Item {index + 1}</span>

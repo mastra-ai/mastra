@@ -1,3 +1,4 @@
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import {
   Fragment,
@@ -206,7 +207,10 @@ export function AuditRangePicker({
               aria-valuemax={bounds.to}
               aria-valuenow={selection[boundary]}
               aria-valuetext={`${dayLabel(selection[boundary])} ${timeLabel(selection[boundary])}`}
-              className="focus-visible:ring-border-focus group flex w-3.5 shrink-0 cursor-ew-resize items-center justify-center rounded-lg outline-none focus-visible:ring-2"
+              className={cn(
+                'group flex w-3.5 shrink-0 cursor-ew-resize items-center justify-center rounded-lg',
+                focusRing,
+              )}
               onPointerDown={startDrag(boundary)}
               onKeyDown={nudge(boundary)}
             >

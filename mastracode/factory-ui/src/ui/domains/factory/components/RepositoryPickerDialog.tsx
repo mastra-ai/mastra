@@ -10,6 +10,7 @@ import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
+import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { useState } from 'react';
 
 import { GitLabIcon } from '../../../ui/icons';
@@ -54,7 +55,7 @@ export function RepositoryPickerDialog({
                 <button
                   type="button"
                   key={repository.projectRepositoryId}
-                  className="hover:bg-surface-overlay-soft focus-visible:outline-border-focus flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-[-2px]"
+                  className={`hover:bg-surface-overlay-soft flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-left ${focusRingInset}`}
                   title={repository.slug}
                   onClick={() => onSelect(repository)}
                 >

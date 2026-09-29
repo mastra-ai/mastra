@@ -275,22 +275,17 @@ export const SurfaceFoundations: Story = {
 
       <FoundationSection
         label="Focus"
-        description="Two focus languages, on purpose. A field takes the neutral edge — no accent — so a focused input does not read as a status. A row, link or tab takes the accent ring plus its halo, because there is no field edge to move."
+        description="Neutral and never a halo. A field or raised surface repaints its own edge to its focus rim; anything without an edge — a row, link or tab — takes focusRing, 1px of --border-focus around it."
       >
         <div className="flex flex-wrap items-end gap-6">
           <div className="w-44">
-            <Specimen name="--ring" note="Alias of --border-focus">
-              <div role="img" aria-label="ring token" className="h-14 rounded-md" style={{ background: Colors.ring }} />
+            <Specimen name="focusRing" note="Row, link, tab">
+              <div className="h-14 rounded-md bg-fill ring-1 ring-border-focus" />
             </Specimen>
           </div>
           <div className="w-44">
-            <Specimen name="ring-1 ring-ring" note="Drawn outside the fill">
-              <div className="h-14 rounded-md bg-fill ring-1 ring-ring" />
-            </Specimen>
-          </div>
-          <div className="w-44">
-            <Specimen name="--shadow-focus-ring" note="focusRing.visible — row, link, tab">
-              <div className="h-14 rounded-md bg-fill shadow-focus-ring ring-1 ring-border-focus" />
+            <Specimen name="focusRingInset" note="Full-bleed row whose outer edge is clipped">
+              <div className="h-14 rounded-md bg-fill ring-1 ring-border-focus ring-inset" />
             </Specimen>
           </div>
         </div>

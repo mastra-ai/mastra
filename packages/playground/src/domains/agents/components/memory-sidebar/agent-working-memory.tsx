@@ -7,7 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { controlStateColorTransition, focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { RefreshCcwIcon, ExternalLink, X, Pencil } from 'lucide-react';
@@ -101,7 +101,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                               type="button"
                               onClick={handleCopy}
                               aria-label="Copy working memory"
-                              className="absolute inset-0 z-10 rounded-lg focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-hidden"
+                              className={cn('absolute inset-0 z-10 rounded-lg', focusRingInset)}
                             />
                             <div className="pointer-events-none">
                               <MarkdownRenderer>{workingMemoryData}</MarkdownRenderer>

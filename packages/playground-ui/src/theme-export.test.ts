@@ -43,7 +43,7 @@ const semanticTokens = [
   'muted-foreground',
   'placeholder',
   'border',
-  'ring',
+  'border-focus',
 ] as const;
 
 const deferredSemanticTokens = [
@@ -75,7 +75,6 @@ const semanticAliases = {
   foreground: 'gray-10',
   'muted-foreground': 'gray-8',
   placeholder: 'gray-7',
-  ring: 'border-focus',
 } as const;
 
 const parseVariables = (css: string) => {
@@ -454,7 +453,7 @@ describe('theme.css export', () => {
     const { darkVariables, lightVariables } = getThemeVariables(themeCss);
 
     for (const variables of [darkVariables, lightVariables]) {
-      const ring = resolveToken('ring', variables);
+      const ring = resolveToken('border-focus', variables);
       for (const background of ['sidebar', 'background', 'card', 'muted']) {
         const backgroundLightness = oklchLightness(resolveToken(background, variables));
         const ringLightness = compositeLightness(ring, backgroundLightness);
