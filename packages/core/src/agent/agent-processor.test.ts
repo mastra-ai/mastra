@@ -3844,3 +3844,80 @@ describe('Workflow as Processor', () => {
     });
   });
 });
+
+describe('output tripwire text disclosure (#24443)', () => {
+  const ANSWER = 'We deliver on Friday. Card or bank transfer.';
+  const usage = { inputTokens: 4, outputTokens: 10, totalTokens: 14 };
+
+  const makeModel = () =>
+    new MockLanguageModelV2({
+      doGenerate: async () => ({
+        content: [{ type: 'text' as const, text: ANSWER }],
+        finishReason: 'stop' as const,
+        usage,
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: ANSWER },
+          { type: 'text-end', id: 'text-1' },
+          { type: 'finish', finishReason: 'stop', usage },
+        ]),
+      }),
+    });
+
+  const makeAgent = (hook: 'processOutputResult' | 'processOutputStep' | 'processOutputStream') => {
+    const processor: Processor = { id: `tripwire-${hook}` };
+    if (hook === 'processOutputStream') {
+      processor.processOutputStream = async ({ part, abort }) => {
+        if (part.type === 'finish') abort(`rejected at ${hook}`);
+        return part;
+      };
+    } else {
+      processor[hook] = async ({ abort }: any) => abort(`rejected at ${hook}`);
+    }
+    return new Agent({
+      id: `disclosure-${hook}`,
+      name: 'disclosure',
+      instructions: 'Answer briefly.',
+      model: makeModel(),
+      outputProcessors: [processor],
+    });
+  };
+
+  const assistantText = (messages: any[]) =>
+    messages
+      .filter(m => m.role === 'assistant')
+      .flatMap(m => (typeof m.content === 'string' ? [m.content] : m.content))
+      .map((p: any) => (typeof p === 'string' ? p : p.type === 'text' ? p.text : ''))
+      .join('');
+
+  for (const hook of ['processOutputResult', 'processOutputStep', 'processOutputStream'] as const) {
+    it(`stream(): text agrees with steps, response and getFullOutput when ${hook} trips`, async () => {
+      const stream = await makeAgent(hook).stream('Do you deliver here?');
+      const full = await stream.getFullOutput();
+      const text = await stream.text;
+      const steps = await stream.steps;
+      const response = await stream.response;
+
+      expect(stream.tripwire?.reason).toBe(`rejected at ${hook}`);
+      expect(stream.tripwire?.processorId).toBe(`tripwire-${hook}`);
+      expect(full.text).toBe(text);
+      if (steps.length > 0) expect(steps.map(s => s.text).join('')).toBe(text);
+      const responseText = assistantText(response?.messages ?? []);
+      if (responseText) expect(responseText).toBe(text);
+      if (hook !== 'processOutputStep') expect(text).toBe(ANSWER);
+    });
+
+    it(`generate(): text agrees with steps when ${hook} trips`, async () => {
+      const result = await makeAgent(hook).generate('Do you deliver here?');
+      expect(result.tripwire?.reason).toBe(`rejected at ${hook}`);
+      if (result.steps.length > 0) expect(result.steps.map(s => s.text).join('')).toBe(result.text);
+      if (hook !== 'processOutputStep') expect(result.text).toBe(ANSWER);
+    });
+  }
+});
