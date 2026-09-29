@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { openSync, closeSync, writeFileSync } from 'node:fs';
+import { mkdirSync, openSync, closeSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { randomUUID } from 'node:crypto';
@@ -36,6 +36,7 @@ async function request(path: string, user: keyof typeof tokens | undefined, body
 }
 /** Start the isolated HTTP example process using the test configuration. */
 async function start() {
+  mkdirSync('.scratch', { recursive: true });
   const log = openSync('.scratch/example-http.log', 'a');
   backend = spawn(process.execPath, ['node_modules/tsx/dist/cli.mjs', 'server.ts'], {
     cwd: directory,
