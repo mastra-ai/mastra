@@ -6,22 +6,36 @@
  * same database never see — or fire — this session's schedules.
  */
 import { randomUUID } from 'node:crypto';
-import type { ScheduleCreateSpec } from './args.js';
 import { nextFireTime, validateInterval } from './interval.js';
+import type { ParsedInterval } from './interval.js';
 import type { AssembledPrompt } from './prompt.js';
 
 /** `source` attribute on fired signals; the TUI labels these turns `schedule`. */
 export const SCHEDULE_SIGNAL_SOURCE = 'schedule';
 
+/** When a schedule fires. Only recurring `every` triggers exist today. */
+export type ScheduleTrigger = { kind: 'every'; interval: ParsedInterval };
+
+/** A file a schedule runs as a script, or re-reads and sends as the prompt, on every fire. */
+export type ScheduleFile = { path: string; displayPath: string; mode: 'script' | 'prompt' };
+
+/** What to send on each fire: `prompt` text, or a `file` (plus `extraPrompt` appended after it). */
+export type ThreadScheduleSource = { prompt: string } | { file: ScheduleFile; extraPrompt?: string };
+
+export type ThreadScheduleSpec = ThreadScheduleSource & {
+  trigger: ScheduleTrigger;
+  /** Who is creating it: the user via `/schedules`, or the agent via its schedule tools. Defaults to `user`. */
+  createdBy?: 'user' | 'agent';
+};
+
 export type ThreadSchedule = {
   id: string;
   threadId: string;
   resourceId: string;
-  interval: { ms: number; label: string };
+  trigger: ScheduleTrigger;
   prompt?: string;
-  file?: ScheduleCreateSpec['file'];
+  file?: ScheduleFile;
   extraPrompt?: string;
-  /** Who created it: the user via `/schedules`, or the agent via its schedule tools. */
   createdBy: 'user' | 'agent';
   status: 'active' | 'paused';
   /** Next boundary this schedule fires at; only meaningful while active. */
@@ -42,7 +56,17 @@ export type ThreadSchedulerOptions = {
 /** How late a timer may run before its fire counts as missed (sleep, stalled event loop). */
 export const LATE_FIRE_GRACE_MS = 60_000;
 
-export type ScheduleRunResult = 'fired' | 'busy' | 'not-found';
+/**
+ * Outcome of a manual `run()`. `failed` means nothing reached the agent: the
+ * prompt could not be built or the agent refused it.
+ */
+export type ScheduleRunResult =
+  | { status: 'fired' }
+  | { status: 'failed'; error: unknown }
+  | { status: 'busy' }
+  | { status: 'not-found' };
+
+type FireOutcome = { kind: 'delivered' } | { kind: 'deleted' } | { kind: 'failed'; error: unknown };
 
 type Entry = { schedule: ThreadSchedule; timer?: ReturnType<typeof setTimeout>; inFlight: number };
 
@@ -58,28 +82,28 @@ export class ThreadScheduler {
     return this.#options.now?.() ?? Date.now();
   }
 
-  /** Throws when the interval is not a supported wall-clock cadence (see `validateInterval`). */
-  create(
-    spec: Pick<ScheduleCreateSpec, 'interval' | 'prompt' | 'file' | 'extraPrompt'> & { createdBy?: 'user' | 'agent' },
-    target: { threadId: string; resourceId: string },
-  ): ThreadSchedule {
-    const check = validateInterval(spec.interval);
+  /** Throws when the interval is not a supported wall-clock cadence (see `validateInterval`) or the prompt is empty. */
+  create(spec: ThreadScheduleSpec, target: { threadId: string; resourceId: string }): ThreadSchedule {
+    const { interval } = spec.trigger;
+    const check = validateInterval(interval);
     if ('error' in check) {
       throw new Error(
         `Invalid schedule interval: ${check.error}${check.suggestion ? ` Try ${check.suggestion}.` : ''}`,
       );
     }
+    if ('prompt' in spec && !spec.prompt.trim()) throw new Error('Schedule prompt is empty.');
     const now = this.#now();
     const schedule: ThreadSchedule = {
       id: randomUUID(),
       threadId: target.threadId,
       resourceId: target.resourceId,
-      interval: spec.interval,
-      ...(spec.file ? { file: spec.file } : { prompt: spec.prompt ?? '' }),
-      ...(spec.extraPrompt ? { extraPrompt: spec.extraPrompt } : {}),
+      trigger: { kind: 'every', interval: { ...interval } },
+      ...('file' in spec
+        ? { file: { ...spec.file }, ...(spec.extraPrompt ? { extraPrompt: spec.extraPrompt } : {}) }
+        : { prompt: spec.prompt }),
       createdBy: spec.createdBy ?? 'user',
       status: 'active',
-      nextFireAt: nextFireTime(spec.interval.ms, now),
+      nextFireAt: nextFireTime(interval.ms, now),
       createdAt: now,
     };
     const entry: Entry = { schedule, inFlight: 0 };
@@ -117,7 +141,7 @@ export class ThreadScheduler {
     if (!entry) return false;
     if (entry.schedule.status === 'active') return true;
     entry.schedule.status = 'active';
-    entry.schedule.nextFireAt = nextFireTime(entry.schedule.interval.ms, this.#now());
+    entry.schedule.nextFireAt = nextFireTime(entry.schedule.trigger.interval.ms, this.#now());
     this.#arm(entry);
     return true;
   }
@@ -130,14 +154,16 @@ export class ThreadScheduler {
   /**
    * Fire once now, outside the cadence. Returns `busy` without firing when a
    * fire of this schedule is still running (a slow script, say), so the same
-   * script never runs twice at once. Resolves once the fire finished.
+   * script never runs twice at once. Resolves once the fire finished; a fire
+   * that never reached the agent resolves `failed` instead of calling `onError`.
    */
   async run(id: string): Promise<ScheduleRunResult> {
     const entry = this.#entries.get(id);
-    if (!entry) return 'not-found';
-    if (entry.inFlight > 0) return 'busy';
-    await this.#fire(entry);
-    return 'fired';
+    if (!entry) return { status: 'not-found' };
+    if (entry.inFlight > 0) return { status: 'busy' };
+    const result = await this.#fire(entry);
+    if (result.kind === 'failed') return { status: 'failed', error: result.error };
+    return result.kind === 'delivered' ? { status: 'fired' } : { status: 'not-found' };
   }
 
   /** Drop every schedule and timer (process shutdown). */
@@ -155,27 +181,33 @@ export class ThreadScheduler {
         // Timers can fire a hair early; step from the later of now and the
         // intended boundary so the same boundary is never fired twice.
         const now = this.#now();
-        entry.schedule.nextFireAt = nextFireTime(entry.schedule.interval.ms, Math.max(now, scheduledAt));
+        entry.schedule.nextFireAt = nextFireTime(entry.schedule.trigger.interval.ms, Math.max(now, scheduledAt));
         this.#arm(entry);
         // A timer that ran long after its boundary (machine asleep) is a missed fire, not a late one.
         if (now - scheduledAt > LATE_FIRE_GRACE_MS) return;
         // A slow script can outlast a short interval; don't stack fires.
-        if (entry.inFlight === 0) void this.#fire(entry);
+        if (entry.inFlight === 0) {
+          void this.#fire(entry).then(result => {
+            if (result.kind === 'failed') this.#options.onError?.(result.error, { ...entry.schedule });
+          });
+        }
       },
       Math.max(0, scheduledAt - this.#now()),
     );
     entry.timer.unref?.();
   }
 
-  async #fire(entry: Entry): Promise<void> {
+  async #fire(entry: Entry): Promise<FireOutcome> {
     const schedule = { ...entry.schedule };
     entry.inFlight++;
     try {
       const assembled = await this.#options.assemblePrompt(schedule);
-      if (this.#entries.get(schedule.id) !== entry) return; // deleted meanwhile
+      // Deleted while its prompt was being built: drop the fire quietly.
+      if (this.#entries.get(schedule.id) !== entry) return { kind: 'deleted' };
       await this.#options.deliver(schedule, assembled);
+      return { kind: 'delivered' };
     } catch (error) {
-      this.#options.onError?.(error, schedule);
+      return { kind: 'failed', error };
     } finally {
       entry.inFlight--;
     }
@@ -189,7 +221,7 @@ export function shortScheduleId(id: string): string {
 /** One-line human summary of what a schedule sends: `run ./check.sh + "extra"`, `read notes.md`, `"prompt"`. */
 export function describeScheduleSource(schedule: Pick<ThreadSchedule, 'prompt' | 'file' | 'extraPrompt'>): string {
   if (!schedule.file) return `"${schedule.prompt ?? ''}"`;
-  const verb = schedule.file.mode === 'exec' ? 'run' : 'read';
+  const verb = schedule.file.mode === 'script' ? 'run' : 'read';
   const extra = schedule.extraPrompt ? ` + "${schedule.extraPrompt}"` : '';
   return `${verb} ${schedule.file.displayPath}${extra}`;
 }
@@ -205,7 +237,7 @@ export function scheduleSignalAttributes(
   return {
     source: SCHEDULE_SIGNAL_SOURCE,
     scheduleId: schedule.id,
-    scheduleCadence: schedule.interval.label,
+    scheduleCadence: schedule.trigger.interval.label,
     scheduleSource: describeScheduleSource(schedule),
     scheduleCreatedBy: schedule.createdBy,
     ...(assembled.outcome ? { scheduleOutcome: assembled.outcome } : {}),

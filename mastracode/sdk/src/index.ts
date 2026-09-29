@@ -115,7 +115,6 @@ import { setAuthStorage as setXAIAuthStorage } from './providers/xai.js';
 import {
   assembleSchedulePrompt,
   createScheduleTools,
-  isExecutableFile,
   runScript,
   scheduleSignalAttributes,
   shortScheduleId,
@@ -959,7 +958,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
               return false;
             }
           },
-          isExecutable: isExecutableFile,
         }),
       })
     : undefined;

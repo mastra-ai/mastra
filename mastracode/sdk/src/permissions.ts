@@ -72,6 +72,7 @@ const TOOL_CATEGORY_MAP: Record<string, ToolCategory> = {
   schedule_list: 'read',
   schedule_update: 'edit',
   schedule_create: 'execute',
+  schedule_resume: 'execute',
   schedule_run: 'execute',
 
   // Interactive / planning tools — always allowed (no category needed)

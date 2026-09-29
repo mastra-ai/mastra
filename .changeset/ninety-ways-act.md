@@ -1,8 +1,14 @@
 ---
 '@mastra/code-sdk': minor
-'mastracode': patch
 ---
 
-Added a `schedules` module with a process-local `ThreadScheduler` that fires recurring prompts into a thread on wall-clock boundaries (daylight-saving aware), plus argument parsing for prompt or file sources and fire-time prompt assembly (scripts run via `execFile` on the literal path; prompt files are re-read each fire). The Mastra Code controller exposes the scheduler as `threadScheduler`; schedules are never written to storage, so processes sharing a database don't fire each other's schedules.
+Added `@mastra/code-sdk/schedules` with a process-local `ThreadScheduler` that sends recurring prompts into a thread on wall-clock boundaries, following daylight saving changes like cron.
 
-`createScheduleTools()` builds agent tools for the scheduler. Mastra Code enables them with the `scheduleTools` config option or the `signals.experimentalScheduleTools` setting (off by default).
+```ts
+scheduler.create(
+  { prompt: 'Check whether the build is green', trigger: { kind: 'every', interval: { ms: 5 * 60_000, label: '5m' } } },
+  { threadId, resourceId },
+);
+```
+
+A schedule's source is a prompt, a prompt file re-read on each fire, or a script whose output becomes the prompt. `run()` reports whether a manual fire was delivered, failed, skipped because it was already firing, or not found. The Mastra Code controller exposes the scheduler as `threadScheduler`, and `createScheduleTools()` builds agent tools for it, enabled with the `scheduleTools` config option or the `signals.experimentalScheduleTools` setting (off by default).

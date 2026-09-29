@@ -36,7 +36,7 @@ describe('assembleSchedulePrompt', () => {
   it('runs exec files in the workspace and appends the extra prompt', async () => {
     const opts = options();
     const prompt = await assembleSchedulePrompt(
-      { file: { path: '/work/check.sh', displayPath: './check.sh', mode: 'exec' }, extraPrompt: 'Report it' },
+      { file: { path: '/work/check.sh', displayPath: './check.sh', mode: 'script' }, extraPrompt: 'Report it' },
       opts,
     );
     expect(prompt).toEqual({ prompt: 'Output of ./check.sh (exit 0):\nOK\n\nReport it', outcome: 'exit 0' });
@@ -52,7 +52,7 @@ describe('assembleSchedulePrompt', () => {
 
   it('turns failures into prompt text instead of skipping', async () => {
     const prompt = await assembleSchedulePrompt(
-      { file: { path: '/work/gone.sh', displayPath: './gone.sh', mode: 'exec' }, extraPrompt: 'Report it' },
+      { file: { path: '/work/gone.sh', displayPath: './gone.sh', mode: 'script' }, extraPrompt: 'Report it' },
       options({ runScript: vi.fn(async () => Promise.reject(new Error('ENOENT'))) }),
     );
     expect(prompt).toEqual({ prompt: 'Schedule ./gone.sh failed: ENOENT\n\nReport it', outcome: 'failed' });
@@ -60,7 +60,7 @@ describe('assembleSchedulePrompt', () => {
 
   it('reports killed scripts', async () => {
     const result = await assembleSchedulePrompt(
-      { file: { path: '/work/slow.sh', displayPath: './slow.sh', mode: 'exec' } },
+      { file: { path: '/work/slow.sh', displayPath: './slow.sh', mode: 'script' } },
       options({ runScript: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: null })) }),
     );
     expect(result.outcome).toBe('killed');

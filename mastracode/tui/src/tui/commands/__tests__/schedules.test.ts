@@ -2,10 +2,14 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { ThreadScheduler } from '@mastra/code-sdk/schedules';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { ModalQuestionOptions } from '../../modal-question.js';
 import { handleSchedulesCommand } from '../schedules.js';
 import type { SlashCommandContext } from '../types.js';
+
+const modal = vi.hoisted(() => ({ askModalQuestion: vi.fn() }));
+vi.mock('../../modal-question.js', () => ({ askModalQuestion: modal.askModalQuestion }));
 
 let workspaceDir: string;
 
@@ -22,6 +26,23 @@ afterAll(() => {
 const schedulers: ThreadScheduler[] = [];
 afterEach(() => {
   for (const scheduler of schedulers.splice(0)) scheduler.stop();
+});
+
+/** Questions the command asked, in order. */
+let asked: ModalQuestionOptions[];
+
+/** Answer each modal question in turn; `null` is Esc. */
+function answer(...answers: Array<string | null>) {
+  modal.askModalQuestion.mockImplementation(async (_ui: unknown, options: ModalQuestionOptions) => {
+    asked.push(options);
+    if (answers.length === 0) throw new Error(`Unexpected question: ${options.question}`);
+    return answers.shift()!;
+  });
+}
+
+beforeEach(() => {
+  asked = [];
+  modal.askModalQuestion.mockReset();
 });
 
 function createContext(
@@ -51,7 +72,12 @@ function createContext(
     },
   };
   const ctx = {
-    state: { session, projectInfo: { rootPath: workspaceDir }, pendingNewThread: options.pendingNewThread ?? false },
+    state: {
+      session,
+      ui: {},
+      projectInfo: { rootPath: workspaceDir },
+      pendingNewThread: options.pendingNewThread ?? false,
+    },
     threadScheduler: options.scheduler === false ? undefined : scheduler,
     showInfo: vi.fn(),
     showError: vi.fn(),
@@ -67,7 +93,8 @@ function createContext(
   };
 }
 
-const lastInfo = (showInfo: ReturnType<typeof vi.fn>) => showInfo.mock.calls.at(-1)![0] as string;
+const every5m = { trigger: { kind: 'every' as const, interval: { ms: 300_000, label: '5m' } } };
+const optionLabels = (question: ModalQuestionOptions) => question.options?.map(option => option.label) ?? [];
 
 describe('/schedules guards', () => {
   it('reports when no scheduler is available', async () => {
@@ -76,222 +103,212 @@ describe('/schedules guards', () => {
     expect(showError).toHaveBeenCalledWith(expect.stringContaining('Schedules are unavailable'));
   });
 
-  it('creates a thread first when the session has none yet', async () => {
-    const { ctx, scheduler, session } = createContext({ threadId: undefined });
-    await handleSchedulesCommand(ctx, ['create', '5m', 'hi']);
-    expect(session.thread.create).toHaveBeenCalledTimes(1);
-    expect(scheduler.list()).toEqual([expect.objectContaining({ threadId: 'thread-new' })]);
-  });
-
-  it('does not create a thread for invalid create args', async () => {
-    const { ctx, session } = createContext({ threadId: undefined });
-    await handleSchedulesCommand(ctx, ['create', '90m', 'hi']);
-    expect(session.thread.create).not.toHaveBeenCalled();
-  });
-
-  it('rejects unknown subcommands with usage', async () => {
-    const { ctx, showError } = createContext();
-    await handleSchedulesCommand(ctx, ['bogus']);
-    expect(showError).toHaveBeenCalledWith(expect.stringContaining('Unknown subcommand "bogus"'));
+  it('rejects typed arguments instead of guessing at them', async () => {
+    const { ctx, showError, scheduler } = createContext();
+    await handleSchedulesCommand(ctx, ['create', '5m', './check.sh']);
+    expect(showError).toHaveBeenCalledWith(expect.stringContaining('takes no arguments'));
+    expect(modal.askModalQuestion).not.toHaveBeenCalled();
+    expect(scheduler.list()).toEqual([]);
   });
 });
 
-describe('/schedules (list)', () => {
-  it('shows the empty-state hint', async () => {
-    const { ctx, showInfo } = createContext();
+describe('/schedules picker', () => {
+  it('offers Create first, then one row per schedule on this thread', async () => {
+    const { ctx, scheduler } = createContext();
+    scheduler.create({ ...every5m, prompt: 'mine' }, { threadId: 'thread-1', resourceId: 'resource-1' });
+    scheduler.create({ ...every5m, prompt: 'theirs' }, { threadId: 'other', resourceId: 'resource-1' });
+    answer(null);
     await handleSchedulesCommand(ctx, []);
-    expect(showInfo).toHaveBeenCalledWith(
-      'No schedules on this thread. Use /schedules create <interval> <prompt|file>.',
-    );
+    const [picker] = asked;
+    expect(picker!.question).toBe('Schedules on this thread (1):');
+    expect(picker!.allowCustomResponse).toBe(false);
+    expect(optionLabels(picker!)[0]).toBe('Create schedule');
+    expect(picker!.options).toHaveLength(2);
+    expect(picker!.options![1]).toMatchObject({
+      label: expect.stringMatching(/every 5m · next in/),
+      description: '"mine"',
+    });
   });
 
-  it('lists only this thread’s schedules with id, cadence, timing, and source', async () => {
-    const { ctx, scheduler, showInfo } = createContext();
-    const a = scheduler.create(
-      { interval: { ms: 300_000, label: '5m' }, prompt: 'check the build' },
-      {
-        threadId: 'thread-1',
-        resourceId: 'resource-1',
-      },
-    );
-    const b = scheduler.create(
-      {
-        interval: { ms: 3_600_000, label: '1h' },
-        file: { path: '/x/check.sh', displayPath: './check.sh', mode: 'exec' },
-        extraPrompt: 'Report',
-      },
-      { threadId: 'thread-1', resourceId: 'resource-1' },
-    );
-    scheduler.pause(b.id);
-    scheduler.create(
-      { interval: { ms: 300_000, label: '5m' }, prompt: 'elsewhere' },
-      {
-        threadId: 'thread-2',
-        resourceId: 'resource-1',
-      },
-    );
-
+  it('says when the thread has no schedules', async () => {
+    const { ctx } = createContext();
+    answer(null);
     await handleSchedulesCommand(ctx, []);
-    const text = lastInfo(showInfo);
-    expect(text).toContain('Schedules on this thread (2)');
-    expect(text).toMatch(new RegExp(`${a.id.slice(0, 8)}  every 5m  next in (<1m|\\d+m)  "check the build"`));
-    expect(text).toContain(`${b.id.slice(0, 8)}  every 1h  paused  run ./check.sh + "Report"`);
-    expect(text).not.toContain('elsewhere');
+    expect(asked[0]!.question).toBe('No schedules on this thread yet.');
   });
 });
 
 describe('/schedules create', () => {
-  it('creates a prompt schedule on the current thread and reports it', async () => {
+  it('creates a prompt schedule after confirmation', async () => {
     const { ctx, scheduler, showInfo } = createContext();
-    await handleSchedulesCommand(ctx, ['create', '5m', 'check', 'the', 'build']);
+    answer('Create schedule', 'Prompt', 'check CI', '5m', 'Create');
+    await handleSchedulesCommand(ctx, []);
     expect(scheduler.list()).toEqual([
       expect.objectContaining({
         threadId: 'thread-1',
         resourceId: 'resource-1',
-        interval: { ms: 300_000, label: '5m' },
-        prompt: 'check the build',
-        status: 'active',
+        prompt: 'check CI',
+        trigger: { kind: 'every', interval: { ms: 300_000, label: '5m' } },
+        createdBy: 'user',
       }),
     ]);
-    const text = lastInfo(showInfo);
-    expect(text).toContain(`Created schedule ${scheduler.list()[0]!.id.slice(0, 8)}: every 5m`);
-    expect(text).toContain('clock boundaries');
+    expect(asked.at(-1)!.question).toContain('Create schedule every 5m — "check CI"?');
+    expect(showInfo).toHaveBeenCalledWith(
+      expect.stringMatching(/^Created schedule [0-9a-f]{8}: every 5m — "check CI"/),
+    );
   });
 
-  it('strips quotes wrapping the prompt', async () => {
+  it('keeps a quoted prompt as typed', async () => {
     const { ctx, scheduler } = createContext();
-    await handleSchedulesCommand(ctx, ['create', '1m', '"schedules', 'test"']);
-    expect(scheduler.list()[0]!.prompt).toBe('schedules test');
+    answer('Create schedule', 'Prompt', '"./check.sh"', '5m', 'Create');
+    await handleSchedulesCommand(ctx, []);
+    expect(scheduler.list()[0]).toMatchObject({ prompt: '"./check.sh"' });
   });
 
-  it('creates an exec-file schedule with an extra prompt', async () => {
+  it('creates a script schedule with an extra prompt', async () => {
     const { ctx, scheduler } = createContext();
-    await handleSchedulesCommand(ctx, ['create', '1h', './check.sh', 'Report', 'the', 'result']);
+    answer('Create schedule', 'Script', './check.sh', 'Report it', '1h', 'Create');
+    await handleSchedulesCommand(ctx, []);
     expect(scheduler.list()[0]).toMatchObject({
-      file: { path: path.join(workspaceDir, 'check.sh'), displayPath: './check.sh', mode: 'exec' },
-      extraPrompt: 'Report the result',
+      file: { path: path.join(workspaceDir, 'check.sh'), displayPath: './check.sh', mode: 'script' },
+      extraPrompt: 'Report it',
     });
   });
 
-  it('creates a prompt-file schedule', async () => {
+  it('creates a prompt-file schedule, asking again until the path exists', async () => {
     const { ctx, scheduler } = createContext();
-    await handleSchedulesCommand(ctx, ['create', '1d', 'notes.md']);
-    expect(scheduler.list()[0]).toMatchObject({ file: { mode: 'prompt', displayPath: 'notes.md' } });
+    answer('Create schedule', 'Prompt file', 'missing.md', 'notes.md', '1d', 'Create');
+    await handleSchedulesCommand(ctx, []);
+    expect(asked[3]!.question).toContain(`No file at ${path.join(workspaceDir, 'missing.md')}`);
+    expect(scheduler.list()[0]).toMatchObject({
+      file: { path: path.join(workspaceDir, 'notes.md'), mode: 'prompt' },
+    });
+    expect(scheduler.list()[0]!.extraPrompt).toBeUndefined();
   });
 
-  it('warns when a path-looking token does not exist', async () => {
-    const { ctx, scheduler, showInfo } = createContext();
-    await handleSchedulesCommand(ctx, ['create', '5m', './missing.sh']);
-    expect(scheduler.list()[0]!.prompt).toBe('./missing.sh');
-    expect(lastInfo(showInfo)).toContain('Note: "./missing.sh" looks like a path but was not found');
+  it('accepts a custom cadence and asks again with a suggestion for an unsupported one', async () => {
+    const { ctx, scheduler } = createContext();
+    answer('Create schedule', 'Prompt', 'hi', '90m', '20m', 'Create');
+    await handleSchedulesCommand(ctx, []);
+    expect(asked[3]!.allowCustomResponse).toBe(true);
+    expect(asked[4]!.question).toContain('Try 2h.');
+    expect(scheduler.list()[0]!.trigger.interval.label).toBe('20m');
   });
 
-  it('shows parse errors with usage and creates nothing', async () => {
-    const { ctx, scheduler, showError } = createContext();
-    await handleSchedulesCommand(ctx, ['create', '90m', 'ping']);
-    expect(showError).toHaveBeenCalledWith(expect.stringMatching(/Try 2h\.[\s\S]*Usage:/));
+  it('creates nothing when cancelled', async () => {
+    const { ctx, scheduler, session } = createContext({ threadId: undefined });
+    answer('Create schedule', 'Prompt', 'hi', '5m', 'Cancel');
+    await handleSchedulesCommand(ctx, []);
     expect(scheduler.list()).toEqual([]);
+    expect(session.thread.create).not.toHaveBeenCalled();
+  });
+
+  it('creates a thread first when the session has none yet', async () => {
+    const { ctx, scheduler, session } = createContext({ threadId: undefined });
+    answer('Create schedule', 'Prompt', 'hi', '5m', 'Create');
+    await handleSchedulesCommand(ctx, []);
+    expect(session.thread.create).toHaveBeenCalledTimes(1);
+    expect(scheduler.list()).toEqual([expect.objectContaining({ threadId: 'thread-new' })]);
   });
 });
 
 describe('/schedules after /new', () => {
   it('binds a new schedule to the new thread, not the one just left', async () => {
     const { ctx, scheduler, session } = createContext({ pendingNewThread: true });
-    await handleSchedulesCommand(ctx, ['create', '1m', 'ping']);
+    answer('Create schedule', 'Prompt', 'hi', '5m', 'Create');
+    await handleSchedulesCommand(ctx, []);
     expect(session.thread.create).toHaveBeenCalledTimes(1);
     expect(ctx.state.pendingNewThread).toBe(false);
-    expect(scheduler.list()).toEqual([expect.objectContaining({ threadId: 'thread-new', prompt: 'ping' })]);
+    expect(scheduler.list()).toEqual([expect.objectContaining({ threadId: 'thread-new' })]);
   });
 
-  it('does not list or manage the previous thread’s schedules', async () => {
-    const { ctx, scheduler, showInfo, showError, session } = createContext({ pendingNewThread: true });
-    const old = scheduler.create(
-      { interval: { ms: 300_000, label: '5m' }, prompt: 'old' },
-      {
-        threadId: 'thread-1',
-        resourceId: 'resource-1',
-      },
-    );
+  it("does not list the previous thread's schedules", async () => {
+    const { ctx, scheduler } = createContext({ pendingNewThread: true });
+    scheduler.create({ ...every5m, prompt: 'old' }, { threadId: 'thread-1', resourceId: 'resource-1' });
+    answer(null);
     await handleSchedulesCommand(ctx, []);
-    expect(lastInfo(showInfo)).toContain('No schedules on this thread');
-    await handleSchedulesCommand(ctx, ['pause']);
-    expect(showError).toHaveBeenCalledWith('No schedules on this thread.');
-    expect(scheduler.list()[0]).toMatchObject({ id: old.id, status: 'active' });
-    expect(session.thread.create).not.toHaveBeenCalled();
+    expect(asked[0]!.options).toHaveLength(1);
   });
 });
 
-describe('/schedules delete|pause|resume|run', () => {
-  async function withTwo() {
-    const context = createContext();
-    await handleSchedulesCommand(context.ctx, ['create', '5m', 'first']);
-    await handleSchedulesCommand(context.ctx, ['create', '5m', 'second']);
-    const [first, second] = context.scheduler.list();
-    return { ...context, first: first!, second: second! };
+describe('/schedules manage', () => {
+  function withSchedule() {
+    const setup = createContext();
+    const schedule = setup.scheduler.create(
+      { ...every5m, prompt: 'ping' },
+      { threadId: 'thread-1', resourceId: 'resource-1' },
+    );
+    return { ...setup, schedule };
+  }
+  /** Pick the schedule's row from the picker, whatever its timing text says. */
+  function pickRow(...rest: Array<string | null>) {
+    modal.askModalQuestion.mockImplementation(async (_ui: unknown, options: ModalQuestionOptions) => {
+      asked.push(options);
+      if (asked.length === 1) return options.options![1]!.label;
+      if (rest.length === 0) throw new Error(`Unexpected question: ${options.question}`);
+      return rest.shift()!;
+    });
   }
 
-  it('errors when the thread has no schedules', async () => {
-    const { ctx, showError } = createContext();
-    await handleSchedulesCommand(ctx, ['run']);
-    expect(showError).toHaveBeenCalledWith('No schedules on this thread.');
-  });
-
-  it('targets the only schedule when no id is given', async () => {
-    const { ctx, scheduler, showInfo } = createContext();
-    await handleSchedulesCommand(ctx, ['create', '5m', 'only']);
-    const id = scheduler.list()[0]!.id;
-    await handleSchedulesCommand(ctx, ['pause']);
+  it('pauses and resumes', async () => {
+    const { ctx, scheduler, schedule, showInfo } = withSchedule();
+    pickRow('Pause');
+    await handleSchedulesCommand(ctx, []);
+    expect(optionLabels(asked[1]!)).toEqual(['Pause', 'Run now', 'Delete']);
     expect(scheduler.list()[0]!.status).toBe('paused');
-    expect(lastInfo(showInfo)).toBe(`Paused schedule ${id.slice(0, 8)}`);
-    await handleSchedulesCommand(ctx, ['resume']);
+    expect(showInfo).toHaveBeenLastCalledWith(`Paused schedule ${schedule.id.slice(0, 8)}.`);
+
+    asked = [];
+    pickRow('Resume');
+    await handleSchedulesCommand(ctx, []);
+    expect(asked[0]!.options![1]!.label).toContain('paused');
+    expect(optionLabels(asked[1]!)).toEqual(['Resume', 'Run now', 'Delete']);
     expect(scheduler.list()[0]!.status).toBe('active');
   });
 
-  it('requires an id for pause/resume/run when several exist', async () => {
-    const { ctx, showError } = await withTwo();
-    await handleSchedulesCommand(ctx, ['run']);
-    expect(showError).toHaveBeenCalledWith(expect.stringContaining('specify an id: /schedules run <id>'));
+  it('runs now, even while paused', async () => {
+    const { ctx, scheduler, schedule, deliver, showInfo } = withSchedule();
+    scheduler.pause(schedule.id);
+    pickRow('Run now');
+    await handleSchedulesCommand(ctx, []);
+    expect(showInfo).toHaveBeenLastCalledWith(`Triggered schedule ${schedule.id.slice(0, 8)}.`);
+    await vi.waitFor(() => expect(deliver).toHaveBeenCalledWith(expect.anything(), { prompt: 'ping' }));
+    expect(scheduler.list()[0]!.status).toBe('paused');
   });
 
-  it('requires an id for delete when several exist', async () => {
-    const { ctx, scheduler, showError } = await withTwo();
-    await handleSchedulesCommand(ctx, ['delete']);
-    expect(scheduler.list()).toHaveLength(2);
-    expect(showError).toHaveBeenCalledWith(expect.stringContaining('specify an id: /schedules delete <id>'));
-  });
-
-  it('resolves ids by case-insensitive prefix', async () => {
-    const { ctx, scheduler, second } = await withTwo();
-    await handleSchedulesCommand(ctx, ['delete', second.id.slice(0, 8).toUpperCase()]);
-    expect(scheduler.list().map(s => s.prompt)).toEqual(['first']);
-  });
-
-  it('reports unknown ids with the list', async () => {
-    const { ctx, showError } = await withTwo();
-    await handleSchedulesCommand(ctx, ['delete', 'zzzz']);
-    expect(showError).toHaveBeenCalledWith(expect.stringMatching(/No schedule matching "zzzz"[\s\S]*first/));
-  });
-
-  it('run fires the schedule now', async () => {
-    const { ctx, deliver, first, showInfo } = await withTwo();
-    await handleSchedulesCommand(ctx, ['run', first.id.slice(0, 8)]);
-    expect(lastInfo(showInfo)).toBe(`Triggered schedule ${first.id.slice(0, 8)}`);
+  it('reports a run that never reached the agent', async () => {
+    const { ctx, schedule, deliver, showError } = withSchedule();
+    deliver.mockRejectedValueOnce(new Error('thread blocked'));
+    pickRow('Run now');
+    await handleSchedulesCommand(ctx, []);
     await vi.waitFor(() =>
-      expect(deliver).toHaveBeenCalledWith(expect.objectContaining({ id: first.id }), { prompt: 'first' }),
+      expect(showError).toHaveBeenCalledWith(`Schedule ${schedule.id.slice(0, 8)} failed to fire: thread blocked`),
     );
   });
 
-  it('run reports a schedule that is still firing instead of firing it twice', async () => {
-    const { ctx, scheduler, assemblePrompt, showInfo } = createContext();
-    await handleSchedulesCommand(ctx, ['create', '5m', 'slow']);
-    const id = scheduler.list()[0]!.id;
+  it('skips a run while the schedule is still firing', async () => {
+    const { ctx, assemblePrompt, showInfo } = withSchedule();
     let release!: () => void;
-    assemblePrompt.mockImplementationOnce(() => new Promise(resolve => (release = () => resolve({ prompt: 'slow' }))));
-    await handleSchedulesCommand(ctx, ['run']);
-    expect(lastInfo(showInfo)).toBe(`Triggered schedule ${id.slice(0, 8)}`);
-    await handleSchedulesCommand(ctx, ['run']);
-    expect(lastInfo(showInfo)).toContain('is already firing; skipped');
+    assemblePrompt.mockImplementationOnce(() => new Promise(resolve => (release = () => resolve({ prompt: 'x' }))));
+    pickRow('Run now');
+    await handleSchedulesCommand(ctx, []);
+    asked = [];
+    pickRow('Run now');
+    await handleSchedulesCommand(ctx, []);
+    expect(showInfo).toHaveBeenLastCalledWith(expect.stringContaining('is already firing; skipped'));
     expect(assemblePrompt).toHaveBeenCalledTimes(1);
     release();
+  });
+
+  it('deletes only after confirmation', async () => {
+    const { ctx, scheduler } = withSchedule();
+    pickRow('Delete', 'Cancel');
+    await handleSchedulesCommand(ctx, []);
+    expect(scheduler.list()).toHaveLength(1);
+
+    asked = [];
+    pickRow('Delete', 'Delete');
+    await handleSchedulesCommand(ctx, []);
+    expect(scheduler.list()).toEqual([]);
   });
 });

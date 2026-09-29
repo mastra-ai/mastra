@@ -84,13 +84,19 @@ describe('nextFireTime', () => {
   });
 });
 
+function restoreTz(tz: string | undefined): void {
+  // Assigning undefined would set TZ to the string "undefined".
+  if (tz === undefined) delete process.env.TZ;
+  else process.env.TZ = tz;
+}
+
 describe('nextFireTime across daylight-saving changes', () => {
   const originalTz = process.env.TZ;
   beforeAll(() => {
     process.env.TZ = 'America/New_York';
   });
   afterAll(() => {
-    process.env.TZ = originalTz;
+    restoreTz(originalTz);
   });
   // Local wall-clock time in New York, rendered as `YYYY-MM-DD HH:MM`.
   const local = (ms: number) => {
@@ -131,5 +137,34 @@ describe('nextFireTime across daylight-saving changes', () => {
     const next = nextFireTime(5 * 60_000, lastEdt);
     expect(next - lastEdt).toBe(5 * 60_000);
     expect(local(next)).toBe('2026-11-01 01:00');
+    // …and keeps stepping forward from inside the repeated hour.
+    const inRepeat = new Date('2026-11-01T01:02:00-05:00').getTime();
+    expect(nextFireTime(5 * 60_000, inRepeat)).toBe(new Date('2026-11-01T01:05:00-05:00').getTime());
+  });
+});
+
+describe('nextFireTime across half-hour clock changes', () => {
+  const originalTz = process.env.TZ;
+  beforeAll(() => {
+    process.env.TZ = 'Australia/Lord_Howe';
+  });
+  afterAll(() => {
+    restoreTz(originalTz);
+  });
+  const MINUTE = 60_000;
+
+  // 2026-04-05 02:00 LHDT (+11:00) falls back to 01:30 LHST (+10:30).
+  it('does not leave a gap longer than the interval when the clock falls back 30 minutes', () => {
+    const fire = new Date('2026-04-05T01:40:00+11:00').getTime();
+    const next = nextFireTime(20 * MINUTE, fire);
+    expect(next - fire).toBe(20 * MINUTE); // 01:30 LHST, not 01:40 LHST
+    const after = nextFireTime(20 * MINUTE, next);
+    expect(after).toBe(new Date('2026-04-05T01:40:00+10:30').getTime());
+  });
+
+  // 2026-10-04 02:00 LHST (+10:30) jumps to 02:30 LHDT (+11:00).
+  it('does not leave a gap longer than the interval when the clock jumps 30 minutes', () => {
+    const fire = new Date('2026-10-04T01:40:00+10:30').getTime();
+    expect(nextFireTime(20 * MINUTE, fire) - fire).toBe(20 * MINUTE);
   });
 });

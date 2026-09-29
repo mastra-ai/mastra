@@ -484,15 +484,7 @@ export function setupAutocomplete(state: TUIState): void {
     },
     {
       name: 'schedules',
-      description: 'Recurring prompts for this thread (session-scoped, ≥1m)',
-      getArgumentCompletions: (argumentPrefix: string) =>
-        [
-          { value: 'create', label: 'create', description: 'create <interval> <prompt|file [extra prompt]>' },
-          { value: 'delete', label: 'delete', description: 'Delete a schedule (or all on this thread)' },
-          { value: 'pause', label: 'pause', description: 'Pause a schedule' },
-          { value: 'resume', label: 'resume', description: 'Resume a paused schedule' },
-          { value: 'run', label: 'run', description: 'Fire a schedule now' },
-        ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
+      description: 'Create and manage recurring prompts for this thread',
     },
     {
       name: 'profile',

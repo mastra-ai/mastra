@@ -8,7 +8,8 @@ import {
 } from './scheduler.js';
 
 const target = { threadId: 'thread-1', resourceId: 'resource-1' };
-const every5m = { interval: { ms: 5 * 60_000, label: '5m' }, prompt: 'ping' };
+const every = (ms: number, label: string) => ({ kind: 'every' as const, interval: { ms, label } });
+const every5m = { trigger: every(5 * 60_000, '5m'), prompt: 'ping' };
 
 function setup(now?: () => number) {
   const deliver = vi.fn(async (_schedule: unknown, _assembled: { prompt: string }) => {});
@@ -85,10 +86,10 @@ describe('ThreadScheduler', () => {
   it('run fires immediately without changing the cadence', async () => {
     const { scheduler, deliver } = setup();
     const schedule = scheduler.create(every5m, target);
-    await expect(scheduler.run(schedule.id)).resolves.toBe('fired');
+    await expect(scheduler.run(schedule.id)).resolves.toEqual({ status: 'fired' });
     expect(deliver).toHaveBeenCalledTimes(1);
     expect(scheduler.list()[0]!.nextFireAt).toBe(schedule.nextFireAt);
-    await expect(scheduler.run('missing')).resolves.toBe('not-found');
+    await expect(scheduler.run('missing')).resolves.toEqual({ status: 'not-found' });
   });
 
   it('does not stack timer fires while a slow fire is still running', async () => {
@@ -100,7 +101,7 @@ describe('ThreadScheduler', () => {
           release = () => resolve({ prompt: 'slow' });
         }),
     );
-    scheduler.create({ interval: { ms: 60_000, label: '1m' }, prompt: 'ping' }, target);
+    scheduler.create({ trigger: every(60_000, '1m'), prompt: 'ping' }, target);
     await vi.advanceTimersByTimeAsync(30_000); // 10:08 fire starts and hangs
     await vi.advanceTimersByTimeAsync(60_000); // 10:09 boundary skipped
     expect(assemblePrompt).toHaveBeenCalledTimes(1);
@@ -139,7 +140,7 @@ describe('ThreadScheduler', () => {
   it('rejects unsupported intervals when called directly', () => {
     const { scheduler } = setup();
     for (const ms of [0, -60_000, Number.NaN, Number.POSITIVE_INFINITY, 30_000, 90_000, 7 * 60_000, 2 * 86_400_000]) {
-      expect(() => scheduler.create({ interval: { ms, label: 'x' }, prompt: 'ping' }, target)).toThrow(
+      expect(() => scheduler.create({ trigger: every(ms, 'x'), prompt: 'ping' }, target)).toThrow(
         /Invalid schedule interval/,
       );
     }
@@ -159,9 +160,9 @@ describe('ThreadScheduler', () => {
     const schedule = scheduler.create(every5m, target);
     const first = scheduler.run(schedule.id);
     expect(scheduler.isFiring(schedule.id)).toBe(true);
-    await expect(scheduler.run(schedule.id)).resolves.toBe('busy');
+    await expect(scheduler.run(schedule.id)).resolves.toEqual({ status: 'busy' });
     release();
-    await expect(first).resolves.toBe('fired');
+    await expect(first).resolves.toEqual({ status: 'fired' });
     expect(scheduler.isFiring(schedule.id)).toBe(false);
     expect(assemblePrompt).toHaveBeenCalledTimes(1);
     expect(deliver).toHaveBeenCalledTimes(1);
@@ -173,7 +174,7 @@ describe('ThreadScheduler', () => {
     assemblePrompt.mockImplementationOnce(() => new Promise(resolve => (release = () => resolve({ prompt: 'a' }))));
     const schedule = scheduler.create(every5m, target);
     await vi.advanceTimersByTimeAsync(2.5 * 60_000); // 10:10 timer fire hangs
-    await expect(scheduler.run(schedule.id)).resolves.toBe('busy');
+    await expect(scheduler.run(schedule.id)).resolves.toEqual({ status: 'busy' });
     release();
     await vi.advanceTimersByTimeAsync(0);
 
@@ -182,7 +183,7 @@ describe('ThreadScheduler', () => {
     await vi.advanceTimersByTimeAsync(5 * 60_000);
     expect(assemblePrompt).toHaveBeenCalledTimes(2);
     release();
-    await expect(manual).resolves.toBe('fired');
+    await expect(manual).resolves.toEqual({ status: 'fired' });
   });
 
   it('skips a fire whose timer ran long after its boundary', async () => {
@@ -204,6 +205,44 @@ describe('ThreadScheduler', () => {
     expect(deliver).toHaveBeenCalledTimes(1);
   });
 
+  it('reports a manual run that never reached the agent as failed, without onError', async () => {
+    const { scheduler, deliver, onError, assemblePrompt } = setup();
+    const schedule = scheduler.create(every5m, target);
+    deliver.mockRejectedValueOnce(new Error('thread blocked'));
+    await expect(scheduler.run(schedule.id)).resolves.toEqual({
+      status: 'failed',
+      error: expect.objectContaining({ message: 'thread blocked' }),
+    });
+    assemblePrompt.mockRejectedValueOnce(new Error('no prompt'));
+    await expect(scheduler.run(schedule.id)).resolves.toMatchObject({ status: 'failed' });
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('reports a manual run whose schedule was deleted mid-fire as not found', async () => {
+    const { scheduler, assemblePrompt } = setup();
+    let release!: () => void;
+    assemblePrompt.mockImplementationOnce(() => new Promise(resolve => (release = () => resolve({ prompt: 'x' }))));
+    const schedule = scheduler.create(every5m, target);
+    const run = scheduler.run(schedule.id);
+    scheduler.delete(schedule.id);
+    release();
+    await expect(run).resolves.toEqual({ status: 'not-found' });
+  });
+
+  it('fires a paused schedule manually without resuming it', async () => {
+    const { scheduler, deliver } = setup();
+    const schedule = scheduler.create(every5m, target);
+    scheduler.pause(schedule.id);
+    await expect(scheduler.run(schedule.id)).resolves.toEqual({ status: 'fired' });
+    expect(deliver).toHaveBeenCalledTimes(1);
+    expect(scheduler.list()[0]!.status).toBe('paused');
+  });
+
+  it('rejects an empty prompt', () => {
+    const { scheduler } = setup();
+    expect(() => scheduler.create({ trigger: every(60_000, '1m'), prompt: '  ' }, target)).toThrow(/empty/);
+  });
+
   it('stop clears every schedule', async () => {
     const { scheduler, deliver } = setup();
     scheduler.create(every5m, target);
@@ -215,11 +254,11 @@ describe('ThreadScheduler', () => {
 });
 
 describe('describeScheduleSource', () => {
-  it('describes prompt, exec, and prompt-file schedules', () => {
+  it('describes prompt, script, and prompt-file schedules', () => {
     expect(describeScheduleSource({ prompt: 'check' })).toBe('"check"');
     expect(
       describeScheduleSource({
-        file: { path: '/w/c.sh', displayPath: './c.sh', mode: 'exec' },
+        file: { path: '/w/c.sh', displayPath: './c.sh', mode: 'script' },
         extraPrompt: 'Report',
       }),
     ).toBe('run ./c.sh + "Report"');
@@ -239,8 +278,8 @@ describe('scheduleSignalAttributes', () => {
       id: '0f75d166-0763-4c11-9fdc-9280aa16535c',
       threadId: 't',
       resourceId: 'r',
-      interval: { ms: 300_000, label: '5m' },
-      file: { path: '/w/c.sh', displayPath: './c.sh', mode: 'exec' as const },
+      trigger: every(300_000, '5m'),
+      file: { path: '/w/c.sh', displayPath: './c.sh', mode: 'script' as const },
       createdBy: 'agent' as const,
       status: 'active' as const,
       nextFireAt: 0,

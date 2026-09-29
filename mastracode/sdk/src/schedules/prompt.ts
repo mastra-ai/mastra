@@ -6,7 +6,7 @@
  * the prompt text rather than a skipped fire — a schedule that silently stops
  * delivering is worse than one that reports "the script broke".
  */
-import type { ScheduleCreateSpec } from './args.js';
+import type { ThreadSchedule } from './scheduler.js';
 
 export const SCRIPT_TIMEOUT_MS = 60_000;
 
@@ -44,7 +44,7 @@ function errorMessage(error: unknown): string {
 }
 
 export async function assembleSchedulePrompt(
-  spec: Pick<ScheduleCreateSpec, 'prompt' | 'file' | 'extraPrompt'>,
+  spec: Pick<ThreadSchedule, 'prompt' | 'file' | 'extraPrompt'>,
   options: AssemblePromptOptions,
 ): Promise<AssembledPrompt> {
   const { file } = spec;
@@ -53,7 +53,7 @@ export async function assembleSchedulePrompt(
   let text: string;
   let outcome: string | undefined;
   try {
-    if (file.mode === 'exec') {
+    if (file.mode === 'script') {
       const result = await options.runScript(file.path, { cwd: options.cwd, timeoutMs: SCRIPT_TIMEOUT_MS });
       text = formatScriptOutput(file.displayPath, result);
       outcome = result.exitCode === null ? 'killed' : `exit ${result.exitCode}`;

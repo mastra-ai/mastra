@@ -212,26 +212,18 @@ Hook exceptions are caught and logged. They never re-route the worker or trigger
 
 Mastra Code offers the `/schedules` command, which attaches a recurring prompt to the current conversation thread. Unlike `mastra.schedules`, these schedules live only in the Mastra Code process that created them: nothing is written to storage, and each fire is sent to the thread with `agent.sendSignal()` directly.
 
-```text
-/schedules create 5m Check whether the build is green
-/schedules create 2h ./scripts/check-ci.sh Summarize any failures
-/schedules create 1d ./notes/standup.md
-/schedules
-/schedules pause 81923e92
-/schedules resume 81923e92
-/schedules run 81923e92
-/schedules delete 81923e92
-```
+Run `/schedules` to open a menu with **Create schedule** and one row per schedule on the current thread. Creating a schedule walks through these steps:
 
-`create` takes an interval and then either a prompt or a file path, optionally followed by extra prompt text:
+1. Choose what each fire sends: a **Prompt**, a **Prompt file** that's re-read on every fire, or a **Script** that runs on every fire.
+1. Enter the prompt text or the file path. Paths resolve from the project root. For a script, you can add a prompt that's sent after the script output.
+1. Pick a cadence from `1m` to `1d`, or type one such as `20m` or `3h`. Minute steps must divide an hour and hour steps must divide a day.
+1. Confirm.
 
-- Intervals accept `Nm`, `Nh`, or `1d` (also spelled out, for example `5 minutes`). Minutes must divide 60 and hours must divide 24. Other values are rejected with the nearest valid suggestion. The minimum cadence is one minute.
-- A path that resolves to an existing file is read at fire time. Files with an executable bit or a `.sh`, `.js`, `.mjs`, `.cjs`, `.ts`, or `.py` extension run as a script from the project root with a 60-second timeout, and their stdout, stderr, and exit code become the prompt. Any other file is sent as prompt text. The extra prompt is appended in both cases and is never passed to the script.
-- A path-looking token that doesn't exist is used as prompt text with a warning.
+Scripts run from the project root with a 60-second timeout, and their stdout, stderr, and exit code become the prompt. The extra prompt is never passed to the script.
 
-Each fire arrives on the thread as a `user`-type signal and shows in the transcript as a `schedule` entry with the schedule's id, cadence, source, and script exit status. If the thread is busy, the running agent receives the prompt as its next input, the same way a message you type mid-run does. If the thread is idle, it wakes and runs. Schedules fire on any thread in the process, not only the one focused in the terminal. After `/new`, `create` binds the schedule to the new thread.
+Selecting an existing schedule offers **Run now**, **Pause** or **Resume**, and **Delete**. **Run now** fires the schedule once without changing its cadence, works on paused schedules, and is skipped while a fire of the same schedule is still running.
 
-Bare `/schedules` lists the current thread's schedules with an 8-character id, cadence, and next fire time. `delete`, `pause`, `resume`, and `run` accept an id prefix, and you can leave the id out when the thread has exactly one schedule. `run` fires the schedule once, off-cadence, and is skipped while a fire of the same schedule is still running.
+Each fire arrives on the thread as a `user`-type signal and shows in the transcript as a `schedule` entry with the schedule's id, cadence, source, and script exit status. If the thread is busy, the running agent receives the prompt as its next input, the same way a message you type mid-run does. If the thread is idle, it wakes and runs. Schedules fire on any thread in the process, not only the one focused in the terminal. After `/new`, a new schedule binds to the new thread.
 
 Things to know:
 
@@ -241,7 +233,7 @@ Things to know:
 
 ### Agent schedule tools
 
-Turning on **Experimental schedule tools** in `/settings` (restart required) gives the agent four tools that manage the same schedules: `schedule_create`, `schedule_list`, `schedule_update` (pause, resume, or delete), and `schedule_run`. The tools only see and change schedules on the thread of the run that calls them. Because a schedule can run a script on every fire, `schedule_create` and `schedule_run` need the same approval as running a shell command unless YOLO mode is on. Schedules the agent creates are marked `created by agent` in the transcript.
+Turning on **Experimental schedule tools** in `/settings` (restart required) gives the agent tools that manage the same schedules: `schedule_create`, `schedule_list`, `schedule_update` (pause or delete), `schedule_resume`, and `schedule_run`. The tools only see and change schedules on the thread of the run that calls them. Because a schedule can run a script on every fire, `schedule_create`, `schedule_resume`, and `schedule_run` need the same approval as running a shell command unless YOLO mode is on. Schedules the agent creates are marked `created by agent` in the transcript.
 
 ## Related
 

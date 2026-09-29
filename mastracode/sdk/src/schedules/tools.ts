@@ -5,26 +5,32 @@
  * that calls it — the model never picks a thread or resource — and can only
  * see or manage schedules on that thread.
  */
+import * as path from 'node:path';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { resolveScheduleFile } from './args.js';
-import type { ScheduleCreateArgsOptions } from './args.js';
 import { parseInterval, validateInterval } from './interval.js';
 import { describeScheduleSource, shortScheduleId } from './scheduler.js';
-import type { ThreadSchedule, ThreadScheduler } from './scheduler.js';
+import type { ScheduleFile, ThreadSchedule, ThreadScheduler } from './scheduler.js';
 
 export const SCHEDULE_TOOL_IDS = {
   create: 'schedule_create',
   list: 'schedule_list',
   update: 'schedule_update',
+  resume: 'schedule_resume',
   run: 'schedule_run',
 } as const;
 
+export type ScheduleFileOptions = {
+  /** Directory relative paths resolve against (the project root). */
+  cwd: string;
+  homeDir?: string;
+  fileExists: (absPath: string) => boolean;
+};
+
 export type ScheduleToolsOptions = {
   scheduler: ThreadScheduler;
-  /** Resolves relative file paths, like `/schedules create` does. */
-  fileOptions: () => ScheduleCreateArgsOptions;
+  fileOptions: () => ScheduleFileOptions;
 };
 
 type ToolRunContext = { agent?: { threadId?: string; resourceId?: string } };
@@ -38,19 +44,30 @@ type ScheduleToolResult = z.infer<typeof resultSchema>;
 const intervalSchema = z
   .string()
   .min(1)
-  .superRefine((value, ctx) => {
+  .transform((value, ctx) => {
     const interval = parseInterval(value);
     if ('error' in interval) {
       ctx.addIssue({ code: 'custom', message: interval.error });
-      return;
+      return z.NEVER;
     }
     const check = validateInterval(interval);
     if ('error' in check) {
       const suggestion = check.suggestion ? ` Try ${check.suggestion}.` : '';
       ctx.addIssue({ code: 'custom', message: `${check.error}${suggestion}` });
+      return z.NEVER;
     }
+    return interval;
   })
   .describe('Cadence such as "5m", "2h", or "1d". Minute steps must divide 60, hour steps must divide 24.');
+
+const triggerSchema = z
+  .discriminatedUnion('kind', [
+    z.object({
+      kind: z.literal('every'),
+      interval: intervalSchema,
+    }),
+  ])
+  .describe('When the schedule fires. "every" repeats on wall-clock boundaries (5m fires at :00, :05, …).');
 
 const idSchema = z.string().min(1).describe('Schedule id, or a unique prefix of it (the 8-character short id works).');
 
@@ -61,10 +78,24 @@ function threadOf(context: unknown): { threadId: string; resourceId: string } | 
 
 const NO_THREAD: ScheduleToolResult = { content: 'Schedules require a memory-backed thread.', isError: true };
 
+function resolveFile(
+  token: string,
+  mode: ScheduleFile['mode'],
+  options: ScheduleFileOptions,
+): ScheduleFile | undefined {
+  const expanded = token.startsWith('~/') && options.homeDir ? path.join(options.homeDir, token.slice(2)) : token;
+  const absPath = path.resolve(options.cwd, expanded);
+  return options.fileExists(absPath) ? { path: absPath, displayPath: token, mode } : undefined;
+}
+
 function formatSchedule(schedule: ThreadSchedule): string {
   const timing =
     schedule.status === 'paused' ? 'paused' : `next at ${new Date(schedule.nextFireAt).toLocaleTimeString()}`;
-  return `${shortScheduleId(schedule.id)}  every ${schedule.interval.label}  ${timing}  ${describeScheduleSource(schedule)}  (created by ${schedule.createdBy})`;
+  return `${shortScheduleId(schedule.id)}  every ${schedule.trigger.interval.label}  ${timing}  ${describeScheduleSource(schedule)}  (created by ${schedule.createdBy})`;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function findOne(
@@ -86,40 +117,42 @@ export function createScheduleTools({ scheduler, fileOptions }: ScheduleToolsOpt
     id: SCHEDULE_TOOL_IDS.create,
     description: `Schedule a recurring prompt on this thread. Each fire arrives as a new user turn labelled "schedule".
 
-Pass either "prompt" (text sent each fire) or "file". A script file (executable, or .sh/.js/.mjs/.cjs/.ts/.py) runs each fire and its output is sent; any other file is re-read and sent as the prompt. "extraPrompt" is appended after the file's output. Schedules fire on wall-clock boundaries (5m fires at :00, :05, …) and live only until Mastra Code exits.`,
+Pass exactly one source: "prompt" (text sent each fire), "promptFile" (a file re-read and sent as the prompt each fire), or "script" (run each fire; its output is sent, followed by "extraPrompt" if given). Schedules live only until Mastra Code exits.`,
     inputSchema: z
       .object({
-        interval: intervalSchema,
+        trigger: triggerSchema,
         prompt: z.string().trim().min(1).optional().describe('Prompt text to send on every fire.'),
-        file: z.string().trim().min(1).optional().describe('Path to a script to run, or a file to send as the prompt.'),
-        extraPrompt: z.string().trim().min(1).optional().describe('Text appended after the file output.'),
+        promptFile: z.string().trim().min(1).optional().describe('Path to a file to re-read and send on every fire.'),
+        script: z.string().trim().min(1).optional().describe('Path to a script to run on every fire.'),
+        extraPrompt: z.string().trim().min(1).optional().describe('Text sent after the script output.'),
       })
-      .refine(input => Boolean(input.prompt) !== Boolean(input.file), {
-        message: 'Provide exactly one of "prompt" or "file".',
+      .refine(input => [input.prompt, input.promptFile, input.script].filter(Boolean).length === 1, {
+        message: 'Provide exactly one of "prompt", "promptFile", or "script".',
       })
-      .refine(input => !input.extraPrompt || input.file, {
-        message: '"extraPrompt" only applies with "file".',
+      .refine(input => !input.extraPrompt || input.script, {
+        message: '"extraPrompt" only applies with "script".',
       }),
     outputSchema: resultSchema,
     execute: async (input, context): Promise<ScheduleToolResult> => {
       const target = threadOf(context);
       if (!target) return NO_THREAD;
-      const interval = parseInterval(input.interval);
-      if ('error' in interval) return { content: interval.error, isError: true };
-      let file: ReturnType<typeof resolveScheduleFile>;
-      if (input.file) {
-        file = resolveScheduleFile(input.file, fileOptions());
-        if (!file) return { content: `File not found: ${input.file}`, isError: true };
+      let schedule: ThreadSchedule;
+      if (input.prompt) {
+        schedule = scheduler.create({ trigger: input.trigger, prompt: input.prompt, createdBy: 'agent' }, target);
+      } else {
+        const token = (input.script ?? input.promptFile)!;
+        const file = resolveFile(token, input.script ? 'script' : 'prompt', fileOptions());
+        if (!file) return { content: `File not found: ${token}`, isError: true };
+        schedule = scheduler.create(
+          {
+            trigger: input.trigger,
+            file,
+            ...(input.extraPrompt ? { extraPrompt: input.extraPrompt } : {}),
+            createdBy: 'agent',
+          },
+          target,
+        );
       }
-      const schedule = scheduler.create(
-        {
-          interval,
-          ...(file ? { file, ...(input.extraPrompt ? { extraPrompt: input.extraPrompt } : {}) } : {}),
-          ...(input.prompt ? { prompt: input.prompt } : {}),
-          createdBy: 'agent',
-        },
-        target,
-      );
       return { content: `Created schedule ${formatSchedule(schedule)}` };
     },
   });
@@ -142,10 +175,10 @@ Pass either "prompt" (text sent each fire) or "file". A script file (executable,
 
   const scheduleUpdateTool = createTool({
     id: SCHEDULE_TOOL_IDS.update,
-    description: 'Pause, resume, or delete a schedule on this thread.',
+    description: 'Pause or delete a schedule on this thread. Use schedule_resume to resume a paused one.',
     inputSchema: z.object({
       id: idSchema,
-      action: z.enum(['pause', 'resume', 'delete']),
+      action: z.enum(['pause', 'delete']),
     }),
     outputSchema: resultSchema,
     execute: async ({ id, action }, context): Promise<ScheduleToolResult> => {
@@ -154,15 +187,32 @@ Pass either "prompt" (text sent each fire) or "file". A script file (executable,
       const found = findOne(scheduler, target.threadId, id);
       if (!('schedule' in found)) return found;
       scheduler[action](found.schedule.id);
-      const verb = { pause: 'Paused', resume: 'Resumed', delete: 'Deleted' }[action];
+      const verb = action === 'pause' ? 'Paused' : 'Deleted';
       return { content: `${verb} schedule ${shortScheduleId(found.schedule.id)}.` };
+    },
+  });
+
+  // Separate from schedule_update: resuming lets the timer run the schedule's
+  // script again, so it needs the same approval as creating or running one.
+  const scheduleResumeTool = createTool({
+    id: SCHEDULE_TOOL_IDS.resume,
+    description: 'Resume a paused schedule on this thread. It fires again from the next clock boundary.',
+    inputSchema: z.object({ id: idSchema }),
+    outputSchema: resultSchema,
+    execute: async ({ id }, context): Promise<ScheduleToolResult> => {
+      const target = threadOf(context);
+      if (!target) return NO_THREAD;
+      const found = findOne(scheduler, target.threadId, id);
+      if (!('schedule' in found)) return found;
+      scheduler.resume(found.schedule.id);
+      return { content: `Resumed schedule ${shortScheduleId(found.schedule.id)}.` };
     },
   });
 
   const scheduleRunTool = createTool({
     id: SCHEDULE_TOOL_IDS.run,
     description:
-      'Fire a schedule on this thread once now, without changing its cadence. Its prompt arrives as the next user turn.',
+      'Fire a schedule on this thread once now, even if it is paused, without changing its cadence. Its prompt arrives as the next user turn.',
     inputSchema: z.object({ id: idSchema }),
     outputSchema: resultSchema,
     execute: async ({ id }, context): Promise<ScheduleToolResult> => {
@@ -171,12 +221,17 @@ Pass either "prompt" (text sent each fire) or "file". A script file (executable,
       const found = findOne(scheduler, target.threadId, id);
       if (!('schedule' in found)) return found;
       const short = shortScheduleId(found.schedule.id);
-      if (scheduler.isFiring(found.schedule.id)) {
-        return { content: `Schedule ${short} is already firing; skipped so its prompt isn't sent twice.` };
+      const result = await scheduler.run(found.schedule.id);
+      switch (result.status) {
+        case 'fired':
+          return { content: `Triggered schedule ${short}; its prompt arrives as the next turn.` };
+        case 'busy':
+          return { content: `Schedule ${short} is already firing; skipped so its prompt isn't sent twice.` };
+        case 'not-found':
+          return { content: `Schedule ${short} was deleted before it fired.`, isError: true };
+        case 'failed':
+          return { content: `Schedule ${short} failed to fire: ${errorMessage(result.error)}`, isError: true };
       }
-      // Don't hold the tool call open for a script that may run up to a minute.
-      void scheduler.run(found.schedule.id);
-      return { content: `Triggered schedule ${short}; its prompt arrives as the next turn.` };
     },
   });
 
@@ -184,6 +239,7 @@ Pass either "prompt" (text sent each fire) or "file". A script file (executable,
     [SCHEDULE_TOOL_IDS.create]: scheduleCreateTool,
     [SCHEDULE_TOOL_IDS.list]: scheduleListTool,
     [SCHEDULE_TOOL_IDS.update]: scheduleUpdateTool,
+    [SCHEDULE_TOOL_IDS.resume]: scheduleResumeTool,
     [SCHEDULE_TOOL_IDS.run]: scheduleRunTool,
   };
 }

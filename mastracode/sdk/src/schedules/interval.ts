@@ -132,7 +132,8 @@ function hourSlotKey(date: Date, stepHours: number): number {
  *
  * Around daylight-saving changes this behaves like cron:
  * - Sub-hour cadences follow the minute hand, so they keep firing every N real
- *   minutes through both the skipped and the repeated hour.
+ *   minutes through both the skipped and the repeated hour. Across a
+ *   half-hour change, the gap between fires never exceeds the interval.
  * - Hourly and daily cadences fire once per wall-clock slot. A boundary that
  *   falls in a skipped hour fires at the first minute after the jump (02:00 →
  *   03:00), and a repeated hour does not fire a second time.
@@ -142,13 +143,16 @@ function hourSlotKey(date: Date, stepHours: number): number {
  * to catch up.
  */
 export function nextFireTime(intervalMs: number, after: number): number {
-  const cursor = new Date(after);
-  cursor.setSeconds(0, 0);
+  // Truncate in UTC: local setters resolve a repeated hour to its first occurrence.
+  const cursor = new Date(Math.floor(after / MINUTE_MS) * MINUTE_MS);
   const stepMinutes = intervalMs / MINUTE_MS;
   // Walk minute by minute: at most an hour for sub-hour cadences, ~a day otherwise.
   if (stepMinutes < 60) {
+    // Never wait longer than one interval: a half-hour clock change (Lord Howe
+    // Island) can otherwise shift the minute hand past the next boundary.
+    const latest = cursor.getTime() + intervalMs;
     do cursor.setTime(cursor.getTime() + MINUTE_MS);
-    while (cursor.getMinutes() % stepMinutes !== 0);
+    while (cursor.getMinutes() % stepMinutes !== 0 && cursor.getTime() < latest);
     return cursor.getTime();
   }
   const stepHours = stepMinutes / 60;
