@@ -850,6 +850,121 @@ describe('TelegramProvider — delegated credentials (tokenResolver)', () => {
     expect(stillThere!.botUserId).toBe(42);
     expect(restored.getAdapter(stillThere!.id)).toBeUndefined();
   });
+
+  it('refuses migration of a legacy record without botUserId when the resolver points at a different bot', async () => {
+    // Seed a pre-r2 legacy record: has botToken but no botUserId (old schema).
+    const storage = new InMemoryChannelsStorage();
+    const legacyToken = BOT_TOKEN;
+    await storage.saveInstallation({
+      id: 'legacy-install-id',
+      platform: 'telegram',
+      agentId: 'agent-1',
+      status: 'active',
+      webhookId: 'legacy-webhook',
+      data: {
+        botToken: legacyToken,
+        // no botUserId — this is the vulnerable shape
+        secretToken: 'legacy-secret',
+        username: 'legacy_bot',
+        webhookUrl: `${BASE_URL}/telegram/events/legacy-webhook`,
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    // Legacy token still resolves to bot 42 (the original bot).
+    stubGetMe(legacyToken);
+    // Resolver now points at a *different* bot's token.
+    const otherToken = '999:OTHER';
+    mockAgent
+      .get(API_ORIGIN)
+      .intercept({ path: `/bot${otherToken}/getMe`, method: 'GET' })
+      .reply(200, { ok: true, result: { id: 43, is_bot: true, first_name: 'Other', username: 'other_bot' } })
+      .persist();
+
+    const restored = new TelegramProvider({ storage, baseUrl: BASE_URL, tokenResolver: async () => otherToken });
+    await restored.initialize();
+
+    // The record is left untouched — no silent retarget, no lost token.
+    const stillThere = await restored.getInstallation('agent-1');
+    expect(stillThere).not.toBeNull();
+    expect(stillThere!.botToken).toBe(legacyToken);
+    expect(stillThere!.botUserId).toBeUndefined();
+    expect(restored.getAdapter(stillThere!.id)).toBeUndefined();
+  });
+
+  it('leaves a legacy record untouched when the stored-token getMe lookup fails', async () => {
+    // Legacy record: botToken present, botUserId undefined. Its stored token
+    // has been revoked upstream, so getMe(stored) 401s — we cannot prove the
+    // resolver still points at the same bot, so we must not migrate.
+    const storage = new InMemoryChannelsStorage();
+    const revokedToken = BOT_TOKEN;
+    await storage.saveInstallation({
+      id: 'revoked-install-id',
+      platform: 'telegram',
+      agentId: 'agent-1',
+      status: 'active',
+      webhookId: 'revoked-webhook',
+      data: {
+        botToken: revokedToken,
+        secretToken: 'revoked-secret',
+        username: 'revoked_bot',
+        webhookUrl: `${BASE_URL}/telegram/events/revoked-webhook`,
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    // Stored token getMe fails (revoked / rotated upstream).
+    stubGetMe(revokedToken, { ok: false });
+    // Resolver returns a different bot's token.
+    const otherToken = '999:OTHER';
+    mockAgent
+      .get(API_ORIGIN)
+      .intercept({ path: `/bot${otherToken}/getMe`, method: 'GET' })
+      .reply(200, { ok: true, result: { id: 43, is_bot: true, first_name: 'Other', username: 'other_bot' } })
+      .persist();
+
+    const restored = new TelegramProvider({ storage, baseUrl: BASE_URL, tokenResolver: async () => otherToken });
+    await restored.initialize();
+
+    // Untouched: legacy token still there, no botUserId assignment happened.
+    const stillThere = await restored.getInstallation('agent-1');
+    expect(stillThere).not.toBeNull();
+    expect(stillThere!.botToken).toBe(revokedToken);
+    expect(stillThere!.botUserId).toBeUndefined();
+  });
+
+  it('migrates a legacy record without botUserId when the resolver still points at the same bot', async () => {
+    // Same legacy shape, but the resolver returns the same bot's token: the
+    // stored-token identity (42) matches the resolved-token identity (42), so
+    // migration proceeds and drops the persisted token.
+    const storage = new InMemoryChannelsStorage();
+    await storage.saveInstallation({
+      id: 'legacy-happy-id',
+      platform: 'telegram',
+      agentId: 'agent-1',
+      status: 'active',
+      webhookId: 'legacy-happy-webhook',
+      data: {
+        botToken: BOT_TOKEN,
+        secretToken: 'legacy-secret',
+        username: 'legacy_bot',
+        webhookUrl: `${BASE_URL}/telegram/events/legacy-happy-webhook`,
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    stubGetMe(BOT_TOKEN);
+    const restored = new TelegramProvider({ storage, baseUrl: BASE_URL, tokenResolver: async () => BOT_TOKEN });
+    await restored.initialize();
+
+    const migrated = await restored.getInstallation('agent-1');
+    expect(migrated).not.toBeNull();
+    expect(migrated!.botToken).toBeUndefined();
+    expect(migrated!.botUserId).toBe(42);
+  });
 });
 
 describe('TelegramProvider — polling mode (getUpdates loop)', () => {

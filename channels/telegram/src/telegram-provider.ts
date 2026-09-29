@@ -194,6 +194,13 @@ export class TelegramProvider implements ChannelProvider {
    * points at the same bot, populate `botUserId` if missing, and drop the
    * persisted token so future rotations flow through the resolver.
    *
+   * For a legacy record with no `botUserId`, the "same bot" check needs an
+   * expected identity — so we `getMe` the stored `botToken` first and compare
+   * that identity to the resolver's. A stored-token lookup failure leaves the
+   * record untouched (we cannot prove it's still the same bot, and silently
+   * assigning `me.id` would let a repointed resolver retarget the install and
+   * orphan the old bot's webhook).
+   *
    * A resolver failure — or an identity mismatch — is not fatal here: we log
    * and leave the record untouched, so the operator can investigate before
    * connect/disconnect on that installation.
@@ -210,14 +217,33 @@ export class TelegramProvider implements ChannelProvider {
       const resolved = await this.#config.tokenResolver();
       if (!resolved) return installation;
       const me = await getMe(resolved, this.#apiBaseUrl());
-      if (installation.botUserId !== undefined && installation.botUserId !== me.id) {
+      // Establish the expected bot identity. When the record already carries a
+      // `botUserId`, that's the truth. When it's a legacy record with only a
+      // stored `botToken`, ask Telegram what bot that token belongs to — a
+      // failure here means we cannot prove the resolver still points at the
+      // same bot, so we refuse to migrate and leave the record untouched.
+      let expectedBotUserId = installation.botUserId;
+      if (expectedBotUserId === undefined && installation.botToken) {
+        try {
+          const stored = await getMe(installation.botToken, this.#apiBaseUrl());
+          expectedBotUserId = stored.id;
+        } catch (err) {
+          console.warn(
+            `[Telegram] Could not verify stored bot identity for installation "${installation.id}" during delegated-mode migration; ` +
+              'leaving the record untouched.',
+            err,
+          );
+          return installation;
+        }
+      }
+      if (expectedBotUserId !== undefined && expectedBotUserId !== me.id) {
         // The upstream credential now points at a different bot. Don't
         // silently retarget the existing installation — the operator has to
         // reconnect intentionally so the old bot's webhook isn't left live.
         // Returning null skips activation, so this installation's adapter is
         // never bound to the new bot's token.
         console.warn(
-          `[Telegram] Delegated credential for installation "${installation.id}" now resolves to bot ${me.id} but was bot ${installation.botUserId}. ` +
+          `[Telegram] Delegated credential for installation "${installation.id}" now resolves to bot ${me.id} but was bot ${expectedBotUserId}. ` +
             'Disconnect and reconnect the agent to adopt the new bot.',
         );
         return null;
