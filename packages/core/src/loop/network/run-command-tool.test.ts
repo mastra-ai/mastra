@@ -32,6 +32,17 @@ describe('extractBaseCommand', () => {
   it.each([
     ['git status', 'git'],
     ['/usr/bin/git status', 'git'],
+    ['"rm" x', 'rm'],
+    ["'rm' x", 'rm'],
+    ['r"m" x', 'rm'],
+    ['"r"m x', 'rm'],
+    ['./echo. x', 'echo.'],
+    ['git.exe status', 'git.exe'],
+  ])('POSIX: %s -> %s', (input, expected) => {
+    expect(extractBaseCommand(input, 'linux')).toBe(expected);
+  });
+
+  it.each([
     ['C:\\tools\\git.exe status', 'git'],
     ['.\\bin\\node -v', 'node'],
     ['RM.EXE -rf x', 'rm'],
@@ -39,32 +50,36 @@ describe('extractBaseCommand', () => {
     ['"rm.exe" -rf x', 'rm'],
     ['"C:/Program Files/rm.exe" x', 'rm'],
     ['rm. -rf x', 'rm'],
-    ['"rm" x', 'rm'],
-    ["'rm' x", 'rm'],
-    ['r"m" x', 'rm'],
-    ['"r"m x', 'rm'],
     ['rm.exe. -rf x', 'rm'],
-  ])('%s -> %s', (input, expected) => {
-    expect(extractBaseCommand(input)).toBe(expected);
+    ['r"m" x', 'rm'],
+  ])('Windows: %s -> %s', (input, expected) => {
+    expect(extractBaseCommand(input, 'win32')).toBe(expected);
   });
 });
 
 describe('createRunCommandTool', () => {
-  it('blocks Windows-path invocations of blocked commands', async () => {
+  it.runIf(process.platform === 'win32')('blocks Windows-path invocations of blocked commands', async () => {
     const tool = createRunCommandTool({ allowUnsafeCharacters: true });
     const res = await run(tool, { command: 'C:\\Windows\\rm.exe x' });
     expect(res.success).toBe(false);
     expect(res.message).toContain("'rm' is not permitted");
   });
 
-  it.each(['"rm.exe" -rf x', '"rm" x', 'rm. x', 'r"m" x', '"r"m x', "r'm' x"])(
-    'blocks %s in default mode',
-    async command => {
-      const res = await run(createRunCommandTool(), { command });
+  it.skipIf(process.platform === 'win32')(
+    'does not strip trailing dots on POSIX when matching the allowlist',
+    async () => {
+      const tool = createRunCommandTool({ allowedCommands: ['echo'] });
+      const res = await run(tool, { command: './echo. x' });
       expect(res.success).toBe(false);
-      expect(res.message).toContain("'rm' is not permitted");
+      expect(res.message).toContain('not in the allowed commands list');
     },
   );
+
+  it.each(['"rm" x', 'r"m" x', '"r"m x', "r'm' x"])('blocks %s in default mode', async command => {
+    const res = await run(createRunCommandTool(), { command });
+    expect(res.success).toBe(false);
+    expect(res.message).toContain("'rm' is not permitted");
+  });
 
   it('applies the allowlist to Windows-path invocations', async () => {
     const tool = createRunCommandTool({ allowUnsafeCharacters: true, allowedCommands: ['git'] });

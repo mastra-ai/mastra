@@ -138,7 +138,7 @@ export function isPathAllowed(
  * Extracts the base command from a command string, handling both `/` and `\\`
  * separators and common Windows executable extensions.
  */
-export function extractBaseCommand(command: string): string {
+export function extractBaseCommand(command: string, platform: NodeJS.Platform = process.platform): string {
   const trimmed = command.trim();
   // Read the first shell word: whitespace ends it only outside quotes, and quote
   // characters are dropped, since the shell joins `r"m"` / `"r"m` into `rm`.
@@ -158,11 +158,11 @@ export function extractBaseCommand(command: string): string {
   }
   const lastSep = Math.max(baseCmd.lastIndexOf('/'), baseCmd.lastIndexOf('\\'));
   const name = lastSep === -1 ? baseCmd : baseCmd.substring(lastSep + 1);
-  // Windows ignores trailing dots/spaces when resolving executables (e.g. `rm.exe.` runs `rm.exe`)
-  return name
-    .toLowerCase()
-    .replace(/[. ]+$/, '')
-    .replace(/\.(exe|cmd|bat|com)$/, '');
+  const lower = name.toLowerCase();
+  if (platform !== 'win32') return lower;
+  // Windows ignores trailing dots/spaces and resolves executable extensions (`rm.exe.` runs `rm.exe`).
+  // On POSIX these are distinct files, so normalizing there would let `./echo.` match an `echo` allowlist entry.
+  return lower.replace(/[. ]+$/, '').replace(/\.(exe|cmd|bat|com)$/, '');
 }
 
 /**
