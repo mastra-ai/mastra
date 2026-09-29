@@ -210,14 +210,14 @@ describe('ThreadTrace', () => {
       const { container } = renderView();
       await screen.findByText('Chef agent run');
       // The span cell stays mounted but collapsed so opening it animates the grid columns.
-      expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,1fr)_0%]');
+      expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,2fr)_minmax(0,0fr)]');
       expect(container.firstElementChild?.className).toContain('transition-[grid-template-columns]');
       expect(screen.getByTestId('span-panel').childElementCount).toBe(0);
 
       fireEvent.click(screen.getByText('Chef agent run'));
 
       await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBeGreaterThan(0));
-      expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,1fr)_40%]');
+      expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,2fr)_minmax(0,1fr)]');
       expect(getRow('trace-a').dataset.active).toBe('true');
       expect(getRow('trace-b').dataset.active).toBeUndefined();
       expect(screen.getByTestId('root-state').textContent).toBe('trace-a/span-a;none');
@@ -225,7 +225,7 @@ describe('ThreadTrace', () => {
       // No close button on the span panel: re-clicking the selected span toggles it off.
       fireEvent.click(screen.getByText('Chef agent run'));
       await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBe(0));
-      expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,1fr)_0%]');
+      expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,2fr)_minmax(0,0fr)]');
       expect(getRow('trace-a').dataset.active).toBeUndefined();
     });
 

@@ -16,7 +16,7 @@ export function ThreadViewSkeleton() {
       className="min-h-0 animate-in overflow-hidden delay-500 duration-200 fade-in-0 fill-mode-backwards"
     >
       {ROWS.map(idx => (
-        <div key={idx} className="grid grid-cols-[24rem_minmax(0,1fr)] border-b border-border pr-4 pl-14">
+        <div key={idx} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] border-b border-border pr-4 pl-14">
           <TraceMessagesSkeleton className="border-x border-border pr-4 pl-0" />
           <div className="min-w-0 overflow-hidden">
             <div className="flex min-h-header-default items-center gap-2 border-b border-border px-2 py-1.5">
