@@ -92,7 +92,7 @@ export function createExampleServer(tokens: Record<string, string>, admission: A
               send(409, { error: 'This run ID belongs to another input.' });
               return;
             }
-            if (!existing.providerId) {
+            if (!existing.providerId && !existing.workerClaim) {
               send(503, {
                 runId,
                 status: 'submission-unknown',
@@ -106,9 +106,10 @@ export function createExampleServer(tokens: Record<string, string>, admission: A
         }
         if (!(await admission.reserve(runId, owner, parsed.data))) {
           const existing = await provider.store.get(editorialReview.id, runId);
-          send(existing?.providerId ? 202 : 503, {
+          const accepted = Boolean(existing?.providerId || existing?.workerClaim);
+          send(accepted ? 202 : 503, {
             runId,
-            ...(!existing?.providerId ? { error: 'Submission is unresolved. Reconnect with this run ID.' } : {}),
+            ...(!accepted ? { error: 'Submission is unresolved. Reconnect with this run ID.' } : {}),
           });
           return;
         }

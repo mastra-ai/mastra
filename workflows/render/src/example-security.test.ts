@@ -4,7 +4,7 @@ import { AdmissionError } from '../examples/editorial-review/admission.js';
 
 const calls = vi.hoisted(() => ({
   starts: 0,
-  stored: null as null | { resourceId: string },
+  stored: null as null | ({ resourceId: string } & Record<string, unknown>),
   getRun: vi.fn(async () => null),
 }));
 vi.mock('../examples/editorial-review/provider.js', () => ({
@@ -78,3 +78,30 @@ it('rejects admission before any workflow submission and returns retry guidance'
     await new Promise<void>(resolve => server.close(() => resolve()));
   }
 });
+
+it.each(['running', 'success', 'unclaimed'] as const)(
+  'reconnects a %s unbound run only when worker acceptance is proven',
+  async state => {
+    calls.stored = {
+      resourceId: 'alice',
+      input: { draft: 'same' },
+      status: state === 'unclaimed' ? 'submission-unknown' : state,
+      ...(state === 'unclaimed' ? {} : { workerClaim: 'test-claim' }),
+    };
+    const reserve = vi.fn(async () => true);
+    const server = createExampleServer({ alice: 'a-valid-local-test-token' }, { reserve, close: async () => {} });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const response = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/api/jobs`, {
+        method: 'POST',
+        headers: { authorization: 'Bearer a-valid-local-test-token', 'content-type': 'application/json' },
+        body: JSON.stringify({ runId: '11111111-1111-4111-8111-111111111111', draft: 'same' }),
+      });
+      expect(response.status).toBe(state === 'unclaimed' ? 503 : 202);
+      expect(calls.starts).toBe(0);
+      expect(reserve).not.toHaveBeenCalled();
+    } finally {
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
+  },
+);
