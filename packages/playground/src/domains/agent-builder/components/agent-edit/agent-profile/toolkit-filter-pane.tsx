@@ -37,9 +37,9 @@ const ToolkitFilterRow = memo(
     const agentColor = useAgentColor();
     const checkboxStyle = checked
       ? {
-          backgroundColor: agentColor.background,
-          borderColor: agentColor.background,
-          color: agentColor.foreground,
+          backgroundColor: agentColor.tint,
+          borderColor: agentColor.tint,
+          color: 'var(--background)',
         }
       : undefined;
 

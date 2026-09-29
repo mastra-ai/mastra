@@ -64,13 +64,16 @@ export function SettingsRowLayout({
           className={cn(
             'text-label text-foreground',
             viewOnly && 'text-muted-foreground',
-            tone === 'destructive' && 'text-destructive',
+            tone === 'destructive' && 'text-destructive-indicator',
           )}
         >
           {label}
           {required ? (
             <>
-              <span aria-hidden className={cn('ml-0.5', viewOnly ? 'text-muted-foreground' : 'text-destructive')}>
+              <span
+                aria-hidden
+                className={cn('ml-0.5', viewOnly ? 'text-muted-foreground' : 'text-destructive-indicator')}
+              >
                 *
               </span>
               <span className="sr-only"> (required)</span>

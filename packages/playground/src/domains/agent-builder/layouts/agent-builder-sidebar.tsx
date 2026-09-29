@@ -1,6 +1,7 @@
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import type { NavLink } from '@mastra/playground-ui/components/MainSidebar';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -104,7 +105,9 @@ export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSideb
                   className="flex min-w-0 items-center gap-2 rounded-sm hover:opacity-80"
                 >
                   <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-                  <span className="truncate font-display text-body whitespace-nowrap">Mastra Studio</span>
+                  <Txt as="span" className="truncate font-display whitespace-nowrap">
+                    Mastra Studio
+                  </Txt>
                 </Link>
                 {!isMobile && <MainSidebar.Trigger />}
               </span>
@@ -118,7 +121,9 @@ export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSideb
                 className="flex min-w-0 items-center gap-2 rounded-sm hover:opacity-80"
               >
                 <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-                <span className="truncate font-display text-body whitespace-nowrap">Mastra Studio</span>
+                <Txt as="span" className="truncate font-display whitespace-nowrap">
+                  Mastra Studio
+                </Txt>
               </Link>
               {!isMobile && <MainSidebar.Trigger />}
             </span>

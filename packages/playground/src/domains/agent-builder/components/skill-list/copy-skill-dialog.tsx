@@ -35,7 +35,6 @@ export function CopySkillDialog({
 }: CopySkillDialogProps) {
   const [name, setName] = useState('');
 
-  // Re-seed the suggested name whenever the dialog opens for a different source.
   useEffect(() => {
     if (open) setName(suggestCopyName(sourceName, existingNames));
   }, [open, sourceName, existingNames]);
@@ -53,7 +52,7 @@ export function CopySkillDialog({
             Creates a private copy in your skills that you can edit. The original stays untouched.
           </AlertDialog.Description>
         </AlertDialog.Header>
-        <div className="px-4 py-2">
+        <AlertDialog.Body>
           <TextFieldBlock
             name="copy-skill-name"
             label="New skill name"
@@ -64,7 +63,7 @@ export function CopySkillDialog({
             testId="copy-skill-name-input"
             errorMsg={collides ? `You already have a skill named "${trimmed}".` : undefined}
           />
-        </div>
+        </AlertDialog.Body>
         <AlertDialog.Footer>
           <AlertDialog.Cancel disabled={isPending}>Cancel</AlertDialog.Cancel>
           <AlertDialog.Action

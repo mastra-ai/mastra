@@ -1,6 +1,7 @@
 import type { DatasetItem } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { focusRing, transitions } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -17,20 +18,20 @@ export interface DatasetCompareVersionsListProps {
 
 const versionInfoConfig = {
   added: {
-    badgeVariant: 'blue' as const,
-    borderColor: 'border-blue-900',
+    badgeVariant: 'info' as const,
+    borderColor: 'border-info-edge',
     icon: <PlusIcon />,
     tooltip: 'Added in this version',
   },
   changed: {
-    badgeVariant: 'yellow' as const,
-    borderColor: 'border-yellow-900',
+    badgeVariant: 'warning' as const,
+    borderColor: 'border-warning-edge',
     icon: <PenIcon />,
     tooltip: 'Changed in this version',
   },
   same: {
-    badgeVariant: 'green' as const,
-    borderColor: 'border-green-900',
+    badgeVariant: 'success' as const,
+    borderColor: 'border-success-edge',
     icon: <EqualIcon />,
     tooltip: 'Same in both versions',
   },
@@ -51,7 +52,7 @@ function EmptyCell({ red = false, tooltip }: { red?: boolean; tooltip: string })
       >
         <BanIcon
           className={cn('h-5 w-5 text-muted-foreground/40', {
-            'text-red-900': red,
+            'text-destructive-indicator': red,
           })}
         />
       </TooltipTrigger>
@@ -98,13 +99,19 @@ function LinkCell({
 
 function VersionInfo({ variant, version }: { variant?: VersionInfoVariant; version?: number }) {
   if (!variant) {
-    return <span className="text-body text-muted-foreground">v. {version}</span>;
+    return (
+      <Txt as="span" tone="muted">
+        v. {version}
+      </Txt>
+    );
   }
   const { badgeVariant, icon, tooltip } = versionInfoConfig[variant];
   return (
     <div className="grid grid-cols-[1fr_auto]">
       {version !== undefined && (
-        <span className="flex min-w-16 justify-end pr-3 text-body text-muted-foreground">v. {version}</span>
+        <Txt as="span" tone="muted" className="flex min-w-16 justify-end pr-3">
+          v. {version}
+        </Txt>
       )}
       <span className="inline-flex" role="img" aria-label={tooltip}>
         <Badge variant={badgeVariant} size="xs" icon={icon} />

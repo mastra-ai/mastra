@@ -15,6 +15,7 @@ import {
   useDataListKeyboard,
 } from '@/ds/components/DataList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/utils/cn';
@@ -169,13 +170,16 @@ function WorkflowRow({
               </Badge>
             ) : null}
             {hasNested ? (
-              <span
+              <Txt
+                as="span"
+                variant="body-sm"
+                tone="muted"
                 title={`Nested workflows: ${nestedIds.join(', ')}`}
-                className="inline-flex shrink-0 items-center gap-1 text-body-sm text-muted-foreground"
+                className="inline-flex shrink-0 items-center gap-1"
               >
                 <WorkflowIcon aria-hidden className="size-3.5" />
                 {nestedIds.length}
-              </span>
+              </Txt>
             ) : null}
           </span>
         </EntityList.NameCell>
@@ -183,10 +187,10 @@ function WorkflowRow({
         <EntityList.TextCell className="text-center">
           {runningCount > 0 ? (
             <span
-              className="inline-flex items-center gap-1.5 text-positive1"
+              className="inline-flex items-center gap-1.5 text-info-indicator"
               aria-label={`${runningCount} run${runningCount === 1 ? '' : 's'} in progress`}
             >
-              <span aria-hidden className="size-2 rounded-full bg-positive1 motion-safe:animate-pulse" />
+              <span aria-hidden className="size-2 rounded-full bg-info-indicator motion-safe:animate-pulse" />
               {runningCount}
             </span>
           ) : (
@@ -196,7 +200,7 @@ function WorkflowRow({
         <EntityList.TextCell className="text-center">
           {suspendedCount > 0 ? (
             <span
-              className="inline-flex items-center gap-1.5 text-warning1"
+              className="inline-flex items-center gap-1.5 text-warning-indicator"
               aria-label={`${suspendedCount} run${suspendedCount === 1 ? '' : 's'} awaiting input`}
             >
               <PauseIcon aria-hidden className="size-3.5" />

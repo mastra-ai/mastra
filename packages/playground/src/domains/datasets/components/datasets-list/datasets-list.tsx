@@ -7,6 +7,7 @@ import {
   DataListSkeleton as EntityListSkeleton,
   useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
@@ -48,9 +49,9 @@ export type DatasetsSortKey = 'name' | 'updatedAt';
 const COLUMNS = 'auto 1fr auto 5rem 10rem 7rem';
 
 function getExperimentsBadgeVariant(successPct: number | null): BadgeVariant {
-  if (successPct !== null && successPct >= 70) return 'green';
-  if (successPct !== null && successPct >= 40) return 'yellow';
-  return 'red';
+  if (successPct !== null && successPct >= 70) return 'success';
+  if (successPct !== null && successPct >= 40) return 'warning';
+  return 'destructive';
 }
 
 const stopPropagation = (event: SyntheticEvent) => event.stopPropagation();
@@ -69,7 +70,11 @@ function TagsCell({ tags: rawTags }: { tags: DatasetRecord['tags'] }) {
           {tags.slice(0, 2).map(tag => (
             <ComputedTag key={tag} value={tag} className="shrink-0" />
           ))}
-          {tags.length > 2 && <span className="shrink-0 text-meta text-placeholder">+{tags.length - 2}</span>}
+          {tags.length > 2 && (
+            <Txt as="span" variant="meta" tone="faint" className="shrink-0">
+              +{tags.length - 2}
+            </Txt>
+          )}
         </div>
       ) : (
         <span className="text-placeholder">—</span>

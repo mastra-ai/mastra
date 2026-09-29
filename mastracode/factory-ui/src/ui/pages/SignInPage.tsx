@@ -33,8 +33,8 @@ export function safeReturnTo(raw?: string): string {
 
 function CustomDomainAuthError({ hostname }: { hostname: string }) {
   return (
-    <div role="alert" className="border-destructive/30 bg-card rounded-lg border px-4 py-3">
-      <Txt as="h2" variant="subheading" className="text-destructive">
+    <div role="alert" className="border-destructive-edge bg-card rounded-lg border px-4 py-3">
+      <Txt as="h2" variant="subheading" className="text-destructive-indicator">
         Mastra Platform sign-in isn&apos;t available on custom domains
       </Txt>
       <Txt as="p" variant="caption" tone="muted" className="mt-2 leading-5">
@@ -47,7 +47,7 @@ function CustomDomainAuthError({ hostname }: { hostname: string }) {
           href="https://mastra.ai/docs/auth/overview"
           target="_blank"
           rel="noreferrer"
-          className="text-accent1 hover:text-accent2 hover:underline"
+          className="text-foreground hover:underline"
         >
           Auth overview
         </a>
@@ -55,7 +55,7 @@ function CustomDomainAuthError({ hostname }: { hostname: string }) {
           href="https://mastra.ai/integrations/auth/workos"
           target="_blank"
           rel="noreferrer"
-          className="text-accent1 hover:text-accent2 hover:underline"
+          className="text-foreground hover:underline"
         >
           WorkOS integration
         </a>
@@ -131,7 +131,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
         />
       </label>
       {error ? (
-        <Txt as="p" variant="caption" role="alert" className="text-destructive">
+        <Txt as="p" variant="caption" role="alert" className="text-destructive-indicator">
           {error}
         </Txt>
       ) : null}
@@ -202,8 +202,8 @@ export function SignInPage() {
 
           <section aria-label="Authentication" className="mt-10 w-full max-w-md lg:mt-12">
             {authError && !customDomainBlocked ? (
-              <div role="alert" className="border-destructive/30 bg-card mb-6 rounded-lg border px-4 py-3">
-                <Txt as="p" variant="subheading" className="text-destructive">
+              <div role="alert" className="border-destructive-edge bg-card mb-6 rounded-lg border px-4 py-3">
+                <Txt as="p" variant="subheading" className="text-destructive-indicator">
                   {accessDenied ? 'Access denied' : 'Sign-in failed'}
                 </Txt>
                 {authErrorDescription ? (
@@ -223,7 +223,9 @@ export function SignInPage() {
             ) : credentialForm ? (
               <>
                 <div className="mb-6">
-                  <h2 className="font-display text-title">Welcome back</h2>
+                  <Txt as="h2" variant="title" className="font-display">
+                    Welcome back
+                  </Txt>
                   <Txt as="p" variant="body" tone="muted" className="mt-2 leading-6">
                     Sign in to continue building with your team.
                   </Txt>

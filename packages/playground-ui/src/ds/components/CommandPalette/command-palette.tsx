@@ -3,6 +3,7 @@ import type { ComponentPropsWithoutRef, HTMLAttributes, ReactNode } from 'react'
 import { CommandDialog, CommandInput, CommandItem, CommandList, CommandShortcut } from '@/ds/components/Command';
 import { Kbd } from '@/ds/components/Kbd';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
+import { Txt } from '@/ds/components/Txt';
 import { inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
@@ -23,14 +24,11 @@ function CommandPaletteDialog({
 }: CommandPaletteDialogProps) {
   return (
     <CommandDialog
+      size="xl"
       showOverlay={showOverlay}
       overlayClassName={cn('bg-sidebar/40 backdrop-blur-none', overlayClassName)}
-      contentClassName={cn(
-        'command-palette-popup max-w-[min(56rem,calc(100vw-2rem))] overflow-visible border-none bg-transparent p-0 shadow-none backdrop-blur-none sm:max-w-[min(56rem,calc(100vw-2rem))]',
-        contentClassName,
-      )}
+      contentClassName={cn('command-palette-popup overflow-visible bg-transparent shadow-none', contentClassName)}
       commandClassName={cn(
-        // Height lives in `.command-palette-shell` — see command-palette.css.
         'command-palette-shell gap-2 overflow-visible rounded-none bg-transparent text-muted-foreground shadow-none backdrop-blur-none',
         '[&_[data-slot=command-input-wrapper]_svg]:text-muted-foreground',
         '**:[[cmdk-input]]:h-full **:[[cmdk-input]]:text-body',
@@ -53,8 +51,6 @@ function CommandPaletteInput({ wrapperClassName, ...props }: CommandPaletteInput
       wrapperClassName={cn(
         'command-palette-surface command-palette-surface-input',
         inputSurfaceAndFocusWithinStyle,
-        // `border-0` because `CommandInput`'s own `border-b` is the separator of a single-panel
-        // Command; here the input is a detached pill and the material already carries its rim.
         'h-11 shrink-0 rounded-xl border-0 px-3 pr-11',
         wrapperClassName,
       )}
@@ -130,9 +126,14 @@ function CommandPaletteScope({
     >
       <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">{icon}</span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      <span className="rounded-md border border-border bg-muted/70 px-1.5 py-0.5 text-meta leading-none text-muted-foreground">
+      <Txt
+        as="span"
+        variant="meta"
+        tone="muted"
+        className="rounded-md border border-border bg-muted/70 px-1.5 py-0.5 leading-none"
+      >
         {count}
-      </span>
+      </Txt>
     </button>
   );
 }
@@ -204,22 +205,35 @@ function CommandPaletteItem({
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-label text-foreground">{title}</span>
+          <Txt as="span" variant="label" tone="ink" className="truncate">
+            {title}
+          </Txt>
           {badge && (
-            <span className="shrink-0 rounded-md border border-border bg-muted/60 px-1.5 py-0.5 text-meta leading-none text-muted-foreground uppercase">
+            <Txt
+              as="span"
+              variant="meta"
+              tone="muted"
+              className="shrink-0 rounded-md border border-border bg-muted/60 px-1.5 py-0.5 leading-none uppercase"
+            >
               {badge}
-            </span>
+            </Txt>
           )}
         </span>
         {(subtitle || path) && (
-          <span className="flex min-w-0 items-center gap-2 text-meta text-muted-foreground">
+          <Txt as="span" variant="meta" tone="muted" className="flex min-w-0 items-center gap-2">
             {subtitle && <span className="truncate">{subtitle}</span>}
             {path && (
-              <span className="max-w-52 truncate rounded-md border border-border bg-muted/70 px-1.5 py-0.5 font-mono text-meta leading-none text-muted-foreground">
+              <Txt
+                as="span"
+                variant="meta"
+                tone="muted"
+                font="mono"
+                className="max-w-52 truncate rounded-md border border-border bg-muted/70 px-1.5 py-0.5 leading-none"
+              >
                 {path}
-              </span>
+              </Txt>
             )}
-          </span>
+          </Txt>
         )}
       </span>
       {shortcut && <CommandShortcut>{shortcut}</CommandShortcut>}

@@ -86,7 +86,7 @@ export function AgentsSection({ control, error, currentAgentId, readOnly = false
                 <div className="flex items-center justify-between bg-card p-3">
                   <CollapsibleTrigger className="flex w-full items-center gap-1">
                     <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                    <SectionTitle icon={<AgentIcon className="text-accent1" />}>
+                    <SectionTitle icon={<AgentIcon className="text-span-agent" />}>
                       Sub-Agents{count > 0 && <span className="text-muted-foreground">({count})</span>}
                     </SectionTitle>
                   </CollapsibleTrigger>
@@ -115,7 +115,7 @@ export function AgentsSection({ control, error, currentAgentId, readOnly = false
                               key={agent.value}
                               id={agent.value}
                               name={agent.label}
-                              icon={<AgentIcon className="text-accent1" />}
+                              icon={<AgentIcon className="text-span-agent" />}
                               description={field.value?.[agent.value]?.description || ''}
                               onDescriptionChange={
                                 readOnly ? undefined : desc => handleDescriptionChange(agent.value, desc)

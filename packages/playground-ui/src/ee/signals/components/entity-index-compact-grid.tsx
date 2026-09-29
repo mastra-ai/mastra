@@ -5,6 +5,7 @@ import { entityIndexMetadata, entityStatusLabel } from './entity-index-model';
 import { Badge } from '@/ds/components/Badge';
 import { CardContent, CardDescription, CardLink, CardTitle } from '@/ds/components/Card';
 import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Txt } from '@/ds/components/Txt';
 import type { LinkComponent } from '@/ds/types/link-component';
 
 export interface EntityIndexCompactGridProps {
@@ -26,7 +27,7 @@ function EntityIndexCompactCard({
   const detailsId = useId();
   const metadata = entityIndexMetadata(entity);
   const statusLabel = entityStatusLabel(metadata.status);
-  const statusVariant = metadata.status === 'ready' ? 'green' : metadata.status === 'processing' ? 'blue' : 'neutral';
+  const statusVariant = metadata.status === 'ready' ? 'success' : metadata.status === 'processing' ? 'info' : 'neutral';
   return (
     <div className="group/entity relative h-full min-w-0" data-entity-card>
       <CardLink
@@ -76,7 +77,11 @@ export function EntityIndexCompactGrid({
   LinkComponent,
 }: EntityIndexCompactGridProps) {
   if (entities.length === 0 && hasSearch) {
-    return <p className="py-8 text-center text-caption text-muted-foreground">No entities match your search</p>;
+    return (
+      <Txt variant="caption" tone="muted" className="py-8 text-center">
+        No entities match your search
+      </Txt>
+    );
   }
   return (
     <ScrollArea className="h-full">

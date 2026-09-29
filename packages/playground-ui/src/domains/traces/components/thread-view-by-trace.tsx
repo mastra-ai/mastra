@@ -8,7 +8,6 @@ import { ThreadViewSkeleton } from '@/domains/traces/components/thread-view-skel
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
 import { TraceThreadItemView } from '@/domains/traces/components/trace-thread-item-view';
 import { TracesErrorContent } from '@/domains/traces/components/traces-error-content';
-import { useThreadRailTurns } from '@/domains/traces/hooks/use-thread-rail-turns';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 import { useTraceSpans } from '@/domains/traces/hooks/use-trace-spans';
 import { useTracesListSource } from '@/domains/traces/hooks/use-traces-list-source';
@@ -110,8 +109,6 @@ function LoadedThreadViewByTrace({
   anchorTraceId: requestedAnchorTraceId,
   onOpenScore,
 }: LoadedThreadViewByTraceProps) {
-  const railTurns = useThreadRailTurns(traceIds);
-
   // "Open full thread" lands here with the originating trace: that row starts expanded and
   // scrolls into view when it mounts. Best effort on the first page only: resolved once at mount,
   // so a row that arrives on a later page is left alone.
@@ -122,7 +119,6 @@ function LoadedThreadViewByTrace({
   return (
     <ThreadTrace traceIds={traceIds} anchorTraceId={anchorTraceId} onSelectedSpanChange={onSelectedSpanChange}>
       <ThreadTrace.List data-testid="thread-view-by-trace">
-        <ThreadTrace.Rail turns={railTurns} />
         {traceIds.map(traceId => (
           <ThreadTrace.Row key={traceId} traceId={traceId}>
             <ThreadTraceRowContent withFeedback={withFeedback} onOpenScore={onOpenScore} />
@@ -144,6 +140,7 @@ function ThreadTraceRowContent({
 }) {
   const { traceId, highlightSpans } = useThreadTraceRow();
   const { Link, paths } = useLinkComponent();
+  const traceHref = paths.traceLink(traceId);
   // First page only, for the tab badges; the Feedback and Scores bodies own their own pagination
   // and share these queries through the React Query cache.
   const { data: feedbackData } = useTraceFeedback({ traceId, enabled: withFeedback });
@@ -185,11 +182,11 @@ function ThreadTraceRowContent({
           <TraceThreadItemView traceId={traceId} onHighlightSpans={highlightSpans} />
         </ThreadTrace.TabContent>
         {withFeedback && (
-          <ThreadTrace.TabContent value="feedback" className="min-h-0 py-3 pl-2">
+          <ThreadTrace.TabContent value="feedback" className="min-h-0 py-3">
             <TraceFeedbackTab key={traceId} traceId={traceId} variant="thread" />
           </ThreadTrace.TabContent>
         )}
-        <ThreadTrace.TabContent value="scores" className="min-h-0 py-3 pl-2">
+        <ThreadTrace.TabContent value="scores" className="min-h-0 py-3">
           {rootSpanId ? (
             <TraceScoresTab
               key={traceId}
@@ -202,17 +199,13 @@ function ThreadTraceRowContent({
       </ThreadTrace.Messages>
       <ThreadTrace.Details>
         <ThreadTrace.DetailsHeader>
-          <ThreadTrace.DetailsActions>
-            <Button
-              render={<Link href={paths.traceLink(traceId)} />}
-
-              variant="ghost"
-              size="sm"
-              icon={<ExternalLinkIcon />}
-            >
-              Go to trace
-            </Button>
-          </ThreadTrace.DetailsActions>
+          {traceHref && (
+            <ThreadTrace.DetailsActions>
+              <Button render={<Link href={traceHref} />} variant="ghost" size="sm" icon={<ExternalLinkIcon />}>
+                Go to trace
+              </Button>
+            </ThreadTrace.DetailsActions>
+          )}
         </ThreadTrace.DetailsHeader>
         <ThreadTrace.Spans />
       </ThreadTrace.Details>

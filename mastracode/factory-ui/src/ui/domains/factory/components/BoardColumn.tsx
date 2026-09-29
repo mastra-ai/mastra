@@ -19,10 +19,13 @@ function ColumnTaskBadge({ count, total, label }: { count: number; total: number
   const dashOffset = circumference * (1 - ratio);
 
   return (
-    <span
+    <Txt
+      as="span"
+      variant="meta"
+      tone="muted"
       aria-label={`${count} of ${total} visible board tasks in ${label}`}
       title={`${count} of ${total} visible board tasks`}
-      className="bg-fill text-meta text-muted-foreground flex h-6 min-w-12 shrink-0 items-center justify-center gap-1.5 rounded-full px-2 tabular-nums"
+      className="bg-fill flex h-6 min-w-12 shrink-0 items-center justify-center gap-1.5 rounded-full px-2 tabular-nums"
     >
       <svg viewBox="0 0 14 14" className="size-3.5 -rotate-90" aria-hidden>
         <circle cx="7" cy="7" r="5" fill="none" strokeWidth="2" className="stroke-border" />
@@ -39,7 +42,7 @@ function ColumnTaskBadge({ count, total, label }: { count: number; total: number
         />
       </svg>
       <span aria-hidden>{count}</span>
-    </span>
+    </Txt>
   );
 }
 
@@ -96,16 +99,19 @@ export function BoardColumnHeader({
           'group/column relative flex min-h-8 items-center justify-end lg:justify-center',
         )}
       >
-        <span
+        <Txt
+          as="span"
+          variant="meta"
+          tone="muted"
           aria-hidden
           className={cn(
-            'text-meta text-muted-foreground flex h-8 items-center tabular-nums',
+            'flex h-8 items-center tabular-nums',
             headerAction &&
               'transition-opacity group-hover/column:opacity-0 group-focus-within/column:opacity-0 pointer-coarse:opacity-0 any-pointer-coarse:opacity-0 motion-reduce:transition-none',
           )}
         >
           {taskCount}
-        </span>
+        </Txt>
         {headerAction ? (
           <div
             className={cn(
