@@ -1073,6 +1073,7 @@ describe('session start (onSessionStart)', () => {
         reflector: makeOmRole('initial/model'),
       },
       state: { get: vi.fn(() => ({})), set: vi.fn(async () => {}) },
+      subagents: { model: { set: vi.fn(async (_: { modelId: string; agentType?: string }) => {}) } },
       /** The model a restarted process would restore from the thread. */
       restoredModel: () => settings.get(`modeModelId_${mode}`) ?? null,
     };
@@ -1161,6 +1162,28 @@ describe('session start (onSessionStart)', () => {
     expect(deps.modelPacks.getActive).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
     expect(session.model.switch).toHaveBeenLastCalledWith({ modelId: 'openai/gpt-5.6' });
     expect(session.restoredModel()).toBe('openai/gpt-5.6');
+  });
+
+  // Subagents follow the sender's pack the way the TUI applies packs, so a
+  // Slack thread doesn't strand them on models the sender never chose.
+  it("gives subagents the sender's pack models, falling back to the factory default", async () => {
+    const deps = makeStartDeps({
+      activePack: { build: 'openai/gpt-5.6', plan: 'openai/gpt-5.6-plan', fast: 'openai/gpt-5.6-mini' },
+    });
+    const session = makeSession();
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId: 'openai/gpt-5.6-mini', agentType: 'explore' });
+    expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId: 'openai/gpt-5.6-plan', agentType: 'plan' });
+    expect(session.subagents.model.set).toHaveBeenLastCalledWith({ modelId: 'openai/gpt-5.6', agentType: 'execute' });
+
+    const noPack = makeSession();
+    await createChannelSessionStartHook(makeStartDeps() as any)(startArgs(noPack) as any);
+    const noPackCalls = noPack.subagents.model.set.mock.calls.map(([arg]) => arg);
+    expect(noPackCalls).toEqual(
+      ['explore', 'plan', 'execute'].map(agentType => ({ modelId: 'anthropic/claude-opus-5', agentType })),
+    );
   });
 
   // The point of persisting the choice: the thread keeps the model it started
