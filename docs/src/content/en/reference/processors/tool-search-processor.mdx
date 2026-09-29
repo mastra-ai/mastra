@@ -73,7 +73,7 @@ const toolSearch = new ToolSearchProcessor({
             name: 'search.minScore',
             type: 'number',
             description:
-              'Minimum relevance score for including a tool in search results. Scores are raw BM25 relevance plus name-match boosts (+5 when a query term equals the tool ID, +2 when it appears in the ID). They are not normalized and often exceed 1, depending on your tool descriptions. Tools scoring less than or equal to this value are excluded. Use small values such as 0 to 0.5 to require some term overlap.',
+              'Minimum relevance score for including a tool in search results. Scores are raw BM25 relevance plus name-match boosts (+5 when a query term equals the tool ID, +2 when it appears in the ID). They are not normalized and often exceed 1. Scores depend on the tools in the catalog and their descriptions, so a threshold tuned for one tool set may not carry over to another. Tools scoring less than or equal to this value are excluded. Use small values such as 0 to 0.5 to require some term overlap.',
             isOptional: true,
             default: '0',
           },
