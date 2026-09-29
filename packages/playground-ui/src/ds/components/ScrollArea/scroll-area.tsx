@@ -323,9 +323,11 @@ function ScrollArea({
     style: viewportStyle,
     contentStyle,
   };
-  const callerRendersViewport = React.Children.toArray(children).some(
+  const callerViewportCount = React.Children.toArray(children).filter(
     child => React.isValidElement(child) && child.type === ScrollAreaViewport,
-  );
+  ).length;
+  if (callerViewportCount > 1) throw new Error('ScrollArea takes at most one ScrollAreaViewport');
+  const callerRendersViewport = callerViewportCount === 1;
 
   return (
     <ScrollAreaPrimitive.Root className={cn('group/scroll-area relative overflow-hidden', className)} {...props}>

@@ -155,6 +155,20 @@ describe('ScrollArea', () => {
       ).toThrow('ScrollAreaViewport must be a direct child of ScrollArea');
       consoleError.mockRestore();
     });
+
+    it('throws when given two viewports, since autoscroll and scroll buttons drive only one', () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      expect(() =>
+        render(
+          <ScrollArea>
+            <ScrollAreaViewport>first</ScrollAreaViewport>
+            <ScrollAreaViewport>second</ScrollAreaViewport>
+          </ScrollArea>,
+        ),
+      ).toThrow('ScrollArea takes at most one ScrollAreaViewport');
+      consoleError.mockRestore();
+    });
   });
 
   describe('scrollButtons', () => {

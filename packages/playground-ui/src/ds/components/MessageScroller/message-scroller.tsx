@@ -1,8 +1,6 @@
 import { ArrowDownIcon } from 'lucide-react';
 import * as React from 'react';
 
-import { mergeRefs } from '@/lib/merge-refs';
-
 import {
   AUTO_SCROLL_ATTACH_THRESHOLD,
   DEFAULT_REACH_START_THRESHOLD,
@@ -40,6 +38,7 @@ import { startTrip } from './message-scroller-trip';
 import type { TripAnimation } from './message-scroller-trip';
 
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
+import { mergeRefs } from '@/lib/merge-refs';
 import { cn } from '@/lib/utils';
 
 export type {
