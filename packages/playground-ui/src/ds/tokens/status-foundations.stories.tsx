@@ -73,15 +73,13 @@ const statusAliases: { token: ColorToken; note: string }[] = [
   { token: 'info-indicator', note: 'Informational state' },
 ];
 
-const tokenCount = noticeVariants.length * 2 + (badgeHues.length * 2 + 1) + greenSteps.length + statusAliases.length;
-
 export const StatusFoundations: Story = {
   name: 'Status foundations',
   render: (_args, context) => (
     <FoundationPage
-      eyebrow={`Status / ${tokenCount} tokens`}
+      eyebrow="Status"
       title="Status foundations"
-      description="Status is the only place the shell is allowed to be chromatic, so each family is deliberately small: five notices, eight badge hues, one success ramp. Hue carries the meaning; the paired foreground carries the contrast."
+      description="Notice and badge examples show status roles in context. Color / Token registry lists every fill, edge, indicator, and foreground, including roles these examples do not use."
       aside={
         <Txt variant="meta" font="mono" tone="muted" className="uppercase">
           Mode / {context.globals.theme === 'light' ? 'Light' : 'Dark'}
@@ -115,7 +113,7 @@ export const StatusFoundations: Story = {
 
       <FoundationSection
         label="Badge"
-        description="One row's worth of status. Badges tint their color ramp and subtle softens the tint; the indicator has its own stronger color."
+        description="One row's worth of status. The labels below name the strong fill and foreground; the examples also use subtle fills and indicators. The registry names each token."
         surface="sidebar"
       >
         <SpecimenGroup label="Neutral">

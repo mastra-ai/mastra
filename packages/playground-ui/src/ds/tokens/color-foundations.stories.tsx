@@ -10,7 +10,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Background tokens describe structural nesting, gray tokens describe contrast strength, and the semantic tokens name the role a component asks for. Components reference roles; the ramps underneath them are the raw material.',
+          'The registry lists the shared theme’s color values and roles. The other pages show them in context. A token being available does not mean Factory or Playground currently uses it.',
       },
     },
   },
@@ -149,7 +149,8 @@ export const ColorFoundations: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Background, gray, and chromatic scales. Components use semantic roles rather than raw ramp steps.',
+        story:
+          'Background, gray, and chromatic scales. Semantic roles are built from these ramps; some local visuals use steps directly.',
       },
     },
   },
@@ -157,7 +158,7 @@ export const ColorFoundations: Story = {
     <FoundationPage
       eyebrow="Color"
       title="Ramps"
-      description="Background, gray, and chromatic scales. Components use semantic roles rather than raw ramp steps."
+      description="Background, gray, and chromatic scales. Semantic roles are built from these ramps; some local visuals use steps directly."
     >
       <FoundationSection label="Backgrounds" description="The three structural surfaces, outer to inner.">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -235,10 +236,7 @@ export const SemanticColors: Story = {
         </div>
       </FoundationSection>
 
-      <FoundationSection
-        label="Text"
-        description="Three tones, and the distance between them is the whole hierarchy — never a fourth grey."
-      >
+      <FoundationSection label="Text" description="The three main text roles, from primary ink to placeholder.">
         <div className="flex flex-col gap-4">
           {textTones.map(tone => (
             <div key={tone.token} className="grid gap-1 sm:grid-cols-[11rem_minmax(0,1fr)] sm:items-baseline sm:gap-4">
@@ -300,7 +298,8 @@ export const ProductColors: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Background and foreground pairs for each product. Component examples live under Elements / Products.',
+        story:
+          'Strong and subtle fills share a foreground for each product. Component examples live under Elements / Products.',
       },
     },
   },
@@ -308,14 +307,17 @@ export const ProductColors: Story = {
     <FoundationPage
       eyebrow="Color"
       title="Product Colors"
-      description="Background and foreground pairs for each product. Component examples live under Elements / Products."
+      description="Strong and subtle fills share a foreground for each product. Component examples live under Elements / Products."
     >
-      <FoundationSection label="Product roles" description="Product identity, with a paired surface and foreground.">
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+      <FoundationSection
+        label="Product roles"
+        description="Product identity, with strong and subtle fills and a shared foreground."
+      >
+        <div className="grid grid-cols-1 gap-6">
           {products.map(({ role, label }) => (
             <SpecimenGroup key={role} label={label}>
-              <div className="grid grid-cols-2 gap-3">
-                {[`--product-${role}`, `--product-${role}-foreground`].map(token => (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {[`--product-${role}`, `--product-${role}-subtle`, `--product-${role}-foreground`].map(token => (
                   <Specimen key={token} name={token}>
                     <Swatch value={`var(${token})`} />
                   </Specimen>
