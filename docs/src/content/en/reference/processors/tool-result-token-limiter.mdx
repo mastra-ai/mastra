@@ -7,7 +7,7 @@ packages:
 
 # ToolResultTokenLimiter
 
-The `ToolResultTokenLimiter` is an **output processor** that truncates tool results over a token limit. It runs during the agent's turn, after a tool returns and before the result is stored in the message list, streamed to clients, or sent to the model on the next step.
+The `ToolResultTokenLimiter` is an **output processor** that truncates tool results over a token limit. It runs during the agent's turn, after a tool returns and before the result is stored in the message list, streamed to clients, or sent to the model on the next step. For tools that define `toModelOutput`, the model sees the mapped output of the original result instead. See [Behavior](#behavior).
 
 ## Usage example
 
