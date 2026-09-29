@@ -16,8 +16,7 @@ import type {
 import { createCodingAgent } from '@mastra/core/coding-agent';
 import type { PubSub } from '@mastra/core/events';
 import { PROVIDER_REGISTRY, findGatewayForModel, getGatewayId } from '@mastra/core/llm';
-import type { MastraModelGatewayInterface } from '@mastra/core/llm';
-import type { ProviderConfig } from '@mastra/core/llm';
+import type { MastraModelGatewayInterface, ProviderConfig } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { defaultNotificationDeliveryDecision } from '@mastra/core/notifications';
 import {
