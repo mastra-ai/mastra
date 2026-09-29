@@ -151,10 +151,12 @@ export async function executeStep(
   // from `__workflow_meta.foreachOutput` so parallel suspensions don't read a sibling's data
   // (e.g. another tool call's suspended run id).
   const foreachIndex = executionContext.foreachIndex;
+  let nestedIterationSuspendPayload: Record<string, any> | undefined;
   if (suspendDataToUse && foreachIndex !== undefined) {
     const iterationResult = suspendDataToUse.__workflow_meta?.foreachOutput?.[foreachIndex];
     if (iterationResult?.status === 'suspended' && iterationResult.suspendPayload) {
       suspendDataToUse = iterationResult.suspendPayload;
+      nestedIterationSuspendPayload = iterationResult.suspendPayload;
     }
   }
 
@@ -423,12 +425,14 @@ export async function executeStep(
         },
         // Only pass resume data if this step was actually suspended before
         // This prevents pending nested workflows from trying to resume instead of start
+        // In foreach, stepResults[step.id] is shared by all iterations, so also require that
+        // this iteration itself suspended; otherwise it would claim a sibling's child run.
         resume:
-          stepResults[step.id]?.status === 'suspended'
+          stepResults[step.id]?.status === 'suspended' && (foreachIndex === undefined || nestedIterationSuspendPayload)
             ? {
                 steps: resume?.steps?.slice(1) || [],
                 resumePayload: resume?.resumePayload,
-                runId: stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId,
+                runId: (nestedIterationSuspendPayload ?? stepResults[step.id]?.suspendPayload)?.__workflow_meta?.runId,
                 label: resume?.label,
                 forEachIndex: resume?.forEachIndex,
               }
