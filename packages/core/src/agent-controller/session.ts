@@ -1075,7 +1075,6 @@ export class SessionStream {
   #agent: Agent | null = null;
   /** Dedup key (`agentId:resourceId:threadId`) for the open subscription, or null. */
   #key: string | null = null;
-  /** Message-author id of the caller whose context opened the subscription, if any. */
   readonly #teardownWaiters = new Set<() => void>();
   readonly #consumerFailureWaiters = new Set<(error: unknown) => void>();
   /** Set once the live subscription's run loop has failed; cleared on attach. */
