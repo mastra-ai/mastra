@@ -1081,6 +1081,19 @@ describe('addUserMessage', () => {
     expect(rendered).toContain('… 2 more lines');
   });
 
+  it('shows a schedule fire line instead of hiding it behind a one-line hint', () => {
+    const state = createState();
+    state.quietMode = true;
+    state.quietModeMaxToolPreviewLines = 0;
+    addUserMessage(
+      state,
+      createUserMessage('test test', 'signal-one', { source: 'schedule', scheduleId: 'abcdef1234' }),
+    );
+    const rendered = stripAnsi((state.chatContainer.children[0] as ScheduleFireComponent).render(80).join('\n'));
+    expect(rendered).toContain('test test');
+    expect(rendered).not.toContain('more line');
+  });
+
   it('confirms pending active signals with the steer label', () => {
     const state = createState();
 

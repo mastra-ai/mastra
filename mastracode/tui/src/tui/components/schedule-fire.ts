@@ -75,11 +75,10 @@ export class ScheduleFireComponent extends WidthAwareContainer {
     this.clear();
     this.addChild(new Text(this.header(), BOX_INDENT, 0));
 
-    const limit = this.expanded
-      ? this.promptLines.length
-      : this.quietDisplayMode === 'quiet'
-        ? this.quietPreviewLineLimit
-        : COLLAPSED_PROMPT_LINES;
+    const collapsedLimit = this.quietDisplayMode === 'quiet' ? this.quietPreviewLineLimit : COLLAPSED_PROMPT_LINES;
+    // Hiding a single line would cost the same space as the "1 more line" hint, so show it instead.
+    const limit =
+      this.expanded || this.promptLines.length <= collapsedLimit + 1 ? this.promptLines.length : collapsedLimit;
     for (const line of this.promptLines.slice(0, limit)) {
       this.addChild(new Text(theme.fg('muted', line), BODY_INDENT, 0));
     }
