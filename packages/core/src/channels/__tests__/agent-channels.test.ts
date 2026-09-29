@@ -3307,18 +3307,23 @@ describe('thread history', () => {
       expect(JSON.stringify(t.dispatches[0].signalContents)).not.toContain('[Thread context');
     });
 
-    it('logs and still dispatches the trigger when the batch write fails', async () => {
+    it('falls back to the legacy text block when the batch write fails', async () => {
       const agent = persistingAgent();
       agent.memory.saveMessages.mockRejectedValue(new Error('write boom'));
       const t = await setup({ agent, threadContext: { maxMessages: 10 }, spyHook: false });
       await t.run(makeChatThread(Array.from({ length: 15 }, (_, i) => historyMessage(i))));
-      await expect(t.hook.mock.results[0]!.value).resolves.toBe(true);
+      // History is only collected on the first mention, so a lost write must
+      // not lose the context: the legacy block carries it on the trigger.
+      await expect(t.hook.mock.results[0]!.value).resolves.toBe(false);
       expect(t.logger.warn).toHaveBeenCalledWith(
         'Failed to persist 11 thread history messages: Error: write boom',
         expect.anything(),
       );
       expect(t.dispatches).toHaveLength(1);
-      expect(JSON.stringify(t.dispatches[0].signalContents)).not.toContain('[Thread context');
+      const text = t.dispatches[0].signalContents as string;
+      expect(text).toContain('[Thread context — messages in this thread before you joined]');
+      expect(text).toContain('[… 5 messages omitted]');
+      expect(text).toContain('(msg:h0): message 0');
     });
 
     it('logs and dispatches the trigger without a legacy block when building the rows fails', async () => {

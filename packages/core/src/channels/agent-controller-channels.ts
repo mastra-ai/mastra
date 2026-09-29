@@ -327,9 +327,9 @@ export class AgentControllerChannels extends AgentChannels {
    * before the history rows rather than at trigger dispatch.
    *
    * Rows are written straight to the session agent's memory (see the base
-   * class for why `session.sendSignal` cannot be used). A session agent
-   * without memory is a misconfiguration; the hook still returns `true` so
-   * the legacy block is never rendered on the controller path.
+   * class for why `session.sendSignal` cannot be used). Like the base class,
+   * a session agent without memory or a failed write returns `false` so the
+   * history still reaches the agent as the legacy text block.
    */
   protected override async persistThreadHistorySignals(args: {
     buildSignals: () => Promise<AgentSignalInput[]>;
@@ -339,16 +339,12 @@ export class AgentControllerChannels extends AgentChannels {
   }): Promise<boolean> {
     const session = await this.getSessionForThread(args.thread, args.requestContext);
     const memory = await session.machinery.getAgent().getMemory({ requestContext: args.requestContext });
-    if (!memory) {
-      this.log('warn', `Session agent has no memory; thread history for ${args.memory.thread} was not persisted.`);
-      return true;
-    }
-    await this.saveThreadHistorySignals({
+    if (!memory) return false;
+    return this.saveThreadHistorySignals({
       buildSignals: args.buildSignals,
       memory,
       target: { thread: session.thread.getId() ?? args.memory.thread, resource: session.identity.getResourceId() },
     });
-    return true;
   }
 
   /**

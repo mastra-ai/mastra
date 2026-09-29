@@ -105,14 +105,18 @@ Tunnel URLs are for local development. After you deploy the Mastra server, updat
 
 ## Thread context
 
-When a user mentions the agent mid-conversation in a channel thread, the agent may not have prior context. By default, Mastra fetches the last 10 messages from the platform on the first mention.
+When a user mentions the agent mid-conversation in a channel thread, the agent may not have prior context. On the first mention, Mastra fetches earlier messages from the platform and saves them into the agent's memory thread before the mention runs.
 
-1. On the first mention in a thread, the agent fetches recent messages from the platform.
-1. These messages are prepended to the user's message as conversation context.
+1. On the first mention in a thread, the agent fetches the thread's first message and the most recent messages before the mention. `maxMessages` (default `10`) sets the window: the first message plus up to `maxMessages - 1` recent messages. When messages fall between the two, a `[… N messages omitted]` marker is saved in their place.
+1. Each fetched message is saved to memory as its own user message, attributed to its author and platform message id and carrying its attachments, with a `source: 'thread-history'` attribute. The mention itself then dispatches as a normal message.
 1. After responding, the agent subscribes to the thread and has full history through Mastra memory.
 1. Subsequent messages in that thread don't re-fetch from the platform.
 
 Set `threadContext: { maxMessages: 0 }` to disable this behavior. This only applies to non-direct message threads.
+
+Agents without memory can't save the rows, so they receive the same history as context text inside the mention instead. The same fallback applies when the write to memory fails.
+
+Memory's `lastMessages` option limits how many messages reach the prompt. Its default of `10` trims the first message and the omitted marker when `maxMessages` is `10`, so set `lastMessages` to at least `maxMessages + 1`.
 
 Mastra also adds a short system message that tells the agent which channel and platform the request came from, such as whether the message came from a direct message or public channel. Set `threadContext: { addSystemMessage: false }` to skip it.
 

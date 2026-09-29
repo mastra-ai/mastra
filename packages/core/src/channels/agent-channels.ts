@@ -1645,9 +1645,8 @@ export class AgentChannels {
     const walked = new Set([...recent, ...older].map(m => m.id));
     if (walked.has(root.id)) {
       // The walk already reached the root (only possible when the thread has
-      // exactly cap + window messages); treat as exhausted.
-      const rootInRecent = recent.some(m => m.id === root!.id);
-      if (rootInRecent) return { root: undefined, omitted: 0, capped: false, recent };
+      // exactly cap + window messages); treat as exhausted. `older` is at the
+      // cap here, so the root is its oldest entry, never inside `recent`.
       return { root: older[older.length - 1], omitted: older.length - 1, capped: false, recent };
     }
     return { root, omitted: THREAD_HISTORY_OMITTED_CAP, capped: true, recent };
@@ -1686,7 +1685,7 @@ export class AgentChannels {
       const text = this.messageText(message);
       const parts: Exclude<AgentSignalContents, string> = [
         ...(text ? [{ type: 'text' as const, text }] : []),
-        ...(await this.attachmentsToParts((message.attachments ?? []).filter(a => a.url || a.fetchData))),
+        ...(await this.attachmentsToParts(message.attachments ?? [])),
       ];
       if (parts.length > 0) {
         const { attributes, providerOptions } = await this.buildEventContext({
@@ -1724,13 +1723,15 @@ export class AgentChannels {
 
   /**
    * Persist the history rows into the Mastra thread without waking the agent.
-   * Returns `false` when the rows cannot be persisted (the agent has no
-   * memory), in which case the caller falls back to the legacy text block.
-   * `buildSignals` downloads attachments, so it is only called once
-   * persistence is known to be possible. A failure building the rows logs
-   * and still returns `true`: rendering the legacy block as well would
-   * duplicate content. A failed write logs and drops the rows; the
-   * deterministic ids let a later re-mention write them again.
+   * Returns `false` when the rows were not persisted (the agent has no
+   * memory, or the write failed), in which case the caller falls back to the
+   * legacy text block. History is only collected on the first mention; the
+   * thread is subscribed right after, so a failure here is the only chance
+   * the agent gets at this context. `buildSignals` downloads attachments, so
+   * it is only called once persistence is known to be possible. A failure
+   * building the rows logs and still returns `true`: the legacy block could
+   * not be built from the same input either. The deterministic row ids keep
+   * deliveries that race before the subscription lands from duplicating rows.
    *
    * The rows are written straight to memory in one batch rather than sent
    * through `agent.sendSignal(..., { behavior: 'persist' })`: the runtime
@@ -1750,32 +1751,39 @@ export class AgentChannels {
   }): Promise<boolean> {
     const memory = await this.agent.getMemory({ requestContext: args.requestContext });
     if (!memory) return false;
-    await this.saveThreadHistorySignals({ ...args, memory, target: args.memory });
-    return true;
+    return this.saveThreadHistorySignals({ ...args, memory, target: args.memory });
   }
 
-  /** Builds the rows and writes them to `memory` in one batch. Never throws. */
+  /**
+   * Builds the rows and writes them to `memory` in one batch. Never throws.
+   * Returns `false` only when the write itself failed. The rows may then be
+   * missing, so the caller falls back to the legacy text block; a store that
+   * applied part of the batch before failing shows some history twice, which
+   * beats losing it.
+   */
   protected async saveThreadHistorySignals(args: {
     buildSignals: () => Promise<AgentSignalInput[]>;
     memory: MastraMemory;
     target: { thread: string; resource: string };
-  }): Promise<void> {
+  }): Promise<boolean> {
     let signals: AgentSignalInput[];
     try {
       signals = await args.buildSignals();
     } catch (err) {
       this.log('warn', `Failed to build thread history messages: ${err}`);
-      return;
+      return true;
     }
-    if (signals.length === 0) return;
+    if (signals.length === 0) return true;
     try {
       await args.memory.saveMessages({
         messages: signals.map(signal =>
           createSignal(signal).toDBMessage({ resourceId: args.target.resource, threadId: args.target.thread }),
         ),
       });
+      return true;
     } catch (err) {
       this.log('warn', `Failed to persist ${signals.length} thread history messages: ${err}`);
+      return false;
     }
   }
 
