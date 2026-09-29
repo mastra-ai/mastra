@@ -133,6 +133,30 @@ describe('EmptyFactoryState', () => {
     });
   });
 
+  describe('given the provider catalog cannot be loaded', () => {
+    it('keeps the model step instead of treating the catalog as empty', async () => {
+      sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-provider');
+      sessionStorage.setItem(ONBOARDING_FACTORY_KEY, 'fp-1');
+      server.use(
+        http.get(`${TEST_BASE_URL}/auth/me`, () =>
+          HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+          HttpResponse.json({ projects: [{ id: 'fp-1', name: 'hello' }] }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({ error: 'Provider catalog unavailable' }, { status: 503 }),
+        ),
+      );
+
+      renderOnboarding();
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Provider catalog unavailable');
+      expect(screen.getByRole('heading', { name: 'Choose your Factory model.' })).toBeInTheDocument();
+      expect(sessionStorage.getItem(ONBOARDING_STEP_KEY)).toBe('model-provider');
+    });
+  });
+
   describe('given the repository link fails after the Factory was created', () => {
     it('reuses the created Factory when the repository is picked again', async () => {
       sessionStorage.setItem(ONBOARDING_STEP_KEY, 'vcs');
