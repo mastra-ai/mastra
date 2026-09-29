@@ -169,7 +169,13 @@ Next, publish the review on the PR itself — this is part of every pass, not so
 - approve → `gh pr review <number> --approve --body-file <file>`
 - request changes → `gh pr review <number> --request-changes --body-file <file>`
 
-If GitHub rejects the review submission (e.g. the token authored the PR and cannot approve or request changes on it), fall back to `gh pr comment <number> --body-file <file>` so the verdict still lands on the PR, and report the fallback under **Verification** — how the verdict was published is an operational outcome, not an assumption.
+**Author-identity misconfiguration must be visible, never silent.** GitHub refuses both approve and request changes from the PR's author, so a review token that authored the PR can never record a verdict in `reviewDecision` or satisfy branch protection. Before submitting, compare the reviewing identity (`gh api user --jq .login`; for an App installation token that call may fail — then treat a submission rejected with GitHub's "Can not approve/request changes on your own pull request" error as the same signal) with the PR's `.author.login`. When they match:
+
+1. Prepend this line to the published body: `> ⚠️ **Factory misconfiguration:** the review token is the PR author, so GitHub cannot record this verdict as an approving or changes-requested review (it will not satisfy branch protection or trigger review-based automation). Configure a separate reviewer token for Factory reviews.`
+2. Publish as a submitted comment review: `gh pr review <number> --comment --body-file <file>`. Only if that also fails, fall back to `gh pr comment <number> --body-file <file>`.
+3. Report the misconfiguration and the publish method under **Verification** and in the **Factory routing** block of the handoff.
+
+If submission fails for any other reason, fall back to `gh pr comment <number> --body-file <file>` so the verdict still lands on the PR, and report the fallback under **Verification** — how the verdict was published is an operational outcome, not an assumption.
 
 After publishing, reconcile the verdict label: approve adds `status:auto-approved` and removes `status:changes-requested`; request changes adds `status:changes-requested` and removes `status:auto-approved`.
 
