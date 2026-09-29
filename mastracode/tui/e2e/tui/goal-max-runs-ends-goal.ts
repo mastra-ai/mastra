@@ -12,7 +12,7 @@ const FOLLOW_UP = 'Looks good, please keep going.';
 const PAUSED_REASON = 'Ran out of evaluation budget (1 runs) before reaching the goal — raise maxRuns to resume.';
 
 function readGoal(dbPath: string): { status?: string; pausedReason?: string } {
-  const db = new DatabaseSync(dbPath);
+  const db = new DatabaseSync(dbPath, { readOnly: true });
   try {
     const row = db.prepare(`select value from mastra_thread_state where type = 'goal'`).get() as
       | { value: string }
@@ -109,8 +109,9 @@ export const goalMaxRunsEndsGoalScenario: McE2eScenario = {
     }
     // The status line wraps, so collapse whitespace before counting the cause.
     const pauseLines = () =>
-      stripAnsi(terminal.serialize().view).replace(/\s+/g, ' ').split('— paused: Ran out of evaluation budget (1 runs)')
-        .length - 1;
+      stripAnsi(terminal.serialize().view)
+        .replace(/\s+/g, ' ')
+        .split('— paused: ' + PAUSED_REASON).length - 1;
     await restartApp?.();
     await runtime.waitForScreenText(/Project:/i, terminal, 30_000);
     await runtime.sleep(500);
