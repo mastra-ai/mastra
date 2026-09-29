@@ -619,7 +619,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     };
     const sessionEntry = constructSessionEntry();
     const workdir = sessionEntry.workdir;
-    const isLocalSandbox = sessionEntry.sandbox.provider === 'local';
     // The SDK system prompt uses `state.projectPath` without falling back to
     // the server cwd. Pin the session workdir once known so the prompt and
     // workspace tools describe the same checkout. A remote workdir resolves at

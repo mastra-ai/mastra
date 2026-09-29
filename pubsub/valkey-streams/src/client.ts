@@ -16,13 +16,6 @@ type StreamMessage = { id: string; message: Record<string, string> };
 type StreamReply = { name: string; messages: StreamMessage[] };
 
 const text = (value: unknown): string => (Buffer.isBuffer(value) ? value.toString() : String(value));
-const messages = (value: unknown): StreamMessage[] =>
-  ((value as unknown[] | null) ?? []).map(entry => {
-    const [id, fields] = entry as [unknown, unknown[]];
-    const message: Record<string, string> = {};
-    for (let index = 0; index < fields.length; index += 2) message[text(fields[index])] = text(fields[index + 1]);
-    return { id: text(id), message };
-  });
 
 class ValkeyMulti {
   readonly #batch = new Batch(true);

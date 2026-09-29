@@ -291,7 +291,7 @@ type ClaimedThreadOwnerStreamOptions =
   | AgentExecutionOptions<any>
   | (() => AgentExecutionOptions<any> | Promise<AgentExecutionOptions<any>>);
 
-type ClaimedThreadOwner<OUTPUT = unknown> = {
+type ClaimedThreadOwner<_OUTPUT = unknown> = {
   agent: Agent<any, any, any, any>;
   resourceId: string;
   threadId: string;
@@ -1069,7 +1069,7 @@ export class AgentThreadStreamRuntime {
     return 'active';
   }
 
-  async claimThreadOwnership<OUTPUT = unknown>(
+  async claimThreadOwnership<_OUTPUT = unknown>(
     agent: Agent<any, any, any, any>,
     options: {
       resourceId: string;

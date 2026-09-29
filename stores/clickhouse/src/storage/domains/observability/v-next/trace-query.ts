@@ -32,7 +32,6 @@ type ClickHouseParameterType = 'String' | 'Float64' | 'UInt64' | "DateTime64(3, 
 type FieldDefinition = { sql: string; parameterType: ClickHouseParameterType };
 type FieldRegistry<TField extends string> = Record<TField, FieldDefinition>;
 type QueryParams = Record<string, string | number>;
-type SqlFragment = { sql: string; params: QueryParams };
 type RelatedCollection = 'spans' | 'scores' | 'feedback';
 type TraceSelection = {
   timeRange: { from: string; to: string };

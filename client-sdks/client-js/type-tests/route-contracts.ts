@@ -207,7 +207,7 @@ type _ObservabilityNestedFilter = Expect<
 type _ObservabilitySerializedResponse = Expect<
   Equal<ObservabilityListTracesResponse['spans'][number]['startedAt'], string>
 >;
-const observabilityTraceQuery = {
+const _observabilityTraceQuery = {
   filters: { dateRange: { start: new Date() } },
   pagination: { page: 1 },
   orderBy: { field: 'startedAt', direction: 'DESC' },

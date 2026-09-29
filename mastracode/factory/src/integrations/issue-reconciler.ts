@@ -26,7 +26,7 @@ export interface IssueReconcileScope<TScope> {
   matches(item: WorkItemRow, scope: TScope): boolean;
 }
 
-export interface IssueReconcilerOptions<TScope = void> {
+export interface IssueReconcilerOptions<_TScope = void> {
   integrationId: string;
   intake: Intake;
   projects: Pick<FactoryProjectsStorage, 'listAll'>;

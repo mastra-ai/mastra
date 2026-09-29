@@ -26,7 +26,6 @@ import type { McE2eScenario } from './types.js';
 const PROVIDER = 'kimi-for-coding';
 const PACK_NAME = 'hop-kimi';
 const KIMI_MODEL_ID = 'kimi-for-coding/kimi-for-coding';
-const ANTHROPIC_BUILD_MODEL_ID = 'anthropic/claude-fable-5';
 const PROMPT = 'Hop to the fallback pack when this one is exhausted.';
 const RESPONSE_TEXT = 'Completed on the fallback pack.';
 const INTERRUPTED_TEXT = 'Fallback run started before interruption.';

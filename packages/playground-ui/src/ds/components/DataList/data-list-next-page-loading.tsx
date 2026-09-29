@@ -10,7 +10,6 @@ export type DataListNextPageLoadingProps = {
 export function DataListNextPageLoading({
   isLoading,
   setEndOfListElement,
-  hasMore,
   loadingText = 'Loading more data...',
 }: DataListNextPageLoadingProps) {
   if (!setEndOfListElement) {

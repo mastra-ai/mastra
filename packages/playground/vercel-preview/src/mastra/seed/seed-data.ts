@@ -13,7 +13,6 @@
 const AGENT = { id: 'studio-preview-agent', name: 'Studio Preview Agent' } as const;
 
 const MINUTE = 60_000;
-const HOUR = 60 * MINUTE;
 
 /** Model catalog used for the Model Usage & Cost breakdown (per-1M token rates, USD). */
 const MODELS = [

@@ -586,7 +586,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   const registrations = deps.integrations ?? [];
   const githubRegistration = registrations.find(({ integration }) => integration.id === 'github');
   const githubStorage = githubRegistration ? deps.sourceControlStorage.forIntegration('github') : undefined;
-  const githubIntegration = githubRegistration?.integration as GithubIntegration | undefined;
   const sourceControlRegistrations = registrations.filter(({ integration }) => integration.versionControl);
   const sourceControlIntegrationIds = [
     ...new Set(['github', ...sourceControlRegistrations.map(({ integration }) => integration.id)]),

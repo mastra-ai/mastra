@@ -709,17 +709,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async endWorkflow(args: ProcessorArgs, status: 'success' | 'failed' | 'canceled' | 'paused' = 'success') {
-    const {
-      workflowId,
-      runId,
-      prevResult,
-      perStep,
-      workflow,
-      stepResults,
-      activeStepsPath,
-      executionPath,
-      parentWorkflow,
-    } = args;
+    const { workflowId, runId, prevResult, perStep, workflow, stepResults, activeStepsPath, executionPath } = args;
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
     const normalizedPrevResult = prevResult ?? ({ status } as StepResult<any, any, any, any>);
 

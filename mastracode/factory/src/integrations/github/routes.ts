@@ -162,16 +162,6 @@ function pullRequestNumberFromUrl(value: string, expectedRepo: string): number |
   }
 }
 
-/**
- * Validate a git branch/ref name against a strict whitelist. The value is later
- * interpolated into a shell `git clone --branch` command, so it must never
- * contain shell metacharacters. We accept only git-ref-safe characters and
- * reject anything else rather than relying on shell quoting alone.
- */
-function isValidGitRef(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0 && value.length <= 255 && /^[A-Za-z0-9_./-]+$/.test(value);
-}
-
 function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
