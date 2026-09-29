@@ -22,6 +22,7 @@ import {
   resolveOmRoleModel,
   resolveThreadActiveModelPackId,
   saveSettings,
+  setExperimentalAgentSetting,
   stripMastraCodeCustomProviderPrefix,
 } from '../settings.js';
 import type { BrowserSettings, CustomProviderSetting, GlobalSettings, StorageSettings } from '../settings.js';
@@ -1542,6 +1543,22 @@ describe('experimental agent settings', () => {
       saveSettings(settings, filePath);
 
       expect(JSON.parse(readFileSync(filePath, 'utf-8'))).toMatchObject({ experimentalAgent: 'default' });
+    });
+  });
+
+  it.each([
+    ['durable', 'durable'],
+    ['off', null],
+  ] as const)('lets an explicit %s selection replace an invalid persisted value', (_label, selection) => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ experimentalAgent: 'default' }), 'utf-8');
+      const settings = loadSettings(filePath);
+
+      setExperimentalAgentSetting(settings, selection);
+      saveSettings(settings, filePath);
+
+      expect(JSON.parse(readFileSync(filePath, 'utf-8'))).toMatchObject({ experimentalAgent: selection });
+      expect(getExperimentalAgentSettingsError(settings)).toBeUndefined();
     });
   });
 });

@@ -507,6 +507,11 @@ export function getExperimentalAgentSettingsError(settings: object): Experimenta
   return experimentalAgentSettingsErrors.get(settings);
 }
 
+export function setExperimentalAgentSetting(settings: GlobalSettings, selection: ExperimentalAgent | null): void {
+  settings.experimentalAgent = selection;
+  experimentalAgentSettingsErrors.delete(settings);
+}
+
 function rememberExperimentalAgentSettingsError(
   settings: GlobalSettings,
   error: ExperimentalAgentSettingsError | undefined,
