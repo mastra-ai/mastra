@@ -18,6 +18,7 @@ export const defaultAdmissionLimits: AdmissionLimits = {
   globalActive: 8,
 };
 export class AdmissionError extends Error {
+  /** Represent a rejected reservation with an HTTP status and bounded retry guidance. */
   constructor(
     readonly status: 429 | 503 | 409,
     message: string,
@@ -81,24 +82,41 @@ export function createAdmission(options: {
       ready = undefined;
       throw error;
     }));
-  return {
-    async reserve(runId, owner, input) {
-      if (!runId || !owner) throw new Error('Admission requires a run and owner');
-      const hash = createHash('sha256').update(JSON.stringify(input)).digest('hex');
-      await initialize();
+  let reconciliation: Promise<void> | undefined;
+  /** Share at most three concurrent status checks across requests on this admission instance. */
+  const reconcile = () =>
+    (reconciliation ??= (async () => {
       // Reconcile outside the admission transaction. Unknown/absent runs keep their reservation.
       const active = await pool.query<{ run_id: string }>(
         'SELECT run_id FROM mastra_render_admissions WHERE namespace=$1 AND settled_at IS NULL',
         [options.namespace],
       );
-      for (const row of active.rows) {
-        const status = await options.getStatus(row.run_id);
-        if (status && ['success', 'failed', 'canceled'].includes(status))
-          await pool.query(
-            'UPDATE mastra_render_admissions SET settled_at=now() WHERE namespace=$1 AND run_id=$2 AND settled_at IS NULL',
-            [options.namespace, row.run_id],
-          );
-      }
+      let next = 0;
+      const results = await Promise.allSettled(
+        Array.from({ length: Math.min(3, active.rows.length) }, async () => {
+          while (next < active.rows.length) {
+            const row = active.rows[next++]!;
+            const status = await options.getStatus(row.run_id);
+            if (status && ['success', 'failed', 'canceled'].includes(status))
+              await pool.query(
+                'UPDATE mastra_render_admissions SET settled_at=now() WHERE namespace=$1 AND run_id=$2 AND settled_at IS NULL',
+                [options.namespace, row.run_id],
+              );
+          }
+        }),
+      );
+      // Drain all workers before releasing the shared pass, even when one lookup fails.
+      for (const result of results) if (result.status === 'rejected') throw result.reason;
+    })().finally(() => {
+      reconciliation = undefined;
+    }));
+  return {
+    /** Reconcile settled runs, then atomically reserve capacity or reconnect the same owner/input identity. */
+    async reserve(runId, owner, input) {
+      if (!runId || !owner) throw new Error('Admission requires a run and owner');
+      const hash = createHash('sha256').update(JSON.stringify(input)).digest('hex');
+      await initialize();
+      await reconcile();
       const connection = await pool.connect();
       try {
         await connection.query('BEGIN');
@@ -156,6 +174,7 @@ export function createAdmission(options: {
         connection.release();
       }
     },
+    /** Release the application admission pool after requests have drained. */
     async close() {
       await pool.end();
     },

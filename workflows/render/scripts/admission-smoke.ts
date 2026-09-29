@@ -103,6 +103,47 @@ try {
   clients.push(unavailable);
   await assert.rejects(unavailable.reserve('denied', 'alice', {}));
   console.log('PASS: provider/storage outage fails closed without a reservation');
+
+  const concurrentNamespace = `reconciliation-${randomUUID()}`;
+  namespaces.push(concurrentNamespace);
+  let inFlight = 0,
+    peak = 0,
+    lookups = 0;
+  const concurrent = createAdmission({
+    connectionString,
+    namespace: concurrentNamespace,
+    limits: { globalActive: 20, ownerActive: 20, globalSubmissions: 100, ownerSubmissions: 100 },
+    getStatus: async id => {
+      lookups++;
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      try {
+        await new Promise(resolve => setTimeout(resolve, 30));
+        return id.startsWith('terminal-') ? 'success' : null;
+      } finally {
+        inFlight--;
+      }
+    },
+  });
+  clients.push(concurrent);
+  // Initialize the schema before seeding this isolated namespace.
+  await concurrent.reserve('unknown-initial', 'owner', {});
+  for (let i = 0; i < 7; i++)
+    await pool.query('INSERT INTO mastra_render_admissions(namespace,run_id,owner,input_hash) VALUES($1,$2,$3,$4)', [
+      concurrentNamespace,
+      `${i < 3 ? 'terminal' : 'unknown'}-${i}`,
+      'owner',
+      'synthetic',
+    ]);
+  await Promise.all([concurrent.reserve('next-a', 'owner', {}), concurrent.reserve('next-b', 'owner', {})]);
+  assert.equal(peak, 3);
+  assert.equal(lookups, 8, 'Concurrent callers should share one bounded reconciliation pass');
+  const settled = await pool.query(
+    'SELECT run_id FROM mastra_render_admissions WHERE namespace=$1 AND settled_at IS NOT NULL',
+    [concurrentNamespace],
+  );
+  assert.deepEqual(settled.rows.map(row => row.run_id).sort(), ['terminal-0', 'terminal-1', 'terminal-2']);
+  console.log('PASS: real PostgreSQL reconciliation shares three concurrent lookups and retains unknown reservations');
 } finally {
   for (const namespace of new Set(namespaces))
     await pool.query('DELETE FROM mastra_render_admissions WHERE namespace=$1', [namespace]);
