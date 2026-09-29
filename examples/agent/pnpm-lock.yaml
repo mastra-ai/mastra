@@ -108,6 +108,9 @@ importers:
       '@mastra/duckdb':
         specifier: link:../../stores/duckdb
         version: link:../../stores/duckdb
+      '@mastra/e2b':
+        specifier: link:../../workspaces/e2b
+        version: link:../../workspaces/e2b
       '@mastra/e2b-desktop':
         specifier: link:../../workspaces/e2b-desktop
         version: link:../../workspaces/e2b-desktop

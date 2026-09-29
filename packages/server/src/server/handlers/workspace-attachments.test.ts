@@ -177,4 +177,40 @@ describe('routeAttachmentsToWorkspace', () => {
       expect(message!.content).toEqual([text, pdf, { type: 'text', text: expect.stringContaining('/a.xls') }, image]);
     });
   });
+
+  describe('given an agent whose workspace only has a sandbox', () => {
+    it('when a spreadsheet is routed then it is written into the sandbox and replaced by a text part', async () => {
+      const writeFiles = vi.fn().mockResolvedValue(undefined);
+      const agent = createAgent();
+      vi.spyOn(agent, 'getWorkspace').mockResolvedValue({ sandbox: { writeFiles } } as any);
+
+      const [message] = await routeAttachmentsToWorkspace({
+        agent,
+        messages: [{ role: 'user', content: [{ type: 'file', data: BASE64, mediaType: XLSX, filename: 'r.xlsx' }] }],
+        requestContext: new RequestContext(),
+      });
+
+      expect(writeFiles).toHaveBeenCalledTimes(1);
+      const [[file]] = writeFiles.mock.calls[0]!;
+      expect(file.path).toMatch(/^uploads\/[0-9a-f-]{36}\/r\.xlsx$/);
+      expect(new Uint8Array(file.content)).toEqual(BYTES);
+      expect(message!.content).toEqual([{ type: 'text', text: expect.stringContaining(file.path) }]);
+    });
+  });
+
+  describe('given a workspace with neither a filesystem nor a writable sandbox', () => {
+    it('when a spreadsheet is routed then a 403 is raised', async () => {
+      const agent = createAgent();
+      vi.spyOn(agent, 'getWorkspace').mockResolvedValue({ sandbox: {} } as any);
+
+      const error = await routeAttachmentsToWorkspace({
+        agent,
+        messages: [{ role: 'user', content: [{ type: 'file', data: BASE64, mediaType: XLSX, filename: 'r.xlsx' }] }],
+        requestContext: new RequestContext(),
+      }).catch(e => e);
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect(error.status).toBe(403);
+    });
+  });
 });

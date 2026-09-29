@@ -57,7 +57,13 @@ export async function routeAttachmentsToWorkspace<T>({
 
   const workspace = await agent.getWorkspace({ requestContext });
   const filesystem = workspace?.filesystem;
-  if (!filesystem) {
+  const sandbox = workspace?.sandbox;
+  const write = filesystem
+    ? (path: string, content: Buffer) => filesystem.writeFile(path, content)
+    : sandbox?.writeFiles
+      ? (path: string, content: Buffer) => sandbox.writeFiles!([{ path, content }])
+      : undefined;
+  if (!write) {
     throw workspaceRequiredError(mediaTypeOf(firstRouted));
   }
 
@@ -70,7 +76,7 @@ export async function routeAttachmentsToWorkspace<T>({
         const mediaType = mediaTypeOf(part);
         const name = sanitizeFilename(part.filename);
         const path = `uploads/${randomUUID()}/${name}`;
-        await filesystem.writeFile(path, decodeData((part as { data?: unknown }).data));
+        await write(path, decodeData((part as { data?: unknown }).data));
         return {
           type: 'text',
           text: `[Attachment "${name}" (${mediaType}) was uploaded to the workspace at ${path}. Use workspace tools to read it.]`,

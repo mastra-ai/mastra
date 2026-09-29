@@ -106,6 +106,7 @@ import {
 } from './processors/index';
 import { gatewayAgent } from './agents/gateway';
 import { askUserAgent } from './agents/ask-user-agent';
+import { xlsxAgent } from './agents/xlsx-agent';
 import { codeModeAgent } from './agents/code-mode-agent';
 import { clinicDirectAgent, clinicSpecialistAgent, clinicSupervisorAgent } from './agents/clinic-context-agents';
 import { approvalDemoAgent } from './agents/approval-demo-agent';
@@ -178,6 +179,7 @@ export const mastra = new Mastra({
     clinicSpecialistAgent,
     clinicSupervisorAgent,
     computerUseAgent,
+    xlsxAgent,
     'standup-note-normalizer': standupNoteNormalizerAgent,
     'standup-digest': standupDigestAgent,
     'standup-escalation': standupEscalationAgent,
