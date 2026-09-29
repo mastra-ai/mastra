@@ -170,6 +170,18 @@ describe('Combobox', () => {
     expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
   });
 
+  it('keeps the clear action outside the scrolling option list', async () => {
+    render(<Combobox multiple options={options} value={['openai']} clearLabel="Clear" />);
+
+    fireEvent.click(screen.getByRole('combobox'));
+    const clear = await screen.findByRole('button', { name: 'Clear' });
+    const listbox = screen.getByRole('listbox');
+    const viewport = listbox.closest('[data-base-ui-scroll-area-viewport], [style*="max-height"]');
+
+    expect(viewport).not.toBeNull();
+    expect(viewport?.contains(clear)).toBe(false);
+  });
+
   it('selects the first filtered item when pressing Enter after searching', async () => {
     const onValueChange = vi.fn();
     renderCombobox({ onValueChange });

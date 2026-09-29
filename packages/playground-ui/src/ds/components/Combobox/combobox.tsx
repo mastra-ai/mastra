@@ -3,13 +3,14 @@ import { Check, ChevronsUpDown, Search, X } from 'lucide-react';
 import * as React from 'react';
 import { comboboxItemClass, comboboxStyles, comboboxTriggerClass } from './combobox-styles';
 import type { ComboboxVariant } from './combobox-styles';
-import { Button, isIconButtonSize } from '@/ds/components/Button/Button';
+import { isIconButtonSize } from '@/ds/components/Button/Button';
 import type { ButtonSize } from '@/ds/components/Button/Button';
 import { FieldBlock } from '@/ds/components/FormFieldBlocks/block/field-block';
 import { fieldErrorId } from '@/ds/components/FormFieldBlocks/block/field-error-id';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
+import { menuSeparatorClass } from '@/ds/primitives/menu-item';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
 
@@ -78,6 +79,20 @@ const ComboboxItem = React.forwardRef<HTMLDivElement, BaseCombobox.Item.Props>((
 ));
 ComboboxItem.displayName = 'ComboboxItem';
 
+function ComboboxClearItem({ label, onClear }: { label: string; onClear: () => void }) {
+  return (
+    <button
+      type="button"
+      ref={useFluidMenuItemRef<HTMLButtonElement>()}
+      onClick={onClear}
+      className={comboboxStyles.item}
+    >
+      <X aria-hidden />
+      <span>{label}</span>
+    </button>
+  );
+}
+
 function ComboboxOptionText({ option }: { option: ComboboxOption }) {
   return (
     <span className={comboboxStyles.optionText}>
@@ -136,6 +151,7 @@ export function Combobox(props: ComboboxProps) {
   // interactive inside a modal drawer; an explicit `container` still wins.
   const resolvedContainer = usePortalContainer(container);
   const menu = useFluidMenu<HTMLDivElement>();
+  const clearMenu = useFluidMenu<HTMLDivElement>();
   const iconOnly = isIconButtonSize(size);
 
   const comboboxContent = (
@@ -232,17 +248,11 @@ export function Combobox(props: ComboboxProps) {
               </div>
             </ScrollArea>
             {selectedValues.length > 0 && clearLabel ? (
-              <div className={cn('border-t', 'border-border', 'p-1')}>
-                <Button
-                  type="button"
-                  variant="destructive-ghost"
-                  size="sm"
-                  className="w-full justify-start"
-                  onClick={clearSelection}
-                  icon={<X />}
-                >
-                  {clearLabel}
-                </Button>
+              <div className={cn(clearMenu.containerClassName, 'px-1 pb-1')} {...clearMenu.getContainerProps({})}>
+                <FluidMenuItems menu={clearMenu}>
+                  <div role="separator" className={cn(menuSeparatorClass, 'mt-0')} />
+                  <ComboboxClearItem label={clearLabel} onClear={clearSelection} />
+                </FluidMenuItems>
               </div>
             ) : null}
           </BaseCombobox.Popup>
