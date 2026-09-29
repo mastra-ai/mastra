@@ -7,5 +7,3 @@ Added a `repeat` option to `useKeydown`. Set it to `false` so holding a key runs
 ```tsx
 useKeydown({ '[': toggleSidebar }, { repeat: false });
 ```
-
-Holding `[` in Studio now toggles the sidebar once instead of flickering it open and closed.

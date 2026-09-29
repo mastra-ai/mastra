@@ -363,6 +363,20 @@ describe('useKeydown', () => {
       expect(onToggle).toHaveBeenCalledTimes(1);
       expect(repeat.defaultPrevented).toBe(true);
     });
+
+    it('given repeat is false, then holding a key does not complete a sequence', () => {
+      const onGoGo = vi.fn();
+      renderHook(() => useKeydown({ 'g$+g': onGoGo }, { repeat: false }));
+
+      pressKey('g');
+      pressKey('g', { repeat: true });
+      pressKey('g', { repeat: true });
+      pressKey('g', { repeat: true });
+      expect(onGoGo).not.toHaveBeenCalled();
+
+      pressKey('g');
+      expect(onGoGo).toHaveBeenCalledTimes(1);
+    });
   });
 });
 

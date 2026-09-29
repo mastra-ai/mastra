@@ -248,6 +248,8 @@ export const createKeyboardDispatcher = (): KeyboardDispatcher => {
           if (!step || !hasPrefix(steps, pending.matched) || !matchesCombo(event, step)) continue;
           if (!accepts(layer, event)) return;
           event.preventDefault();
+          // A held key neither advances nor completes a `repeat: false` sequence.
+          if (event.repeat && layer.repeat === false) return;
           if (stepIndex === steps.length - 1) {
             reset();
             handler();
@@ -269,7 +271,8 @@ export const createKeyboardDispatcher = (): KeyboardDispatcher => {
     const first = candidates[0]?.steps[0];
     if (first) {
       event.preventDefault();
-      arm([first], candidates, now);
+      const armable = candidates.filter(({ layer }) => !event.repeat || layer.repeat !== false);
+      if (armable.length > 0) arm([first], armable, now);
       return;
     }
 
