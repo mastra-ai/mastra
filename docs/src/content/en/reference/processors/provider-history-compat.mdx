@@ -216,7 +216,7 @@ Use `applyToPrompt` for provider-specific rewrites that shouldn't be saved to me
 
 ## Tool call ID repair is prompt-scoped
 
-Anthropic enforces `^[a-zA-Z0-9_-]+$` on `tool_use.id`. A tool call whose ID came from another provider, containing `.` or `:`, is rejected, so the rule sanitizes those IDs in the outbound request:
+Anthropic enforces `^[a-zA-Z0-9_-]+$` on `tool_use.id`. A tool call whose ID came from another provider, containing `.` or `:`, is rejected. The rule sanitizes those IDs in the outbound request:
 
 ```typescript oxfmt:false
 // What the provider receives
@@ -231,7 +231,7 @@ Because nothing is persisted, a caller that reuses the same message list in a la
 
 ### Reactive fallback
 
-The rule's `errorPatterns` and `fix` hooks repair the same rejection after the provider raises it. The preemptive rewrite only runs when `isMaybeAnthropic(model)` matches, so the reactive path stays the fallback for Claude served through a provider the check doesn't recognize, such as Vertex-hosted Claude, and the only repair once a call has already been rejected. A rule can use both hooks together, and `fix` on the `CompatRule` interface itself isn't deprecated: custom rules legitimately use it.
+The rule's `errorPatterns` and `fix` hooks repair the same rejection after the provider raises it. The preemptive rewrite only runs when `isMaybeAnthropic(model)` matches. The reactive path stays the fallback for Claude served through a provider the check doesn't recognize, such as Vertex-hosted Claude, and the only repair once a call has already been rejected. A rule can use both hooks together, and `fix` on the `CompatRule` interface itself isn't deprecated: custom rules legitimately use it.
 
 ## Related
 
