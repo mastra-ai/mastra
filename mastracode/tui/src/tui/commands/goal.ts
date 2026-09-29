@@ -101,11 +101,10 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
   if (subCommand === 'clear') {
     goalManager.clear();
     if (!(await goalManager.deleteFromThread(state))) {
-      // Loading retries the delete once, so the goal may be gone after all.
-      await goalManager.loadFromThread(state);
-      if (goalManager.getGoal()) {
+      // Loading retries the delete once; only a retry that lands counts as cleared.
+      if (!(await goalManager.loadFromThread(state))) {
         ctx.updateStatusLine();
-        ctx.showError('Could not clear the goal; it is still active. Try /goal clear again.');
+        ctx.showError('Could not clear the goal; it may still be active. Try /goal clear again.');
         return;
       }
     }

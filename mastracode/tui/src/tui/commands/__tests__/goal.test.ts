@@ -965,10 +965,51 @@ describe('handleGoalCommand', () => {
 
     await handleGoalCommand(ctx, ['clear']);
 
-    expect(showError).toHaveBeenCalledWith(expect.stringContaining('still active'));
+    expect(showError).toHaveBeenCalledWith(expect.stringContaining('may still be active'));
     expect(showInfo).not.toHaveBeenCalledWith('Goal cleared.');
     expect(goalManager.getGoal()?.objective).toBe('finish the task');
     expect(abort).not.toHaveBeenCalled();
+  });
+
+  it('does not report /goal clear as done when storage reads and writes both fail', async () => {
+    let stored: Record<string, unknown> | undefined;
+    let storageDown = false;
+    const agent = {
+      id: 'agent-1',
+      setObjective: vi.fn(async (objective: string, opts: Record<string, unknown>) => {
+        stored = { objective, status: 'active', runsUsed: 0, activeDurationMs: 0, startedAt: 1, updatedAt: 1, ...opts };
+        return stored;
+      }),
+      getObjective: vi.fn(async () => {
+        if (storageDown) throw new Error('storage down');
+        return stored;
+      }),
+      clearObjective: vi.fn(async () => {
+        throw new Error('storage down');
+      }),
+      updateObjectiveOptions: vi.fn(),
+    };
+    const goalManager = new GoalManager();
+    const abort = vi.fn();
+    const state = createMockState({
+      threadId: 'thread-1',
+      controller: { getCurrentAgent: vi.fn(() => agent) },
+      session: { abort, run: { isRunning: vi.fn(() => true) }, suspensions: { hasPending: vi.fn(() => false) } },
+      extra: { goalManager, pendingInlineQuestions: [], pendingAskUserComponents: new Map() },
+    }) as any;
+    await goalManager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+    state.planStartedGoalId = goalManager.getGoal()?.id;
+    storageDown = true;
+    const showInfo = vi.fn();
+    const showError = vi.fn();
+    const ctx = { state, showInfo, showError, updateStatusLine: vi.fn() } as any;
+
+    await handleGoalCommand(ctx, ['clear']);
+
+    expect(showError).toHaveBeenCalledWith(expect.stringContaining('may still be active'));
+    expect(showInfo).not.toHaveBeenCalledWith('Goal cleared.');
+    expect(abort).not.toHaveBeenCalled();
+    expect(state.planStartedGoalId).toBeDefined();
   });
 
   it('reports /goal clear as done when the retry on reload succeeds', async () => {

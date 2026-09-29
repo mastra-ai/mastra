@@ -352,9 +352,10 @@ export class GoalManager {
    *
    * A clear whose delete failed is retried here when it targeted this thread and
    * the stored goal is the one that was cleared; otherwise the stored goal loads,
-   * so the mirror never hides a goal core is still judging.
+   * so the mirror never hides a goal core is still judging. Resolves to whether
+   * that retried delete landed.
    */
-  async loadFromThread(state: GoalManagerState, isCurrent: () => boolean = () => true): Promise<void> {
+  async loadFromThread(state: GoalManagerState, isCurrent: () => boolean = () => true): Promise<boolean> {
     const pending = this.pendingDelete;
     const threadId = state.session.thread.getId();
     const agent = this.getAgent(state);
@@ -375,16 +376,19 @@ export class GoalManager {
         // fall through to legacy metadata
       }
     }
-    if (!isCurrent()) return;
+    if (!isCurrent()) return false;
+    let retriedDelete = false;
     if (pending?.goalId && pending.threadId === threadId && storedId === pending.goalId) {
-      if (await this.deleteFromThread(state)) nextRecord = null;
-      if (!isCurrent()) return;
+      retriedDelete = await this.deleteFromThread(state);
+      if (retriedDelete) nextRecord = null;
+      if (!isCurrent()) return false;
     }
     this.persistGoalOnNextThreadCreate = false;
     this.pendingDelete = null;
     this.threadId = threadId ?? undefined;
     this.agentId = agent?.id;
     this.record = nextRecord;
+    return retriedDelete;
   }
 
   /**
