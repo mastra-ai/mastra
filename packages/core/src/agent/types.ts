@@ -155,6 +155,15 @@ export type AgentSignalActiveBehavior = 'deliver' | 'persist' | 'discard';
 export type AgentSignalIdleBehavior = 'wake' | 'persist' | 'discard';
 
 /**
+ * Stream options for an idle wake, either given up front or built lazily at wake time.
+ *
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentSignalStreamOptions<OUTPUT = unknown> =
+  | AgentExecutionOptions<OUTPUT>
+  | (() => AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>>);
+
+/**
  * Options applied when a signal targets an idle thread.
  *
  * Controls whether the thread should be woken, the signal persisted without
@@ -165,7 +174,12 @@ export type AgentSignalIdleBehavior = 'wake' | 'persist' | 'discard';
  */
 export type AgentSignalIfIdleOptions<OUTPUT = unknown> = {
   behavior?: AgentSignalIdleBehavior;
-  streamOptions?: AgentExecutionOptions<OUTPUT>;
+  /**
+   * Options for the run started when the signal wakes an idle thread. Pass a
+   * function to build them only when that wake happens — useful when the
+   * signal may instead be delivered to a run that is still active.
+   */
+  streamOptions?: AgentSignalStreamOptions<OUTPUT>;
   attributes?: AgentSignalAttributes;
   /** Reject the wake unless an advertised thread owner acknowledges it. */
   requireClaimedOwner?: boolean;

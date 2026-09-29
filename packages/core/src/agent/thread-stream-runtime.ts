@@ -25,6 +25,7 @@ import type {
   AgentAbortThreadOptions,
   AgentClaimThreadPeerOptions,
   AgentSignal,
+  AgentSignalStreamOptions,
   AgentSubscribeToThreadOptions,
   AgentThreadIdentityOptions,
   AgentThreadPeerAdvertisement,
@@ -216,6 +217,28 @@ function withThreadMemory(memory: unknown, resourceId: string, threadId: string)
   };
 }
 
+/** The runtime queues and spreads options without tracking the caller's OUTPUT type. */
+function idleStreamOptions(ifIdle: { streamOptions?: unknown } | undefined) {
+  return ifIdle?.streamOptions as AgentSignalStreamOptions<any> | undefined;
+}
+
+/** Build lazy idle-wake options now that the wake is actually happening. */
+async function resolveSignalStreamOptions<OUTPUT>(
+  streamOptions: AgentSignalStreamOptions<OUTPUT> | undefined,
+): Promise<AgentExecutionOptions<OUTPUT> | undefined> {
+  return typeof streamOptions === 'function' ? await streamOptions() : streamOptions;
+}
+
+/**
+ * Options that are available without building lazy ones. Paths that don't wake
+ * the thread must not build them: the builder may prepare a whole run.
+ */
+function eagerSignalStreamOptions<OUTPUT>(
+  streamOptions: AgentSignalStreamOptions<OUTPUT> | undefined,
+): AgentExecutionOptions<OUTPUT> | undefined {
+  return typeof streamOptions === 'function' ? undefined : streamOptions;
+}
+
 type AgentThreadRunLifecycle = 'running' | 'suspending' | 'suspended' | 'completed' | 'failed' | 'aborted';
 
 type AgentThreadRunSuspension = {
@@ -273,7 +296,7 @@ type PendingIdleSignal<OUTPUT = unknown> = {
   runId: string;
   resourceId: string;
   threadId: string;
-  streamOptions?: AgentExecutionOptions<OUTPUT>;
+  streamOptions?: AgentSignalStreamOptions<OUTPUT>;
   queueOwnerId?: string;
   cancelled?: boolean;
 };
@@ -3533,7 +3556,10 @@ export class AgentThreadStreamRuntime {
         runId: pendingIdle.runId,
         error: getErrorFromUnknown(err).message,
       });
-      this.#trimFailedRun(pubsub, key, { ...pendingIdle, streamOptions: pendingIdle.streamOptions ?? {} });
+      this.#trimFailedRun(pubsub, key, {
+        ...pendingIdle,
+        streamOptions: eagerSignalStreamOptions(pendingIdle.streamOptions) ?? {},
+      });
       if (!(await this.#drainPendingIdleSignals(state, pubsub, key, fromRunId))) {
         this.#releaseThreadLease(pubsub, key, fromRunId ?? pendingIdle.runId);
       }
@@ -3588,14 +3614,16 @@ export class AgentThreadStreamRuntime {
       return true;
     }
 
+    let streamOptions = eagerSignalStreamOptions(pendingIdle.streamOptions);
     try {
       state.drainingIdleSignalsByThread.delete(key);
       this.#notifyThreadEvents(state);
       state.startingQueuedRunIds.add(pendingIdle.runId);
+      streamOptions = await resolveSignalStreamOptions(pendingIdle.streamOptions);
       const output = await pendingIdle.agent.stream(pendingIdle.signal, {
-        ...(pendingIdle.streamOptions as any),
+        ...(streamOptions as any),
         runId: pendingIdle.runId,
-        memory: withThreadMemory(pendingIdle.streamOptions?.memory, pendingIdle.resourceId, pendingIdle.threadId),
+        memory: withThreadMemory(streamOptions?.memory, pendingIdle.resourceId, pendingIdle.threadId),
       });
 
       if ((idleQueue?.length ?? 0) > 0) {
@@ -3626,14 +3654,14 @@ export class AgentThreadStreamRuntime {
         runId: pendingIdle.runId,
         error: message,
       });
-      this.#trimFailedRun(pubsub, key, { ...pendingIdle, streamOptions: pendingIdle.streamOptions ?? {} });
+      this.#trimFailedRun(pubsub, key, { ...pendingIdle, streamOptions: streamOptions ?? {} });
       // No completion watcher exists for a failed startup. Preserve pending-before-idle recovery here too.
       await this.#drainPendingSignals(state, pubsub, key, {
         agent: pendingIdle.agent,
         runId: pendingIdle.runId,
         resourceId: pendingIdle.resourceId,
         threadId: pendingIdle.threadId,
-        streamOptions: pendingIdle.streamOptions ?? {},
+        streamOptions: streamOptions ?? {},
       });
     } finally {
       state.startingQueuedRunIds.delete(pendingIdle.runId);
@@ -4718,7 +4746,7 @@ export class AgentThreadStreamRuntime {
     });
     const queuedRunId = globalThis.crypto.randomUUID();
     // Preserve explicit cancellation, but don't inherit the active run's signal.
-    const queuedStreamOptions = target.ifIdle?.streamOptions ?? {
+    const queuedStreamOptions: AgentSignalStreamOptions<any> = idleStreamOptions(target.ifIdle) ?? {
       ...activeRecord?.streamOptions,
       abortSignal: undefined,
     };
@@ -4766,7 +4794,7 @@ export class AgentThreadStreamRuntime {
     const resourceId = target.resourceId;
     const threadId = target.threadId;
 
-    const requestContext = target.ifIdle?.streamOptions?.requestContext;
+    const requestContext = eagerSignalStreamOptions(idleStreamOptions(target.ifIdle))?.requestContext;
     const memoryContext = parseMemoryRequestContext(requestContext);
     const memory = await agent.getMemory({ requestContext });
     if (!memory) {
@@ -4901,7 +4929,7 @@ export class AgentThreadStreamRuntime {
           signal,
           resourceId,
           threadId,
-          target.ifIdle?.streamOptions?.requestContext,
+          eagerSignalStreamOptions(idleStreamOptions(target.ifIdle))?.requestContext,
         );
         void persisted.catch(() => {});
         return {
@@ -5010,7 +5038,7 @@ export class AgentThreadStreamRuntime {
         signal,
         resourceId,
         threadId,
-        target.ifIdle?.streamOptions?.requestContext,
+        eagerSignalStreamOptions(idleStreamOptions(target.ifIdle))?.requestContext,
       );
       void persisted.catch(() => {});
       return {
@@ -5047,7 +5075,7 @@ export class AgentThreadStreamRuntime {
       // Another run owns the thread. Queue this idle-start request and let the watcher
       // launch it only after the active run clears the thread reservation.
       const idleQueue = state.pendingIdleSignalsByThread.get(key) ?? [];
-      idleQueue.push({ agent, signal, runId, resourceId, threadId, streamOptions: target.ifIdle?.streamOptions });
+      idleQueue.push({ agent, signal, runId, resourceId, threadId, streamOptions: idleStreamOptions(target.ifIdle) });
       state.pendingIdleSignalsByThread.set(key, idleQueue);
       if (activeRecord) {
         this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
@@ -5086,7 +5114,7 @@ export class AgentThreadStreamRuntime {
           signal,
           Date.now() + AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS,
           () => state.claimedThreadOwners.get(reservedKey)?.unsubscribe === localClaimedOwner.unsubscribe,
-          target.ifIdle?.streamOptions,
+          await resolveSignalStreamOptions(idleStreamOptions(target.ifIdle)),
         );
         if (!localAcceptance) {
           throw new Error(`Claimed thread owner could not acquire the execution lease for ${reservedKey}`);
@@ -5170,12 +5198,14 @@ export class AgentThreadStreamRuntime {
       // We own the lease. Start the renewal timer so it survives runs
       // that outlive the TTL, then kick off the stream.
       this.#startLeaseRenewal(resolvedPubSub, reservedKey, reservedRunId);
+      let streamOptions = eagerSignalStreamOptions(idleStreamOptions(target.ifIdle));
       try {
+        streamOptions = await resolveSignalStreamOptions(idleStreamOptions(target.ifIdle));
         const output = await agent.stream(signal, {
-          ...(target.ifIdle?.streamOptions as any),
+          ...(streamOptions as any),
           untilIdle: true,
           runId: reservedRunId,
-          memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
+          memory: withThreadMemory(streamOptions?.memory, resourceId, threadId),
         });
         return { action: 'wake' as const, runId: reservedRunId, output };
       } catch (error) {
@@ -5192,7 +5222,7 @@ export class AgentThreadStreamRuntime {
         });
         this.#trimFailedRun(pubsub, reservedKey, {
           agent,
-          streamOptions: target.ifIdle?.streamOptions ?? {},
+          streamOptions: streamOptions ?? {},
           runId: reservedRunId,
         });
         void this.#drainPendingIdleSignals(state, pubsub, reservedKey);

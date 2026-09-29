@@ -4025,11 +4025,25 @@ export class Session<TState = unknown> {
             },
           });
         }
+        // The run can finish before the signal lands, turning this into an idle
+        // wake. That run needs the controller's request context (model, tools),
+        // but building it here would prepare a run — and clear the abort flag —
+        // for a signal the active run may still take, so build it only on wake.
         const result = agent.sendSignal(signal, {
           resourceId: this.identity.getResourceId(),
           threadId,
           ifActive,
-          ifIdle,
+          ifIdle: {
+            ...ifIdle,
+            streamOptions: () =>
+              this.machinery.buildStreamOptions({
+                requestContext: requestContextInput,
+                tracingContext,
+                tracingOptions,
+                untilIdle,
+                threadId,
+              }) as any,
+          },
         });
         const shouldObservePersistence = ifActive?.behavior === 'persist' || ifIdle?.behavior === 'persist';
         const settled = shouldObservePersistence || requireDelivery ? await result.accepted : undefined;
@@ -4174,11 +4188,21 @@ export class Session<TState = unknown> {
     await this.thread.ensureSubscription(threadId);
 
     if (this.run.getRunId() && this.stream.activeRunId()) {
+      // Build the wake context lazily, as in `sendSignal`'s active-run branch.
       return agent.sendNotificationSignal(input, {
         resourceId: this.identity.getResourceId(),
         threadId,
         ifActive,
-        ifIdle,
+        ifIdle: {
+          ...ifIdle,
+          streamOptions: () =>
+            this.machinery.buildStreamOptions({
+              requestContext: requestContextInput,
+              tracingContext,
+              tracingOptions,
+              threadId,
+            }) as any,
+        },
       });
     }
 
