@@ -8,6 +8,7 @@ export const NumberField: React.FC<AutoFormFieldProps> = ({ inputProps, field })
   return (
     <Input
       type="number"
+      step="any"
       {...props}
       defaultValue={field.default !== undefined ? Number(field.default) : undefined}
       onChange={e => {
