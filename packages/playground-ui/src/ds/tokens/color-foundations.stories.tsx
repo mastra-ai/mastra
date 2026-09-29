@@ -64,6 +64,7 @@ const textTones: { token: ColorToken; className: string; role: string; sample: s
 
 const hues = ['red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink'];
 const steps = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
+const softSteps = new Set([300, 600, 900, 950]);
 const statusRoles = ['destructive', 'warning', 'success', 'info'];
 const products = [
   { role: 'studio', label: 'Studio' },
@@ -185,7 +186,7 @@ export const ColorFoundations: Story = {
 
       <FoundationSection
         label="Chromatic ramps"
-        description="Shared primitives, from light 50 to dark 950. Roles select a step for each theme."
+        description="Shared primitives, from light 50 to dark 950. The soft row sits under 300, 600, 900 and 950: about the same lightness at lower chroma, for badges and subtle status fills. Roles select a step for each theme."
       >
         {hues.map(hue => (
           <SpecimenGroup key={hue} label={hue}>
@@ -195,6 +196,17 @@ export const ColorFoundations: Story = {
                   <Swatch value={`var(--${hue}-${step})`} />
                 </Specimen>
               ))}
+            </div>
+            <div className="grid grid-cols-3 gap-3 sm:grid-cols-6 lg:grid-cols-11">
+              {steps.map(step =>
+                softSteps.has(step) ? (
+                  <Specimen key={step} name={`soft-${step}`}>
+                    <Swatch value={`var(--${hue}-soft-${step})`} />
+                  </Specimen>
+                ) : (
+                  <div key={step} />
+                ),
+              )}
             </div>
           </SpecimenGroup>
         ))}
