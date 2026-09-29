@@ -156,6 +156,8 @@ const durableLLMOutputSchema = z.object({
     warnings: z.array(z.any()),
     isContinued: z.boolean(),
     totalUsage: z.any().optional(),
+    // Final response message id; input processors can rotate it during the step.
+    messageId: z.string().optional(),
   }),
   metadata: z.any(),
   processorRetryCount: z.number().optional(),
