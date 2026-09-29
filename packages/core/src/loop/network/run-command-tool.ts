@@ -138,7 +138,11 @@ export function isPathAllowed(
  * Extracts the base command from a command string, handling both `/` and `\\`
  * separators and common Windows executable extensions.
  */
-export function extractBaseCommand(command: string, platform: NodeJS.Platform = process.platform): string {
+export function extractBaseCommand(
+  command: string,
+  platform: NodeJS.Platform = process.platform,
+  stripExtension = true,
+): string {
   const trimmed = command.trim();
   // Read the first shell word: whitespace ends it only outside quotes, and quote
   // characters are dropped, since the shell joins `r"m"` / `"r"m` into `rm`.
@@ -162,7 +166,8 @@ export function extractBaseCommand(command: string, platform: NodeJS.Platform = 
   if (platform !== 'win32') return lower;
   // Windows ignores trailing dots/spaces and resolves executable extensions (`rm.exe.` runs `rm.exe`).
   // On POSIX these are distinct files, so normalizing there would let `./echo.` match an `echo` allowlist entry.
-  return lower.replace(/[. ]+$/, '').replace(/\.(exe|cmd|bat|com)$/, '');
+  const trimmedName = lower.replace(/[. ]+$/, '');
+  return stripExtension ? trimmedName.replace(/\.(exe|cmd|bat|com)$/, '') : trimmedName;
 }
 
 /**
@@ -201,7 +206,12 @@ export function createRunCommandTool(options: RunCommandToolOptions = {}) {
 
   // Normalize configured names the same way as commands so `tool.exe` still matches on Windows.
   const blockedCommands = new Set([...BLOCKED_COMMANDS, ...additionalBlockedCommands.map(c => extractBaseCommand(c))]);
-  const allowedNames = allowedCommands.map(c => extractBaseCommand(c));
+  // An allowlist entry with an explicit extension (`safe.cmd`) only permits that exact file,
+  // so it can't authorize `safe.exe` or a bare `safe` that Windows might resolve to another file.
+  const allowedEntries = allowedCommands.map(c => ({
+    name: extractBaseCommand(c),
+    full: extractBaseCommand(c, process.platform, false),
+  }));
 
   return createTool({
     id: 'run-command',
@@ -244,7 +254,10 @@ export function createRunCommandTool(options: RunCommandToolOptions = {}) {
 
       // Check allowlist if configured
       if (allowedCommands.length > 0) {
-        const isAllowed = allowedNames.includes(baseCommand);
+        const fullCommand = extractBaseCommand(command, process.platform, false);
+        const isAllowed = allowedEntries.some(entry =>
+          entry.full === entry.name ? entry.name === baseCommand : entry.full === fullCommand,
+        );
         if (!isAllowed) {
           return {
             success: false,

@@ -79,6 +79,24 @@ describe('createRunCommandTool', () => {
       // Passing the allowlist means the next check (cwd) is what rejects it.
       expect(res.message).toContain('is not within allowed paths');
     });
+
+    it.each(['safe.exe x', 'safe x'])('does not let a safe.cmd allowlist entry permit %s', async command => {
+      const tool = createRunCommandTool({ allowedCommands: ['safe.cmd'] });
+      const res = await run(tool, { command });
+      expect(res.message).toContain('is not in the allowed commands list');
+    });
+
+    it.each(['SAFE.CMD x', 'safe.cmd. x'])('lets a safe.cmd allowlist entry permit %s', async command => {
+      const tool = createRunCommandTool({ allowedCommands: ['safe.cmd'], allowedBasePaths: ['C:\\nowhere'] });
+      const res = await run(tool, { command, cwd: 'C:\\elsewhere' });
+      expect(res.message).toContain('is not within allowed paths');
+    });
+
+    it('lets an extensionless allowlist entry permit any extension', async () => {
+      const tool = createRunCommandTool({ allowedCommands: ['node'], allowedBasePaths: ['C:\\nowhere'] });
+      const res = await run(tool, { command: 'node.exe -v', cwd: 'C:\\elsewhere' });
+      expect(res.message).toContain('is not within allowed paths');
+    });
   });
 
   it.runIf(process.platform === 'win32')('blocks Windows-path invocations of blocked commands', async () => {
