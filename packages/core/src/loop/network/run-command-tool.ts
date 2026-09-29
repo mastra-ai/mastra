@@ -140,15 +140,22 @@ export function isPathAllowed(
  */
 export function extractBaseCommand(command: string): string {
   const trimmed = command.trim();
-  const quote = trimmed[0] === '"' || trimmed[0] === "'" ? trimmed[0] : '';
-  const closingQuote = quote ? trimmed.indexOf(quote, 1) : -1;
-  const firstSpace = trimmed.indexOf(' ');
-  const baseCmd =
-    closingQuote > 0
-      ? trimmed.substring(1, closingQuote)
-      : firstSpace === -1
-        ? trimmed
-        : trimmed.substring(0, firstSpace);
+  // Read the first shell word: whitespace ends it only outside quotes, and quote
+  // characters are dropped, since the shell joins `r"m"` / `"r"m` into `rm`.
+  let baseCmd = '';
+  let quote = '';
+  for (const ch of trimmed) {
+    if (quote) {
+      if (ch === quote) quote = '';
+      else baseCmd += ch;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (/\s/.test(ch)) {
+      break;
+    } else {
+      baseCmd += ch;
+    }
+  }
   const lastSep = Math.max(baseCmd.lastIndexOf('/'), baseCmd.lastIndexOf('\\'));
   const name = lastSep === -1 ? baseCmd : baseCmd.substring(lastSep + 1);
   // Windows ignores trailing dots/spaces when resolving executables (e.g. `rm.exe.` runs `rm.exe`)
