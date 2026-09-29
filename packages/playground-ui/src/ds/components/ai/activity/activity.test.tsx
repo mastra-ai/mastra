@@ -3,19 +3,20 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { Search } from 'lucide-react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  ToolCall,
-  ToolCallContent,
-  ToolCallDetail,
-  ToolCallDisclosure,
-  ToolCallHeader,
-  ToolCallIcon,
-  ToolCallLabel,
-  ToolCallPresentedHeader,
-  ToolCallSpacer,
-  ToolCallSummary,
-  ToolCallTrailing,
-  ToolCallTrigger,
-} from './tool-call';
+  Activity,
+  ActivityContent,
+  ActivityDetail,
+  ActivityDisclosure,
+  ActivityHeader,
+  ActivityIcon,
+  ActivityLabel,
+  ActivityHeadline,
+  ActivityItem,
+  ActivitySpacer,
+  ActivitySummary,
+  ActivityTrailing,
+  ActivityTrigger,
+} from './activity';
 import { ArrivalScope } from '@/ds/components/Arrival';
 import { ARRIVING_CLASS } from '@/ds/tokens';
 
@@ -30,7 +31,7 @@ const Example = ({
   onOpenChange?: (open: boolean) => void;
   status?: 'idle' | 'running' | 'error';
 }) => (
-  <ToolCall
+  <Activity
     aria-label="Tool: execute_command"
     className="root-class"
     open={open}
@@ -38,26 +39,26 @@ const Example = ({
     onOpenChange={onOpenChange}
     status={status}
   >
-    <ToolCallTrigger className="trigger-class" data-testid="trigger">
-      <ToolCallHeader data-testid="header">
-        <ToolCallIcon data-testid="icon">$</ToolCallIcon>
-        <ToolCallLabel>Ran command</ToolCallLabel>
-        <ToolCallDetail>pnpm test</ToolCallDetail>
-        <ToolCallSummary>2 files</ToolCallSummary>
-        <ToolCallSpacer />
-        <ToolCallTrailing>Done</ToolCallTrailing>
-        <ToolCallDisclosure data-testid="disclosure" />
-      </ToolCallHeader>
-    </ToolCallTrigger>
-    <ToolCallContent className="body-class" data-testid="content">
+    <ActivityTrigger className="trigger-class" data-testid="trigger">
+      <ActivityHeader data-testid="header">
+        <ActivityIcon data-testid="icon">$</ActivityIcon>
+        <ActivityLabel>Ran command</ActivityLabel>
+        <ActivityDetail>pnpm test</ActivityDetail>
+        <ActivitySummary>2 files</ActivitySummary>
+        <ActivitySpacer />
+        <ActivityTrailing>Done</ActivityTrailing>
+        <ActivityDisclosure data-testid="disclosure" />
+      </ActivityHeader>
+    </ActivityTrigger>
+    <ActivityContent className="body-class" data-testid="content">
       Command output
-    </ToolCallContent>
-  </ToolCall>
+    </ActivityContent>
+  </Activity>
 );
 
 afterEach(cleanup);
 
-describe('ToolCall', () => {
+describe('Activity', () => {
   it('renders composed custom content and forwards semantic props', () => {
     render(<Example defaultOpen />);
 
@@ -68,7 +69,7 @@ describe('ToolCall', () => {
     expect(root.getAttribute('aria-invalid')).toBeNull();
     expect(root.getAttribute('aria-describedby')).toBeNull();
     expect(root.getAttribute('data-status')).toBe('idle');
-    expect(screen.queryByText(/Tool call (running|failed)/)).toBeNull();
+    expect(screen.queryByText(/Running|Failed/)).toBeNull();
 
     const trigger = screen.getByTestId('trigger');
     expect(trigger.className).toContain('group/row');
@@ -81,9 +82,6 @@ describe('ToolCall', () => {
     expect(screen.getByText('pnpm test').classList).toContain('font-mono');
     expect(screen.getByText('2 files').className).toContain('items-center');
     expect(screen.getByText('Done').className).toContain('shrink-0');
-    expect(screen.getByTestId('disclosure').firstElementChild?.className).toContain(
-      'group-focus-visible/row:opacity-100',
-    );
 
     const content = document.querySelector<HTMLDivElement>('.body-class');
     expect(content?.textContent).toBe('Command output');
@@ -143,7 +141,7 @@ describe('ToolCall', () => {
     expect(root.getAttribute('aria-busy')).toBe('true');
     expect(root.getAttribute('data-status')).toBe('running');
     expect(root.getAttribute('aria-describedby')).toBeTruthy();
-    expect(screen.getByText('Tool call running').className).toContain('sr-only');
+    expect(screen.getByText('Running').className).toContain('sr-only');
     expect(screen.getByText('Ran command').parentElement?.className).toContain('shimmer-text');
   });
 
@@ -153,17 +151,17 @@ describe('ToolCall', () => {
     const root = screen.getByRole('group', { name: 'Tool: execute_command' });
     expect(root.getAttribute('aria-invalid')).toBe('true');
     expect(root.getAttribute('data-status')).toBe('error');
-    expect(screen.getByText('Tool call failed').className).toContain('sr-only');
+    expect(screen.getByText('Failed').className).toContain('sr-only');
   });
 
   it('renders optional spacer rules and custom disclosure content', () => {
     render(
-      <ToolCall aria-label="Tool: custom">
-        <ToolCallTrigger>
-          <ToolCallSpacer rule data-testid="spacer" />
-          <ToolCallDisclosure data-testid="custom-disclosure">Toggle</ToolCallDisclosure>
-        </ToolCallTrigger>
-      </ToolCall>,
+      <Activity aria-label="Tool: custom">
+        <ActivityTrigger>
+          <ActivitySpacer rule data-testid="spacer" />
+          <ActivityDisclosure data-testid="custom-disclosure">Toggle</ActivityDisclosure>
+        </ActivityTrigger>
+      </Activity>,
     );
 
     expect(screen.getByRole('group', { name: 'Tool: custom' }).getAttribute('data-status')).toBe('idle');
@@ -171,24 +169,24 @@ describe('ToolCall', () => {
     expect(screen.getByTestId('custom-disclosure').className).toContain('justify-center');
     const toggleClasses = screen.getByText('Toggle').className.split(' ');
     expect(toggleClasses).toEqual(
-      expect.arrayContaining(['flex', 'shrink-0', 'items-center', 'opacity-0', 'transition', 'duration-150']),
+      expect.arrayContaining(['flex', 'shrink-0', 'items-center', 'transition', 'duration-150']),
     );
     expect(screen.getByText('Toggle').textContent).toBe('Toggle');
   });
 
   it('rejects compounds rendered outside the root', () => {
-    expect(() => render(<ToolCallDisclosure />)).toThrow('ToolCall compounds must be rendered within ToolCall');
+    expect(() => render(<ActivityDisclosure />)).toThrow('Activity compounds must be rendered within Activity');
   });
 });
 
-describe('ToolCallPresentedHeader', () => {
+describe('ActivityHeadline', () => {
   const Presented = ({ status = 'idle', detail }: { status?: 'idle' | 'running' | 'error'; detail?: string }) => (
-    <ToolCall status={status}>
-      <ToolCallTrigger>
-        <ToolCallPresentedHeader icon={Search} label="Searched files" detail={detail} />
-      </ToolCallTrigger>
-      <ToolCallContent>body</ToolCallContent>
-    </ToolCall>
+    <Activity status={status}>
+      <ActivityTrigger>
+        <ActivityHeadline icon={<Search aria-hidden />} label="Searched files" detail={detail} />
+      </ActivityTrigger>
+      <ActivityContent>body</ActivityContent>
+    </Activity>
   );
 
   it('renders the presented label with its detail', () => {
@@ -201,16 +199,16 @@ describe('ToolCallPresentedHeader', () => {
 
   it('shows a description alone, in place of the label and detail', () => {
     render(
-      <ToolCall>
-        <ToolCallTrigger>
-          <ToolCallPresentedHeader
-            icon={Search}
+      <Activity>
+        <ActivityTrigger>
+          <ActivityHeadline
+            icon={<Search aria-hidden />}
             label="Run"
             detail="rg -n processor"
             description="Finding the processor wiring"
           />
-        </ToolCallTrigger>
-      </ToolCall>,
+        </ActivityTrigger>
+      </Activity>,
     );
 
     expect(screen.getByText('Finding the processor wiring')).toBeTruthy();
@@ -226,42 +224,151 @@ describe('ToolCallPresentedHeader', () => {
 
   it('seats a leading slot ahead of the label', () => {
     render(
-      <ToolCall>
-        <ToolCallTrigger>
-          <ToolCallPresentedHeader icon={Search} label="Searched files" leading={<time>3:42:05 PM</time>} />
-        </ToolCallTrigger>
-      </ToolCall>,
+      <Activity>
+        <ActivityTrigger>
+          <ActivityHeadline icon={<Search aria-hidden />} label="Searched files" leading={<time>3:42:05 PM</time>} />
+        </ActivityTrigger>
+      </Activity>,
     );
 
     const leading = screen.getByText('3:42:05 PM');
     const label = screen.getByText('Searched files');
     expect(leading.compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
+
+  it('opens the line from a click on its leading slot', () => {
+    render(
+      <Activity>
+        <ActivityTrigger>
+          <ActivityHeadline icon={<Search aria-hidden />} label="Searched files" leading={<time>3:42:05 PM</time>} />
+        </ActivityTrigger>
+        <ActivityContent>3 matches</ActivityContent>
+      </Activity>,
+    );
+
+    fireEvent.click(screen.getByText('3:42:05 PM'));
+
+    expect(screen.getByRole('button', { name: /Searched files/ }).getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('3 matches')).toBeTruthy();
+  });
 });
 
-describe('ToolCallDetail arrival', () => {
+describe('ActivityDetail arrival', () => {
   it('fades in a detail that lands after the reader was watching', () => {
     const { rerender } = render(
       <ArrivalScope>
-        <ToolCall>
-          <ToolCallHeader>
-            <ToolCallLabel>Ran command</ToolCallLabel>
-          </ToolCallHeader>
-        </ToolCall>
+        <Activity>
+          <ActivityHeader>
+            <ActivityLabel>Ran command</ActivityLabel>
+          </ActivityHeader>
+        </Activity>
       </ArrivalScope>,
     );
 
     rerender(
       <ArrivalScope>
-        <ToolCall>
-          <ToolCallHeader>
-            <ToolCallLabel>Ran command</ToolCallLabel>
-            <ToolCallDetail>pnpm test</ToolCallDetail>
-          </ToolCallHeader>
-        </ToolCall>
+        <Activity>
+          <ActivityHeader>
+            <ActivityLabel>Ran command</ActivityLabel>
+            <ActivityDetail>pnpm test</ActivityDetail>
+          </ActivityHeader>
+        </Activity>
       </ArrivalScope>,
     );
 
     expect(screen.getByText('pnpm test').classList.contains(ARRIVING_CLASS)).toBe(true);
+  });
+});
+
+describe('ActivityItem', () => {
+  it('folds a body behind a disclosure', () => {
+    render(
+      <ActivityItem icon={<Search aria-hidden />} label="Searched files" detail="src/**/*.ts" aria-label="Tool: search">
+        3 matches
+      </ActivityItem>,
+    );
+
+    const trigger = screen.getByRole('button', { name: /Searched files/ });
+    expect(screen.queryByText('3 matches')).toBeNull();
+
+    fireEvent.click(trigger);
+    expect(screen.getByText('3 matches')).toBeTruthy();
+  });
+
+  it('stays a plain line with nothing to fold', () => {
+    render(
+      <ActivityItem icon={<Search aria-hidden />} label="Thinking" detail="a long detail" aria-label="Thinking" />,
+    );
+
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('shows a body inline when folding is turned off', () => {
+    render(
+      <ActivityItem icon={<Search aria-hidden />} label="Skill" collapsible={false} aria-label="Skill">
+        Instructions
+      </ActivityItem>,
+    );
+
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.getByText('Instructions')).toBeTruthy();
+  });
+});
+
+describe('a body landing on a line', () => {
+  const Line = ({ body }: { body?: string }) => (
+    <ArrivalScope>
+      <ActivityItem icon={<Search aria-hidden />} label="Searched files" detail="src/**/*.ts" aria-label="Tool: search">
+        {body}
+      </ActivityItem>
+    </ArrivalScope>
+  );
+
+  it('keeps the line mounted, so its detail does not fade in a second time', () => {
+    const { rerender } = render(<Line />);
+    const label = screen.getByText('Searched files');
+
+    rerender(<Line body="3 matches" />);
+
+    expect(screen.getByText('Searched files')).toBe(label);
+    expect(screen.getByText('src/**/*.ts').classList.contains(ARRIVING_CLASS)).toBe(false);
+    expect(screen.getByRole('button', { name: /Searched files/ })).toBeTruthy();
+  });
+});
+
+describe('an Activity with nothing to fold', () => {
+  it('stays closed and offers no disclosure, even when asked to open by default', () => {
+    render(
+      <Activity foldable={false} defaultOpen aria-label="Tool: view">
+        <ActivityTrigger>
+          <ActivityHeadline icon={<Search aria-hidden />} label="Read" />
+        </ActivityTrigger>
+        <ActivityContent>
+          <span>rail</span>
+        </ActivityContent>
+      </Activity>,
+    );
+
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.queryByText('rail')).toBeNull();
+  });
+
+  it('opens on its own once it has something to fold', () => {
+    const Tool = ({ foldable }: { foldable: boolean }) => (
+      <Activity foldable={foldable} defaultOpen aria-label="Tool: view">
+        <ActivityTrigger>
+          <ActivityHeadline icon={<Search aria-hidden />} label="Read" />
+        </ActivityTrigger>
+        <ActivityContent>
+          <span>arguments</span>
+        </ActivityContent>
+      </Activity>
+    );
+    const { rerender } = render(<Tool foldable={false} />);
+
+    rerender(<Tool foldable />);
+
+    expect(screen.getByRole('button', { name: /Read/ }).getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('arguments')).toBeTruthy();
   });
 });
