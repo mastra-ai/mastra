@@ -162,7 +162,9 @@ function redactUrl(raw: string): string {
 
 export function describeStorageTarget(config: StorageConfig): string {
   if (config.backend === 'libsql') {
-    return config.url.startsWith('file:') ? `libsql file ${config.url.slice('file:'.length)}` : `libsql ${redactUrl(config.url)}`;
+    return config.url.startsWith('file:')
+      ? `libsql file ${config.url.slice('file:'.length)}`
+      : `libsql ${redactUrl(config.url)}`;
   }
   if (config.connectionString) return `pg ${redactUrl(config.connectionString)}`;
   const host = `${config.host ?? 'localhost'}${config.port ? `:${config.port}` : ''}`;

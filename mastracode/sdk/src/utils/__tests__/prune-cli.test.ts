@@ -361,9 +361,9 @@ describe('runPruneCommand', () => {
 
 describe('describeStorageTarget', () => {
   it('never prints credentials', () => {
-    expect(describeStorageTarget({ backend: 'libsql', url: 'libsql://db.turso.io?authToken=SECRET', isRemote: true })).toBe(
-      'libsql libsql://db.turso.io',
-    );
+    expect(
+      describeStorageTarget({ backend: 'libsql', url: 'libsql://db.turso.io?authToken=SECRET', isRemote: true }),
+    ).toBe('libsql libsql://db.turso.io');
     expect(
       describeStorageTarget({ backend: 'pg', connectionString: 'postgres://u:SECRET@db:5432/app?sslmode=require' }),
     ).toBe('pg postgres://db:5432/app');
