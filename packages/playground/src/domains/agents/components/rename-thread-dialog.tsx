@@ -36,7 +36,7 @@ export function RenameThreadDialog({ agentId, threadId, initialTitle, onOpenChan
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Rename chat</DialogTitle>
+          <DialogTitle>Rename thread</DialogTitle>
         </DialogHeader>
         <DialogBody>
           <form onSubmit={handleSubmit} className="space-y-4">

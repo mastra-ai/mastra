@@ -32,7 +32,7 @@ describe('ChatThreads — hide threads panel', () => {
   it('offers no hide control when the panel cannot be hidden', () => {
     renderThreads();
 
-    expect(screen.getByRole('link', { name: 'New Chat' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'New Thread' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Hide threads panel' })).toBeNull();
   });
 
@@ -41,7 +41,7 @@ describe('ChatThreads — hide threads panel', () => {
     renderThreads(onHidePanel);
 
     const hideButton = screen.getByRole('button', { name: 'Hide threads panel' });
-    const newChat = screen.getByRole('link', { name: 'New Chat' });
+    const newChat = screen.getByRole('link', { name: 'New Thread' });
     expect(hideButton.parentElement).toBe(newChat.parentElement);
 
     fireEvent.click(hideButton);
@@ -79,7 +79,7 @@ const renderWithThread = (props: Partial<ChatThreadsProps> = {}) =>
 const openRenameDialog = async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Thread actions' }));
   fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
-  return screen.findByRole('dialog', { name: 'Rename chat' });
+  return screen.findByRole('dialog', { name: 'Rename thread' });
 };
 
 describe('ChatThreads — thread actions', () => {
@@ -143,7 +143,7 @@ describe('ChatThreads — thread actions', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
       await waitFor(() => expect(patched).toHaveBeenCalledWith('agent-1', 'Paris trip'));
-      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Rename chat' })).toBeNull());
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Rename thread' })).toBeNull());
     });
 
     it('disables Save when the title is empty or unchanged', async () => {

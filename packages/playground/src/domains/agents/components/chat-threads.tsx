@@ -29,7 +29,7 @@ export interface ChatThreadsProps {
   resourceId: string;
   resourceType: 'agent' | 'network';
   embedded?: boolean;
-  /** When provided, renders a "Hide threads panel" control next to "New Chat". */
+  /** When provided, renders a "Hide threads panel" control next to "New Thread". */
   onHidePanel?: () => void;
 }
 
@@ -61,7 +61,7 @@ export const ChatThreads = ({
             <Icon>
               <Plus />
             </Icon>
-            New Chat
+            New Thread
           </ThreadListNewItem>
           {onHidePanel && (
             <Tooltip>
