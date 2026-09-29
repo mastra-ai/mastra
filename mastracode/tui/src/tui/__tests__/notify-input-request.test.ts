@@ -13,13 +13,14 @@
  * via direct handleEvent calls, so the queue semantics are genuinely exercised.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as NotifyModule from '../notify.js';
 
 const mocks = vi.hoisted(() => ({
   sendNotification: vi.fn(),
 }));
 
 vi.mock('../notify.js', async importOriginal => ({
-  ...(await importOriginal<typeof import('../notify.js')>()),
+  ...(await importOriginal<typeof NotifyModule>()),
   sendNotification: mocks.sendNotification,
 }));
 

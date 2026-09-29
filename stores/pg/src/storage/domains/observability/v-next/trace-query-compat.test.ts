@@ -1,4 +1,5 @@
 import { parseTraceQueryRequest, planTraceQuery } from '@mastra/core/storage';
+import type * as CoreStorageModule from '@mastra/core/storage';
 import { expect, it, vi } from 'vitest';
 import type { DbClient } from '../../../client';
 import { queryTraces } from './trace-query';
@@ -6,7 +7,7 @@ import { queryTraces } from './trace-query';
 // Older core versions support list delta polling but lack trace-query delta helpers.
 vi.mock('@mastra/core/features', () => ({ coreFeatures: new Set(['observability-delta-polling']) }));
 vi.mock('@mastra/core/storage', async importOriginal => ({
-  ...(await importOriginal<typeof import('@mastra/core/storage')>()),
+  ...(await importOriginal<typeof CoreStorageModule>()),
   encodeTraceQueryDeltaCursor: undefined,
 }));
 

@@ -29,7 +29,7 @@ function makeServer(journal: { writes: number; rounds: string[] }) {
     outputSchema: z.object({ status: z.string(), address: z.string().optional(), writes: z.number() }),
     suspendSchema: z.object({ phase: z.enum(['address', 'confirm']), message: z.string(), address: z.string().optional() }),
     resumeSchema: z.object({ address: z.string().optional(), ok: z.boolean().optional() }),
-    execute: async ({ opKey }, context) => {
+    execute: async (_input, context) => {
       const phase = context.suspendPayload?.phase ?? 'start';
       journal.rounds.push(phase);
       await context.mcp?.log?.('info', `round ${phase}`);

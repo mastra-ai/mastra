@@ -1,9 +1,10 @@
+import type * as SdkSettingsModule from '@mastra/code-sdk/onboarding/settings';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockLoadSettings = vi.hoisted(() => vi.fn());
 
 vi.mock('@mastra/code-sdk/onboarding/settings', async importOriginal => {
-  const actual = await importOriginal<typeof import('@mastra/code-sdk/onboarding/settings')>();
+  const actual = await importOriginal<typeof SdkSettingsModule>();
   return {
     ...actual,
     loadSettings: mockLoadSettings,

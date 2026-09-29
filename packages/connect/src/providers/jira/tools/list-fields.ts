@@ -48,11 +48,6 @@ export const listFieldsOutputSchema = z.object({
   fields: z.array(FieldOutputSchema),
 });
 
-const MetadataSchema = z.object({
-  cloudId: z.string().optional(),
-  baseUrl: z.string().optional(),
-});
-
 export function listFieldsTool(proxy: PlatformProxy) {
   return createTool({
     id: 'jira_list_fields',

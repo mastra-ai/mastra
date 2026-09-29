@@ -3,6 +3,7 @@ import type { Event, EventCallback } from '@mastra/core/events';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createClient } from './client';
 import type { ValkeyClientType } from './client';
+import type * as ClientModule from './client';
 import { ValkeyStreamsPubSub } from './index';
 
 const VALKEY_URL = process.env.VALKEY_URL ?? 'valkey://localhost:6381';
@@ -11,7 +12,7 @@ const VALKEY_URL = process.env.VALKEY_URL ?? 'valkey://localhost:6381';
 // intercept a command) without reaching into private fields.
 const hooks = vi.hoisted(() => ({ wrap: undefined as undefined | ((client: any) => any) }));
 vi.mock('./client', async importOriginal => {
-  const mod = await importOriginal<typeof import('./client')>();
+  const mod = await importOriginal<typeof ClientModule>();
   return {
     ...mod,
     createClient: (options: Parameters<typeof mod.createClient>[0]) => {

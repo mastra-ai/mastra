@@ -1,4 +1,5 @@
 import { workItemPhaseSemantics } from '../../boards/index.js';
+import type { WorkItemRow } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
 import {
   githubRulesOptions,
@@ -80,7 +81,7 @@ export function createGithubIssueReconciler(
         if (projects.length === 0) continue;
 
         // Collect issue cards: number -> items (skip terminal stages)
-        const itemsByNumber = new Map<number, import('../../storage/domains/work-items/base.js').WorkItemRow[]>();
+        const itemsByNumber = new Map<number, WorkItemRow[]>();
         // Every issue with any card, terminal included: a finished card must
         // not be re-minted by missed-open discovery.
         const carded = new Set<number>();

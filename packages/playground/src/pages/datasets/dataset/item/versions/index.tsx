@@ -16,7 +16,8 @@ import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { DatasetItemDetails } from '@/domains/datasets';
 import { useDatasetItemVersion, useDatasetItemVersions } from '@/domains/datasets/hooks/use-dataset-item-versions';
 import type { DatasetItemVersion } from '@/domains/datasets/hooks/use-dataset-item-versions';
-import { datasetCrumb, navCrumb, truncateItemIdCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
+import { datasetCrumb, navCrumb, truncateItemIdCrumb } from '@/domains/navigation/crumbs';
+import type { CrumbDef } from '@/domains/navigation/crumbs';
 
 function toDatasetItem(version: DatasetItemVersion, datasetId: string): DatasetItem {
   return {

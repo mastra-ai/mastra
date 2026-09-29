@@ -7,7 +7,7 @@ import type { ObservationalMemoryModel } from '../types';
 import { publishSubconsciousActivity } from './activity';
 import { resolveSubconsciousAgentModel } from './model';
 import { createReminderAgent } from './remind-agent';
-import { ensureOwnedRemindThread, getRemindThreadId, REMIND_MESSAGE_METADATA_KEY } from './remind-protocol';
+import { ensureOwnedRemindThread, REMIND_MESSAGE_METADATA_KEY } from './remind-protocol';
 import { createReplyToMemoryQuestionTool } from './remind-questions';
 import { resolveKnowledgeResourceId } from './scope';
 import type { ResolvedSubconsciousAgent } from './types';

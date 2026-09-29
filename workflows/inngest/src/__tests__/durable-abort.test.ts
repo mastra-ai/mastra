@@ -12,6 +12,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { INNGEST_PORT, startConnectInngestDevServer, stopInngestDevServer } from './durable-agent.test.utils';
+import type * as AbortAgentFixture from './fixtures/abort-agent';
 
 vi.setConfig({ testTimeout: 180_000, hookTimeout: 120_000 });
 
@@ -180,7 +181,7 @@ describe('durable agent abort on a connect worker', () => {
   // Studio do) must reach the worker too, not only the stream result's abort().
   async function streamAndAbortThroughAgent(
     abort: (
-      durableAgent: ReturnType<typeof import('./fixtures/abort-agent').buildAbortAgent>['durableAgent'],
+      durableAgent: ReturnType<typeof AbortAgentFixture.buildAbortAgent>['durableAgent'],
       runId: string,
       scope: { threadId: string; resourceId: string },
     ) => boolean,

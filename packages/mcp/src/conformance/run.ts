@@ -128,4 +128,6 @@ try {
 }
 await assertCurrentRevisionStdio();
 await assertLegacyStdioRejected();
-console.log('MCP conformance smoke passed: official 2026-07-28 HTTP scenario, 2026-07-28 stdio, legacy stdio rejected');
+console.info(
+  'MCP conformance smoke passed: official 2026-07-28 HTTP scenario, 2026-07-28 stdio, legacy stdio rejected',
+);

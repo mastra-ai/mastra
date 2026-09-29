@@ -90,10 +90,10 @@ function main(): void {
   try {
     const rows = listProviders(parseArguments(process.argv.slice(2)));
     if (rows.length === 0) {
-      console.log('No providers found.');
+      console.info('No providers found.');
       return;
     }
-    for (const row of rows) console.log(row);
+    for (const row of rows) console.info(row);
   } catch (error) {
     console.error(error instanceof Error ? error.message : error);
     process.exitCode = 1;

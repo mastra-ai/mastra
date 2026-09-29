@@ -89,7 +89,7 @@ export function createStepFromAgent<TStepId extends string, TStepOutput>(
   } as Step<TStepId, unknown, any, TStepOutput, unknown, unknown, DefaultEngineType>;
 }
 
-export type ClassifierStepOptions<TStepInput = unknown> = SerializableClassifierStepOptions & {
+export type ClassifierStepOptions<_TStepInput = unknown> = SerializableClassifierStepOptions & {
   id?: string;
 };
 

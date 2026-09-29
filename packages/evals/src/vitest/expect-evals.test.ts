@@ -1,6 +1,7 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { createScorer } from '@mastra/core/evals';
+import type { Workflow } from '@mastra/core/workflows';
 import { afterEach, describe, expect, it, test } from 'vitest';
 
 import type { ExpectEvalOptions, ExpectEvalsOptions } from './expect-evals';
@@ -205,7 +206,7 @@ describe('expectEval', () => {
 
 describe('target-specific data contracts (types)', () => {
   it('rejects agent-only data shapes for workflow targets at the type level', () => {
-    const workflow = {} as import('@mastra/core/workflows').Workflow;
+    const workflow = {} as Workflow;
 
     // @ts-expect-error `turns` is agent-only; workflow data items must not accept it
     const invalidEvals: ExpectEvalsOptions = { target: workflow, data: [{ turns: [] }] };

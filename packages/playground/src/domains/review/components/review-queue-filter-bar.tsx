@@ -8,11 +8,8 @@ import type { LucideIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import type { ReviewListStatus } from './dataset-review';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
-import {
-  DATASET_TARGET_TYPES,
-  isDatasetTargetType,
-  type DatasetTargetType,
-} from '@/domains/datasets/components/target-type-options';
+import { DATASET_TARGET_TYPES, isDatasetTargetType } from '@/domains/datasets/components/target-type-options';
+import type { DatasetTargetType } from '@/domains/datasets/components/target-type-options';
 import { getExperimentDisplayName } from '@/domains/experiments/utils/experiment-display-name';
 import { useProcessors } from '@/domains/processors/hooks/use-processors';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';

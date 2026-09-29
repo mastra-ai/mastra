@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { link, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import type * as FsPromisesModule from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -23,7 +24,7 @@ const recoveryRace = vi.hoisted(() => ({
 }));
 
 vi.mock('node:fs/promises', async importOriginal => {
-  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  const actual = await importOriginal<typeof FsPromisesModule>();
   return {
     ...actual,
     link: async (existingPath: Parameters<typeof actual.link>[0], newPath: Parameters<typeof actual.link>[1]) => {

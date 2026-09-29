@@ -1,3 +1,4 @@
+import type * as SdkSettingsModule from '@mastra/code-sdk/onboarding/settings';
 import type { BrowserSettings } from '@mastra/code-sdk/onboarding/settings';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -17,7 +18,7 @@ const browserMocks = vi.hoisted(() => ({
 vi.mock('@mastra/code-sdk/onboarding/settings', async importActual => ({
   // Viewport parsing and presets are pure, so the real implementations run here
   // and keep the command tests honest about what the SDK actually accepts.
-  ...(await importActual<typeof import('@mastra/code-sdk/onboarding/settings')>()),
+  ...(await importActual<typeof SdkSettingsModule>()),
   checkProfileProviderMismatch: browserMocks.checkProfileProviderMismatch,
   createBrowserFromSettings: browserMocks.createBrowserFromSettings,
   loadSettings: browserMocks.loadSettings,

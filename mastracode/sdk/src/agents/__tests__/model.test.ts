@@ -188,7 +188,7 @@ const mockLoadSettings = vi.hoisted(() =>
 );
 
 vi.mock('../../onboarding/settings.js', async importOriginal => {
-  const actual = await importOriginal<typeof import('../../onboarding/settings.js')>();
+  const actual = await importOriginal<typeof SettingsModule>();
   return {
     ...actual,
     loadSettings: mockLoadSettings,
@@ -211,6 +211,7 @@ import { wrapLanguageModel } from 'ai';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MODEL_TOKENS } from '../../../../../docs/src/plugins/remark-model-tokens/models.js';
 import { ProviderAuthRequiredError } from '../../auth/provider-auth-error.js';
+import type * as SettingsModule from '../../onboarding/settings.js';
 import { opencodeClaudeMaxProvider, buildAnthropicOAuthFetch } from '../../providers/claude-max.js';
 import { openaiCodexProvider, buildOpenAICodexOAuthFetch } from '../../providers/openai-codex.js';
 import { setCredentialStoreProvider } from '../credential-resolver.js';

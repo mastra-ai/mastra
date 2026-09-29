@@ -5,7 +5,7 @@
  */
 
 import { Hono } from 'hono';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { ParkedRun } from '../session/live-sessions.js';

@@ -4,7 +4,8 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
-import { TraceMessagesPanel, type TraceMessagesPanelProps } from '../trace-messages-panel';
+import { TraceMessagesPanel } from '../trace-messages-panel';
+import type { TraceMessagesPanelProps } from '../trace-messages-panel';
 import { TRACE_ID, panelTraceSpans } from './fixtures/trace-span-panel';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';

@@ -21,6 +21,7 @@ export default defineConfig({
       rules: {
         'no-console': 'off',
         'no-unused-vars': 'off',
+        'no-restricted-imports': 'off',
         'react/rules-of-hooks': 'off',
       },
     },

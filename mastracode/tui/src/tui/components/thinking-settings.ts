@@ -42,10 +42,6 @@ const BASE_THINKING_LEVELS: ThinkingLevelOption[] = [
   { id: 'max', label: 'Max', providerValue: 'max', description: 'Unbounded reasoning (Anthropic, GPT-5.6+)' },
 ];
 
-function isOpenAIModel(modelId: string): boolean {
-  return modelId.startsWith('openai/');
-}
-
 export function getThinkingLevelsForModel(modelId: string): ThinkingLevelOption[] {
   const availableLevels = getAvailableThinkingLevelsForModel(modelId);
   const levels = BASE_THINKING_LEVELS.filter(level => availableLevels.some(available => available === level.id));

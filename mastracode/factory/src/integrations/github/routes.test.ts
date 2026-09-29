@@ -8,6 +8,7 @@ import { mountApiRoutes } from '../../routes/test-utils.js';
 
 import { SessionRetirementCoordinator } from '../../sandbox/session-retirement.js';
 import { __clearSessionSandboxesForTests, getSessionSandbox } from '../../sandbox/session-sandbox.js';
+import type * as FilesystemCaptureModule from '../../session/filesystem-capture.js';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 // Mock drizzle's `eq`/`and` so the fake DB below can honour `where` predicates.
@@ -511,7 +512,7 @@ vi.mock('./sandbox', () => {
 
 const filesystemCaptureMock = vi.hoisted(() => ({ waitError: null as Error | null }));
 vi.mock('../../session/filesystem-capture.js', async importOriginal => {
-  const actual = await importOriginal<typeof import('../../session/filesystem-capture.js')>();
+  const actual = await importOriginal<typeof FilesystemCaptureModule>();
   return {
     ...actual,
     waitForPendingFilesystemCapture: vi.fn(

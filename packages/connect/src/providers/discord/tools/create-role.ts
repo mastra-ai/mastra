@@ -77,10 +77,6 @@ export const createRoleOutputSchema = z.object({
   flags: z.number().int(),
 });
 
-const MetadataSchema = z.object({
-  botToken: z.string(),
-});
-
 export function createRoleTool(proxy: PlatformProxy) {
   return createTool({
     id: 'discord_create_role',

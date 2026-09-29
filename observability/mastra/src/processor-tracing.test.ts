@@ -1773,7 +1773,6 @@ describe('Processor Tracing Tests', () => {
       });
 
       const agentSpans = testExporter.getAgentSpans();
-      const processorSpans = testExporter.getProcessorSpans();
       const modelSpans = testExporter.getModelSpans();
       const modelStepSpans = testExporter.getModelStepSpans();
 
@@ -1995,7 +1994,6 @@ describe('Processor Tracing Tests', () => {
       });
 
       const agentSpans = testExporter.getAgentSpans();
-      const processorSpans = testExporter.getProcessorSpans();
       const modelSpans = testExporter.getModelSpans();
       const modelStepSpans = testExporter.getModelStepSpans();
 

@@ -13,11 +13,6 @@ export const deleteAttachmentOutputSchema = z.object({
   id: z.string(),
 });
 
-const MetadataSchema = z.object({
-  cloudId: z.string().optional(),
-  baseUrl: z.string().optional(),
-});
-
 export function deleteAttachmentTool(proxy: PlatformProxy) {
   return createTool({
     id: 'jira_delete_attachment',

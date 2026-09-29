@@ -2,6 +2,7 @@ import type { LeaseProvider } from '@mastra/core/events';
 import type { WorkerDeps } from '@mastra/core/worker';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { WorkItemsStorage } from '../../../storage/domains/work-items/base.js';
 import type { IssueReconciler } from '../../issue-reconciler.js';
 import type { LinearRulesIngress } from '../../linear/rules.js';
 import { PlatformApiClient } from '../api-client.js';
@@ -92,7 +93,7 @@ function createDeps(pubsub: unknown = {}): WorkerDeps {
  */
 function stubWorkItems(
   links: Record<string, string[]> = {},
-): Pick<import('../../../storage/domains/work-items/base.js').WorkItemsStorage, 'list'> {
+): Pick<WorkItemsStorage, 'list'> {
   return {
     list: async ({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }) => {
       const sourceKeys = links[`${orgId}:${factoryProjectId}`] ?? [];

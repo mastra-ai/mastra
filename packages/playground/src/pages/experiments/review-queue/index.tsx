@@ -12,8 +12,10 @@ import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { isDatasetTargetType } from '@/domains/datasets/components/target-type-options';
 import { useExperimentsForDatasetFilter } from '@/domains/experiments/hooks/use-experiments-for-dataset-filter';
 import { navCrumb } from '@/domains/navigation/crumbs';
-import { DatasetReview, type ReviewListFilters } from '@/domains/review/components/dataset-review';
-import { ReviewQueueFilterBar, type ReviewQueueFilters } from '@/domains/review/components/review-queue-filter-bar';
+import { DatasetReview } from '@/domains/review/components/dataset-review';
+import type { ReviewListFilters } from '@/domains/review/components/dataset-review';
+import { ReviewQueueFilterBar } from '@/domains/review/components/review-queue-filter-bar';
+import type { ReviewQueueFilters } from '@/domains/review/components/review-queue-filter-bar';
 import { TARGET_ID_PARAM, TARGET_TYPE_PARAM } from '@/domains/shared/hooks/use-target-filter-params';
 
 const crumbs = [navCrumb('/experiments'), navCrumb('/experiments/review-queue')];

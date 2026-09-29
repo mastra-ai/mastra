@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../mastra';
+import type * as ObservabilityModule from '../observability';
 import { MockStore } from '../storage/mock';
 import { createWorkflow } from './create';
 import { createStep } from './workflow';
@@ -9,7 +10,7 @@ import { createStep } from './workflow';
 // assertion has to be on the span object itself — there is no exporter on this path to observe.
 const getOrCreateSpanMock = vi.fn();
 vi.mock('../observability', async importOriginal => {
-  const actual = await importOriginal<typeof import('../observability')>();
+  const actual = await importOriginal<typeof ObservabilityModule>();
   return {
     ...actual,
     getOrCreateSpan: (...args: any[]) => getOrCreateSpanMock(...args) ?? (actual.getOrCreateSpan as any)(...args),

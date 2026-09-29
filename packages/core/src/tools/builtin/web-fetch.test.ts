@@ -1,4 +1,6 @@
 import { EventEmitter } from 'node:events';
+import type * as HttpModule from 'node:http';
+import type * as HttpsModule from 'node:https';
 import { Readable } from 'node:stream';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -14,7 +16,7 @@ vi.mock('node:dns', () => ({
 }));
 
 vi.mock('node:http', async () => {
-  const actual = await vi.importActual<typeof import('node:http')>('node:http');
+  const actual = await vi.importActual<typeof HttpModule>('node:http');
   return {
     ...actual,
     default: {
@@ -25,7 +27,7 @@ vi.mock('node:http', async () => {
 });
 
 vi.mock('node:https', async () => {
-  const actual = await vi.importActual<typeof import('node:https')>('node:https');
+  const actual = await vi.importActual<typeof HttpsModule>('node:https');
   return {
     ...actual,
     default: {

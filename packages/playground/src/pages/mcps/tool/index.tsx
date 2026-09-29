@@ -4,7 +4,8 @@ import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { MCPToolPanel } from '@/domains/mcps/components/MCPToolPanel';
 import { useMCPServerTool } from '@/domains/mcps/hooks/use-mcp-server-tool';
 import { McpServerToolCrumb } from '@/domains/mcps/mcp-crumbs';
-import { mcpServerCrumb, navCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
+import { mcpServerCrumb, navCrumb } from '@/domains/navigation/crumbs';
+import type { CrumbDef } from '@/domains/navigation/crumbs';
 
 const MCPServerToolExecutor = () => {
   const { serverId, toolId } = useParams<{ serverId: string; toolId: string }>();

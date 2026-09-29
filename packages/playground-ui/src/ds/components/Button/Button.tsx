@@ -4,7 +4,8 @@ import type { VariantProps } from 'class-variance-authority';
 import React from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Icon } from '@/ds/icons/Icon';
-import { iconSizeClasses, type IconSize } from '@/ds/icons/icon-size-classes';
+import { iconSizeClasses } from '@/ds/icons/icon-size-classes';
+import type { IconSize } from '@/ds/icons/icon-size-classes';
 import { controlHeight, controlSizeClasses } from '@/ds/primitives/control-size';
 import {
   controlFocusBorderVisible,

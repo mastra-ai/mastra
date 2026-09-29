@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AvailableHooks } from '../hooks';
+import type * as HooksModule from '../hooks';
 import type { ObservabilityContext } from '../observability';
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../request-context';
 import type { MastraScorerEntry } from './base';
@@ -8,7 +9,7 @@ import { hashToUnitInterval, runScorer } from './hooks';
 import type { ScoringHookInput } from './types';
 
 vi.mock('../hooks', async importOriginal => {
-  const actual = await importOriginal<typeof import('../hooks')>();
+  const actual = await importOriginal<typeof HooksModule>();
   return {
     ...actual,
     executeHook: vi.fn(),

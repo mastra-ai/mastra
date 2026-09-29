@@ -5,20 +5,6 @@ export default defineConfig({
   categories: {
     correctness: 'off',
   },
-  env: {
-    builtin: true,
-    browser: true,
-    node: true,
-  },
-  globals: {
-    AudioWorkletGlobalScope: 'readonly',
-    AudioWorkletProcessor: 'readonly',
-    currentFrame: 'readonly',
-    currentTime: 'readonly',
-    registerProcessor: 'readonly',
-    sampleRate: 'readonly',
-    WorkletGlobalScope: 'readonly',
-  },
   ignorePatterns: [
     '**/.tsup/**',
     '**/.mastra/**',
@@ -56,7 +42,7 @@ export default defineConfig({
   },
   overrides: [
     {
-      files: ['**/*.ts?(x)', '**/*.js?(x)'],
+      files: ['**/*.{ts,tsx}', '**/*.{js,jsx}'],
       rules: {
         'no-console': [
           'error',
@@ -68,7 +54,21 @@ export default defineConfig({
       },
     },
     {
-      files: ['**/*.js?(x)'],
+      files: ['**/*.{js,jsx}'],
+      env: {
+        builtin: true,
+        browser: true,
+        node: true,
+      },
+      globals: {
+        AudioWorkletGlobalScope: 'readonly',
+        AudioWorkletProcessor: 'readonly',
+        currentFrame: 'readonly',
+        currentTime: 'readonly',
+        registerProcessor: 'readonly',
+        sampleRate: 'readonly',
+        WorkletGlobalScope: 'readonly',
+      },
       rules: {
         'no-undef': 'error',
         'no-unused-vars': [
@@ -85,7 +85,7 @@ export default defineConfig({
       },
     },
     {
-      files: ['**/*.ts?(x)'],
+      files: ['**/*.{ts,tsx}'],
       rules: {
         'import/consistent-type-specifier-style': ['error', 'prefer-top-level'],
         'eslint/no-unused-vars': [
@@ -122,7 +122,7 @@ export default defineConfig({
       plugins: ['typescript'],
     },
     {
-      files: ['**/*.ts?(x)', '**/*.js?(x)'],
+      files: ['**/*.{ts,tsx}', '**/*.{js,jsx}'],
       rules: {
         'no-restricted-imports': [
           'error',

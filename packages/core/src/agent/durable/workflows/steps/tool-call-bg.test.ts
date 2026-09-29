@@ -3,6 +3,7 @@ import { z } from 'zod/v4';
 import { BACKGROUND_WORK_CONTEXT } from '../../../../processors/background-work-signals';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { globalRunRegistry } from '../../run-registry';
+import type * as ResolveRuntimeModule from '../../utils/resolve-runtime';
 import { createDurableToolCallStep } from './tool-call';
 
 vi.mock('../../../../background-tasks/create', () => ({
@@ -14,9 +15,8 @@ vi.mock('../../../../background-tasks/resolve-config', () => ({
 }));
 
 vi.mock('../../utils/resolve-runtime', async () => ({
-  restoreRequestContext: (
-    await vi.importActual<typeof import('../../utils/resolve-runtime')>('../../utils/resolve-runtime')
-  ).restoreRequestContext,
+  restoreRequestContext: (await vi.importActual<typeof ResolveRuntimeModule>('../../utils/resolve-runtime'))
+    .restoreRequestContext,
   resolveTool: vi.fn(),
   toolRequiresApproval: vi.fn().mockResolvedValue(false),
   rebuildRunToolsFromMastra: vi.fn().mockResolvedValue(undefined),

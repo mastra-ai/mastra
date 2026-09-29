@@ -12,6 +12,7 @@ import type { MastraCompositeStore } from '../storage';
 import type { DynamicArgument } from '../types';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
 import type { VectorFilter } from '../vector/filter/base';
+import type { MessageHistoryConfig } from './message-history-config';
 import type { MemoryRunStateAccessor } from './run-state';
 import type { MemoryProcessor } from '.';
 
@@ -999,7 +1000,7 @@ type BaseMemoryConfig = {
    * messageHistory: { maxTokens: 8000, atMaxRemoveTokens: 1000 }
    * ```
    */
-  messageHistory?: import('./message-history-config').MessageHistoryConfig;
+  messageHistory?: MessageHistoryConfig;
 
   /**
    * Semantic recall configuration for RAG-based retrieval of relevant past messages.
@@ -1373,7 +1374,7 @@ export type SerializedMemoryConfig = {
     lastMessages?: number | false;
 
     /** Token budget for conversation history */
-    messageHistory?: import('./message-history-config').MessageHistoryConfig;
+    messageHistory?: MessageHistoryConfig;
 
     /** Semantic recall configuration */
     semanticRecall?: boolean | SemanticRecall;

@@ -604,7 +604,6 @@ describe('AuthStorage multi-account registry', () => {
   it('re-authenticating an inactive account onto the active account tokens keeps an active entry', async () => {
     const { storage, authPath } = makeStorage();
     await storage.addAccount(PROVIDER, { refresh: 'r1', access: 'a1', expires: FUTURE }, { label: 'Work' });
-    const work = storage.getActiveAccount(PROVIDER)!;
     const personal = await storage.addAccount(
       PROVIDER,
       { refresh: 'r2', access: 'a2', expires: FUTURE },

@@ -10,11 +10,6 @@ const AccessibleResourceSchema = z.object({
   name: z.string().optional(),
 });
 
-const MetadataSchema = z.object({
-  cloudId: z.string().optional(),
-  baseUrl: z.string().optional(),
-});
-
 export const getStatusInputSchema = z.object({
   statusIdOrName: z.string().describe('Status ID or name. Example: "10001" or "To Do"'),
 });

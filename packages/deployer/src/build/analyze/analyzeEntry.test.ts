@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { noopLogger } from '@mastra/core/logger';
 import { readFile } from 'fs-extra';
 import { resolveModule } from 'local-pkg';
+import type * as LocalPkgModule from 'local-pkg';
 import { rollup } from 'rollup';
 import type * as RollupModule from 'rollup';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -20,7 +21,7 @@ vi.mock('rollup', async () => {
 });
 
 vi.mock('local-pkg', async importOriginal => {
-  const actual = await importOriginal<typeof import('local-pkg')>();
+  const actual = await importOriginal<typeof LocalPkgModule>();
   return {
     ...actual,
     resolveModule: vi.fn(actual.resolveModule),
@@ -357,7 +358,7 @@ describe('analyzeEntry', () => {
   it('should handle recursive imports', async () => {
     const root = join(import.meta.dirname, '__fixtures__', 'nested-workspace');
     vi.spyOn(process, 'cwd').mockReturnValue(join(root, 'apps', 'mastra'));
-    const actualLocalPkg = await vi.importActual<typeof import('local-pkg')>('local-pkg');
+    const actualLocalPkg = await vi.importActual<typeof LocalPkgModule>('local-pkg');
 
     vi.mocked(resolveModule).mockImplementation((id, options) => {
       if (id === '@internal/a') {
@@ -424,7 +425,7 @@ describe('analyzeEntry', () => {
     const root = await mkdtemp(join(tmpdir(), 'mastra-analyze-cycle-'));
     const entryFilePath = join(root, 'app.ts');
     const circularPackagePath = join(root, 'circular-a.ts');
-    const actualLocalPkg = await vi.importActual<typeof import('local-pkg')>('local-pkg');
+    const actualLocalPkg = await vi.importActual<typeof LocalPkgModule>('local-pkg');
 
     await Promise.all([
       writeFile(
@@ -517,7 +518,7 @@ describe('analyzeEntry', () => {
   it('should cache direct and transitive analysis separately', async () => {
     const root = join(import.meta.dirname, '__fixtures__', 'nested-workspace');
     const entryFilePath = join(root, 'apps', 'mastra', 'src', 'shared-transitive.ts');
-    const actualLocalPkg = await vi.importActual<typeof import('local-pkg')>('local-pkg');
+    const actualLocalPkg = await vi.importActual<typeof LocalPkgModule>('local-pkg');
 
     vi.mocked(resolveModule).mockImplementation((id, options) => {
       if (id === '@internal/a') {
@@ -640,7 +641,7 @@ describe('analyzeEntry', () => {
     const root = join(import.meta.dirname, '__fixtures__', 'nested-workspace');
     const entryFilePath = join(root, 'apps', 'mastra', 'src', 'shared-transitive.ts');
     vi.spyOn(process, 'cwd').mockReturnValue(join(root, 'apps', 'mastra'));
-    const actualLocalPkg = await vi.importActual<typeof import('local-pkg')>('local-pkg');
+    const actualLocalPkg = await vi.importActual<typeof LocalPkgModule>('local-pkg');
 
     vi.mocked(resolveModule).mockImplementation((id, options) => {
       if (id === '@internal/a') {

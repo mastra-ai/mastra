@@ -19,7 +19,7 @@ import {
   traceQueryRequestSchema,
 } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { z } from 'zod/v4';
+import type { z } from 'zod/v4';
 
 import { MASTRA_USER_KEY } from '../constants';
 import { HTTPException } from '../http-exception';

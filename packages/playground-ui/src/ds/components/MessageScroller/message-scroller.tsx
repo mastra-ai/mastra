@@ -19,7 +19,6 @@ import type {
   MessageScrollerActionsContextValue,
   MessageScrollerButtonDirection,
   MessageScrollerDefaultScrollPosition,
-  MessageScrollerScrollAlign,
   MessageScrollerScrollOptions,
   MessageScrollerScrollable,
   MessageScrollerVisibility,

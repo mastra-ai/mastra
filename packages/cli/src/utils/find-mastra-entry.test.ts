@@ -1,4 +1,5 @@
 import { mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import type * as FsModule from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -6,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { findMastraEntryFile } from './find-mastra-entry';
 
 vi.mock('node:fs', async importOriginal => {
-  const actual = await importOriginal<typeof import('node:fs')>();
+  const actual = await importOriginal<typeof FsModule>();
   return { ...actual, statSync: vi.fn(actual.statSync) };
 });
 

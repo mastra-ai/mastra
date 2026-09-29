@@ -1,4 +1,5 @@
 import { evictSessionSandbox, peekSessionSandbox } from '../../sandbox/session-sandbox.js';
+import type { SourceControlSession } from '../../storage/domains/source-control/base.js';
 
 /**
  * Stop or destroy the sandbox a session holds in this process, dropping it
@@ -38,7 +39,7 @@ export async function releaseSessionSandbox(options: {
  * ever resolve this session id again.
  */
 export async function reclaimDeletedSessionSandbox(options: {
-  session: Pick<import('../../storage/domains/source-control/base.js').SourceControlSession, 'id'>;
+  session: Pick<SourceControlSession, 'id'>;
 }): Promise<void> {
   await releaseSessionSandbox({ sessionId: options.session.id, destroy: true });
 }

@@ -1,7 +1,8 @@
 import { Mastra } from '@mastra/core/mastra';
-import { MCPServer } from '@mastra/mcp';
+import type { MCPServer } from '@mastra/mcp';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { type AdapterTestContext, type AdapterTestSuiteConfig, createDefaultTestContext } from './test-helpers';
+import { createDefaultTestContext } from './test-helpers';
+import type { AdapterTestContext, AdapterTestSuiteConfig } from './test-helpers';
 
 /**
  * Creates a standardized integration test suite for MCP registry routes
@@ -39,7 +40,6 @@ export function createMCPRouteTestSuite(config: AdapterTestSuiteConfig) {
     let context: AdapterTestContext;
     let app: any;
     let mcpServer1: MCPServer;
-    let mcpServer2: MCPServer;
 
     beforeEach(async () => {
       // Create test context - use provided or default
@@ -54,7 +54,6 @@ export function createMCPRouteTestSuite(config: AdapterTestSuiteConfig) {
       app = setup.app;
       const mastra = setup.adapter.mastra;
       mcpServer1 = mastra.getMCPServerById('test-server-1');
-      mcpServer2 = mastra.getMCPServerById('test-server-2');
     }, 30000);
 
     describe('GET /api/mcp/v0/servers', () => {

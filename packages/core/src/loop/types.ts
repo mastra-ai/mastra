@@ -1,7 +1,6 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV4CallOptions } from '@ai-sdk/provider-v7';
 import type {
-  CallSettings,
   IdGenerator,
   ModelMessage,
   StopCondition as StopConditionV5,
@@ -47,6 +46,7 @@ import type { MCPToolExecutionContext, RequireToolApproval, ToolPayloadTransform
 import type { MastraIdGenerator } from '../types';
 import type { OutputWriter } from '../workflows/types';
 import type { Workspace } from '../workspace/workspace';
+import type { EagerToolExecutionCoordinator } from './workflows/agentic-execution/eager-tool-execution';
 
 type StopCondition = StopConditionV5<any> | StopConditionV6<any>;
 
@@ -135,7 +135,7 @@ export type StreamInternal = {
   /** @deprecated Use `runScope.get(STEP_MODEL_MESSAGES_KEY)` from `loop/run-scope-keys`. */
   stepModelMessages?: ModelMessage[];
   /** @deprecated Use `runScope.get(EAGER_TOOL_EXECUTION_KEY)` from `loop/run-scope-keys`. */
-  eagerToolExecutionCoordinator?: import('./workflows/agentic-execution/eager-tool-execution').EagerToolExecutionCoordinator;
+  eagerToolExecutionCoordinator?: EagerToolExecutionCoordinator;
   // Set to true when a delegation hook calls ctx.bail() to signal the loop should stop
   /** @deprecated Use `runScope.get(DELEGATION_BAILED_KEY)` from `loop/run-scope-keys`. */
   _delegationBailed?: boolean;

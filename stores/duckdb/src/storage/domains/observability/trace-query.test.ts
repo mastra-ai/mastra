@@ -8,9 +8,8 @@ import {
   planTraceQuery,
   planTraceQueryObservedFields,
   planTraceQueryValues,
-  TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
-import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
+import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan, TraceQueryResourceLimitError } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { DuckDBConnection } from '../../db/index';

@@ -51,11 +51,6 @@ export const listIssueCommentsOutputSchema = z.object({
   total: z.number(),
 });
 
-const MetadataSchema = z.object({
-  cloudId: z.string().optional(),
-  baseUrl: z.string().optional(),
-});
-
 export function listIssueCommentsTool(proxy: PlatformProxy) {
   return createTool({
     id: 'jira_list_issue_comments',

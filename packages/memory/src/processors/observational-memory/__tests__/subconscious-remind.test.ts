@@ -8,7 +8,6 @@ import { applyExtractorHooks } from '../extracted-values';
 import { buildExtractorOutputSections, Extractor } from '../extractor';
 import { SubconsciousRemindExtractor } from '../subconscious';
 import {
-  getRemindMessageMetadata,
   getRemindMessageText,
   getRemindThreadId,
   REMIND_PARENT_THREAD_METADATA_KEY,

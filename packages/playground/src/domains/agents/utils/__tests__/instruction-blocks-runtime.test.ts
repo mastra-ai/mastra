@@ -32,18 +32,6 @@ const mapAllPublished = (): ReadonlyMap<string, 'published' | 'unpublished' | 'u
   });
 };
 
-/**
- * Build a publication map where the given IDs are published.
- * Missing keys return undefined (treated as unknown).
- */
-const publishedIds = (...ids: string[]) => {
-  const map = new Map<string, 'published' | 'unpublished' | 'unknown'>();
-  for (const id of ids) {
-    map.set(id, 'published');
-  }
-  return map;
-};
-
 describe('instructionsResolveEmptyDueToDrafts', () => {
   it('returns published for empty / undefined block lists', () => {
     expect(instructionsResolveEmptyDueToDrafts(undefined, allDrafts)).toEqual({ type: 'published' });

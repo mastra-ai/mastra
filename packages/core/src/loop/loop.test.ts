@@ -1,10 +1,11 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import type * as LoggerModule from '../logger';
 import type { Mastra } from '../mastra';
 
 const consoleLoggerConstructor = vi.hoisted(() => vi.fn());
 
 vi.mock('../logger', async importOriginal => {
-  const actual = await importOriginal<typeof import('../logger')>();
+  const actual = await importOriginal<typeof LoggerModule>();
 
   return {
     ...actual,

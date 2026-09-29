@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  CloudflareSandboxBridgeClient,
-  CloudflareSandboxBridgeError,
-  type CloudflareCommandEvent,
-} from './bridge-client';
+import { CloudflareSandboxBridgeClient, CloudflareSandboxBridgeError } from './bridge-client';
+import type { CloudflareCommandEvent } from './bridge-client';
 import { createFakeBridge } from './testing/fake-bridge';
 
 const BASE_URL = 'https://bridge.example.com';

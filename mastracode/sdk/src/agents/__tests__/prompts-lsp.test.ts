@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type * as SettingsModule from '../../onboarding/settings.js';
 import type { GlobalSettings } from '../../onboarding/settings.js';
 
 async function buildPromptWithLspSetting(lsp: GlobalSettings['lsp']) {
   vi.resetModules();
   // Keep prompt tests independent from optional web-search package artifacts.
   vi.doMock('../../tools/index.js', () => ({ hasParallelKey: () => false, hasTavilyKey: () => false }));
-  const settings = await vi.importActual<typeof import('../../onboarding/settings.js')>('../../onboarding/settings.js');
+  const settings = await vi.importActual<typeof SettingsModule>('../../onboarding/settings.js');
   vi.doMock('../../onboarding/settings.js', () => ({
     ...settings,
     loadSettings: () => ({ ...settings.loadSettings(), lsp }),

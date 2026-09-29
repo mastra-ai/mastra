@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FileEnvService } from './service.env';
 
 vi.mock('node:fs/promises', async importOriginal => ({
-  ...(await importOriginal<typeof import('node:fs/promises')>()),
+  ...(await importOriginal<typeof fs>()),
 }));
 
 describe('FileEnvService', () => {

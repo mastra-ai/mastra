@@ -26,7 +26,7 @@ export interface IssueReconcileScope<TScope> {
   matches(item: WorkItemRow, scope: TScope): boolean;
 }
 
-export interface IssueReconcilerOptions<TScope = void> {
+export interface IssueReconcilerOptions {
   integrationId: string;
   intake: Intake;
   projects: Pick<FactoryProjectsStorage, 'listAll'>;
@@ -118,7 +118,7 @@ function issueItems(project: FactoryProject, items: WorkItemRow[], integrationId
   );
 }
 
-export function createIssueReconciler<TScope = void>(options: IssueReconcilerOptions<TScope>): IssueReconciler<TScope> {
+export function createIssueReconciler<TScope = void>(options: IssueReconcilerOptions): IssueReconciler<TScope> {
   const now = options.now ?? (() => new Date());
   const run = async (scope?: IssueReconcileScope<TScope>): Promise<IssueReconcileSummary> => {
     const summary: IssueReconcileSummary = {

@@ -359,7 +359,7 @@ describe('Agent client-side tools', () => {
       response: { messages: [{ role: 'assistant', content: [] }] },
       usage: { totalTokens: 2 },
     };
-    (global.fetch as any).mockImplementationOnce(async (_url: string, init: RequestInit) => {
+    (global.fetch as any).mockImplementationOnce(async (_url: string) => {
       // Abort while the first request is "in flight" – the response still arrives, but the
       // client must not execute the tool or fire the continuation request afterwards.
       controller.abort();

@@ -1,5 +1,5 @@
 import { AgentControllerChannels } from '@mastra/core/channels';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@mastra/slack', () => ({
   createSlackAdapter: vi.fn(() => ({ __adapter: true })),

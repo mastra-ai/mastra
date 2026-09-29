@@ -1,4 +1,5 @@
 import { workItemPhaseSemantics } from '../../boards/index.js';
+import type { IntakeIssue } from '../../capabilities/intake.js';
 import type { IntegrationContext } from '../base.js';
 import { createIssueReconciler } from '../issue-reconciler.js';
 import type { IssueReconciler } from '../issue-reconciler.js';
@@ -8,7 +9,7 @@ import type { LinearIssueIngress } from './rules.js';
 
 export type LinearIssueReconciler = IssueReconciler;
 
-function issueToIngress(issue: import('../../capabilities/intake.js').IntakeIssue): LinearIssueIngress {
+function issueToIngress(issue: IntakeIssue): LinearIssueIngress {
   return {
     id: issue.id,
     identifier: issue.identifier,

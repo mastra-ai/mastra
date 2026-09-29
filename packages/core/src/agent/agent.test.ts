@@ -6646,9 +6646,9 @@ describe('sub-agent tool input schema coercion', () => {
 //       expect((agent.listTools() as Agent['tools']).vercelTool).toBeDefined();
 
 //       // Verify both tools can be executed
-//       // @ts-expect-error
+//       // @ts-expect-error -- tool lookup and execute args are loosely typed in this test
 //       await (agent.listTools() as Agent['tools']).mastraTool.execute!({ name: 'test' });
-//       // @ts-expect-error
+//       // @ts-expect-error -- tool lookup and execute args are loosely typed in this test
 //       await (agent.listTools() as Agent['tools']).vercelTool.execute!({ name: 'test' });
 
 //       expect(mastraExecute).toHaveBeenCalled();

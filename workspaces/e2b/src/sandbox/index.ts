@@ -19,7 +19,6 @@ import type {
   SandboxFileInput,
   SandboxNetworking,
   SandboxCloneOptions,
-  SandboxStartResult,
 } from '@mastra/core/workspace';
 
 /**

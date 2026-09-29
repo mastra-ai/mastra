@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { platformMcpTransport, resolveClient } from '../client.js';
 import { connect } from '../connect.js';
-import { PROVIDERS, type ProviderRegistration } from '../registry.js';
+import { PROVIDERS } from '../registry.js';
+import type { ProviderRegistration } from '../registry.js';
 
 const PLATFORM_TOKEN = 'platform-token';
 const INTEGRATION_ID = 'catalog-mcp';

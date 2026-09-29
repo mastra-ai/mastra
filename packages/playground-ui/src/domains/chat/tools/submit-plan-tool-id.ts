@@ -1,4 +1,6 @@
-type SubmitPlanToolId = (typeof import('@mastra/core/tools'))['submitPlanTool']['id'];
+import type { submitPlanTool } from '@mastra/core/tools';
+
+type SubmitPlanToolId = (typeof submitPlanTool)['id'];
 
 // Keep the browser bundle free of the Node-oriented tool implementation while
 // retaining a compile-time link to the literal ID exported by @mastra/core.

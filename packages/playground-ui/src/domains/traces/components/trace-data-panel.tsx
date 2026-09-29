@@ -1,7 +1,9 @@
-import { useState, type ComponentProps } from 'react';
+import { useState } from 'react';
+import type { ComponentProps } from 'react';
 import { SpanScoring } from '@/domains/scores';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { TraceDataPanelView, type TraceSideView } from '@/domains/traces/components/trace-data-panel-view';
+import { TraceDataPanelView } from '@/domains/traces/components/trace-data-panel-view';
+import type { TraceSideView } from '@/domains/traces/components/trace-data-panel-view';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
 
 type TraceDataPanelProps = Omit<

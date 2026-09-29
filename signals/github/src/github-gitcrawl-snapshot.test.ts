@@ -1,9 +1,10 @@
+import type * as ChildProcessModule from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const execFileAsync = vi.hoisted(() => vi.fn());
 
 vi.mock('node:child_process', async importOriginal => {
-  const actual = await importOriginal<typeof import('node:child_process')>();
+  const actual = await importOriginal<typeof ChildProcessModule>();
   const execFile = () => undefined;
   Object.defineProperty(execFile, Symbol.for('nodejs.util.promisify.custom'), { value: execFileAsync });
   return { ...actual, execFile };

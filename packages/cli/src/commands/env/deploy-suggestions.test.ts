@@ -2,6 +2,8 @@ import process from 'node:process';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type * as SharedDeploySuggestionsModule from '../deploy-suggestions.js';
+
 const mockGetToken = vi.fn();
 const mockResolveCurrentOrg = vi.fn();
 const mockResolveProject = vi.fn();
@@ -41,7 +43,7 @@ vi.mock('./platform-api.js', () => ({
 }));
 
 vi.mock('../deploy-suggestions.js', async () => {
-  const actual = await vi.importActual<typeof import('../deploy-suggestions.js')>('../deploy-suggestions.js');
+  const actual = await vi.importActual<typeof SharedDeploySuggestionsModule>('../deploy-suggestions.js');
   return {
     ...actual,
     pollForDiagnosis: async (fetchOnce: () => Promise<unknown>) => fetchOnce(),

@@ -1,11 +1,12 @@
 import { Mastra } from '@mastra/core';
+import type * as CoreStorageModule from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { HTTPException } from '../http-exception';
 import { createTestServerContext } from './test-utils';
 
 vi.mock('@mastra/core/storage', async importOriginal => {
-  const actual = await importOriginal<typeof import('@mastra/core/storage')>();
+  const actual = await importOriginal<typeof CoreStorageModule>();
   return {
     ...actual,
     getTraceQueryFieldsArgsSchema: undefined,

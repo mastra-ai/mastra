@@ -25,10 +25,6 @@ export const createIssueLinkOutputSchema = z.object({
   outwardIssueKey: z.string(),
 });
 
-const MetadataSchema = z.object({
-  cloudId: z.string().optional(),
-});
-
 const AccessibleResourceSchema = z.object({
   id: z.string(),
   url: z.string(),

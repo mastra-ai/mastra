@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import type * as ReactRouterModule from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RerunExperimentButton } from '../rerun-experiment-button';
 import { experiments } from './fixtures/experiments';
@@ -19,7 +20,7 @@ import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 const mockNavigate = vi.fn();
 
 vi.mock('react-router', async importOriginal => {
-  const actual = await importOriginal<typeof import('react-router')>();
+  const actual = await importOriginal<typeof ReactRouterModule>();
   return { ...actual, useNavigate: () => mockNavigate };
 });
 

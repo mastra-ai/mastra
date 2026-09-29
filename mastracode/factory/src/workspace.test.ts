@@ -3,9 +3,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RequestContext } from '@mastra/core/request-context';
-import { LocalSandbox } from '@mastra/core/workspace';
-import type { LocalFilesystem } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type * as GithubSandboxModule from './integrations/github/sandbox.js';
 
 const mocks = vi.hoisted(() => ({
   /** Whether the mock VM already carries a matching setup marker (warm template image). */
@@ -104,10 +103,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('./integrations/github/sandbox', async importOriginal => ({
   // Keep the real lifecycle constants and MaterializeError so workspace.ts uses production behavior.
-  DEFAULT_COMMAND_TIMEOUT_MS: (await importOriginal<typeof import('./integrations/github/sandbox.js')>())
-    .DEFAULT_COMMAND_TIMEOUT_MS,
-  MaterializeError: (await importOriginal<typeof import('./integrations/github/sandbox.js')>()).MaterializeError,
-  SetupCommandError: (await importOriginal<typeof import('./integrations/github/sandbox.js')>()).SetupCommandError,
+  DEFAULT_COMMAND_TIMEOUT_MS: (await importOriginal<typeof GithubSandboxModule>()).DEFAULT_COMMAND_TIMEOUT_MS,
+  MaterializeError: (await importOriginal<typeof GithubSandboxModule>()).MaterializeError,
+  SetupCommandError: (await importOriginal<typeof GithubSandboxModule>()).SetupCommandError,
   materializeRepo: (...args: unknown[]) => (mocks.materializeRepo as any)(...args),
   checkoutSessionBranch: (...args: unknown[]) => (mocks.checkoutSessionBranch as any)(...args),
   runSetupCommand: (...args: unknown[]) => (mocks.runSetupCommand as any)(...args),
@@ -143,14 +141,6 @@ function lastGhToken(): string | undefined {
     | ((env: Record<string, string | undefined>) => Record<string, string | undefined>)
     | undefined;
   return update?.({}).GH_TOKEN;
-}
-
-function lastSandboxEnv(): Record<string, string | undefined> {
-  const calls = mocks.setEnv.mock.calls;
-  const update = calls[calls.length - 1]?.[0] as
-    | ((env: Record<string, string | undefined>) => Record<string, string | undefined>)
-    | undefined;
-  return update?.({}) ?? {};
 }
 
 afterEach(async () => {

@@ -34,18 +34,18 @@ import posixPath from 'node:path/posix';
 import Docker from 'dockerode';
 import { pack as tarPack } from 'tar-stream';
 import { createAbortError, normalizeAbortError, throwIfAborted, waitForAbortable } from '../abort';
-import { DockerSandbox, type DockerSandboxOptions } from '../sandbox';
-import { openBuildSession, type BuildSession } from './build-session';
-import {
-  type AptInstallOptions,
-  type DockerTemplateDefinition,
-  type DockerTemplateOperation,
-  type NpmInstallOptions,
-  type PipInstallOptions,
-  type RunWithSecretsOptions,
-  secretNames,
-  synthesizeDockerfile,
-  templateImageTag,
+import { DockerSandbox } from '../sandbox';
+import type { DockerSandboxOptions } from '../sandbox';
+import { openBuildSession } from './build-session';
+import type { BuildSession } from './build-session';
+import { secretNames, synthesizeDockerfile, templateImageTag } from './dockerfile';
+import type {
+  AptInstallOptions,
+  DockerTemplateDefinition,
+  DockerTemplateOperation,
+  NpmInstallOptions,
+  PipInstallOptions,
+  RunWithSecretsOptions,
 } from './dockerfile';
 
 const MAX_OPERATIONS = 256;

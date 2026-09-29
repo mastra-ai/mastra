@@ -2,7 +2,8 @@ import type { Experimental_EvaluationModelV4 as EvaluationModelV4 } from '@ai-sd
 import { expectTypeOf } from 'vitest';
 import { z } from 'zod/v4';
 
-import { Classifier, type BooleanAnswer, type ChoiceAnswer, type ScoreAnswer } from '../classifier';
+import { Classifier } from '../classifier';
+import type { BooleanAnswer, ChoiceAnswer, ScoreAnswer } from '../classifier';
 import { createWorkflow } from './create';
 import type { Step } from './step';
 import { createStep } from './workflow';

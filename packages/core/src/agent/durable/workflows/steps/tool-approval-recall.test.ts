@@ -18,13 +18,13 @@ import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { MastraDBMessage } from '../../../message-list';
 import { MessageList } from '../../../message-list';
 import { globalRunRegistry } from '../../run-registry';
+import type * as ResolveRuntimeModule from '../../utils/resolve-runtime';
 import { createDurableLLMMappingStep } from './llm-mapping';
 import { createDurableToolCallStep } from './tool-call';
 
 vi.mock('../../utils/resolve-runtime', async () => ({
-  restoreRequestContext: (
-    await vi.importActual<typeof import('../../utils/resolve-runtime')>('../../utils/resolve-runtime')
-  ).restoreRequestContext,
+  restoreRequestContext: (await vi.importActual<typeof ResolveRuntimeModule>('../../utils/resolve-runtime'))
+    .restoreRequestContext,
   resolveTool: vi.fn(),
   toolRequiresApproval: vi.fn().mockResolvedValue(true),
   rebuildRunToolsFromMastra: vi.fn().mockResolvedValue(undefined),

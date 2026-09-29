@@ -154,11 +154,11 @@ export async function getInputOptions(
       // for debugging
       // {
       //   name: 'logger',
-      //   //@ts-expect-error
+      //   //@ts-expect-error -- ad-hoc debug plugin hook params are implicitly any
       //   resolveId(id, ...args) {
       //     console.log({ id, args });
       //   },
-      //   // @ts-expect-error
+      //   // @ts-expect-error -- ad-hoc debug plugin hook params are implicitly any
       // transform(code, id) {
       //   if (code.includes('class Duplexify ')) {
       //     console.log({ duplex: id });

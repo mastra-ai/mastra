@@ -8,11 +8,6 @@ export const getEditIssueMetadataInputSchema = z.object({
   issueIdOrKey: z.string().describe('The ID or key of the issue. Example: "10000" or "PROJ-123"'),
 });
 
-const MetadataSchema = z.object({
-  cloudId: z.string().optional(),
-  baseUrl: z.string().optional(),
-});
-
 export const getEditIssueMetadataOutputSchema = z.object({
   fields: z.any(),
 });

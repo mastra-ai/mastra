@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'dotenv';
-import { getCurrentOrgId, getToken, type LoginOptions } from '../auth/credentials.js';
+import { getCurrentOrgId, getToken } from '../auth/credentials.js';
+import type { LoginOptions } from '../auth/credentials.js';
 import { fetchServerProjects } from '../server/platform-api.js';
 import { loadProjectConfig } from '../studio/project-config.js';
 import { ApiCliError } from './errors.js';

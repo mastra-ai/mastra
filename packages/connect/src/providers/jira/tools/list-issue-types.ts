@@ -4,11 +4,6 @@ import { z } from 'zod';
 
 import type { PlatformProxy, PlatformProxyRequest } from '../../../runtime/platform-proxy.js';
 
-const MetadataSchema = z.object({
-  cloudId: z.string().optional(),
-  baseUrl: z.string().optional(),
-});
-
 export const listIssueTypesInputSchema = z.object({
   // No input required - lists all issue types available to the user
 });

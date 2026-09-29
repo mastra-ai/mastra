@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import { createServer } from 'node:http';
 import type { Server as HttpServer } from 'node:http';
@@ -7,10 +6,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { RequestContext } from '@mastra/core/di';
 import { toStandardSchema } from '@mastra/schema-compat';
-import { Client, SdkErrorCode, SdkHttpError, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import { McpServer, createMcpHandler } from '@modelcontextprotocol/server';
 import type { CallToolResult } from '@modelcontextprotocol/server';
+import type * as ExitHookModule from 'exit-hook';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -25,7 +25,7 @@ import { InternalMastraMCPClient, getMcpCallToolContent, getMcpCallToolMeta } fr
 const exitHooks = vi.hoisted(() => ({ live: 0 }));
 
 vi.mock('exit-hook', async importOriginal => {
-  const actual = await importOriginal<typeof import('exit-hook')>();
+  const actual = await importOriginal<typeof ExitHookModule>();
   return {
     ...actual,
     asyncExitHook: (...args: Parameters<typeof actual.asyncExitHook>) => {

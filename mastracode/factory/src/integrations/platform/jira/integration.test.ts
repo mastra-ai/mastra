@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '../../../boards/index.js';
 import { fakeRouteAuth } from '../../../routes/test-utils.js';
 import { createFactoryStorageForTests } from '../../../storage/test-utils.js';
-import { JiraApiError } from '../../jira/api.js';
+import type { JiraApiError } from '../../jira/api.js';
 import { attachJiraIssueReconciler } from '../../jira/issue-reconciler.js';
 import {
   decodeIssueReference,

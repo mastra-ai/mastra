@@ -11,7 +11,6 @@ import type { RequestContext } from '../../../request-context';
 import type { MastraOnFinishCallbackContext } from '../../../stream/types';
 import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
-import type { MessageList } from '../../message-list';
 import type { SaveQueueManager } from '../../save-queue';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';

@@ -19,6 +19,7 @@ import {
   TABLE_KNOWLEDGE_NODES,
   TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
 } from '@mastra/core/storage';
+import type * as CoreStorageModule from '@mastra/core/storage';
 import type {
   AppendKnowledgeInput,
   ClaimKnowledgeSemanticOutboxInput,
@@ -52,7 +53,7 @@ let assertDescriptionWithinBound: ((description: string | undefined) => void) | 
 async function assertKnowledgeDescriptionWithinBoundCompat(description: string | undefined): Promise<void> {
   let assertWithinBound = assertDescriptionWithinBound;
   if (!assertWithinBound) {
-    const mod: Partial<typeof import('@mastra/core/storage')> = await import('@mastra/core/storage');
+    const mod: Partial<typeof CoreStorageModule> = await import('@mastra/core/storage');
     const resolvedAssert: (description: string | undefined) => void =
       mod.assertKnowledgeDescriptionWithinBound ??
       (value => {

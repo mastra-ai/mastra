@@ -6,24 +6,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { MessageList } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
-import type { IMastraLogger } from '../../logger';
-import { ProcessorRunner } from '../../processors/runner';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
 
 import { TokenLimiterProcessor } from './token-limiter';
-
-// Mock logger that implements all required methods
-const mockLogger: IMastraLogger = {
-  debug: vi.fn(),
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  trackException: vi.fn(),
-  getTransports: vi.fn(() => []),
-  listLogs: vi.fn(() => []),
-  listLogsByRunId: vi.fn(() => []),
-} as any;
 
 function createTestMessage(text: string, role: 'user' | 'assistant' = 'assistant', id = 'test-id'): MastraDBMessage {
   return {

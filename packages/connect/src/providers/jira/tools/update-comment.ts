@@ -60,11 +60,6 @@ export const updateCommentOutputSchema = z.object({
   visibility: VisibilitySchemaWidened,
 });
 
-const MetadataSchema = z.object({
-  cloudId: z.string().optional(),
-  baseUrl: z.string().optional(),
-});
-
 export function updateCommentTool(proxy: PlatformProxy) {
   return createTool({
     id: 'jira_update_comment',

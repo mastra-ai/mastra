@@ -464,8 +464,8 @@ describe('RailwaySandbox', () => {
       const child = await sandbox.fork({ idleTimeoutMinutes: 15 });
 
       expect(mockSandbox.fork).toHaveBeenCalledWith(expect.objectContaining({ idleTimeoutMinutes: 15 }));
-      expect(mockConnect).not.toHaveBeenCalled();
-      expect(mockCreate).toHaveBeenCalledTimes(2);
+      expect(mockConnect).toHaveBeenCalledWith('rw-forked-456', expect.objectContaining({ token: 'tok' }));
+      expect(mockCreate).toHaveBeenCalledTimes(1);
       expect(child).toBeInstanceOf(RailwaySandbox);
       expect(child.status).toBe('running');
       expect(child).not.toBe(sandbox);

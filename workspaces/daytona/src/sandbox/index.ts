@@ -24,13 +24,10 @@ import type {
   MountResult,
   FilesystemMountConfig,
   MountManager,
-  CommandResult,
-  ExecuteCommandOptions,
   SandboxComputer,
   SandboxNetworking,
   SandboxFileInput,
   SandboxCloneOptions,
-  SandboxStartResult,
 } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError, assertModesUnsupported } from '@mastra/core/workspace';
 

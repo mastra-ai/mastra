@@ -1,9 +1,10 @@
 import { writeFile } from 'node:fs/promises';
+import type * as FsPromisesModule from 'node:fs/promises';
 import { copy } from 'fs-extra';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('node:fs/promises', async importOriginal => ({
-  ...(await importOriginal<typeof import('node:fs/promises')>()),
+  ...(await importOriginal<typeof FsPromisesModule>()),
   writeFile: vi.fn().mockResolvedValue(undefined),
 }));
 

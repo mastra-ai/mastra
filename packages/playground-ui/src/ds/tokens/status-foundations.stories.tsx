@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Badge, type BadgeVariant } from '../components/Badge';
-import { Notice, type NoticeVariant } from '../components/Notice';
+import { Badge } from '../components/Badge';
+import type { BadgeVariant } from '../components/Badge';
+import { Notice } from '../components/Notice';
+import type { NoticeVariant } from '../components/Notice';
 import { Txt } from '../components/Txt/Txt';
 import { Colors } from './colors';
 import { FoundationPage, FoundationSection, Specimen, SpecimenGroup } from './foundations-layout';

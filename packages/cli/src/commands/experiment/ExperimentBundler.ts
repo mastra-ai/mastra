@@ -8,11 +8,8 @@ import type { Config } from '@mastra/core/mastra';
 import { FileService } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import { shouldSkipDotenvLoading } from '../utils.js';
-import {
-  EXPERIMENT_DATASET_CANONICALIZATION_VERSION,
-  EXPERIMENT_WORKER_PROTOCOL_VERSION,
-  type ExperimentWorkerBuildIdentity,
-} from './runtime.js';
+import { EXPERIMENT_DATASET_CANONICALIZATION_VERSION, EXPERIMENT_WORKER_PROTOCOL_VERSION } from './runtime.js';
+import type { ExperimentWorkerBuildIdentity } from './runtime.js';
 
 export { EXPERIMENT_DATASET_CANONICALIZATION_VERSION, EXPERIMENT_WORKER_PROTOCOL_VERSION } from './runtime.js';
 

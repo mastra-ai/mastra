@@ -22,13 +22,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HookManager } from '@mastra/code-sdk/hooks/manager';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as NotifyModule from '../notify.js';
 
 const mocks = vi.hoisted(() => ({
   sendNotification: vi.fn(),
 }));
 
 vi.mock('../notify.js', async importOriginal => ({
-  ...(await importOriginal<typeof import('../notify.js')>()),
+  ...(await importOriginal<typeof NotifyModule>()),
   sendNotification: mocks.sendNotification,
 }));
 

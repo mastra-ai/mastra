@@ -23,7 +23,8 @@ import { ExperimentItemPanelProvider } from '@/domains/experiments/context/exper
 import { ExperimentCrumb, ExperimentCrumbStatusIcon } from '@/domains/experiments/experiment-crumb';
 import { useExperimentMetrics } from '@/domains/experiments/hooks/use-experiment-metrics';
 import { useExperimentResultsSelection } from '@/domains/experiments/hooks/use-experiment-results-selection';
-import { navCrumb, truncateItemIdCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
+import { navCrumb, truncateItemIdCrumb } from '@/domains/navigation/crumbs';
+import type { CrumbDef } from '@/domains/navigation/crumbs';
 
 // Stable fallback so the selection hook's memoised filters don't churn while results load.
 const EMPTY_RESULTS: never[] = [];

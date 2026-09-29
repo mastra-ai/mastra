@@ -246,7 +246,7 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
     sql: `NOT (${key})`,
     needsValue: false,
   }),
-  $size: (key: string, value: number) => {
+  $size: (key: string) => {
     const jsonPath = getJsonPath(key);
     return {
       // Anonymous placeholder like every other operator: the previous

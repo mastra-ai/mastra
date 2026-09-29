@@ -5,6 +5,9 @@ import { resolve } from 'node:path';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type * as AddProviderModule from '../../scripts/add-provider.js';
+import type * as ListProvidersModule from '../../scripts/list-providers.js';
+import type * as RemoveProviderModule from '../../scripts/remove-provider.js';
 import { TEMPLATE_REPO } from '../../scripts/templates-config.js';
 
 const actionTemplate = `import { z } from 'zod';
@@ -273,9 +276,9 @@ export default action;
 describe('maintainer provider commands', () => {
   let packageRoot: string;
   let templateSha: string;
-  let addProvider: typeof import('../../scripts/add-provider.js').addProvider;
-  let removeProvider: typeof import('../../scripts/remove-provider.js').removeProvider;
-  let listProviders: typeof import('../../scripts/list-providers.js').listProviders;
+  let addProvider: typeof AddProviderModule.addProvider;
+  let removeProvider: typeof RemoveProviderModule.removeProvider;
+  let listProviders: typeof ListProvidersModule.listProviders;
   const originalTtyDescriptors = {
     stdin: Object.getOwnPropertyDescriptor(process.stdin, 'isTTY'),
     stdout: Object.getOwnPropertyDescriptor(process.stdout, 'isTTY'),

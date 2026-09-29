@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { applyBackgroundToolResult } from '../../../loop/shared/steps/background-task-result-core';
+import type * as BackgroundTaskResultCoreModule from '../../../loop/shared/steps/background-task-result-core';
 import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { MockStore } from '../../../storage/mock';
@@ -30,7 +31,7 @@ import { createDurableAgent } from '../create-durable-agent';
 // deterministically and (b) assert the durable engine's onResult wiring
 // without changing behavior.
 vi.mock('../../../loop/shared/steps/background-task-result-core', async importOriginal => {
-  const actual = await importOriginal<typeof import('../../../loop/shared/steps/background-task-result-core')>();
+  const actual = await importOriginal<typeof BackgroundTaskResultCoreModule>();
   return {
     ...actual,
     applyBackgroundToolResult: vi.fn(actual.applyBackgroundToolResult),

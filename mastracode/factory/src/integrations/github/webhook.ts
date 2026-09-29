@@ -4,7 +4,7 @@ import type { NotificationPriority } from '@mastra/core/notifications';
 import type { Context } from 'hono';
 import { resolveSubscriptionSession, subscriptionRunContext } from '../subscription-session.js';
 import type { FactorySessionOwner } from '../subscription-session.js';
-import { GithubAppIdentity } from './app-identity.js';
+import type { GithubAppIdentity } from './app-identity.js';
 import type { GithubIntegration, GithubRepositoryPermission } from './integration.js';
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from './subscriptions.js';
 import type {

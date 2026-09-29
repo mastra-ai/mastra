@@ -3,13 +3,14 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type * as SettingsModule from '../../onboarding/settings.js';
 
 vi.mock('../onboarding/settings.js', async importOriginal => ({
-  ...(await importOriginal<typeof import('../../onboarding/settings.js')>()),
+  ...(await importOriginal<typeof SettingsModule>()),
   loadSettings: () => ({}),
 }));
 vi.mock('../../onboarding/settings.js', async importOriginal => ({
-  ...(await importOriginal<typeof import('../../onboarding/settings.js')>()),
+  ...(await importOriginal<typeof SettingsModule>()),
   loadSettings: () => ({}),
 }));
 

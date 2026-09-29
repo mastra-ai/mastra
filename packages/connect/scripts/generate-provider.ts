@@ -20,15 +20,14 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, w
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import {
-  Node,
-  Project,
-  SyntaxKind,
-  type CallExpression,
-  type ImportDeclaration,
-  type ObjectLiteralExpression,
-  type SourceFile,
-  type Statement,
+import { Node, Project, SyntaxKind } from 'ts-morph';
+import type {
+  CallExpression,
+  Identifier,
+  ImportDeclaration,
+  ObjectLiteralExpression,
+  SourceFile,
+  Statement,
 } from 'ts-morph';
 import { format, resolveConfig } from 'prettier';
 
@@ -42,9 +41,10 @@ import {
   providersDir,
   templatesDir,
   validateProviderId,
-  type ProviderManifest,
 } from './provider-utils.js';
-import { templatePinFor, type TemplatePin } from './templates-config.js';
+import type { ProviderManifest } from './provider-utils.js';
+import { templatePinFor } from './templates-config.js';
+import type { TemplatePin } from './templates-config.js';
 
 /** Module specifier the upstream templates import their SDK from. */
 const TEMPLATE_SDK_MODULE = 'nango';
@@ -175,6 +175,48 @@ function unsupportedTopLevelStatementReason(source: SourceFile, createActionCall
     return `uses unsupported top-level statement: ${statement.getKindName()}`;
   }
   return undefined;
+}
+
+function unexportedDeclarationNames(statement: Statement): Identifier[] | undefined {
+  if (Node.isVariableStatement(statement)) {
+    if (statement.isExported()) return undefined;
+    const names = statement.getDeclarations().map(declaration => declaration.getNameNode());
+    return names.every((name): name is Identifier => Node.isIdentifier(name)) ? names : undefined;
+  }
+  if (
+    Node.isFunctionDeclaration(statement) ||
+    Node.isTypeAliasDeclaration(statement) ||
+    Node.isInterfaceDeclaration(statement) ||
+    Node.isEnumDeclaration(statement)
+  ) {
+    if (statement.isExported()) return undefined;
+    const name = statement.getNameNode();
+    return name ? [name] : undefined;
+  }
+  return undefined;
+}
+
+function withoutUnreferencedDeclarations(statements: Statement[], execInitializer: Node): Statement[] {
+  let kept = statements;
+  let changed = true;
+  while (changed) {
+    const next = kept.filter(statement => {
+      const names = unexportedDeclarationNames(statement);
+      if (!names) return true;
+      return names.some(name =>
+        name
+          .findReferencesAsNodes()
+          .some(
+            reference =>
+              execInitializer.containsRange(reference.getPos(), reference.getEnd()) ||
+              kept.some(other => other !== statement && other.containsRange(reference.getPos(), reference.getEnd())),
+          ),
+      );
+    });
+    changed = next.length !== kept.length;
+    kept = next;
+  }
+  return kept;
 }
 
 function usesNamedImport(declaration: ImportDeclaration, name: string): boolean {
@@ -591,10 +633,10 @@ function extractAction(
   }
 
   const moduleStatements = widenResponseEnums(
-    source
-      .getStatements()
-      .filter(statement => shouldKeepStatement(statement, createActionCall))
-      .map(statement => replaceProxyRequestType(sanitizeVendoredSource(statement.getText()), usesProxyRequestType)),
+    withoutUnreferencedDeclarations(
+      source.getStatements().filter(statement => shouldKeepStatement(statement, createActionCall)),
+      execInitializer,
+    ).map(statement => replaceProxyRequestType(sanitizeVendoredSource(statement.getText()), usesProxyRequestType)),
     inputSchemaName,
   );
 
@@ -867,11 +909,11 @@ function parseArguments(argv: string[]): GenerateProviderOptions {
 async function main(): Promise<void> {
   try {
     const result = await generateProvider(parseArguments(process.argv.slice(2)));
-    console.log(
+    console.info(
       `✓ Generated ${result.providerId} as ${result.localId} (${result.toolCount} tools, ${result.skippedActions.length} skipped)`,
     );
     for (const skippedAction of result.skippedActions) {
-      console.log(`  - ${skippedAction.action}: ${skippedAction.reason}`);
+      console.info(`  - ${skippedAction.action}: ${skippedAction.reason}`);
     }
   } catch (error) {
     console.error(error instanceof Error ? error.message : error);

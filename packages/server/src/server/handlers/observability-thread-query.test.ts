@@ -15,7 +15,7 @@ import {
   TraceQueryExecutionError,
 } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { z } from 'zod/v4';
+import type { z } from 'zod/v4';
 
 import { HTTPException } from '../http-exception';
 import { generateOpenAPIDocument } from '../server-adapter/openapi-utils';

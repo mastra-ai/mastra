@@ -19,11 +19,13 @@ import type { IMastraLogger } from '@mastra/core/logger';
 import type { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod/v4';
 import { signAgentCard } from '../a2a/agent-card-signing';
-import { createV1AgentCard, type AgentCardV1 } from '../a2a/agent-card-v1';
+import { createV1AgentCard } from '../a2a/agent-card-v1';
+import type { AgentCardV1 } from '../a2a/agent-card-v1';
 import { convertToCoreMessage, normalizeError, createSuccessResponse } from '../a2a/protocol';
 import { DefaultPushNotificationSender } from '../a2a/push-notification-sender';
 import { InMemoryPushNotificationStore } from '../a2a/push-notification-store';
-import { TaskStoreVersionConflictError, type InMemoryTaskStore } from '../a2a/store';
+import { TaskStoreVersionConflictError } from '../a2a/store';
+import type { InMemoryTaskStore } from '../a2a/store';
 import { isInterruptedTaskState, isTerminalTaskState } from '../a2a/task-state';
 import { applyUpdateToTask, loadOrCreateTask, resolveTaskMemory } from '../a2a/tasks';
 import {

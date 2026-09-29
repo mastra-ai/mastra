@@ -1,6 +1,7 @@
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { type AdapterTestContext, createDefaultTestContext } from './test-helpers';
+import { createDefaultTestContext } from './test-helpers';
+import type { AdapterTestContext } from './test-helpers';
 
 /**
  * Configuration for multipart FormData test suite
@@ -197,7 +198,7 @@ export function createMultipartTestSuite(config: MultipartTestSuiteConfig) {
       const { adapter, app } = await setupAdapter(context, {
         bodyLimitOptions: {
           maxSize,
-          onError: (err: any) => ({ error: 'File too large' }),
+          onError: (_err: any) => ({ error: 'File too large' }),
         },
       });
 
@@ -233,14 +234,11 @@ export function createMultipartTestSuite(config: MultipartTestSuiteConfig) {
     it('should handle empty FormData gracefully', async () => {
       const { adapter, app } = await setupAdapter(context);
 
-      let receivedBody: any;
-
       const testRoute: ServerRoute<any, any, any> = {
         method: 'POST',
         path: '/test/upload-empty',
         responseType: 'json',
         handler: async (params: any) => {
-          receivedBody = params;
           return {
             success: true,
             // Filter out all system-injected params to get only body fields
@@ -327,14 +325,11 @@ export function createMultipartTestSuite(config: MultipartTestSuiteConfig) {
     it('should still handle JSON requests normally', async () => {
       const { adapter, app } = await setupAdapter(context);
 
-      let receivedBody: any;
-
       const testRoute: ServerRoute<any, any, any> = {
         method: 'POST',
         path: '/test/json',
         responseType: 'json',
         handler: async (params: any) => {
-          receivedBody = params;
           return { success: true, message: params.message };
         },
       };

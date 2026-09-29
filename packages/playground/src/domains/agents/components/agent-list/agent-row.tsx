@@ -1,5 +1,6 @@
 import type { GetAgentResponse } from '@mastra/client-js';
-import { DataList as EntityList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
+import type { useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
+import { DataList as EntityList } from '@mastra/playground-ui/components/DataList';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useRef } from 'react';
 import type { SyntheticEvent } from 'react';

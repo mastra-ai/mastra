@@ -8,6 +8,7 @@ import { deleteDB, openDB } from 'idb';
 import { http, HttpResponse } from 'msw';
 import { createContext, useContext, useEffect, useImperativeHandle, useState } from 'react';
 import type { ReactNode, Ref } from 'react';
+import type * as ReactResizablePanelsModule from 'react-resizable-panels';
 import { createMemoryRouter, Outlet, RouterProvider, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -54,7 +55,7 @@ const ATTACHMENT_TIMEOUT = { timeout: 10_000 };
 // and reports the layout to the Group so the real `useDefaultLayout` still
 // persists it. Everything else (usePanelRef, useDefaultLayout) is the real lib.
 vi.mock('react-resizable-panels', async () => {
-  const actual = await vi.importActual<typeof import('react-resizable-panels')>('react-resizable-panels');
+  const actual = await vi.importActual<typeof ReactResizablePanelsModule>('react-resizable-panels');
 
   type PanelSize = { inPixels: number; asPercentage: number };
   type Handle = {

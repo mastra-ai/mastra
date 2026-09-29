@@ -11,8 +11,8 @@ import {
   readSentAgentSignals,
   updateAgentConnections,
   writeSentAgentSignals,
-  type AgentConnectionContext,
 } from './thread-state.js';
+import type { AgentConnectionContext } from './thread-state.js';
 import type {
   AgentConnectResult,
   AgentConnectionDeltaOp,

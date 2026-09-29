@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type * as SettingsModule from '../../onboarding/settings.js';
 import type { GlobalSettings } from '../../onboarding/settings.js';
 
 function createRequestContext(projectPath: string) {
@@ -22,7 +23,7 @@ function createRequestContext(projectPath: string) {
 
 async function buildWorkspaceWithLspSetting(lsp: GlobalSettings['lsp'], tempDir: string) {
   vi.resetModules();
-  const settings = await vi.importActual<typeof import('../../onboarding/settings.js')>('../../onboarding/settings.js');
+  const settings = await vi.importActual<typeof SettingsModule>('../../onboarding/settings.js');
   vi.doMock('../../onboarding/settings.js', () => ({
     ...settings,
     loadSettings: () => ({ ...settings.loadSettings(), lsp }),

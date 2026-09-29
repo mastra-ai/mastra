@@ -15,6 +15,7 @@ import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
+import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
 import {
   createSourceControlSessionLookup,
@@ -42,16 +43,10 @@ import type { MemorySettingsStorage } from '../storage/domains/memory-settings/b
 import type { ModelPacksStorage } from '../storage/domains/model-packs/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
-import {
-  SourceControlConnectionNotFoundError,
-  type SourceControlStorage,
-  type SourceControlStorageHandle,
-} from '../storage/domains/source-control/base.js';
-import {
-  isAgentActor,
-  type FactoryDispatchFailureCode,
-  type WorkItemsStorage,
-} from '../storage/domains/work-items/base.js';
+import { SourceControlConnectionNotFoundError } from '../storage/domains/source-control/base.js';
+import type { SourceControlStorage, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import { isAgentActor } from '../storage/domains/work-items/base.js';
+import type { FactoryDispatchFailureCode, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { workItemBranch, workItemBranchSource, workItemThreadTitle } from '../work-item-branch.js';
 import { buildAutomationRunRoutes } from './automation-runs.js';
 import { ConfigRoutes } from './config.js';
@@ -128,7 +123,7 @@ export interface FactoryApiRoutesDeps {
   /** Work-item feed service, handed to integrations that ingest platform messages. */
   feed: CommentsDomain;
   factoryTransitionService?: FactoryTransitionService;
-  sessionRetirement?: import('../sandbox/session-retirement.js').SessionRetirementCoordinator;
+  sessionRetirement?: SessionRetirementCoordinator;
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
     prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
@@ -586,7 +581,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   const registrations = deps.integrations ?? [];
   const githubRegistration = registrations.find(({ integration }) => integration.id === 'github');
   const githubStorage = githubRegistration ? deps.sourceControlStorage.forIntegration('github') : undefined;
-  const githubIntegration = githubRegistration?.integration as GithubIntegration | undefined;
   const sourceControlRegistrations = registrations.filter(({ integration }) => integration.versionControl);
   const sourceControlIntegrationIds = [
     ...new Set(['github', ...sourceControlRegistrations.map(({ integration }) => integration.id)]),

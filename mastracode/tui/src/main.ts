@@ -15,10 +15,8 @@ import {
   toActiveBrowserSettings,
 } from '@mastra/code-sdk/onboarding/settings';
 import { formatScaffoldSuccess, scaffoldPlugin } from '@mastra/code-sdk/plugins/scaffold';
-import {
-  stopProcessMemoryDiagnosticsWithTimeout,
-  type ProcessMemoryDiagnostics,
-} from '@mastra/code-sdk/process-memory-diagnostics';
+import { stopProcessMemoryDiagnosticsWithTimeout } from '@mastra/code-sdk/process-memory-diagnostics';
+import type { ProcessMemoryDiagnostics } from '@mastra/code-sdk/process-memory-diagnostics';
 import { setupDebugLogging, truncateLogFile } from '@mastra/code-sdk/utils/debug-log';
 import { drainPipedStdin, reopenStdinFromTTY } from '@mastra/code-sdk/utils/stdin-pipe';
 import { releaseAllThreadLocks } from '@mastra/code-sdk/utils/thread-lock';

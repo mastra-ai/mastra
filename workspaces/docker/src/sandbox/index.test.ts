@@ -20,6 +20,7 @@ import { createSandboxLifecycleTests } from '@internal/workspace-test-utils';
 import { SandboxAbortError, SandboxError, SandboxNotReadyError } from '@mastra/core/workspace';
 import { extract as tarExtract } from 'tar-stream';
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
+import type { DockerTemplate } from '../template/template';
 
 import { DockerSandbox } from './index';
 
@@ -275,7 +276,7 @@ describe('DockerSandbox', () => {
             templateId: 'mastra-template:abc',
             error: overrides.status === 'failed' ? 'step failed' : undefined,
           })),
-        }) as unknown as import('../template/template').DockerTemplate;
+        }) as unknown as DockerTemplate;
 
       it('rejects image and template together', () => {
         expect(() => new DockerSandbox({ image: 'x', template: fakeTemplate() })).toThrow(/mutually exclusive/);

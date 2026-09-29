@@ -2,12 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent, emitSuspendedEvent } from '../../stream-adapter';
+import type * as ResolveRuntimeModule from '../../utils/resolve-runtime';
 import { createDurableToolCallStep } from './tool-call';
 
 vi.mock('../../utils/resolve-runtime', async () => ({
-  restoreRequestContext: (
-    await vi.importActual<typeof import('../../utils/resolve-runtime')>('../../utils/resolve-runtime')
-  ).restoreRequestContext,
+  restoreRequestContext: (await vi.importActual<typeof ResolveRuntimeModule>('../../utils/resolve-runtime'))
+    .restoreRequestContext,
   resolveTool: vi.fn(),
   toolRequiresApproval: vi.fn().mockResolvedValue(false),
   rebuildRunToolsFromMastra: vi.fn().mockResolvedValue(undefined),

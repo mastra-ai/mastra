@@ -3,7 +3,8 @@ import { appendFile, chmod, mkdir, rename, rm, writeFile } from 'node:fs/promise
 import { Session } from 'node:inspector/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { PerformanceObserver, type PerformanceEntry } from 'node:perf_hooks';
+import { PerformanceObserver } from 'node:perf_hooks';
+import type { PerformanceEntry } from 'node:perf_hooks';
 import { arch, platform } from 'node:process';
 import { getHeapSpaceStatistics, getHeapStatistics } from 'node:v8';
 

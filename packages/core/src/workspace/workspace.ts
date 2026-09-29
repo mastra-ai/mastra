@@ -35,6 +35,7 @@
  */
 
 import * as path from 'node:path';
+import type { pMapSkip as pMapSkipSymbol } from 'p-map';
 import type { MastraBrowser } from '../browser';
 import type { IMastraLogger } from '../logger';
 import { RequestContext } from '../request-context';
@@ -1190,7 +1191,7 @@ export class Workspace<
     const { default: pMap, pMapSkip } = await import('p-map');
     return pMap(
       files,
-      async (filePath): Promise<{ filePath: string; docs: IndexDocument[] } | typeof import('p-map').pMapSkip> => {
+      async (filePath): Promise<{ filePath: string; docs: IndexDocument[] } | typeof pMapSkipSymbol> => {
         try {
           const content = (await fs.readFile(filePath, { encoding: 'utf-8' })) as string;
           const chunks = splitIntoChunks(content);
@@ -1205,7 +1206,7 @@ export class Workspace<
                 }));
           return { filePath, docs };
         } catch {
-          return pMapSkip as typeof import('p-map').pMapSkip;
+          return pMapSkip as typeof pMapSkipSymbol;
         }
       },
       { stopOnError: false, concurrency: FS_READ_CONCURRENCY },

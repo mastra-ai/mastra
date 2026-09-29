@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type * as SettingsModule from '../../onboarding/settings.js';
 
 vi.mock('../../tools/index.js', () => ({
   hasParallelKey: () => false,
@@ -14,7 +15,7 @@ vi.mock('../../utils/binaries.js', () => ({
 }));
 
 vi.mock('../../onboarding/settings.js', async importOriginal => ({
-  ...(await importOriginal<typeof import('../../onboarding/settings.js')>()),
+  ...(await importOriginal<typeof SettingsModule>()),
   loadSettings: () => ({}),
 }));
 

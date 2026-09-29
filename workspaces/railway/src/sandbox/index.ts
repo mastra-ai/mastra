@@ -20,7 +20,7 @@ import type {
   SandboxStartResult,
 } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
-import { Sandbox, SandboxFailedError, SandboxNotFoundError, SandboxTimeoutError } from 'railway';
+import { Sandbox, SandboxNotFoundError } from 'railway';
 import type { SandboxNetworkIsolation, SandboxTemplate } from 'railway';
 import { shellQuote } from '../utils/shell-quote';
 import { LOG_PREFIX, RailwayProcessManager } from './process-manager';
@@ -544,6 +544,7 @@ export class RailwaySandbox extends MastraSandbox {
       ...(options.id !== undefined && { id: options.id }),
       ...(this._token !== undefined && { token: this._token }),
       ...(this._environmentId !== undefined && { environmentId: this._environmentId }),
+      sandboxId: forked.id,
       idleTimeoutMinutes: options.idleTimeoutMinutes ?? this._idleTimeoutMinutes,
       networkIsolation: options.networkIsolation ?? this._networkIsolation,
       env: options.env ?? this._env,

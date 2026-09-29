@@ -250,11 +250,11 @@ export async function main(argv: string[]): Promise<void> {
         )
       ).rows;
       for (const row of perThread) {
-        console.log(`OM_RECORDS thread=${row.threadId} count=${row.n}`);
+        console.info(`OM_RECORDS thread=${row.threadId} count=${row.n}`);
       }
-      console.log(`EXTRACTED_THREADS=${counts['mastra_threads']}`);
-      console.log(`EXTRACTED_MESSAGES=${counts['mastra_messages']}`);
-      console.log(`EXTRACTED_OM_RECORDS=${counts['mastra_observational_memory']}`);
+      console.info(`EXTRACTED_THREADS=${counts['mastra_threads']}`);
+      console.info(`EXTRACTED_MESSAGES=${counts['mastra_messages']}`);
+      console.info(`EXTRACTED_OM_RECORDS=${counts['mastra_observational_memory']}`);
     });
   } finally {
     await Promise.all([

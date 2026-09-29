@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { ChunkFrom, type ChunkType, type DataChunkType } from '@mastra/core/stream';
+import { ChunkFrom } from '@mastra/core/stream';
+import type { ChunkType, DataChunkType } from '@mastra/core/stream';
 import { MastraReactProvider, useChat } from '@mastra/react';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';

@@ -1,10 +1,11 @@
 import { STAGEHAND_MODEL_PROVIDERS } from '@mastra/stagehand';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as AuthStorageModule from '../../auth/storage.js';
 
 const authMocks = vi.hoisted(() => ({ get: vi.fn() }));
 
 vi.mock('../../auth/storage.js', async importOriginal => ({
-  ...(await importOriginal<typeof import('../../auth/storage.js')>()),
+  ...(await importOriginal<typeof AuthStorageModule>()),
   AuthStorage: class {
     get = authMocks.get;
   },

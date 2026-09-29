@@ -3,7 +3,8 @@ import { useParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentToolCrumb } from '@/domains/agents/agent-crumb';
 import { AgentToolPanel } from '@/domains/agents/components/AgentToolPanel';
-import { agentCrumb, navCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
+import { agentCrumb, navCrumb } from '@/domains/navigation/crumbs';
+import type { CrumbDef } from '@/domains/navigation/crumbs';
 
 const AgentTool = () => {
   const { toolId, agentId } = useParams();

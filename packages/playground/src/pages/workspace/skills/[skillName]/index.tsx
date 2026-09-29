@@ -11,7 +11,8 @@ import { useParams, useSearchParams } from 'react-router';
 
 import { validateAgentId } from './validate-agent-id';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
-import { decodeRouteParam, navCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
+import { decodeRouteParam, navCrumb } from '@/domains/navigation/crumbs';
+import type { CrumbDef } from '@/domains/navigation/crumbs';
 import { ReferenceViewerDialog } from '@/domains/workspace/components/reference-viewer-dialog';
 import { SkillDetail } from '@/domains/workspace/components/skill-detail';
 import { useWorkspaceFile } from '@/domains/workspace/hooks/use-workspace';

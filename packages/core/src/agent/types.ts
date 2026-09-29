@@ -1,5 +1,4 @@
 import type { GenerateTextOnStepFinishCallback } from '@internal/ai-sdk-v4';
-import type { CallSettings } from '@internal/ai-sdk-v5';
 import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
@@ -33,7 +32,6 @@ import type {
 import type { ModelConfigModelSettings } from '../llm/model/model-settings';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { IMastraLogger } from '../logger';
-import type { ReasoningLevel } from '../loop/types';
 import type { Mastra } from '../mastra';
 import type { VersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';

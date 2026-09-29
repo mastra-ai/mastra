@@ -3,10 +3,11 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type * as SettingsModule from '../onboarding/settings.js';
 
 const settingsMock = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
 vi.mock('../onboarding/settings.js', async importOriginal => ({
-  ...(await importOriginal<typeof import('../onboarding/settings.js')>()),
+  ...(await importOriginal<typeof SettingsModule>()),
   loadSettings: () => settingsMock.value,
 }));
 

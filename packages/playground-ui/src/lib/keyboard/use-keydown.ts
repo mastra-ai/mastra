@@ -1,14 +1,8 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { RefObject } from 'react';
 
-import {
-  createKeyboardDispatcher,
-  isKeyboardConsumer,
-  matchesCombo,
-  parseKeyCombo,
-  type KeyboardLayer,
-  type ParsedKeyCombo,
-  type UseKeydownArgs,
-} from './keyboard-dispatcher';
+import { createKeyboardDispatcher, isKeyboardConsumer, matchesCombo, parseKeyCombo } from './keyboard-dispatcher';
+import type { KeyboardLayer, ParsedKeyCombo, UseKeydownArgs } from './keyboard-dispatcher';
 import { useKeyboardScopeDepth, useKeyboardShortcutsContext } from './keyboard-shortcuts-context';
 
 export { parseKeyCombo, parseKeyBinding, matchesCombo } from './keyboard-dispatcher';

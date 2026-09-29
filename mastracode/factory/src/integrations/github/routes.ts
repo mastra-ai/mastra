@@ -23,7 +23,7 @@ import type { Context } from 'hono';
 import type { RouteAuth } from '../../routes/route.js';
 import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '../../rules/types.js';
 import { requireExec } from '../../sandbox/materialization.js';
-import type { ExecutableSandbox } from '../../sandbox/materialization.js';
+import type { SessionRetirementCoordinator } from '../../sandbox/session-retirement.js';
 import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
 import { peekSessionSandbox } from '../../sandbox/session-sandbox.js';
 import { sanitizeSegment } from '../../sandbox/workdir.js';
@@ -39,10 +39,11 @@ import type {
   SourceControlInstallation,
   SourceControlRepository,
 } from '../../storage/domains/source-control/base.js';
+import type { WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import { listRepositoryCommits } from './commits.js';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.js';
 import type { GithubIntegration } from './integration.js';
-import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
+import { clearGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
 import type { GithubPatKind } from './pat.js';
 
 import { reclaimDeletedSessionSandbox } from './sandbox-release.js';
@@ -137,9 +138,9 @@ export interface MountGithubRoutesOptions {
   emitAudit?: AuditEmitter['emit'];
   /** Factory projects domain — resolves a project's default triage model. */
   projects?: FactoryProjectsStorage;
-  sessionRetirement?: import('../../sandbox/session-retirement.js').SessionRetirementCoordinator;
+  sessionRetirement?: SessionRetirementCoordinator;
   /** Work-items domain — session deletion strips the refs work items hold on it. */
-  workItems?: Pick<import('../../storage/domains/work-items/base.js').WorkItemsStorage, 'clearSessionReferences'>;
+  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences'>;
   /** Authoritative Factory rule ingress for normalized, signature-verified GitHub deliveries. */
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
 }
@@ -160,16 +161,6 @@ function pullRequestNumberFromUrl(value: string, expectedRepo: string): number |
   } catch {
     return undefined;
   }
-}
-
-/**
- * Validate a git branch/ref name against a strict whitelist. The value is later
- * interpolated into a shell `git clone --branch` command, so it must never
- * contain shell metacharacters. We accept only git-ref-safe characters and
- * reject anything else rather than relying on shell quoting alone.
- */
-function isValidGitRef(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0 && value.length <= 255 && /^[A-Za-z0-9_./-]+$/.test(value);
 }
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {

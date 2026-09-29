@@ -1,7 +1,8 @@
 import { InMemoryDB, InMemoryMemory } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as ObservationalMemoryExports from '../observational-memory';
 
-type ObservationalMemoryModule = typeof import('../observational-memory');
+type ObservationalMemoryModule = typeof ObservationalMemoryExports;
 
 async function loadFreshModule(): Promise<ObservationalMemoryModule> {
   vi.resetModules();

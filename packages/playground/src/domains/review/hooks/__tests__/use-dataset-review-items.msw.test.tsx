@@ -8,7 +8,8 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { useReviewItems, type ReviewItemsOptions } from '../use-dataset-review-items';
+import { useReviewItems } from '../use-dataset-review-items';
+import type { ReviewItemsOptions } from '../use-dataset-review-items';
 import {
   DATASET_ID,
   EXPERIMENT_ID,
