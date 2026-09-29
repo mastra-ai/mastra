@@ -23,8 +23,6 @@ Labels are styled by the `Field`: a label beside a `Checkbox`, `Switch` or radio
 
 Added `Form` (`@mastra/playground-ui/components/Form`), built on Base UI Form, with one standard gap between fields. Put a `<FieldError />` with no children in a field that uses `required`, `type="email"`, `min` or `max`: when a user submits an invalid value, the form stops, focuses that field and shows the browser's message there.
 
-Added `InputNumber` (`@mastra/playground-ui/components/InputNumber`), built on Base UI NumberField. It looks like `InputGroup`, with optional `InputNumberDecrement` and `InputNumberIncrement` buttons, ignores non-numeric typing and clamps to `min` and `max`.
-
 **Why**
 
 Before, there were three ways to build a field: the `*FieldBlock` components, `FieldBlock` parts with hand-built ids, and `Label` with `htmlFor`. Mistakes in the id wiring left fields without an accessible name, such as hidden labels that were dropped and radio labels pointing at a `div`. Now there is one way to build a field, and it links the label, description and error for you.
