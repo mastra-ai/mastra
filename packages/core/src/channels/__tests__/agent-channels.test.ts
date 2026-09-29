@@ -638,6 +638,92 @@ describe('AgentChannels', () => {
       expect(requestContext.get('channel')).toBeDefined();
     });
 
+    describe('function-form toolDisplay owns the resolved approval card (#23512)', () => {
+      async function setup(toolDisplay: (event: any) => any) {
+        const adapter = createMockAdapter('slack');
+        const channels = new AgentChannels({ adapters: { slack: { adapter, toolDisplay } } });
+        channels.__setAgent(mockAgent);
+        channels.__setLogger({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any);
+        await channels.initialize(makeMastra());
+        (channels as any).findThreadMapping = vi
+          .fn()
+          .mockResolvedValue({ thread: { id: 'mastra-thread-1', resourceId: 'resource-1' } });
+        (channels as any).pendingApprovalCards.set('tool-call-1', {
+          runId: 'run-1',
+          toolName: 'deleteCustomerTool',
+          args: { id: 'c-1' },
+        });
+        const dispatchApproval = vi.fn().mockResolvedValue(undefined);
+        const dispatchDecline = vi.fn().mockResolvedValue(undefined);
+        (channels as any).dispatchApproval = dispatchApproval;
+        (channels as any).dispatchDecline = dispatchDecline;
+        const click = (actionId: string) =>
+          (channels.sdk as any).processAction({
+            ...makeActionEvent(adapter, actionId),
+            thread: { id: 'channel-1:thread-1', channelId: 'channel-1', isDM: false },
+          });
+        return { adapter, click, dispatchApproval, dispatchDecline };
+      }
+
+      it('edits the card with the renderer output on approve', async () => {
+        const toolDisplay = vi.fn((event: any) =>
+          event.kind === 'approved' ? { kind: 'post', message: 'Onaylandı' } : undefined,
+        );
+        const { adapter, click, dispatchApproval } = await setup(toolDisplay);
+
+        await click('tool_approve:tool-call-1');
+
+        expect(toolDisplay).toHaveBeenCalledWith(
+          expect.objectContaining({
+            kind: 'approved',
+            toolCallId: 'tool-call-1',
+            toolName: 'deleteCustomerTool',
+            args: { id: 'c-1' },
+          }),
+          { mode: 'static', platform: 'slack' },
+        );
+        expect(adapter.editMessage).toHaveBeenCalledWith('channel-1:thread-1', 'card-1', 'Onaylandı');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
+      it('edits the card with the renderer output on deny and passes byUser', async () => {
+        const toolDisplay = vi.fn((event: any) =>
+          event.kind === 'denied' ? { kind: 'post', message: `Reddedildi: ${event.byUser}` } : undefined,
+        );
+        const { adapter, click, dispatchDecline } = await setup(toolDisplay);
+
+        await click('tool_deny:tool-call-1');
+
+        expect(toolDisplay).toHaveBeenCalledWith(
+          expect.objectContaining({ kind: 'denied', byUser: 'Clicker' }),
+          expect.anything(),
+        );
+        expect(adapter.editMessage).toHaveBeenCalledWith('channel-1:thread-1', 'card-1', 'Reddedildi: Clicker');
+        expect(dispatchDecline).toHaveBeenCalledTimes(1);
+      });
+
+      it.each([
+        ['returns undefined', () => undefined],
+        ['returns a blank message', () => ({ kind: 'post', message: '  ' })],
+        [
+          'throws',
+          () => {
+            throw new Error('boom');
+          },
+        ],
+      ])('falls back to the default card when the renderer %s', async (_label, toolDisplay) => {
+        const { adapter, click, dispatchApproval } = await setup(toolDisplay);
+
+        await click('tool_approve:tool-call-1');
+
+        expect(adapter.editMessage).toHaveBeenCalledTimes(1);
+        const message = adapter.editMessage.mock.calls[0]![2];
+        expect(typeof message === 'string' ? message.trim() : message).toBeTruthy();
+        expect(JSON.stringify(message)).toContain('Approved');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+    });
+
     describe('approval requester check', () => {
       async function setup(record: Record<string, unknown>, mastra = makeMastra()) {
         const adapter = createMockAdapter('discord');
