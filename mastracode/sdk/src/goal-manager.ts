@@ -377,6 +377,8 @@ export class GoalManager {
       }
     }
     if (!isCurrent()) return false;
+    // A goal set or cleared during the read replaced this intent; keep the newer state.
+    if (pending && this.pendingDelete !== pending) return false;
     let retriedDelete = false;
     if (pending?.goalId && pending.threadId === threadId && storedId === pending.goalId) {
       retriedDelete = await this.deleteFromThread(state);

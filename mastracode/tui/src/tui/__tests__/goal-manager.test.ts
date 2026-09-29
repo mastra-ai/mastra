@@ -434,6 +434,28 @@ describe('GoalManager adapter', () => {
     expect(agent.clearObjective).not.toHaveBeenCalled();
   });
 
+  it('does not retry a clear that a new goal cancelled while the reload read was in flight', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+    const goal = await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+    manager.clear();
+    agent.clearObjective.mockRejectedValueOnce(new Error('storage down'));
+    expect(await manager.deleteFromThread(state)).toBe(false);
+
+    let releaseRead!: () => void;
+    agent.getObjective.mockReturnValueOnce(
+      new Promise(resolve => (releaseRead = () => resolve(makeRecord({ id: goal!.id })))),
+    );
+    const reload = manager.loadFromThread(state);
+    await manager.setGoal(state, 'new goal', '__GATEWAY_OPENAI_MODEL__');
+    releaseRead();
+    await reload;
+
+    expect(agent.clearObjective).toHaveBeenCalledTimes(1);
+    expect(manager.getGoal()?.objective).toBe('new goal');
+  });
+
   it('loads, and does not delete, a stored goal with a different id than the cleared one', async () => {
     const agent = createAgent();
     const state = createState(agent);
