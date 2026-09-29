@@ -748,4 +748,49 @@ describe('toModelOutput after processToolResult', () => {
 
     expect(chunks.find(c => c.type === 'tool-result')?.payload.result).toBe('hits');
   });
+
+  it('keeps a rewrite of a client tool result that reused the id', async () => {
+    const prompts: unknown[] = [];
+    const mapper = vi.fn((output: unknown) => ({ type: 'text' as const, value: `mapped: ${String(output)}` }));
+    const agent = new Agent({
+      id: 'mo-reused-id-rewrite',
+      name: 'mo-reused-id-rewrite',
+      instructions: 'x',
+      model: recordingModel(prompts) as LanguageModelV2,
+      tools: { getSecret: reusedIdTool(mapper) },
+      outputProcessors: [redactor as any],
+    });
+    const result = await agent.stream(reusedIdHistory as any, { maxSteps: 3 });
+    const chunks: any[] = [];
+    for await (const c of result.fullStream) chunks.push(c);
+
+    expect(chunks.find(c => c.type === 'tool-result')?.payload.result).toBe('[REDACTED]');
+    expect(mapper.mock.calls.map(c => c[0])).toEqual(['[REDACTED]']);
+  });
+
+  // A processor that writes the same value an earlier turn stored must still count as a rewrite.
+  it('keeps a same-stream provider rewrite that reused the id and equals the earlier value', async () => {
+    const constant = {
+      id: 'constant',
+      async processToolResult({ toolCallId, toolName, messageList }: any) {
+        messageList.updateToolInvocation({
+          type: 'tool-invocation',
+          toolInvocation: { state: 'result', toolCallId, toolName, args: {}, result: 'OLD-HITS' },
+        });
+      },
+    };
+    const agent = new Agent({
+      id: 'mo-same-stream-reused-rewrite',
+      name: 'mo-same-stream-reused-rewrite',
+      instructions: 'x',
+      model: sameStreamReusedIdModel() as LanguageModelV2,
+      tools: { web_search: webSearch },
+      outputProcessors: [constant as any],
+    });
+    const stream = await agent.stream(providerReusedIdHistory as any, { maxSteps: 1 });
+    const chunks: any[] = [];
+    for await (const c of stream.fullStream) chunks.push(c);
+
+    expect(chunks.find(c => c.type === 'tool-result')?.payload.result).toBe('OLD-HITS');
+  });
 });
