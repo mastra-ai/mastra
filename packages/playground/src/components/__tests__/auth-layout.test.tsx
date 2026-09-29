@@ -10,10 +10,6 @@ import { Login } from '@/pages/login';
 import { SignUp } from '@/pages/signup';
 import { server } from '@/test/msw-server';
 
-vi.mock('@/store/playground-store', () => ({
-  usePlaygroundStore: () => ({ requestContext: undefined }),
-}));
-
 const BASE_URL = 'http://localhost:4111';
 
 function renderAuthRoute(path: string) {

@@ -392,6 +392,15 @@ describe('DataListCreatedCell', () => {
     expect(container.textContent).toBe('May 19, 2020, 9:05:03 AM');
   });
 
+  it('omits the year from the visible text when given the day preset, keeping it in the title', () => {
+    const { container } = render(
+      <DataListCreatedCell timestamp={new Date(2020, 7, 31, 13, 7, 47, 657)} preset="day-time-seconds" />,
+    );
+
+    expect(container.textContent).toBe('Aug 31, 1:07:47 PM');
+    expect(cellOf(container).title).toBe('Aug 31, 2020, 1:07:47 PM');
+  });
+
   it('shows nothing for a date it cannot read', () => {
     const { container } = render(<DataListCreatedCell timestamp="not a date" />);
 

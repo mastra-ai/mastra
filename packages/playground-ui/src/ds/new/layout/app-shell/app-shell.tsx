@@ -13,11 +13,15 @@ export function AppShell({ children, className, mobileHeader, ref, sidebar, ...p
     <div
       ref={ref}
       data-slot="app-shell"
-      className={cn('h-full min-h-0', sidebar && 'lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]', className)}
+      className={cn(
+        'h-full min-h-0',
+        sidebar && 'lg:grid lg:grid-cols-[auto_minmax(0,1fr)] lg:grid-rows-[1fr]',
+        className,
+      )}
       {...props}
     >
       {sidebar}
-      <div data-slot="app-shell-content" className="flex h-full min-h-0 flex-col">
+      <div data-slot="app-shell-content" className="flex h-full min-h-0 min-w-0 flex-col">
         {mobileHeader}
         <div
           data-slot="app-shell-body"

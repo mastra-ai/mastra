@@ -43,6 +43,11 @@ test.describe('Agent detail page', () => {
       const overview = page.getByTestId('agent-overview-panel');
       await expect(overview).not.toBeVisible();
 
+      // The composer auto-focuses and swallows `]` as text, so move focus out of it first.
+      const composer = page.getByPlaceholder('Enter your message...');
+      await expect(composer).toBeFocused();
+      await composer.blur();
+
       await page.keyboard.press(']');
       await expect(overview).toBeVisible();
       await expect(page.getByRole('heading', { name: 'System Prompt' })).toBeVisible({ timeout: 10000 });

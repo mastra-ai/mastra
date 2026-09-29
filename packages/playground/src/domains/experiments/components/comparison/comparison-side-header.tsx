@@ -85,12 +85,10 @@ export function ComparisonSideHeader({
               <TargetIcon /> {experiment.targetId}
             </TextAndIcon>
           )}
-          <span className={cn(versionMismatch && 'text-accent6')}>
-            <TextAndIcon>
-              <LayersIcon /> v{experiment.datasetVersion ?? '—'}
-              {versionMismatch && ' · different dataset version'}
-            </TextAndIcon>
-          </span>
+          <TextAndIcon className={cn(versionMismatch && 'text-accent6')}>
+            <LayersIcon /> v{experiment.datasetVersion ?? '—'}
+            {versionMismatch && ' · different dataset version'}
+          </TextAndIcon>
           {createdAt && (
             <TextAndIcon>
               <CalendarIcon /> {formatDate(createdAt, 'date-time')}

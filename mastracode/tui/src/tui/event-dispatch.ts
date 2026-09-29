@@ -2,7 +2,12 @@
  * Event dispatcher: maps AgentControllerEvent types to extracted handler functions.
  */
 import { getCurrentGitBranchAsync } from '@mastra/code-sdk/utils/project';
-import type { AgentControllerEvent, AgentControllerThread, MastraDBMessage } from '@mastra/core/agent-controller';
+import type {
+  AgentControllerEvent,
+  AgentControllerThread,
+  MastraDBMessage,
+  MastraMessagePart,
+} from '@mastra/core/agent-controller';
 import type { TaskItemSnapshot } from '@mastra/core/signals';
 import type { AskUserSelectionMode } from '@mastra/core/tools';
 
@@ -51,6 +56,7 @@ import type { EventHandlerContext } from './handlers/types.js';
 import { flushRender } from './render-scheduler.js';
 import type { TUIState } from './state.js';
 import { getGithubPrSubscriptionsFromMetadata } from './state.js';
+import { isEventRoutedToCurrentThread } from './thread-routing.js';
 import { setCurrentThreadTitle } from './thread-title.js';
 
 /**
@@ -117,17 +123,55 @@ function applyMessageUpdate(
   return { ...message, content: { ...message.content, parts } };
 }
 
+/**
+ * Providers sometimes hold a whole response and send it at once after generating it,
+ * so it arrives within a few milliseconds and its generation time is unobservable.
+ * Such steps keep the last reading instead of dividing by the delivery time.
+ */
+const MIN_DECODE_WINDOW_SEC = 0.05;
+
+/** An empty thinking or text block: the model has started generating it. */
+function isGenerationBlockStart(
+  part: MastraMessagePart | undefined,
+): part is Extract<MastraMessagePart, { type: 'text' | 'reasoning' }> {
+  if (part?.type === 'text') return part.text === '';
+  if (part?.type === 'reasoning') {
+    return part.reasoning === '' && part.details.every(detail => detail.type !== 'text' || detail.text === '');
+  }
+  return false;
+}
+
+/**
+ * Opens the step's decode window when a block starts generating rather than at its first
+ * delta: providers can hold a block and deliver it in one late burst (notably summarized
+ * thinking), which would otherwise divide the whole block by milliseconds. The window is
+ * bound to the assistant message, so a step whose usage never arrived cannot leave its
+ * interval open over the next step. Tool arguments stream before their step's
+ * message_start, so they carry the message id; unstamped ones (older servers) keep the
+ * current window.
+ */
+function markGenerationStart(state: TUIState, messageId: string | undefined, isReasoning: boolean, now = Date.now()) {
+  if (messageId !== undefined && state.decodeMessageId !== messageId) {
+    state.decodeMessageId = messageId;
+    state.decodeStartedAt = now;
+    state.decodeLastDeltaAt = 0;
+    state.decodeHasReasoning = isReasoning;
+    return;
+  }
+  if (state.decodeStartedAt === 0) state.decodeStartedAt = now;
+  // Thinking can start after the window opened on text; the window measured it, so
+  // usage_update must not subtract it as if it had never streamed.
+  if (isReasoning) state.decodeHasReasoning = true;
+}
+
 export async function dispatchEvent(
   event: AgentControllerEvent,
   ectx: EventHandlerContext,
   state: TUIState,
 ): Promise<void> {
-  if (
-    'toolCallId' in event &&
-    'threadId' in event &&
-    event.threadId &&
-    (state.pendingNewThread || event.threadId !== state.session.thread.getId())
-  ) {
+  // Tool events carry the thread that produced them; a call parked on a detached
+  // thread must not drive the current thread's UI.
+  if (!isEventRoutedToCurrentThread(event, state)) {
     return;
   }
 
@@ -180,6 +224,11 @@ export async function dispatchEvent(
 
     case 'message_start':
       if (isMessageForCurrentThread(event.message, state)) {
+        // The first thinking or text block of a message arrives inside its message_start.
+        const firstPart = event.message.content.parts.at(-1);
+        if (event.message.role === 'assistant' && isGenerationBlockStart(firstPart)) {
+          markGenerationStart(state, event.message.id, firstPart.type === 'reasoning');
+        }
         handleMessageStart(ectx, event.message);
       }
       break;
@@ -192,24 +241,15 @@ export async function dispatchEvent(
       if (!updated) break;
 
       // Measure streamed generation, including thinking, but never replayed tool results.
-      // The window is bound to the assistant message, so a step whose usage never arrived
-      // cannot leave its interval open over the next step's tool execution.
-      if (
+      if (event.event.type === 'part' && isGenerationBlockStart(event.event.part)) {
+        markGenerationStart(state, event.id, event.event.part.type === 'reasoning');
+      } else if (
         (event.event.type === 'text-delta' || event.event.type === 'reasoning-delta') &&
         event.event.delta.length > 0
       ) {
         const now = Date.now();
         state.agentRunLastStreamPartAt = now;
-        const isReasoning = event.event.type === 'reasoning-delta';
-        if (state.decodeMessageId !== event.id) {
-          state.decodeMessageId = event.id;
-          state.decodeStartedAt = now;
-          state.decodeHasReasoning = isReasoning;
-        } else if (isReasoning) {
-          // Thinking can start after the window opened on text; the whole window measured
-          // it, so usage_update must not subtract it as if it had never streamed.
-          state.decodeHasReasoning = true;
-        }
+        markGenerationStart(state, event.id, event.event.type === 'reasoning-delta', now);
         state.decodeLastDeltaAt = now;
         ectx.updateStatusLine();
       }
@@ -242,7 +282,9 @@ export async function dispatchEvent(
     case 'tool_approval_required':
       trackInteractivePrompt(ectx, 'tool_approval_required', {
         toolName: event.toolName,
-        threadId: state.session.thread.getId(),
+        // The producer's thread id, not the session's: they only differ if the
+        // call belongs to a detached thread, which the routing guard drops.
+        threadId: event.threadId ?? state.session.thread.getId(),
         resourceId: state.session.identity.getResourceId(),
       });
       handleToolApprovalRequired(ectx, event.toolCallId, event.toolName, event.args);
@@ -270,6 +312,7 @@ export async function dispatchEvent(
           resourceId: state.session.identity.getResourceId(),
         });
       }
+      markGenerationStart(state, event.messageId, false);
       handleToolInputStart(ectx, event.toolCallId, event.toolName);
       break;
 
@@ -278,15 +321,7 @@ export async function dispatchEvent(
       if (typeof event.argsTextDelta === 'string') {
         if (event.argsTextDelta.length > 0) {
           const now = Date.now();
-          // Arguments stream before this step's message_start, so the stamped id is what
-          // attributes them to a step. Unstamped (older server) keeps the existing window.
-          if (event.messageId !== undefined && state.decodeMessageId !== event.messageId) {
-            state.decodeMessageId = event.messageId;
-            state.decodeStartedAt = now;
-            state.decodeHasReasoning = false;
-          } else if (state.decodeStartedAt === 0) {
-            state.decodeStartedAt = now;
-          }
+          markGenerationStart(state, event.messageId, false, now);
           state.decodeLastDeltaAt = now;
         }
         handleToolInputDelta(ectx, event.toolCallId, event.argsTextDelta);
@@ -428,7 +463,7 @@ export async function dispatchEvent(
       // latest step separate for context auditing; cumulative usage is billing data.
       state.latestRequestPromptTokens = event.usage.promptTokens ?? 0;
       // Provider output already includes reasoning. Measure only streamed generation,
-      // not initial waiting, tool execution, or usage delivery. Buffered bursts may spike.
+      // not initial waiting, tool execution, or usage delivery.
       const completionTokens = event.usage.completionTokens ?? 0;
       const reportedReasoning = event.usage.reasoningTokens ?? 0;
       // Thinking that never streamed has no observable duration, so measure the output
@@ -436,7 +471,7 @@ export async function dispatchEvent(
       const stepTokens =
         reportedReasoning > 0 && !state.decodeHasReasoning ? completionTokens - reportedReasoning : completionTokens;
       const decodeSec = (state.decodeLastDeltaAt - state.decodeStartedAt) / 1000;
-      if (state.decodeStartedAt > 0 && decodeSec > 0 && stepTokens > 0) {
+      if (state.decodeStartedAt > 0 && decodeSec >= MIN_DECODE_WINDOW_SEC && stepTokens > 0) {
         const instantaneous = stepTokens / decodeSec;
         const alpha = 0.3;
         const ema = state.tokensPerSec > 0 ? alpha * instantaneous + (1 - alpha) * state.tokensPerSec : instantaneous;
