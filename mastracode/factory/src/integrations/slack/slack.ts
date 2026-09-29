@@ -680,14 +680,6 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
   };
 }
 
-/**
- * The models of the sender's active model pack — the models that user chose
- * for themselves — or `undefined` when they have no pack.
- *
- * Best-effort by design: an uninitialized model-packs domain, a read failure, or
- * a pack saved without a build model all mean "no personal preference", which
- * falls through to the factory default rather than failing the dispatch.
- */
 const SUBAGENT_TYPES = ['explore', 'plan', 'execute'] as const;
 const pinnedSubagentModelKey = (agentType: string) => `slackSubagentModelId_${agentType}`;
 
@@ -710,6 +702,14 @@ async function applySubagentModel(
   }
 }
 
+/**
+ * The models of the sender's active model pack — the models that user chose
+ * for themselves — or `undefined` when they have no pack.
+ *
+ * Best-effort by design: an uninitialized model-packs domain, a read failure, or
+ * a pack saved without a build model all mean "no personal preference", which
+ * falls through to the factory default rather than failing the dispatch.
+ */
 async function resolveActivePackModels(
   modelPacks: ModelPacksStorage | undefined,
   owner: { orgId: string; userId: string },
