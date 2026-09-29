@@ -2402,7 +2402,7 @@ export class EventedRun<
     const claimed = await workflowsStore.updateWorkflowState({
       workflowName: this.workflowId,
       runId: this.runId,
-      opts: { status: 'running', expectedStatus: 'suspended' },
+      opts: { status: 'pending', expectedStatus: 'suspended' },
     });
 
     if (claimed) {
@@ -2432,6 +2432,14 @@ export class EventedRun<
         expectedStatus: 'suspended',
         actualStatus: current.status ?? 'unknown',
       },
+    });
+  }
+
+  async #releaseResumeClaim(workflowsStore: WorkflowsStorage): Promise<void> {
+    await workflowsStore.updateWorkflowState({
+      workflowName: this.workflowId,
+      runId: this.runId,
+      opts: { status: 'suspended', expectedStatus: 'pending' },
     });
   }
 
@@ -2613,6 +2621,10 @@ export class EventedRun<
         abortController: this.abortController,
         perStep: params.perStep,
         outputOptions: params.outputOptions,
+      })
+      .catch(async error => {
+        await this.#releaseResumeClaim(workflowsStore);
+        throw error;
       })
       .then(result => {
         if (result.status !== 'suspended') {

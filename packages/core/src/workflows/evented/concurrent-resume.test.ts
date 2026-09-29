@@ -72,6 +72,44 @@ describe('evented concurrent resume', () => {
       });
       expect(afterSetupFailure?.status).toBe('suspended');
 
+      const executeSpy = vi
+        .spyOn((run as any).executionEngine, 'execute')
+        .mockRejectedValueOnce(new Error('publish boom'));
+      await expect(run.resume({ step: approval, resumeData: { approvedBy: 'failed-publish' } })).rejects.toThrow(
+        'publish boom',
+      );
+      executeSpy.mockRestore();
+
+      const afterPublishFailure = await workflowsStore.loadWorkflowSnapshot({
+        workflowName: workflow.id,
+        runId: run.runId,
+      });
+      expect(afterPublishFailure?.status).toBe('suspended');
+
+      const startedExecuteSpy = vi.spyOn((run as any).executionEngine, 'execute').mockImplementationOnce(async () => {
+        await workflowsStore.updateWorkflowState({
+          workflowName: workflow.id,
+          runId: run.runId,
+          opts: { status: 'running', expectedStatus: 'pending' },
+        });
+        throw new Error('engine failed after start');
+      });
+      await expect(run.resume({ step: approval, resumeData: { approvedBy: 'started' } })).rejects.toThrow(
+        'engine failed after start',
+      );
+      startedExecuteSpy.mockRestore();
+
+      const afterStartedFailure = await workflowsStore.loadWorkflowSnapshot({
+        workflowName: workflow.id,
+        runId: run.runId,
+      });
+      expect(afterStartedFailure?.status).toBe('running');
+      await workflowsStore.updateWorkflowState({
+        workflowName: workflow.id,
+        runId: run.runId,
+        opts: { status: 'suspended', expectedStatus: 'running' },
+      });
+
       const updateWorkflowState = workflowsStore.updateWorkflowState.bind(workflowsStore);
       let claimAttempts = 0;
       let releaseClaims!: () => void;
