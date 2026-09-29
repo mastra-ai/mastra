@@ -23,7 +23,8 @@ vi.mock('../../onboarding/settings.js', () => ({
   })),
 }));
 
-vi.mock('../project.js', () => ({
+vi.mock('../project.js', async importOriginal => ({
+  getAppDataDir: (await importOriginal<typeof import('../project.js')>()).getAppDataDir,
   detectProject: vi.fn(() => ({
     resourceId: 'res-1',
     name: 'proj',
@@ -58,7 +59,7 @@ vi.mock('../storage-maintenance.js', async importOriginal => {
 });
 
 import { loadSettings } from '../../onboarding/settings.js';
-import { acquireMaintenanceLock, MaintenanceLockError } from '../maintenance-lock.js';
+import { acquireMaintenanceLock, getMaintenanceLockPath, MaintenanceLockError } from '../maintenance-lock.js';
 import { detectProject, getStorageConfig } from '../project.js';
 import { runPruneCommand } from '../prune-cli.js';
 import { createStorage, createVectorStore } from '../storage-factory.js';
@@ -304,5 +305,33 @@ describe('runPruneCommand', () => {
     await runPruneCommand([]);
 
     expect(logged.join('\n')).toContain('Using LibSQL fallback.');
+  });
+
+  it('loads the project .env before taking the maintenance lock, so MASTRA_APP_DATA_DIR is honored', async () => {
+    const { acquireMaintenanceLock: realAcquire } =
+      await vi.importActual<typeof import('../maintenance-lock.js')>('../maintenance-lock.js');
+    vi.mocked(acquireMaintenanceLock).mockImplementation(realAcquire);
+
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-prune-env-lock-'));
+    const appDir = path.join(cwd, 'app-data');
+    fs.writeFileSync(path.join(cwd, '.env'), `MASTRA_APP_DATA_DIR=${appDir}\n`);
+    // A live session registered in the configured dir (the parent test runner stands in for it).
+    fs.mkdirSync(path.join(appDir, 'locks', 'sessions'), { recursive: true });
+    fs.writeFileSync(path.join(appDir, 'locks', 'sessions', `${process.ppid}.pid`), String(process.ppid));
+    vi.spyOn(process, 'cwd').mockReturnValue(cwd);
+    const prev = process.env.MASTRA_APP_DATA_DIR;
+    delete process.env.MASTRA_APP_DATA_DIR;
+    try {
+      const code = await runPruneCommand([]);
+
+      expect(getMaintenanceLockPath()).toBe(path.join(appDir, 'locks', 'maintenance.lock'));
+      expect(code).toBe(1);
+      expect(errored.join('\n')).toContain(`PID ${process.ppid}`);
+      expect(createStorage).not.toHaveBeenCalled();
+    } finally {
+      if (prev === undefined) delete process.env.MASTRA_APP_DATA_DIR;
+      else process.env.MASTRA_APP_DATA_DIR = prev;
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
   });
 });

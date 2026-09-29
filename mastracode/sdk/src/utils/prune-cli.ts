@@ -60,6 +60,15 @@ export async function runPruneCommand(args: string[]): Promise<number> {
   const vacuum = flags.has('--vacuum');
   const keepMemory = flags.has('--keep-memory');
 
+  // Startup loads the project .env before registering its session and resolving
+  // storage (MASTRA_APP_DATA_DIR, MASTRA_DB_PATH, ...). Do the same before taking
+  // the lock, or prune locks/scans a different app data dir or opens another DB.
+  try {
+    process.loadEnvFile(path.join(process.cwd(), '.env'));
+  } catch {
+    // No .env file — keys may be in the shell environment
+  }
+
   // Maintenance needs the database to itself: hold the lock for the whole run
   // and refuse while any mastracode session is registered.
   let releaseLock: () => void;
@@ -78,14 +87,6 @@ export async function runPruneCommand(args: string[]): Promise<number> {
 }
 
 async function prune({ vacuum, keepMemory }: { vacuum: boolean; keepMemory: boolean }): Promise<number> {
-  // Startup loads the project .env before resolving storage (MASTRA_DB_PATH,
-  // MASTRA_STORAGE_BACKEND, ...); do the same or prune targets another database.
-  try {
-    process.loadEnvFile(path.join(process.cwd(), '.env'));
-  } catch {
-    // No .env file — keys may be in the shell environment
-  }
-
   // Resolve storage exactly the way startup does, so prune targets the same
   // database the TUI uses — honoring MASTRA_DB_PATH / MASTRA_STORAGE_BACKEND,
   // global settings, and a project's own .mastracode/database.json.
