@@ -404,21 +404,62 @@ describe('createSourceControlTools', () => {
       return { setup, run };
     }
 
+    async function schemaError(input: Record<string, unknown>) {
+      const { setup } = await submit({});
+      const tools = createSourceControlTools({
+        requestContext: requestContext(),
+        providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
+        audit: setup.audit,
+      });
+      const parsed = (tools.source_control_review_change_request!.inputSchema as any).safeParse({
+        changeRequestId: 17,
+        ...input,
+      });
+      expect(parsed.success).toBe(false);
+      return parsed.error.issues.map((issue: { message: string }) => issue.message).join('\n');
+    }
+
     it('rejects an approval whose body requests changes', async () => {
-      const { setup, run } = await submit({ event: 'approve', body: 'Verdict: request changes\n\nFix it.' });
-      await expect(run).rejects.toThrow(/Verdict: request changes.*event is "approve"/);
-      expect(setup.createReview).not.toHaveBeenCalled();
+      expect(await schemaError({ event: 'approve', body: 'Verdict: request changes\n\nFix it.' })).toMatch(
+        /Verdict: request changes.*event is "approve"/,
+      );
     });
 
     it('rejects a request-changes review whose body approves', async () => {
-      const { setup, run } = await submit({ event: 'request-changes', body: 'Verdict: approve\n\nLGTM.' });
-      await expect(run).rejects.toThrow(/Verdict: approve.*event is "request-changes"/);
-      expect(setup.createReview).not.toHaveBeenCalled();
+      expect(await schemaError({ event: 'request-changes', body: 'Verdict: approve\n\nLGTM.' })).toMatch(
+        /Verdict: approve.*event is "request-changes"/,
+      );
     });
 
     it('rejects a comment review whose body approves', async () => {
-      const { run } = await submit({ event: 'comment', body: 'Verdict: approve\n\nLGTM.' });
-      await expect(run).rejects.toThrow(/event is "comment"/);
+      expect(await schemaError({ event: 'comment', body: 'Verdict: approve\n\nLGTM.' })).toMatch(/event is "comment"/);
+    });
+
+    it.each(['`ce79aaafad`', head.slice(0, 10), 'the latest commit'])(
+      'rejects a reviewed head that is not a full SHA: %s',
+      async value => {
+        expect(await schemaError({ event: 'approve', body: `Verdict: approve\nReviewed head: ${value}\n` })).toMatch(
+          /full 40- or 64-character commit SHA/,
+        );
+      },
+    );
+
+    it('accepts consistent verdict and full-SHA bodies in the schema', async () => {
+      const { setup } = await submit({});
+      const tools = createSourceControlTools({
+        requestContext: requestContext(),
+        providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
+        audit: setup.audit,
+      });
+      const schema = tools.source_control_review_change_request!.inputSchema as any;
+      for (const input of [
+        { event: 'approve', body: `Verdict: approve\nReviewed head: ${head}\n` },
+        { event: 'approve', body: `Verdict: approve\nReviewed head: ${'a'.repeat(64)}\n` },
+        { event: 'comment', body: 'Verdict: request changes\n\nFix it.' },
+        { event: 'comment', body: 'Looks fine overall, one question inline.' },
+      ]) {
+        expect(schema.safeParse({ changeRequestId: 17, ...input }).success).toBe(true);
+      }
     });
 
     it.each([
@@ -435,9 +476,9 @@ describe('createSourceControlTools', () => {
     it('rejects a body whose reviewed head is not the current head', async () => {
       const { setup, run } = await submit({
         event: 'approve',
-        body: 'Verdict: approve\nReviewed head: `ce79aaafad`\n\nLGTM.',
+        body: `Verdict: approve\nReviewed head: \`${'c'.repeat(40)}\`\n\nLGTM.`,
       });
-      await expect(run).rejects.toThrow(/Reviewed head: ce79aaafad.*current change-request head/);
+      await expect(run).rejects.toThrow(/current change-request head/);
       expect(setup.createReview).not.toHaveBeenCalled();
     });
 
@@ -455,7 +496,7 @@ describe('createSourceControlTools', () => {
       const { setup, run } = await submit({
         event: 'approve',
         commitId: head,
-        body: `Verdict: approve\nReviewed head: ${head.slice(0, 10)}\n`,
+        body: `Verdict: approve\nReviewed head: ${head.toUpperCase()}\n`,
       });
       await expect(run).resolves.toEqual({ id: 'review-1' });
       expect(setup.createReview).toHaveBeenCalledOnce();

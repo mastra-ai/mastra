@@ -42,29 +42,27 @@ interface SessionTarget {
 
 type ReviewEvent = 'approve' | 'request-changes' | 'comment';
 
-/** Rejects a review whose leading `Verdict:` line contradicts the submitted event. */
-export function assertVerdictMatchesEvent(event: ReviewEvent, body: string | undefined): void {
+/** Returns why a review's leading `Verdict:` line contradicts the submitted event, if it does. */
+export function verdictEventMismatch(event: ReviewEvent, body: string | undefined): string | undefined {
   const firstLine = body?.trimStart().split('\n', 1)[0] ?? '';
   const verdict = /^verdict:\s*(approve|request changes)\b/i.exec(firstLine)?.[1]?.toLowerCase();
-  if (!verdict) return;
+  if (!verdict) return undefined;
   // GitLab has no request-changes state, so a blocking verdict is published as a comment review.
   const allowed: ReviewEvent[] = verdict === 'approve' ? ['approve'] : ['request-changes', 'comment'];
-  if (!allowed.includes(event)) {
-    throw new Error(
-      `Review body opens with "Verdict: ${verdict}" but event is "${event}". Nothing was posted. Use event ${allowed
-        .map(e => `"${e}"`)
-        .join(' or ')} for this body, or regenerate the body for the verdict you intend.`,
-    );
-  }
+  if (allowed.includes(event)) return undefined;
+  return `Review body opens with "Verdict: ${verdict}" but event is "${event}". Nothing was posted. Use event ${allowed
+    .map(e => `"${e}"`)
+    .join(' or ')} for this body, or regenerate the body for the verdict you intend.`;
 }
 
-function reviewedHeadFromBody(body: string | undefined): string | undefined {
-  return /^[\s*_>-]*reviewed head[*_]*:[*_]*\s*`?([0-9a-f]{7,40})\b/im.exec(body ?? '')?.[1]?.toLowerCase();
-}
+const REVIEWED_HEAD_LINE = /^[\s*_>-]*reviewed head[*_]*:[*_]*\s*(.*)$/im;
+const FULL_SHA = /^`?([0-9a-f]{40}|[0-9a-f]{64})`?(?:\s|$)/i;
 
-function shaMatches(reviewed: string, actual: string): boolean {
-  const full = actual.toLowerCase();
-  return full.startsWith(reviewed) || reviewed.startsWith(full);
+/** Returns the full SHA named by a `Reviewed head:` line, `null` when the line is malformed, or `undefined` when absent. */
+export function reviewedHeadFromBody(body: string | undefined): string | null | undefined {
+  const line = REVIEWED_HEAD_LINE.exec(body ?? '');
+  if (!line) return undefined;
+  return FULL_SHA.exec(line[1]!.trim())?.[1]?.toLowerCase() ?? null;
 }
 
 function authIdentity(requestContext: RequestContext) {
@@ -500,9 +498,19 @@ export function createSourceControlTools({
         .refine(input => input.event === 'approve' || Boolean(input.body?.trim()), {
           path: ['body'],
           message: 'request-changes and comment reviews require a body.',
+        })
+        .superRefine((input, ctx) => {
+          const mismatch = verdictEventMismatch(input.event, input.body);
+          if (mismatch) ctx.addIssue({ code: 'custom', path: ['body'], message: mismatch });
+          if (reviewedHeadFromBody(input.body) === null) {
+            ctx.addIssue({
+              code: 'custom',
+              path: ['body'],
+              message: '"Reviewed head:" must name the full 40- or 64-character commit SHA.',
+            });
+          }
         }),
       execute: async input => {
-        assertVerdictMatchesEvent(input.event, input.body);
         const target = await withTarget();
         const reviewedHead = reviewedHeadFromBody(input.body);
         if (reviewedHead) {
@@ -517,7 +525,7 @@ export function createSourceControlTools({
             ['current change-request head', pullRequest.headSha],
             ['commitId', input.commitId],
           ] as const) {
-            if (sha && !shaMatches(reviewedHead, sha)) {
+            if (sha && sha.toLowerCase() !== reviewedHead) {
               throw new Error(
                 `Review body says "Reviewed head: ${reviewedHead}" but the ${label} is ${sha}. Nothing was posted. Re-review the current head and regenerate the body before publishing.`,
               );
