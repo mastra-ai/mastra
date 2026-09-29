@@ -139,9 +139,11 @@ export const ManageConnectionForm = ({
             </AlertDialog.Description>
           </AlertDialog.Header>
           {disconnectConnection.error ? (
-            <div role="alert">
-              <Notice variant="destructive">{String(disconnectConnection.error)}</Notice>
-            </div>
+            <AlertDialog.Body>
+              <div role="alert">
+                <Notice variant="destructive">{String(disconnectConnection.error)}</Notice>
+              </div>
+            </AlertDialog.Body>
           ) : null}
           <AlertDialog.Footer>
             <AlertDialog.Cancel

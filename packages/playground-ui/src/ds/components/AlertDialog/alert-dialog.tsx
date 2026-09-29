@@ -1,8 +1,22 @@
 import { AlertDialog as AlertDialogPrimitive } from '@base-ui/react/alert-dialog';
 import * as React from 'react';
 
-import { buttonVariants } from '@/ds/components/Button/Button';
-import { dialogSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { Button } from '@/ds/components/Button';
+import {
+  DialogBody,
+  DialogCancel,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/ds/components/Dialog';
+import { dialogActionLayoutClasses, dialogActionSizeClasses } from '@/ds/components/Dialog/dialog-context';
+import {
+  dialogContentSizeClasses,
+  dialogOverlayClassName,
+  dialogPopupClassName,
+} from '@/ds/components/Dialog/dialog-shell';
+import type { DialogSize } from '@/ds/components/Dialog/dialog-shell';
 import { asChildRenderProps } from '@/lib/as-child';
 import { cn } from '@/lib/utils';
 
@@ -49,113 +63,64 @@ type AlertDialogOverlayProps = Omit<AlertDialogPrimitive.Backdrop.Props, 'classN
 };
 
 const AlertDialogOverlay = React.forwardRef<HTMLDivElement, AlertDialogOverlayProps>(({ className, ...props }, ref) => (
-  <AlertDialogPrimitive.Backdrop
-    ref={ref}
-    className={cn('dialog-backdrop-motion fixed inset-0 z-50 bg-scrim backdrop-blur-xs', className)}
-    {...props}
-  />
+  <AlertDialogPrimitive.Backdrop ref={ref} className={cn(dialogOverlayClassName, className)} {...props} />
 ));
 AlertDialogOverlay.displayName = 'AlertDialogOverlay';
 
 type AlertDialogContentProps = Omit<AlertDialogPrimitive.Popup.Props, 'className'> & {
   className?: string;
+  size?: DialogSize;
 };
 
-const AlertDialogContent = React.forwardRef<HTMLDivElement, AlertDialogContentProps>(({ className, ...props }, ref) => (
-  <AlertDialogPortal>
-    <AlertDialogOverlay />
-    <AlertDialogPrimitive.Popup
-      ref={ref}
-      data-slot="alert-dialog-content"
-      className={cn(
-        'dialog-popup-motion',
-        'fixed top-[50%] left-[50%] z-50 grid translate-[-50%]',
-        'w-full max-w-[calc(100%-2rem)] sm:max-w-lg',
-        'rounded-xl backdrop-blur-md',
-        dialogSurfaceStyle,
-        className,
-      )}
-      {...props}
-    />
-  </AlertDialogPortal>
-));
+const AlertDialogContent = React.forwardRef<HTMLDivElement, AlertDialogContentProps>(
+  ({ className, size = 'sm', ...props }, ref) => (
+    <AlertDialogPortal>
+      <AlertDialogOverlay />
+      <AlertDialogPrimitive.Popup
+        ref={ref}
+        data-slot="alert-dialog-content"
+        data-size={size}
+        className={cn(dialogPopupClassName, dialogContentSizeClasses[size], className)}
+        {...props}
+      />
+    </AlertDialogPortal>
+  ),
+);
 AlertDialogContent.displayName = 'AlertDialogContent';
 
 const AlertDialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn('flex flex-col gap-0.5 px-3 py-2.5 text-left', className)} {...props} />
+  <DialogHeader className={cn('pr-5', className)} {...props} />
 );
 AlertDialogHeader.displayName = 'AlertDialogHeader';
 
-const AlertDialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn('flex flex-col-reverse gap-1.5 px-3 py-2 sm:flex-row sm:justify-end', className)} {...props} />
-);
-AlertDialogFooter.displayName = 'AlertDialogFooter';
-
-const AlertDialogBody = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn('max-h-[50vh] overflow-y-auto p-3', className)} {...props} />
-);
-AlertDialogBody.displayName = 'AlertDialogBody';
-
-type AlertDialogTitleProps = Omit<AlertDialogPrimitive.Title.Props, 'className'> & {
-  className?: string;
-};
-
-const AlertDialogTitle = React.forwardRef<HTMLHeadingElement, AlertDialogTitleProps>(({ className, ...props }, ref) => (
-  <AlertDialogPrimitive.Title ref={ref} className={cn('text-subheading', className)} {...props} />
-));
-AlertDialogTitle.displayName = 'AlertDialogTitle';
-
-type AlertDialogDescriptionProps = Omit<AlertDialogPrimitive.Description.Props, 'className'> & {
-  className?: string;
-};
-
-const AlertDialogDescription = React.forwardRef<HTMLParagraphElement, AlertDialogDescriptionProps>(
-  ({ className, ...props }, ref) => (
-    <AlertDialogPrimitive.Description
-      ref={ref}
-      className={cn('text-caption text-muted-foreground', className)}
-      {...props}
-    />
-  ),
-);
-AlertDialogDescription.displayName = 'AlertDialogDescription';
-
-type AlertDialogActionProps = Omit<AlertDialogPrimitive.Close.Props, 'className'> & {
-  className?: string;
-};
-
-const AlertDialogAction = React.forwardRef<HTMLButtonElement, AlertDialogActionProps>(
-  ({ className, ...props }, ref) => (
+const AlertDialogAction = React.forwardRef<HTMLButtonElement, AlertDialogPrimitive.Close.Props>(
+  ({ children, ...props }, ref) => (
     <AlertDialogPrimitive.Close
       ref={ref}
-      className={cn(buttonVariants({ variant: 'primary', size: 'lg' }), className)}
+      render={
+        <Button
+          variant="primary"
+          size="md"
+          className={cn(dialogActionLayoutClasses, dialogActionSizeClasses.md)}
+          children={children}
+        />
+      }
       {...props}
     />
   ),
 );
 AlertDialogAction.displayName = 'AlertDialogAction';
 
-const AlertDialogCancel = React.forwardRef<HTMLButtonElement, AlertDialogActionProps>(
-  ({ className, ...props }, ref) => (
-    <AlertDialogPrimitive.Close
-      ref={ref}
-      className={cn(buttonVariants({ variant: 'default', size: 'lg' }), className)}
-      {...props}
-    />
-  ),
-);
-AlertDialogCancel.displayName = 'AlertDialogCancel';
-
 AlertDialog.Trigger = AlertDialogTrigger;
 AlertDialog.Portal = AlertDialogPortal;
 AlertDialog.Overlay = AlertDialogOverlay;
 AlertDialog.Content = AlertDialogContent;
 AlertDialog.Header = AlertDialogHeader;
-AlertDialog.Footer = AlertDialogFooter;
-AlertDialog.Body = AlertDialogBody;
-AlertDialog.Title = AlertDialogTitle;
-AlertDialog.Description = AlertDialogDescription;
+AlertDialog.Footer = DialogFooter;
+AlertDialog.Body = DialogBody;
+AlertDialog.Title = DialogTitle;
+AlertDialog.Description = DialogDescription;
 AlertDialog.Action = AlertDialogAction;
-AlertDialog.Cancel = AlertDialogCancel;
+AlertDialog.Cancel = DialogCancel;
 
 export { AlertDialog };

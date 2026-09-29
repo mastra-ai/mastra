@@ -66,7 +66,7 @@ const DeleteAgentDialog = ({
             undone.
           </AlertDialog.Description>
         </AlertDialog.Header>
-        <AlertDialog.Body className="pt-0">
+        <AlertDialog.Body>
           <AgentImpactWarnings agentId={agentId} variant="delete" enabled={open} />
         </AlertDialog.Body>
         <AlertDialog.Footer>

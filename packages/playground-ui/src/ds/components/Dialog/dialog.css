@@ -37,7 +37,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dialog-popup-motion {
+  .dialog-popup-motion,
+  .dialog-popup-motion[data-starting-style],
+  .dialog-popup-motion[data-ending-style] {
+    scale: none;
     transition-property: opacity;
   }
 }

@@ -48,19 +48,13 @@ export function DeleteExperimentDialog({
           </AlertDialog.Description>
         </AlertDialog.Header>
         <AlertDialog.Footer>
+          <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
           {/* Deliberately a Button rather than AlertDialog.Action: Action is a
               Close, which would dismiss the dialog before the request settles
               and hide a failed deletion behind a toast. */}
-          <Button
-            icon={<Trash2 />}
-            variant="primary"
-            size="lg"
-            onClick={handleDelete}
-            disabled={deleteExperiment.isPending}
-          >
+          <Button icon={<Trash2 />} variant="primary" onClick={handleDelete} disabled={deleteExperiment.isPending}>
             {deleteExperiment.isPending ? 'Deleting...' : 'Delete'}
           </Button>
-          <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
         </AlertDialog.Footer>
       </AlertDialog.Content>
     </AlertDialog>
