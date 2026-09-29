@@ -30,7 +30,7 @@ describe('Transcript notifications', () => {
       expect(within(notification).queryByRole('link')).not.toBeInTheDocument();
       await userEvent.click(within(notification).getByRole('button'));
       expect(within(notification).getByText(message)).toBeVisible();
-      const link = within(notification).getByRole('link', { name: `Open notification target: ${message}` });
+      const link = within(notification).getByRole('link', { name: /^Open on GitHub: The pull request was merged/ });
       expect(link).toHaveAttribute('href', 'https://github.com/mastra-ai/mastra/pull/24263');
       expect(link).toHaveAttribute('rel', 'noreferrer');
     });

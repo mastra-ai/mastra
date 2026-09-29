@@ -19,7 +19,7 @@ describe('NotificationActivity', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /github/ }));
 
-      const link = screen.getByRole('link', { name: `Open notification target: ${message}` });
+      const link = screen.getByRole('link', { name: /^Open on GitHub: The production deployment failed/ });
       if (!link.parentElement) throw new Error('Notification body is missing');
       expect(within(link.parentElement).getByText(message)).toBeTruthy();
     });

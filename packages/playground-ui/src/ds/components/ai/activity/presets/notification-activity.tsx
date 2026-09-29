@@ -87,7 +87,7 @@ function NotificationLink({
       href={link.href}
       target="_blank"
       rel="noreferrer"
-      aria-label={`Open notification target: ${message}`}
+      aria-label={`${link.label}: ${messagePreview(message)}`}
       className="flex w-fit items-center gap-1 text-meta text-muted-foreground hover:text-foreground"
     >
       {link.label}
