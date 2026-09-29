@@ -1,4 +1,5 @@
 import type { Json } from '../protocol.js';
+import { isDeepStrictEqual } from 'node:util';
 import { RenderRunConflictError } from '../errors.js';
 
 export type RunStatus =
@@ -54,6 +55,8 @@ export async function updateRun(
     if (!current) throw new RenderRunConflictError(`Unknown Mastra run ${workflowId}/${runId}`);
     const patch = update(current);
     if (terminal(current.status)) return current;
+    if (Object.entries(patch).every(([key, value]) => isDeepStrictEqual(current[key as keyof RunRecord], value)))
+      return current;
     const next = { ...current, ...patch, revision: current.revision + 1, updatedAt: Date.now() };
     if (await store.compareAndSwap(next, current.revision)) return next;
   }

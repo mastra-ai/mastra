@@ -638,7 +638,7 @@ it('keeps the native binding when the worker finishes before the submission resp
   expect(record?.result).toMatchObject({ status: 'success', result: 3 });
 });
 
-it.each(['success', 'failure'] as const)('preserves native %s when final bookkeeping fails', async outcome => {
+it.each(['success', 'failure'] as const)('preserves native %s when final bookkeeping reads fail', async outcome => {
   const log = vi.spyOn(console, 'error').mockImplementation(() => {});
   const h = harness();
   const step = h.createStep({
@@ -655,11 +655,17 @@ it.each(['success', 'failure'] as const)('preserves native %s when final bookkee
     .then(step)
     .commit();
   h.register(workflow);
-  const swap = h.provider.store.compareAndSwap.bind(h.provider.store);
-  vi.spyOn(h.provider.store, 'compareAndSwap').mockImplementation(async (record, revision) => {
-    const current = await h.provider.store.get(record.workflowId, record.runId);
-    if (current?.dispatchClosed && record.status === 'running') throw new Error('secondary bookkeeping failure');
-    return swap(record, revision);
+  const get = h.provider.store.get.bind(h.provider.store);
+  let injected = false;
+  vi.spyOn(h.provider.store, 'get').mockImplementation(async (workflowId, runId) => {
+    const current = await get(workflowId, runId);
+    // Closure writes are now no-ops after the primary outcome closes dispatch.
+    // Fail the required cleanup read to retain coverage of secondary storage errors.
+    if (!injected && current?.dispatchClosed && current.status === 'running') {
+      injected = true;
+      throw new Error('secondary bookkeeping failure');
+    }
+    return current;
   });
   try {
     const run = await workflow.createRun();
@@ -669,6 +675,7 @@ it.each(['success', 'failure'] as const)('preserves native %s when final bookkee
     if (outcome === 'success') expect(native.status).toBe('completed');
     else expect((native.error as Error).message).toMatch(/^Mastra workflow .* failed$/);
     expect((await h.provider.store.get(workflow.id, run.runId))?.dispatchClosed).toBe(true);
+    expect(injected).toBe(true);
     expect(log).toHaveBeenCalled();
   } finally {
     vi.restoreAllMocks();
