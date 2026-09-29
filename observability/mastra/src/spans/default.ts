@@ -39,7 +39,14 @@ function apiCallErrorDetails(error: Error): Record<string, unknown> | undefined 
   // Keep only origin and path: a custom baseURL may carry a credential in the query string.
   if (apiError.url !== undefined) details.url = apiError.url.split('?')[0];
   if (apiError.isRetryable !== undefined) details.isRetryable = apiError.isRetryable;
-  if (apiError.responseBody !== undefined) details.responseBody = apiError.responseBody;
+  if (apiError.responseBody !== undefined) {
+    // Providers usually answer with JSON; keep it as an object so its keys stay readable and filterable.
+    try {
+      details.responseBody = JSON.parse(apiError.responseBody);
+    } catch {
+      details.responseBody = apiError.responseBody;
+    }
+  }
   return details;
 }
 

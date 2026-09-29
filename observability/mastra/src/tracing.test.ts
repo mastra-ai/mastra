@@ -487,8 +487,30 @@ describe('Tracing', () => {
         statusCode: 503,
         url: 'https://openrouter.ai/api/v1/chat/completions',
         isRetryable: true,
-        responseBody: '{"error":"upstream overloaded"}',
+        responseBody: { error: 'upstream overloaded' },
       });
+    });
+
+    it('keeps a non-JSON provider response body as text', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+      const span = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent', attributes: { agentId: 'a' } });
+
+      span.error({
+        error: new APICallError({
+          message: 'Bad Gateway',
+          url: 'https://api.example.com/v1/chat',
+          requestBodyValues: {},
+          statusCode: 502,
+          responseBody: '<html>502 Bad Gateway</html>',
+        }),
+      });
+
+      expect(span.errorInfo?.details?.responseBody).toBe('<html>502 Bad Gateway</html>');
     });
 
     it('keeps APICallError details when a MastraError wraps it', () => {
