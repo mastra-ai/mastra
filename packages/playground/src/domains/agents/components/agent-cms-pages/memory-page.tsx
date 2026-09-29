@@ -436,7 +436,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
               <Input
                 type="number"
                 min="1"
-                step="1000"
+                step="1"
                 value={field.value ?? ''}
                 onChange={e => {
                   const v = e.target.value;
@@ -462,7 +462,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
               <Input
                 type="number"
                 min="1"
-                step="1000"
+                step="1"
                 value={field.value ?? ''}
                 onChange={e => {
                   const v = e.target.value;
@@ -623,7 +623,7 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
               <Input
                 type="number"
                 min="1"
-                step="1000"
+                step="1"
                 value={field.value ?? ''}
                 onChange={e => {
                   const v = e.target.value;

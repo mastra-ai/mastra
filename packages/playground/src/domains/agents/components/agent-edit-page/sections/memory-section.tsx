@@ -330,7 +330,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                 <Input
                                   type="number"
                                   min="1"
-                                  step="1000"
+                                  step="1"
                                   value={field.value ?? ''}
                                   onChange={e => {
                                     const v = e.target.value;
@@ -356,7 +356,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                 <Input
                                   type="number"
                                   min="1"
-                                  step="1000"
+                                  step="1"
                                   value={field.value ?? ''}
                                   onChange={e => {
                                     const v = e.target.value;
@@ -521,7 +521,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                 <Input
                                   type="number"
                                   min="1"
-                                  step="1000"
+                                  step="1"
                                   value={field.value ?? ''}
                                   onChange={e => {
                                     const v = e.target.value;
