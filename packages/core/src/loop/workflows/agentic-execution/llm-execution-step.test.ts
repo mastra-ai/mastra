@@ -3617,6 +3617,46 @@ describe('per-step modelSettings precedence (call-time < per-model < processor)'
     expect(secondaryStream.mock.calls[0]?.[0]?.temperature).toBe(0.3);
   });
 
+  it('fails the model spans with the provider error when no retry or fallback is left', async () => {
+    const apiError = new APICallError({
+      message: 'Service Unavailable',
+      url: 'https://openrouter.ai/api/v1/chat/completions',
+      requestBodyValues: {},
+      statusCode: 503,
+      isRetryable: true,
+    });
+    const reportGenerationError = vi.fn();
+    const modelSpanTracker = {
+      getTracingContext: vi.fn(() => ({})),
+      reportGenerationError,
+      endGeneration: vi.fn(),
+      updateGeneration: vi.fn(),
+      wrapStream: vi.fn(<T>(stream: T) => stream),
+      startStep: vi.fn(),
+    };
+
+    const llmExecutionStep = baseRun({
+      modelSpanTracker: modelSpanTracker as any,
+      models: [
+        {
+          id: 'only-model',
+          maxRetries: 0,
+          model: mockModel(
+            vi.fn(async () => {
+              throw apiError;
+            }),
+          ),
+        },
+      ],
+    });
+
+    await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    // The trace must mark the failing inference/step/model spans, not only the agent root.
+    expect(reportGenerationError).toHaveBeenCalledTimes(1);
+    expect(reportGenerationError).toHaveBeenCalledWith({ error: apiError });
+  });
+
   it('reports the same modelSettings on the MODEL_INFERENCE span as it passes to the model', async () => {
     const doStream = finishingStream();
     const setInferenceContext = vi.fn();

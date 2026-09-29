@@ -1,3 +1,4 @@
+import { APICallError } from '@internal/ai-sdk-v5';
 import { MastraError } from '@mastra/core/error';
 import type {
   SpanType,
@@ -9,6 +10,26 @@ import type {
 } from '@mastra/core/observability';
 import { BaseSpan } from './base';
 import { deepClean } from './serialization';
+
+/**
+ * HTTP facts of a provider call failure, read from an AI SDK `APICallError` or
+ * from the one a wrapper (MastraError, durable transport) carries as `cause`.
+ * Without them a span only says "Service Unavailable", with no status or URL.
+ */
+function apiCallErrorDetails(error: Error): Record<string, unknown> | undefined {
+  const apiError = APICallError.isInstance(error)
+    ? error
+    : APICallError.isInstance(error.cause)
+      ? error.cause
+      : undefined;
+  if (!apiError) return undefined;
+  return {
+    statusCode: apiError.statusCode,
+    url: apiError.url,
+    isRetryable: apiError.isRetryable,
+    responseBody: apiError.responseBody,
+  };
+}
 
 export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
   public id: string;
@@ -129,11 +150,12 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
     }
 
     if (!this.isExcluded) {
+      const apiDetails = apiCallErrorDetails(error);
       this.errorInfo = deepClean(
         error instanceof MastraError
           ? {
               id: error.id,
-              details: error.details,
+              details: apiDetails ? { ...error.details, ...apiDetails } : error.details,
               category: error.category,
               domain: error.domain,
               message: error.message,
@@ -147,6 +169,7 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
               message: error.message,
               name: error.name,
               stack: error.stack,
+              ...(apiDetails && { details: apiDetails }),
             },
         this.deepCleanOptions,
       );
