@@ -320,6 +320,14 @@ export type BaseServerOptions = {
    * ```
    */
   inputRequests?: MCPInputRequestHandler;
+  /**
+   * Per-server override of the `clientInfo` sent in this server's `initialize`
+   * handshake, layered over the `MCPClient`-level {@link MCPClientOptions.clientInfo}
+   * default (this server's fields win; unset fields still fall through to the
+   * client-level default, then to the server-map-key/`"1.0.0"` fallbacks). See
+   * {@link MCPClientInfo} for why this exists separately from the server's map key.
+   */
+  clientInfo?: MCPClientInfo;
 };
 
 /**
@@ -506,6 +514,46 @@ export type InternalMastraMCPClientOptions = {
   version?: string;
   /** Optional timeout in milliseconds */
   timeout?: number;
+  /**
+   * Overrides the `clientInfo` sent in the MCP `initialize` handshake, independent
+   * of `name`/`version` above. See {@link MCPClientInfo} for why this is separate
+   * from the server-map key.
+   */
+  clientInfo?: MCPClientInfo;
+};
+
+/**
+ * Identifies the calling application to an MCP server, sent as `clientInfo` in
+ * the `initialize` handshake.
+ *
+ * Deliberately distinct from the key used to name a server in
+ * {@link MCPClientOptions.servers} (or the `MCPClient`-level default): that key
+ * also names the tool-call prefix (`<key>_<tool>`) and the internal client
+ * cache, so repurposing it as the wire identity forces every consumer to choose
+ * between a meaningful client identity and stable tool names. Without this
+ * option, every server sees the map key as `clientInfo.name` and `"1.0.0"` as
+ * `clientInfo.version`, so a server cannot tell one Mastra application apart
+ * from another that happened to pick the same server key, nor correlate
+ * behavior with a specific application release.
+ *
+ * Applies uniformly to both `stdio` and HTTP-based servers: it is resolved
+ * once, before either transport connects.
+ *
+ * @example
+ * ```typescript
+ * const mcp = new MCPClient({
+ *   clientInfo: { name: 'my-app', version: '2.4.1' },
+ *   servers: {
+ *     weather: { url: new URL('https://example.com/mcp') },
+ *   },
+ * });
+ * ```
+ */
+export type MCPClientInfo = {
+  /** Sent as `clientInfo.name`. Falls back to the server's map key when omitted. */
+  name?: string;
+  /** Sent as `clientInfo.version`. Falls back to `"1.0.0"` when omitted. */
+  version?: string;
 };
 
 /**

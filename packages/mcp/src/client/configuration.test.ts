@@ -400,6 +400,121 @@ describe('MCPClient tool discovery retries', () => {
     expect(capabilities).toMatchObject(customCapabilities);
   });
 
+  it('sends a per-server clientInfo override in the initialize handshake for an HTTP server', async () => {
+    const connectSpy = vi.spyOn(InternalMastraMCPClient.prototype, 'connect').mockResolvedValue(true);
+
+    const client = new MCPClient({
+      id: `configuration-test-${++clientId}`,
+      servers: {
+        weather: {
+          url: new URL('http://localhost:1234/mcp'),
+          clientInfo: { name: 'my-agent', version: '2.0.0' },
+        },
+      },
+    });
+
+    clients.push(client);
+
+    const internalClient = await (client as any).getConnectedClientForServer('weather');
+    const clientInfo = (internalClient as any).client._clientInfo;
+
+    expect(connectSpy).toHaveBeenCalledTimes(1);
+    expect(clientInfo).toEqual({ name: 'my-agent', version: '2.0.0' });
+    // The server-map key must stay untouched: it still drives the tool-name
+    // prefix, logging, and mcpMetadata.serverName, independent of clientInfo.
+    expect((internalClient as any).name).toBe('weather');
+  });
+
+  it('sends a per-server clientInfo override in the initialize handshake for a stdio server', async () => {
+    const connectSpy = vi.spyOn(InternalMastraMCPClient.prototype, 'connect').mockResolvedValue(true);
+
+    const client = new MCPClient({
+      id: `configuration-test-${++clientId}`,
+      servers: {
+        sfdx: {
+          command: process.execPath,
+          args: ['-e', 'process.exit(0)'],
+          clientInfo: { name: 'my-agent', version: '2.0.0' },
+        },
+      },
+    });
+
+    clients.push(client);
+
+    const internalClient = await (client as any).getConnectedClientForServer('sfdx');
+    const clientInfo = (internalClient as any).client._clientInfo;
+
+    expect(connectSpy).toHaveBeenCalledTimes(1);
+    expect(clientInfo).toEqual({ name: 'my-agent', version: '2.0.0' });
+    expect((internalClient as any).name).toBe('sfdx');
+  });
+
+  it('applies the MCPClient-level clientInfo default when no per-server override is set', async () => {
+    vi.spyOn(InternalMastraMCPClient.prototype, 'connect').mockResolvedValue(true);
+
+    const client = new MCPClient({
+      id: `configuration-test-${++clientId}`,
+      clientInfo: { name: 'default-agent', version: '9.9.9' },
+      servers: {
+        weather: {
+          url: new URL('http://localhost:1234/mcp'),
+        },
+      },
+    });
+
+    clients.push(client);
+
+    const internalClient = await (client as any).getConnectedClientForServer('weather');
+    const clientInfo = (internalClient as any).client._clientInfo;
+
+    expect(clientInfo).toEqual({ name: 'default-agent', version: '9.9.9' });
+  });
+
+  it('lets a per-server clientInfo field win over the client-level default, field-by-field', async () => {
+    vi.spyOn(InternalMastraMCPClient.prototype, 'connect').mockResolvedValue(true);
+
+    const client = new MCPClient({
+      id: `configuration-test-${++clientId}`,
+      clientInfo: { name: 'default-agent', version: '9.9.9' },
+      servers: {
+        weather: {
+          url: new URL('http://localhost:1234/mcp'),
+          // Only `name` is overridden per-server; `version` should still fall
+          // through to the client-level default rather than being clobbered
+          // by an object-level `??` between the two tiers.
+          clientInfo: { name: 'weather-specific-agent' },
+        },
+      },
+    });
+
+    clients.push(client);
+
+    const internalClient = await (client as any).getConnectedClientForServer('weather');
+    const clientInfo = (internalClient as any).client._clientInfo;
+
+    expect(clientInfo).toEqual({ name: 'weather-specific-agent', version: '9.9.9' });
+  });
+
+  it('falls back to the server map key and version 1.0.0 when clientInfo is not configured at all', async () => {
+    vi.spyOn(InternalMastraMCPClient.prototype, 'connect').mockResolvedValue(true);
+
+    const client = new MCPClient({
+      id: `configuration-test-${++clientId}`,
+      servers: {
+        weather: {
+          url: new URL('http://localhost:1234/mcp'),
+        },
+      },
+    });
+
+    clients.push(client);
+
+    const internalClient = await (client as any).getConnectedClientForServer('weather');
+    const clientInfo = (internalClient as any).client._clientInfo;
+
+    expect(clientInfo).toEqual({ name: 'weather', version: '1.0.0' });
+  });
+
   it('advertises form elicitation when an inputRequests handler is configured', async () => {
     const connectSpy = vi.spyOn(InternalMastraMCPClient.prototype, 'connect').mockResolvedValue(true);
 

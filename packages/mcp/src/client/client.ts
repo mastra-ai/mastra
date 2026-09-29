@@ -440,8 +440,19 @@ export class InternalMastraMCPClient extends MastraBase {
   /**
    * @internal
    */
-  constructor({ name, version = '1.0.0', server, timeout = DEFAULT_REQUEST_TIMEOUT_MSEC }: InternalMastraMCPClientOptions) {
+  constructor({
+    name,
+    version = '1.0.0',
+    server,
+    timeout = DEFAULT_REQUEST_TIMEOUT_MSEC,
+    clientInfo,
+  }: InternalMastraMCPClientOptions) {
     super({ name: 'MastraMCPClient' });
+    // `this.name` stays the server-map key: it names the tool-call prefix
+    // (`${this.name}_${tool.name}`), log lines, and `mcpMetadata.serverName`, so it
+    // must never change. The wire `clientInfo` sent to the server below is resolved
+    // separately (see `clientInfo` on `InternalMastraMCPClientOptions`) so a caller
+    // can identify itself to the server without renaming every tool it exposes.
     this.name = name;
     this.timeout = timeout;
     this.logHandler = server.logger;
@@ -469,7 +480,7 @@ export class InternalMastraMCPClient extends MastraBase {
     };
 
     this.client = new Client(
-      { name, version },
+      { name: clientInfo?.name ?? name, version: clientInfo?.version ?? version },
       {
         capabilities: clientCapabilities,
         ...(server.jsonSchemaValidator ? { jsonSchemaValidator: server.jsonSchemaValidator } : {}),

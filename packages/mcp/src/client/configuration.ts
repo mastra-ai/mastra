@@ -16,7 +16,7 @@ import { createOAuthCallbackServer } from './oauth-callback-server';
 import type { OAuthCallbackServer } from './oauth-callback-server';
 import { MCPOAuthClientProvider } from './oauth-provider';
 import { MCPClientServerProxy } from './server-proxy';
-import type { SerializableMCPToolCatalog, SerializableMCPToolDefinition } from './types';
+import type { MCPClientInfo, SerializableMCPToolCatalog, SerializableMCPToolDefinition } from './types';
 
 const mcpClientInstances = new Map<string, InstanceType<typeof MCPClient>>();
 const TOOL_DISCOVERY_MAX_ATTEMPTS = 2;
@@ -59,6 +59,13 @@ export interface MCPClientOptions {
   servers: Record<string, MastraMCPServerDefinition>;
   /** Optional global timeout in milliseconds for all servers (default: 60000ms) */
   timeout?: number;
+  /**
+   * Default `clientInfo` sent to every configured server's `initialize` handshake,
+   * overridable per-server via that server's own `clientInfo`. See
+   * {@link MCPClientInfo} for why this is separate from a server's map key in
+   * `servers`.
+   */
+  clientInfo?: MCPClientInfo;
 }
 
 /**
@@ -91,6 +98,7 @@ export class MCPClient extends MastraBase {
   private serverConfigs: Record<string, MastraMCPServerDefinition> = {};
   private id: string;
   private defaultTimeout: number;
+  private defaultClientInfo?: MCPClientInfo;
   private mcpClientsById = new Map<string, InternalMastraMCPClient>();
   private disconnectPromise: Promise<void> | null = null;
   private authFlowsByServer = new Map<string, Promise<void>>();
@@ -113,6 +121,9 @@ export class MCPClient extends MastraBase {
    * @param args.id - Optional unique identifier to allow multiple instances with same config
    * @param args.servers - Map of server names to server configurations
    * @param args.timeout - Optional global timeout in milliseconds (default: 60000)
+   * @param args.clientInfo - Optional `clientInfo` sent to every server's `initialize`
+   *   handshake, overridable per-server. Without it, each server sees its own map key
+   *   as `clientInfo.name` and `"1.0.0"` as `clientInfo.version`.
    *
    * @throws {Error} If multiple instances with identical config are created without an ID
    *
@@ -134,6 +145,7 @@ export class MCPClient extends MastraBase {
   constructor(args: MCPClientOptions) {
     super({ name: 'MCPClient' });
     this.defaultTimeout = args.timeout ?? DEFAULT_REQUEST_TIMEOUT_MSEC;
+    this.defaultClientInfo = args.clientInfo;
     this.serverConfigs = args.servers;
     this.id = args.id ?? this.makeId();
 
@@ -1457,6 +1469,13 @@ To fix this you have three different options:
       name,
       server: config,
       timeout: config.timeout ?? this.defaultTimeout,
+      // Per-server clientInfo fields win over the MCPClient-level default; unset
+      // fields on both fall through to InternalMastraMCPClient's own defaults
+      // (the map key for `name`, `"1.0.0"` for `version`).
+      clientInfo: {
+        name: config.clientInfo?.name ?? this.defaultClientInfo?.name,
+        version: config.clientInfo?.version ?? this.defaultClientInfo?.version,
+      },
     });
 
     mcpClient.__setLogger(this.logger);
