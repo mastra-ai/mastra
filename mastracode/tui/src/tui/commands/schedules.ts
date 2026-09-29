@@ -48,19 +48,26 @@ async function resolveThread(ctx: SlashCommandContext): Promise<{ threadId?: str
   return { threadId, resourceId: thread?.resourceId ?? session?.identity?.getResourceId?.() };
 }
 
-function formatNextFire(nextFireAt: number): string {
-  const deltaMs = nextFireAt - Date.now();
-  if (deltaMs <= 0) return 'now';
-  const minutes = Math.round(deltaMs / 60_000);
-  if (minutes < 1) return '<1m';
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return rest ? `${hours}h ${rest}m` : `${hours}h`;
+/** `17:43:00 (in 35s)`; fires on another day also get the date, e.g. `Oct 1 00:00:00 (in 6h 16m)`. */
+export function formatNextFire(nextFireAt: number, now = Date.now()): string {
+  const at = new Date(nextFireAt);
+  const time = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  const sameDay = at.toDateString() === new Date(now).toDateString();
+  const when = sameDay ? time : `${at.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${time}`;
+  const totalSeconds = Math.max(0, Math.ceil((nextFireAt - now) / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const delta = hours
+    ? `${hours}h${minutes ? ` ${minutes}m` : ''}`
+    : minutes
+      ? `${minutes}m${seconds ? ` ${seconds}s` : ''}`
+      : `${seconds}s`;
+  return `${when} (in ${delta})`;
 }
 
 function scheduleLabel(schedule: ThreadSchedule): string {
-  const timing = schedule.status === 'paused' ? 'paused' : `next in ${formatNextFire(schedule.nextFireAt)}`;
+  const timing = schedule.status === 'paused' ? 'paused' : `next at ${formatNextFire(schedule.nextFireAt)}`;
   return `${shortScheduleId(schedule.id)}  every ${schedule.trigger.interval.label} · ${timing}`;
 }
 
@@ -142,7 +149,7 @@ async function createScheduleFlow(ctx: SlashCommandContext, scheduler: ThreadSch
     { threadId: target.threadId, resourceId: target.resourceId },
   );
   ctx.showInfo(
-    `Created schedule ${shortScheduleId(schedule.id)}: ${summary}, next in ${formatNextFire(schedule.nextFireAt)}.`,
+    `Created schedule ${shortScheduleId(schedule.id)}: ${summary}, next at ${formatNextFire(schedule.nextFireAt)}.`,
   );
 }
 

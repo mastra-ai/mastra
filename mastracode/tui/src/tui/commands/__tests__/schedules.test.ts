@@ -5,7 +5,7 @@ import { ThreadScheduler } from '@mastra/code-sdk/schedules';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ModalQuestionOptions } from '../../modal-question.js';
-import { handleSchedulesCommand } from '../schedules.js';
+import { formatNextFire, handleSchedulesCommand } from '../schedules.js';
 import type { SlashCommandContext } from '../types.js';
 
 const modal = vi.hoisted(() => ({ askModalQuestion: vi.fn() }));
@@ -112,6 +112,27 @@ describe('/schedules guards', () => {
   });
 });
 
+describe('formatNextFire', () => {
+  const at = (h: number, m: number, sec = 0, day = 29) => new Date(2026, 8, day, h, m, sec).getTime();
+
+  it('shows the exact time and seconds when under a minute away', () => {
+    expect(formatNextFire(at(17, 43), at(17, 42, 25))).toBe('17:43:00 (in 35s)');
+  });
+
+  it('shows minutes and seconds, dropping zero parts', () => {
+    expect(formatNextFire(at(17, 45), at(17, 42, 25))).toBe('17:45:00 (in 2m 35s)');
+    expect(formatNextFire(at(17, 45), at(17, 42))).toBe('17:45:00 (in 3m)');
+  });
+
+  it('shows hours and minutes for later fires', () => {
+    expect(formatNextFire(at(20, 0), at(17, 42))).toBe('20:00:00 (in 2h 18m)');
+  });
+
+  it('adds the date when the fire is on another day', () => {
+    expect(formatNextFire(at(0, 0, 0, 30), at(17, 44))).toMatch(/^Sep 30 00:00:00 \(in 6h 16m\)$/);
+  });
+});
+
 describe('/schedules picker', () => {
   it('offers Create first, then one row per schedule on this thread', async () => {
     const { ctx, scheduler } = createContext();
@@ -125,7 +146,7 @@ describe('/schedules picker', () => {
     expect(optionLabels(picker!)[0]).toBe('Create schedule');
     expect(picker!.options).toHaveLength(2);
     expect(picker!.options![1]).toMatchObject({
-      label: expect.stringMatching(/every 5m · next in/),
+      label: expect.stringMatching(/every 5m · next at \d{2}:\d{2}:\d{2} \(in /),
       description: '"mine"',
     });
   });
@@ -154,7 +175,7 @@ describe('/schedules create', () => {
     ]);
     expect(asked.at(-1)!.question).toContain('Create schedule every 5m — "check CI"?');
     expect(showInfo).toHaveBeenCalledWith(
-      expect.stringMatching(/^Created schedule [0-9a-f]{8}: every 5m — "check CI"/),
+      expect.stringMatching(/^Created schedule [0-9a-f]{8}: every 5m — "check CI", next at \d{2}:\d{2}:\d{2} \(in /),
     );
   });
 

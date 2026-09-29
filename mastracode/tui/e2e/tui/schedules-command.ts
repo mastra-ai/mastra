@@ -65,7 +65,7 @@ export const schedulesCommandScenario: McE2eScenario = {
 
     // Pause first so a real 5m boundary can't add a second fire to the count below.
     await openSchedules();
-    await selectMenuRow(terminal, /every 5m · next in/);
+    await selectMenuRow(terminal, /every 5m · next at/);
     await runtime.waitForScreenText(/Run now/i, terminal);
     await selectMenuRow(terminal, /Pause/);
     await runtime.waitForScreenText(/Paused schedule/i, terminal);
@@ -111,7 +111,7 @@ export const schedulesCommandScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Created schedule [0-9a-f]{8}: every 1h/i, terminal, 30_000);
 
     await openSchedules();
-    await selectMenuRow(terminal, /every 1h · next in/);
+    await selectMenuRow(terminal, /every 1h · next at/);
     await runtime.waitForScreenText(/Run now/i, terminal);
     await selectMenuRow(terminal, /Pause/);
     await runtime.waitForScreenText(/Paused schedule[\s\S]*Paused schedule/i, terminal);
