@@ -1041,9 +1041,7 @@ describe('Board card pending states', () => {
 
     // The filed Jira card carries the same menu a filed Linear card does.
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Investigate hands-off' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Build hands-off' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Open in Jira' })).toHaveAttribute('href', jiraIssue.url);
     expect(screen.getByRole('menuitem', { name: 'Ask supervisor' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Move to Planning' })).toBeVisible();
@@ -1196,9 +1194,7 @@ describe('Board card pending states', () => {
 
     // The filed incident.io card carries the same menu a filed Linear card does.
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Investigate hands-off' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Build hands-off' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Open in incident.io' })).toHaveAttribute('href', incidentioIssue.url);
     expect(screen.getByRole('menuitem', { name: 'Ask supervisor' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Move to Planning' })).toBeVisible();

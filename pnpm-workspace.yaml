@@ -352,9 +352,9 @@ overrides:
   # undici 5.x has no patched release; the only 5.x consumer is
   # @connectrpc/connect-node@1.7.0 (via @cursor/sdk), which is compatible with
   # the undici 6 Client/Pool APIs.
-  undici@<6.0.0: 6.28.1
-  undici@>=6.0.0 <6.28.1: 6.28.1
-  undici@>=7.0.0 <7.29.1: 7.29.1
+  undici@<6.0.0: 6.29.0
+  undici@>=6.0.0 <6.29.0: 6.29.0
+  undici@>=7.0.0 <7.30.0: 7.30.0
   undici@>=8.0.0 <8.11.2: 8.11.2
   e2b>undici8: npm:undici@8.11.2
   multer@<2.3.0: 2.3.0
@@ -432,6 +432,11 @@ overrides:
   tinypool@<2.1.2: 2.1.2
   ajv@>=8.0.0 <8.20.0: 8.20.0
   zod@>=4.0.0 <4.6.5: 4.6.5
+  # Vanta 2026-09-28: Aikido residuals (docusaurus search + inngest OTEL instrumentations)
+  '@docsearch/react@>=4.0.0 <4.7.0': 4.7.0
+  '@opentelemetry/auto-instrumentations-node@<0.80.0': 0.80.0
+  # @lancedb/lancedb pins @huggingface/transformers@3.0.2 -> onnxruntime-node@1.19.2 (AIKIDO-2026-10293, fixed 1.24.2)
+  onnxruntime-node@<1.24.2: 1.24.3
   # Note: zod@3.x has no AIKIDO patches (fixes are 4.x-only); left as residual.
   '@codemirror/lang-jinja': ^6.0.1
   'aggregate-error': 'npm:@socketregistry/aggregate-error@^1'

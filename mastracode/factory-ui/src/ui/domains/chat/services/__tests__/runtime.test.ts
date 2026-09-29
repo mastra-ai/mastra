@@ -56,6 +56,88 @@ describe('chat runtime status', () => {
     expect(state.tokensPerSec).toBe(40);
   });
 
+  it('times a thinking block from its start when the provider delivers it in one late burst', () => {
+    // Captured from a live step: the thinking block opened, nothing arrived for 1.23s,
+    // then all thinking and text deltas landed within 43ms (3605 t/s by first delta).
+    vi.useFakeTimers();
+    let state = initialChatRuntime;
+    const emit = (at: number, event: AgentControllerEvent) => {
+      vi.setSystemTime(at);
+      state = runtimeReducer(state, { type: 'event', event });
+    };
+    emit(1000, {
+      type: 'message_update',
+      id: 'm',
+      event: { type: 'part', index: 0, part: { type: 'reasoning', reasoning: '', details: [] } },
+    });
+    for (const at of [2230, 2235, 2240]) {
+      emit(at, { type: 'message_update', id: 'm', event: { type: 'reasoning-delta', index: 0, delta: 'Thinking' } });
+    }
+    emit(2270, {
+      type: 'message_update',
+      id: 'm',
+      event: { type: 'part', index: 1, part: { type: 'text', text: '' } },
+    });
+    for (const at of [2271, 2272, 2273]) {
+      emit(at, { type: 'message_update', id: 'm', event: { type: 'text-delta', delta: 'Output' } });
+    }
+    emit(2287, {
+      type: 'usage_update',
+      usage: { promptTokens: 100, completionTokens: 155, reasoningTokens: 48, totalTokens: 255 },
+    });
+    expect(state.tokensPerSec).toBe(122);
+  });
+
+  it('times the first block of a message from the message_start that opens it', () => {
+    vi.useFakeTimers();
+    let state = initialChatRuntime;
+    const emit = (at: number, event: AgentControllerEvent) => {
+      vi.setSystemTime(at);
+      state = runtimeReducer(state, { type: 'event', event });
+    };
+    emit(1000, {
+      type: 'message_start',
+      message: {
+        id: 'm',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: { format: 2, parts: [{ type: 'text', text: '' }] },
+      },
+    });
+    for (const at of [1990, 2000]) {
+      emit(at, { type: 'message_update', id: 'm', event: { type: 'text-delta', delta: 'Output' } });
+    }
+    emit(2010, { type: 'usage_update', usage: { promptTokens: 100, completionTokens: 40, totalTokens: 140 } });
+    expect(state.tokensPerSec).toBe(40);
+  });
+
+  it('times tool arguments from the start of the tool input', () => {
+    vi.useFakeTimers();
+    let state = initialChatRuntime;
+    const emit = (at: number, event: AgentControllerEvent) => {
+      vi.setSystemTime(at);
+      state = runtimeReducer(state, { type: 'event', event });
+    };
+    emit(1000, { type: 'tool_input_start', toolCallId: 't', toolName: 'write_file', messageId: 's' });
+    for (const at of [1990, 2000]) {
+      emit(at, { type: 'tool_input_delta', toolCallId: 't', argsTextDelta: '{}', messageId: 's' });
+    }
+    emit(2010, { type: 'usage_update', usage: { promptTokens: 100, completionTokens: 40, totalTokens: 140 } });
+    expect(state.tokensPerSec).toBe(40);
+  });
+
+  it('does not treat a block that already has content as a generation start', () => {
+    const state = runtimeReducer(initialChatRuntime, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        id: 'm',
+        event: { type: 'part', index: 0, part: { type: 'text', text: 'Replayed' } },
+      },
+    });
+    expect(state._decodeStartedAt).toBe(0);
+  });
+
   it('counts thinking that starts after text in the same step', () => {
     // Text opens the window before any thinking streams. The thinking that follows still
     // happened inside it, so usage_update must not subtract those tokens as unmeasured.
@@ -129,13 +211,15 @@ describe('chat runtime status', () => {
     expect(state.tokensPerSec).toBe(19);
   });
 
-  it('allows the captured 13ms tool-argument burst without counting tool execution', () => {
+  it('keeps the last reading when a whole response arrives in one delivery', () => {
+    // Captured live: the provider held the response and delivered it within milliseconds,
+    // so its generation time is unobservable. Dividing by 13ms read 13k t/s.
     vi.useFakeTimers();
     vi.setSystemTime(3600);
-    let state = runtimeReducer(initialChatRuntime, {
-      type: 'event',
-      event: { type: 'tool_input_delta', toolCallId: 't', argsTextDelta: '{' },
-    });
+    let state = runtimeReducer(
+      { ...initialChatRuntime, tokensPerSec: 40 },
+      { type: 'event', event: { type: 'tool_input_delta', toolCallId: 't', argsTextDelta: '{' } },
+    );
     vi.setSystemTime(3613);
     state = runtimeReducer(state, {
       type: 'event',
@@ -149,7 +233,27 @@ describe('chat runtime status', () => {
         usage: { completionTokens: 170, promptTokens: 100, totalTokens: 270 },
       },
     });
-    expect(state.tokensPerSec).toBe(13077);
+    expect(state.tokensPerSec).toBe(40);
+    expect(state._decodeStartedAt).toBe(0);
+  });
+
+  it('measures a generation window from 50ms up', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(3600);
+    let state = runtimeReducer(initialChatRuntime, {
+      type: 'event',
+      event: { type: 'tool_input_delta', toolCallId: 't', argsTextDelta: '{' },
+    });
+    vi.setSystemTime(3650);
+    state = runtimeReducer(state, {
+      type: 'event',
+      event: { type: 'tool_input_delta', toolCallId: 't', argsTextDelta: '}' },
+    });
+    state = runtimeReducer(state, {
+      type: 'event',
+      event: { type: 'usage_update', usage: { completionTokens: 20, promptTokens: 10, totalTokens: 30 } },
+    });
+    expect(state.tokensPerSec).toBe(400);
   });
 
   it('does not carry the generation window into the next step when a step reported no usage', () => {
