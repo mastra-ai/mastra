@@ -1,5 +1,31 @@
 # @mastra/react
 
+## 1.7.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`4d187b7`](https://github.com/mastra-ai/mastra/commit/4d187b79d7ecce4d2f357f5fe385b414a532ff19), [`2a28888`](https://github.com/mastra-ai/mastra/commit/2a28888f7dfee74f84ec548c9c222cfd1aa7f393)]:
+  - @mastra/core@1.72.0-alpha.8
+  - @mastra/client-js@1.51.0-alpha.8
+
+## 1.7.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`9ce3444`](https://github.com/mastra-ai/mastra/commit/9ce3444d1a6b17e72b0a20c74603abaf252a843e), [`3b77788`](https://github.com/mastra-ai/mastra/commit/3b77788a08df1e754282d39c42823e6e1c5f2742), [`987257a`](https://github.com/mastra-ai/mastra/commit/987257a34cda8a153fe592c31d75fbb1dee55202), [`65a93a2`](https://github.com/mastra-ai/mastra/commit/65a93a2a3b1434d605a6a417cb83d2d58e16bfc0), [`fd92729`](https://github.com/mastra-ai/mastra/commit/fd92729380a29f2a0ec822e39f3c09eb9aaa5ac5), [`30b10ef`](https://github.com/mastra-ai/mastra/commit/30b10ef8c5697cceaf9aed9533b116c917eb546c), [`79c3b1f`](https://github.com/mastra-ai/mastra/commit/79c3b1fa4d470585a00558b317ed47db9b1decd4), [`4092ef2`](https://github.com/mastra-ai/mastra/commit/4092ef29aad09f2ba5f90c92a4d4d3bd444eae67), [`5026973`](https://github.com/mastra-ai/mastra/commit/50269736f432cee1170627b2b6f88ba1431e837f)]:
+  - @mastra/core@1.72.0-alpha.7
+  - @mastra/client-js@1.51.0-alpha.7
+
+## 1.7.0-alpha.6
+
+### Patch Changes
+
+- Fixed the Approve and Decline buttons doing nothing for tool approvals from Inngest durable agents in Studio. These agents stream the approval without a preceding `start` event, so the chat hook never learned the run ID and silently dropped the approval. The hook now takes the run ID from the approval event itself. ([#25292](https://github.com/mastra-ai/mastra/pull/25292))
+
+- Updated dependencies:
+  - @mastra/core@1.72.0-alpha.6
+  - @mastra/client-js@1.51.0-alpha.6
+
 ## 1.7.0-alpha.5
 
 ### Patch Changes

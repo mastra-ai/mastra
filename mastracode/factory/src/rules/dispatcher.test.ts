@@ -2811,6 +2811,100 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.sendSignal).not.toHaveBeenCalled();
   });
 
+  it('delivers a held kickoff once the card is moved into the stage its seat carries', async () => {
+    // Decided while the card sat outside the plan seat's stages, like a held
+    // triage run in Intake that Investigate approves and moves into Triage.
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'plan',
+      skillName: 'understand-issue',
+      arguments: 'Issue 42',
+      idempotencyKey: 'skill-held-then-moved-in',
+    });
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { stages: ['planning'] } });
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['planning'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'plan',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: 'kickoff-null',
+      kickoffMessage: null,
+    });
+    const { controller, session } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(session.sendSignal).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops a held kickoff when the card moves past the stage its seat carries', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'plan',
+      skillName: 'understand-issue',
+      arguments: 'Issue 42',
+      idempotencyKey: 'skill-held-moved-past',
+    });
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { stages: ['planning'] } });
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['planning'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'plan',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: 'kickoff-null',
+      kickoffMessage: null,
+    });
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { stages: ['review'] } });
+    const { controller, session } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(session.sendSignal).not.toHaveBeenCalled();
+  });
+
   it('does not resend a dropped kickoff once its binding is revoked', async () => {
     const { storage, transitionService } = await prepareDeliverScenario('skill-binding-revoked');
     const [binding] = await storage.listActiveRunBindings();
@@ -3111,6 +3205,53 @@ describe('FactoryDecisionDispatcher', () => {
     expect(parked).toMatchObject({ status: 'proposed' });
     expect(session.sendSignal).not.toHaveBeenCalled();
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['intake']);
+  });
+
+  it('re-reviews a push to a Factory-authored PR without asking, even with automatic runs off', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item } = await storage.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      input: {
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:8' },
+        title: 'Factory change',
+        stages: ['done'],
+        sessions: {},
+        metadata: { authorTrusted: true, factoryAuthored: true },
+      },
+    });
+    const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      ingress: { identity: 'push-f', triggerType: 'github' },
+      configVersion: 'rules-v1',
+      expectedRevision: item.revision,
+      actor: { type: 'github', login: 'factory-platform[bot]', trusted: true, factoryAuthored: true },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'transition', board: 'review', stage: 'review', idempotencyKey: 're-review-f' }],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => false,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+    const rows = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(rows.find(row => row.idempotencyKey === 're-review-f')?.status).toBe('succeeded');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['review']);
+    const run = rows.find(row => row.decision.type === 'invokeSkill');
+    expect(run?.decision).toMatchObject({ skillName: 'factory-rereview' });
+    expect(run?.status).not.toBe('proposed');
   });
 
   it('lets an external push move a card a person already handed over', async () => {
@@ -3828,7 +3969,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
   });
 
-  it("approves a hands-off item's plan while the project switch stays off", async () => {
+  it("leaves a legacy hands-off item's plan parked while the project switch stays off", async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueRunKickoff(storage, { preapprovePlans: true });
     const { controller, session } = createSession(undefined, { suspendsOnPlan: true });
@@ -3844,14 +3985,11 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.plansPreapprovedAt).toBeInstanceOf(Date);
-    expect(session.respondToToolSuspension).toHaveBeenCalledWith({
-      resumeData: { action: 'approved' },
-      toolCallId: 'call-plan',
-    });
+    expect(session.respondToToolSuspension).not.toHaveBeenCalled();
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
   });
 
-  it("approves a hands-off item's plan on rule-started follow-up runs too", async () => {
+  it("leaves a legacy hands-off item's plan parked on rule-started follow-up runs too", async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
       type: 'invokeSkill',
@@ -3872,10 +4010,7 @@ describe('FactoryDecisionDispatcher', () => {
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
-    expect(session.respondToToolSuspension).toHaveBeenCalledWith({
-      resumeData: { action: 'approved' },
-      toolCallId: 'call-plan',
-    });
+    expect(session.respondToToolSuspension).not.toHaveBeenCalled();
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
   });
 

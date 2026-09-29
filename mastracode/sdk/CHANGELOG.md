@@ -1,5 +1,85 @@
 # @mastra/code-sdk
 
+## 1.9.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`4d187b7`](https://github.com/mastra-ai/mastra/commit/4d187b79d7ecce4d2f357f5fe385b414a532ff19), [`2a28888`](https://github.com/mastra-ai/mastra/commit/2a28888f7dfee74f84ec548c9c222cfd1aa7f393)]:
+  - @mastra/core@1.72.0-alpha.8
+
+## 1.9.0-alpha.7
+
+### Minor Changes
+
+- Added model, mode, and reasoning selection for Agent Client Protocol clients: ([#24321](https://github.com/mastra-ai/mastra/pull/24321))
+
+  ```ts
+  await connection.setSessionConfigOption({
+    sessionId,
+    configId: 'thought_level',
+    value: 'high',
+  });
+  ```
+
+  Fixed user prompts and internal system messages appearing as assistant replies. Failed turns now return errors that clients can display; token limits and refusals return their corresponding protocol stop reasons.
+
+  Each conversation now has its own runtime and uses the client's requested working directory. Client-supplied stdio and HTTP MCP servers connect with their configured environment variables or headers. Unsupported legacy SSE servers return an error before session startup.
+
+  Tool approvals and sandbox access requests now ask the client for permission. Cancelling a session stops its active turn and queued prompts without interrupting other conversations. Shutdown waits for cleanup even when multiple signals arrive.
+
+  Headless runs report session cancellation during startup as aborted while preserving provider and transport errors. Session creation retains its original error even if cleanup also fails.
+
+  Model lists now omit unconfigured providers and retain full routing IDs in labels, preventing gateway entries from appearing to be direct provider models.
+
+  Added workspace skill discovery and invocation for Agent Client Protocol clients. Clients can list user-invokable skills and activate them with an ordinary prompt:
+
+  ```ts
+  await connection.prompt({
+    sessionId,
+    prompt: [{ type: 'text', text: '/skill/review Check the current changes' }],
+  });
+  ```
+
+  Skills marked `user-invocable: false` are hidden and cannot be invoked through slash commands.
+
+### Patch Changes
+
+- **Approval prompts are now independent per thread and run.** Concurrent and detached approvals stop overwriting, stranding, or answering each other's gates: gates are keyed by tool call and tagged with the thread and run that opened them, abort and user-message interjection release only the current thread's gates, detached-thread approvals no longer fire notifications or permission hooks, and an approved run resumes against the thread, run, resource, agent, and cancellation signal that actually parked it — so a mode switch, resource re-scope, or a successor run cannot redirect or cancel the parked continuation. ([#24776](https://github.com/mastra-ai/mastra/pull/24776))
+
+  **Approval responses now require the gate's `toolCallId`.** Without the id, a response could release whichever gate happened to be parked — another thread's or another run's — so an id-less response is rejected instead of silently applied. Every caller inside the repo already passes the id; this only affects external callers of the session API.
+
+  Before:
+
+  ```ts
+  session.respondToToolApproval({ decision: 'approve' });
+  ```
+
+  After:
+
+  ```ts
+  session.respondToToolApproval({ decision: 'approve', toolCallId });
+  ```
+
+  Similarly, `SessionApproval.arm()` now requires a `toolCallId`, and `getToolCallId()` is replaced by `getToolCallIds()` (which accepts an optional thread/run filter).
+
+  **"Always allow" grants are now scoped to the gate's thread.** Approving with `always_allow_category` grants the tool's category to the thread that owns the gate rather than the whole session, so a background thread's approval cannot widen what the current thread may run without prompting. `grantCategory`, `grantTool`, `hasCategoryGrant`, `hasToolGrant`, and `getGrants` accept an optional `threadId`; passing one scopes the grant to that thread, omitting it keeps the existing session-wide behavior for embedders that grant explicitly.
+
+- Updated dependencies [[`9ce3444`](https://github.com/mastra-ai/mastra/commit/9ce3444d1a6b17e72b0a20c74603abaf252a843e), [`3b77788`](https://github.com/mastra-ai/mastra/commit/3b77788a08df1e754282d39c42823e6e1c5f2742), [`987257a`](https://github.com/mastra-ai/mastra/commit/987257a34cda8a153fe592c31d75fbb1dee55202), [`65a93a2`](https://github.com/mastra-ai/mastra/commit/65a93a2a3b1434d605a6a417cb83d2d58e16bfc0), [`fd92729`](https://github.com/mastra-ai/mastra/commit/fd92729380a29f2a0ec822e39f3c09eb9aaa5ac5), [`79c3b1f`](https://github.com/mastra-ai/mastra/commit/79c3b1fa4d470585a00558b317ed47db9b1decd4), [`4092ef2`](https://github.com/mastra-ai/mastra/commit/4092ef29aad09f2ba5f90c92a4d4d3bd444eae67), [`68e8258`](https://github.com/mastra-ai/mastra/commit/68e8258560d09abdf8595488aff866f6e39c7913), [`e62e372`](https://github.com/mastra-ai/mastra/commit/e62e3721356955f0a9fd3d723cee9fa0c160652b), [`13f03a4`](https://github.com/mastra-ai/mastra/commit/13f03a4e969384ccb63b81759a9e89a026b1fed8), [`0eb178e`](https://github.com/mastra-ai/mastra/commit/0eb178e3e06fd90d1f76faea8dbbaba8f97afa1f), [`5026973`](https://github.com/mastra-ai/mastra/commit/50269736f432cee1170627b2b6f88ba1431e837f), [`0eb178e`](https://github.com/mastra-ai/mastra/commit/0eb178e3e06fd90d1f76faea8dbbaba8f97afa1f)]:
+  - @mastra/core@1.72.0-alpha.7
+  - @mastra/observability@1.18.2-alpha.1
+  - @mastra/mcp@2.1.1-alpha.0
+  - @mastra/memory@1.33.0-alpha.4
+  - @mastra/libsql@1.24.0-alpha.2
+  - @mastra/pg@1.28.0-alpha.3
+
+## 1.8.4-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`1818674`](https://github.com/mastra-ai/mastra/commit/18186744bebffdfecdca33e0b8b6a421cc95ed0d)]:
+  - @mastra/duckdb@1.11.2-alpha.1
+  - @mastra/core@1.72.0-alpha.6
+
 ## 1.8.4-alpha.5
 
 ### Patch Changes

@@ -94,7 +94,9 @@ import {
   OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_CORE_FEATURE,
   OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_UPGRADE_MESSAGE,
   assertObservabilityTraceQueryDiscoverySupported,
+  assertObservabilityTraceQueryContextIdsSupported,
   assertObservabilityTraceQueryRootDurationSupported,
+  isTraceQueryContextIdField,
   assertObservabilityTraceQuerySupported,
   createObservabilityListQuerySchema,
   getObservabilityStorageCapabilities,
@@ -102,6 +104,7 @@ import {
   NEW_ROUTE_DEFS,
   NO_OBSERVABILITY_STORAGE_CAPABILITIES,
   OBSERVABILITY_LIST_ENDPOINTS,
+  supportsObservabilityTraceQueryContextIds,
   supportsObservabilityTraceQueryRootDuration,
   supportsTraceQueryDiscoveryCore,
   withDiscoveryFallback,
@@ -343,6 +346,7 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilityTraceQuerySupported(observabilityStore);
       assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
+      assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
       if (plan.paginationMode === 'delta' && !observabilityStore.getFeatures()?.includes('delta-polling')) {
         throw new HTTPException(501, { message: 'This storage provider does not support observability delta polling' });
@@ -436,6 +440,10 @@ export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
             predicateScope !== 'trace' ||
             field.path !== 'durationMs' ||
             supportsObservabilityTraceQueryRootDuration(observabilityStore),
+        )
+        .filter(
+          field =>
+            !isTraceQueryContextIdField(field.path) || supportsObservabilityTraceQueryContextIds(observabilityStore),
         );
       return { canonicalFields, ...observed };
     } catch (error) {
@@ -546,7 +554,9 @@ export const QUERY_THREADS = createNewRoute(NEW_ROUTE_DEFS.QUERY_THREADS, {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilityThreadQuerySupported(observabilityStore);
       assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.traces.where);
+      assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.traces.where);
       assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
+      assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
       if (error instanceof HTTPException && error.status === 501) {

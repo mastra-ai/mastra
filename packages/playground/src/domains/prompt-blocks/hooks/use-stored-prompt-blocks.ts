@@ -7,11 +7,9 @@ import type {
 } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { usePlaygroundStore } from '@/store/playground-store';
 
-export const useStoredPromptBlocks = (params?: ListStoredPromptBlocksParams) => {
+export const useStoredPromptBlocks = (params?: ListStoredPromptBlocksParams, requestContext?: Record<string, any>) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useQuery<ListStoredPromptBlocksResponse>({
     queryKey: ['stored-prompt-blocks', params, requestContext],
@@ -20,9 +18,12 @@ export const useStoredPromptBlocks = (params?: ListStoredPromptBlocksParams) => 
   });
 };
 
-export const useStoredPromptBlock = (blockId?: string, options?: { status?: 'draft' | 'published' }) => {
+export const useStoredPromptBlock = (
+  blockId?: string,
+  options?: { status?: 'draft' | 'published' },
+  requestContext?: Record<string, any>,
+) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useQuery<StoredPromptBlockResponse | null>({
     queryKey: ['stored-prompt-block', blockId, options?.status, requestContext],
@@ -31,10 +32,9 @@ export const useStoredPromptBlock = (blockId?: string, options?: { status?: 'dra
   });
 };
 
-export const useStoredPromptBlockMutations = (blockId?: string) => {
+export const useStoredPromptBlockMutations = (blockId?: string, requestContext?: Record<string, any>) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
 
   const createMutation = useMutation({
     mutationFn: (params: CreateStoredPromptBlockParams) => client.createStoredPromptBlock(params),
