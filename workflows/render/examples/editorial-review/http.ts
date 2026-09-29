@@ -8,9 +8,15 @@ import { provider } from './provider.js';
 import { editorialReview, inputSchema, reviewMode } from './workflow.js';
 import './mastra.js';
 import { AdmissionError, type Admission } from './admission.js';
+import { createBodyReader, rejectUpload, UploadError, type UploadLimits } from './uploads.js';
 
 /** Serve authenticated owner-scoped review jobs, enforcing admission before native submission. */
-export function createExampleServer(tokens: Record<string, string>, admission: Admission) {
+export function createExampleServer(
+  tokens: Record<string, string>,
+  admission: Admission,
+  uploadLimits: Partial<UploadLimits> = {},
+) {
+  const readBody = createBodyReader(uploadLimits);
   const principals = Object.entries(tokens);
   if (!principals.length || principals.some(([user, token]) => !user || token.length < 16))
     throw new Error('Provide named demo API tokens of at least 16 characters');
@@ -55,14 +61,7 @@ export function createExampleServer(tokens: Record<string, string>, admission: A
         return;
       }
       if (request.method === 'POST' && url.pathname === '/api/jobs') {
-        let body = '';
-        for await (const chunk of request) {
-          body += String(chunk);
-          if (Buffer.byteLength(body) > 200000) {
-            send(413, { error: 'Draft request is too large.' });
-            return;
-          }
-        }
+        const body = await readBody(request, owner);
         let raw: unknown;
         try {
           raw = JSON.parse(body);
@@ -150,6 +149,10 @@ export function createExampleServer(tokens: Record<string, string>, admission: A
       }
       send(404, { error: 'Not found.' });
     } catch (error) {
+      if (error instanceof UploadError) {
+        rejectUpload(request, response, error);
+        return;
+      }
       if (error instanceof AdmissionError) {
         response.setHeader('retry-after', error.retryAfter);
         send(error.status, { error: error.message });
