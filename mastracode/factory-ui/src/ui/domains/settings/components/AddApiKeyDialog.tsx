@@ -1,9 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
-  DialogAction,
   DialogBody,
-  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -75,13 +73,13 @@ export function AddApiKeyDialog({
   };
 
   return (
-    <Dialog open onOpenChange={open => !open && close()} pending={saveKeyMutation.isPending}>
+    <Dialog open onOpenChange={open => !open && close()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>API key for {displayName}</DialogTitle>
           <DialogDescription>The key is stored securely and never displayed again.</DialogDescription>
         </DialogHeader>
-        <DialogBody>
+        <DialogBody className="flex flex-col gap-4">
           <Input
             autoFocus
             type="password"
@@ -96,7 +94,7 @@ export function AddApiKeyDialog({
           />
           {authEnabled && !fixedScope && (
             <div className="flex items-center justify-between gap-4">
-              <Txt as="span" variant="caption" tone="muted">
+              <Txt as="span" variant="caption" className="text-muted-foreground">
                 Who can use this key
               </Txt>
               <ButtonsGroup size="sm" role="group" aria-label="API key access">
@@ -125,7 +123,7 @@ export function AddApiKeyDialog({
             </div>
           )}
           {personalOnlyWarning && (
-            <Txt as="p" variant="caption" tone="muted" role="note">
+            <Txt as="p" variant="caption" className="text-muted-foreground" role="note">
               Only you will be able to use this key. Ask an org admin to add a shared {displayName} key so teammates can
               use it too.
             </Txt>
@@ -137,10 +135,16 @@ export function AddApiKeyDialog({
           )}
         </DialogBody>
         <DialogFooter>
-          <DialogCancel>Cancel</DialogCancel>
-          <DialogAction disabled={!keyDraft.trim()} onConfirm={() => void saveKey()}>
+          <Button disabled={saveKeyMutation.isPending} onClick={close}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            disabled={saveKeyMutation.isPending || !keyDraft.trim()}
+            onClick={() => void saveKey()}
+          >
             {saveKeyMutation.isPending ? 'Saving…' : 'Save'}
-          </DialogAction>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

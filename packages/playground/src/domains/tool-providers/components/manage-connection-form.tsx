@@ -59,7 +59,7 @@ export const ManageConnectionForm = ({
 
   return (
     <>
-      <DialogBody>
+      <DialogBody className="flex flex-col gap-3">
         {showBack && (
           <Button
             type="button"
@@ -139,11 +139,9 @@ export const ManageConnectionForm = ({
             </AlertDialog.Description>
           </AlertDialog.Header>
           {disconnectConnection.error ? (
-            <AlertDialog.Body>
-              <div role="alert">
-                <Notice variant="destructive">{String(disconnectConnection.error)}</Notice>
-              </div>
-            </AlertDialog.Body>
+            <div role="alert">
+              <Notice variant="destructive">{String(disconnectConnection.error)}</Notice>
+            </div>
           ) : null}
           <AlertDialog.Footer>
             <AlertDialog.Cancel

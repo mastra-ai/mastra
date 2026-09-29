@@ -3,13 +3,13 @@ import type {
   TraceSignalDefinition,
   UpdateTraceSignalDefinitionInput,
 } from '@mastra/client-js';
+import { X } from 'lucide-react';
 import { useId, useState } from 'react';
 
+import { Button } from '@/ds/components/Button';
 import {
   Dialog,
-  DialogAction,
   DialogBody,
-  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -20,6 +20,7 @@ import { Field, FieldDescription, FieldError, FieldLabel } from '@/ds/components
 import { Form } from '@/ds/components/Form';
 import { Input } from '@/ds/components/Input';
 import { Notice } from '@/ds/components/Notice';
+import { Spinner } from '@/ds/components/Spinner';
 import { Textarea } from '@/ds/components/Textarea';
 
 const reservedNames = new Set([
@@ -95,8 +96,8 @@ export function SignalDefinitionFormDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} pending={pending}>
-      <DialogContent size="lg">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{editing ? 'Edit custom signal' : 'Create custom signal'}</DialogTitle>
           <DialogDescription>
@@ -179,10 +180,18 @@ export function SignalDefinitionFormDialog({
           </Form>
         </DialogBody>
         <DialogFooter>
-          <DialogCancel>Cancel</DialogCancel>
-          <DialogAction type="submit" form={formId}>
+          <Button icon={<X />} type="button" variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form={formId}
+            variant="primary"
+            disabled={pending}
+            icon={pending ? <Spinner /> : undefined}
+          >
             {editing ? 'Save signal' : 'Create signal'}
-          </DialogAction>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

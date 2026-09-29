@@ -1,5 +1,5 @@
 import { useMastraClient } from '@mastra/react';
-import { DatabaseIcon } from 'lucide-react';
+import { DatabaseIcon, Save, X } from 'lucide-react';
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useDatasetSaveContext } from '../context/dataset-save-context';
 import type { DatasetSaveContextValue } from '../context/dataset-save-context';
@@ -8,8 +8,6 @@ import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import {
   Dialog,
-  DialogAction,
-  DialogCancel,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -98,13 +96,13 @@ function DatasetSaveDialog({
   }, [input, groundTruth, selectedDatasetId, requestContext, addItem, datasets, onOpenChange, onInputChange]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} pending={addItem.isPending}>
-      <DialogContent>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Save to Dataset</DialogTitle>
           <DialogDescription>Save as a dataset item for evaluation.</DialogDescription>
         </DialogHeader>
-        <DialogBody>
+        <DialogBody className="space-y-4 py-1">
           <Field>
             <FieldLabel>Dataset</FieldLabel>
             <Select
@@ -144,11 +142,19 @@ function DatasetSaveDialog({
             />
           </Field>
         </DialogBody>
-        <DialogFooter>
-          <DialogCancel>Cancel</DialogCancel>
-          <DialogAction onConfirm={handleSubmit} disabled={!selectedDatasetId || datasets.length === 0}>
+        <DialogFooter className="px-4">
+          <Button icon={<X />} variant="default" size="sm" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handleSubmit}
+            disabled={addItem.isPending || !selectedDatasetId || datasets.length === 0}
+            icon={<Save />}
+          >
             {addItem.isPending ? 'Saving...' : 'Save Item'}
-          </DialogAction>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

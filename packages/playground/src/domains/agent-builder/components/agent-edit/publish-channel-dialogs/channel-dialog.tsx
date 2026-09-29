@@ -35,7 +35,7 @@ export function ChannelDialog({
   const close = () => onOpenChange(false);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} intent={view === 'confirm-disconnect' ? 'destructive' : 'default'}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent data-testid={`publish-channel-dialog-${platform.id}`}>
         {view === 'publish' ? (
           <PublishChannelContent

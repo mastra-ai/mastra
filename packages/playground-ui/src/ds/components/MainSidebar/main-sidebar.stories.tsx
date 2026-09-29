@@ -24,7 +24,6 @@ import { getIsLinkActive, MainSidebar, MainSidebarProvider, useMainSidebar } fro
 import type { MainSidebarProviderProps, NavSection } from './main-sidebar';
 import {
   Dialog,
-  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -690,22 +689,22 @@ export const AsChild: Story = {
 
                 {/* asChild: opens a Dialog. Replaces the old `<div onClick>` wrapper hack. */}
                 <Dialog open={supportOpen} onOpenChange={setSupportOpen}>
-                  <DialogTrigger
-                    render={
-                      <MainSidebar.NavLink asChild>
-                        <button type="button">
-                          <LifeBuoy />
-                          <MainSidebar.NavLabel>Contact support</MainSidebar.NavLabel>
-                        </button>
-                      </MainSidebar.NavLink>
-                    }
-                  />
+                  <DialogTrigger asChild>
+                    <MainSidebar.NavLink asChild>
+                      <button type="button">
+                        <LifeBuoy />
+                        <MainSidebar.NavLabel>Contact support</MainSidebar.NavLabel>
+                      </button>
+                    </MainSidebar.NavLink>
+                  </DialogTrigger>
                   <DialogContent>
                     <DialogHeader>
                       <DialogTitle>Contact support</DialogTitle>
                       <DialogDescription>asChild lets a NavLink act as a Dialog trigger.</DialogDescription>
                     </DialogHeader>
-                    <DialogBody>Anything that can be clicked can be a sidebar item.</DialogBody>
+                    <p className="text-caption text-muted-foreground">
+                      Anything that can be clicked can be a sidebar item.
+                    </p>
                   </DialogContent>
                 </Dialog>
 

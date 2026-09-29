@@ -1,20 +1,13 @@
 'use client';
-import {
-  Dialog,
-  DialogAction,
-  DialogBody,
-  DialogCancel,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@mastra/playground-ui/components/Dialog';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
+import { Copy, X } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 export interface DuplicateDatasetDialogProps {
@@ -135,6 +128,13 @@ export function DuplicateDatasetDialog({
     }
   };
 
+  const handleCancel = () => {
+    if (isDuplicating) return; // Prevent cancel during duplication
+    setName('');
+    setDescription('');
+    onOpenChange(false);
+  };
+
   const getProgressText = () => {
     switch (progress.phase) {
       case 'fetching':
@@ -151,13 +151,13 @@ export function DuplicateDatasetDialog({
   const progressPercent = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} pending={isDuplicating}>
-      <DialogContent>
+    <Dialog open={open} onOpenChange={isDuplicating ? undefined : onOpenChange}>
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Duplicate Dataset</DialogTitle>
         </DialogHeader>
-        <Form onSubmit={handleSubmit}>
-          <DialogBody>
+        <DialogBody>
+          <Form onSubmit={handleSubmit}>
             <Field>
               <FieldLabel required>Name</FieldLabel>
               <Input
@@ -194,14 +194,17 @@ export function DuplicateDatasetDialog({
                 <p className="text-body text-muted-foreground">{getProgressText()}</p>
               </div>
             )}
-          </DialogBody>
-          <DialogFooter>
-            <DialogCancel>Cancel</DialogCancel>
-            <DialogAction type="submit" disabled={!name.trim()}>
-              {isDuplicating ? 'Duplicating...' : 'Duplicate Dataset'}
-            </DialogAction>
-          </DialogFooter>
-        </Form>
+
+            <div className="flex justify-end gap-2 pt-4">
+              <Button icon={<X />} type="button" onClick={handleCancel} disabled={isDuplicating}>
+                Cancel
+              </Button>
+              <Button icon={<Copy />} type="submit" variant="primary" disabled={isDuplicating || !name.trim()}>
+                {isDuplicating ? 'Duplicating...' : 'Duplicate Dataset'}
+              </Button>
+            </div>
+          </Form>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

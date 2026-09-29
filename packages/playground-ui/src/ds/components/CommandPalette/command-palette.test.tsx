@@ -255,13 +255,13 @@ describe('CommandPaletteDialog', () => {
   it('dims the page behind it', () => {
     renderDialog();
 
-    expect(document.querySelector('[data-slot="dialog-overlay"]')).toBeTruthy();
+    expect(document.querySelector('.dialog-overlay-anim')).toBeTruthy();
   });
 
   it('leaves the page alone when the caller asks', () => {
     renderDialog({ showOverlay: false });
 
-    expect(document.querySelector('[data-slot="dialog-overlay"]')).toBeNull();
+    expect(document.querySelector('.dialog-overlay-anim')).toBeNull();
   });
 });
 

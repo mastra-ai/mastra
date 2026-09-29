@@ -16,7 +16,9 @@ type Story = StoryObj<typeof AlertDialog>;
 export const Default: Story = {
   render: () => (
     <AlertDialog>
-      <AlertDialog.Trigger render={<Button>Open Alert Dialog</Button>} />
+      <AlertDialog.Trigger asChild>
+        <Button>Open Alert Dialog</Button>
+      </AlertDialog.Trigger>
       <AlertDialog.Content>
         <AlertDialog.Header>
           <AlertDialog.Title>Are you sure?</AlertDialog.Title>
@@ -37,7 +39,9 @@ export const Default: Story = {
 export const DeleteConfirmation: Story = {
   render: () => (
     <AlertDialog>
-      <AlertDialog.Trigger render={<Button>Delete Item</Button>} />
+      <AlertDialog.Trigger asChild>
+        <Button>Delete Item</Button>
+      </AlertDialog.Trigger>
       <AlertDialog.Content>
         <AlertDialog.Header>
           <AlertDialog.Title>Delete this item?</AlertDialog.Title>
@@ -57,7 +61,9 @@ export const DeleteConfirmation: Story = {
 export const LogoutConfirmation: Story = {
   render: () => (
     <AlertDialog>
-      <AlertDialog.Trigger render={<Button variant="ghost">Log out</Button>} />
+      <AlertDialog.Trigger asChild>
+        <Button variant="ghost">Log out</Button>
+      </AlertDialog.Trigger>
       <AlertDialog.Content>
         <AlertDialog.Header>
           <AlertDialog.Title>Log out of your account?</AlertDialog.Title>
@@ -75,7 +81,9 @@ export const LogoutConfirmation: Story = {
 export const DiscardChanges: Story = {
   render: () => (
     <AlertDialog>
-      <AlertDialog.Trigger render={<Button>Discard changes</Button>} />
+      <AlertDialog.Trigger asChild>
+        <Button>Discard changes</Button>
+      </AlertDialog.Trigger>
       <AlertDialog.Content>
         <AlertDialog.Header>
           <AlertDialog.Title>Discard unsaved changes?</AlertDialog.Title>

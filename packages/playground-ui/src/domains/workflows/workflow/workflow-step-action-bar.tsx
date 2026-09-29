@@ -5,7 +5,14 @@ import type { TripwireData } from '../context/use-current-run';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
 import { WorkflowTimeTravelForm } from './workflow-time-travel-form';
-import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogBody } from '@/ds/components/Dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogHeader,
+  DialogDescription,
+  DialogBody,
+} from '@/ds/components/Dialog';
 import { WorkflowCodeContent, WorkflowStepActions, WorkflowStepAction } from '@/ds/components/Workflow';
 
 export interface WorkflowStepActionBarProps {
@@ -55,6 +62,8 @@ export const WorkflowStepActionBar = ({
   const { showMapConfig, stepDetail, closeStepDetail } = useWorkflowStepDetail();
 
   const workflowStatus = result?.status ?? runSnapshot?.status;
+
+  const dialogContentClass = 'max-w-4xl w-full';
 
   const showTimeTravel =
     !withoutTimeTravel && stepKey && !mapConfig && workflowStatus !== 'running' && workflowStatus !== 'paused';
@@ -181,11 +190,12 @@ export const WorkflowStepActionBar = ({
 
       {showTimeTravel && (
         <Dialog {...dialogProps('timeTravel')}>
-          <DialogContent size="xl">
+          <DialogContent className={dialogContentClass}>
             <DialogHeader>
               <DialogTitle>Time travel to {stepKey}</DialogTitle>
+              <DialogDescription>Time travel to a specific workflow step</DialogDescription>
             </DialogHeader>
-            <DialogBody>
+            <DialogBody className="max-h-150">
               <WorkflowTimeTravelForm stepKey={stepKey} closeModal={closeDialog} requestContext={requestContext} />
             </DialogBody>
           </DialogContent>
@@ -195,11 +205,12 @@ export const WorkflowStepActionBar = ({
       {showDebugMode && !mapConfig && (
         <>
           <Dialog {...dialogProps('runStep')}>
-            <DialogContent size="xl">
+            <DialogContent className={dialogContentClass}>
               <DialogHeader>
                 <DialogTitle>Run step {stepKey}</DialogTitle>
+                <DialogDescription>Run a specific workflow step</DialogDescription>
               </DialogHeader>
-              <DialogBody>
+              <DialogBody className="max-h-150">
                 <WorkflowTimeTravelForm
                   requestContext={requestContext}
                   stepKey={stepKey}
@@ -213,11 +224,12 @@ export const WorkflowStepActionBar = ({
           </Dialog>
 
           <Dialog {...dialogProps('continueRun')}>
-            <DialogContent size="xl">
+            <DialogContent className={dialogContentClass}>
               <DialogHeader>
                 <DialogTitle>Continue run {stepKey}</DialogTitle>
+                <DialogDescription>Continue the workflow run from this step</DialogDescription>
               </DialogHeader>
-              <DialogBody>
+              <DialogBody className="max-h-150">
                 <WorkflowTimeTravelForm
                   requestContext={requestContext}
                   stepKey={stepKey}
@@ -234,9 +246,10 @@ export const WorkflowStepActionBar = ({
 
       {resumeData && (
         <Dialog {...dialogProps('resumeData')}>
-          <DialogContent size="xl">
+          <DialogContent className={dialogContentClass}>
             <DialogHeader>
               <DialogTitle>{stepName} resume data</DialogTitle>
+              <DialogDescription>View the resume data for this step</DialogDescription>
             </DialogHeader>
             <DialogBody>
               <WorkflowCodeContent data={resumeData} />
@@ -247,9 +260,10 @@ export const WorkflowStepActionBar = ({
 
       {error && (
         <Dialog {...dialogProps('error')}>
-          <DialogContent size="xl">
+          <DialogContent className={dialogContentClass}>
             <DialogHeader>
               <DialogTitle>{stepName} error</DialogTitle>
+              <DialogDescription>View the error details for this step</DialogDescription>
             </DialogHeader>
             <DialogBody>
               <WorkflowCodeContent data={error} />
@@ -260,9 +274,10 @@ export const WorkflowStepActionBar = ({
 
       {tripwire && (
         <Dialog {...dialogProps('tripwire')}>
-          <DialogContent size="xl">
+          <DialogContent className={dialogContentClass}>
             <DialogHeader>
               <DialogTitle>{stepName} tripwire</DialogTitle>
+              <DialogDescription>View the tripwire details for this step</DialogDescription>
             </DialogHeader>
             <DialogBody>
               <WorkflowCodeContent

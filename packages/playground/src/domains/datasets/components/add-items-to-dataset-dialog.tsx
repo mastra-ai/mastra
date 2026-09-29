@@ -1,21 +1,14 @@
 'use client';
 
 import type { DatasetItem } from '@mastra/client-js';
-import {
-  Dialog,
-  DialogAction,
-  DialogBody,
-  DialogCancel,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@mastra/playground-ui/components/Dialog';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@mastra/playground-ui/components/Select';
 import { useDatasetMutations, useDatasets } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { Plus, X } from 'lucide-react';
 import { useState } from 'react';
 
 export interface AddItemsToDatasetDialogProps {
@@ -83,16 +76,22 @@ export function AddItemsToDatasetDialog({
     }
   };
 
+  const handleCancel = () => {
+    if (isAdding) return;
+    setSelectedDatasetId('');
+    onOpenChange(false);
+  };
+
   const progressPercent = items.length > 0 ? (progress / items.length) * 100 : 0;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} pending={isAdding}>
-      <DialogContent>
+    <Dialog open={open} onOpenChange={isAdding ? undefined : onOpenChange}>
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Add Items to Dataset</DialogTitle>
         </DialogHeader>
-        <Form onSubmit={handleSubmit}>
-          <DialogBody>
+        <DialogBody>
+          <Form onSubmit={handleSubmit}>
             <Field>
               <FieldLabel required>Target Dataset</FieldLabel>
               <Select
@@ -136,14 +135,22 @@ export function AddItemsToDatasetDialog({
                 </p>
               </div>
             )}
-          </DialogBody>
-          <DialogFooter>
-            <DialogCancel onClick={() => setSelectedDatasetId('')}>Cancel</DialogCancel>
-            <DialogAction type="submit" disabled={!selectedDatasetId || availableDatasets.length === 0}>
-              {isAdding ? `Adding... (${progress}/${items.length})` : 'Add Items'}
-            </DialogAction>
-          </DialogFooter>
-        </Form>
+
+            <div className="flex justify-end gap-2 pt-4">
+              <Button icon={<X />} type="button" onClick={handleCancel} disabled={isAdding}>
+                Cancel
+              </Button>
+              <Button
+                icon={<Plus />}
+                type="submit"
+                variant="primary"
+                disabled={isAdding || !selectedDatasetId || availableDatasets.length === 0}
+              >
+                {isAdding ? `Adding... (${progress}/${items.length})` : 'Add Items'}
+              </Button>
+            </div>
+          </Form>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

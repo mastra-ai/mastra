@@ -55,6 +55,7 @@ export const ManageConnectionList = ({
         <DialogFooter>
           <Button
             type="button"
+            size="sm"
             onClick={onAddConnection}
             disabled={disabled || addingConnection}
             data-testid={`${testIdPrefix}-add`}

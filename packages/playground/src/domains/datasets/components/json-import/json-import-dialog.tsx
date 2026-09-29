@@ -1,19 +1,19 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
-  DialogAction,
-  DialogBody,
-  DialogCancel,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogBody,
+  DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { X } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { MAX_IMPORT_BYTES, MAX_IMPORT_LABEL, validateImportJSON } from '../../utils/json-validation';
@@ -99,10 +99,11 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
   }, []);
 
   const handleClose = useCallback(() => {
+    if (isImporting) return;
     onOpenChange(false);
     // Reset after the close animation
     setTimeout(resetState, 150);
-  }, [onOpenChange, resetState]);
+  }, [isImporting, onOpenChange, resetState]);
 
   const handleImport = useCallback(async () => {
     if (validation.status !== 'ready') return;
@@ -122,17 +123,17 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
   }, [validation, batchInsertItems, datasetId, onSuccess, onOpenChange, resetState]);
 
   return (
-    <Dialog open={open} onOpenChange={handleClose} pending={isImporting}>
-      <DialogContent size="xl">
-        <DialogHeader>
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="flex max-h-[90vh] w-[960px] max-w-[calc(100vw-2rem)] flex-col gap-0 p-0">
+        <DialogHeader className="border-b border-border px-4 py-4">
           <DialogTitle>Import into dataset</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="not-sr-only text-caption text-muted-foreground">
             Add items to {datasetName ? <span className="text-foreground">{datasetName}</span> : 'this dataset'} from a
             JSON file or paste them directly.
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody flush>
+        <DialogBody className="max-h-none min-h-0 flex-1 overflow-y-auto p-0">
           <div className="grid divide-y divide-border md:grid-cols-[1.15fr_1fr] md:divide-x md:divide-y-0">
             <div className="flex min-h-[360px] flex-col p-4">
               <JSONSourcePanel
@@ -153,15 +154,19 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
           </div>
         </DialogBody>
 
-        <DialogFooter>
+        <DialogFooter className="items-center border-t border-border px-4 py-3 sm:justify-between">
           <JSONImportStatus validation={validation} />
-          <DialogCancel>Cancel</DialogCancel>
-          <DialogAction onConfirm={handleImport} disabled={validation.status !== 'ready'}>
-            {isImporting && <Spinner />}
-            {validation.status === 'ready'
-              ? `Import ${validation.total} item${validation.total !== 1 ? 's' : ''}`
-              : 'Import'}
-          </DialogAction>
+          <div className="flex gap-2">
+            <Button icon={<X />} onClick={handleClose} disabled={isImporting}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleImport} disabled={validation.status !== 'ready' || isImporting}>
+              {isImporting && <Spinner />}
+              {validation.status === 'ready'
+                ? `Import ${validation.total} item${validation.total !== 1 ? 's' : ''}`
+                : 'Import'}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -218,7 +223,7 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
   }
 
   return (
-    <div role="status" className="mr-auto flex min-w-0 items-center gap-2 text-caption text-muted-foreground">
+    <div role="status" className="flex min-w-0 items-center gap-2 text-caption text-muted-foreground">
       <span className={dotClassName} />
       <span className="truncate">{message}</span>
     </div>
