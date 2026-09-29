@@ -1,6 +1,12 @@
 import { isRemoteUrl } from '@/lib/file';
 
-export type ComposerAttachmentKind = 'image' | 'pdf' | 'video' | 'text' | 'file';
+export type ComposerAttachmentKind = 'image' | 'pdf' | 'video' | 'text' | 'spreadsheet' | 'file';
+
+// Models cannot read these; the server routes them to the agent workspace instead.
+export const spreadsheetTypes = new Set([
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+]);
 
 // Browsers can omit these types or report CSV as application/vnd.ms-excel.
 const extensionTypes = new Map([
@@ -65,6 +71,7 @@ export const classifyAttachment = (
     (extension ? 'application/octet-stream' : 'text/plain');
   if (contentType.startsWith('image/')) return { kind: 'image', contentType };
   if (contentType === 'application/pdf' || extension === 'pdf') return { kind: 'pdf', contentType: 'application/pdf' };
+  if (spreadsheetTypes.has(contentType)) return { kind: 'spreadsheet', contentType };
   if (contentType.startsWith('video/') || contentType.startsWith('audio/')) return { kind: 'video', contentType };
   return { kind: isTextMimeType(contentType) ? 'text' : 'file', contentType };
 };

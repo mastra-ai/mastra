@@ -6,7 +6,7 @@ import { ComposerAttachmentsProvider } from '../composer-attachments';
 
 // The native picker is the only browser boundary; the real provider validates the files.
 describe('AttachFilePopover', () => {
-  describe('when an unsupported spreadsheet is selected', () => {
+  describe('when an unsupported binary file is selected', () => {
     it('explains how to attach readable data instead', async () => {
       render(
         <ComposerAttachmentsProvider>
@@ -17,9 +17,8 @@ describe('AttachFilePopover', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
       const input = document.querySelector<HTMLInputElement>('input[type="file"]');
       if (!input) throw new Error('Native file picker input is missing');
-      fireEvent.change(input, { target: { files: [new File(['binary'], 'leads.xlsx')] } });
-      expect((await screen.findByRole('alert')).textContent).toContain('leads.xlsx');
-      expect(screen.getByRole('alert').textContent).toContain('CSV');
+      fireEvent.change(input, { target: { files: [new File([new Uint8Array([0xff, 0xfe, 0xfd])], 'archive.zip')] } });
+      expect((await screen.findByRole('alert')).textContent).toContain('archive.zip');
     });
   });
 });

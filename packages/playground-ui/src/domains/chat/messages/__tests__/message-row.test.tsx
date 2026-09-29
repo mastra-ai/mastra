@@ -108,6 +108,18 @@ describe('MessageRow', () => {
       expect(container.textContent).toContain('word39');
     });
 
+    it('shows a user message whole at once', () => {
+      vi.useFakeTimers();
+      const text = `Ready. ${Array.from({ length: 40 }, (_, index) => `word${index}`).join(' ')}`;
+      const user = (value: string) =>
+        baseMessage({ role: 'user', content: { format: 2, parts: [streamingText(value)] } });
+
+      const { container, rerender } = render(<MessageRow message={user('Ready.')} />, { wrapper: Providers });
+      rerender(<MessageRow message={user(text)} />);
+
+      expect(container.textContent).toContain('word39');
+    });
+
     it('holds a tool row behind the prose written before it', () => {
       vi.useFakeTimers();
       const reply = `Ready. ${Array.from({ length: 40 }, (_, index) => `word${index}`).join(' ')}`;

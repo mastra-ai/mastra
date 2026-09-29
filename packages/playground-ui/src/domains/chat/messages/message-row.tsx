@@ -151,7 +151,7 @@ export const MessageRow = memo(function MessageRow({
   const { data: mcpAppTools } = useMcpAppTools();
   const parts = dbMessage?.content.parts ?? NO_PARTS;
   const revealed = useRevealedParts(parts, isStreaming(parts));
-  const shownParts = isProse(parts, metadata) ? revealed : parts;
+  const shownParts = dbMessage?.role === 'assistant' && isProse(parts, metadata) ? revealed : parts;
   const revealing = shownParts !== parts;
 
   const toolContext = useMemo<ToolCardContext>(() => ({ metadata, mcpAppTools }), [metadata, mcpAppTools]);

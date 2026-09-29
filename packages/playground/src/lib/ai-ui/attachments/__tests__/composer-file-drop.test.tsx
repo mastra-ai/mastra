@@ -48,13 +48,21 @@ describe('ComposerFileDrop', () => {
     });
   });
 
-  describe('when an unsupported spreadsheet is dropped', () => {
-    it('explains how to attach readable data instead', async () => {
+  describe('when a spreadsheet is dropped', () => {
+    it('attaches it to the composer without an error', async () => {
       renderComposer();
       dropOnWindow([new File(['binary'], 'leads.xlsx')]);
+      expect(await screen.findByRole('button', { name: 'Remove leads.xlsx' })).toBeTruthy();
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+  });
+
+  describe('when an unsupported binary file is dropped', () => {
+    it('explains how to attach readable data instead', async () => {
+      renderComposer();
+      dropOnWindow([new File([new Uint8Array([0xff, 0xfe, 0xfd])], 'archive.zip')]);
       const alert = await screen.findByRole('alert');
-      expect(alert.textContent).toContain('leads.xlsx');
-      expect(alert.textContent).toContain('CSV');
+      expect(alert.textContent).toContain('archive.zip');
     });
   });
 

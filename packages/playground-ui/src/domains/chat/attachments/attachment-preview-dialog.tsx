@@ -1,5 +1,6 @@
-import { File as FileIcon, FileAudio, FileText, FileVideo } from 'lucide-react';
+import { File as FileIcon, FileAudio, FileSpreadsheet, FileText, FileVideo } from 'lucide-react';
 import { useState } from 'react';
+import { spreadsheetTypes } from './attachment-kind';
 import { Button } from '@/ds/components/Button';
 import {
   Dialog,
@@ -67,13 +68,15 @@ interface FileChipEntryProps {
 const iconForContentType = (contentType?: string) => {
   if (contentType?.startsWith('video/')) return { Icon: FileVideo, label: 'Video file' };
   if (contentType?.startsWith('audio/')) return { Icon: FileAudio, label: 'Audio file' };
+  if (contentType && spreadsheetTypes.has(contentType))
+    return { Icon: FileSpreadsheet, label: 'Spreadsheet file', className: 'text-accent1' };
   if (contentType?.startsWith('text/') || contentType === 'application/pdf')
     return { Icon: FileText, label: 'Document file' };
   return { Icon: FileIcon, label: 'File' };
 };
 export const FileChipEntry = ({ name, url, contentType }: FileChipEntryProps) => {
-  const { Icon, label } = iconForContentType(contentType);
-  const icon = <Icon className="text-accent2" aria-label={label} />;
+  const { Icon, label, className = 'text-accent2' } = iconForContentType(contentType);
+  const icon = <Icon className={className} aria-label={label} />;
 
   if (url) {
     return (

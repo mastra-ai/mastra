@@ -140,12 +140,7 @@ export const ComposerAttachmentsProvider = ({
         const list = await Promise.all(
           Array.from(files).map(async file => {
             const attachment = toAttachment(file);
-            if (
-              attachment.kind === 'file' &&
-              !attachment.contentType.startsWith('application/vnd.ms-excel') &&
-              !attachment.contentType.startsWith('application/vnd.openxmlformats-officedocument.spreadsheetml') &&
-              (await looksLikeText(file))
-            ) {
+            if (attachment.kind === 'file' && (await looksLikeText(file))) {
               return { ...attachment, kind: 'text' as const, contentType: 'text/plain' };
             }
             return attachment;

@@ -29,6 +29,30 @@ describe('UserTextPartRenderer', () => {
     expect(screen.queryByText(/hello body/)).toBeNull();
   });
 
+  describe('given a spreadsheet uploaded to the workspace', () => {
+    it('when rendered then it shows a spreadsheet chip instead of the raw note', () => {
+      const text =
+        '[Attachment "Feuille de calcul.xlsx" (application/vnd.openxmlformats-officedocument.spreadsheetml.sheet) was uploaded to the workspace at uploads/abc/Feuille de calcul.xlsx. Use workspace tools to read it.]';
+
+      render(<UserTextPartRenderer part={{ type: 'text', text }} />);
+
+      expect(screen.getAllByTitle('Feuille de calcul.xlsx').length).toBeGreaterThan(0);
+      expect(screen.getByLabelText('Spreadsheet file')).toBeTruthy();
+      expect(screen.queryByText(/Use workspace tools/)).toBeNull();
+    });
+
+    it('when the note is merged with the user prompt then it shows the chip and the prompt only', () => {
+      const text =
+        'donne moi la premiere ligne\n\n[Attachment "a.xlsx" (application/vnd.openxmlformats-officedocument.spreadsheetml.sheet) was uploaded to the workspace at uploads/abc/a.xlsx. Use workspace tools to read it.]';
+
+      render(<UserTextPartRenderer part={{ type: 'text', text }} />);
+
+      expect(screen.getByLabelText('Spreadsheet file')).toBeTruthy();
+      expect(screen.getByText(/donne moi la premiere ligne/)).toBeTruthy();
+      expect(screen.queryByText(/Use workspace tools/)).toBeNull();
+    });
+  });
+
   describe('when several named text attachments are rendered', () => {
     it('identifies each preview by its decoded filename', () => {
       render(

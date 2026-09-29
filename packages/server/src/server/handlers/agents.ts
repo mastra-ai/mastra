@@ -95,7 +95,7 @@ import {
   validateThreadOwnership,
   validateRunOwnership,
 } from './utils';
-import { routeAttachmentsToWorkspace } from './workspace-attachments';
+import { routeAttachmentsToWorkspace, routeSignalContentsToWorkspace } from './workspace-attachments';
 
 /**
  * Merge incoming version overrides onto a RequestContext.
@@ -2045,7 +2045,14 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
         throw new HTTPException(501, { message: 'agent signals are not supported by this Mastra core version' });
       }
 
-      const agentSignal = signal as AgentSignalInput;
+      const agentSignal = {
+        ...signal,
+        contents: await routeSignalContentsToWorkspace({
+          agent,
+          contents: signal.contents,
+          requestContext: serverRequestContext,
+        }),
+      } as AgentSignalInput;
 
       if (runId) {
         const result = await agent.sendSignal(agentSignal, {
@@ -2148,6 +2155,13 @@ async function handleAgentMessageRoute({
   if (typeof (agent as unknown as Record<string, unknown>)[methodName] !== 'function') {
     throw new HTTPException(501, { message: `agent ${methodName} is not supported by this Mastra core version` });
   }
+
+  const routeContents = <C>(contents: C) =>
+    routeSignalContentsToWorkspace({ agent, contents, requestContext: serverRequestContext });
+  message =
+    typeof message === 'object' && !Array.isArray(message)
+      ? { ...message, contents: await routeContents(message.contents) }
+      : await routeContents(message);
 
   if (runId) {
     const result = await agent[methodName](message, {

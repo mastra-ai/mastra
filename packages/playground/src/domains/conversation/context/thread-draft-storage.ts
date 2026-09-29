@@ -25,7 +25,7 @@ const recordSchema = z.object({
         id: z.string(),
         name: z.string(),
         contentType: z.string(),
-        kind: z.enum(['image', 'pdf', 'video', 'text', 'file']),
+        kind: z.enum(['image', 'pdf', 'video', 'text', 'spreadsheet', 'file']),
         isUrl: z.boolean(),
         file: z.custom<Blob>(value => value instanceof Blob),
         fileName: z.string(),

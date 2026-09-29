@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import { lessComplexWorkflow, myWorkflow } from '../workflows';
+import { myWorkflow } from '../workflows';
 import { Memory } from '@mastra/memory';
 import { ModerationProcessor } from '@mastra/core/processors';
 import { submitPlanTool } from '@mastra/core/tools';
@@ -115,7 +115,6 @@ export const chefModelV2Agent = new Agent({
   },
   workflows: {
     myWorkflow,
-    lessComplexWorkflow,
     findUserWorkflow,
   },
   scorers: {

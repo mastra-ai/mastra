@@ -42,8 +42,11 @@ describe('classifyAttachment', () => {
       expect(classifyAttachment('README.MD', '')).toEqual({ kind: 'text', contentType: 'text/markdown' });
     });
 
-    it('classifies spreadsheets as generic files', () => {
-      expect(classifyAttachment('leads.xlsx', '').kind).toBe('file');
+    it.each([
+      ['leads.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+      ['leads.xls', 'application/vnd.ms-excel'],
+    ])('classifies %s as a spreadsheet', (name, contentType) => {
+      expect(classifyAttachment(name, '')).toEqual({ kind: 'spreadsheet', contentType });
     });
   });
 

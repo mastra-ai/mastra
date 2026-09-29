@@ -1054,6 +1054,95 @@ describe('Agent Routes Authorization', () => {
       },
     );
 
+    const spreadsheetContents = () => [
+      { type: 'text', text: 'Summarize' },
+      { type: 'file', data: 'UEsDBA==', mediaType: XLSX, filename: 'report.xlsx' },
+    ];
+
+    it.each([
+      [
+        'signal',
+        SEND_AGENT_SIGNAL_ROUTE,
+        'sendSignal',
+        () => ({ signal: { type: 'user-message', contents: spreadsheetContents() } }),
+      ],
+      [
+        'send-message',
+        SEND_AGENT_MESSAGE_ROUTE,
+        'sendMessage',
+        () => ({ message: { contents: spreadsheetContents() } }),
+      ],
+      ['queue-message', QUEUE_AGENT_MESSAGE_ROUTE, 'queueMessage', () => ({ message: spreadsheetContents() })],
+    ] as const)(
+      'when %s is called on an agent without a workspace then it responds 403 with the error code',
+      async (_label, route, method, body) => {
+        const agentCall = vi.fn();
+        (mockAgent as any)[method] = agentCall;
+
+        const error = await (route.handler as any)({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: new RequestContext(),
+          runId: 'run-1',
+          ...body(),
+        }).catch((e: unknown) => e);
+
+        expect(error).toBeInstanceOf(HTTPException);
+        expect(error.status).toBe(403);
+        expect(await error.getResponse().json()).toMatchObject({ code: 'WORKSPACE_REQUIRED_FOR_ATTACHMENT' });
+        expect(agentCall).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      [
+        'signal',
+        SEND_AGENT_SIGNAL_ROUTE,
+        'sendSignal',
+        () => ({ signal: { type: 'user-message', contents: spreadsheetContents() } }),
+        (arg: any) => arg.contents,
+      ],
+      [
+        'send-message',
+        SEND_AGENT_MESSAGE_ROUTE,
+        'sendMessage',
+        () => ({ message: { contents: spreadsheetContents() } }),
+        (arg: any) => arg.contents,
+      ],
+      [
+        'queue-message',
+        QUEUE_AGENT_MESSAGE_ROUTE,
+        'queueMessage',
+        () => ({ message: spreadsheetContents() }),
+        (arg: any) => arg,
+      ],
+    ] as const)(
+      'when %s is called on an agent with a workspace then the agent receives a text part',
+      async (_label, route, method, body, contentsOf) => {
+        const writeFile = vi.fn().mockResolvedValue(undefined);
+        vi.spyOn(mockAgent, 'getWorkspace').mockResolvedValue({ filesystem: { writeFile } } as any);
+        const agentCall = vi.fn().mockReturnValue({ accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }) });
+        (mockAgent as any)[method] = agentCall;
+
+        await (route.handler as any)({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: new RequestContext(),
+          runId: 'run-1',
+          ...body(),
+        });
+
+        expect(writeFile).toHaveBeenCalledWith(
+          expect.stringMatching(/^uploads\/.+\/report\.xlsx$/),
+          expect.any(Buffer),
+        );
+        expect(contentsOf(agentCall.mock.calls[0][0])).toEqual([
+          { type: 'text', text: 'Summarize' },
+          { type: 'text', text: expect.stringContaining('report.xlsx') },
+        ]);
+      },
+    );
+
     it('when stream is called on an agent with a workspace then the agent receives a text part', async () => {
       const writeFile = vi.fn().mockResolvedValue(undefined);
       vi.spyOn(mockAgent, 'getWorkspace').mockResolvedValue({ filesystem: { writeFile } } as any);

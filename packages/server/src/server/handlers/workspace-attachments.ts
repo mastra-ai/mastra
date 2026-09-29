@@ -86,6 +86,20 @@ export async function routeAttachmentsToWorkspace<T>({
   return (await routeMessage(messages)) as T;
 }
 
+export async function routeSignalContentsToWorkspace<T>({
+  agent,
+  contents,
+  requestContext,
+}: {
+  agent: Agent<any, any, any>;
+  contents: T;
+  requestContext: RequestContext;
+}): Promise<T> {
+  if (!Array.isArray(contents)) return contents;
+  const routed = await routeAttachmentsToWorkspace({ agent, messages: { content: contents }, requestContext });
+  return routed.content as T;
+}
+
 function sanitizeFilename(filename: unknown): string {
   const base = typeof filename === 'string' ? (filename.split(/[\\/]/).pop() ?? '') : '';
   const cleaned = base

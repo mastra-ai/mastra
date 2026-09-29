@@ -192,19 +192,27 @@ describe('composer attachments', () => {
     });
   });
 
-  describe('when a local workbook name contains URL punctuation', () => {
-    it.each(['leads#2026.xlsx', 'leads.csv#2026.xlsx', 'leads.csv?2026.xls'])(
-      'rejects %s rather than reading its bytes as text',
-      async name => {
-        const { ref } = renderProvider();
-        let rejected;
-        await act(async () => {
-          rejected = await ref.current!.addFiles([new File(['fake workbook'], name)]);
-        });
-        expect(rejected).toEqual([name]);
-        expect(ref.current!.attachments).toEqual([]);
-      },
-    );
+  describe('when a spreadsheet is attached', () => {
+    it.each([
+      ['leads.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+      ['leads.xls', 'application/vnd.ms-excel'],
+      ['leads#2026.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+      ['leads.csv?2026.xls', 'application/vnd.ms-excel'],
+    ])('sends %s as a file part with its bytes intact', async (name, mimeType) => {
+      const { ref } = renderProvider();
+      let rejected;
+      await act(async () => {
+        rejected = await ref.current!.addFiles([new File([new Uint8Array([80, 75, 3, 4])], name)]);
+      });
+      expect(rejected).toEqual([]);
+      expect(ref.current!.attachments[0]?.kind).toBe('spreadsheet');
+      expect(await ref.current!.toCoreUserMessages()).toEqual([
+        {
+          role: 'user',
+          content: [{ type: 'file', data: `data:${mimeType};base64,UEsDBA==`, mimeType, filename: name }],
+        },
+      ]);
+    });
   });
 
   describe('when an empty text file has markup in its filename', () => {
@@ -220,7 +228,7 @@ describe('composer attachments', () => {
   });
 
   describe('when unsupported binary files are selected', () => {
-    it.each(['leads.xls', 'leads.xlsx', 'archive.zip', 'file.constructor'])(
+    it.each(['archive.zip', 'file.constructor'])(
       'rejects %s while keeping supported files in the same selection',
       async name => {
         const { ref } = renderProvider();
