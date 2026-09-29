@@ -1,4 +1,5 @@
 import { ClientError } from '@renderinc/sdk';
+import { submissionHash } from './authorization.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { AnyWorkflow } from '@mastra/core/workflows';
 import { RenderProtocolError, RenderRunConflictError, RenderSubmissionUnknownError, errorRecord } from './errors.js';
@@ -85,6 +86,7 @@ export class RenderProvider {
       status: 'submitting',
       input: json(envelope.input),
       initialState: json(envelope.state),
+      submissionHash: submissionHash(envelope),
       createdAt: now,
       updatedAt: now,
     };
@@ -124,7 +126,13 @@ export class RenderProvider {
       // an active Mastra execution, not user-directed suspend/resume.
       const status = remote.status === 'pending' ? 'pending' : 'running';
       return updateRun(this.store, workflowId, runId, current => ({
-        status: current.status === 'cancel-requested' ? current.status : status,
+        // A stale pending read must not revoke a coordinator that already claimed the run.
+        status:
+          current.status === 'cancel-requested'
+            ? current.status
+            : current.workerClaim && !current.dispatchClosed
+              ? 'running'
+              : status,
       }));
     }
     if (remote.status === 'completed' || remote.status === 'succeeded') {

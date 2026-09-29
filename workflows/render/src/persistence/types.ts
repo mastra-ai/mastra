@@ -2,7 +2,14 @@ import type { Json } from '../protocol.js';
 import { RenderRunConflictError } from '../errors.js';
 
 export type RunStatus =
-  'submitting' | 'submission-unknown' | 'pending' | 'running' | 'cancel-requested' | 'success' | 'failed' | 'canceled';
+  | 'submitting'
+  | 'submission-unknown'
+  | 'pending'
+  | 'running'
+  | 'cancel-requested'
+  | 'success'
+  | 'failed'
+  | 'canceled';
 export interface RunRecord {
   workflowId: string;
   runId: string;
@@ -13,6 +20,10 @@ export interface RunRecord {
   status: RunStatus;
   providerId?: string;
   workerClaim?: string;
+  /** Hash of the originally accepted root envelope, including request context. */
+  submissionHash?: string;
+  dispatchClosed?: boolean;
+  dispatchExpiresAt?: number;
   input: Json;
   initialState: Json;
   result?: Json;

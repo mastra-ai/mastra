@@ -1,12 +1,14 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { TaskContext, TaskDefinition } from '@renderinc/sdk/workflows';
 import { unsupported } from './errors.js';
+import { json, type StepEnvelope } from './protocol.js';
 
 interface Runtime {
   context: TaskContext;
   tasks: ReadonlyMap<string, TaskDefinition<[unknown], unknown>>;
   run?: { workflowId: string; runId: string };
   dispatch?: <T>(execute: () => Promise<T>) => Promise<T>;
+  authorize?: (envelope: StepEnvelope) => StepEnvelope;
 }
 const runtime = new AsyncLocalStorage<Runtime>();
 export function withTaskRuntime<T>(value: Runtime, execute: () => Promise<T>): Promise<T> {
@@ -24,11 +26,13 @@ export function getRenderTaskContext(): TaskContext {
   return runtime.getStore()?.context ?? unsupported('accessing Render task context outside a worker execution');
 }
 
-export function dispatchChild(name: string, envelope: unknown): Promise<unknown> {
+export function dispatchChild(name: string, envelope: StepEnvelope): Promise<unknown> {
   const active = runtime.getStore();
   const definition = active?.tasks.get(name);
-  if (!active || !definition) return unsupported(`unregistered Render child task ${name}`);
-  const execute = () => active.context.run(definition, envelope);
+  if (!active?.authorize || !definition) return unsupported(`unauthorized Render child dispatch ${name}`);
+  const authorized = active.authorize(envelope);
+  json([authorized], 'authorized task arguments');
+  const execute = () => active.context.run(definition, authorized);
   return active.dispatch ? active.dispatch(execute) : execute();
 }
 

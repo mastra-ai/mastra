@@ -1,5 +1,5 @@
 import { task } from '@renderinc/sdk/workflows';
-import { randomUUID } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import type { TaskDefinition } from '@renderinc/sdk/workflows';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
@@ -10,6 +10,7 @@ import { terminal, updateRun } from './persistence/types.js';
 import { workflowBindings, type WorkflowBinding } from './provider.js';
 import { RenderRun } from './run.js';
 import { withTaskRuntime, createDispatchLimiter } from './runtime-internal.js';
+import { authorizeDispatch, submissionHash, verifyDispatch } from './authorization.js';
 
 /** Import application definitions first, then register synchronously before SDK autostart. */
 export function registerRenderTasks({
@@ -59,6 +60,7 @@ export function registerRenderTasks({
           const envelope = parseEnvelope(stepEnvelopeSchema, raw);
           check(binding, envelope);
           if (envelope.stepKey !== registered.key) throw new RenderProtocolError('Step identity mismatch');
+          verifyDispatch(envelope, await binding.provider.store.get(envelope.workflowId, envelope.runId));
           return withTaskRuntime({ context, tasks: definitions, run: envelope }, () =>
             executeRemoteStep(registered.step, envelope, mastra, binding.provider.contextKeys),
           );
@@ -76,16 +78,26 @@ export function registerRenderTasks({
           !record ||
           record.manifest !== envelope.manifest ||
           record.resourceId !== envelope.resourceId ||
+          record.buildId !== envelope.buildId ||
+          record.submissionHash !== submissionHash(envelope) ||
+          record.status === 'cancel-requested' ||
           record.status === 'success' ||
           record.status === 'failed' ||
           record.status === 'canceled'
         ) {
           throw new RenderProtocolError('Missing, mismatched or terminal Mastra run binding');
         }
-        const workerClaim = randomUUID();
+        const workerClaim = randomBytes(32).toString('hex');
         const claimed = await updateRun(store, envelope.workflowId, envelope.runId, current => {
           if (current.workerClaim) throw new RenderProtocolError('This Mastra run was already claimed by a root task');
-          return { workerClaim, status: current.status === 'cancel-requested' ? 'cancel-requested' : 'running' };
+          if (terminal(current.status) || current.status === 'cancel-requested')
+            throw new RenderProtocolError('Mastra run is no longer accepting execution');
+          return {
+            workerClaim,
+            status: 'running',
+            dispatchClosed: false,
+            dispatchExpiresAt: Date.now() + (binding.rootPolicy.timeoutSeconds ?? 7200) * 1000,
+          };
         });
         if (claimed.workerClaim !== workerClaim || terminal(claimed.status))
           throw new RenderProtocolError('Run became terminal before worker claim');
@@ -96,6 +108,7 @@ export function registerRenderTasks({
               tasks: definitions,
               run: envelope,
               dispatch: createDispatchLimiter(binding.provider.options.maxConcurrentSteps ?? 16),
+              authorize: value => authorizeDispatch(value, workerClaim),
             },
             async () => {
               const run = await binding.workflow.createRun({ runId: envelope.runId, resourceId: envelope.resourceId });
@@ -121,6 +134,8 @@ export function registerRenderTasks({
             error: current.error ?? errorRecord(error),
           }));
           throw error;
+        } finally {
+          await updateRun(store, envelope.workflowId, envelope.runId, () => ({ dispatchClosed: true }));
         }
       }),
     );

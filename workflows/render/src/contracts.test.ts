@@ -10,6 +10,7 @@ import { updateRun, type RunRecord } from './persistence/types.js';
 import { registerRenderTasks } from './worker.js';
 import { getRenderTaskContext, withTaskRuntime } from './runtime-internal.js';
 import { parseEnvelope, stepOutcomeSchema } from './protocol.js';
+import { submissionHash } from './authorization.js';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 function record(): RunRecord {
@@ -52,6 +53,17 @@ const unusedTransport: RenderTransport = {
 };
 
 describe('durable lifecycle contracts', () => {
+  it('does not demote a claimed coordinator after a stale pending provider read', async () => {
+    const h = setup(unusedTransport);
+    const run = await h.workflow.createRun();
+    await run.startAsync({ inputData: 1 });
+    await updateRun(h.store, h.workflow.id, run.runId, () => ({
+      status: 'running',
+      workerClaim: 'claim',
+      dispatchClosed: false,
+    }));
+    expect((await h.provider.getRun(h.workflow.id, run.runId))?.status).toBe('running');
+  });
   it('keeps a native paused coordinator active and cancelable', async () => {
     let status = 'paused';
     const h = setup({
@@ -198,14 +210,8 @@ describe('capability and worker contracts', () => {
     const tasks = registerRenderTasks({ mastra: new Mastra({ workflows: { workflow: h.workflow }, logger: false }) });
     const manifest = h.provider.workflows.get(h.workflow.id)!.manifest();
     const initial = { ...record(), workflowId: h.workflow.id, manifest: manifest.hash };
-    await h.store.create(initial);
-    const context: TaskContext = {
-      async run(definition, ...args) {
-        return definition.func(context, ...args);
-      },
-    };
-    await expect(tasks.get(manifest.rootName)!.func(context, {
-      version: 1,
+    const envelope = {
+      version: 1 as const,
       workflowId: h.workflow.id,
       runId: initial.runId,
       buildId: 'v1',
@@ -213,7 +219,17 @@ describe('capability and worker contracts', () => {
       input: 1,
       state: {},
       requestContext: {},
-    })).resolves.toMatchObject({ status: 'success', result: 1 });
+    };
+    await h.store.create({ ...initial, submissionHash: submissionHash(envelope) });
+    const context: TaskContext = {
+      async run(definition, ...args) {
+        return definition.func(context, ...args);
+      },
+    };
+    await expect(tasks.get(manifest.rootName)!.func(context, envelope)).resolves.toMatchObject({
+      status: 'success',
+      result: 1,
+    });
     // External reads still reconcile authoritative provider status.
     await expect(h.workflow.getWorkflowRunById(initial.runId)).rejects.toThrow('management API token');
   });
@@ -265,9 +281,8 @@ describe('capability and worker contracts', () => {
     const tasks = registerRenderTasks({ mastra: new Mastra({ workflows: { workflow }, logger: false }) });
     const manifest = h.provider.workflows.get(workflow.id)!.manifest();
     const initial = { ...record(), workflowId: workflow.id, manifest: manifest.hash };
-    await h.provider.store.create(initial);
     const envelope = {
-      version: 1,
+      version: 1 as const,
       workflowId: workflow.id,
       runId: initial.runId,
       buildId: 'v1',
@@ -281,6 +296,7 @@ describe('capability and worker contracts', () => {
         return definition.func(context, ...args);
       },
     };
+    await h.provider.store.create({ ...initial, submissionHash: submissionHash(envelope) });
     const root = tasks.get(manifest.rootName)!;
     const results = await Promise.allSettled([root.func(context, envelope), root.func(context, envelope)]);
     expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);

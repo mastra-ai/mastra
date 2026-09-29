@@ -55,3 +55,11 @@ node node_modules/tsx/dist/cli.mjs scripts/example-smoke.ts
 The HTTP check starts and restarts an example backend on port 4318. It verifies unauthorized requests, invalid input, owner isolation for lookup/cancellation, an asynchronous accepted response, backend restart and successful reconnection, explicit failure, and real cancellation. It closes the backend processes it owns. Results are recorded in `.scratch/example-observations.json`. The example makes no model calls in deterministic mode.
 
 See [hosted validation](hosted-validation.md) for real Render deployment results, the deterministic HTTP check and a separate real-agent check using OpenAI GPT-4.1 mini. Production deploy transitions during active runs, hosted root process loss/timeouts, workspace rate pressure, other model providers, agent tool loops, Studio streaming and unpublished Mastra core compatibility remain unverified.
+
+## Security regression checks
+
+`src/security.test.ts` rejects fabricated children and tampered payloads, owner/step/execution mismatches, terminal or canceled parents, expired/closed authority, and preserves signed retries/key reordering. `src/example-security.test.ts` checks that HTTP admission denial occurs before any workflow submission. These cases failed against the original implementation before the fixes.
+
+Run `scripts/admission-smoke.ts` with a real disposable PostgreSQL connection. It checks atomic cross-pool limits, duplicate reservation, owner/input conflicts, process reconstruction, per-owner/global rate and active limits, window rollover, uncertain/canceling holds, terminal release, circuit breaker, and provider/storage failures. Keep this separate from model tests: rate rejection must not generate model calls.
+
+A deployed verification must include both a bounded successful agent workflow and a fabricated native child invocation rejected before business effects. Verify native retry counts and parent links, retained history, reconnects and ownership. For quota checks, use dedicated test owners/isolated namespaces; never saturate the shared Render workspace. No security claim is made against trusted operators who can read and replay still-authorized task arguments.

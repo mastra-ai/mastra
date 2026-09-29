@@ -73,6 +73,11 @@ export type RootEnvelope = z.infer<typeof rootEnvelopeSchema>;
 
 export const stepEnvelopeSchema = rootEnvelopeSchema
   .extend({
+    // Optional at parsing so missing authorization gets an explicit worker rejection.
+    authorization: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     stepKey: z.string(),
     executionKey: z.string(),
     initialInput: z.unknown().refine(value => value !== undefined, 'initialInput is required'),

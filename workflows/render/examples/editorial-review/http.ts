@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -7,8 +7,9 @@ import { RenderSubmissionUnknownError } from '@renderinc/mastra';
 import { provider } from './provider.js';
 import { editorialReview, inputSchema, reviewMode } from './workflow.js';
 import './mastra.js';
+import { AdmissionError, type Admission } from './admission.js';
 
-export function createExampleServer(tokens: Record<string, string>) {
+export function createExampleServer(tokens: Record<string, string>, admission: Admission) {
   const principals = Object.entries(tokens);
   if (!principals.length || principals.some(([user, token]) => !user || token.length < 16))
     throw new Error('Provide named demo API tokens of at least 16 characters');
@@ -78,7 +79,7 @@ export function createExampleServer(tokens: Record<string, string>) {
           send(400, { error: 'Invalid run ID.' });
           return;
         }
-        const runId = identity.data.runId;
+        const runId = identity.data.runId ?? randomUUID();
         if (runId) {
           const existing = await provider.store.get(editorialReview.id, runId);
           if (existing) {
@@ -101,6 +102,14 @@ export function createExampleServer(tokens: Record<string, string>) {
             send(202, { runId });
             return;
           }
+        }
+        if (!(await admission.reserve(runId, owner, parsed.data))) {
+          const existing = await provider.store.get(editorialReview.id, runId);
+          send(existing?.providerId ? 202 : 503, {
+            runId,
+            ...(!existing?.providerId ? { error: 'Submission is unresolved. Reconnect with this run ID.' } : {}),
+          });
+          return;
         }
         const run = await editorialReview.createRun({ runId, resourceId: owner });
         // Core startAsync waits for provider acceptance and binding persistence, not final job completion.
@@ -135,6 +144,11 @@ export function createExampleServer(tokens: Record<string, string>) {
       }
       send(404, { error: 'Not found.' });
     } catch (error) {
+      if (error instanceof AdmissionError) {
+        response.setHeader('retry-after', error.retryAfter);
+        send(error.status, { error: error.message });
+        return;
+      }
       if (error instanceof RenderSubmissionUnknownError) {
         send(503, { error: error.message, runId: error.runId, status: 'submission-unknown' });
         return;

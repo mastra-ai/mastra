@@ -60,8 +60,18 @@ This submits one job with three real reviewer calls and one editor call. It refu
 
 ## Boundaries
 
-This example defaults to `127.0.0.1` for local evaluation. For a Render web service set `HOST=0.0.0.0` and use the platform-provided `PORT`; see [hosted validation](../../docs/hosted-validation.md) for build/start commands. Before deploying an application, integrate the host application's authentication, TLS, rate limits and retention policy. The demo uses configured bearer tokens and has no sign-up or token issuance flow. The core provider API assumes a trusted backend, so preserve the ownership checks when adapting it.
+This example defaults to `127.0.0.1` for local evaluation. For a Render web service set `HOST=0.0.0.0` and use the platform-provided `PORT`; see [hosted validation](../../docs/hosted-validation.md) for build/start commands. Before deploying an application, integrate the host application's authentication, TLS and retention policy. The demo uses configured bearer tokens and has no sign-up or token issuance flow. The core provider API assumes a trusted backend, so preserve the ownership checks when adapting it.
 
 It uses custom HTTP routes calling the **core** `run.startAsync()`, which waits for remote acceptance and persistence. The client receives 202 only after that succeeds. Submission uncertainty is reported with the existing job ID and does not trigger automatic resubmission. The browser allocates and saves the job ID before submission, so a lost HTTP response can be reconciled by lookup. Repeating a request with the same ID and input retrieves the existing submission instead of creating another. Changed input or a different owner is rejected. Refresh and backend restart retrieve that same run.
 
 No percentage progress, token streaming, workflow replay or root retry is claimed. A root failure is a failed job. Render completion/cancellation control comes from the provider; business steps do not call the Render SDK directly.
+
+## Submission admission controls
+
+`admission.ts` reserves each new job atomically in PostgreSQL before `createRun`/`startAsync`. Separate server instances share the same limits. Defaults are 5 accepted jobs per owner and 20 globally in a rolling hour, with 2 active jobs per owner and 8 globally. These are application job-count limits, not dollar budgets or Render workspace quotas. Status, history, cancellation and idempotent reconnects remain available at capacity.
+
+Configure `SUBMISSION_WINDOW_MS`, `SUBMISSIONS_PER_OWNER`, `SUBMISSIONS_GLOBAL`, `ACTIVE_RUNS_PER_OWNER`, and `ACTIVE_RUNS_GLOBAL`. Set `SUBMISSIONS_ENABLED=false` to pause new jobs; this returns 503 while reads and cancellation continue. Invalid settings fail startup. Capacity/rate denials return 429 with Retry-After. Storage/provider outages fail closed. Global limits also bound applications where visitors can create new identities.
+
+Accepted reservations remain active until the existing workflow status proves success, failure or cancellation. A cancellation request, missing binding or ambiguous submission does not release capacity. If a process dies between reservation and submission, an operator must reconcile that run ID and verify no native execution was accepted before settling the reservation. Never release an uncertain reservation based solely on its age or retry it as a new job. The additive `mastra_render_admissions` table contains namespace, run ID, owner, input hash and timestamps, not drafts or credentials. Include it in the application's retention/backup policy.
+
+Run the real PostgreSQL admission regression with `DATABASE_URL=... node node_modules/tsx/dist/cli.mjs scripts/admission-smoke.ts` from the package directory. It uses isolated namespaces and deletes only its synthetic reservation rows.
