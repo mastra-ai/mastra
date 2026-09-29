@@ -2,36 +2,34 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useState } from 'react';
+import { useUpdateThread } from '@/domains/memory/hooks/use-memory';
 
 export interface RenameThreadDialogProps {
+  agentId: string;
+  threadId: string;
   initialTitle: string;
   onOpenChange: (open: boolean) => void;
-  onRename: (title: string) => Promise<void>;
 }
 
 /**
  * Mount on demand (`{open && ...}`) so the input is seeded from the thread each time it opens.
  */
-export function RenameThreadDialog({ initialTitle, onOpenChange, onRename }: RenameThreadDialogProps) {
+export function RenameThreadDialog({ agentId, threadId, initialTitle, onOpenChange }: RenameThreadDialogProps) {
+  const [requestContext] = useEntityRequestContext('agent', agentId);
+  const { mutate, isPending } = useUpdateThread(requestContext);
   const [title, setTitle] = useState(initialTitle);
-  const [isPending, setIsPending] = useState(false);
 
   const trimmed = title.trim();
   const canSave = Boolean(trimmed) && trimmed !== initialTitle.trim() && !isPending;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSave) return;
 
-    setIsPending(true);
-    try {
-      await onRename(trimmed);
-      onOpenChange(false);
-    } catch {
-      // The caller surfaces the failure (toast); keep the dialog open so the user can retry.
-      setIsPending(false);
-    }
+    // On failure the hook toasts and the dialog stays open so the user can retry.
+    mutate({ threadId, agentId, title: trimmed }, { onSuccess: () => onOpenChange(false) });
   };
 
   return (

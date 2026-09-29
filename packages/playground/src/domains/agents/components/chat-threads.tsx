@@ -26,8 +26,6 @@ export interface ChatThreadsProps {
   threads: StorageThreadType[];
   threadId: string;
   onDelete: (threadId: string) => void;
-  /** When provided (and the user can write memory), threads can be renamed from their actions menu. */
-  onRename?: (threadId: string, title: string) => Promise<void>;
   resourceId: string;
   resourceType: 'agent' | 'network';
   embedded?: boolean;
@@ -39,7 +37,6 @@ export const ChatThreads = ({
   threads,
   threadId,
   onDelete,
-  onRename,
   resourceId,
   resourceType,
   embedded = false,
@@ -50,7 +47,7 @@ export const ChatThreads = ({
   const { canDelete, canEdit } = usePermissions();
 
   const canDeleteThread = canDelete('memory');
-  const canRenameThread = Boolean(onRename) && canEdit('memory');
+  const canRenameThread = resourceType === 'agent' && canEdit('memory');
   const closeDialog = () => setDialog(null);
   const newThreadLink =
     resourceType === 'agent' ? paths.agentNewThreadLink(resourceId) : paths.networkNewThreadLink(resourceId);
@@ -135,11 +132,12 @@ export const ChatThreads = ({
         }}
       />
 
-      {dialog?.type === 'rename' && onRename && (
+      {dialog?.type === 'rename' && (
         <RenameThreadDialog
+          agentId={resourceId}
+          threadId={dialog.thread.id}
           initialTitle={dialog.thread.title ?? ''}
           onOpenChange={open => !open && closeDialog()}
-          onRename={title => onRename(dialog.thread.id, title)}
         />
       )}
     </>

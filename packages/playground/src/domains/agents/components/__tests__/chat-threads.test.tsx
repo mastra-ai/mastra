@@ -85,14 +85,14 @@ const openRenameDialog = async () => {
 describe('ChatThreads — thread actions', () => {
   describe('when the user can write and delete memory', () => {
     it('shows a thread actions menu instead of a delete button', async () => {
-      renderWithThread({ onRename: vi.fn() });
+      renderWithThread();
 
       expect(await screen.findByRole('button', { name: 'Thread actions' })).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'delete thread' })).toBeNull();
     });
 
     it('lists Rename and Delete in the menu', async () => {
-      renderWithThread({ onRename: vi.fn() });
+      renderWithThread();
 
       fireEvent.click(await screen.findByRole('button', { name: 'Thread actions' }));
 
@@ -101,7 +101,7 @@ describe('ChatThreads — thread actions', () => {
     });
 
     it('opens a rename dialog prefilled with the thread title', async () => {
-      renderWithThread({ onRename: vi.fn() });
+      renderWithThread();
 
       await openRenameDialog();
 
@@ -110,7 +110,6 @@ describe('ChatThreads — thread actions', () => {
 
     it('prefills the rename input with a default-titled thread title', async () => {
       renderWithThread({
-        onRename: vi.fn(),
         threads: [
           {
             ...namedThread,
@@ -128,20 +127,27 @@ describe('ChatThreads — thread actions', () => {
       );
     });
 
-    it('calls onRename with the trimmed new title on submit', async () => {
-      const onRename = vi.fn().mockResolvedValue(undefined);
-      renderWithThread({ onRename });
+    it('saves the trimmed new title and closes the dialog', async () => {
+      const patched = vi.fn();
+      server.use(
+        http.patch(`${TEST_BASE_URL}/api/memory/threads/thread-1`, async ({ request }) => {
+          const body = (await request.json()) as { title: string };
+          patched(new URL(request.url).searchParams.get('agentId'), body.title);
+          return HttpResponse.json({ ...namedThread, title: body.title });
+        }),
+      );
+      renderWithThread();
 
       await openRenameDialog();
       fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), { target: { value: '  Paris trip  ' } });
       fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-      await waitFor(() => expect(onRename).toHaveBeenCalledWith('thread-1', 'Paris trip'));
+      await waitFor(() => expect(patched).toHaveBeenCalledWith('agent-1', 'Paris trip'));
       await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Rename chat' })).toBeNull());
     });
 
     it('disables Save when the title is empty or unchanged', async () => {
-      renderWithThread({ onRename: vi.fn() });
+      renderWithThread();
 
       await openRenameDialog();
       const save = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement;
@@ -153,7 +159,7 @@ describe('ChatThreads — thread actions', () => {
 
     it('asks for confirmation before deleting', async () => {
       const onDelete = vi.fn();
-      renderWithThread({ onDelete, onRename: vi.fn() });
+      renderWithThread({ onDelete });
 
       fireEvent.click(await screen.findByRole('button', { name: 'Thread actions' }));
       fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
@@ -165,9 +171,9 @@ describe('ChatThreads — thread actions', () => {
     });
   });
 
-  describe('when no rename handler is provided', () => {
+  describe('when the threads belong to a network', () => {
     it('only offers Delete in the menu', async () => {
-      renderWithThread();
+      renderWithThread({ resourceType: 'network' });
 
       fireEvent.click(await screen.findByRole('button', { name: 'Thread actions' }));
 
@@ -182,7 +188,7 @@ describe('ChatThreads — thread actions', () => {
     });
 
     it('shows no thread actions menu', async () => {
-      renderWithThread({ onRename: vi.fn() });
+      renderWithThread();
 
       expect(await screen.findByText('Trip planning')).toBeTruthy();
       await waitFor(() => expect(screen.queryByRole('button', { name: 'Thread actions' })).toBeNull());

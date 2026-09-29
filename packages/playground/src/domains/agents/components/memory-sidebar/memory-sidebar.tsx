@@ -32,7 +32,6 @@ export interface MemorySidebarProps {
   threadId: string;
   threads?: StorageThreadType[];
   onDelete?: (threadId: string) => void;
-  onRename?: (threadId: string, title: string) => Promise<void>;
   /** When provided, rendered as the thread layer instead of the built-in ChatThreads list. */
   threadsSlot?: React.ReactNode;
   /** Forwarded to ChatThreads; renders the "Hide threads panel" control when set. */
@@ -88,7 +87,7 @@ function MemorySidebarSkeleton() {
 
 // SidebarPanel is the single layout shell; the body picks the view with guard
 // clauses and returns bare content — see structure-early-return-render-branches.
-export function MemorySidebar({ agentId, threadId, threads, onDelete, onRename, onHidePanel }: MemorySidebarProps) {
+export function MemorySidebar({ agentId, threadId, threads, onDelete, onHidePanel }: MemorySidebarProps) {
   return (
     <SidebarPanel>
       <MemorySidebarBody
@@ -96,7 +95,6 @@ export function MemorySidebar({ agentId, threadId, threads, onDelete, onRename, 
         threadId={threadId}
         threads={threads}
         onDelete={onDelete}
-        onRename={onRename}
         onHidePanel={onHidePanel}
       />
     </SidebarPanel>
@@ -108,7 +106,6 @@ export function MemorySidebarBody({
   threadId,
   threads,
   onDelete,
-  onRename,
   threadsSlot,
   onHidePanel,
 }: MemorySidebarProps) {
@@ -234,7 +231,6 @@ export function MemorySidebarBody({
                 threads={threads ?? []}
                 threadId={threadId}
                 onDelete={onDelete ?? (() => {})}
-                onRename={onRename}
                 embedded
                 onHidePanel={onHidePanel}
               />
