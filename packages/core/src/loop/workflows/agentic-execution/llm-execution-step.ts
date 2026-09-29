@@ -1179,7 +1179,18 @@ function executeStreamWithFallbackModels<T>(
 
         lastError = err;
 
-        logger?.error(`Error executing model ${modelConfig.model.modelId}`, err);
+        const nextModel = models[index];
+        if (nextModel) {
+          logger?.warn(`Model ${modelConfig.model.modelId} failed; falling back to ${nextModel.model.modelId}`, {
+            error: err,
+            modelId: modelConfig.model.modelId,
+            nextModelId: nextModel.model.modelId,
+            attempt: index,
+            totalModels: models.length,
+          });
+        } else {
+          logger?.error(`Error executing model ${modelConfig.model.modelId}`, err);
+        }
       }
     }
     if (typeof finalResult === 'undefined') {
@@ -2430,8 +2441,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
 
           const isUpstreamError = APICallError.isInstance(error);
+          const isTerminalAttempt = isLastModel || eagerCoordinator?.hasSuspendedHandback;
 
-          if (isUpstreamError) {
+          // Non-terminal failures are rethrown and logged once as a failover warning by the fallback runner.
+          if (isTerminalAttempt && isUpstreamError) {
             const providerInfo = provider ? ` from ${provider}` : '';
             const modelInfo = modelIdStr ? ` (model: ${modelIdStr})` : '';
             logger?.error(`Upstream LLM API error${providerInfo}${modelInfo}`, {
@@ -2440,7 +2453,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               ...(provider && { provider }),
               ...(modelIdStr && { modelId: modelIdStr }),
             });
-          } else {
+          } else if (isTerminalAttempt) {
             logger?.error('Error in LLM execution', {
               error,
               runId,
