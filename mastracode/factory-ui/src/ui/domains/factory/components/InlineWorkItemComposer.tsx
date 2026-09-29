@@ -51,7 +51,7 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
       aria-busy={submitting}
       className={cn(
         'relative flex flex-col gap-3 rounded-card border border-border/50 bg-fill-subtle p-2 outline-none transition-colors focus-within:border-border-focus motion-reduce:transition-none',
-        error !== undefined && 'border-error',
+        error !== undefined && 'border-destructive-edge',
       )}
       onSubmit={event => void submit(event)}
     >
@@ -102,7 +102,7 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
         </Button>
       </div>
       {error ? (
-        <p className="text-meta text-notice-destructive-fg m-0" role="alert">
+        <p className="text-meta text-destructive-indicator m-0" role="alert">
           {error}
         </p>
       ) : null}

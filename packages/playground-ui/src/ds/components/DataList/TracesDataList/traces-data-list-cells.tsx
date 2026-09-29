@@ -115,10 +115,10 @@ export function TracesDataListTypeCell({ entityType }: TracesDataListTypeCellPro
 const UNSET_STATUS_CONFIG: { label: string; variant: BadgeVariant } = { label: '-', variant: 'neutral' };
 
 const STATUS_CONFIG: Record<string, { label: string; variant: BadgeVariant }> = {
-  completed: { label: 'OK', variant: 'green' },
-  ok: { label: 'OK', variant: 'green' },
-  success: { label: 'OK', variant: 'green' },
-  error: { label: 'ERR', variant: 'red' },
+  completed: { label: 'OK', variant: 'success' },
+  ok: { label: 'OK', variant: 'success' },
+  success: { label: 'OK', variant: 'success' },
+  error: { label: 'ERR', variant: 'destructive' },
   running: { label: 'RUN', variant: 'neutral' },
   unset: UNSET_STATUS_CONFIG,
 };

@@ -101,7 +101,9 @@ function PipelineStep({
           aria-hidden="true"
           className={cn(
             'flex size-6 shrink-0 items-center justify-center rounded-full border text-meta',
-            done ? 'border-accent1 bg-accent1 text-white' : 'border-border text-muted-foreground',
+            done
+              ? 'border-success-edge bg-success-subtle text-success-subtle-foreground'
+              : 'border-border text-muted-foreground',
           )}
         >
           {index}
@@ -365,7 +367,7 @@ export function ExperimentTriggerDialog({
           <p data-testid="experiment-run-status" aria-live="polite" className="mr-auto flex items-center gap-2">
             {missing.length === 0 ? (
               <>
-                <Badge variant="green" indicator="dot">
+                <Badge variant="success" indicator="dot">
                   Ready
                 </Badge>
                 <span className="text-meta text-muted-foreground">

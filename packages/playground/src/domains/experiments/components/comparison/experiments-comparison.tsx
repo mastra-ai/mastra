@@ -124,7 +124,7 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
         {/* Header row: Items / Baseline / Contender */}
         <div
           role="row"
-          className="grid border-y border-border xl:grid-cols-[minmax(20rem,24rem)_1fr_1fr] xl:divide-x xl:divide-[var(--border)]"
+          className="grid border-y border-border xl:grid-cols-[minmax(20rem,24rem)_1fr_1fr] xl:divide-x xl:divide-border"
         >
           <div
             role="columnheader"
@@ -162,7 +162,7 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
               key={row.itemId}
               role="row"
               aria-label={row.itemId}
-              className="grid border-b border-border xl:grid-cols-[minmax(20rem,24rem)_1fr_1fr] xl:divide-x xl:divide-[var(--border)]"
+              className="grid border-b border-border xl:grid-cols-[minmax(20rem,24rem)_1fr_1fr] xl:divide-x xl:divide-border"
             >
               <div role="cell" className={`${cell} grid content-start gap-1`}>
                 <Link

@@ -1,5 +1,5 @@
 import { getSignalRecordNodeId, getSignalRecordNodeLabel, getSignalRecordNodeValue } from './sankey-signals-data';
-import { getSignalHue } from './signal-colors';
+import { getSignalColor } from './signal-colors';
 import { SortableSignalHeaders } from './sortable-signal-headers';
 import type { ThemeFlowResponse, TraceSignalName } from './types';
 import { Card, CardContent } from '@/ds/components/Card';
@@ -76,7 +76,7 @@ export function FlowCard({
             data={records}
             columns={chartColumns}
             columnOrder={chartColumns.map(column => column.id)}
-            getColumnHue={column => getSignalHue(column.id)}
+            getColumnColor={column => getSignalColor(column.id)}
             getRecordNodeId={getSignalRecordNodeId}
             getRecordNodeLabel={getSignalRecordNodeLabel}
             getRecordNodeValue={getSignalRecordNodeValue}

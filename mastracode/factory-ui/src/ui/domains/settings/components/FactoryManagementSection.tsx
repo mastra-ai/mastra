@@ -28,7 +28,7 @@ export function FactoryManagementSection() {
               render={
                 <Button
                   size="sm"
-                  className="text-notice-destructive border-notice-destructive/25 hover:bg-notice-destructive/10 hover:text-notice-destructive"
+                  variant="destructive-ghost"
                   disabled={deleteMutation.isPending}
                   aria-label={`Delete ${factory.name}`}
                 >

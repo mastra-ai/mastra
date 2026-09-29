@@ -1,8 +1,8 @@
 import { useMastraClient } from '@mastra/react';
 import { DatabaseIcon } from 'lucide-react';
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { useDatasetSaveContext } from '../context/dataset-save-context';
-import type { DatasetSaveContextValue } from '../context/dataset-save-context';
+import { useDatasetSaveContext } from '../context/dataset-save-context-value';
+import type { DatasetSaveContextValue } from '../context/dataset-save-context-value';
 import { useDatasetMutations, useDatasets } from '@/domains/datasets';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';

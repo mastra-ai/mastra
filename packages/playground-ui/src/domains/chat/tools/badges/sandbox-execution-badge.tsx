@@ -39,18 +39,18 @@ interface WorkspaceMetadata {
 const getStatusColor = (status?: string) => {
   switch (status) {
     case 'running':
-      return 'bg-green-500';
+      return 'bg-success-indicator';
     case 'starting':
     case 'initializing':
-      return 'bg-yellow-500';
+      return 'bg-warning-indicator';
     case 'stopped':
     case 'paused':
       return 'bg-muted-foreground';
     case 'error':
     case 'failed':
-      return 'bg-red-500';
+      return 'bg-destructive-indicator';
     default:
-      return 'bg-accent6';
+      return 'bg-warning-indicator';
   }
 };
 
@@ -116,9 +116,9 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
       <pre
         ref={contentRef}
         style={{ maxHeight }}
-        className="overflow-auto bg-black p-3 text-body whitespace-pre-wrap text-neutral-300"
+        className="overflow-auto bg-muted p-3 text-body whitespace-pre-wrap text-foreground"
       >
-        {content || <span className="text-foreground italic">No output</span>}
+        {content || <span className="text-muted-foreground italic">No output</span>}
       </pre>
     </div>
   );
@@ -241,7 +241,7 @@ export const SandboxExecutionBadge = ({
           <Icon>
             <ChevronUpIcon className={cn('transition-all', isCollapsed ? 'rotate-90' : 'rotate-180')} />
           </Icon>
-          <Badge icon={<TerminalSquare className="text-accent6" size={16} />}>{displayName}</Badge>
+          <Badge icon={<TerminalSquare className="text-span-workspace" size={16} />}>{displayName}</Badge>
           {execMeta?.sandbox && (
             <Link
               href={execMeta.id ? `/workspaces/${execMeta.id}` : '/workspaces'}
@@ -258,8 +258,8 @@ export const SandboxExecutionBadge = ({
         <div className="flex items-center gap-2">
           {isRunning ? (
             <>
-              <span className="flex items-center gap-1.5 text-caption text-accent6">
-                <span className="size-1.5 animate-pulse rounded-full bg-accent6" />
+              <span className="flex items-center gap-1.5 text-caption text-warning-indicator">
+                <span className="size-1.5 animate-pulse rounded-full bg-warning-indicator" />
                 <span className="animate-pulse">running</span>
               </span>
               <span className="text-caption text-foreground tabular-nums">{formatElapsed(elapsedTime)}</span>
@@ -268,11 +268,15 @@ export const SandboxExecutionBadge = ({
             <>
               {exitCode !== undefined &&
                 (exitSuccess ? (
-                  <CheckIcon className="text-green-400" size={14} />
+                  <CheckIcon className="text-success-indicator" size={14} />
                 ) : wasKilled ? (
-                  <span className="rounded bg-orange-500/20 px-1.5 py-0.5 text-meta text-orange-400">killed</span>
+                  <span className="rounded bg-badge-orange-strong px-1.5 py-0.5 text-meta text-badge-orange-foreground">
+                    killed
+                  </span>
                 ) : (
-                  <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-meta text-red-400">exit {exitCode}</span>
+                  <span className="rounded bg-destructive-subtle px-1.5 py-0.5 text-meta text-destructive-subtle-foreground">
+                    exit {exitCode}
+                  </span>
                 ))}
               {executionTime !== undefined && (
                 <span className="text-caption text-foreground">{formatDuration(executionTime)}</span>

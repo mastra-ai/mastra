@@ -75,7 +75,7 @@ const DeleteAgentDialog = ({
           </AlertDialog.Cancel>
           <Button
             icon={<Trash2 />}
-            variant="primary"
+            variant="destructive"
             data-testid="agent-builder-delete-agent-confirm"
             disabled={isPending || isDependentsLoading}
             onClick={() => {
@@ -133,7 +133,7 @@ export const DeleteAgentMenuItem = ({ agentId, agentName, disabled = false }: De
       <DropdownMenu.Item
         data-testid="agent-builder-mobile-menu-delete"
         disabled={disabled}
-        className="text-red-500 focus:text-red-400"
+        variant="destructive"
         onSelect={event => {
           event.preventDefault();
           setOpen(true);

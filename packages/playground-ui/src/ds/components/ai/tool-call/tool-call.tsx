@@ -82,7 +82,7 @@ export function ToolCall({
 export const ToolCallTrigger = ({ className, ...props }: ComponentProps<typeof CollapsibleTrigger>) => (
   <CollapsibleTrigger
     className={cn(
-      'group/row w-full cursor-pointer rounded-md text-left transition-colors hover:bg-fill focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden motion-reduce:transition-none',
+      'group/row w-full cursor-pointer rounded-md text-left transition-colors hover:bg-fill focus-visible:ring-1 focus-visible:ring-border-focus focus-visible:outline-hidden motion-reduce:transition-none',
       className,
     )}
     {...props}
@@ -196,7 +196,7 @@ export const ToolCallPresentedHeader = ({
           size={14}
           strokeWidth={1.75}
           aria-hidden
-          className={status === 'error' ? 'text-error/80' : 'text-placeholder'}
+          className={status === 'error' ? 'text-destructive-indicator' : 'text-placeholder'}
         />
       </ToolCallIcon>
       {description ? (
@@ -210,7 +210,7 @@ export const ToolCallPresentedHeader = ({
       <ToolCallSpacer />
       {status === 'error' && (
         <ToolCallTrailing>
-          <X size={13} role="img" aria-label="Failed" className="shrink-0 text-error" />
+          <X size={13} role="img" aria-label="Failed" className="shrink-0 text-destructive-indicator" />
         </ToolCallTrailing>
       )}
       {disclosure && <ToolCallDisclosure />}
