@@ -621,7 +621,10 @@ export const createRestartExecutionParams = ({
     );
   }
 
-  const isPreFirstStepRestart = nestedWorkflowPending || snapshot.activePaths.length === 0;
+  const hasFirstEntryResult = getStepIds(firstEntry).some(stepId =>
+    Object.prototype.hasOwnProperty.call(snapshot.context, stepId),
+  );
+  const isPreFirstStepRestart = nestedWorkflowPending || (snapshot.activePaths.length === 0 && !hasFirstEntryResult);
   const restartData: RestartExecutionParams = {
     activePaths: isPreFirstStepRestart ? [0] : snapshot.activePaths,
     activeStepsPath: isPreFirstStepRestart ? firstEntryActiveStepsPath : snapshot.activeStepsPath,

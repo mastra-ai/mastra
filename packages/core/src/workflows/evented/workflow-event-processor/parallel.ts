@@ -34,17 +34,18 @@ export async function processWorkflowParallel(
   },
 ) {
   const pathsToRun: Record<string, boolean> = {};
+  const isRestartedEntry = restart?.activePaths[0] === executionPath[0];
   const branchPath = (idx: number) =>
-    (restart && !restart.isPreFirstStepRestart ? executionPath.slice(0, -1) : executionPath).concat([idx]);
+    (isRestartedEntry && !restart?.isPreFirstStepRestart ? executionPath.slice(0, -1) : executionPath).concat([idx]);
   // Get current state from stepResults or passed state
   const currentState = resolveCurrentState({ stepResults, state });
   for (let i = 0; i < step.steps.length; i++) {
     const nestedStep = step.steps[i];
     if (nestedStep) {
       const nestedStepId = getSingleStepEntryId(nestedStep);
-      //if restart, only run the step if it's in the active steps path
-      if (restart) {
-        pathsToRun[nestedStepId] = !!restart.activeStepsPath[nestedStepId];
+      // Only filter branches while routing the entry captured by the restart snapshot.
+      if (isRestartedEntry) {
+        pathsToRun[nestedStepId] = !!restart?.activeStepsPath[nestedStepId];
       } else {
         pathsToRun[nestedStepId] = true;
       }
@@ -121,9 +122,10 @@ export async function processWorkflowConditional(
   // Get current state from stepResults or passed state
   const currentState = resolveCurrentState({ stepResults, state });
 
-  // On an in-flight restart, executionPath includes the persisted branch index, so replace it instead of appending.
+  // On an in-flight restart of this entry, executionPath includes the persisted branch index, so replace it.
+  const isRestartedEntry = restart?.activePaths[0] === executionPath[0];
   const branchPath = (idx: number) =>
-    (restart && !restart.isPreFirstStepRestart ? executionPath.slice(0, -1) : executionPath).concat([idx]);
+    (isRestartedEntry && !restart?.isPreFirstStepRestart ? executionPath.slice(0, -1) : executionPath).concat([idx]);
 
   // Create a proper RequestContext from the plain object passed in ProcessorArgs
   const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import type { Event } from '../../events';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
@@ -7,12 +8,30 @@ import { createStep, createWorkflow } from '.';
 
 const hosts: Mastra[] = [];
 
-async function makeHost(workflow: ReturnType<typeof createWorkflow>, storage: InstanceType<typeof MockStore>) {
+class DropStepRunPubSub extends EventEmitterPubSub {
+  dropped = Promise.withResolvers<void>();
+  dropNextStepRun = true;
+
+  async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>, options?: { localOnly?: boolean }) {
+    if (this.dropNextStepRun && event.type === 'workflow.step.run') {
+      this.dropNextStepRun = false;
+      this.dropped.resolve();
+      return;
+    }
+    await super.publish(topic, event, options);
+  }
+}
+
+async function makeHost(
+  workflow: ReturnType<typeof createWorkflow>,
+  storage: InstanceType<typeof MockStore>,
+  pubsub: EventEmitterPubSub = new EventEmitterPubSub(),
+) {
   const mastra = new Mastra({
     logger: false,
     storage,
     workflows: { [workflow.id]: workflow as any },
-    pubsub: new EventEmitterPubSub(),
+    pubsub,
   });
   await mastra.startWorkers();
   hosts.push(mastra);
@@ -188,6 +207,199 @@ describe('evented pre-first-step restart', () => {
     expect(condition.mock.calls[0]![0].inputData).toEqual(originalInput);
     expect(selectedExecute).toHaveBeenCalledTimes(1);
     expect(selectedExecute.mock.calls[0]![0].inputData).toEqual(originalInput);
+    expect(skippedExecute).not.toHaveBeenCalled();
+  });
+
+  it('does not replay completed steps when a restart crashes before republishing the active step', async () => {
+    const storage = new MockStore();
+    const firstExecute = vi.fn(async ({ inputData }: { inputData: { value: string } }) => ({
+      value: `${inputData.value}-first`,
+    }));
+    const secondExecute = vi.fn(async ({ inputData }: { inputData: { value: string } }) => ({
+      value: `${inputData.value}-second`,
+    }));
+    const first = createStep({
+      id: 'restart-gap-first',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: firstExecute,
+    });
+    const second = createStep({
+      id: 'restart-gap-second',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: secondExecute,
+    });
+    const workflow = createWorkflow({
+      id: 'restart-gap-recovery',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      steps: [first, second],
+    })
+      .then(first)
+      .then(second)
+      .commit();
+
+    const droppingPubSub = new DropStepRunPubSub();
+    const firstHost = await makeHost(workflow, storage, droppingPubSub);
+
+    const runId = `restart-gap-${Date.now()}`;
+    const workflowsStore = (await storage.getStore('workflows'))!;
+    await workflowsStore.persistWorkflowSnapshot({
+      workflowName: workflow.id,
+      runId,
+      snapshot: {
+        activePaths: [1],
+        suspendedPaths: {},
+        resumeLabels: {},
+        waitingPaths: {},
+        activeStepsPath: { [second.id]: [1] },
+        serializedStepGraph: workflow.serializedStepGraph,
+        timestamp: Date.now(),
+        runId,
+        context: {
+          input: { value: 'original' },
+          [first.id]: { status: 'success', output: { value: 'original-first' } },
+          [second.id]: { status: 'running', payload: { value: 'original-first' }, startedAt: Date.now() },
+          __state: {},
+        },
+        status: 'running',
+        value: {},
+      } as any,
+    });
+
+    const interruptedRun = await workflow.createRun({ runId });
+    void interruptedRun.restart();
+    await droppingPubSub.dropped.promise;
+
+    const interruptedSnapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId });
+    expect(interruptedSnapshot?.activePaths).toEqual([1]);
+    expect(interruptedSnapshot?.activeStepsPath).toEqual({ [second.id]: [1] });
+
+    await firstHost.stopWorkers();
+    hosts.splice(hosts.indexOf(firstHost), 1);
+    await makeHost(workflow, storage);
+
+    const recoveredRun = await workflow.createRun({ runId });
+    const result = await recoveredRun.restart();
+
+    expect(result.status).toBe('success');
+    expect(firstExecute).not.toHaveBeenCalled();
+    expect(secondExecute).toHaveBeenCalledTimes(1);
+    expect(secondExecute.mock.calls[0]![0].inputData).toEqual({ value: 'original-first' });
+  });
+
+  it('runs a later parallel entry after a pre-first-step restart', async () => {
+    const storage = new MockStore();
+    const firstExecute = vi.fn(async ({ inputData }: { inputData: { value: string } }) => ({
+      value: `${inputData.value}-first`,
+    }));
+    const branchAExecute = vi.fn(async ({ inputData }: { inputData: { value: string } }) => ({
+      branch: 'a',
+      value: inputData.value,
+    }));
+    const branchBExecute = vi.fn(async ({ inputData }: { inputData: { value: string } }) => ({
+      branch: 'b',
+      value: inputData.value,
+    }));
+    const first = createStep({
+      id: 'before-later-parallel',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: firstExecute,
+    });
+    const branchA = createStep({
+      id: 'later-parallel-a',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ branch: z.string(), value: z.string() }),
+      execute: branchAExecute,
+    });
+    const branchB = createStep({
+      id: 'later-parallel-b',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ branch: z.string(), value: z.string() }),
+      execute: branchBExecute,
+    });
+    const workflow = createWorkflow({
+      id: 'pre-first-step-then-parallel',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.any(),
+      steps: [first, branchA, branchB],
+    })
+      .then(first)
+      .parallel([branchA, branchB])
+      .commit();
+
+    await makeHost(workflow, storage);
+
+    const runId = `pre-first-then-parallel-${Date.now()}`;
+    await persistPreFirstStepSnapshot({ storage, workflow, runId, input: { value: 'original' } });
+
+    const run = await workflow.createRun({ runId });
+    const result = await Promise.race([
+      run.restart(),
+      new Promise<'timed-out'>(resolve => setTimeout(() => resolve('timed-out'), 500)),
+    ]);
+
+    expect(result).not.toBe('timed-out');
+    expect((result as any).status).toBe('success');
+    expect(firstExecute).toHaveBeenCalledTimes(1);
+    expect(branchAExecute).toHaveBeenCalledTimes(1);
+    expect(branchBExecute).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs a later conditional entry after a pre-first-step restart', async () => {
+    const storage = new MockStore();
+    const firstExecute = vi.fn(async ({ inputData }: { inputData: { value: string } }) => ({
+      value: `${inputData.value}-first`,
+    }));
+    const selectedExecute = vi.fn(async ({ inputData }: { inputData: { value: string } }) => ({
+      value: `${inputData.value}-selected`,
+    }));
+    const skippedExecute = vi.fn();
+    const first = createStep({
+      id: 'before-later-conditional',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: firstExecute,
+    });
+    const selected = createStep({
+      id: 'later-conditional-selected',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: selectedExecute,
+    });
+    const skipped = createStep({
+      id: 'later-conditional-skipped',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: skippedExecute,
+    });
+    const workflow = createWorkflow({
+      id: 'pre-first-step-then-conditional',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.any(),
+      steps: [first, selected, skipped],
+    })
+      .then(first)
+      .branch([
+        [async () => true, selected],
+        [async () => false, skipped],
+      ])
+      .commit();
+
+    await makeHost(workflow, storage);
+
+    const runId = `pre-first-then-conditional-${Date.now()}`;
+    await persistPreFirstStepSnapshot({ storage, workflow, runId, input: { value: 'original' } });
+
+    const run = await workflow.createRun({ runId });
+    const result = await run.restart();
+
+    expect(result.status).toBe('success');
+    expect(firstExecute).toHaveBeenCalledTimes(1);
+    expect(selectedExecute).toHaveBeenCalledTimes(1);
+    expect(selectedExecute.mock.calls[0]![0].inputData).toEqual({ value: 'original-first' });
     expect(skippedExecute).not.toHaveBeenCalled();
   });
 
