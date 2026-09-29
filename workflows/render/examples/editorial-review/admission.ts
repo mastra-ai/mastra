@@ -32,6 +32,16 @@ export interface Admission {
   close(): Promise<void>;
 }
 
+/** Recognize per-run failures across separately installed SDK/adapter copies, without message matching. */
+function isRunLookupError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return (
+    (error.name === 'ClientError' && 'statusCode' in error && error.statusCode === 404) ||
+    error.name === 'RenderProtocolError' ||
+    error.name === 'RenderRunConflictError'
+  );
+}
+
 /** Application policy only. Does not replace Render scheduling or Mastra run state. */
 export function createAdmission(options: {
   connectionString: string;
@@ -92,6 +102,13 @@ export function createAdmission(options: {
   let closed = false;
   let refreshFailed = false;
   let cursor = '';
+  let sweepFailed = false;
+  /** Clear an observed outage only after every batch in a complete sweep succeeds. */
+  function finishSweep() {
+    refreshFailed = sweepFailed;
+    sweepFailed = false;
+    cursor = '';
+  }
   /** Refresh at most 100 reservations with three workers; requests never trigger provider lookups. */
   async function reconcile() {
     await initialize();
@@ -102,41 +119,60 @@ export function createAdmission(options: {
       );
     let active = await readBatch();
     if (!active.rows.length && cursor) {
-      cursor = '';
+      finishSweep();
       active = await readBatch();
     }
     let next = 0;
-    const results = await Promise.allSettled(
+    let passFailed = false;
+    let rowFailures = 0;
+    await Promise.all(
       Array.from({ length: Math.min(3, active.rows.length) }, async () => {
         while (next < active.rows.length) {
           const row = active.rows[next++]!;
-          const status = await options.getStatus(row.run_id);
-          if (status && ['success', 'failed', 'canceled'].includes(status))
-            await pool.query(
-              'UPDATE mastra_render_admissions SET settled_at=now() WHERE namespace=$1 AND run_id=$2 AND settled_at IS NULL',
-              [options.namespace, row.run_id],
-            );
+          try {
+            let status: string | null;
+            try {
+              status = await options.getStatus(row.run_id);
+            } catch (error) {
+              // These failures concern one run. Keep its reservation and retry it next sweep.
+              if (isRunLookupError(error)) {
+                rowFailures++;
+                continue;
+              }
+              throw error;
+            }
+            if (status && ['success', 'failed', 'canceled'].includes(status))
+              await pool.query(
+                'UPDATE mastra_render_admissions SET settled_at=now() WHERE namespace=$1 AND run_id=$2 AND settled_at IS NULL',
+                [options.namespace, row.run_id],
+              );
+          } catch {
+            // Authentication, transport, storage and unclassified failures remain fail-closed.
+            // Continue the bounded batch so an error cannot strand later rows.
+            passFailed = true;
+            refreshFailed = true;
+            sweepFailed = true;
+          }
         }
       }),
     );
-    // Drain every started worker before another pass or pool shutdown can begin.
-    for (const result of results) if (result.status === 'rejected') throw result.reason;
     cursor = active.rows.at(-1)?.run_id ?? '';
+    if (active.rows.length < 100) finishSweep();
+    if (rowFailures)
+      console.error('[mastra-render] Run status lookup failed; reservations retained for retry:', rowFailures);
+    if (passFailed) console.error('[mastra-render] Admission status refresh failed; reservations remain active.');
   }
+
   /** Schedule the next pass after completion, bounding work independently of submission traffic. */
   function schedule() {
     if (closed) return;
     timer = setTimeout(() => {
       reconciliation = reconcile()
-        .then(
-          () => {
-            refreshFailed = false;
-          },
-          () => {
-            refreshFailed = true;
-            console.error('[mastra-render] Admission status refresh failed; reservations remain active.');
-          },
-        )
+        .catch(() => {
+          refreshFailed = true;
+          sweepFailed = true;
+          console.error('[mastra-render] Admission status refresh failed; reservations remain active.');
+        })
         .finally(() => {
           reconciliation = undefined;
           schedule();

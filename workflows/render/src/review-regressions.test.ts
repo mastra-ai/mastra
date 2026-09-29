@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { ClientError, ServerError, TimeoutError } from '@renderinc/sdk';
+import { RenderProtocolError, RenderRunConflictError } from '@renderinc/mastra';
 import { createStep } from '@mastra/core/workflows';
 import { createPostgresPersistence, createMemoryPersistence, init } from './index.js';
 import { json } from './protocol.js';
@@ -318,4 +320,157 @@ it('drains started refresh work before closing its pool and never refreshes afte
   expect(end).toHaveBeenCalledTimes(1);
   await vi.advanceTimersByTimeAsync(20000);
   expect(getStatus).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  new ClientError('missing task', 404),
+  new RenderProtocolError('malformed result'),
+  new RenderRunConflictError('record disappeared'),
+])('isolates $name lookup errors, visits the whole batch and retries the retained row', async error => {
+  vi.useFakeTimers();
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  database.active = Array.from({ length: 101 }, (_, i) => ({ run_id: String(i).padStart(3, '0') }));
+  let repaired = false;
+  const getStatus = vi.fn(async (id: string) => {
+    if (id === '000' && !repaired) throw error;
+    return 'success';
+  });
+  const admission = createAdmission({ connectionString: 'test', namespace: 'n', getStatus });
+  try {
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(getStatus).toHaveBeenCalledTimes(100);
+    expect(database.settled).toHaveLength(99);
+    expect(database.settled).not.toContain('000');
+    expect(await admission.reserve('accepted', 'owner', {})).toBe(true);
+    expect(getStatus).toHaveBeenCalledTimes(100);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(getStatus).toHaveBeenLastCalledWith('100');
+    expect(database.settled).toContain('100');
+    repaired = true;
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(database.settled).toContain('000');
+  } finally {
+    await admission.close();
+  }
+});
+
+it.each([
+  new ClientError('unauthorized', 401),
+  new ClientError('forbidden', 403),
+  new ClientError('limited', 429),
+  new ServerError('unavailable', 503),
+  new TimeoutError('timed out'),
+  new TypeError('fetch failed'),
+  new Error('unclassified error'),
+  Object.assign(new Error('not a Render error'), { statusCode: 404 }),
+])('keeps $name outages closed across later clean batches until a complete healthy sweep', async error => {
+  vi.useFakeTimers();
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  database.active = Array.from({ length: 101 }, (_, i) => ({ run_id: String(i).padStart(3, '0') }));
+  let recovered = false;
+  const getStatus = vi.fn(async (id: string) => {
+    if (id === '000' && !recovered) throw error;
+    return null;
+  });
+  const admission = createAdmission({ connectionString: 'test', namespace: 'n', getStatus });
+  try {
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(getStatus).toHaveBeenCalledTimes(100);
+    await expect(admission.reserve('denied', 'owner', {})).rejects.toMatchObject({ status: 503 });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(getStatus).toHaveBeenCalledTimes(101);
+    expect(getStatus).toHaveBeenLastCalledWith('100');
+    await expect(admission.reserve('denied', 'owner', {})).rejects.toMatchObject({ status: 503 });
+    expect(database.settled).toEqual([]);
+    recovered = true;
+    await vi.advanceTimersByTimeAsync(5000);
+    await expect(admission.reserve('denied', 'owner', {})).rejects.toMatchObject({ status: 503 });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(await admission.reserve('accepted', 'owner', {})).toBe(true);
+  } finally {
+    await admission.close();
+  }
+});
+
+it('does not misclassify a settlement database error as a row lookup error', async () => {
+  vi.useFakeTimers();
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  database.active = [{ run_id: 'terminal' }];
+  const admission = createAdmission({ connectionString: 'test', namespace: 'n', getStatus: async () => 'success' });
+  const pool = database.pools[0];
+  const query = pool.query.getMockImplementation();
+  let unavailable = true;
+  pool.query.mockImplementation(async (sql: string, args: unknown[]) => {
+    if (unavailable && sql.startsWith('UPDATE mastra_render_admissions'))
+      throw new ClientError('synthetic persistence failure', 404);
+    return query(sql, args);
+  });
+  try {
+    await vi.advanceTimersByTimeAsync(5000);
+    await expect(admission.reserve('denied', 'owner', {})).rejects.toMatchObject({ status: 503 });
+    expect(database.settled).toEqual([]);
+    unavailable = false;
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(database.settled).toEqual(['terminal']);
+    expect(await admission.reserve('accepted', 'owner', {})).toBe(true);
+  } finally {
+    await admission.close();
+  }
+});
+
+it.each(['record', 'outage'] as const)('visits all rows when every lookup fails with a %s error', async kind => {
+  vi.useFakeTimers();
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  database.active = Array.from({ length: 101 }, (_, i) => ({ run_id: String(i).padStart(3, '0') }));
+  const getStatus = vi.fn(async () => {
+    throw kind === 'record' ? new ClientError('missing', 404) : new TimeoutError('unavailable');
+  });
+  const admission = createAdmission({ connectionString: 'test', namespace: 'n', getStatus });
+  try {
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(getStatus).toHaveBeenCalledTimes(100);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(getStatus).toHaveBeenCalledTimes(101);
+    expect(database.settled).toEqual([]);
+    if (kind === 'record') expect(await admission.reserve('accepted', 'owner', {})).toBe(true);
+    else await expect(admission.reserve('denied', 'owner', {})).rejects.toMatchObject({ status: 503 });
+  } finally {
+    await admission.close();
+  }
+});
+
+it('retains outage state through an exact-size batch and retries database scans without losing the cursor', async () => {
+  vi.useFakeTimers();
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  database.active = Array.from({ length: 100 }, (_, i) => ({ run_id: String(i).padStart(3, '0') }));
+  let failed = true;
+  const getStatus = vi.fn(async () => {
+    if (failed) throw new TimeoutError('unavailable');
+    return null;
+  });
+  const admission = createAdmission({ connectionString: 'test', namespace: 'n', getStatus });
+  const pool = database.pools[0];
+  try {
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(getStatus).toHaveBeenCalledTimes(100);
+    const query = pool.query.getMockImplementation();
+    let failScan = true;
+    pool.query.mockImplementation(async (sql: string, args: unknown[]) => {
+      if (failScan && sql.startsWith('SELECT run_id')) throw new Error('database disconnected');
+      return query(sql, args);
+    });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(getStatus).toHaveBeenCalledTimes(100);
+    await expect(admission.reserve('denied', 'owner', {})).rejects.toMatchObject({ status: 503 });
+    failScan = false;
+    failed = false;
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(getStatus).toHaveBeenCalledTimes(200);
+    await expect(admission.reserve('denied', 'owner', {})).rejects.toMatchObject({ status: 503 });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(await admission.reserve('accepted', 'owner', {})).toBe(true);
+    expect(database.settled).toEqual([]);
+  } finally {
+    await admission.close();
+  }
 });
