@@ -84,6 +84,8 @@ Only verified terminal provider states release capacity. Unknown statuses remain
 
 Use this only for a specific reservation with no native provider binding. The provider creates its run record before calling Render, so a record may exist without a `providerId`. An unbound record in `submitting` or `submission-unknown` can still represent an accepted native execution. Neither that status nor a missing task ID proves non-acceptance. Keep the reservation active unless independent evidence establishes that Render accepted no execution. Increasing the cap or releasing by age is not reconciliation.
 
+This transaction is specific to the included example, whose admission namespace is its workflow ID (`namespace: editorialReview.id` in `server.ts`). It checks the supplied workflow ID against that stored namespace and uses the namespace to find provider records. If your application uses a different namespace mapping, do not use this SQL unchanged; use a stored or independently validated workflow-to-admission mapping.
+
 1. Set `SUBMISSIONS_ENABLED=false` on every caller, deploy it, and drain or stop all in-flight submission handlers. Verify new submissions return 503 while reads and cancellation work. The database lock below cannot by itself stop a handler that already reserved capacity and is about to submit.
 2. Inspect the exact namespace/run ID, persisted run record, application logs, and Render task history. Record the operator, timestamp, run ID, and evidence in the incident record. If acceptance or a live submitting handler cannot be ruled out, stop and keep the reservation active. A `providerId` or `workerClaim` rules out this procedure; reconcile that execution through the provider instead.
 3. After proving the caller cannot resume and Render accepted no execution, run this transaction with explicit `psql` variables `namespace`, `workflow_id`, and `run_id`. It permits an absent record or an unbound, unclaimed record still in `submitting` or `submission-unknown`. It touches at most one reservation, retains the row for idempotency and rate accounting, and prints the settlement for the audit record. The SQL guards do not replace the operator's evidence of non-acceptance.
@@ -94,11 +96,12 @@ SELECT pg_advisory_xact_lock(hashtextextended('mastra-admission:' || :'namespace
 UPDATE mastra_render_admissions AS admission
 SET settled_at = now()
 WHERE admission.namespace = :'namespace'
+  AND admission.namespace = :'workflow_id'
   AND admission.run_id = :'run_id'
   AND admission.settled_at IS NULL
   AND NOT EXISTS (
     SELECT 1 FROM mastra_render_runs
-    WHERE workflow_id = :'workflow_id' AND run_id = admission.run_id
+    WHERE workflow_id = admission.namespace AND run_id = admission.run_id
       AND (
         record->>'providerId' IS NOT NULL
         OR record->>'workerClaim' IS NOT NULL

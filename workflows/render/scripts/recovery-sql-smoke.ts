@@ -12,12 +12,13 @@ const sql = readme
 assert.ok(sql, 'The operator recovery SQL must exist in the example README');
 const pool = new Pool({ connectionString, max: 1 });
 const connection = await pool.connect();
-const namespace = 'recovery-sql-test';
 const workflowId = 'recovery-workflow';
+// The included example uses its workflow ID as the persisted admission namespace.
+const namespace = workflowId;
 
 /** Execute the README transaction with parameterized equivalents of its explicit psql variables. */
-async function recover(runId: string) {
-  const variables: Record<string, string> = { namespace, workflow_id: workflowId, run_id: runId };
+async function recover(runId: string, selectedWorkflowId = workflowId) {
+  const variables: Record<string, string> = { namespace, workflow_id: selectedWorkflowId, run_id: runId };
   const settled: unknown[] = [];
   try {
     for (const statement of sql!.split(';').filter(part => part.trim())) {
@@ -82,6 +83,11 @@ try {
       JSON.stringify({ status: 'running', providerId: 'unrelated-native-run' }),
     ]);
     const before = await connection.query('SELECT * FROM mastra_render_runs ORDER BY workflow_id,run_id');
+    assert.equal(
+      (await recover(test.name, 'wrong-workflow')).length,
+      0,
+      'A mismatched workflow must never release capacity',
+    );
     assert.equal((await recover(test.name)).length, test.expected, test.name);
     assert.equal((await recover(test.name)).length, 0, 'Recovery must be idempotent');
     const after = await connection.query('SELECT * FROM mastra_render_runs ORDER BY workflow_id,run_id');
