@@ -639,8 +639,9 @@ describe('AgentChannels', () => {
     });
 
     describe('function-form toolDisplay owns the resolved approval card (#23512)', () => {
-      async function setup(toolDisplay: (event: any) => any) {
+      async function setup(toolDisplay: (event: any) => any, isDM = false) {
         const adapter = createMockAdapter('slack');
+        (adapter as any).isDM = vi.fn(() => isDM);
         const channels = new AgentChannels({ adapters: { slack: { adapter, toolDisplay } } });
         channels.__setAgent(mockAgent);
         channels.__setLogger({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any);
@@ -702,7 +703,19 @@ describe('AgentChannels', () => {
         expect(dispatchDecline).toHaveBeenCalledTimes(1);
       });
 
-      it.each([
+      it('passes byUser as undefined when denied in a DM', async () => {
+        const toolDisplay = vi.fn(() => undefined);
+        const { click } = await setup(toolDisplay, true);
+
+        await click('tool_deny:tool-call-1');
+
+        expect(toolDisplay).toHaveBeenCalledWith(
+          expect.objectContaining({ kind: 'denied', byUser: undefined }),
+          expect.anything(),
+        );
+      });
+
+      const fallbackRenderers: [string, (event: any) => any][] = [
         ['returns undefined', () => undefined],
         ['returns a blank message', () => ({ kind: 'post', message: '  ' })],
         [
@@ -711,16 +724,26 @@ describe('AgentChannels', () => {
             throw new Error('boom');
           },
         ],
-      ])('falls back to the default card when the renderer %s', async (_label, toolDisplay) => {
-        const { adapter, click, dispatchApproval } = await setup(toolDisplay);
+      ];
 
-        await click('tool_approve:tool-call-1');
+      describe.each([
+        ['approve', 'tool_approve:tool-call-1', 'Approved', 'dispatchApproval'],
+        ['deny', 'tool_deny:tool-call-1', 'Denied', 'dispatchDecline'],
+      ] as const)('on %s', (_action, actionId, expected, dispatchKey) => {
+        it.each(fallbackRenderers)(
+          'falls back to the default card when the renderer %s',
+          async (_label, toolDisplay) => {
+            const ctx = await setup(toolDisplay);
 
-        expect(adapter.editMessage).toHaveBeenCalledTimes(1);
-        const message = adapter.editMessage.mock.calls[0]![2];
-        expect(typeof message === 'string' ? message.trim() : message).toBeTruthy();
-        expect(JSON.stringify(message)).toContain('Approved');
-        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+            await ctx.click(actionId);
+
+            expect(ctx.adapter.editMessage).toHaveBeenCalledTimes(1);
+            const message = ctx.adapter.editMessage.mock.calls[0]![2];
+            expect(typeof message === 'string' ? message.trim() : message).toBeTruthy();
+            expect(JSON.stringify(message)).toContain(expected);
+            expect(ctx[dispatchKey]).toHaveBeenCalledTimes(1);
+          },
+        );
       });
     });
 
