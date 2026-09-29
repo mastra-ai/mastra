@@ -4,8 +4,13 @@ import { PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } f
 
 const accessToken = 'platform-secret-token';
 
-function client(fetchImpl: typeof fetch) {
-  return new PlatformApiClient({ baseUrl: 'https://platform.example.com/', accessToken, fetchImpl });
+function client(fetchImpl: typeof fetch, factoryIdentity?: 'installation') {
+  return new PlatformApiClient({
+    baseUrl: 'https://platform.example.com/',
+    accessToken,
+    fetchImpl,
+    factoryIdentity,
+  });
 }
 
 afterEach(() => {
@@ -123,7 +128,7 @@ describe('PlatformApiClient', () => {
         new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } }),
       );
 
-    await client(fetchImpl).request(
+    await client(fetchImpl, 'installation').request(
       'POST',
       '/v1/server/github/repos/acme/app/pulls',
       {},
@@ -135,6 +140,7 @@ describe('PlatformApiClient', () => {
 
     expect(fetchImpl.mock.calls[0]?.[1]?.headers).toMatchObject({
       'x-acting-user-id': 'user-42',
+      'x-mastra-factory-identity': 'installation',
       'x-mastra-factory-attribution': 'applied',
     });
   });

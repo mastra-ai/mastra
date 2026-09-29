@@ -531,7 +531,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   ) {
     this.#rules = resolveGithubRules(options.rules);
     const config = platformApiClientConfigFromEnv();
-    this.#client = new PlatformApiClient(config);
+    this.#client = new PlatformApiClient({ ...config, factoryIdentity: 'installation' });
     this.#endpointHost = new URL(config.baseUrl).host;
     this.#slug = options.slug;
     // Identity is deliberately NOT taken from `options.slug`. That slug names

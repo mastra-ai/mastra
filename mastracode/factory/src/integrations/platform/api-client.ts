@@ -2,6 +2,8 @@ export interface PlatformApiClientConfig {
   baseUrl: string;
   accessToken: string;
   fetchImpl?: typeof fetch;
+  /** Opts this Factory client into installation-backed GitHub identity. */
+  factoryIdentity?: 'installation';
 }
 
 const DEFAULT_INTEGRATIONS_URL = 'https://integrations.mastra.ai';
@@ -66,6 +68,7 @@ export class PlatformApiClient {
   readonly #baseUrl: string;
   readonly #accessToken: string;
   readonly #fetch: typeof fetch;
+  readonly #factoryIdentity: 'installation' | undefined;
 
   constructor(config: PlatformApiClientConfig) {
     const missing = ['baseUrl', 'accessToken'].filter(field => !config[field as keyof PlatformApiClientConfig]);
@@ -75,6 +78,7 @@ export class PlatformApiClient {
     this.#baseUrl = config.baseUrl.replace(/\/+$/, '');
     this.#accessToken = config.accessToken;
     this.#fetch = config.fetchImpl ?? globalThis.fetch;
+    this.#factoryIdentity = config.factoryIdentity;
   }
 
   async request<T>(
@@ -133,8 +137,14 @@ export class PlatformApiClient {
       accept: 'application/json',
       authorization: `Bearer ${this.#accessToken}`,
     };
-    // The platform uses this server-resolved id for visible attribution. It is
-    // not authorization and Factory writes remain installation-authored.
+    // Capability signal for gradual rollout. Older Factory releases omit it,
+    // preserving the platform's connected-user behavior until they upgrade.
+    if (this.#factoryIdentity) {
+      headers['x-mastra-factory-identity'] = this.#factoryIdentity;
+    }
+    // The platform uses this server-resolved id for visible attribution. When
+    // the identity capability above is present, it does not select a personal
+    // OAuth credential.
     if (options?.actingUserId) {
       headers['x-acting-user-id'] = options.actingUserId;
     }

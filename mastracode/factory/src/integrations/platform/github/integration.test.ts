@@ -502,6 +502,9 @@ describe('PlatformGithubIntegration', () => {
     );
     for (const call of fetchImpl.mock.calls) {
       expect((call[1] as RequestInit).headers).not.toHaveProperty('x-acting-user-id');
+      expect((call[1] as RequestInit).headers).toMatchObject({
+        'x-mastra-factory-identity': 'installation',
+      });
     }
   });
 
