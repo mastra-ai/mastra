@@ -126,7 +126,7 @@ export const MetaBesideLargeIcon: Story = {
         </PageHeader.Icon>
         <PageHeader.Title>Frontend Notion</PageHeader.Title>
         <PageHeader.Meta beside>
-          <Badge variant="green" emphasis="muted" size="sm">
+          <Badge variant="green" emphasis="subtle" size="sm">
             Active
           </Badge>
         </PageHeader.Meta>
