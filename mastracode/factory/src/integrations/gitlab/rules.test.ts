@@ -101,7 +101,13 @@ function mergeRequestNote(deliveryId = 'delivery-mr-note') {
 }
 
 async function setup(
-  options: { selected?: boolean; accessLevel?: number; duplicateInstallation?: boolean; installationHost?: string; platformOnly?: boolean } = {},
+  options: {
+    selected?: boolean;
+    accessLevel?: number;
+    duplicateInstallation?: boolean;
+    installationHost?: string;
+    platformOnly?: boolean;
+  } = {},
 ) {
   const seeded = await createFactoryStorageForTests();
   const sourceControl = seeded.sourceControl.forIntegration('gitlab');
@@ -167,9 +173,11 @@ async function setup(
     rules: resolveGitLabRules(),
     getProjectMemberAccessLevel: vi.fn().mockResolvedValue(options.accessLevel ?? 40),
     getWorkItemAuthorUsername: vi.fn().mockResolvedValue('maintainer'),
-    resolveActiveConnectionForHost: vi.fn().mockImplementation(async (connectionId: string, host: string) =>
-      options.platformOnly && host === 'gitlab.example.com' ? 'direct' : connectionId,
-    ),
+    resolveActiveConnectionForHost: vi
+      .fn()
+      .mockImplementation(async (connectionId: string, host: string) =>
+        options.platformOnly && host === 'gitlab.example.com' ? 'direct' : connectionId,
+      ),
   };
   const service = new GitLabRules({
     gitlab,
@@ -291,14 +299,16 @@ describe('GitLabRules', () => {
     const { seeded, project, gitlab, service } = await setup();
     const event = issueOpened('issue-author-id');
     const { author: _author, ...attributes } = event.payload.object_attributes;
-    await expect(service.ingest({
-      ...event,
-      payload: {
-        ...event.payload,
-        user: { id: 7, username: 'maintainer' },
-        object_attributes: { ...attributes, author_id: 7 },
-      },
-    })).resolves.toEqual({ status: 'committed' });
+    await expect(
+      service.ingest({
+        ...event,
+        payload: {
+          ...event.payload,
+          user: { id: 7, username: 'maintainer' },
+          object_attributes: { ...attributes, author_id: 7 },
+        },
+      }),
+    ).resolves.toEqual({ status: 'committed' });
     expect(gitlab.getWorkItemAuthorUsername).not.toHaveBeenCalled();
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
       { decision: { metadata: { author: 'maintainer', authorTrusted: true } } },
@@ -312,15 +322,17 @@ describe('GitLabRules', () => {
     );
     const event = issueOpened('issue-author-lookup');
     const { author: _author, ...attributes } = event.payload.object_attributes;
-    await expect(service.ingest({
-      ...event,
-      payload: {
-        ...event.payload,
-        user_username: 'external-editor',
-        user: { id: 8, username: 'external-editor' },
-        object_attributes: { ...attributes, author_id: 7 },
-      },
-    })).resolves.toEqual({ status: 'committed' });
+    await expect(
+      service.ingest({
+        ...event,
+        payload: {
+          ...event.payload,
+          user_username: 'external-editor',
+          user: { id: 8, username: 'external-editor' },
+          object_attributes: { ...attributes, author_id: 7 },
+        },
+      }),
+    ).resolves.toEqual({ status: 'committed' });
     expect(gitlab.getWorkItemAuthorUsername).toHaveBeenCalledWith('direct', PROJECT_ID, 'issue', 42);
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
       {
@@ -335,14 +347,16 @@ describe('GitLabRules', () => {
     vi.mocked(gitlab.getWorkItemAuthorUsername).mockRejectedValue(new Error('GitLab unavailable'));
     const event = issueOpened('issue-author-unavailable');
     const { author: _author, ...attributes } = event.payload.object_attributes;
-    await expect(service.ingest({
-      ...event,
-      payload: {
-        ...event.payload,
-        user: { id: 8, username: 'maintainer' },
-        object_attributes: { ...attributes, author_id: 7 },
-      },
-    })).resolves.toEqual({ status: 'committed' });
+    await expect(
+      service.ingest({
+        ...event,
+        payload: {
+          ...event.payload,
+          user: { id: 8, username: 'maintainer' },
+          object_attributes: { ...attributes, author_id: 7 },
+        },
+      }),
+    ).resolves.toEqual({ status: 'committed' });
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
       { decision: { metadata: { authorTrusted: false, autoStartCandidate: false } } },
     ]);
@@ -376,14 +390,16 @@ describe('GitLabRules', () => {
     const { seeded, project, gitlab, service } = await setup();
     const event = mergeRequestOpened('mr-author-id');
     const { author: _author, ...attributes } = event.payload.object_attributes;
-    await expect(service.ingest({
-      ...event,
-      payload: {
-        ...event.payload,
-        user: { id: 7, username: 'maintainer' },
-        object_attributes: { ...attributes, author_id: 7 },
-      },
-    })).resolves.toEqual({ status: 'committed' });
+    await expect(
+      service.ingest({
+        ...event,
+        payload: {
+          ...event.payload,
+          user: { id: 7, username: 'maintainer' },
+          object_attributes: { ...attributes, author_id: 7 },
+        },
+      }),
+    ).resolves.toEqual({ status: 'committed' });
     expect(gitlab.getWorkItemAuthorUsername).not.toHaveBeenCalled();
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
       { decision: { metadata: { author: 'maintainer', authorTrusted: true } } },
@@ -396,15 +412,17 @@ describe('GitLabRules', () => {
     );
     const event = mergeRequestOpened('mr-untrusted-actor');
     const { author: _author, ...attributes } = event.payload.object_attributes;
-    await expect(service.ingest({
-      ...event,
-      payload: {
-        ...event.payload,
-        user_username: 'external-editor',
-        user: { id: 8, username: 'external-editor' },
-        object_attributes: { ...attributes, author_id: 7 },
-      },
-    })).resolves.toEqual({ status: 'committed' });
+    await expect(
+      service.ingest({
+        ...event,
+        payload: {
+          ...event.payload,
+          user_username: 'external-editor',
+          user: { id: 8, username: 'external-editor' },
+          object_attributes: { ...attributes, author_id: 7 },
+        },
+      }),
+    ).resolves.toEqual({ status: 'committed' });
     expect(gitlab.getWorkItemAuthorUsername).toHaveBeenCalledWith('direct', PROJECT_ID, 'merge_request', 17);
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
       {
@@ -481,8 +499,9 @@ describe('GitLabRules', () => {
         metadata: { authorTrusted: true },
       },
     });
-    await expect(service.ingest(mergeRequestNote('delivery-mr-note-unrelated'))).resolves.toEqual({ status: 'committed' });
+    await expect(service.ingest(mergeRequestNote('delivery-mr-note-unrelated'))).resolves.toEqual({
+      status: 'committed',
+    });
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
-
 });

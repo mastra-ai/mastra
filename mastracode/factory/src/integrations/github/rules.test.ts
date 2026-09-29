@@ -2110,7 +2110,7 @@ describe('GithubRules', () => {
     );
   });
 
-  it('uses verified Factory provenance to link an opened Review card and remind Work on merge', async () => {
+  it('uses verified Factory provenance to link an opened Review card and carry Work through review to Done', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
     const work = await workItems.upsert({
       orgId: 'org-1',
@@ -2147,7 +2147,11 @@ describe('GithubRules', () => {
     });
 
     await service.ingest(pullRequest('opened', 'delivery-open'));
+    // While the pull request is open the Work item records it, which is what
+    // keeps an agent from closing the work before the merge.
+    expect((await workItems.get({ orgId: 'org-1', id: work.item.id }))?.metadata?.openPullRequestNumber).toBe(17);
     await service.ingest(pullRequest('closed', 'delivery-merge', true));
+    expect((await workItems.get({ orgId: 'org-1', id: work.item.id }))?.metadata?.openPullRequestNumber).toBeNull();
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
     expect(decisions).toEqual(
       expect.arrayContaining([
@@ -2157,12 +2161,13 @@ describe('GithubRules', () => {
         }),
         expect.objectContaining({
           workItemId: work.item.id,
-          decision: expect.objectContaining({ type: 'sendMessage', role: 'work' }),
+          decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'review' }),
+        }),
+        expect.objectContaining({
+          workItemId: work.item.id,
+          decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'done' }),
         }),
       ]),
-    );
-    expect(decisions.map(entry => entry.decision)).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ type: 'transition' })]),
     );
   });
 
@@ -2258,6 +2263,10 @@ describe('GithubRules', () => {
           source: 'github-pr',
           metadata: expect.objectContaining({ headBranch: 'feature' }),
         }),
+      }),
+      expect.objectContaining({
+        workItemId: work.item.id,
+        decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'review' }),
       }),
     ]);
   });
@@ -2487,7 +2496,7 @@ describe('GithubRules', () => {
     });
   });
 
-  it('closes the merged Review card and wakes the work item it was opened from', async () => {
+  it('closes the merged Review card and the work item it was opened from', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
     const work = await createLinkedIssue(workItems, project.id);
     // The last review asked for changes; the merge overrides it.
@@ -2538,7 +2547,7 @@ describe('GithubRules', () => {
         }),
         expect.objectContaining({
           workItemId: work.id,
-          decision: expect.objectContaining({ type: 'sendMessage', role: 'work' }),
+          decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'done' }),
         }),
       ]),
     );
@@ -2547,7 +2556,7 @@ describe('GithubRules', () => {
     expect((await workItems.get({ orgId: 'org-1', id: work.id }))?.metadata?.reviewVerdict).toBeNull();
 
     // The fan-out rides the same delivery, so replaying it must stay inert for
-    // both cards rather than sending the work item a second reminder.
+    // both cards rather than moving the work item a second time.
     await expect(service.ingest(pullRequest('closed', 'delivery-merged-both', true))).resolves.toEqual({
       status: 'replayed',
     });
@@ -2599,7 +2608,7 @@ describe('GithubRules', () => {
       expect.arrayContaining([
         expect.objectContaining({
           workItemId: work.id,
-          decision: expect.objectContaining({ type: 'sendMessage', role: 'work' }),
+          decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'done' }),
         }),
         expect.objectContaining({
           workItemId: card.item.id,

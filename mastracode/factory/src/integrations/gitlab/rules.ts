@@ -226,7 +226,9 @@ export class GitLabRules {
       integrationIds: ['gitlab'],
     });
     if (!config.gitlab?.enabled || !config.gitlab.sourceIds?.includes(sourceId)) return { status: 'ignored' };
-    const binding = (await this.options.intake.listBindings({ orgId: target.target.orgId, integrationId: 'gitlab' })).find(
+    const binding = (
+      await this.options.intake.listBindings({ orgId: target.target.orgId, integrationId: 'gitlab' })
+    ).find(
       candidate => candidate.sourceId === sourceId && candidate.factoryProjectId === target.target.factoryProjectId,
     );
     if (!binding) return { status: 'ignored' };
@@ -236,8 +238,8 @@ export class GitLabRules {
     const connectionIds = [
       ...new Set(
         await Promise.all(
-          target.connectionIds.map(connectionId =>
-            this.options.gitlab.resolveActiveConnectionForHost?.(connectionId, host) ?? connectionId,
+          target.connectionIds.map(
+            connectionId => this.options.gitlab.resolveActiveConnectionForHost?.(connectionId, host) ?? connectionId,
           ),
         ),
       ),
@@ -257,10 +259,14 @@ export class GitLabRules {
       factoryProjectId: target.target.factoryProjectId,
     });
     const issueItem = issueSourceKey
-      ? items.find(item => item.externalSource?.integrationId === 'gitlab' && item.externalSource.externalId === issueSourceKey)
+      ? items.find(
+          item => item.externalSource?.integrationId === 'gitlab' && item.externalSource.externalId === issueSourceKey,
+        )
       : undefined;
     const reviewItem = mergeRequestKey
-      ? items.find(item => item.externalSource?.integrationId === 'gitlab' && item.externalSource.externalId === mergeRequestKey)
+      ? items.find(
+          item => item.externalSource?.integrationId === 'gitlab' && item.externalSource.externalId === mergeRequestKey,
+        )
       : undefined;
     const headBranch = string(mergeRequest?.source_branch) ?? '';
     const authoringItem = headBranch
@@ -302,9 +308,7 @@ export class GitLabRules {
     ]);
     const authorTrusted = async (author: string | undefined): Promise<boolean> => {
       if (!author) return false;
-      return author === username
-        ? actorTrusted
-        : this.#trusted(connectionIds, String(projectId), author);
+      return author === username ? actorTrusted : this.#trusted(connectionIds, String(projectId), author);
     };
     const [issueAuthorTrusted, mergeRequestAuthorTrusted] = await Promise.all([
       authorTrusted(issueAuthor),
@@ -482,10 +486,11 @@ export class GitLabRules {
                 string(input.mergeRequest?.url) ??
                 string(input.mergeRequest?.web_url) ??
                 `https://${input.host}/${input.projectPath}/-/merge_requests/${input.mergeRequestIid}`,
-              ...(string(input.mergeRequest?.created_at)
-                ? { createdAt: string(input.mergeRequest?.created_at) }
-                : {}),
-              state: mergeRequestState === 'closed' || mergeRequestState === 'merged' ? ('closed' as const) : ('open' as const),
+              ...(string(input.mergeRequest?.created_at) ? { createdAt: string(input.mergeRequest?.created_at) } : {}),
+              state:
+                mergeRequestState === 'closed' || mergeRequestState === 'merged'
+                  ? ('closed' as const)
+                  : ('open' as const),
               draft: boolean(input.mergeRequest?.draft) ?? boolean(input.mergeRequest?.work_in_progress) ?? false,
               merged: input.event === 'mergeRequestMerged' || mergeRequestState === 'merged',
               assignees: usernames(input.parsed.payload.assignees ?? input.mergeRequest?.assignees),
@@ -511,7 +516,11 @@ export class GitLabRules {
         outcome = { status: 'rejected', code: decision.code, reason: decision.reason };
       } else if (decision) {
         decisions = validateFactoryRuleDecisions([decision]).map(entry => {
-          assertFactoryDecisionTarget(entry, this.options.boards, input.item ? boardForWorkItem(input.item) : undefined);
+          assertFactoryDecisionTarget(
+            entry,
+            this.options.boards,
+            input.item ? boardForWorkItem(input.item) : undefined,
+          );
           return { ...entry };
         });
       }

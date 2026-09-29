@@ -50,7 +50,11 @@ describe('work board build prompt', () => {
 });
 
 describe('work board done policy', () => {
-  function toDone(actor: { type: string; id: string; role?: string }, reviewVerdict?: string | null) {
+  function toDone(
+    actor: { type: string; id: string; role?: string },
+    reviewVerdict?: string | null,
+    openPullRequestNumber?: number | null,
+  ) {
     return workBoard.transitionPolicy!({
       actor,
       fromStage: 'review',
@@ -58,7 +62,12 @@ describe('work board done policy', () => {
       isHumanTransition: actor.type === 'human',
       plansAutoApproved: false,
       planApproved: false,
-      item: { ...executeContext('issue').item, stages: ['review'], triageType: 'bug', metadata: { reviewVerdict } },
+      item: {
+        ...executeContext('issue').item,
+        stages: ['review'],
+        triageType: 'bug',
+        metadata: { reviewVerdict, openPullRequestNumber },
+      },
     } as never);
   }
 
@@ -76,5 +85,14 @@ describe('work board done policy', () => {
 
   it('still lets a maintainer close work with changes requested', () => {
     expect(toDone({ type: 'human', id: 'user-1' }, 'request changes')).toMatchObject({ type: 'allow' });
+  });
+
+  it('keeps the builder from closing work while its pull request is still open', () => {
+    expect(toDone({ type: 'agent', id: 'binding-1', role: 'work' }, 'approve', 17)).toMatchObject({
+      type: 'reject',
+      code: 'invalid_transition',
+    });
+    expect(toDone({ type: 'system', id: 'factory-rule-dispatcher' }, null, 17)).toMatchObject({ type: 'allow' });
+    expect(toDone({ type: 'human', id: 'user-1' }, null, 17)).toMatchObject({ type: 'allow' });
   });
 });

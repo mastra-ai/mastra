@@ -703,18 +703,38 @@ export class GithubRules {
     // this the card reads "open" until the next sweep and still offers Re-review.
     // Stamped after the evaluations, which commit at the revision they read.
     const stampClosed = async () => {
-      if ((event !== 'pullRequestMerged' && event !== 'pullRequestClosed') || !pullRequestNumber) return;
+      if (!pullRequestNumber) return;
+      // The authoring Work item records which pull request it has out, so an
+      // agent cannot close the work while that pull request is still open.
+      if (pullRequestOpened) {
+        if (authoringItem) {
+          await this.options.storage.update({
+            orgId: authoringItem.orgId,
+            id: authoringItem.id,
+            userId: 'factory-rule-dispatcher',
+            patch: { metadata: { openPullRequestNumber: pullRequestNumber } },
+          });
+        }
+        return;
+      }
+      if (event !== 'pullRequestMerged' && event !== 'pullRequestClosed') return;
       for (const card of [relatedItem, linked]) {
         if (!card) continue;
         if (card.externalSource?.type !== 'pull-request') {
           // A merge settles the review, so the authoring Work item's mirrored
           // "request changes" no longer stops it from being closed.
-          if (event === 'pullRequestMerged' && card.metadata?.reviewVerdict === 'request changes') {
+          const settled = {
+            ...(event === 'pullRequestMerged' && card.metadata?.reviewVerdict === 'request changes'
+              ? { reviewVerdict: null }
+              : {}),
+            ...(card.metadata?.openPullRequestNumber === pullRequestNumber ? { openPullRequestNumber: null } : {}),
+          };
+          if (Object.keys(settled).length > 0) {
             await this.options.storage.update({
               orgId: card.orgId,
               id: card.id,
               userId: 'factory-rule-dispatcher',
-              patch: { metadata: { reviewVerdict: null } },
+              patch: { metadata: settled },
             });
           }
           continue;

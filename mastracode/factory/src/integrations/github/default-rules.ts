@@ -107,7 +107,11 @@ function issueClosed(context: FactoryGithubRuleContext) {
 
 function materializePullRequestIntake(
   context: FactoryGithubRuleContext,
-  { idempotencyKey, autoStartCandidate, stage = 'intake' }: { idempotencyKey: string; autoStartCandidate: boolean; stage?: 'intake' | 'review' },
+  {
+    idempotencyKey,
+    autoStartCandidate,
+    stage = 'intake',
+  }: { idempotencyKey: string; autoStartCandidate: boolean; stage?: 'intake' | 'review' },
 ) {
   if (!context.pullRequest) return;
   return {
@@ -144,8 +148,19 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
   // Opening a pull request is evaluated once per card it concerns. This rule
   // files the pull request's own Review card, which is the arrival — the
   // evaluation carrying `pullRequestIntake` — so the authoring Work item's own
-  // evaluation has nothing to file.
-  if (context.item && context.pullRequestIntake !== true) return;
+  // evaluation only moves it out for review: Building means "no pull request
+  // yet", Review means one is open. The card rests there through every round of
+  // feedback — the builder is woken in place — until the merge closes it.
+  if (context.item && context.pullRequestIntake !== true) {
+    if (context.board !== 'work' || context.pullRequest.state !== 'open') return;
+    if (!context.item.stages.includes('execute')) return;
+    return {
+      type: 'transition',
+      idempotencyKey: `${context.ingress.id}:out-for-review`,
+      board: 'work',
+      stage: 'review',
+    } as const;
+  }
   // A GitHub App bot is never a collaborator, so Factory's own PRs score
   // untrusted; their authorship is the trust signal.
   const autoStartCandidate =
@@ -176,15 +191,14 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
       },
     } as const;
   }
-  // Provenance bound the event to the originating Work item instead: remind
-  // its agent to assess completion — never auto-complete the Work item.
+  // Provenance bound the event to the originating Work item instead: the merge
+  // is what finishes the work, so it closes the Work card alongside its Review card.
   return {
-    type: 'sendMessage',
-    idempotencyKey: `${context.ingress.id}:assess-work-completion`,
-    role: 'work',
-    message:
-      `Pull request #${context.pullRequest.number} merged. Assess whether the linked Work item is complete. ` +
-      'Do not mark it Done solely because this PR merged; use factory_transition_work_item only after verifying the work.',
+    type: 'transition',
+    idempotencyKey: `${context.ingress.id}:work-merged`,
+    board: 'work',
+    stage: 'done',
+    message: { text: `Pull request #${context.pullRequest.number} merged; this Work card was moved to Done.` },
   } as const;
 }
 

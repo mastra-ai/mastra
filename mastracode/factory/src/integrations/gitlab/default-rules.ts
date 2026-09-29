@@ -1,8 +1,4 @@
-import type {
-  FactoryGitLabEventName,
-  FactoryGitLabRuleContext,
-  FactoryRuleHandler,
-} from '../../rules/types.js';
+import type { FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryRuleHandler } from '../../rules/types.js';
 
 export type GitLabRuleOverrides = Partial<
   Record<FactoryGitLabEventName, FactoryRuleHandler<FactoryGitLabRuleContext> | null | undefined>
@@ -10,7 +6,6 @@ export type GitLabRuleOverrides = Partial<
 export type GitLabEventRules = Readonly<
   Record<FactoryGitLabEventName, FactoryRuleHandler<FactoryGitLabRuleContext> | null>
 >;
-
 
 function actorUsername(context: Pick<FactoryGitLabRuleContext, 'actor'>): string | undefined {
   return context.actor.type === 'gitlab' ? context.actor.username : undefined;
@@ -44,7 +39,7 @@ function issueOpened(context: FactoryGitLabRuleContext) {
       gitlabIssueIid: context.issue.number,
       identifier: `${context.repository.fullName}#${context.issue.number}`,
       ...(context.issue.createdAt ? { sourceCreatedAt: context.issue.createdAt } : {}),
-      ...(context.issue.author ?? actorUsername(context)
+      ...((context.issue.author ?? actorUsername(context))
         ? { author: context.issue.author ?? actorUsername(context) }
         : {}),
       authorTrusted: context.issue.authorTrusted,

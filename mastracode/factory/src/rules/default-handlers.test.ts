@@ -1078,10 +1078,10 @@ describe('built-in board and integration handlers', () => {
     });
   });
 
-  it('files the pull request card only on the arrival, not on the item that authored it', async () => {
+  it('files the pull request card on the arrival and moves the authoring item out for review', async () => {
     // Opening a pull request is evaluated once per card it concerns. Only the
     // arrival — flagged `pullRequestIntake` — files the card; the authoring
-    // item's own evaluation must leave the card alone.
+    // item's own evaluation moves it from Building to Review.
     const authored = {
       ...githubContext('pullRequestOpened'),
       item: {
@@ -1099,7 +1099,15 @@ describe('built-in board and integration handlers', () => {
       itemRevision: 1,
     };
 
-    expect(await defaultGithubRules.pullRequestOpened?.(authored)).toBeUndefined();
+    expect(await defaultGithubRules.pullRequestOpened?.(authored)).toMatchObject({
+      type: 'transition',
+      board: 'work',
+      stage: 'review',
+    });
+    // Only Building moves: a card already past it (or a draft-closed PR) is left alone.
+    expect(
+      await defaultGithubRules.pullRequestOpened?.({ ...authored, item: { ...authored.item, stages: ['review'] } }),
+    ).toBeUndefined();
     expect(await defaultGithubRules.pullRequestOpened?.({ ...authored, pullRequestIntake: true })).toMatchObject({
       type: 'upsertLinkedWorkItem',
       source: 'github-pr',
@@ -1158,14 +1166,13 @@ describe('built-in board and integration handlers', () => {
     });
   });
 
-  it('reminds the provenance-linked Work agent after merge without transitioning the Work item', async () => {
+  it('moves the provenance-linked Work item to Done when its pull request merges', async () => {
     const context = githubContext('pullRequestMerged');
     context.item = item;
     context.board = 'work';
     context.pullRequest = { ...context.pullRequest!, state: 'closed', merged: true };
     const decision = await defaultGithubRules.pullRequestMerged?.(context);
-    expect(decision).toMatchObject({ type: 'sendMessage', role: 'work' });
-    expect(decision).not.toMatchObject({ type: 'transition', stage: 'done' });
+    expect(decision).toMatchObject({ type: 'transition', board: 'work', stage: 'done' });
   });
 
   it('cancels the Review card when the PR is closed without merging', async () => {

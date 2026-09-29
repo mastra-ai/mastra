@@ -44,6 +44,14 @@ export const workTransitionPolicy: BoardTransitionPolicy = context => {
         'The latest Factory review requested changes on this pull request. Address them and push; the re-review updates the verdict. A merge or a maintainer can still close the work.',
     };
   }
+  // The work ships when its pull request merges, and the merge closes the card.
+  if (toStage === 'done' && actor.type === 'agent' && typeof item.metadata?.openPullRequestNumber === 'number') {
+    return {
+      type: 'reject',
+      code: 'invalid_transition',
+      reason: `Pull request #${item.metadata.openPullRequestNumber} is still open. The card moves to Done when it merges; a maintainer can still close the work.`,
+    };
+  }
   const triageType = item.triageType ?? requestedTriageType;
   const entersWork = toStage === 'planning' || toStage === 'execute';
   // An intermediate phase is not evidence of human approval.
