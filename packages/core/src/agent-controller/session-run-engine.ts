@@ -444,8 +444,6 @@ export class SessionRunEngine {
       const subagent = this.#session.displayState.get().activeSubagents.get(toolCallId);
       if (subagent) {
         this.endDelegatedSubagent(toolCallId, subagent, result, isError);
-      } else {
-        this.startDelegatedSubagent(state, toolCallId, toolName);
       }
     }
     this.#session.emit({

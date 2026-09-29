@@ -163,6 +163,13 @@ describe('SessionRunEngine — subagents delegated through Agent.agents', () => 
       toolCalls: [{ name: 'searchDocs', isError: true }],
       status: 'error',
     });
+    expect(events.find(event => event.type === 'tool_end')).toMatchObject({
+      toolCallId,
+      result: 'helper crashed',
+      isError: true,
+    });
+    const order = events.map(event => event.type);
+    expect(order.indexOf('subagent_end')).toBeLessThan(order.indexOf('tool_end'));
   });
 
   it('picks the subagent back up after the run pauses for approval and resumes', async () => {
@@ -226,31 +233,35 @@ describe('SessionRunEngine — subagents delegated through Agent.agents', () => 
     expect(subagentEvents(events).find(event => event.type === 'subagent_end')).toMatchObject({ result: '' });
   });
 
-  it('opens and closes the subagent when the delegation settles without streaming any output', async () => {
-    const { engine, events, session } = createHarness();
-    const state = engine.createStreamState();
-    const context = new RequestContext();
+  it.each(['tool-result', 'tool-error'] as const)(
+    'emits only parent tool events when a %s arrives without any subagent output',
+    async type => {
+      const { engine, events, session } = createHarness();
+      const state = engine.createStreamState();
+      const context = new RequestContext();
 
-    const toolCallId = 'delegate-silent';
-    const chunks: StreamChunk[] = [
-      { type: 'tool-call', payload: { toolCallId, toolName: 'agent-helper', args: { prompt: 'Research streams' } } },
-      {
-        type: 'tool-error',
-        payload: { toolCallId, toolName: 'agent-helper', error: new Error('helper crashed') },
-      },
-    ];
-    for (const item of chunks) await engine.processStreamChunk(state, item, context);
+      const toolCallId = 'delegate-silent';
+      const chunks: StreamChunk[] = [
+        { type: 'tool-call', payload: { toolCallId, toolName: 'agent-helper', args: { prompt: 'Research streams' } } },
+        type === 'tool-error'
+          ? { type, payload: { toolCallId, toolName: 'agent-helper', error: new Error('helper crashed') } }
+          : { type, payload: { toolCallId, toolName: 'agent-helper', result: { text: 'Done.' } } },
+      ];
+      for (const item of chunks) await engine.processStreamChunk(state, item, context);
 
-    expect(subagentEvents(events)).toMatchObject([
-      { type: 'subagent_start', agentType: 'helper', task: 'Research streams' },
-      { type: 'subagent_end', agentType: 'helper', isError: true },
-    ]);
-    expect(session.displayState.get().activeSubagents.get(toolCallId)).toMatchObject({
-      agentType: 'helper',
-      task: 'Research streams',
-      status: 'error',
-    });
-  });
+      expect(subagentEvents(events)).toEqual([]);
+      expect(session.displayState.get().activeSubagents.has(toolCallId)).toBe(false);
+      expect(events.filter(event => event.type === 'tool_start' || event.type === 'tool_end')).toMatchObject([
+        { type: 'tool_start', toolCallId, toolName: 'agent-helper', args: { prompt: 'Research streams' } },
+        {
+          type: 'tool_end',
+          toolCallId,
+          result: type === 'tool-error' ? 'helper crashed' : { text: 'Done.' },
+          isError: type === 'tool-error',
+        },
+      ]);
+    },
+  );
 
   it('ignores tool-output that is not from an agent-<key> delegation', async () => {
     const { engine, events, session } = createHarness();
