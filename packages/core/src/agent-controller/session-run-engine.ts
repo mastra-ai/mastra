@@ -21,7 +21,7 @@ import {
   getDisplayTransform,
   getUsageNumber,
 } from './stream-content';
-import type { TokenUsage } from './types';
+import type { ActiveSubagentState, TokenUsage } from './types';
 
 /**
  * The transient state of a single in-flight agent stream: the assistant message
@@ -440,30 +440,15 @@ export class SessionRunEngine {
     }
     this.emitMessagePart(state, partIndex);
     // The built-in subagent tool emits its own `subagent_end`; only close `agent-<key>` delegations here.
-    // A delegation that settles before streaming any output has no entry yet, so open one first.
-    if (toolName.startsWith('agent-') && !this.#session.displayState.get().activeSubagents.has(toolCallId)) {
-      const args = existing?.type === 'tool-invocation' ? existing.toolInvocation.args : undefined;
-      this.#session.emit({
-        type: 'subagent_start',
-        toolCallId,
-        agentType: toolName.slice('agent-'.length),
-        task: getString(getRecord(args)?.prompt) ?? '',
-        modelId: '',
-      });
-    }
-    const delegatedSubagent = toolName.startsWith('agent-')
-      ? this.#session.displayState.get().activeSubagents.get(toolCallId)
-      : undefined;
-    if (delegatedSubagent) {
-      this.#session.emit({
-        type: 'subagent_end',
-        toolCallId,
-        agentType: delegatedSubagent.agentType,
-        result:
-          getString(getRecord(result)?.text) ?? (typeof result === 'string' ? result : (JSON.stringify(result) ?? '')),
-        isError,
-        durationMs: delegatedSubagent.startedAt !== undefined ? Date.now() - delegatedSubagent.startedAt : 0,
-      });
+    if (toolName.startsWith('agent-')) {
+      // A delegation that settles before streaming any output has no entry yet, so open one first.
+      if (!this.#session.displayState.get().activeSubagents.has(toolCallId)) {
+        this.startDelegatedSubagent(state, toolCallId, toolName);
+      }
+      const subagent = this.#session.displayState.get().activeSubagents.get(toolCallId);
+      if (subagent) {
+        this.endDelegatedSubagent(toolCallId, subagent, result, isError);
+      }
     }
     this.#session.emit({
       type: 'tool_end',
@@ -472,6 +457,38 @@ export class SessionRunEngine {
       result,
       isError,
       ...(providerMetadata ? { providerMetadata } : {}),
+    });
+  }
+
+  /** Open an `agent-<key>` delegation in `activeSubagents`, taking its task from the tool call's prompt. */
+  private startDelegatedSubagent(state: StreamState, toolCallId: string, toolName: string): void {
+    const toolIndex = state.toolPartById.get(toolCallId);
+    const toolPart = toolIndex !== undefined ? state.currentMessage.content.parts[toolIndex] : undefined;
+    const args = toolPart?.type === 'tool-invocation' ? toolPart.toolInvocation.args : undefined;
+    this.#session.emit({
+      type: 'subagent_start',
+      toolCallId,
+      agentType: toolName.slice('agent-'.length),
+      task: getString(getRecord(args)?.prompt) ?? '',
+      modelId: '',
+    });
+  }
+
+  /** Close an `agent-<key>` delegation once its tool call settles. */
+  private endDelegatedSubagent(
+    toolCallId: string,
+    subagent: ActiveSubagentState,
+    result: unknown,
+    isError: boolean,
+  ): void {
+    this.#session.emit({
+      type: 'subagent_end',
+      toolCallId,
+      agentType: subagent.agentType,
+      result:
+        getString(getRecord(result)?.text) ?? (typeof result === 'string' ? result : (JSON.stringify(result) ?? '')),
+      isError,
+      durationMs: subagent.startedAt !== undefined ? Date.now() - subagent.startedAt : 0,
     });
   }
 
@@ -771,16 +788,7 @@ export class SessionRunEngine {
 
         const agentType = toolName.slice('agent-'.length);
         if (!this.#session.displayState.get().activeSubagents.has(toolCallId)) {
-          const toolIndex = state.toolPartById.get(toolCallId);
-          const toolPart = toolIndex !== undefined ? state.currentMessage.content.parts[toolIndex] : undefined;
-          const args = toolPart?.type === 'tool-invocation' ? toolPart.toolInvocation.args : undefined;
-          this.#session.emit({
-            type: 'subagent_start',
-            toolCallId,
-            agentType,
-            task: getString(getRecord(args)?.prompt) ?? '',
-            modelId: '',
-          });
+          this.startDelegatedSubagent(state, toolCallId, toolName);
         }
 
         const nested = getRecord(output.payload) ?? {};
