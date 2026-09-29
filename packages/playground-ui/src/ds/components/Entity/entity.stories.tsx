@@ -59,7 +59,7 @@ export const WithCustomContent: Story = {
   ),
 };
 
-export const EntityList: Story = {
+export const StackedEntities: Story = {
   render: () => (
     <div className="flex w-75 flex-col gap-2">
       <Entity onClick={() => console.log('Agent 1 clicked')}>
