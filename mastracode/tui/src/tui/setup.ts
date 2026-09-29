@@ -232,6 +232,9 @@ async function pauseStoredGoal(state: TUIState, pausedReason: string): Promise<v
   if (!threadId) return;
   try {
     const agent = state.controller.getCurrentAgent(state.session);
+    // Only an active goal is being judged; never overwrite a finished or already-paused goal.
+    const record = await agent.getObjective({ threadId });
+    if (record?.status !== 'active') return;
     await agent.updateObjectiveOptions({ threadId, status: 'paused', pausedReason });
   } catch {
     // Persistence is best-effort, like saveToThread.
