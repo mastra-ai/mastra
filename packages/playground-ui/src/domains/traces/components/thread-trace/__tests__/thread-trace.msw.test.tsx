@@ -8,7 +8,6 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import { ThreadTrace, useThreadTrace, useThreadTraceRow } from '../index';
 import { spanADetail, traceASpans, traceBSpans } from './fixtures/thread-trace';
-import type { ThreadRailTurn } from '@/ds/components/ThreadRail';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -24,7 +23,7 @@ function Wrapper({ children }: { children: ReactNode }) {
   );
 }
 
-// jsdom does not implement scrollIntoView, which the rail and the anchor row rely on.
+// jsdom does not implement scrollIntoView, which the anchor row relies on.
 const scrollIntoView = vi.fn();
 beforeAll(() => {
   Element.prototype.scrollIntoView = scrollIntoView;
@@ -76,14 +75,6 @@ const stubIntersectionObserver = () => {
   return { intersect };
 };
 
-const railTurns: ThreadRailTurn[] = TRACE_IDS.map(traceId => ({
-  key: traceId,
-  messageId: traceId,
-  prompt: `Turn ${traceId}`,
-  files: [],
-  hiddenFileCount: 0,
-}));
-
 /** A consumer-provided messages slot that drives highlighting through the row hook. */
 function MessagesSlot() {
   const { traceId, highlightSpans } = useThreadTraceRow();
@@ -114,7 +105,6 @@ const renderView = ({
   renderUI(
     <ThreadTrace traceIds={traceIds} anchorTraceId={anchorTraceId} className={className}>
       <ThreadTrace.List data-testid="thread-trace-list">
-        <ThreadTrace.Rail turns={railTurns} />
         <ThreadTrace.LoadMoreSentinel data-testid="sentinel" />
         {traceIds.map(traceId => (
           <ThreadTrace.Row key={traceId} traceId={traceId}>
@@ -181,16 +171,7 @@ describe('ThreadTrace', () => {
     });
   });
 
-  describe('rail', () => {
-    it('shows one stop per turn and scrolls the matching row into view on click', async () => {
-      renderView();
-      await screen.findByText('Chef agent run');
-
-      fireEvent.click(screen.getByRole('button', { name: 'Jump to Turn trace-b' }));
-      expect(scrollIntoView).toHaveBeenCalledTimes(1);
-      expect(scrollIntoView.mock.instances[0]).toBe(getRow('trace-b'));
-    });
-
+  describe('row emphasis', () => {
     it('emphasises the first row in view and dims the others', async () => {
       const { intersect } = stubIntersectionObserver();
       renderView();

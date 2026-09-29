@@ -288,22 +288,6 @@ describe('ThreadViewByTrace', () => {
     await waitFor(() => expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull());
   });
 
-  it('shows a rail with one stop per turn that jumps to the matching row', async () => {
-    installHandlers();
-    const { queryClient } = renderView();
-
-    // trace-a reconstructs a user turn, so its stop carries the prompt.
-    const stop = await screen.findByRole('button', { name: 'Jump to cook pasta' });
-    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-    expect(screen.getByTestId('thread-rail').querySelectorAll('button')).toHaveLength(2);
-
-    scrollIntoView.mockClear();
-    fireEvent.click(stop);
-    const row = screen.getByTestId('thread-view-by-trace').querySelector('[data-trace-id="trace-a"]');
-    expect(scrollIntoView).toHaveBeenCalledTimes(1);
-    expect(scrollIntoView.mock.instances[0]).toBe(row);
-  });
-
   describe('arriving from a trace with ?traceId', () => {
     it('scrolls to that row and shows its trace in full', async () => {
       mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 900 });
