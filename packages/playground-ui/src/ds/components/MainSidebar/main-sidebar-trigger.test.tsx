@@ -47,3 +47,16 @@ describe('MainSidebarTrigger tooltip', () => {
     expect(tooltip.querySelector('kbd')?.textContent).toBe('[');
   });
 });
+
+describe('MainSidebarProvider keyboard toggle', () => {
+  it('toggles once when mod+B is held down', () => {
+    const { container } = render(<MainSidebarProvider disableKeyboardShortcut={false}>content</MainSidebarProvider>);
+    const scope = container.querySelector('[data-sidebar-scope]');
+    expect(scope?.getAttribute('data-sidebar-state')).toBe('default');
+
+    fireEvent.keyDown(window, { code: 'KeyB', key: 'b', ctrlKey: true });
+    fireEvent.keyDown(window, { code: 'KeyB', key: 'b', ctrlKey: true, repeat: true });
+
+    expect(scope?.getAttribute('data-sidebar-state')).toBe('collapsed');
+  });
+});

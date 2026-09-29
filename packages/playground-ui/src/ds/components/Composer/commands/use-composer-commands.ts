@@ -87,6 +87,7 @@ export function useComposerCommands({
     {
       target: inputRef,
       enabled: items.length > 0,
+      repeat: true,
       shouldHandle: shouldHandleCommandKey,
     },
   );

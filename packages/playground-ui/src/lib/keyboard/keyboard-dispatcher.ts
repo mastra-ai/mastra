@@ -154,6 +154,8 @@ export type KeyboardLayer = {
   depth: number;
   bindings: UseKeydownArgs;
   shouldHandle?: (event: KeyboardEvent) => boolean;
+  /** Also fire handlers on auto-repeated keydowns while a key is held. */
+  repeat?: boolean;
 };
 
 type ResolvedBinding = {
@@ -231,7 +233,8 @@ export const createKeyboardDispatcher = (): KeyboardDispatcher => {
     const bindings = resolveBindings();
     const now = Date.now();
 
-    if (pending) {
+    // A held key neither advances nor resets a sequence.
+    if (pending && !event.repeat) {
       if (now < pending.expiresAt) {
         const stepIndex = pending.matched.length;
         const candidates = bindings.filter(binding =>
@@ -262,7 +265,7 @@ export const createKeyboardDispatcher = (): KeyboardDispatcher => {
     // Sequence prefixes win over plain combos on the same key.
     const candidates = bindings.filter(({ steps, layer }) => {
       const [first] = steps;
-      return steps.length > 1 && first && matchesCombo(event, first) && accepts(layer, event);
+      return !event.repeat && steps.length > 1 && first && matchesCombo(event, first) && accepts(layer, event);
     });
     const first = candidates[0]?.steps[0];
     if (first) {
@@ -276,7 +279,9 @@ export const createKeyboardDispatcher = (): KeyboardDispatcher => {
       if (steps.length === 1 && first && matchesCombo(event, first)) {
         if (!accepts(layer, event)) return;
         event.preventDefault();
-        handler();
+        // Holding a key re-fires only bindings that opt in (e.g. arrow navigation),
+        // so toggles and actions run once per press.
+        if (!event.repeat || layer.repeat) handler();
         return;
       }
     }

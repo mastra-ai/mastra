@@ -227,18 +227,15 @@ export const ScopedTarget: Story = { render: () => <ScopedTargetDemo /> };
 const TypingInFieldsDemo = () => {
   const out = useLog();
 
-  useKeydown(
-    {
-      'g$+a': () => out.log('g then a'),
-      '?': () => out.log('? → show shortcuts'),
-      'mod+k': () => out.log('mod+k → still fires from inside the input'),
-    },
-    { shouldHandle: event => !event.repeat },
-  );
+  useKeydown({
+    'g$+a': () => out.log('g then a'),
+    '?': () => out.log('? → show shortcuts'),
+    'mod+k': () => out.log('mod+k → still fires from inside the input'),
+  });
 
   return (
     <Layout
-      title="Unmodified keys are ignored while typing in a field (built-in). Modifier combos still fire. shouldHandle adds extra filtering (here: no key repeat)."
+      title="Unmodified keys are ignored while typing in a field (built-in). Modifier combos still fire."
       log={out}
     >
       <input

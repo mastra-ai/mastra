@@ -26,6 +26,13 @@ export type UseKeydownOptions = {
    * unless the listener targets that field directly.
    */
   shouldHandle?: (event: KeyboardEvent) => boolean;
+  /**
+   * When `true`, handlers also fire on auto-repeated keydowns while a key is
+   * held, e.g. for arrow-key navigation. Defaults to `false`, so toggles and
+   * actions run once per press. Repeats of a matched key are still
+   * default-prevented.
+   */
+  repeat?: boolean;
 };
 
 /**
@@ -43,9 +50,15 @@ export const useKeydown = (opts: UseKeydownArgs, options: UseKeydownOptions = {}
   const depth = useKeyboardScopeDepth();
 
   // Kept fresh on every render so the dispatcher always calls the latest handlers.
-  const layerRef = useRef<KeyboardLayer>({ depth, bindings: opts, shouldHandle: options.shouldHandle });
+  const layerRef = useRef<KeyboardLayer>({
+    depth,
+    bindings: opts,
+    shouldHandle: options.shouldHandle,
+    repeat: options.repeat,
+  });
   layerRef.current.bindings = opts;
   layerRef.current.shouldHandle = options.shouldHandle;
+  layerRef.current.repeat = options.repeat;
   layerRef.current.depth = depth;
 
   const shared = !target && shortcuts.status === 'ready' ? shortcuts.dispatcher : undefined;
@@ -156,6 +169,7 @@ export const useTableKeydown = ({
     },
     {
       enabled: global,
+      repeat: true,
       shouldHandle: event => !event.defaultPrevented && count > 0 && !isKeyboardConsumer(event.target),
     },
   );

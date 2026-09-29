@@ -340,6 +340,32 @@ describe('useKeydown', () => {
     pressKey('ArrowUp');
     expect(onArrowUp).toHaveBeenCalledTimes(1);
   });
+
+  describe('given a key is held down', () => {
+    it('when auto-repeat keydowns fire, then the handler runs once and repeats are still default-prevented', () => {
+      const onToggle = vi.fn();
+      renderHook(() => useKeydown({ '[': onToggle }));
+
+      pressKey('[');
+      const repeat = new KeyboardEvent('keydown', { key: '[', repeat: true, cancelable: true });
+      window.dispatchEvent(repeat);
+      pressKey('[', { repeat: true });
+
+      expect(onToggle).toHaveBeenCalledTimes(1);
+      expect(repeat.defaultPrevented).toBe(true);
+    });
+
+    it('when the binding opts into repeat, then every repeat fires the handler', () => {
+      const onArrowDown = vi.fn();
+      renderHook(() => useKeydown({ ArrowDown: onArrowDown }, { repeat: true }));
+
+      pressKey('ArrowDown');
+      pressKey('ArrowDown', { repeat: true });
+      pressKey('ArrowDown', { repeat: true });
+
+      expect(onArrowDown).toHaveBeenCalledTimes(3);
+    });
+  });
 });
 
 describe('useKeydown with a scoped target', () => {
@@ -489,6 +515,19 @@ describe('useKeydown sequences', () => {
       pressKey('a');
 
       expect(onGoAgents).toHaveBeenCalledTimes(2);
+    });
+
+    it('when g is held before a, then the sequence stays armed and fires once', () => {
+      const onGoAgents = vi.fn();
+      renderHook(() => useKeydown({ 'g$+a': onGoAgents }));
+
+      pressKey('g');
+      pressKey('g', { repeat: true });
+      pressKey('g', { repeat: true });
+      pressKey('a');
+      pressKey('a', { repeat: true });
+
+      expect(onGoAgents).toHaveBeenCalledTimes(1);
     });
 
     it('given shouldHandle rejects the second key, then the sequence stays armed', () => {
@@ -843,6 +882,16 @@ describe('useTableKeydown global', () => {
     fireEvent.keyDown(document.body, { key: 'ArrowDown' });
     expect(document.activeElement).toBe(row(1));
     expect(activeIndexOf()).toBe(1);
+  });
+
+  it('keeps moving while ArrowDown is held', () => {
+    render(<TableHarness count={3} global />);
+
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' });
+    fireEvent.keyDown(row(0), { key: 'ArrowDown', repeat: true });
+    fireEvent.keyDown(row(1), { key: 'ArrowDown', repeat: true });
+
+    expect(activeIndexOf()).toBe(2);
   });
 
   it('ignores arrows typed into an input outside the list', () => {
