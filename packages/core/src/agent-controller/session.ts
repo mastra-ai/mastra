@@ -3348,6 +3348,7 @@ export class Session<TState = unknown> {
     // missed event (e.g. concurrent runs on one thread) hangs the caller forever.
     const waitersController = new AbortController();
     // Register before awaiting acceptance so a teardown while it is pending is not missed.
+    const threadId = this.thread.getId();
     let tornDown = false;
     const teardown = this.stream.waitForTeardown(waitersController.signal).then(() => {
       tornDown = true;
@@ -3358,9 +3359,9 @@ export class Session<TState = unknown> {
       if (result.action !== 'wake' && !waitForDelivery) return;
       runId = 'runId' in result ? result.runId : undefined;
       if (!runId || completedRunIds.has(runId)) return;
-      // A teardown during acceptance only ends the wait if nothing re-attached;
-      // sending may rebind the subscription on its own.
-      if (tornDown && !this.stream.isOpen()) return;
+      // A teardown during acceptance ends the wait unless the same thread was
+      // re-attached (sending may rebind the subscription on its own).
+      if (tornDown && (!this.stream.isOpen() || this.thread.getId() !== threadId)) return;
       const waits: Promise<unknown>[] = [
         completion,
         this.stream.waitForConsumerFailure(waitersController.signal),

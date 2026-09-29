@@ -102,6 +102,35 @@ describe('Session.sendMessage settles', () => {
     expect(await settleWithin(pending)).toBeUndefined();
   });
 
+  it('resolves when the session switches threads while acceptance is pending', async () => {
+    const { agent, session } = await createController();
+    const originalThreadId = session.thread.getId()!;
+    const other = await session.thread.create({ title: 'other' });
+    await session.thread.switch({ threadId: originalThreadId });
+    vi.spyOn(session, 'processSubscribedThreadStream').mockReturnValue(new Promise(() => {}));
+    session.thread.cleanupSubscription();
+
+    let releaseAcceptance!: () => void;
+    const gate = new Promise<void>(resolve => (releaseAcceptance = resolve));
+    const original = agent.sendSignal.bind(agent);
+    let signalSent!: () => void;
+    const sent = new Promise<void>(resolve => (signalSent = resolve));
+    vi.spyOn(agent, 'sendSignal').mockImplementationOnce((...args: Parameters<typeof original>) => {
+      const result = original(...args);
+      signalSent();
+      return { ...result, accepted: gate.then(() => result.accepted) };
+    });
+
+    const pending = session.sendMessage({ content: 'hello' });
+    await sent;
+    await session.thread.switch({ threadId: other.id });
+    await session.thread.ensureCurrentSubscription();
+    expect(session.stream.isOpen()).toBe(true);
+    releaseAcceptance();
+
+    expect(await settleWithin(pending)).toBeUndefined();
+  });
+
   it('resolves when the run is aborted and agent_end never arrives', async () => {
     const { agent, session } = await createController();
     vi.spyOn(session, 'processSubscribedThreadStream').mockReturnValue(new Promise(() => {}));
