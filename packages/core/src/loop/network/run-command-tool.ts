@@ -140,11 +140,21 @@ export function isPathAllowed(
  */
 export function extractBaseCommand(command: string): string {
   const trimmed = command.trim();
+  const closingQuote = trimmed.startsWith('"') ? trimmed.indexOf('"', 1) : -1;
   const firstSpace = trimmed.indexOf(' ');
-  const baseCmd = firstSpace === -1 ? trimmed : trimmed.substring(0, firstSpace);
+  const baseCmd =
+    closingQuote > 0
+      ? trimmed.substring(1, closingQuote)
+      : firstSpace === -1
+        ? trimmed
+        : trimmed.substring(0, firstSpace);
   const lastSep = Math.max(baseCmd.lastIndexOf('/'), baseCmd.lastIndexOf('\\'));
   const name = lastSep === -1 ? baseCmd : baseCmd.substring(lastSep + 1);
-  return name.toLowerCase().replace(/\.(exe|cmd|bat|com)$/, '');
+  // Windows ignores trailing dots/spaces when resolving executables (e.g. `rm.exe.` runs `rm.exe`)
+  return name
+    .toLowerCase()
+    .replace(/[. ]+$/, '')
+    .replace(/\.(exe|cmd|bat|com)$/, '');
 }
 
 /**

@@ -35,6 +35,10 @@ describe('extractBaseCommand', () => {
     ['.\\bin\\node -v', 'node'],
     ['RM.EXE -rf x', 'rm'],
     ['script.cmd', 'script'],
+    ['"rm.exe" -rf x', 'rm'],
+    ['"C:/Program Files/rm.exe" x', 'rm'],
+    ['rm. -rf x', 'rm'],
+    ['rm.exe. -rf x', 'rm'],
   ])('%s -> %s', (input, expected) => {
     expect(extractBaseCommand(input)).toBe(expected);
   });
