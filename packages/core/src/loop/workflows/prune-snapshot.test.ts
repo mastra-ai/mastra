@@ -8,6 +8,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { WorkflowRunState } from '../../workflows/types';
+import { DurableAgenticLoopBuilder } from '../../agent/durable/workflows/durable-loop-builder';
 import { pruneAgentLoopSnapshot } from './prune-snapshot';
 
 function requestEcho() {
@@ -201,6 +202,31 @@ describe('pruneAgentLoopSnapshot restart reads', () => {
 
     expect(undeclared['durable-llm-execution'].output).toEqual({});
     expect(declared['durable-llm-execution'].output).toEqual(history('o1'));
+  });
+
+  it('durable iteration workflow keeps llm-execution output for recovery (#25248)', () => {
+    // Bind the regression to the production pruning callback: the durable
+    // workflow declares durable-llm-mapping as a reader of durable-llm-execution
+    // in buildIterationWorkflow(), and removing that declaration must fail here.
+    const snapshot = {
+      status: 'running',
+      serializedStepGraph: executionGraph,
+      activePaths: [3],
+      activeStepsPath: { 'durable-llm-mapping': [3] },
+      context: {
+        input: { initial: true },
+        'durable-llm-execution': { status: 'success', output: history('o1') },
+        'durable-tool-call': { status: 'success', output: [{ result: 'ok' }] },
+        'collect-tool-results': { status: 'success', output: { toolResults: [{ result: 'ok' }] } },
+      },
+    } as unknown as WorkflowRunState;
+
+    const workflow = new DurableAgenticLoopBuilder().buildIterationWorkflow();
+    const prune = workflow.options.pruneSnapshot;
+    expect(prune).toBeTypeOf('function');
+
+    const context = contextOf(prune!({ snapshot, workflowStatus: 'running' }));
+    expect(context['durable-llm-execution'].output).toEqual(history('o1'));
   });
 
   it('keeps the model call result while its tools run', () => {
