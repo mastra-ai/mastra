@@ -1,5 +1,6 @@
 import { CircleSlashIcon, CircleXIcon } from 'lucide-react';
 import * as React from 'react';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 type EmptyStateTone = 'default' | 'error';
@@ -51,7 +52,11 @@ export function EmptyState({
     >
       {iconSlot && <div className={cn('mb-3 [&_svg]:size-5', iconColorByTone[tone])}>{iconSlot}</div>}
       <HeadingTag className="text-subheading text-foreground">{titleSlot}</HeadingTag>
-      {descriptionSlot && <p className="mt-1.5 max-w-md text-caption text-muted-foreground">{descriptionSlot}</p>}
+      {descriptionSlot && (
+        <Txt variant="caption" tone="muted" className="mt-1.5 max-w-md">
+          {descriptionSlot}
+        </Txt>
+      )}
       {actionSlot && <div className="mt-4">{actionSlot}</div>}
     </div>
   );

@@ -107,20 +107,26 @@ Product code does not add opacity modifiers (`bg-green-500/20`) or `color-mix()`
 
 To migrate removed tokens:
 
-| Removed token                           | Replacement                                       |
-| --------------------------------------- | ------------------------------------------------- |
-| `--chart-soft-N`                        | `--chart-sequential-N`                            |
-| `--span-type-NAME`                      | `--span-NAME`                                     |
-| `accent1`, `positive1`                  | `success-*`                                       |
-| `accent2`, `negative1`                  | `destructive-*`                                   |
-| `accent6`, `warning1`                   | `warning-*`                                       |
-| `accent3`, `accent5`                    | `info-*`                                          |
-| `error`                                 | `destructive-indicator`                           |
-| `notice-STATUS`                         | `STATUS-subtle`, `STATUS-subtle-foreground`       |
-| `--brand-green-N`                       | `--green-N`                                       |
-| `destructive`, `destructive-foreground` | `fill-destructive`, `fill-destructive-foreground` |
-| `badge-HUE`, `badge-HUE-fg`             | `badge-HUE-strong`, `badge-HUE-foreground`        |
-| `notice-note`, `notice-note-fg`         | `muted`, `foreground`                             |
+| Removed token                                         | Replacement                                       |
+| ----------------------------------------------------- | ------------------------------------------------- |
+| `--chart-soft-N`                                      | `--chart-sequential-N`                            |
+| `--span-type-NAME`                                    | `--span-NAME`                                     |
+| `accent1`, `positive1`                                | `success-*`                                       |
+| `accent2`, `negative1`                                | `destructive-*`                                   |
+| `accent6`, `warning1`                                 | `warning-*`                                       |
+| `accent3`, `accent5`                                  | `info-*`                                          |
+| `error`                                               | `destructive-indicator`                           |
+| `notice-STATUS`                                       | `STATUS-subtle`, `STATUS-subtle-foreground`       |
+| `--brand-green-N`                                     | `--green-N`                                       |
+| `destructive`, `destructive-foreground`               | `fill-destructive`, `fill-destructive-foreground` |
+| `badge-HUE`, `badge-HUE-fg`                           | `badge-HUE-strong`, `badge-HUE-foreground`        |
+| `notice-note`, `notice-note-fg`                       | `muted`, `foreground`                             |
+| `--ring`, `ring-ring`                                 | `--border-focus`, `ring-border-focus`             |
+| `--shadow-focus-ring`, `--focus-halo`                 | none; focus has no halo                           |
+| `--surface-rim-focus`, `--field-rim-focus-on-surface` | `--border-focus`                                  |
+| `focusRing.visible` and siblings                      | `focusRing`, or `focusRingInset` in clipped rows  |
+
+Keyboard focus is a 1px `--border-focus` outline on `:focus-visible`, and the base layer draws it on any focusable element that does not style its own. `focusRing` from `primitives/transitions` applies it explicitly, `focusRingInset` draws it inside a full-bleed row whose edge is clipped, and `focusRingOffset` sets it 2px out on checkboxes, radios, switches, and filled `primary` and `destructive` buttons, where a flush line vanishes into the fill. It is an outline, not a `ring-*`, because a ring rewrites `box-shadow` and would erase a raised surface's rim. Fields, buttons, and clickable cards show focus on that rim instead: `surfaceRimFocus` from `primitives/form-element` repaints it to `--border-focus`, the same colour and weight, and the surface keeps its elevation.
 
 `SankeyChart` accepts `getNodeColor` and `getLinkColor` callbacks returning CSS colors. Explicit link colors keep the default link transparency and hover emphasis:
 

@@ -1,4 +1,5 @@
 import type { ComponentProps, ReactNode } from 'react';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export interface MessageProps extends ComponentProps<'div'> {
@@ -67,6 +68,6 @@ export function MessageActions({ visibility = 'hover', children, className, ...p
 
 export function MessageMetadata({ className, ...props }: ComponentProps<'span'>) {
   return (
-    <span {...props} className={cn('inline-flex items-center gap-1 text-meta text-muted-foreground', className)} />
+    <Txt {...props} as="span" variant="meta" tone="muted" className={cn('inline-flex items-center gap-1', className)} />
   );
 }

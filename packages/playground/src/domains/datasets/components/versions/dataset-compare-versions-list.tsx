@@ -1,6 +1,7 @@
 import type { DatasetItem } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { focusRing, transitions } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -47,7 +48,7 @@ function EmptyCell({ red = false, tooltip }: { red?: boolean; tooltip: string })
         role="img"
         tabIndex={0}
         aria-label={tooltip}
-        className="rounded focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-border-focus focus-visible:outline-solid"
+        className={cn('rounded', focusRing)}
       >
         <BanIcon
           className={cn('h-5 w-5 text-muted-foreground/40', {
@@ -78,7 +79,7 @@ function LinkCell({
       className={cn(
         'flex w-full items-center justify-center gap-4 rounded-lg px-3 py-2 text-left hover:bg-fill-subtle',
         transitions.colors,
-        focusRing.visible,
+        focusRing,
         className,
       )}
     >
@@ -98,13 +99,19 @@ function LinkCell({
 
 function VersionInfo({ variant, version }: { variant?: VersionInfoVariant; version?: number }) {
   if (!variant) {
-    return <span className="text-body text-muted-foreground">v. {version}</span>;
+    return (
+      <Txt as="span" tone="muted">
+        v. {version}
+      </Txt>
+    );
   }
   const { badgeVariant, icon, tooltip } = versionInfoConfig[variant];
   return (
     <div className="grid grid-cols-[1fr_auto]">
       {version !== undefined && (
-        <span className="flex min-w-16 justify-end pr-3 text-body text-muted-foreground">v. {version}</span>
+        <Txt as="span" tone="muted" className="flex min-w-16 justify-end pr-3">
+          v. {version}
+        </Txt>
       )}
       <span className="inline-flex" role="img" aria-label={tooltip}>
         <Badge variant={badgeVariant} size="xs" icon={icon} />

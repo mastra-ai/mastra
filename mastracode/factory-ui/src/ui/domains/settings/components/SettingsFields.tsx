@@ -2,12 +2,14 @@ import type { AgentControllerSessionSettings } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Volume2Icon, VolumeXIcon } from 'lucide-react';
 import { useState } from 'react';
 
 import { DONE_SOUND_OPTIONS } from '../services/doneSound';
 import type { DoneSound } from '../services/doneSound';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 type ThinkingLevel = NonNullable<AgentControllerSessionSettings['thinkingLevel']>;
 
@@ -75,7 +77,9 @@ export function ThinkingLevelPicker({ value, ariaLabel, disabled, inherited, onC
       <span className="flex w-32 shrink-0 justify-end">
         {inherited !== undefined &&
           (inheriting ? (
-            <span className="text-placeholder text-meta">Follows base</span>
+            <Txt as="span" variant="meta" tone="faint">
+              Follows base
+            </Txt>
           ) : (
             <Button variant="ghost" size="sm" disabled={disabled} onClick={() => onChange()}>
               Reset to base
@@ -83,7 +87,9 @@ export function ThinkingLevelPicker({ value, ariaLabel, disabled, inherited, onC
           ))}
       </span>
 
-      <span className="text-caption w-20 shrink-0 text-right">{label}</span>
+      <Txt as="span" variant="caption" className="w-20 shrink-0 text-right">
+        {label}
+      </Txt>
 
       <span className="bg-fill relative flex h-7 w-36 items-center rounded-lg">
         <span
@@ -111,8 +117,8 @@ export function ThinkingLevelPicker({ value, ariaLabel, disabled, inherited, onC
           aria-valuetext={valueText}
           disabled={disabled}
           className={cn(
-            'focus-visible:ring-current/60 relative h-7 w-full cursor-pointer appearance-none rounded-lg',
-            'bg-transparent outline-none focus-visible:ring-2',
+            'relative h-7 w-full cursor-pointer appearance-none rounded-lg bg-transparent',
+            focusRing,
             '[&::-webkit-slider-runnable-track]:h-7 [&::-webkit-slider-runnable-track]:bg-transparent',
             '[&::-webkit-slider-thumb]:h-7 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none',
             '[&::-webkit-slider-thumb]:bg-transparent',
@@ -150,7 +156,8 @@ export function SoundPicker({ value, onChange }: { value: DoneSound; onChange: (
         className={cn(
           'bg-fill text-muted-foreground -mr-6 flex h-7 items-center rounded-full py-1 pr-8 pl-2.5',
           'transition-colors duration-150 motion-reduce:transition-none',
-          'hover:text-foreground focus-visible:ring-border-focus focus-visible:ring-2 focus-visible:outline-none',
+          'hover:text-foreground',
+          focusRing,
         )}
         onClick={() => onChange(muted ? lastAudible : 'none')}
       >

@@ -1,4 +1,5 @@
 import { ChartTooltip } from '@/ds/components/ChartTooltip';
+import { Txt } from '@/ds/components/Txt';
 
 export function MetricsLineChartTooltip({
   active,
@@ -16,7 +17,9 @@ export function MetricsLineChartTooltip({
   if (!active || !payload?.length) return null;
   return (
     <ChartTooltip>
-      <p className="mb-1 text-column text-foreground">{label}</p>
+      <Txt variant="column" tone="ink" className="mb-1">
+        {label}
+      </Txt>
       {payload.map(entry => (
         <p key={entry.name} className="text-foreground">
           <span className="mr-2 inline-block size-2 rounded-full" style={{ backgroundColor: entry.color }} />

@@ -14,6 +14,7 @@ import { DataList, DataListSkeleton, TracesDataList, useDataListKeyboard } from 
 import type { DataListSort } from '@/ds/components/DataList';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { Txt } from '@/ds/components/Txt/Txt';
+import { focusRing } from '@/ds/primitives/transitions';
 import { formatCompactNumber, formatCost } from '@/lib/cost';
 import { cn } from '@/lib/utils';
 import { formatDuration } from '@/utils/duration';
@@ -212,7 +213,7 @@ export function TracesListView({
                   render={
                     <button
                       type="button"
-                      className="focus-visible:outline-accent flex min-w-0 items-center gap-1 rounded-sm hover:text-foreground focus-visible:outline-2"
+                      className={cn('flex min-w-0 items-center gap-1 rounded-sm hover:text-foreground', focusRing)}
                     >
                       <span className="min-w-0 truncate">{label}</span>
                       <ListFilterIcon aria-hidden className="size-[1.2em] shrink-0" />

@@ -4,6 +4,7 @@ import { DataListCell, DataListTextCell } from '../data-list-cells';
 import { Badge } from '@/ds/components/Badge';
 import type { BadgeVariant } from '@/ds/components/Badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { McpServerIcon } from '@/ds/icons/McpServerIcon';
 import { MemoryIcon } from '@/ds/icons/MemoryIcon';
@@ -99,7 +100,9 @@ export function TracesDataListTypeCell({ entityType }: TracesDataListTypeCellPro
       {display ? (
         <>
           <display.Icon className="size-3.5 shrink-0 text-placeholder" aria-hidden />
-          <span className="min-w-0 truncate text-body-sm">{display.label}</span>
+          <Txt as="span" variant="body-sm" className="min-w-0 truncate">
+            {display.label}
+          </Txt>
         </>
       ) : (
         '-'

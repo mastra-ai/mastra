@@ -575,28 +575,36 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
     await seedSessionOrg(session, owner.orgId);
 
     const modeModelKey = `modeModelId_${session.mode.get()}`;
-    if (!(await session.thread.getSetting({ key: modeModelKey }))) {
+    const persistedModelId = await session.thread.getSetting({ key: modeModelKey });
+    if (typeof persistedModelId === 'string') {
+      // A restarted session restores its generation model from the thread, but
+      // still needs the project memory row and a provider-compatible fallback.
+      await hydrateFactorySession(session, {
+        orgId: owner.orgId,
+        factoryProjectId: owner.factoryProjectId,
+        observationalMemoryModelId: persistedModelId,
+        memorySettings,
+      });
+    } else {
       const factoryModelId = await resolveFactoryDefaultModelId(projects, owner.factoryProjectId);
       const userModelId = await resolveActivePackBuildModel(modelPacks, owner);
+      const selectedModelId = userModelId ?? factoryModelId;
 
       await hydrateFactorySession(session, {
         orgId: owner.orgId,
         factoryProjectId: owner.factoryProjectId,
-        // The FACTORY model drives observational-memory's provider-aware
-        // fallback, even when the sender's pack supplies the model the session
-        // actually runs — a factory connected only to Anthropic should not
-        // observe with an uncredentialed provider.
         defaultModelId: factoryModelId,
+        // Slack runs with the linked sender's credentials. Derive OM's fallback
+        // from that sender's selected model rather than the factory model, which
+        // may belong to a provider the sender cannot access.
+        observationalMemoryModelId: selectedModelId,
         memorySettings,
       });
 
-      const selectedModelId = userModelId ?? factoryModelId;
       if (selectedModelId && selectedModelId !== factoryModelId) {
         // The sender's own choice beats the factory's. `switch` applies the model
         // and persists it as this mode's model on the thread in one step — which
-        // is what makes the choice outlive this process. A switch that fails is
-        // logged by the channel machinery and leaves the factory/SDK model that
-        // `hydrateFactorySession` already applied: the message still answers.
+        // is what makes the choice outlive this process.
         try {
           await session.model.switch({ modelId: selectedModelId });
         } catch (error) {
@@ -605,6 +613,14 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
             error: error instanceof Error ? error.message : String(error),
           });
           const currentModelId = session.model.get();
+          // The message continues on the factory/SDK model. Realign the OM
+          // fallback with that model while preserving explicit project settings.
+          await hydrateFactorySession(session, {
+            orgId: owner.orgId,
+            factoryProjectId: owner.factoryProjectId,
+            observationalMemoryModelId: currentModelId,
+            memorySettings,
+          });
           if (currentModelId && !factoryModelId) {
             try {
               await session.model.saveForMode({ modeId: session.mode.get(), modelId: currentModelId });
@@ -851,6 +867,55 @@ export async function upsertThreadWorkItem({
   }
 }
 
+function preDispatchErrorDetails(error: unknown): { message: string; cause?: { message: string } } {
+  const readMessage = (value: unknown) => {
+    const message =
+      typeof value === 'string'
+        ? value
+        : value && typeof value === 'object' && 'message' in value
+          ? value.message
+          : undefined;
+    return typeof message === 'string' && message.length > 0 ? message : undefined;
+  };
+  try {
+    const message = readMessage(error) ?? 'Unknown error';
+    const cause = error && typeof error === 'object' && 'cause' in error ? readMessage(error.cause) : undefined;
+    return { message, ...(cause ? { cause: { message: cause } } : {}) };
+  } catch {
+    return { message: 'Error details unavailable' };
+  }
+}
+
+async function reportPreDispatchError(
+  thread: HandlerThread,
+  message: HandlerMessage,
+  ctx: ChannelHandlerContext,
+  error: unknown,
+): Promise<void> {
+  try {
+    if (error instanceof ChannelSessionRejectedError) return;
+  } catch {
+    // A thrown proxy can fail even the refusal check; still report the failure.
+  }
+  const correlation = {
+    platform: thread.adapter.name,
+    threadId: thread.id,
+    messageId: message.id,
+    authorId: message.author.userId,
+  };
+  const logger = ctx.mastra?.getLogger();
+  const logError = (line: string) => (logger ? logger.error(line) : console.error(line));
+  logError(`[slack] Pre-dispatch failure ${JSON.stringify({ ...correlation, error: preDispatchErrorDetails(error) })}`);
+  try {
+    // The message id is the lookup key for the diagnostic above.
+    await thread.post(`Couldn’t start processing your message. Please try again.\n\`messageId: ${message.id}\``);
+  } catch (deliveryError) {
+    logError(
+      `[slack] Failed to deliver pre-dispatch error reply ${JSON.stringify({ ...correlation, error: preDispatchErrorDetails(deliveryError) })}`,
+    );
+  }
+}
+
 function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
   const { workItems } = deps;
   return async (thread, message, defaultHandler, ctx) => {
@@ -859,13 +924,20 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
     // created (which would otherwise be tenant-less and fail credential
     // resolution). This handler is the only gate — core dispatches whatever
     // reaches it — so every slot that can start a run must call it.
-    const gate = await gateDispatch(thread, message, deps, ctx);
-    if (!gate) return;
+    let gate: Awaited<ReturnType<typeof gateDispatch>>;
+    let isNewSession: boolean;
+    try {
+      gate = await gateDispatch(thread, message, deps, ctx);
+      if (!gate) return;
 
-    // A mention on a not-yet-subscribed thread is a NEW session. The
-    // default handler auto-subscribes, so once subscribed this is a
-    // follow-up mention — don't re-announce.
-    const isNewSession = !(await thread.isSubscribed());
+      // A mention on a not-yet-subscribed thread is a NEW session. The
+      // default handler auto-subscribes, so once subscribed this is a
+      // follow-up mention — don't re-announce.
+      isNewSession = !(await thread.isSubscribed());
+    } catch (error) {
+      await reportPreDispatchError(thread, message, ctx, error);
+      return;
+    }
 
     // Run the framework handler first so the internal Mastra thread and
     // controller session are created before we build the deep link.
@@ -1015,8 +1087,13 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       // (e.g. the link was removed mid-conversation), and it must still
       // resolve a factory (e.g. the default was cleared or its factory
       // deleted mid-conversation).
-      const gate = await gateDispatch(thread, message, deps, ctx, { requireInternalThread: true });
-      if (!gate) return;
+      try {
+        const gate = await gateDispatch(thread, message, deps, ctx);
+        if (!gate) return;
+      } catch (error) {
+        await reportPreDispatchError(thread, message, ctx, error);
+        return;
+      }
       await defaultHandler(thread, message);
     },
     onMention: newSessionChatHandler,

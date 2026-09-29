@@ -66,9 +66,9 @@ function TimeAxis({ domain }: { domain: TDomain }) {
   const ticks = [0, 0.25, 0.5, 0.75, 1];
   return (
     <div className="grid grid-cols-[6rem_1fr] items-center">
-      <p className="flex items-center self-stretch border-r border-border/50 pl-3 text-meta text-muted-foreground">
+      <Txt variant="meta" tone="muted" className="flex items-center self-stretch border-r border-border/50 pl-3">
         Time
-      </p>
+      </Txt>
       <div className="flex justify-between px-1 py-1.5 text-meta text-muted-foreground">
         {ticks.map(t => (
           <Txt key={t} as="span" variant="meta" font="mono">
@@ -147,9 +147,9 @@ function AreaRow({ label, data, dataKey, color, gradientId, domain, zoomDomain, 
 
   return (
     <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border/50 hover:z-10">
-      <p className="flex items-center self-stretch border-r border-border/50 pl-3 text-meta text-muted-foreground">
+      <Txt variant="meta" tone="muted" className="flex items-center self-stretch border-r border-border/50 pl-3">
         {label}
-      </p>
+      </Txt>
       <div>
         <ResponsiveContainer width="100%" height={32}>
           <AreaChart data={data} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
@@ -190,9 +190,9 @@ interface EventRowProps {
 function EventRow({ label, data, color, height = 32, domain, zoomDomain }: EventRowProps) {
   return (
     <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border/50 hover:z-10">
-      <p className="flex items-center self-stretch border-r border-border/50 pl-3 text-meta text-muted-foreground">
+      <Txt variant="meta" tone="muted" className="flex items-center self-stretch border-r border-border/50 pl-3">
         {label}
-      </p>
+      </Txt>
       <div>
         <ResponsiveContainer width="100%" height={height}>
           <ScatterChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
@@ -251,9 +251,9 @@ function CombinedRow({
 
   return (
     <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border/50 hover:z-10">
-      <p className="flex items-center self-stretch border-r border-border/50 pl-3 text-meta text-muted-foreground">
+      <Txt variant="meta" tone="muted" className="flex items-center self-stretch border-r border-border/50 pl-3">
         {label}
-      </p>
+      </Txt>
       <div>
         <ResponsiveContainer width="100%" height={height}>
           <ComposedChart
@@ -359,7 +359,9 @@ function ZoomTrack({
   return (
     <div className="grid grid-cols-[6rem_1fr] items-center border-b border-border/50">
       <div className="flex items-center gap-1 self-stretch border-r border-border/50 pl-3">
-        <p className="text-meta text-muted-foreground">Zoom</p>
+        <Txt variant="meta" tone="muted">
+          Zoom
+        </Txt>
         <Button variant="ghost" size="icon-sm" aria-label="Reset zoom" onClick={onReset}>
           <RotateCcw className="size-3" />
         </Button>

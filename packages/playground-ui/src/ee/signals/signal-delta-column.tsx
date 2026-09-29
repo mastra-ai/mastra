@@ -6,6 +6,7 @@ import type { ThemeSelection } from './theme-drilldown-data';
 import type { ThemeFlowResponse, TraceSignalName } from './types';
 import { useTraceIntelligence } from './use-trace-intelligence';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
 
 function percent(share: number) {
   return `${Math.round(share * 100)}%`;
@@ -42,14 +43,20 @@ export function SignalDeltaColumn({
 
   return (
     <section aria-label={`${label} changes`} className="min-w-0">
-      <h3 className="font-mono text-column tracking-widest uppercase" style={{ color: getSignalColor(signalName) }}>
+      <Txt
+        as="h3"
+        variant="column"
+        font="mono"
+        className="tracking-widest uppercase"
+        style={{ color: getSignalColor(signalName) }}
+      >
         <Tooltip>
           <TooltipTrigger aria-label={signalName} className="cursor-default uppercase">
             {label}
           </TooltipTrigger>
           <TooltipContent>{signalDescription(signalCatalog, signalName)}</TooltipContent>
         </Tooltip>
-      </h3>
+      </Txt>
       <ul className="mt-2 space-y-1.5">
         {deltas.length === 0 ? (
           <li className="text-caption text-muted-foreground">No themes in either snapshot.</li>
@@ -59,16 +66,16 @@ export function SignalDeltaColumn({
           const card = (
             <>
               <div className="flex items-baseline justify-between gap-2">
-                <span className="truncate text-column text-foreground" title={delta.label}>
+                <Txt as="span" variant="column" tone="ink" className="truncate" title={delta.label}>
                   {delta.label}
-                </span>
-                <span className="shrink-0 font-mono text-column text-foreground tabular-nums">
+                </Txt>
+                <Txt as="span" variant="column" tone="ink" font="mono" className="shrink-0 tabular-nums">
                   {deltaLabel(delta.delta)}
-                </span>
+                </Txt>
               </div>
-              <p className="font-mono text-caption text-muted-foreground tabular-nums">
+              <Txt variant="caption" tone="muted" font="mono" className="tabular-nums">
                 {percent(delta.fromShare)} → {percent(delta.toShare)}
-              </p>
+              </Txt>
               <ThemeCompareSparkline
                 series={themeShareSeries(flows, signalName, delta.label)}
                 positions={positions}

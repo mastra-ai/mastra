@@ -1,5 +1,6 @@
 import { FileTextIcon, InfoIcon, LightbulbIcon, OctagonAlertIcon, TriangleAlertIcon } from 'lucide-react';
 import React from 'react';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export type NoticeVariant = 'warning' | 'destructive' | 'success' | 'info' | 'note';
@@ -74,7 +75,9 @@ export function NoticeRoot({ variant, title, icon, action, children, className }
       <div className="flex h-4 min-w-0 items-center gap-2 [&>svg]:size-4">
         {resolvedIcon}
         {/* truncate, not wrap — the row is 1rem tall, a wrapped title would spill out of it */}
-        <span className="truncate text-column leading-none tracking-wide uppercase">{title}</span>
+        <Txt as="span" variant="column" className="truncate leading-none tracking-wide uppercase">
+          {title}
+        </Txt>
       </div>
       {action && <div className="absolute top-2 right-2 hidden @md:block">{action}</div>}
       {(children || action) && (

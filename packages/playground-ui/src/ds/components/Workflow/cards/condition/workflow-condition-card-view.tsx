@@ -33,7 +33,7 @@ export function WorkflowConditionCardView({
 
   return (
     <div
-      className={`${raisedSurfaceStyle} w-[274px] overflow-hidden rounded-xl p-0.5 has-focus-visible:outline-2 has-focus-visible:outline-offset-4 has-focus-visible:outline-border-focus`}
+      className={`${raisedSurfaceStyle} w-[274px] overflow-hidden rounded-xl p-0.5 has-focus-visible:outline-1 has-focus-visible:outline-offset-4 has-focus-visible:outline-border-focus`}
       data-workflow-node
       data-testid="workflow-condition-node"
       data-workflow-step-status={previousDisplayStatus ?? 'idle'}

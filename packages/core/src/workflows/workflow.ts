@@ -75,6 +75,8 @@ import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import { validateTemplate } from './mapping-template';
 import { derivePredicateLabel, evaluatePredicate } from './predicate';
 import type { Predicate } from './predicate';
+import { validateCron } from './scheduler/cron';
+import type { WorkflowScheduleConfig } from './scheduler/types';
 import type {
   ConditionFunction,
   ExecuteFunction,
@@ -1847,6 +1849,8 @@ export class Workflow<
 
   #runs: Map<string, Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> = new Map();
 
+  #schedules: WorkflowScheduleConfig[];
+
   constructor({
     mastra,
     id,
@@ -1861,8 +1865,29 @@ export class Workflow<
     steps,
     options = {},
     type,
+    schedule,
   }: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>) {
     super({ name: id, component: RegisteredLogger.WORKFLOW });
+    // Stored type-erased: the scheduler reads these as plain records.
+    const schedules = (!schedule ? [] : Array.isArray(schedule) ? schedule : [schedule]) as WorkflowScheduleConfig[];
+    if (Array.isArray(schedule)) {
+      const seenIds = new Set<string>();
+      for (const entry of schedules) {
+        if (!entry.id) {
+          throw new Error(
+            `Workflow "${id}" declares an array of schedules but one entry is missing the required \`id\` field. Every entry in a schedule array must have a unique stable id.`,
+          );
+        }
+        if (seenIds.has(entry.id)) {
+          throw new Error(`Workflow "${id}" declares duplicate schedule id "${entry.id}".`);
+        }
+        seenIds.add(entry.id);
+      }
+    }
+    for (const entry of schedules) {
+      validateCron(entry.cron, entry.timezone);
+    }
+    this.#schedules = schedules.map(cfg => ({ ...cfg }));
     this.id = id;
     this.description = description;
     this.metadata = metadata;
@@ -1918,6 +1943,15 @@ export class Workflow<
 
   get options() {
     return this.#options;
+  }
+
+  /**
+   * Returns the cron schedule configurations declared on this workflow as a
+   * normalized array. Used by the Mastra scheduler to register declarative
+   * schedules at boot. Returns an empty array when no schedule is declared.
+   */
+  getScheduleConfigs(): WorkflowScheduleConfig[] {
+    return this.#schedules.map(cfg => ({ ...cfg }));
   }
 
   __registerMastra(mastra: Mastra) {

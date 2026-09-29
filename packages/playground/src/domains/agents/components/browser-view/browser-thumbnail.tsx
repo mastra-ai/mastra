@@ -1,8 +1,9 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useBrowserToolCalls } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { controlStateColorTransition, focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Monitor, ChevronUp, ChevronDown, Maximize2, X } from 'lucide-react';
@@ -101,11 +102,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
       <button
         type="button"
         onClick={handleToggleExpand}
-        className={cn(
-          'group flex w-full items-center gap-3 px-4 py-3',
-          'hover:bg-fill-subtle',
-          'focus:ring-2 focus:ring-border-focus focus:outline-none focus:ring-inset',
-        )}
+        className={cn('group flex w-full items-center gap-3 px-4 py-3', 'hover:bg-fill-subtle', focusRingInset)}
       >
         {/* Thumbnail preview */}
         <div className={cn(raisedSurfaceStyle, 'relative h-14 w-24 shrink-0 overflow-hidden rounded-md')}>
@@ -123,12 +120,16 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
         {/* Info section */}
         <div className="min-w-0 flex-1 text-left">
           <div className="flex items-center gap-2">
-            <span className="truncate text-subheading text-foreground">{agentName}&apos;s browser</span>
+            <Txt as="span" variant="subheading" tone="ink" className="truncate">
+              {agentName}&apos;s browser
+            </Txt>
             <Badge variant={isLive ? 'success' : 'neutral'} size="sm" indicator={isLive ? 'pulse' : 'dot'}>
               {isLive ? 'Live' : 'Idle'}
             </Badge>
           </div>
-          <p className="mt-0.5 truncate text-caption text-muted-foreground">{displayUrl}</p>
+          <Txt variant="caption" tone="muted" className="mt-0.5 truncate">
+            {displayUrl}
+          </Txt>
         </div>
 
         {/* Expand/collapse indicator */}

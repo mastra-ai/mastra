@@ -1,5 +1,19 @@
 # @mastra/factory
 
+## 0.18.0-alpha.9
+
+### Patch Changes
+
+- Transcript rows share one line style. Tool calls, reasoning, signals, notifications, skills and the "Thinking" indicator show an icon and a label, with a chevron only when there is more to show. A state signal names its state and shows its mode as a badge. A row whose message fits on its line no longer offers a disclosure that only repeats the line, and a tool call with nothing to show, including one that returned `null` or an empty result, has no disclosure at all. ([#24694](https://github.com/mastra-ai/mastra/pull/24694))
+
+- Factory reviews now flag a visible misconfiguration warning when the review token is the PR author. Previously GitHub rejected the approve/request-changes submission and the verdict silently fell back to a plain PR comment. The verdict is still published as a PR comment (so the repair loop keeps working), with a warning placed after the verdict line explaining that a separate reviewer token is required for the verdict to count toward branch protection. ([#25391](https://github.com/mastra-ai/mastra/pull/25391))
+
+- Fixed Slack sessions using observational-memory models from an incompatible provider. New and restarted sessions now use a memory model compatible with their running model, including after a model switch fails. ([#25412](https://github.com/mastra-ai/mastra/pull/25412))
+
+- Updated dependencies [[`93fe2d6`](https://github.com/mastra-ai/mastra/commit/93fe2d6a9e47861d90cc0fd0080aefdb8cabb612), [`561e2a6`](https://github.com/mastra-ai/mastra/commit/561e2a6c8a44dbfd91eae390e14671462497cf85), [`8156816`](https://github.com/mastra-ai/mastra/commit/815681621dd88997608c5b7e8f0f87fe03cd1d18), [`94ba70e`](https://github.com/mastra-ai/mastra/commit/94ba70ea6ba8a53f5e4010392bf3bbaecde7966d), [`a7895fc`](https://github.com/mastra-ai/mastra/commit/a7895fce693e499c08c4784c57d4c4f46c0e1ccb), [`5197f81`](https://github.com/mastra-ai/mastra/commit/5197f81d6a5641f80f0ee6596ac085653b38cca3), [`0c2fe6c`](https://github.com/mastra-ai/mastra/commit/0c2fe6c00909795234270c8ea2c2c53882d63798), [`dd01709`](https://github.com/mastra-ai/mastra/commit/dd01709f780562f9ff8c72d977f3da5ae265970e)]:
+  - @mastra/core@1.72.0-alpha.9
+  - @mastra/code-sdk@1.9.0-alpha.9
+
 ## 0.18.0-alpha.8
 
 ### Patch Changes

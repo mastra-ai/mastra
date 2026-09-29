@@ -1,5 +1,67 @@
 # @mastra/core
 
+## 1.72.0-alpha.9
+
+### Minor Changes
+
+- Added `runId`, `sessionId`, `userId`, and `organizationId` filters to advanced trace queries. Use them at trace scope or inside `spans.some` / `spans.none` with `eq`, `ne`, `in`, `notIn`, `exists`, and `notExists`. Value discovery does not suggest these values, and `organizationId` can only narrow the trusted tenant scope. ([#24935](https://github.com/mastra-ai/mastra/pull/24935))
+
+  ```ts
+  const result = await observability.queryTraces(
+    planTraceQuery(
+      parseTraceQueryRequest({
+        timeRange,
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: 'userId' }, right: { literal: 'user-42' } },
+            { op: 'eq', left: { path: 'sessionId' }, right: { literal: 'session-9' } },
+          ],
+        },
+      }),
+    ),
+  );
+  ```
+
+- Fixed scheduled workflows hanging when started directly on serverless hosts (#18807). Declaring `schedule` on a workflow no longer switches it to the evented engine unless the `MASTRA_WORKERS` environment variable is set. Dev servers, single-process servers, and serverless hosts keep the default engine, so an HTTP-triggered `run.start()` runs in-process like any other workflow instead of waiting for a worker that never starts. ([#25430](https://github.com/mastra-ai/mastra/pull/25430))
+
+  **What changes**
+
+  - Without `MASTRA_WORKERS`, scheduled workflows run on the default engine and no longer need storage with concurrent-update support. Cron fires run in-process on the host that runs the scheduler.
+  - With `MASTRA_WORKERS` set to any value (split-worker deployments), scheduled workflows still run on the evented engine, and Mastra logs a warning to the console when one is created. Set `MASTRA_WORKERS` on every process in a split deployment, including `false` on the API.
+  - `schedule` declared on Inngest workflows is ignored with a warning. Use Inngest's `cron` instead.
+
+  ```typescript
+  import { createWorkflow } from '@mastra/core/workflows';
+
+  const dailyReport = createWorkflow({
+    id: 'daily-report',
+    schedule: { cron: '0 9 * * *' },
+    // ...
+  }).commit();
+
+  // Before: dailyReport.engineType === 'evented', and run.start() hung without workers
+  // After (MASTRA_WORKERS unset): dailyReport.engineType === 'default'
+  const run = await dailyReport.createRun();
+  await run.start({ inputData }); // completes in-process
+  ```
+
+  To keep a scheduled workflow on the evented engine everywhere, import `createWorkflow` from `@mastra/core/workflows/evented`.
+
+### Patch Changes
+
+- Fixed DurableAgent dropping cached-input, cache-write, and reasoning token counts from `model_generation` span usage, so tracing exporters and cache/reasoning token metrics now match the regular Agent. ([#25392](https://github.com/mastra-ai/mastra/pull/25392))
+
+- Fixed durable agent resumes (including `InngestAgent`) running another agent's tool when two agents register tools with the same id. On a cold worker, tool calls now resolve against the run's own agent before falling back to Mastra-wide tools. ([#25393](https://github.com/mastra-ai/mastra/pull/25393))
+
+- Fixed generated thread titles re-creating a thread that was deleted while the title was still being generated. Deleted threads now stay deleted, and the title save no longer overwrites thread metadata that changed during generation. ([#25385](https://github.com/mastra-ai/mastra/pull/25385))
+
+- Fixed `createRunCommandTool` security checks on Windows. `allowedBasePaths` now accepts working directories with backslash paths (previously every subdirectory was rejected), command allow/block lists now recognize Windows paths such as `C:\tools\rm.exe`, and the unsafe-character filter now rejects dangerous input consistently on every call. ([#25383](https://github.com/mastra-ai/mastra/pull/25383))
+
+- `submit_plan` results now record the reviewer's decision. `submittedPlan.action` is `approved` or `rejected`, and `submittedPlan.feedback` holds the reviewer's comments when they asked for changes. UIs can show the outcome from message history without parsing the result text. ([#25413](https://github.com/mastra-ai/mastra/pull/25413))
+
+- Fixed AgentController not showing live progress for subagents delegated through `Agent.agents`. These subagents now appear in `displayState.activeSubagents` while they run, with their tool calls and text streaming in, instead of only showing up once they finish. Fixes #25019. ([#25424](https://github.com/mastra-ai/mastra/pull/25424))
+
 ## 1.72.0-alpha.8
 
 ### Patch Changes

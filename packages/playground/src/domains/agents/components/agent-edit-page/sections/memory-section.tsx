@@ -3,6 +3,7 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
@@ -58,7 +59,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                     <Label htmlFor="memory-enabled" className="text-foreground">
                       Enable Memory
                     </Label>
-                    <span className="text-caption text-muted-foreground">Store and retrieve conversation history</span>
+                    <Txt as="span" variant="caption" tone="muted">
+                      Store and retrieve conversation history
+                    </Txt>
                   </div>
                   <Switch
                     id="memory-enabled"
@@ -80,9 +83,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                       <Label htmlFor="memory-last-messages" className="text-muted-foreground">
                         Last Messages
                       </Label>
-                      <span className="text-caption text-muted-foreground">
+                      <Txt as="span" variant="caption" tone="muted">
                         Number of recent messages to include in context
-                      </span>
+                      </Txt>
                       <Input
                         id="memory-last-messages"
                         type="number"
@@ -110,7 +113,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                         <Label htmlFor="memory-semantic-recall" className="text-foreground">
                           Semantic Recall
                         </Label>
-                        <span className="text-caption text-muted-foreground">Enable semantic search in memory</span>
+                        <Txt as="span" variant="caption" tone="muted">
+                          Enable semantic search in memory
+                        </Txt>
                       </div>
                       <Switch
                         id="memory-semantic-recall"
@@ -132,9 +137,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                           <Label htmlFor="memory-vector" className="text-muted-foreground">
                             Vector Store
                           </Label>
-                          <span className="text-caption text-muted-foreground">
+                          <Txt as="span" variant="caption" tone="muted">
                             Select a vector store for semantic search
-                          </span>
+                          </Txt>
                           <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={readOnly}>
                             <SelectTrigger id="memory-vector" className="bg-card">
                               <SelectValue placeholder="Select a vector store" />
@@ -159,9 +164,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                           <Label htmlFor="memory-embedder" className="text-muted-foreground">
                             Embedder Model
                           </Label>
-                          <span className="text-caption text-muted-foreground">
+                          <Txt as="span" variant="caption" tone="muted">
                             Select an embedding model for semantic search
-                          </span>
+                          </Txt>
                           <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={readOnly}>
                             <SelectTrigger id="memory-embedder" className="bg-card">
                               <SelectValue placeholder="Select an embedder model" />
@@ -189,9 +194,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                         <Label htmlFor="memory-read-only" className="text-foreground">
                           Read Only
                         </Label>
-                        <span className="text-caption text-muted-foreground">
+                        <Txt as="span" variant="caption" tone="muted">
                           Memory is read-only (no new messages stored)
-                        </span>
+                        </Txt>
                       </div>
                       <Switch
                         id="memory-read-only"
@@ -212,9 +217,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                         <Label htmlFor="memory-observational" className="text-foreground">
                           Observational Memory
                         </Label>
-                        <span className="text-caption text-muted-foreground">
+                        <Txt as="span" variant="caption" tone="muted">
                           Automatically observe and reflect on conversations to build long-term memory
-                        </span>
+                        </Txt>
                       </div>
                       <Switch
                         id="memory-observational"
@@ -230,9 +235,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                   <div className="ml-2 flex flex-col gap-4 border-l-2 border-border pl-3">
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-muted-foreground">Provider</Label>
-                      <span className="text-caption text-muted-foreground">
+                      <Txt as="span" variant="caption" tone="muted">
                         Provider for the observer and reflector agents
-                      </span>
+                      </Txt>
                       <Controller
                         name="memory.observationalMemory.model.provider"
                         control={control}
@@ -252,9 +257,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
 
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-muted-foreground">Model</Label>
-                      <span className="text-caption text-muted-foreground">
+                      <Txt as="span" variant="caption" tone="muted">
                         Model for the observer and reflector agents
-                      </span>
+                      </Txt>
                       <Controller
                         name="memory.observationalMemory.model.name"
                         control={control}
@@ -274,9 +279,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                           <Label htmlFor="memory-om-scope" className="text-muted-foreground">
                             Scope
                           </Label>
-                          <span className="text-caption text-muted-foreground">
+                          <Txt as="span" variant="caption" tone="muted">
                             Whether observations are scoped per thread or shared across all threads for a resource
-                          </span>
+                          </Txt>
                           <Select value={field.value ?? 'thread'} onValueChange={field.onChange} disabled={readOnly}>
                             <SelectTrigger id="memory-om-scope" className="bg-card">
                               <SelectValue placeholder="Select scope" />
@@ -299,9 +304,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                             <Label htmlFor="memory-om-share-budget" className="text-foreground">
                               Share Token Budget
                             </Label>
-                            <span className="text-caption text-muted-foreground">
+                            <Txt as="span" variant="caption" tone="muted">
                               Share token budget between observation and reflection
-                            </span>
+                            </Txt>
                           </div>
                           <Switch
                             id="memory-om-share-budget"
@@ -325,9 +330,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                         <div className="mt-2 ml-2 flex flex-col gap-4 border-l-2 border-border pl-3">
                           <div className="flex flex-col gap-1.5">
                             <Label className="text-muted-foreground">Provider Override</Label>
-                            <span className="text-caption text-muted-foreground">
+                            <Txt as="span" variant="caption" tone="muted">
                               Override the default model provider for the observer
-                            </span>
+                            </Txt>
                             <Controller
                               name="memory.observationalMemory.observation.model.provider"
                               control={control}
@@ -347,9 +352,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
 
                           <div className="flex flex-col gap-1.5">
                             <Label className="text-muted-foreground">Model Override</Label>
-                            <span className="text-caption text-muted-foreground">
+                            <Txt as="span" variant="caption" tone="muted">
                               Override the default model for the observer
-                            </span>
+                            </Txt>
                             <Controller
                               name="memory.observationalMemory.observation.model.name"
                               control={control}
@@ -373,9 +378,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                 <Label htmlFor="memory-om-obs-msg-tokens" className="text-muted-foreground">
                                   Message Tokens
                                 </Label>
-                                <span className="text-caption text-muted-foreground">
+                                <Txt as="span" variant="caption" tone="muted">
                                   Token count of unobserved messages that triggers observation (default: 30000)
-                                </span>
+                                </Txt>
                                 <Input
                                   id="memory-om-obs-msg-tokens"
                                   type="number"
@@ -402,9 +407,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                 <Label htmlFor="memory-om-obs-batch" className="text-muted-foreground">
                                   Max Tokens Per Batch
                                 </Label>
-                                <span className="text-caption text-muted-foreground">
+                                <Txt as="span" variant="caption" tone="muted">
                                   Maximum tokens per batch when observing multiple threads (default: 10000)
-                                </span>
+                                </Txt>
                                 <Input
                                   id="memory-om-obs-batch"
                                   type="number"
@@ -431,10 +436,10 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                 <Label htmlFor="memory-om-obs-buffer" className="text-muted-foreground">
                                   Buffer Tokens
                                 </Label>
-                                <span className="text-caption text-muted-foreground">
+                                <Txt as="span" variant="caption" tone="muted">
                                   Token interval for async buffering (fraction of messageTokens or absolute count, empty
                                   to use default 0.2, set 0 to disable)
-                                </span>
+                                </Txt>
                                 <Input
                                   id="memory-om-obs-buffer"
                                   type="number"
@@ -466,9 +471,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                 <Label htmlFor="memory-om-obs-buf-act" className="text-muted-foreground">
                                   Buffer Activation
                                 </Label>
-                                <span className="text-caption text-muted-foreground">
+                                <Txt as="span" variant="caption" tone="muted">
                                   Ratio (0-1) of buffered observations to activate (default: 0.8)
-                                </span>
+                                </Txt>
                                 <Input
                                   id="memory-om-obs-buf-act"
                                   type="number"
@@ -496,9 +501,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                 <Label htmlFor="memory-om-obs-block" className="text-muted-foreground">
                                   Block After
                                 </Label>
-                                <span className="text-caption text-muted-foreground">
+                                <Txt as="span" variant="caption" tone="muted">
                                   Multiplier or absolute token count for synchronous blocking (default: 1.2)
-                                </span>
+                                </Txt>
                                 <Input
                                   id="memory-om-obs-block"
                                   type="number"
@@ -532,9 +537,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                         <div className="mt-2 ml-2 flex flex-col gap-4 border-l-2 border-border pl-3">
                           <div className="flex flex-col gap-1.5">
                             <Label className="text-muted-foreground">Provider Override</Label>
-                            <span className="text-caption text-muted-foreground">
+                            <Txt as="span" variant="caption" tone="muted">
                               Override the default model provider for the reflector
-                            </span>
+                            </Txt>
                             <Controller
                               name="memory.observationalMemory.reflection.model.provider"
                               control={control}
@@ -554,9 +559,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
 
                           <div className="flex flex-col gap-1.5">
                             <Label className="text-muted-foreground">Model Override</Label>
-                            <span className="text-caption text-muted-foreground">
+                            <Txt as="span" variant="caption" tone="muted">
                               Override the default model for the reflector
-                            </span>
+                            </Txt>
                             <Controller
                               name="memory.observationalMemory.reflection.model.name"
                               control={control}
@@ -580,9 +585,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                 <Label htmlFor="memory-om-ref-obs-tokens" className="text-muted-foreground">
                                   Observation Tokens
                                 </Label>
-                                <span className="text-caption text-muted-foreground">
+                                <Txt as="span" variant="caption" tone="muted">
                                   Token count of observations that triggers reflection (default: 40000)
-                                </span>
+                                </Txt>
                                 <Input
                                   id="memory-om-ref-obs-tokens"
                                   type="number"
@@ -609,9 +614,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                 <Label htmlFor="memory-om-ref-block" className="text-muted-foreground">
                                   Block After
                                 </Label>
-                                <span className="text-caption text-muted-foreground">
+                                <Txt as="span" variant="caption" tone="muted">
                                   Multiplier or absolute token count for synchronous blocking (default: 1.2)
-                                </span>
+                                </Txt>
                                 <Input
                                   id="memory-om-ref-block"
                                   type="number"
@@ -638,9 +643,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                 <Label htmlFor="memory-om-ref-buf-act" className="text-muted-foreground">
                                   Buffer Activation
                                 </Label>
-                                <span className="text-caption text-muted-foreground">
+                                <Txt as="span" variant="caption" tone="muted">
                                   Ratio (0-1) controlling when async reflection buffering starts
-                                </span>
+                                </Txt>
                                 <Input
                                   id="memory-om-ref-buf-act"
                                   type="number"
