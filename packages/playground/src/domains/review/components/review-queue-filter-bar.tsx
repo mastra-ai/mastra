@@ -1,6 +1,7 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { FilterBar } from '@mastra/playground-ui/components/FilterBar';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@mastra/playground-ui/components/FilterBar';
+import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
 import { themedHueColor } from '@mastra/playground-ui/utils/colors';
 import { BoxIcon, CheckCircleIcon, FingerprintIcon, FlaskConicalIcon, TagIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -15,7 +16,6 @@ import {
 import { getExperimentDisplayName } from '@/domains/experiments/utils/experiment-display-name';
 import { useProcessors } from '@/domains/processors/hooks/use-processors';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
 export const TARGET_TYPE_FIELD_ID = 'targetType';
 export const TARGET_ID_FIELD_ID = 'targetId';
@@ -115,7 +115,9 @@ export function ReviewQueueFilterBar({
   onChange,
 }: ReviewQueueFilterBarProps) {
   const { data: agents } = useAgents({ enabled: targetType === 'agent' });
-  const { data: workflows } = useWorkflows({ enabled: targetType === 'workflow' });
+  const { data: workflows } = useWorkflows({
+    enabled: targetType === 'workflow',
+  });
   const { data: scorers } = useScorers({ enabled: targetType === 'scorer' });
   const { data: processors } = useProcessors({ enabled: targetType === 'processor' });
 

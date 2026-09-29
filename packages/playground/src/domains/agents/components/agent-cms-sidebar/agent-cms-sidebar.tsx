@@ -1,5 +1,6 @@
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -12,7 +13,6 @@ import { AGENT_CMS_SECTIONS, getCodeAgentOverrideSections } from './agent-cms-se
 import type { AgentCmsSection } from './agent-cms-sections';
 import { useSidebarDescriptions } from './use-sidebar-descriptions';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
-import { useLinkComponent } from '@/lib/framework';
 
 /** Maps section names to builder feature keys. Sections without a mapping are always shown. */
 const SECTION_FEATURE_GATE: Record<string, keyof ReturnType<typeof useBuilderAgentFeatures>> = {

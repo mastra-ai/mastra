@@ -1,5 +1,34 @@
 # @mastra/spanner
 
+## 1.9.0-alpha.0
+
+### Minor Changes
+
+- Persist background task ownership so recovery can be fenced on the lease. ([#24841](https://github.com/mastra-ai/mastra/pull/24841))
+
+  Adds `ownerId` and `leaseExpiresAt` to the background tasks schema and honours the new `expectedOwnerId` / `expectedLeaseExpiresAt` write conditions on `updateTask()`. Existing tables are migrated in place; rows written before the upgrade carry no ownership and are treated as reclaimable.
+
+  Convex deployments must redeploy their schema and server functions: the new fields are declared as optional, but documents that carry them are rejected until the schema is pushed.
+
+### Patch Changes
+
+- Updated dependencies [[`77c6f1c`](https://github.com/mastra-ai/mastra/commit/77c6f1cf14ba9ba47257829646a4569c4462d12f), [`3d25340`](https://github.com/mastra-ai/mastra/commit/3d2534080417711d1baf2ad947d1205ca95a34cd), [`afc53be`](https://github.com/mastra-ai/mastra/commit/afc53be4c95e83e8613f4e080b5a1926e63c5da6), [`b33985e`](https://github.com/mastra-ai/mastra/commit/b33985eac3e019f58d3785c48ef85eae48b4e068), [`32d71df`](https://github.com/mastra-ai/mastra/commit/32d71df2ce71573b40f9a62b8ac510ad6eadd859), [`444debd`](https://github.com/mastra-ai/mastra/commit/444debd7104ada74fa15d0e70703ee9be180fc75), [`9997948`](https://github.com/mastra-ai/mastra/commit/99979482956903a2cd685b31f53370dd33074799), [`7540eb1`](https://github.com/mastra-ai/mastra/commit/7540eb176c32ffbff45ccc64a8d8fce82ce42a94), [`9623397`](https://github.com/mastra-ai/mastra/commit/96233975b75135852c9b1616b91fd8cb54c77a53)]:
+  - @mastra/core@1.72.0-alpha.3
+
+## 1.8.2
+
+### Patch Changes
+
+- The Spanner observability store now reports metrics and metric discovery as supported only when metrics are enabled with `disableMetrics: false`. Previously Studio could treat metrics as available while every metric request failed. ([#25008](https://github.com/mastra-ai/mastra/pull/25008))
+
+  ```ts
+  const { capabilities } = await client.getObservabilityCapabilities();
+  capabilities.metrics; // true only when the SpannerStore sets disableMetrics: false
+  ```
+
+- Updated dependencies [[`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`b757896`](https://github.com/mastra-ai/mastra/commit/b757896872edd74f71ec104be92273c5406265da), [`7f64865`](https://github.com/mastra-ai/mastra/commit/7f648656d2b24b214a899e8835b8286333c80a19), [`f751e65`](https://github.com/mastra-ai/mastra/commit/f751e659f496e5e53ed38632c59c296fec2ccbe5)]:
+  - @mastra/core@1.71.0
+
 ## 1.8.2-alpha.0
 
 ### Patch Changes

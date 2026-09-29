@@ -5,6 +5,7 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import type { StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
+import { createSignal } from '../../../agent/signals';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
@@ -89,6 +90,8 @@ import { composeStepInput } from '../../shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-call-headers';
 import { recordTerminalErrorMessage } from '../../shared/record-terminal-error-message';
+import { STEP_CONTENT_CHUNK_TYPES } from '../../shared/step-content-chunk-types';
+import { TERMINAL_FINISH_REASONS } from '../../shared/terminal-finish-reasons';
 import { isMastraTimeoutError } from '../../timeout';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
@@ -107,39 +110,6 @@ import type { PendingProviderToolCall } from './provider-tool-spans';
 import { endPendingProviderToolSpan } from './provider-tool-spans';
 import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
-
-/**
- * Finish reasons that terminate the agentic loop. The loop must NOT continue on
- * any of these, otherwise it re-sends the same request and spins until maxSteps
- * (or forever when maxSteps is unset).
- *
- * - `stop`: the model finished normally.
- * - `error`: the model stream failed.
- * - `length`: the model hit max_tokens; retrying reproduces the truncation
- *   (issue #15717).
- * - `content-filter`: a classifier block / model refusal (e.g. `claude-fable-5`
- *   surfaced by the AI SDK as `content-filter`). Retrying re-triggers the same
- *   refusal, so the run would hang indefinitely.
- */
-const TERMINAL_FINISH_REASONS = ['stop', 'error', 'length', 'content-filter'];
-
-/**
- * Chunk types that represent actual model output for a step. Used to detect a
- * "zero-output" step: a stream that finishes with reason `other` without ever
- * producing any of these must not re-enter the loop (issue #21897) — the
- * request would be re-issued unchanged and spin until maxSteps.
- */
-const STEP_CONTENT_CHUNK_TYPES = new Set([
-  'text-delta',
-  'reasoning-delta',
-  'tool-call',
-  'tool-call-delta',
-  'tool-result',
-  'object',
-  'object-result',
-  'file',
-  'source',
-]);
 
 function getRequestInputProcessors({
   inputProcessors,
@@ -1436,6 +1406,27 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         eagerCoordinator.beginTurn();
       }
 
+      let currentMessageId = inputData.isTaskCompleteCheckFailed
+        ? `${messageIdPassed}-${currentIteration}`
+        : inputData.messageId || messageIdPassed;
+
+      // The abort reason from a processor-requested retry goes at the end of the conversation,
+      // verbatim, as a reminder signal, so the retry reuses the cached prompt prefix. A system message would
+      // sit ahead of the whole conversation and invalidate it. The response message id is
+      // rotated first so the retry streams into a new message after the signal; this happens
+      // before the boundary is opened so that boundary belongs to the retry's own message.
+      if (inputData.processorRetryFeedback) {
+        currentMessageId = rotateLoopResponseMessageId(currentMessageId);
+        const feedbackSignal = messageList.addSignal(
+          createSignal({
+            type: 'reactive',
+            tagName: 'system-reminder',
+            contents: inputData.processorRetryFeedback,
+          }),
+        );
+        safeEnqueue(controller, feedbackSignal.toDataPart());
+      }
+
       // Insert a step-start boundary between loop iterations so that
       // consecutive tool-only turns are not collapsed into a single block
       // by convertToModelMessages. This ensures the LLM sees them as
@@ -1447,9 +1438,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // append to — both roll the message back whole, which is what the rejection means there.
       const iterationBoundary = currentIteration > 1 ? messageList.openStepBoundary().boundary : undefined;
 
-      let currentMessageId = inputData.isTaskCompleteCheckFailed
-        ? `${messageIdPassed}-${currentIteration}`
-        : inputData.messageId || messageIdPassed;
       // Start the MODEL_STEP span at the beginning of LLM execution
       modelSpanTracker?.startStep();
 
@@ -1506,10 +1494,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         // processor-owned buckets remain on messageList and are assembled later.
         if (initialUntaggedSystemMessages) {
           messageList.replaceAllSystemMessages(initialUntaggedSystemMessages);
-        }
-
-        if (inputData.processorRetryFeedback) {
-          messageList.addSystem(inputData.processorRetryFeedback, 'processor-retry-feedback');
         }
 
         const initialSignalEchoes =
@@ -3081,9 +3065,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       }
 
       const retryFeedbackText =
-        shouldRetry && processOutputStepTripwire
-          ? `[Processor Feedback] Your previous response was not accepted: ${processOutputStepTripwire.message}. Please try again with the feedback in mind.`
-          : undefined;
+        shouldRetry && processOutputStepTripwire ? processOutputStepTripwire.message : undefined;
 
       const messages = {
         all: messageList.get.all.aiV5.model(),

@@ -1,5 +1,11 @@
 # @mastra/fastembed
 
+## 1.3.2
+
+### Patch Changes
+
+- Built-in FastEmbed models now download from Hugging Face (Qdrant organization) instead of the legacy Qdrant Google Cloud Storage bucket, which is being shut down. Existing local model caches keep working. ([#25026](https://github.com/mastra-ai/mastra/pull/25026))
+
 ## 1.3.2-alpha.0
 
 ### Patch Changes

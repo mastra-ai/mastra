@@ -63,7 +63,7 @@ export class E2BCodeModeTransport implements CodeModeTransport {
       await sandbox.start();
     }
 
-    const e2b = sandbox.e2b;
+    let e2b = sandbox.e2b;
     const externals = toolIds.map(toolId => ({ toolId, externalName: sanitizeToolId(toolId) }));
     const allowList = new Set(toolIds);
 
@@ -106,9 +106,16 @@ export class E2BCodeModeTransport implements CodeModeTransport {
     };
 
     try {
-      await e2b.files.makeDir(dir);
-      await e2b.files.write(programPath, programSource);
-      await e2b.files.write(runnerPath, runnerSource);
+      // `status` is a local field: E2B may have auto-paused the sandbox
+      // server-side while it still reads 'running'. Retry the setup on a dead
+      // sandbox (resume + reconnect). Only setup is retried so host tools are
+      // never dispatched twice; `spawn()` below has its own retry.
+      await sandbox.retryOnDead(async () => {
+        e2b = sandbox.e2b;
+        await e2b.files.makeDir(dir);
+        await e2b.files.write(programPath, programSource);
+        await e2b.files.write(runnerPath, runnerSource);
+      });
 
       let handle: ProcessHandle;
 

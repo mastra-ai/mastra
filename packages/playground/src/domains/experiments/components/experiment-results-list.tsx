@@ -3,13 +3,13 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ReviewStatusBadge } from '@mastra/playground-ui/domains/review/components/review-status-badge';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { AlertCircleIcon, GaugeIcon } from 'lucide-react';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
-import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
-import { useLinkComponent } from '@/lib/framework';
 
 /**
  * Minimal shape shared by every surface that lists dataset items

@@ -2968,6 +2968,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                           "toolName": "tool1",
                         },
                         "type": "tool-invocation",
+                        "updatedAt": 1704067200000,
                       },
                       {
                         "createdAt": 1704067200000,

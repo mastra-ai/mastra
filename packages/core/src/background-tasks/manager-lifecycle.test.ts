@@ -696,6 +696,7 @@ describe('BackgroundTaskManager lifecycle', () => {
 
     expect(updateTask).toHaveBeenLastCalledWith(task.id, expect.objectContaining({ status: 'failed' }), {
       expectedStatus: 'running',
+      expectedOwnerId: (manager as any).ownerId,
     });
     expect(publish).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'task.failed' }));
     expect(ack).toHaveBeenCalledOnce();
@@ -856,6 +857,8 @@ describe('BackgroundTaskManager lifecycle', () => {
 
     expect(updateTask).toHaveBeenCalledWith('task-1', expect.objectContaining({ status: 'running', retryCount: 0 }), {
       expectedStatus: 'pending',
+      expectedOwnerId: null,
+      expectedLeaseExpiresAt: null,
     });
     expect(ack).toHaveBeenCalled();
     await manager.shutdown();
@@ -897,10 +900,106 @@ describe('BackgroundTaskManager lifecycle', () => {
 
     expect(updateTask).toHaveBeenCalledWith('task-1', expect.objectContaining({ status: 'running', retryCount: 1 }), {
       expectedStatus: 'running',
+      expectedOwnerId: null,
+      expectedLeaseExpiresAt: null,
     });
     expect(ack).toHaveBeenCalled();
     await manager.shutdown();
     await pubsub.close();
+  });
+
+  it("leaves a redelivered dispatch unacked while another worker's lease is still live", async () => {
+    const pubsub = new CapturingPubSub();
+    const manager = new BackgroundTaskManager({ enabled: true });
+    await manager.init(pubsub);
+
+    const leasedTask = makeRunningTask({
+      ownerId: 'other-worker',
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+    });
+    const updateTask = vi.fn(async () => true);
+    manager.__registerMastra({
+      getStorage: () => ({
+        getStore: async () => ({
+          getTask: async () => leasedTask,
+          updateTask,
+          listTasks: async () => ({ tasks: [] }),
+        }),
+      }),
+      __getInternalWorkflow: () => ({
+        createRun: async () => ({ start: vi.fn(async () => ({ status: 'success' })) }),
+        deleteWorkflowRunById: async () => {},
+      }),
+    } as unknown as Mastra);
+    const ack = vi.fn(async () => {});
+    const event: Event = {
+      type: 'task.dispatch',
+      id: 'event-1',
+      data: { taskId: 'task-1' },
+      runId: 'task-1',
+      createdAt: new Date(),
+      deliveryAttempt: 2,
+    };
+
+    await pubsub.dispatchCallback!(event, ack);
+
+    // The lease is live and held by someone else, so this delivery neither
+    // claims the task nor acknowledges the message: it stays queued for a
+    // redelivery once the lease lapses.
+    expect(updateTask).not.toHaveBeenCalled();
+    expect(ack).not.toHaveBeenCalled();
+    await manager.shutdown();
+    await pubsub.close();
+  });
+
+  it('acks a redelivered dispatch for a live lease it already owns without reclaiming', async () => {
+    const pubsub = new CapturingPubSub();
+    const manager = new BackgroundTaskManager({ enabled: true });
+    await manager.init(pubsub);
+
+    const leasedTask = makeRunningTask({
+      ownerId: manager.ownerId,
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+    });
+    const updateTask = vi.fn(async () => true);
+    manager.__registerMastra({
+      getStorage: () => ({
+        getStore: async () => ({
+          getTask: async () => leasedTask,
+          updateTask,
+          listTasks: async () => ({ tasks: [] }),
+        }),
+      }),
+      __getInternalWorkflow: () => ({
+        createRun: async () => ({ start: vi.fn(async () => ({ status: 'success' })) }),
+        deleteWorkflowRunById: async () => {},
+      }),
+    } as unknown as Mastra);
+    const ack = vi.fn(async () => {});
+    const event: Event = {
+      type: 'task.dispatch',
+      id: 'event-1',
+      data: { taskId: 'task-1' },
+      runId: 'task-1',
+      createdAt: new Date(),
+      deliveryAttempt: 2,
+    };
+
+    await pubsub.dispatchCallback!(event, ack);
+
+    // This worker already owns the live lease, so the duplicate delivery is
+    // acknowledged without another claim.
+    expect(updateTask).not.toHaveBeenCalled();
+    expect(ack).toHaveBeenCalled();
+    await manager.shutdown();
+    await pubsub.close();
+  });
+
+  it('rejects a lease duration too short to renew before it lapses', () => {
+    const message = /leaseDurationMs must be a finite number of at least 3000ms/;
+    expect(() => new BackgroundTaskManager({ enabled: true, leaseDurationMs: 1_000 })).toThrow(message);
+    expect(() => new BackgroundTaskManager({ enabled: true, leaseDurationMs: Number.NaN })).toThrow(message);
+    expect(() => new BackgroundTaskManager({ enabled: true, leaseDurationMs: 3_000 })).not.toThrow();
   });
 
   it('rejects AbortController registration after shutdown starts', async () => {

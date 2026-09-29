@@ -1,5 +1,84 @@
 # @mastra/connect
 
+## 0.5.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`9ce3444`](https://github.com/mastra-ai/mastra/commit/9ce3444d1a6b17e72b0a20c74603abaf252a843e), [`3b77788`](https://github.com/mastra-ai/mastra/commit/3b77788a08df1e754282d39c42823e6e1c5f2742), [`987257a`](https://github.com/mastra-ai/mastra/commit/987257a34cda8a153fe592c31d75fbb1dee55202), [`65a93a2`](https://github.com/mastra-ai/mastra/commit/65a93a2a3b1434d605a6a417cb83d2d58e16bfc0), [`fd92729`](https://github.com/mastra-ai/mastra/commit/fd92729380a29f2a0ec822e39f3c09eb9aaa5ac5), [`79c3b1f`](https://github.com/mastra-ai/mastra/commit/79c3b1fa4d470585a00558b317ed47db9b1decd4), [`4092ef2`](https://github.com/mastra-ai/mastra/commit/4092ef29aad09f2ba5f90c92a4d4d3bd444eae67), [`e62e372`](https://github.com/mastra-ai/mastra/commit/e62e3721356955f0a9fd3d723cee9fa0c160652b), [`5026973`](https://github.com/mastra-ai/mastra/commit/50269736f432cee1170627b2b6f88ba1431e837f)]:
+  - @mastra/core@1.72.0-alpha.7
+  - @mastra/mcp@2.1.1-alpha.0
+
+## 0.5.0-alpha.1
+
+### Patch Changes
+
+- Fixed Discord channel connections failing with `Discord rejected the bot token: 401: Unauthorized`. The Discord bot token is now read from the connection's metadata (`botToken`, following Nango's Discord convention) instead of the OAuth credential — Discord's OAuth exchange only yields a user Bearer token, which can never authenticate as a bot. A Discord connection without `botToken` metadata is skipped with a warning telling you to store the token on the connection. ([#25260](https://github.com/mastra-ai/mastra/pull/25260))
+
+- Updated dependencies [[`43fbe75`](https://github.com/mastra-ai/mastra/commit/43fbe75535650345cf61dee00cf3e7b3f5efaf7f), [`ebd03fd`](https://github.com/mastra-ai/mastra/commit/ebd03fd3bc93fe3930747956724252f7c8834826), [`2c57ba8`](https://github.com/mastra-ai/mastra/commit/2c57ba896b04215fface2a8216b88fe59cfdd041), [`f6effda`](https://github.com/mastra-ai/mastra/commit/f6effdabafa9fc6388478b3e281ad4c457d4200b), [`7f4ce21`](https://github.com/mastra-ai/mastra/commit/7f4ce2190029710851d95f7b75a2fb724782483c), [`1ba1588`](https://github.com/mastra-ai/mastra/commit/1ba158873dadf3d290b111981c3bc7ef95ab1d1c), [`b537ab1`](https://github.com/mastra-ai/mastra/commit/b537ab14714870e058775530bc55b37c9115613f), [`d4e350a`](https://github.com/mastra-ai/mastra/commit/d4e350a5c1e29a7da5a22da52ed1f33431403012)]:
+  - @mastra/core@1.72.0-alpha.5
+
+## 0.5.0-alpha.0
+
+### Minor Changes
+
+- `channels()` now returns a live channel resolver instead of a fixed provider map. Channel connections created or removed on the Mastra platform are picked up by a running server automatically — no redeploy needed. ([#25149](https://github.com/mastra-ai/mastra/pull/25149))
+
+  ```typescript
+  import { Mastra } from '@mastra/core/mastra';
+  import { channels } from '@mastra/connect';
+
+  export const mastra = new Mastra({
+    channels: await channels({ projectId: 'my-project' }),
+  });
+  ```
+
+  The resolver keeps one provider instance per integration, refreshes platform connections on a configurable `ttlMs` cache (30 seconds by default), and re-applies credentials when a connection changes. Slack credentials are fetched fresh from the platform before each app-management call, so tokens refreshed by the platform are always honored.
+
+  If you previously awaited `channels()` and read providers off the result as a plain object, call the resolver instead: `const providers = await resolver()`.
+
+  Requires `@mastra/core` 1.72.0 or later — the first release whose `Mastra` constructor accepts a `ChannelsResolver` (the peer dependency range has been raised to match). Older cores treat the resolver as a static provider record and fail at construction.
+
+- `@mastra/slack`, `@mastra/telegram`, and `@mastra/discord` are now direct dependencies of `@mastra/connect`. Installing `@mastra/connect` is enough to use any channel with `channels()` — no separate channel package installs required. ([#25125](https://github.com/mastra-ai/mastra/pull/25125))
+
+### Patch Changes
+
+- Discord channel connections no longer require `applicationId` and `publicKey` on the platform connection. The bot token stored as the connection credential is enough — the provider resolves the rest from Discord automatically — so the "missing applicationId + publicKey" warning is gone. Connection metadata and `providerOptions` still work as explicit overrides. ([#25125](https://github.com/mastra-ai/mastra/pull/25125))
+
+- Fixed Slack channel connections that failed with "Slack refresh token is invalid" when connecting an agent. The Mastra platform now manages the Slack credential refresh cycle, so `channels()` no longer competes with it over the single-use refresh token. ([#25125](https://github.com/mastra-ai/mastra/pull/25125))
+
+- Updated dependencies [[`c3bc77c`](https://github.com/mastra-ai/mastra/commit/c3bc77ca9e1e665d9e0ad2bfd15a88ad71461f12), [`68cc668`](https://github.com/mastra-ai/mastra/commit/68cc66800e5ce6f5d62189fc7b5ef9d71cf80971), [`c3bc77c`](https://github.com/mastra-ai/mastra/commit/c3bc77ca9e1e665d9e0ad2bfd15a88ad71461f12), [`68cc668`](https://github.com/mastra-ai/mastra/commit/68cc66800e5ce6f5d62189fc7b5ef9d71cf80971), [`781762b`](https://github.com/mastra-ai/mastra/commit/781762b2dcd0c8cc7f9b8ab73824ec45a5225db7), [`cc0da13`](https://github.com/mastra-ai/mastra/commit/cc0da13b826d5f74213c4d8c470acf8698542249), [`f2c3f8c`](https://github.com/mastra-ai/mastra/commit/f2c3f8c74e1d7bc7baca5303b36320b0b361775c), [`1fe1c2b`](https://github.com/mastra-ai/mastra/commit/1fe1c2b6f0b29481dca62a9199af751d594e3ea6), [`279a736`](https://github.com/mastra-ai/mastra/commit/279a736c62495cac0f247ab1402a8c80bccc892a), [`4edc93d`](https://github.com/mastra-ai/mastra/commit/4edc93dedadb89686aad75a4853cb0aa807d256e)]:
+  - @mastra/slack@1.7.0-alpha.0
+  - @mastra/core@1.72.0-alpha.2
+  - @mastra/discord@1.2.0-alpha.0
+
+## 0.4.0
+
+### Minor Changes
+
+- Add `environment()` for sandboxed agents. Materialize provider credentials from your project's Platform connections into a `{ env, onStart }` pair that any sandbox provider (e2b, Modal, Daytona, Docker, subprocess) can consume — so CLI tooling inside the sandbox is authenticated without hand-wiring tokens per agent. ([#24912](https://github.com/mastra-ai/mastra/pull/24912))
+
+  ```ts
+  import { environment } from '@mastra/connect';
+
+  const env = environment({
+    projectId: process.env.MASTRA_PROJECT_ID,
+    client: { accessToken: process.env.MASTRA_PLATFORM_ACCESS_TOKEN },
+  });
+
+  const { env: envVars, onStart } = await env();
+
+  await sandbox.start({ env: envVars, onStart });
+  ```
+
+  `environment()` shares its resolution model with `connect()`: same `projectId`, `client`, and per-provider `integrations` overrides (`connectionId` to pin, `disabled: true` to exclude). GitHub is the first provider with an env contributor — its OAuth token is exported as `GH_TOKEN`/`GITHUB_TOKEN` so both `gh` and `git` HTTPS authenticate as the connected user, and `onStart` installs a git credential helper that reads the token from the environment rather than baking it into git config.
+
+### Patch Changes
+
+- Updated dependencies [[`d47a70d`](https://github.com/mastra-ai/mastra/commit/d47a70d14aa2486089115069416fb0a9cac5eef5), [`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`b757896`](https://github.com/mastra-ai/mastra/commit/b757896872edd74f71ec104be92273c5406265da), [`1640470`](https://github.com/mastra-ai/mastra/commit/1640470792c1138f91f543526b3a516a948cf129), [`7f64865`](https://github.com/mastra-ai/mastra/commit/7f648656d2b24b214a899e8835b8286333c80a19), [`f751e65`](https://github.com/mastra-ai/mastra/commit/f751e659f496e5e53ed38632c59c296fec2ccbe5)]:
+  - @mastra/discord@1.1.0
+  - @mastra/core@1.71.0
+  - @mastra/telegram@0.1.3
+
 ## 0.4.0-alpha.0
 
 ### Minor Changes

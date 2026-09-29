@@ -7,6 +7,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeftIcon, CalendarClockIcon, PauseIcon, PlayIcon } from 'lucide-react';
 import { Link, useParams } from 'react-router';
@@ -18,7 +19,6 @@ import { useSchedule } from '@/domains/schedules/hooks/use-schedule';
 import { useScheduleTriggers } from '@/domains/schedules/hooks/use-schedule-triggers';
 import { useToggleSchedule } from '@/domains/schedules/hooks/use-toggle-schedule';
 import { schedulesCrumb } from '@/domains/workflows/schedules-crumb';
-import { useLinkComponent } from '@/lib/framework';
 
 function MetaItem({ label, children }: { label: string; children: React.ReactNode }) {
   return (

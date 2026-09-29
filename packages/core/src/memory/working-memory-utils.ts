@@ -1,3 +1,5 @@
+import type { MastraMessageContentV2, MastraMessagePart } from '../agent/message-list/state/types';
+
 export const WORKING_MEMORY_START_TAG = '<working_memory>';
 export const WORKING_MEMORY_END_TAG = '</working_memory>';
 
@@ -107,6 +109,57 @@ export function extractWorkingMemoryContent(text: string): string | null {
   if (end === -1) return null;
 
   return text.substring(contentStart, end);
+}
+
+/**
+ * Removes `updateWorkingMemory` tool invocations from stored message parts, one step
+ * at a time. A step starts at a `step-start` part, or where a tool part is followed by
+ * a non-tool part (the same boundary prompt conversion uses when markers are missing).
+ * A step whose tool calls were all working-memory calls loses its tool-call/tool-result
+ * boundary once they are removed. If only reasoning is left, the whole step is dropped:
+ * replaying that signed reasoning merges it into the next step's assistant message,
+ * which providers such as Anthropic reject (see #22798).
+ */
+export function removeWorkingMemoryToolInvocationParts(parts: MastraMessagePart[]): MastraMessagePart[] {
+  const isWorkingMemoryCall = (part: MastraMessagePart) =>
+    part?.type === 'tool-invocation' && part.toolInvocation?.toolName === UPDATE_WORKING_MEMORY_TOOL_NAME;
+
+  if (!parts.some(isWorkingMemoryCall)) return parts;
+
+  const steps: MastraMessagePart[][] = [];
+  parts.forEach((part, i) => {
+    const previous = parts[i - 1];
+    const startsStep =
+      part?.type === 'step-start' || (previous?.type === 'tool-invocation' && part?.type !== 'tool-invocation');
+    if (startsStep || steps.length === 0) steps.push([]);
+    steps[steps.length - 1]!.push(part);
+  });
+
+  return steps.flatMap(step => {
+    if (!step.some(isWorkingMemoryCall)) return step;
+    const remaining = step.filter(part => !isWorkingMemoryCall(part));
+    const onlyReasoningLeft = remaining.every(
+      part =>
+        part?.type === 'step-start' ||
+        part?.type === 'reasoning' ||
+        (part?.type === 'text' && !removeWorkingMemoryTags(part.text ?? '').trim()),
+    );
+    return onlyReasoningLeft ? [] : remaining;
+  });
+}
+
+/**
+ * Removes `updateWorkingMemory` entries from the legacy `toolInvocations` array so
+ * prompt conversion cannot re-add a stripped working-memory call.
+ */
+export function removeWorkingMemoryToolInvocations(
+  toolInvocations: MastraMessageContentV2['toolInvocations'],
+): MastraMessageContentV2['toolInvocations'] {
+  if (!toolInvocations?.some(invocation => invocation.toolName === UPDATE_WORKING_MEMORY_TOOL_NAME)) {
+    return toolInvocations;
+  }
+  const remaining = toolInvocations.filter(invocation => invocation.toolName !== UPDATE_WORKING_MEMORY_TOOL_NAME);
+  return remaining.length > 0 ? remaining : undefined;
 }
 
 /**

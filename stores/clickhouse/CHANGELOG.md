@@ -1,5 +1,43 @@
 # @mastra/clickhouse
 
+## 1.21.2-alpha.0
+
+### Patch Changes
+
+- Fixed the Studio Traces page running out of memory or timing out on large ClickHouse databases. Trace queries no longer read every stored trace's full data before applying the selected time range, which cuts memory use and data read on large tables. Fixes [#25141](https://github.com/mastra-ai/mastra/issues/25141). ([#25225](https://github.com/mastra-ai/mastra/pull/25225))
+
+- Updated dependencies [[`9ce3444`](https://github.com/mastra-ai/mastra/commit/9ce3444d1a6b17e72b0a20c74603abaf252a843e), [`3b77788`](https://github.com/mastra-ai/mastra/commit/3b77788a08df1e754282d39c42823e6e1c5f2742), [`987257a`](https://github.com/mastra-ai/mastra/commit/987257a34cda8a153fe592c31d75fbb1dee55202), [`65a93a2`](https://github.com/mastra-ai/mastra/commit/65a93a2a3b1434d605a6a417cb83d2d58e16bfc0), [`fd92729`](https://github.com/mastra-ai/mastra/commit/fd92729380a29f2a0ec822e39f3c09eb9aaa5ac5), [`79c3b1f`](https://github.com/mastra-ai/mastra/commit/79c3b1fa4d470585a00558b317ed47db9b1decd4), [`4092ef2`](https://github.com/mastra-ai/mastra/commit/4092ef29aad09f2ba5f90c92a4d4d3bd444eae67), [`5026973`](https://github.com/mastra-ai/mastra/commit/50269736f432cee1170627b2b6f88ba1431e837f)]:
+  - @mastra/core@1.72.0-alpha.7
+
+## 1.21.1
+
+### Patch Changes
+
+- Fixed slow feedback review-status updates on ClickHouse. Since 1.21.0, each update ran a ClickHouse mutation that scanned every part of the feedback table, taking several seconds on tables with months of daily partitions and timing out on larger ones. Review updates now write a new row again, which takes milliseconds regardless of table size. ([#25000](https://github.com/mastra-ai/mastra/pull/25000))
+
+  **Upgrade note:** the runtime database user no longer needs `ALTER UPDATE(reviewStatus)` on `mastra_feedback_events` or `INSERT` on `mastra_feedback_events_delta` for review updates. Grants you added for 1.21.0 are harmless. Keep `ALTER UPDATE` if you run ClickHouse 26.6 or earlier, because lightweight deletes still need it there.
+
+  Deleted feedback still can't reappear through a review update: an update that lands during a delete of the same feedback retries the delete and reports the feedback as not found. A failed delete no longer blocks review updates: the next update saves the new status, then retries the delete and reports its error if it fails again. If a network error or a lagging replica lets a review row outlive a successful delete, the next review update of that feedback removes it.
+
+- Declared feedback support in the observability store so servers report the `feedback` capability as available to clients. ([#25020](https://github.com/mastra-ai/mastra/pull/25020))
+
+  ```ts
+  // With one of these stores configured as the observability storage:
+  const { capabilities } = await client.getObservabilityCapabilities();
+
+  console.log(capabilities.feedback); // true
+  ```
+
+- The observability stores used by `PostgresStoreVNext`, `ClickhouseStoreVNext` and `DuckDBStore` now declare their filter discovery support, so Studio can show discovery-backed filters based on what the store reports. ([#25008](https://github.com/mastra-ai/mastra/pull/25008))
+
+  ```ts
+  const { capabilities } = await client.getObservabilityCapabilities();
+  capabilities.discovery; // { entityTypes: true, entityNames: true, serviceNames: true, environments: true, tags: true, metrics: true }
+  ```
+
+- Updated dependencies [[`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`b757896`](https://github.com/mastra-ai/mastra/commit/b757896872edd74f71ec104be92273c5406265da), [`7f64865`](https://github.com/mastra-ai/mastra/commit/7f648656d2b24b214a899e8835b8286333c80a19), [`f751e65`](https://github.com/mastra-ai/mastra/commit/f751e659f496e5e53ed38632c59c296fec2ccbe5)]:
+  - @mastra/core@1.71.0
+
 ## 1.21.1-alpha.0
 
 ### Patch Changes

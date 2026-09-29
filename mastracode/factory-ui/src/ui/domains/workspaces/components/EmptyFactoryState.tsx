@@ -15,7 +15,9 @@ import {
   readOnboardingStep,
   type OnboardingStep as Step,
 } from '../services/onboardingFlow';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ArrowLeft } from 'lucide-react';
 import { FactoryHalftoneField } from '../../auth/components/FactoryHalftoneField';
 import { InitialFactoryStep } from './InitialFactoryStep';
 import { ModelProviderFactoryStep } from './ModelProviderFactoryStep';
@@ -139,23 +141,48 @@ export function EmptyFactoryState() {
 
   const steps: Step[] = ['initial', 'vcs', 'project-management', 'model-provider', 'personal-provider'];
   const stepIndex = steps.indexOf(step);
+  const previousStep = stepIndex > 0 ? steps[stepIndex - 1] : undefined;
+  // Once a Factory has been created for the user's first repository pick, Back
+  // can no longer safely land on `vcs`: rewinding would either orphan the
+  // server Factory or race against the retry that already links to it. Drop
+  // the affordance in that case rather than shipping a destructive delete.
+  const backDisabled = Boolean(pendingFactory) && previousStep === 'vcs';
 
   return (
     <main className="bg-sidebar text-foreground min-h-dvh">
       <div className="grid min-h-dvh w-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(480px,42%)]">
         <section className="relative z-3 flex flex-col justify-center px-6 py-12 sm:px-10 lg:px-16 lg:py-17 xl:px-20">
           <div className="w-full max-w-2xl">
-            <ol className="mb-9 flex gap-2" aria-label="Factory setup progress">
-              {steps.map((item, index) => (
-                <li
-                  key={item}
-                  aria-current={step === item ? 'step' : undefined}
-                  className={`h-1 w-14 rounded-full transition-colors ${index <= stepIndex ? 'bg-accent1' : 'bg-fill'}`}
+            <div className="mb-9 flex items-center gap-3">
+              {previousStep && !backDisabled && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => goTo(previousStep)}
+                  aria-label="Go back to previous step"
+                  // A pending chooseRepository run ends with goTo('project-management');
+                  // letting Back fire mid-flight would move the user forward again
+                  // right after they chose to go back. connectingRepositoryId covers
+                  // the whole run — including the factories invalidation await after
+                  // both mutations have settled.
+                  disabled={createFactory.isPending || linkRepository.isPending || connectingRepositoryId !== null}
                 >
-                  <span className="sr-only">Step {index + 1}</span>
-                </li>
-              ))}
-            </ol>
+                  <ArrowLeft aria-hidden="true" />
+                  Back
+                </Button>
+              )}
+              <ol className="flex gap-2" aria-label="Factory setup progress">
+                {steps.map((item, index) => (
+                  <li
+                    key={item}
+                    aria-current={step === item ? 'step' : undefined}
+                    className={`h-1 w-14 rounded-full transition-colors ${index <= stepIndex ? 'bg-accent1' : 'bg-fill'}`}
+                  >
+                    <span className="sr-only">Step {index + 1}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
 
             <h1 className="max-w-xl text-[clamp(2rem,3.9vw,3.25rem)] leading-[1.1] font-[520] tracking-[0.01em] text-balance [font-stretch:112%]">
               {STEP_META[step].title}

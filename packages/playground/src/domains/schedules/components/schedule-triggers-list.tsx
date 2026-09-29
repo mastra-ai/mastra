@@ -3,10 +3,10 @@ import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playgro
 import { RelativeTimestamp } from '@mastra/playground-ui/components/RelativeTimestamp';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import { AlertTriangleIcon } from 'lucide-react';
 import { WorkflowRunStatusInline } from './workflow-run-status-inline';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface ScheduleTriggersListProps {
   triggers: ScheduleTriggerResponse[];

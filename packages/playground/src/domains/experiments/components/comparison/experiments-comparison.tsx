@@ -1,6 +1,7 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMemo } from 'react';
 import { buildComparisonRows } from './build-comparison-rows';
@@ -14,7 +15,6 @@ import {
   useDatasetExperimentResults,
   useScoresByExperimentId,
 } from '@/domains/datasets/hooks/use-dataset-experiments';
-import { useLinkComponent } from '@/lib/framework';
 
 interface ExperimentsComparisonProps {
   datasetId: string;

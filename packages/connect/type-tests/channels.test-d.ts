@@ -1,25 +1,23 @@
-import type { ChannelProvider } from '@mastra/core/channels';
+import type { ChannelProvider, ChannelsResolver as CoreChannelsResolver } from '@mastra/core/channels';
 
 import type { ChannelsOptions, ChannelsResolver } from '../src/channels.js';
 
-// The value awaited from `channels()` must be structurally assignable to the
-// shape `Mastra({ channels })` accepts: `Record<string, ChannelProvider>`.
+// The value awaited from `channels()` must satisfy `@mastra/core`'s
+// `ChannelsResolver` contract so it can be handed to `new Mastra({ channels })`
+// directly (callable + getRoutes()).
 declare const resolver: ChannelsResolver;
-
-// `await channels({...})` must resolve to a Record<string, ChannelProvider>.
-declare const resolved: Awaited<ChannelsResolver>;
-const asMastraChannels: Record<string, ChannelProvider> = resolved;
+const asMastraChannels: CoreChannelsResolver = resolver;
 void asMastraChannels;
 
-// The callable form returns the same map, useful for tests that inspect it.
+// The callable form returns the provider map of connected integrations.
 declare const called: Awaited<ReturnType<ChannelsResolver>>;
-const asMastraChannels2: Record<string, ChannelProvider> = called;
-void asMastraChannels2;
+const asProviderMap: Record<string, ChannelProvider> = called;
+void asProviderMap;
 
 // `.refresh()` returns the same shape.
 declare const refreshed: Awaited<ReturnType<ChannelsResolver['refresh']>>;
-const asMastraChannels3: Record<string, ChannelProvider> = refreshed;
-void asMastraChannels3;
+const asProviderMap2: Record<string, ChannelProvider> = refreshed;
+void asProviderMap2;
 
 // ---------------------------------------------------------------------------
 // providerOptions reserved-field enforcement.

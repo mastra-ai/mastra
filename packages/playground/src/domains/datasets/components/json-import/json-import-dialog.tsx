@@ -10,12 +10,12 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { X } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 
-import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import { MAX_IMPORT_BYTES, MAX_IMPORT_LABEL, validateImportJSON } from '../../utils/json-validation';
 import type { JSONImportValidation } from '../../utils/json-validation';
 import { JSONFormatPanel } from './json-format-panel';
