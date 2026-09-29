@@ -12,8 +12,9 @@ import {
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
@@ -204,65 +205,72 @@ export function AddSkillDialog({
               <div className="mb-2 text-column tracking-wide text-muted-foreground uppercase">
                 {hasSearchResults ? 'Search Results' : 'Popular Skills'}
               </div>
-              <ScrollArea
-                className="flex-1 rounded-lg border border-border"
-                viewPortClassName={
-                  !isLoadingPopular && !isSearching && displaySkills.length === 0
-                    ? 'flex flex-col [&>div]:flex [&>div]:flex-1 [&>div]:flex-col'
-                    : undefined
-                }
-              >
-                {isLoadingPopular || isSearching ? (
-                  <div className="flex items-center justify-center py-5">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  </div>
-                ) : displaySkills.length === 0 ? (
-                  <div className="flex flex-1 flex-col items-center-safe justify-center-safe py-5 text-muted-foreground">
-                    <CircleSlashIcon className="mb-2 h-8 w-8" />
-                    <p className="text-body">{hasSearchResults ? 'No skills found' : 'No skills available'}</p>
-                  </div>
-                ) : (
-                  <div className="space-y-1 p-2">
-                    {displaySkills.map(skill => {
-                      const skillUniqueId = getSkillUniqueId(skill);
-                      const installedId = getInstalledSkillId(skill);
-                      const isInstalled =
-                        (installedId && installedSkillIds.includes(installedId)) ||
-                        installedSkillNames.includes(skill.name);
-                      const selectedSkillUniqueId = selectedSkill ? getSkillUniqueId(selectedSkill) : null;
-                      return (
-                        <button
-                          key={skillUniqueId}
-                          onClick={() => setSelectedSkill(skill)}
-                          className={cn(
-                            'w-full rounded-md px-3 py-2 text-left',
-                            'hover:bg-fill-subtle',
-                            selectedSkillUniqueId === skillUniqueId && 'border border-border-strong bg-fill-hover',
-                          )}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="truncate text-subheading text-foreground">{skill.name}</span>
-                                {isInstalled && (
-                                  <span className="inline-flex items-center gap-1 rounded bg-info-subtle px-1.5 py-0.5 text-meta text-info-subtle-foreground">
-                                    <Check className="h-2.5 w-2.5" />
-                                    Installed
-                                  </span>
-                                )}
+              <ScrollArea className="flex-1 rounded-lg border border-border">
+                <ScrollAreaViewport
+                  className={
+                    !isLoadingPopular && !isSearching && displaySkills.length === 0
+                      ? 'flex flex-col [&>div]:flex [&>div]:flex-1 [&>div]:flex-col'
+                      : undefined
+                  }
+                >
+                  {isLoadingPopular || isSearching ? (
+                    <div className="flex items-center justify-center py-5">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : displaySkills.length === 0 ? (
+                    <div className="flex flex-1 flex-col items-center-safe justify-center-safe py-5 text-muted-foreground">
+                      <CircleSlashIcon className="mb-2 h-8 w-8" />
+                      <Txt>{hasSearchResults ? 'No skills found' : 'No skills available'}</Txt>
+                    </div>
+                  ) : (
+                    <div className="space-y-1 p-2">
+                      {displaySkills.map(skill => {
+                        const skillUniqueId = getSkillUniqueId(skill);
+                        const installedId = getInstalledSkillId(skill);
+                        const isInstalled =
+                          (installedId && installedSkillIds.includes(installedId)) ||
+                          installedSkillNames.includes(skill.name);
+                        const selectedSkillUniqueId = selectedSkill ? getSkillUniqueId(selectedSkill) : null;
+                        return (
+                          <button
+                            key={skillUniqueId}
+                            onClick={() => setSelectedSkill(skill)}
+                            className={cn(
+                              'w-full rounded-md px-3 py-2 text-left',
+                              'hover:bg-fill-subtle',
+                              selectedSkillUniqueId === skillUniqueId && 'border border-border-strong bg-fill-hover',
+                            )}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <Txt as="span" variant="subheading" tone="ink" className="truncate">
+                                    {skill.name}
+                                  </Txt>
+                                  {isInstalled && (
+                                    <Txt
+                                      as="span"
+                                      variant="meta"
+                                      className="inline-flex items-center gap-1 rounded bg-info-subtle px-1.5 py-0.5 text-info-subtle-foreground"
+                                    >
+                                      <Check className="h-2.5 w-2.5" />
+                                      Installed
+                                    </Txt>
+                                  )}
+                                </div>
+                                <div className="truncate text-caption text-muted-foreground">{skill.topSource}</div>
                               </div>
-                              <div className="truncate text-caption text-muted-foreground">{skill.topSource}</div>
+                              <div className="flex shrink-0 items-center gap-1 text-caption text-muted-foreground">
+                                <Download className="h-3 w-3" />
+                                <span>{skill.installs.toLocaleString()}</span>
+                              </div>
                             </div>
-                            <div className="flex shrink-0 items-center gap-1 text-caption text-muted-foreground">
-                              <Download className="h-3 w-3" />
-                              <span>{skill.installs.toLocaleString()}</span>
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </ScrollAreaViewport>
               </ScrollArea>
             </div>
 
@@ -272,7 +280,7 @@ export function AddSkillDialog({
                 {!selectedSkill ? (
                   <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
                     <Package className="mb-2 h-8 w-8" />
-                    <p className="text-body">Select a skill to preview</p>
+                    <Txt>Select a skill to preview</Txt>
                   </div>
                 ) : (
                   <>
@@ -282,7 +290,9 @@ export function AddSkillDialog({
                           <SkillIcon className="h-5 w-5 text-muted-foreground" />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <h3 className="truncate text-subheading text-foreground">{selectedSkill.name}</h3>
+                          <Txt as="h3" variant="subheading" tone="ink" className="truncate">
+                            {selectedSkill.name}
+                          </Txt>
                           <div className="mt-1 flex items-center gap-3 text-caption text-muted-foreground">
                             <span className="flex items-center gap-1">
                               <GithubIcon className="h-3 w-3" />
@@ -321,7 +331,7 @@ export function AddSkillDialog({
                     ) : (
                       <div className="flex flex-1 flex-col items-center justify-center text-muted-foreground">
                         <Package className="mb-2 h-8 w-8" />
-                        <p className="text-body">Preview unavailable</p>
+                        <Txt>Preview unavailable</Txt>
                         {skillsUrl && (
                           <a
                             href={skillsUrl}
@@ -373,7 +383,9 @@ export function AddSkillDialog({
                 const skillPath = installedSkillPaths[selectedSkill.name]!;
                 const mount = writableMounts.find(m => skillPath.startsWith(m.path + '/') || skillPath === m.path);
                 return mount ? (
-                  <span className="mr-auto text-caption text-muted-foreground">Installed at {mount.path}</span>
+                  <Txt as="span" variant="caption" tone="muted" className="mr-auto">
+                    Installed at {mount.path}
+                  </Txt>
                 ) : null;
               })()}
             <DialogCancel>Cancel</DialogCancel>

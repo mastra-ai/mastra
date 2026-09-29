@@ -18,6 +18,7 @@ import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useDatasetMutations, useDataset } from '@mastra/playground-ui/domains/datasets';
 import { useDatasetItems } from '@mastra/playground-ui/domains/datasets/hooks/use-dataset-items';
 import { DynamicForm } from '@mastra/playground-ui/lib/form/dynamic-form';
@@ -297,9 +298,9 @@ export function ExperimentTriggerDialog({
                 )}
               </div>
               {datasetId && itemCount !== undefined && (
-                <p className="text-meta text-muted-foreground">
+                <Txt variant="meta" tone="muted">
                   {itemCount} {itemCount === 1 ? 'item' : 'items'}
-                </p>
+                </Txt>
               )}
             </PipelineStep>
 
@@ -312,9 +313,9 @@ export function ExperimentTriggerDialog({
                 container={contentRef}
               />
               {targetType && !targetId && (
-                <p className="text-meta text-muted-foreground">
+                <Txt variant="meta" tone="muted">
                   Choose {targetType === 'agent' ? 'an' : 'a'} {targetType} to run
-                </p>
+                </Txt>
               )}
             </PipelineStep>
 
@@ -366,9 +367,9 @@ export function ExperimentTriggerDialog({
                 <Badge variant="success" indicator="dot">
                   Ready
                 </Badge>
-                <span className="text-meta text-muted-foreground">
+                <Txt as="span" variant="meta" tone="muted">
                   {itemCount ?? 0} items · {targetType} · {effectiveScorers.length} scorers
-                </span>
+                </Txt>
               </>
             ) : (
               <Badge variant="neutral" indicator="dot">

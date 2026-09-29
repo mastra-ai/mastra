@@ -8,6 +8,7 @@ import { DatePicker, TimePicker } from '@/ds/components/DateTimePicker';
 import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
 import { Field, FieldError } from '@/ds/components/Field';
 import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover/popover';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export type DateRangePreset = 'all' | 'last-24h' | 'last-3d' | 'last-7d' | 'last-14d' | 'last-30d' | 'custom';
@@ -128,7 +129,9 @@ export function DateTimeRangePicker({
           <Field invalid={Boolean(customRangeError)} role="group" aria-label="Custom date range" className="block">
             <div className={cn('flex')}>
               <div className={cn('border-r border-border')}>
-                <span className={cn('block px-4 pt-3 text-column text-muted-foreground')}>Start</span>
+                <Txt as="span" variant="column" tone="muted" className="block px-4 pt-3">
+                  Start
+                </Txt>
                 <DatePicker
                   mode="single"
                   selected={draftDateFrom}
@@ -146,7 +149,9 @@ export function DateTimeRangePicker({
                 />
               </div>
               <div>
-                <span className={cn('block px-4 pt-3 text-column text-muted-foreground')}>End</span>
+                <Txt as="span" variant="column" tone="muted" className="block px-4 pt-3">
+                  End
+                </Txt>
                 <DatePicker
                   mode="single"
                   selected={draftDateTo}

@@ -12,6 +12,7 @@ import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/Rad
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Check, Save } from 'lucide-react';
 import type { RefObject } from 'react';
@@ -112,7 +113,9 @@ export function ScorerEditSidebar({
                   />
                 )}
               />
-              <span className="text-caption text-muted-foreground">to</span>
+              <Txt as="span" variant="caption" tone="muted">
+                to
+              </Txt>
               <Controller
                 name="scoreRange.max"
                 control={control}

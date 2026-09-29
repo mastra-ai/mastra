@@ -16,6 +16,7 @@ import { workflowStatusTone, workflowStatusToneBar, workflowStatusToneText } fro
 import type { TimelineRow } from './workflow-timeline-utils';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
+import { focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/utils/cn';
 import { formatDuration } from '@/utils/duration';
 
@@ -71,7 +72,10 @@ export function WorkflowTimelineRow({
     >
       <button
         type="button"
-        className="flex min-h-9 min-w-0 cursor-pointer items-center gap-2.5 text-left text-meta text-foreground focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus aria-disabled:cursor-default"
+        className={cn(
+          'flex min-h-9 min-w-0 cursor-pointer items-center gap-2.5 text-left text-meta text-foreground focus-visible:rounded-sm aria-disabled:cursor-default',
+          focusRing,
+        )}
         aria-disabled={row.isNestedEntry}
         aria-pressed={isSelected}
         onClick={() => {
@@ -92,10 +96,10 @@ export function WorkflowTimelineRow({
         <span className="min-w-0">
           <span className="block truncate">{label}</span>
           {row.isNestedEntry && (
-            <span className="flex min-w-0 items-center gap-1 text-meta text-muted-foreground">
+            <Txt as="span" variant="meta" tone="muted" className="flex min-w-0 items-center gap-1">
               <CornerDownRight aria-hidden className="size-3 shrink-0" />
               <span className="truncate">{parentPath}</span>
-            </span>
+            </Txt>
           )}
         </span>
       </button>
@@ -113,8 +117,11 @@ export function WorkflowTimelineRow({
           />
         )}
       </div>
-      <span
-        className="text-right text-meta whitespace-nowrap text-muted-foreground"
+      <Txt
+        as="span"
+        variant="meta"
+        tone="muted"
+        className="text-right whitespace-nowrap"
         title={row.timing && row.spansSuspension ? 'Includes time spent suspended waiting for input' : undefined}
       >
         {row.timing ? (
@@ -124,7 +131,7 @@ export function WorkflowTimelineRow({
         ) : (
           <span aria-label="Timing unavailable">—</span>
         )}
-      </span>
+      </Txt>
       <div className="flex items-center">
         <Button
           type="button"

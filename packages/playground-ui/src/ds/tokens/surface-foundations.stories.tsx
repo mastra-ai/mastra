@@ -56,7 +56,7 @@ const overlayWashes: { token: FillToken; use: string }[] = [
   { token: 'surface-overlay-strong', use: 'The selected one, and a menu separator band' },
 ];
 
-const rimTokens = ['--surface-rim', '--surface-rim-focus'];
+const rimTokens = ['--surface-rim'];
 const tintTokens = ['--fill-tint'];
 
 const tintValues = [
@@ -261,8 +261,8 @@ export const SurfaceFoundations: Story = {
           <Specimen name="--surface-rim" note="Rest — every raised and overlay surface">
             <div className="h-20 rounded-md bg-card shadow-raised" />
           </Specimen>
-          <Specimen name="--surface-rim-focus" note="Focus — the same edge, never a second line beside it">
-            <div className="h-20 rounded-md bg-card shadow-raised [--surface-rim:var(--surface-rim-focus)]" />
+          <Specimen name="--border-focus" note="Focus — the same edge repainted, never a second line beside it">
+            <div className="h-20 rounded-md bg-card shadow-raised [--surface-rim:var(--border-focus)]" />
           </Specimen>
         </div>
         <Txt variant="caption" tone="muted">
@@ -275,22 +275,22 @@ export const SurfaceFoundations: Story = {
 
       <FoundationSection
         label="Focus"
-        description="Two focus languages, on purpose. A field takes the neutral edge — no accent — so a focused input does not read as a status. A row, link or tab takes the accent ring plus its halo, because there is no field edge to move."
+        description="Neutral and never a halo. A field or raised surface repaints its own edge to its focus rim. Anything without an edge — a row, link, tab or small control — takes a 1px --border-focus outline: flush, inset where the edge is clipped, or offset where it would vanish into a solid fill."
       >
         <div className="flex flex-wrap items-end gap-6">
           <div className="w-44">
-            <Specimen name="--ring" note="Alias of --border-focus">
-              <div role="img" aria-label="ring token" className="h-14 rounded-md" style={{ background: Colors.ring }} />
+            <Specimen name="focusRing" note="Row, link, tab">
+              <div className="h-14 rounded-md bg-fill outline-1 outline-border-focus" />
             </Specimen>
           </div>
           <div className="w-44">
-            <Specimen name="ring-1 ring-ring" note="Drawn outside the fill">
-              <div className="h-14 rounded-md bg-fill ring-1 ring-ring" />
+            <Specimen name="focusRingInset" note="Full-bleed row whose outer edge is clipped">
+              <div className="h-14 rounded-md bg-fill outline-1 -outline-offset-1 outline-border-focus" />
             </Specimen>
           </div>
           <div className="w-44">
-            <Specimen name="--shadow-focus-ring" note="focusRing.visible — row, link, tab">
-              <div className="h-14 rounded-md bg-fill shadow-focus-ring ring-1 ring-border-focus" />
+            <Specimen name="focusRingOffset" note="Checkbox, radio, switch">
+              <div className="h-14 rounded-md bg-foreground outline-1 outline-offset-2 outline-border-focus" />
             </Specimen>
           </div>
         </div>

@@ -8,7 +8,6 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import { ThreadTrace, useThreadTrace, useThreadTraceRow } from '../index';
 import { spanADetail, traceASpans, traceBSpans } from './fixtures/thread-trace';
-import type { ThreadRailTurn } from '@/ds/components/ThreadRail';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -24,7 +23,7 @@ function Wrapper({ children }: { children: ReactNode }) {
   );
 }
 
-// jsdom does not implement scrollIntoView, which the rail and the anchor row rely on.
+// jsdom does not implement scrollIntoView, which the anchor row relies on.
 const scrollIntoView = vi.fn();
 beforeAll(() => {
   Element.prototype.scrollIntoView = scrollIntoView;
@@ -76,14 +75,6 @@ const stubIntersectionObserver = () => {
   return { intersect };
 };
 
-const railTurns: ThreadRailTurn[] = TRACE_IDS.map(traceId => ({
-  key: traceId,
-  messageId: traceId,
-  prompt: `Turn ${traceId}`,
-  files: [],
-  hiddenFileCount: 0,
-}));
-
 /** A consumer-provided messages slot that drives highlighting through the row hook. */
 function MessagesSlot() {
   const { traceId, highlightSpans } = useThreadTraceRow();
@@ -114,7 +105,6 @@ const renderView = ({
   renderUI(
     <ThreadTrace traceIds={traceIds} anchorTraceId={anchorTraceId} className={className}>
       <ThreadTrace.List data-testid="thread-trace-list">
-        <ThreadTrace.Rail turns={railTurns} />
         <ThreadTrace.LoadMoreSentinel data-testid="sentinel" />
         {traceIds.map(traceId => (
           <ThreadTrace.Row key={traceId} traceId={traceId}>
@@ -181,16 +171,7 @@ describe('ThreadTrace', () => {
     });
   });
 
-  describe('rail', () => {
-    it('shows one stop per turn and scrolls the matching row into view on click', async () => {
-      renderView();
-      await screen.findByText('Chef agent run');
-
-      fireEvent.click(screen.getByRole('button', { name: 'Jump to Turn trace-b' }));
-      expect(scrollIntoView).toHaveBeenCalledTimes(1);
-      expect(scrollIntoView.mock.instances[0]).toBe(getRow('trace-b'));
-    });
-
+  describe('row emphasis', () => {
     it('emphasises the first row in view and dims the others', async () => {
       const { intersect } = stubIntersectionObserver();
       renderView();
@@ -210,14 +191,14 @@ describe('ThreadTrace', () => {
       const { container } = renderView();
       await screen.findByText('Chef agent run');
       // The span cell stays mounted but collapsed so opening it animates the grid columns.
-      expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,1fr)_0%]');
+      expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,2fr)_minmax(0,0fr)]');
       expect(container.firstElementChild?.className).toContain('transition-[grid-template-columns]');
       expect(screen.getByTestId('span-panel').childElementCount).toBe(0);
 
       fireEvent.click(screen.getByText('Chef agent run'));
 
       await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBeGreaterThan(0));
-      expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,1fr)_40%]');
+      expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,2fr)_minmax(0,1fr)]');
       expect(getRow('trace-a').dataset.active).toBe('true');
       expect(getRow('trace-b').dataset.active).toBeUndefined();
       expect(screen.getByTestId('root-state').textContent).toBe('trace-a/span-a;none');
@@ -225,7 +206,7 @@ describe('ThreadTrace', () => {
       // No close button on the span panel: re-clicking the selected span toggles it off.
       fireEvent.click(screen.getByText('Chef agent run'));
       await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBe(0));
-      expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,1fr)_0%]');
+      expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,2fr)_minmax(0,0fr)]');
       expect(getRow('trace-a').dataset.active).toBeUndefined();
     });
 
@@ -278,7 +259,7 @@ describe('ThreadTrace', () => {
   });
 
   describe('details column', () => {
-    it('draws the borders on the row — a line under each turn, the messages column framed left and right — and renders custom actions', async () => {
+    it('draws the borders on the row — a line under each turn, a divider right of the messages column — and renders custom actions', async () => {
       renderView();
       await screen.findByText('Chef agent run');
 
@@ -286,7 +267,7 @@ describe('ThreadTrace', () => {
         const details = screen.getByTestId(`details-${id}`);
         const row = getRow(id);
         expect(row.className).toContain('border-b');
-        expect(row.querySelector('[data-slot=thread-trace-messages]')?.className).toContain('border-x');
+        expect(row.querySelector('[data-slot=thread-trace-messages]')?.className).toContain('border-r');
         expect(details.className).not.toMatch(/border|rounded/);
       }
       expect(screen.getByRole('button', { name: 'Action trace-a' })).toBeTruthy();

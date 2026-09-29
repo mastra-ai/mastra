@@ -4,6 +4,7 @@ import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { AppShell, MainCard } from '@mastra/playground-ui/new/layout/app-shell';
@@ -43,7 +44,9 @@ function MobileNavbar() {
         <SidebarNew.MobileTrigger />
         <span className="flex min-w-0 items-center gap-2">
           <LogoWithoutText className="size-[1.5rem] shrink-0" />
-          <span className="font-display text-body whitespace-nowrap">Mastra Studio</span>
+          <Txt as="span" className="font-display whitespace-nowrap">
+            Mastra Studio
+          </Txt>
         </span>
       </div>
       <Button

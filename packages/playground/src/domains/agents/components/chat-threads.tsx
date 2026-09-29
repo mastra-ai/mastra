@@ -237,7 +237,11 @@ function ThreadTitle({ title, id, createdAt }: { title?: string; id?: string; cr
         ? formatDate(createdAt, 'date-time-seconds')
         : `Thread ${id ? id.substring(id.length - 5) : ''}`;
 
-  return <span className="block truncate text-body-sm">{titleText}</span>;
+  return (
+    <Txt as="span" variant="body-sm" className="block truncate">
+      {titleText}
+    </Txt>
+  );
 }
 
 interface CollapsibleSectionProps {

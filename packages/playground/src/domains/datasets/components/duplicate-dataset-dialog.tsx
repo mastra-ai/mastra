@@ -12,6 +12,7 @@ import {
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
@@ -173,9 +174,7 @@ export function DuplicateDatasetDialog({
               />
             </Field>
 
-            <p className="text-body text-muted-foreground">
-              All items from &quot;{sourceDatasetName}&quot; will be copied to the new dataset
-            </p>
+            <Txt tone="muted">All items from &quot;{sourceDatasetName}&quot; will be copied to the new dataset</Txt>
 
             {isDuplicating && (
               <div className="space-y-2">
@@ -185,7 +184,7 @@ export function DuplicateDatasetDialog({
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
-                <p className="text-body text-muted-foreground">{getProgressText()}</p>
+                <Txt tone="muted">{getProgressText()}</Txt>
               </div>
             )}
           </DialogBody>

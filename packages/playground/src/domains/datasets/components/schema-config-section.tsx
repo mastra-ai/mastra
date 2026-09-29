@@ -3,6 +3,7 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/pla
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -238,7 +239,9 @@ export function SchemaConfigSection({
             )}
 
             {sourceType === 'workflow' && selectedWorkflow && workflowSchemaLoading && (
-              <span className="text-caption text-muted-foreground">Loading schema...</span>
+              <Txt as="span" variant="caption" tone="muted">
+                Loading schema...
+              </Txt>
             )}
 
             {sourceType === 'scorer' && (
@@ -259,11 +262,11 @@ export function SchemaConfigSection({
           </div>
 
           {sourceType === 'scorer' && (
-            <p className="text-caption text-muted-foreground">
+            <Txt variant="caption" tone="muted">
               {scorerTargetType === 'agent'
                 ? 'For calibrating agent-type scorers'
                 : 'For calibrating custom scorers (input/output as any)'}
-            </p>
+            </Txt>
           )}
         </div>
 

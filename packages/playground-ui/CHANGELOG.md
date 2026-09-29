@@ -1,5 +1,427 @@
 # @mastra/playground-ui
 
+## 60.0.0-alpha.9
+
+### Minor Changes
+
+- `ScrollArea` fade depth can now be set per side through `mask`. Fades stay 2rem deep by default; the main sidebar uses a 3rem top and 5rem bottom fade. A fade now grows with how far the content is scrolled from that edge, up to its depth, instead of appearing at full depth as soon as the content scrolls. ([#25415](https://github.com/mastra-ai/mastra/pull/25415))
+
+  ```tsx
+  <ScrollArea mask={{ top: '3rem', bottom: '5rem' }}>{items}</ScrollArea>
+  ```
+
+  **Breaking:** Removed the `viewPortClassName` and `viewportRef` props from `ScrollArea`. To style or reach the scrolling viewport, render the new `ScrollAreaViewport` as the direct child of `ScrollArea` and pass it `className` or `ref`. When you do not render it, `ScrollArea` adds it for you.
+
+  ```tsx
+  // Before
+  <ScrollArea maxHeight="20rem" viewPortClassName="px-4" viewportRef={scrollRef}>
+    {items}
+  </ScrollArea>
+
+  // After
+  <ScrollArea maxHeight="20rem">
+    <ScrollAreaViewport ref={scrollRef} className="px-4">
+      {items}
+    </ScrollAreaViewport>
+  </ScrollArea>
+  ```
+
+  **Breaking:** Removed the deprecated `showMask` prop from `ScrollArea`. Use `mask` instead.
+
+- `Dialog` now has one modern shell. Every dialog gets the same padding, spacing, close button, scroll fades and motion, so call sites only pass layout. ([#25432](https://github.com/mastra-ai/mastra/pull/25432))
+
+  - **Sizes**: `<DialogContent size="sm" | "md" | "lg" | "xl" | "full">` sets the width: 24rem, 32rem (the default), 42rem, 56rem, or the full viewport. Height grows with the content up to a viewport cap.
+  - **Body**: `DialogBody` is a padded ScrollArea whose edges fade while content scrolls. `layout="fill"` makes the body take the remaining height and lets its children handle scrolling, for example split panes or a pinned search. `flush` removes the inset.
+  - **Footer actions**: `DialogCancel` closes the dialog. `DialogAction` is the primary action: `onConfirm` for a click, `confirmation="hold"` for press-and-hold, and now `type="submit"` to submit the surrounding form. Both are disabled while the dialog is `pending`.
+  - **Root**: `intent="destructive"` now works on every dialog: it sets the `alertdialog` role, focuses Close first, and ignores outside clicks. A `<form>` placed directly inside `DialogContent` fits the layout without extra classes.
+  - **Text**: titles use the `heading` role (16px), and descriptions use the `body` role, muted. `DialogDescription` is now visible.
+  - **Motion**: dialogs scale up from 96% with a strong ease-out curve and close faster than they open. With reduced motion, they only fade.
+  - **AlertDialog**: now built from the same shell and parts as `Dialog`, so it has the same padding, text roles, footer buttons and motion. Its header, body, footer, title, description and cancel are the `Dialog` parts. `AlertDialog.Content` takes the same `size` prop and defaults to `sm`. `AlertDialog.Body` is now the padded scroll area.
+
+  ```tsx
+  // Before
+  <Dialog open={open} onOpenChange={isSaving ? undefined : onOpenChange}>
+    <DialogContent className="max-w-2xl">
+      <DialogHeader className="border-b border-border px-4 py-4">
+        <DialogTitle>Import items</DialogTitle>
+        <DialogDescription className="not-sr-only text-caption">Paste JSON or upload a file.</DialogDescription>
+      </DialogHeader>
+      <DialogBody className="max-h-[70vh] overflow-y-auto px-4 py-5">…</DialogBody>
+      <DialogFooter className="px-4 pt-4">
+        <Button icon={<X />} onClick={() => onOpenChange(false)}>Cancel</Button>
+        <Button variant="primary" onClick={handleImport}>Import</Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
+
+  // After
+  <Dialog open={open} onOpenChange={onOpenChange} pending={isSaving}>
+    <DialogContent size="lg">
+      <DialogHeader>
+        <DialogTitle>Import items</DialogTitle>
+        <DialogDescription>Paste JSON or upload a file.</DialogDescription>
+      </DialogHeader>
+      <DialogBody>…</DialogBody>
+      <DialogFooter>
+        <DialogCancel>Cancel</DialogCancel>
+        <DialogAction onConfirm={handleImport}>Import</DialogAction>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
+  ```
+
+  **Removed**
+
+  - The `variant` prop on `Dialog` and the `DialogVariant` type. Every dialog now uses the modern shell.
+  - `asChild` on `DialogTrigger`, `DialogClose` and `AlertDialog.Trigger`. Use `render` instead: `<DialogTrigger render={<Button>Open</Button>} />`.
+  - `AlertDialog.Portal` and `AlertDialog.Overlay`. `AlertDialog.Content` renders both.
+  - The `@mastra/playground-ui/lib/as-child` helper.
+  - The `dialog-overlay-anim` and `dialog-content-anim` classes. To find the overlay in a test, query `[data-slot="dialog-overlay"]`.
+
+- Added `PageHeader.Eyebrow` for a back link above the page title, and fixed `PageHeader.Meta beside` sitting below the title text when the header has a tall icon. ([#25155](https://github.com/mastra-ai/mastra/pull/25155))
+
+  `PageHeader.Icon`, `PageHeader.Action`, and `PageHeader.Meta beside` now center on the first line of the title, including when the title wraps. A header with an icon or action contains them, so they no longer overflow the header, push the title up, or sit below it. Beside meta no longer shrinks when the title is long.
+
+  ```tsx
+  <PageHeader>
+    <PageHeader.Eyebrow>
+      <Link to="/alerts">
+        <ArrowLeftIcon aria-hidden />
+        Back to alerts
+      </Link>
+    </PageHeader.Eyebrow>
+    <PageHeader.Title>Create alert</PageHeader.Title>
+  </PageHeader>
+  ```
+
+  **Breaking:** removed the `title`, `description`, `icon`, and `isLoading` props from `PageHeader`. Compose the slots instead:
+
+  ```tsx
+  // Before
+  <PageHeader title="Agents" description="Build and test agents." icon={<BotIcon />} />
+
+  // After
+  <PageHeader>
+    <PageHeader.Icon>
+      <BotIcon />
+    </PageHeader.Icon>
+    <PageHeader.Title>Agents</PageHeader.Title>
+    <PageHeader.Description>Build and test agents.</PageHeader.Description>
+  </PageHeader>
+  ```
+
+  For a loading state, pass `isLoading` to `PageHeader.Title` and `PageHeader.Description`.
+
+- Each thing an agent does in a chat now renders as its own `Activity` line: every tool call, reasoning step, signal, notification, skill and plain "working" row. A body is optional. Without one, the line has no chevron and otherwise looks the same, so a step that returns nothing reads like one that does. ([#24694](https://github.com/mastra-ai/mastra/pull/24694))
+
+  ```tsx
+  import { ActivityItem } from '@mastra/playground-ui/components/ai/activity';
+  import { ToolCallOutput } from '@mastra/playground-ui/components/ai/tool-call';
+
+  <ActivityItem icon={<Sparkles aria-hidden />} label="Thinking" status="running" aria-label="Thinking" />;
+
+  <ActivityItem icon={<FileText aria-hidden />} label="Read file" detail="src/agent.ts" aria-label="Tool: view">
+    <ToolCallOutput text={output} />
+  </ActivityItem>;
+  ```
+
+  **The `ToolCall` shell is renamed to `Activity`**
+
+  The compound parts moved to `components/ai/activity` under new names: `ToolCall*` becomes `Activity*`, `ToolCallPresentedHeader` becomes `ActivityHeadline`, and `ToolCallStatus` becomes `ActivityStatus`. `ActivityHeadline` takes its icon as an element instead of a component, and keeps the `description` prop that shows a command's description in place of its label and detail. Its `disclosure` prop is removed: pass `foldable={false}` to `Activity` instead. The tool-specific blocks stay in `components/ai/tool-call`: `ToolCallArguments`, `ToolCallOutput`, `ToolCallCommand`, `ToolCallGroup` and `presentTool`.
+
+  ```tsx
+  // Before
+  import {
+    ToolCall,
+    ToolCallTrigger,
+    ToolCallPresentedHeader,
+    ToolCallContent,
+  } from '@mastra/playground-ui/components/ai/tool-call';
+
+  <ToolCall status={status}>
+    <ToolCallTrigger>
+      <ToolCallPresentedHeader icon={Search} label={label} detail={detail} />
+    </ToolCallTrigger>
+    <ToolCallContent>{body}</ToolCallContent>
+  </ToolCall>;
+
+  // After
+  import {
+    Activity,
+    ActivityTrigger,
+    ActivityHeadline,
+    ActivityContent,
+  } from '@mastra/playground-ui/components/ai/activity';
+
+  <Activity status={status}>
+    <ActivityTrigger>
+      <ActivityHeadline icon={<Search aria-hidden />} label={label} detail={detail} />
+    </ActivityTrigger>
+    <ActivityContent>{body}</ActivityContent>
+  </Activity>;
+  ```
+
+  The screen-reader status text is now "Running" or "Failed" instead of "Tool call running" or "Tool call failed", because the line is no longer only for tools.
+
+  **Signals, notifications and reasoning are `Activity` presets**
+
+  `components/ai/chat-event` is removed. Its presets moved into `components/ai/activity` and are named after the line they draw: `ChatSignal` is now `SignalActivity` and `ChatNotification` is now `NotificationActivity`. Each one picks the icon, badges and body for one kind of event over `ActivityItem`.
+
+  The card presentation of signals and the notice presentation of notifications are removed along with their `variant` prop and `getNotificationNoticeVariant`. A notification's priority is now a coloured badge on the line: urgent is red, high is orange, medium is blue. Its status and pending count are badges beside it. A system reminder names its path as the detail of the line.
+
+  ```tsx
+  // Before
+  import { ChatNotification } from '@mastra/playground-ui/components/ai/chat-event';
+
+  <ChatNotification variant="notice" label="github / issue-opened" message={message} priority="high" />;
+
+  // After
+  import { NotificationActivity } from '@mastra/playground-ui/components/ai/activity';
+
+  <NotificationActivity label="github / issue-opened" message={message} priority="high" />;
+  ```
+
+  `Reasoning` moved out of `domains/chat/messages/reasoning` and joins them as `ReasoningActivity`, with the same props. `hasVisibleReasoning` answers whether it would render anything, so a transcript can skip an empty reasoning part without drawing it. `ReasoningStreamingLine` is removed: `ReasoningActivity` covers the waiting state itself, and while it streams with no text yet, it shows a busy "Reasoning" line with no disclosure.
+
+  ```tsx
+  // Before
+  import { Reasoning } from '@mastra/playground-ui/domains/chat/messages/reasoning';
+
+  <Reasoning text={text} streaming />;
+
+  // After
+  import { ReasoningActivity } from '@mastra/playground-ui/components/ai/activity';
+
+  <ReasoningActivity text={text} streaming />;
+  ```
+
+  **A line only folds when its body says more than the line**
+
+  A short single-line message fits in the preview, so opening a disclosure used to reveal a copy of the line above it. Such a line now has no disclosure and wraps its detail instead of clipping it, so a narrow transcript never hides the end of a sentence it offers no way to open. Because folding is now the exception, a line that folds shows a dimmed chevron at rest instead of only on hover.
+
+  Notification badges wrap in narrow transcripts without squeezing the message out. Linked notifications keep their full message in the expanded body. Expanded messages preserve line breaks and wrap long URLs. A notification link is now announced by its visible text followed by the message preview, for example "Open on GitHub: The pull request was merged…", so voice control can open it by what it says.
+
+  The same rule covers a composed `Activity`: pass `foldable={false}` when there is nothing to open, and the line drops its disclosure button and its empty body. A tool call with no arguments, no output and no result is one example, and so is a call whose arguments are an empty object. `hasToolArguments` tells you whether `ToolCallArguments` would render anything, and `awaitsToolApproval` tells you whether `ToolApprovalButtons` would.
+
+  ```tsx
+  import {
+    Activity,
+    ActivityContent,
+    ActivityHeadline,
+    ActivityTrigger,
+  } from '@mastra/playground-ui/components/ai/activity';
+  import { hasToolArguments, ToolCallArguments, ToolCallOutput } from '@mastra/playground-ui/components/ai/tool-call';
+
+  const foldable = hasToolArguments({ toolName, args }) || output !== undefined;
+
+  <Activity foldable={foldable} status={status}>
+    <ActivityTrigger>
+      <ActivityHeadline icon={<Search aria-hidden />} label={label} detail={detail} />
+    </ActivityTrigger>
+    <ActivityContent>
+      <ToolCallArguments toolName={toolName} args={args} />
+      {output !== undefined && <ToolCallOutput text={output} />}
+    </ActivityContent>
+  </Activity>;
+  ```
+
+  A line that gains a body as its arguments stream in keeps its headline mounted: its shimmer does not restart, its detail does not fade in again, and the chevron fades into a slot that was already reserved, so the text does not shift sideways.
+
+  Because the disclosure button now lies over the whole line, put anything that needs its own hover, such as a timestamp with a `title`, in `ActivityLeading`. It stays reachable above the button, so the tooltip still shows, and a click on it still opens the line. `ActivityHeadline` and `ToolCallGroup` already wrap their `leading` content in it. `ActivityTrigger` is now a wrapper around that button rather than the button itself, so props such as `onClick` or `disabled` no longer reach it: drive the line through `open`, `onOpenChange` and `foldable` on `Activity`.
+
+  **`ChatTimeGap` is replaced by `TranscriptDivider`**
+
+  The transcript separator is a `role="separator"` rule, not an event, and it no longer parses a time string. It takes the label and, separately, the timestamp that belongs in `title`, and renders nothing when the label is empty.
+
+  ```tsx
+  // Before
+  import { ChatTimeGap } from '@mastra/playground-ui/components/ai/chat-event';
+
+  <ChatTimeGap text="24 minutes later — Sep 17, 2026, 2:24 PM" />;
+
+  // After
+  import { TranscriptDivider } from '@mastra/playground-ui/components/ai/transcript-divider';
+
+  <TranscriptDivider label="24 minutes later" title="Sep 17, 2026, 2:24 PM" />;
+  ```
+
+  `ChatSkill` is removed: the Factory was its only consumer, so it now composes `ActivityItem` itself.
+
+  `SignalActivity` and `NotificationActivity` no longer set their own width or vertical margin, so the caller places them.
+
+  **Studio draws workspace and memory steps as `Activity` lines too**
+
+  Listing files, running a sandbox command and observational memory used to render their own cards, so a group of tool calls mixed two styles. They now use the same line as every other tool call. A listing shows its path on the line, and its summary and filesystem link beside it. A sandbox command shows its command on the line, and its sandbox link, exit status and duration beside it. The sandbox link is no longer nested inside the toggle button. A sandbox command now starts folded like any other call, unless it waits for approval. An observation or reflection shows its token counts on the line and keeps its observations, current task, suggested response and extractions in the body. A failed one is a failed line.
+
+- Added chromatic color ramps and theme-aware status, badge, product, chart, and span colors. Every resting color is now a solid ramp step in both themes, so a badge or notice looks the same whatever surface it sits on. ([#24681](https://github.com/mastra-ai/mastra/pull/24681))
+
+  **What you get**
+
+  - Eight ramps (`red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `purple`, `pink`) from `50` to `950`, plus low-chroma `--{hue}-soft-300/600/900/950` steps. Utilities such as `bg-green-soft-900` are generated.
+  - Status roles for states: `{status}-subtle`, `-subtle-active`, `-edge`, `-indicator`, and `-subtle-foreground`, where `{status}` is `success`, `destructive`, `warning`, or `info`.
+  - Categorical badge roles for labels that are not states: `badge-{hue}-strong`, `-subtle`, `-edge`, `-foreground`, and `-indicator`.
+  - Product roles: `product-{name}`, `-subtle`, and `-foreground` for `studio`, `server`, `observability`, `factory`, `workers`, and `persistent-server`, with new `ProductAvatar` and `ProductBadge` components and product `Badge` variants.
+  - The fixed Mastra brand palette as `--color-brand-{hue}` (utilities such as `bg-brand-green`). It does not change with the theme.
+  - Chart roles keep their hue names (`--chart-blue`, `--chart-green`, …) plus `--chart-sequential-1` to `-5`, and resolve from the ramps. Span roles are `--span-agent`, `--span-workflow`, and so on, each on its own hue.
+  - `Badge` status variants `success`, `destructive`, `warning`, and `info`. `green`, `red`, `yellow`, and `blue` are categorical tones like `purple` and `orange`.
+  - Optional `getNodeColor` and `getLinkColor` callbacks on `SankeyChart`.
+
+  ```css
+  .status {
+    background: var(--success-subtle);
+    border: 1px solid var(--success-edge);
+    color: var(--success-subtle-foreground);
+  }
+
+  .status-dot {
+    background: var(--success-indicator);
+  }
+  ```
+
+  **Breaking: removed color tokens**
+
+  The numbered accent tokens (`accent1`–`accent6` and their `Dark`/`Darker` variants), `positive1`, `negative1`, `warning1`, `error`, the `notice-*` tokens, `--brand-green-*`, `--chart-soft-*`, `--span-type-*`, `destructive`, and `destructive-foreground` are removed, along with their `Colors` entries. The old `badge-{hue}` fill and `badge-{hue}-fg` tokens are renamed. See the playground-ui README for the full table.
+
+  ```tsx
+  // Before
+  <span className="bg-notice-success text-notice-success-fg">Saved</span>
+  <span className="bg-badge-green text-badge-green-fg">Label</span>
+  <button className="bg-destructive text-destructive-foreground">Delete</button>
+  <path stroke="var(--chart-soft-1)" />
+  <Icon style={{ color: 'var(--span-type-agent)' }} />
+
+  // After
+  <span className="bg-success-subtle text-success-subtle-foreground">Saved</span>
+  <span className="bg-badge-green-strong text-badge-green-foreground">Label</span>
+  <Button variant="destructive">Delete</Button>
+  <path stroke="var(--chart-sequential-1)" />
+  <Icon style={{ color: 'var(--span-agent)' }} />
+  ```
+
+  Standalone status text, icons, dots, bars, and invalid-field borders use `{status}-indicator`. `{status}-subtle-foreground` is only for text on a `{status}-subtle` surface. A filled destructive control uses `fill-destructive` and its `-hover`, `-active`, `-disabled`, and `-foreground` steps.
+
+  **Breaking: `Badge` emphasis**
+
+  `emphasis` values are now `strong` (the default) and `subtle`, instead of `default` and `muted`. `subtle` now also applies to product variants.
+
+  ```tsx
+  // Before
+  <Badge variant="purple" emphasis="muted">Draft</Badge>
+
+  // After
+  <Badge variant="purple" emphasis="subtle">Draft</Badge>
+  ```
+
+  **Breaking: `@mastra/playground-ui/utils/colors`**
+
+  Generated `hsl()` colors are gone. `stringToColor`, `themedHueColor`, and `stringToThemedColor` are replaced by `hueForName`, which returns a stable categorical hue for any name, and `hueFillClass`, `hueAccentColor`, and `hueColors`, which resolve to theme-aware badge tokens. `hueForName` never returns `red`, so a hashed label cannot be mistaken for an error.
+
+  ```tsx
+  // Before
+  import { stringToColor } from '@mastra/playground-ui/utils/colors';
+  <span style={{ backgroundColor: stringToColor(tag) }}>{tag}</span>;
+
+  // After
+  import { hueFillClass, hueForName } from '@mastra/playground-ui/utils/colors';
+  <span className={hueFillClass(hueForName(tag))}>{tag}</span>;
+  ```
+
+  `BADGE_COLORS` and topic colors return theme variables such as `var(--badge-purple-indicator)` instead of hex values.
+
+  **Breaking: `SankeyChart`**
+
+  Nodes and ribbons are colored from the chart series tokens, and a label keeps its color when other nodes are added or removed. `buildSankeyHueMap`, `hashHue`, `nodeColor`, and `nodeColorVivid` are replaced by `buildSankeyColorMap` and `sankeySeriesColors`. `Sankey`'s `getColumnHue` is now `getColumnColor` and returns a CSS color.
+
+  ```tsx
+  // Before
+  <Sankey getColumnHue={column => getSignalHue(column.id)} />
+
+  // After
+  <Sankey getColumnColor={column => getSignalColor(column.id)} />
+  ```
+
+  **Breaking: `@mastra/playground-ui/ee/signals/signal-colors`**
+
+  `SIGNAL_HUES` and `getSignalHue` are no longer exported. Use `getSignalColor` for a CSS color, and `getSignalAreaClass` or `getSignalConnectorClass` for SVG fill and stroke classes.
+
+  ```tsx
+  // Before
+  import { getSignalHue } from '@mastra/playground-ui/ee/signals/signal-colors';
+  const hue = getSignalHue('goal');
+
+  // After
+  import { getSignalColor } from '@mastra/playground-ui/ee/signals/signal-colors';
+  const color = getSignalColor('goal');
+  ```
+
+  **Other changes**
+
+  - Tool approval buttons read `Approved` or `Declined` after a decision, and their accessible names follow (`Approved search`, `Declined search`).
+  - Ramp steps stay inside sRGB. Chart, span, and syntax roles are picked to stay distinguishable under common color-vision deficiencies and to meet 3:1 against the page in both themes. The sequential chart scale runs light-to-dark in light mode and dark-to-light in dark mode.
+  - Scorer spans are pink, and workspace, memory, and provider spans are now on clearly separate hues.
+  - Light-mode destructive buttons darken on hover and press, like dark mode.
+  - Notes in `Notice` use the neutral `muted` surface.
+  - CodeMirror syntax colors are scoped to `.cm-editor`.
+
+- Fixed sidebar alignment and collapse behavior: ([#25428](https://github.com/mastra-ai/mastra/pull/25428))
+
+  - The header logo now lines up with the nav icons.
+  - Collapsed section dividers sit centered between icons, and rows no longer shift when the sidebar collapses.
+  - The sidebar toggle shows the same panel icon in both states.
+  - The main content card now sits flush against the sidebar edge in every app.
+
+  Added a `collapsedLogo` prop to `SidebarNew.Header`. When the sidebar is collapsed, the header shows this logo and swaps it for a centered toggle on hover or keyboard focus, without jumping or flashing while the sidebar collapses.
+
+  ```tsx
+  <SidebarNew.Header collapsedLogo={<LogoWithoutText className="size-6" />}>
+    <SidebarNew.Brand logo={<LogoWithoutText className="size-6" />} title="Mastra" />
+    <SidebarNew.Trigger />
+  </SidebarNew.Header>
+  ```
+
+- Added a `raised` variant to `SidebarNew`. The sidebar sits on a raised panel that runs off the left edge of the window, with the resize handle on the panel's edge. On mobile it keeps the standard drawer. ([#25440](https://github.com/mastra-ai/mastra/pull/25440))
+
+  ```tsx
+  <SidebarNew variant="raised">{/* header, nav, footer */}</SidebarNew>
+  ```
+
+- Improved code comparisons with syntax-highlighted diffs for file changes and observation history. ([#25456](https://github.com/mastra-ai/mastra/pull/25456))
+
+- Added an `actions` slot to `ThreadListItem` so a thread row can show custom controls, such as a menu with Rename and Delete. The controls appear on hover or focus, and stay visible while a popup they own is open. ([#25411](https://github.com/mastra-ai/mastra/pull/25411))
+
+  ```tsx
+  <ThreadListItem href="/chat/1" actions={<ThreadActionsMenu />}>
+    Trip planning
+  </ThreadListItem>
+  ```
+
+### Patch Changes
+
+- Headings, paragraphs and spans across Studio components now render through `Txt` instead of repeating text-role and tone classes by hand. Rendered elements and classes are unchanged, so nothing moves visually. ([#25427](https://github.com/mastra-ai/mastra/pull/25427))
+
+- Fixed nested workflows that are not registered in Mastra looking clickable in the Studio workflows list. They no longer highlight on hover, and their label now reads "not registered" instead of "inline", with a hint that registering the workflow gives it its own page. ([#25319](https://github.com/mastra-ai/mastra/pull/25319))
+
+- Made the main sidebar's scroll fade taller so it is clearer that the navigation list scrolls. ([#25405](https://github.com/mastra-ai/mastra/pull/25405))
+
+- Plan approval cards now have a **Request changes** action. It opens a feedback field and sends your comments to the agent so it can revise the plan. Resolved plans show whether they were approved, rejected, or sent back with changes requested, along with any feedback. ([#25413](https://github.com/mastra-ai/mastra/pull/25413))
+
+- Fixed `PageLayout` `fit` pages overflowing the screen when their content is wider than the page. The body now shrinks to the page width, so callers no longer need a `min-w-0` wrapper. ([#25153](https://github.com/mastra-ai/mastra/pull/25153))
+
+- The trace thread view now renders messages the same way as the chat. Submitted plans appear as plan cards. A tool call that was suspended and then resumed appears once. The reply from a resumed run is displayed. Observational memory appears as an observation badge instead of the observer's raw output. Tool calls also have less empty space between them. ([#25421](https://github.com/mastra-ai/mastra/pull/25421))
+
+- Tightened the spacing around `ThreadListSeparator` so the thread list sits closer to the "New Thread" button, and fixed the separator disappearing when the thread list overflows. ([#25439](https://github.com/mastra-ai/mastra/pull/25439))
+
+- Trace and thread views now build every outgoing link through the app's `paths` and hide actions whose path resolves to an empty string, so apps that only embed traces no longer show broken links. ([#25421](https://github.com/mastra-ai/mastra/pull/25421))
+
+  - `paths.scorerLink` accepts optional `{ scoreId, entity }` params and owns the scorer URL's query string.
+  - The trace summary links the agent or workflow through `paths.agentLink` / `paths.workflowLink` instead of hardcoded routes.
+  - "Open scorer run", "Go to trace", and score Trace/Span ids are hidden or shown as plain text when their path is empty.
+
+- Updated dependencies [[`93fe2d6`](https://github.com/mastra-ai/mastra/commit/93fe2d6a9e47861d90cc0fd0080aefdb8cabb612), [`561e2a6`](https://github.com/mastra-ai/mastra/commit/561e2a6c8a44dbfd91eae390e14671462497cf85), [`8156816`](https://github.com/mastra-ai/mastra/commit/815681621dd88997608c5b7e8f0f87fe03cd1d18), [`94ba70e`](https://github.com/mastra-ai/mastra/commit/94ba70ea6ba8a53f5e4010392bf3bbaecde7966d), [`a7895fc`](https://github.com/mastra-ai/mastra/commit/a7895fce693e499c08c4784c57d4c4f46c0e1ccb), [`5197f81`](https://github.com/mastra-ai/mastra/commit/5197f81d6a5641f80f0ee6596ac085653b38cca3), [`0c2fe6c`](https://github.com/mastra-ai/mastra/commit/0c2fe6c00909795234270c8ea2c2c53882d63798), [`dd01709`](https://github.com/mastra-ai/mastra/commit/dd01709f780562f9ff8c72d977f3da5ae265970e)]:
+  - @mastra/core@1.72.0-alpha.9
+  - @mastra/client-js@1.51.0-alpha.9
+  - @mastra/react@1.7.0-alpha.9
+
 ## 60.0.0-alpha.8
 
 ### Patch Changes

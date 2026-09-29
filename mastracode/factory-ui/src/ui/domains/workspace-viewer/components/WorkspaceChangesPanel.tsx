@@ -5,12 +5,15 @@ import { Tree } from '@mastra/playground-ui/components/Tree';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowLeft, FileDiff, Folder, FolderOpen, RefreshCw } from 'lucide-react';
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 
 import type { WorkspaceChange, WorkspaceChanges, WorkspaceChangeStatus } from '../../../../api/types';
 import { useWorkspaceDiff } from '../../../../hooks/use-fs';
-import { WorkspaceDiffLines } from './WorkspaceDiffLines';
 import { treeRowContainmentClass } from '../layout';
+
+const CodeDiff = lazy(() =>
+  import('@mastra/playground-ui/components/CodeDiff').then(({ CodeDiff }) => ({ default: CodeDiff })),
+);
 
 const STATUS_LABELS: Record<WorkspaceChangeStatus, string> = {
   modified: 'Modified',
@@ -35,20 +38,27 @@ const FOLDER_CLASS = 'text-muted-foreground!';
 
 function ChangeCounts({ additions, deletions, binary }: Pick<WorkspaceChange, 'additions' | 'deletions' | 'binary'>) {
   if (binary) {
-    return <span className="text-meta text-muted-foreground shrink-0">Binary</span>;
+    return (
+      <Txt as="span" variant="meta" tone="muted" className="shrink-0">
+        Binary
+      </Txt>
+    );
   }
   if (additions === undefined || deletions === undefined) return null;
 
   return (
-    <span
-      className="text-meta flex shrink-0 items-center gap-1 font-mono tabular-nums"
+    <Txt
+      as="span"
+      variant="meta"
+      font="mono"
+      className="flex shrink-0 items-center gap-1 tabular-nums"
       aria-label={`${additions} ${additions === 1 ? 'addition' : 'additions'} and ${deletions} ${
         deletions === 1 ? 'deletion' : 'deletions'
       }`}
     >
       <span className="text-success-indicator">+{additions}</span>
       <span className="text-destructive-indicator">−{deletions}</span>
-    </span>
+    </Txt>
   );
 }
 
@@ -172,9 +182,9 @@ function ChangeTreeItem({ node, openFolders, onFolderOpenChange }: ChangeTreeIte
         {node.change.previousPath ? `${splitPath(node.change.previousPath).name} → ${node.name}` : node.name}
       </Tree.Label>
       <span className="ml-auto flex shrink-0 items-center gap-2">
-        <span className={cn('text-meta shrink-0', STATUS_CLASSES[node.change.status])}>
+        <Txt as="span" variant="meta" className={cn('shrink-0', STATUS_CLASSES[node.change.status])}>
           {STATUS_LABELS[node.change.status]}
-        </span>
+        </Txt>
         <ChangeCounts {...node.change} />
       </span>
     </Tree.File>
@@ -222,9 +232,9 @@ function DiffViewer({
         </div>
         {change ? (
           <span className="flex shrink-0 items-center gap-2">
-            <span className={cn('text-meta shrink-0', STATUS_CLASSES[change.status])}>
+            <Txt as="span" variant="meta" className={cn('shrink-0', STATUS_CLASSES[change.status])}>
               {STATUS_LABELS[change.status]}
-            </span>
+            </Txt>
             <ChangeCounts {...change} />
           </span>
         ) : null}
@@ -251,9 +261,16 @@ function DiffViewer({
         </div>
       ) : null}
       {!isLoading && !error && patch ? (
-        <ScrollArea className="min-h-0 flex-1 font-mono text-xs leading-5">
-          <WorkspaceDiffLines patch={patch} truncated={truncated} />
-        </ScrollArea>
+        <div className="min-h-0 flex-1 overflow-auto p-2">
+          <Suspense fallback={<Spinner size="sm" />}>
+            <CodeDiff patch={patch} />
+          </Suspense>
+          {truncated ? (
+            <Txt variant="meta" className="text-muted-foreground block p-3">
+              Diff truncated at 512 KB.
+            </Txt>
+          ) : null}
+        </div>
       ) : null}
       {!isLoading && !error && !patch ? <ChangesEmptyState available /> : null}
     </section>

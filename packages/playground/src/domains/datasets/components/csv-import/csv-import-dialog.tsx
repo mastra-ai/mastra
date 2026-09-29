@@ -13,6 +13,7 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useDatasetMutations, useDataset } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useCallback, useState } from 'react';
@@ -336,17 +337,21 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
             {schemaValidation.invalidCount > 0 ? (
               <div className="rounded-md border border-warning-edge bg-warning-subtle p-3">
                 <div className="flex items-center gap-2 font-medium text-warning-subtle-foreground">
-                  <span className="text-heading">⚠</span>
+                  <Txt as="span" variant="heading">
+                    ⚠
+                  </Txt>
                   {schemaValidation.invalidCount} row{schemaValidation.invalidCount !== 1 ? 's' : ''} will be skipped
                 </div>
-                <p className="mt-1 text-body text-muted-foreground">
+                <Txt tone="muted" className="mt-1">
                   {schemaValidation.validCount} of {schemaValidation.totalRows} rows will be imported
-                </p>
+                </Txt>
               </div>
             ) : (
               <div className="rounded-md border border-success-edge bg-success-subtle p-3">
                 <div className="flex items-center gap-2 font-medium text-success-subtle-foreground">
-                  <span className="text-heading">✓</span>
+                  <Txt as="span" variant="heading">
+                    ✓
+                  </Txt>
                   All {schemaValidation.totalRows} row{schemaValidation.totalRows !== 1 ? 's are' : ' is'} valid
                 </div>
               </div>

@@ -18,6 +18,7 @@ import {
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
 import { Form } from '@/ds/components/Form';
+import { Txt } from '@/ds/components/Txt';
 
 const EMPTY_KEYS: readonly string[] = [];
 
@@ -131,9 +132,9 @@ export function TraceColumnsMenu({
             </DropdownMenu.CheckboxItem>
           ))}
           {usageDisabledReason && (
-            <p className="px-2 py-1 text-meta text-placeholder" role="note">
+            <Txt variant="meta" tone="faint" className="px-2 py-1" role="note">
               {usageDisabledReason}
-            </p>
+            </Txt>
           )}
 
           <DropdownMenu.Separator />

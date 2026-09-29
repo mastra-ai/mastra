@@ -8,6 +8,7 @@ import { useRef, useState } from 'react';
 
 import type { BoardStageId } from '../stages';
 import { IntakeIcon } from './IntakeIcon';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 interface InlineWorkItemComposerProps {
   stage: BoardStageId;
@@ -55,7 +56,9 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
       )}
       onSubmit={event => void submit(event)}
     >
-      <span className="text-meta text-placeholder truncate pr-14">Manual · new</span>
+      <Txt as="span" variant="meta" tone="faint" className="truncate pr-14">
+        Manual · new
+      </Txt>
       <div className="flex min-w-0 items-center gap-1.5">
         <IntakeIcon className="text-muted-foreground shrink-0" />
         <Input
@@ -102,9 +105,9 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
         </Button>
       </div>
       {error ? (
-        <p className="text-meta text-destructive-indicator m-0" role="alert">
+        <Txt variant="meta" className="text-destructive-indicator m-0" role="alert">
           {error}
-        </p>
+        </Txt>
       ) : null}
     </form>
   );

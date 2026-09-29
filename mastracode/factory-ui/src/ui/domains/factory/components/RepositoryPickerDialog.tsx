@@ -9,6 +9,7 @@ import {
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
+import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { useState } from 'react';
 
 import { GitLabIcon } from '../../../ui/icons';
@@ -50,23 +51,23 @@ export function RepositoryPickerDialog({
               <button
                 type="button"
                 key={repository.projectRepositoryId}
-                className="hover:bg-surface-overlay-soft focus-visible:outline-border-focus flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-[-2px]"
+                className={`hover:bg-surface-overlay-soft flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-left ${focusRingInset}`}
                 title={repository.slug}
                 onClick={() => onSelect(repository)}
               >
                 <span className="min-w-0 flex-1">
-                  <span className="text-body text-foreground flex items-center gap-1.5">
+                  <Txt as="span" tone="ink" className="flex items-center gap-1.5">
                     {repository.provider === 'gitlab' ? (
                       <GitLabIcon className="text-muted-foreground size-3.5 shrink-0" />
                     ) : (
                       <GithubIcon className="text-muted-foreground size-3.5 shrink-0" />
                     )}
                     <span className="min-w-0 truncate">{repository.slug}</span>
-                  </span>
+                  </Txt>
                   {repository.gitBranch && (
-                    <span className="text-caption text-muted-foreground block truncate">
+                    <Txt as="span" variant="caption" tone="muted" className="block truncate">
                       Default branch: {repository.gitBranch}
-                    </span>
+                    </Txt>
                   )}
                 </span>
               </button>
