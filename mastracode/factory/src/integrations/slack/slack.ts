@@ -695,7 +695,6 @@ async function prepareExistingSessionOwnerContext(
   options: { expectedOrgId?: string; requireInternalThread: boolean },
 ): Promise<void> {
   const sourceControls = configuredSourceControls(deps);
-  if (sourceControls.length === 0) return;
   const internalThread = await findInternalThread(ctx.mastra, thread);
   if (!internalThread) {
     if (options.requireInternalThread) {
@@ -703,7 +702,7 @@ async function prepareExistingSessionOwnerContext(
     }
     return;
   }
-  if (internalThread.resourceId.startsWith('channel:')) return;
+  if (sourceControls.length === 0 || internalThread.resourceId.startsWith('channel:')) return;
   if (!options.expectedOrgId) {
     throw new Error(`Could not authorize the owner of Slack Factory session ${internalThread.resourceId}.`);
   }

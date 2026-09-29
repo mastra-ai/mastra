@@ -18,7 +18,15 @@ import {
  * resolved tenant onto `requestContext`, so tests that drive them must pass a
  * real one — a bare `{}` throws once the sender resolves as linked.
  */
-function handlerCtx(mastra?: unknown) {
+function handlerCtx(
+  mastra: unknown = {
+    getStorage: () => ({
+      getStore: vi.fn().mockResolvedValue({
+        listThreads: vi.fn().mockResolvedValue({ threads: [{ id: 'thread-1', resourceId: 'channel:slack-thread-1' }] }),
+      }),
+    }),
+  },
+) {
   return { mastra: mastra as any, requestContext: new RequestContext() };
 }
 
@@ -412,6 +420,25 @@ describe('handler dispatch gating', () => {
     expect(defaultHandler).not.toHaveBeenCalled();
   });
 
+  it('rejects a subscribed follow-up without an internal thread when no source control is configured', async () => {
+    const thread = makeSubscribedThread();
+    const accountLinks = fullStore({ orgId: 'org-1', userId: 'user-1' });
+    const mastra = {
+      getStorage: () => ({
+        getStore: vi.fn().mockResolvedValue({
+          listThreads: vi.fn().mockResolvedValue({ threads: [] }),
+        }),
+      }),
+    };
+    const defaultHandler = vi.fn();
+    const handlers = createHandlers({ accountLinks });
+
+    await expect(
+      handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(mastra)),
+    ).rejects.toThrow(`Could not resolve the internal Slack thread for ${thread.id}.`);
+    expect(defaultHandler).not.toHaveBeenCalled();
+  });
+
   it('stamps the tenant for a linked sender even when factory routing is ungated', async () => {
     // The silent-failure path: with no `projects` dep, `resolveFactoryForLink`
     // returns `ungated`, so this sender leaves the gate without a routed
@@ -419,10 +446,17 @@ describe('handler dispatch gating', () => {
     // the sender would run on default credentials with nothing to show for it.
     const thread = makeSubscribedThread();
     const accountLinks = fullStore({ orgId: 'org-1', userId: 'user-1' });
+    const mastra = {
+      getStorage: () => ({
+        getStore: vi.fn().mockResolvedValue({
+          listThreads: vi.fn().mockResolvedValue({ threads: [{ id: 'thread-1', resourceId: 'channel:slack-thread-1' }] }),
+        }),
+      }),
+    };
     const defaultHandler = vi.fn();
     const handlers = createHandlers({ accountLinks });
 
-    const ctx = handlerCtx();
+    const ctx = handlerCtx(mastra);
     await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, ctx);
 
     expect(defaultHandler).toHaveBeenCalledTimes(1);
