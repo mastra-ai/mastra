@@ -38,7 +38,6 @@ import { useBoardIntake } from '../domains/factory/hooks/useBoardIntake';
 import { useItemSessionStatuses } from '../domains/factory/hooks/useItemSessionStatuses';
 import { useBoardItems } from '../domains/factory/hooks/useBoardItems';
 import { useBoardRuns } from '../domains/factory/hooks/useBoardRuns';
-import { isTerminalStage } from '../domains/factory/stages';
 import {
   boardLabels,
   boardParticipants,
