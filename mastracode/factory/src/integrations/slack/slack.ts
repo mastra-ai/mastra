@@ -709,31 +709,33 @@ async function prepareExistingSessionOwnerContext(
   deps: SlackChannelDeps,
   ctx: ChannelHandlerContext,
   options: { expectedOrgId?: string; requireInternalThread: boolean },
-): Promise<void> {
+): Promise<'ready' | 'organization-mismatch'> {
   const sourceControls = configuredSourceControls(deps);
-  if (sourceControls.length === 0 && !options.requireInternalThread) return;
+  if (sourceControls.length === 0 && !options.requireInternalThread) return 'ready';
 
   const internalThread = await findInternalThread(ctx.mastra, thread);
   if (!internalThread) {
     if (options.requireInternalThread) {
       throw new Error(`Could not resolve the internal Slack thread for ${thread.id}.`);
     }
-    return;
+    return 'ready';
   }
-  if (sourceControls.length === 0 || internalThread.resourceId.startsWith('channel:')) return;
+  if (sourceControls.length === 0 || internalThread.resourceId.startsWith('channel:')) return 'ready';
   if (!options.expectedOrgId) {
     throw new Error(`Could not authorize the owner of Slack Factory session ${internalThread.resourceId}.`);
   }
 
-  const prepared = await prepareSessionRunContext(
+  const preparation = await prepareSessionRunContext(
     ctx.requestContext,
     internalThread.resourceId,
     { sessions: createSourceControlSessionLookup(sourceControls) },
     { expectedOrgId: options.expectedOrgId },
   );
-  if (!prepared) {
+  if (preparation === 'organization-mismatch') return preparation;
+  if (preparation === 'unavailable') {
     throw new Error(`Could not authorize the owner of Slack Factory session ${internalThread.resourceId}.`);
   }
+  return 'ready';
 }
 
 /**
@@ -768,10 +770,14 @@ async function gateDispatch(
     // stamping only in the routed branch would silently run them on default
     // credentials.
     ctx.requestContext.set('user', { id: sender.link.userId, organizationId: sender.link.orgId });
-    await prepareExistingSessionOwnerContext(thread, deps, ctx, {
+    const ownerContext = await prepareExistingSessionOwnerContext(thread, deps, ctx, {
       expectedOrgId: sender.link.orgId,
       requireInternalThread: options.requireInternalThread,
     });
+    if (ownerContext === 'organization-mismatch') {
+      await thread.post('This thread belongs to a Factory session in another organization.');
+      return null;
+    }
 
     const route = await resolveFactoryForLink({ thread, ...sender, accountLinks, projects });
     if (route.status === 'blocked') return null;

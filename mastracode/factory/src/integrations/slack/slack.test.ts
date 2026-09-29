@@ -382,7 +382,9 @@ describe('handler dispatch gating', () => {
         getBySessionId: vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'owner-1' }),
       },
     } as any;
+    const output = vi.fn();
     const mastra = {
+      getLogger: () => ({ error: output }),
       getStorage: () => ({
         getStore: vi.fn().mockResolvedValue({
           listThreads: vi.fn().mockResolvedValue({
@@ -396,7 +398,10 @@ describe('handler dispatch gating', () => {
 
     await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(mastra));
 
-    expect(thread.post).toHaveBeenCalledWith(expect.stringContaining('Couldn’t start processing your message.'));
+    expect(thread.post).toHaveBeenCalledExactlyOnceWith(
+      'This thread belongs to a Factory session in another organization.',
+    );
+    expect(output).not.toHaveBeenCalled();
     expect(defaultHandler).not.toHaveBeenCalled();
   });
 
