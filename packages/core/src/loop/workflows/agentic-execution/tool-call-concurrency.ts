@@ -93,8 +93,9 @@ export function effectiveToolSetRequiresSequentialExecution({
     if (maybeTool.hasSuspendSchema) {
       return true;
     }
-    if (dynamicApprovalEvaluated && getNeedsApprovalFn(tool)) {
-      return false;
+    // An unevaluated `needsApprovalFn` may require approval, so stay sequential.
+    if (getNeedsApprovalFn(tool)) {
+      return !dynamicApprovalEvaluated;
     }
     return Boolean(maybeTool.requireApproval);
   });
