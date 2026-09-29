@@ -147,9 +147,9 @@ async function run(argv: string[]): Promise<void> {
         subconscious,
         mainAgent,
         knowledgeResourceId,
-        onEvent: console.log,
+        onEvent: console.info,
       });
-      console.log(
+      console.info(
         JSON.stringify({
           threadId,
           reconstructionWarnings: reconstruction.warnings,

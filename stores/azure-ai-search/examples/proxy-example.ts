@@ -42,7 +42,7 @@ function createProxyPolicy(config: {
         });
       }
 
-      console.log(`[Proxy] Redirecting: ${originalUrl.href} -> ${request.url}`);
+      console.info(`[Proxy] Redirecting: ${originalUrl.href} -> ${request.url}`);
 
       return next(request);
     },
@@ -85,14 +85,14 @@ async function main() {
 
   try {
     // Use the vector store normally - all requests go through the proxy
-    console.log('Creating index through proxy...');
+    console.info('Creating index through proxy...');
     await vectorStore.createIndex({
       indexName: 'test-index',
       dimension: 1536,
       metric: 'cosine',
     });
 
-    console.log('Index created successfully through proxy!');
+    console.info('Index created successfully through proxy!');
 
     // Query vectors through proxy
     const results = await vectorStore.query({
@@ -101,7 +101,7 @@ async function main() {
       topK: 5,
     });
 
-    console.log(`Found ${results.length} results through proxy`);
+    console.info(`Found ${results.length} results through proxy`);
   } catch (error) {
     console.error('Error using proxy:', error);
   }

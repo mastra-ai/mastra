@@ -57,14 +57,14 @@ function main(): void {
     pin.sha === 'main' ? run('git', ['ls-remote', 'origin', 'refs/heads/main'], cacheDir).split(/\s/)[0]! : pin.sha;
 
   if (currentSha === targetSha) {
-    console.log(`[sync-templates] Cache already at ${targetSha.slice(0, 12)} — nothing to do.`);
+    console.info(`[sync-templates] Cache already at ${targetSha.slice(0, 12)} — nothing to do.`);
     return;
   }
 
-  console.log(`[sync-templates] Fetching ${pin.repo}@${targetSha.slice(0, 12)} …`);
+  console.info(`[sync-templates] Fetching ${pin.repo}@${targetSha.slice(0, 12)} …`);
   run('git', ['fetch', '--depth', '1', 'origin', targetSha], cacheDir);
   run('git', ['checkout', '--quiet', targetSha], cacheDir);
-  console.log(`[sync-templates] Ready at ${targetSha.slice(0, 12)}.`);
+  console.info(`[sync-templates] Ready at ${targetSha.slice(0, 12)}.`);
 }
 
 main();

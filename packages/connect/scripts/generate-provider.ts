@@ -867,11 +867,11 @@ function parseArguments(argv: string[]): GenerateProviderOptions {
 async function main(): Promise<void> {
   try {
     const result = await generateProvider(parseArguments(process.argv.slice(2)));
-    console.log(
+    console.info(
       `✓ Generated ${result.providerId} as ${result.localId} (${result.toolCount} tools, ${result.skippedActions.length} skipped)`,
     );
     for (const skippedAction of result.skippedActions) {
-      console.log(`  - ${skippedAction.action}: ${skippedAction.reason}`);
+      console.info(`  - ${skippedAction.action}: ${skippedAction.reason}`);
     }
   } catch (error) {
     console.error(error instanceof Error ? error.message : error);

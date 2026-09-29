@@ -78,7 +78,7 @@ export async function addProvider(options: AddProviderOptions): Promise<boolean>
         : `Provider '${options.localId}' is already installed. Regenerate and overwrite it?`;
 
     if (!(await confirm(message, options.yes))) {
-      console.log('Cancelled; no files changed.');
+      console.info('Cancelled; no files changed.');
       return false;
     }
   }
@@ -89,11 +89,11 @@ export async function addProvider(options: AddProviderOptions): Promise<boolean>
     expectedTemplateSha: options.expectedTemplateSha,
   });
   updateProviderIndex();
-  console.log(
+  console.info(
     `✓ Added ${result.providerId} as ${result.localId}: ${result.toolCount} tools generated, ${result.skippedActions.length} skipped.`,
   );
   for (const skipped of result.skippedActions) {
-    console.log(`  - ${skipped.action}: ${skipped.reason}`);
+    console.info(`  - ${skipped.action}: ${skipped.reason}`);
   }
   return true;
 }

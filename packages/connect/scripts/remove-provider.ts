@@ -49,13 +49,13 @@ export async function removeProvider({ localId, yes }: RemoveProviderOptions): P
     : `Provider '${localId}' has no generator manifest. Delete the entire directory anyway?`;
 
   if (!(await confirm(message, yes))) {
-    console.log('Cancelled; no files changed.');
+    console.info('Cancelled; no files changed.');
     return false;
   }
 
   rmSync(destination, { recursive: true, force: true });
   updateProviderIndex();
-  console.log(`✓ Removed provider '${localId}'.`);
+  console.info(`✓ Removed provider '${localId}'.`);
   return true;
 }
 
