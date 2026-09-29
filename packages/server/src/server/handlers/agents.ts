@@ -95,6 +95,7 @@ import {
   validateThreadOwnership,
   validateRunOwnership,
 } from './utils';
+import { routeAttachmentsToWorkspace } from './workspace-attachments';
 
 /**
  * Merge incoming version overrides onto a RequestContext.
@@ -1515,9 +1516,15 @@ export const GENERATE_AGENT_ROUTE = createRoute({
         abortSignal,
       };
 
+      const routedMessages = await routeAttachmentsToWorkspace({
+        agent,
+        messages,
+        requestContext: serverRequestContext,
+      });
+
       const result = structuredOutput
-        ? await agent.generate(messages, { ...options, structuredOutput })
-        : await agent.generate(messages, options);
+        ? await agent.generate(routedMessages, { ...options, structuredOutput })
+        : await agent.generate(routedMessages, options);
 
       return result;
     } catch (error) {
@@ -1916,9 +1923,15 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         options.untilIdle = untilIdle;
       }
 
+      const routedMessages = await routeAttachmentsToWorkspace({
+        agent,
+        messages,
+        requestContext: serverRequestContext,
+      });
+
       const streamResult = structuredOutput
-        ? await agent.stream(messages, { ...options, structuredOutput })
-        : await agent.stream(messages, options);
+        ? await agent.stream(routedMessages, { ...options, structuredOutput })
+        : await agent.stream(routedMessages, options);
 
       return streamResult.fullStream;
     } catch (error) {
@@ -2524,9 +2537,15 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
         abortSignal,
       };
 
+      const routedMessages = await routeAttachmentsToWorkspace({
+        agent,
+        messages,
+        requestContext: serverRequestContext,
+      });
+
       const streamResult = structuredOutput
-        ? await agent.streamUntilIdle(messages, { ...options, structuredOutput })
-        : await agent.streamUntilIdle(messages, options);
+        ? await agent.streamUntilIdle(routedMessages, { ...options, structuredOutput })
+        : await agent.streamUntilIdle(routedMessages, options);
 
       return streamResult.fullStream;
     } catch (error) {
@@ -3375,7 +3394,9 @@ export const STREAM_NETWORK_ROUTE = createRoute({
         authorizedMemoryOption = { ...params.memory, resource: effectiveResourceId };
       }
 
-      const streamResult = await agent.network(messages, {
+      const routedMessages = await routeAttachmentsToWorkspace({ agent, messages, requestContext });
+
+      const streamResult = await agent.network(routedMessages, {
         ...params,
         memory: authorizedMemoryOption,
       });

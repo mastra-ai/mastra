@@ -107,6 +107,11 @@ export function formatZodError(
 
 // Helper to handle errors consistently
 export function handleError(error: unknown, defaultMessage: string): never {
+  // Exceptions that already carry a custom response body must reach the client unchanged.
+  if (error instanceof HTTPException && error.res) {
+    throw error;
+  }
+
   if (isModelNotAllowedError(error)) {
     const body = {
       error: {
