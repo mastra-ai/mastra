@@ -28,6 +28,7 @@ import { resolveModePackFallbackChain } from '../onboarding/packs.js';
 import { findModePackForModel, loadSettings, resolveModePackModels } from '../onboarding/settings.js';
 import {
   getRequestAccountSelection,
+  isRequestAccountRoutingExhausted,
   markRequestAccountRoutingExhausted,
   setRequestAccountSelection,
 } from './account-routing-context.js';
@@ -501,12 +502,11 @@ function getRequestActiveAccount(
   store: CredentialStore,
   providerId: string,
 ) {
+  if (isRequestAccountRoutingExhausted(args.requestContext, providerId)) return undefined;
   const selectedId = getRequestAccountSelection(args.requestContext, providerId);
-  return (
-    (selectedId ? store.listAccounts?.(providerId).find(account => account.id === selectedId) : undefined) ??
-    store.getActiveAccount?.(providerId) ??
-    store.listAccounts?.(providerId).find(account => account.active)
-  );
+  // A deleted request selection is not a failure of the new global active account.
+  if (selectedId) return store.listAccounts?.(providerId).find(account => account.id === selectedId);
+  return store.getActiveAccount?.(providerId) ?? store.listAccounts?.(providerId).find(account => account.active);
 }
 
 function resolveAccountRoute(
@@ -571,12 +571,13 @@ async function applyPreferredAccountRoute(
   settingsPath: string | undefined,
   route: AccountRoute,
 ): Promise<boolean> {
+  store.reload();
   const preferredId = getRouteTargetAccountId(settingsPath, route);
   const accounts = store.listAccounts?.(route.providerId) ?? [];
-  if (accounts.length === 0) return false;
+  if (accounts.length === 0 && preferredId === undefined) return false;
   const tried = getTriedInstances(args.state);
   const unavailable = new Set(accounts.filter(account => tried.has(account.id)).map(account => account.id));
-  const active = getRequestActiveAccount(args, store, route.providerId);
+  const active = getRequestActiveAccount(args, store, route.providerId) ?? store.getActiveAccount?.(route.providerId);
   const selected = // A12: a targeted route may use only the account it names. `Automatic`
     // keeps insertion order with full pool rotation (A10), starting from the
     // account the cursor already points at (A14).
@@ -599,16 +600,23 @@ async function applyPreferredAccountRoute(
   // Activate before recording the request-scoped selection: a failed
   // activation must not leave the selection claiming an account that never
   // became the provider's active credential.
-  const activated = store.activateAccount?.(route.providerId, selected.id) ?? selected;
+  const activated = store.activateAccount ? store.activateAccount(route.providerId, selected.id) : selected;
+  if (!activated) {
+    markRequestAccountRoutingExhausted(args.requestContext, route.providerId);
+    return false;
+  }
   setRequestAccountSelection(args.requestContext, route.providerId, activated.id);
 
-  await emitAccountSwitchPart(args, {
-    provider: route.providerId,
-    from: active ? { id: active.id, label: active.label } : null,
-    to: { id: activated.id, label: activated.label },
-    reason: 'preferred-routing',
-    at: new Date().toISOString(),
-  });
+  // Applying an explicit account choice is routine, not a failover notice.
+  if (preferredId === undefined) {
+    await emitAccountSwitchPart(args, {
+      provider: route.providerId,
+      from: active ? { id: active.id, label: active.label } : null,
+      to: { id: activated.id, label: activated.label },
+      reason: 'preferred-routing',
+      at: new Date().toISOString(),
+    });
+  }
   return true;
 }
 
@@ -670,6 +678,7 @@ export class AccountRotationProcessor implements Processor {
     // path below uses the optional `forceRefreshActiveAccount` when the host
     // provides it.
     const store: RotationCredentialStore = resolveCredentialStore(args.requestContext) ?? this.options.credentialStore;
+    store.reload();
     const accounts = store.listAccounts?.(providerId) ?? [];
     const active = getRequestActiveAccount(args, store, providerId);
     const route =
@@ -713,20 +722,11 @@ export class AccountRotationProcessor implements Processor {
     // A12: a targeted route never activates a sibling subscription. A
     // rotate-classified failure on the account the route selected proceeds to
     // the pack's fallback chain instead — the request hops, it does not spill
-    // onto another subscription's quota. `Automatic` keeps rotating, so this
-    // check sits above the pool-size test: a targeted route has nothing to
+    // onto another subscription's quota. A targeted route has nothing to
     // rotate to at any pool size. A stale id for an account the user removed
     // reads the same way: fail closed rather than silently land on a sibling.
     if (targetAccountId !== undefined) {
       return this.declarePoolUnavailable(args, providerId, 'pool-exhausted', true);
-    }
-
-    // A pool smaller than 2 has nothing to rotate to — it is exhausted by
-    // definition once a rotate-classified error arrives. Route through the
-    // pool-exhausted path so the notices (and any pack hop) still fire; with
-    // no registry at all this announces only a configured pack hop.
-    if (accounts.length < 2) {
-      return this.declarePoolUnavailable(args, providerId, 'pool-exhausted');
     }
 
     // Count only this provider's instances: `tried` spans the whole request
@@ -742,7 +742,10 @@ export class AccountRotationProcessor implements Processor {
       return this.declarePoolUnavailable(args, providerId, 'pool-exhausted');
     }
 
-    const nextCandidate = accounts.find(account => !tried.has(account.id));
+    // If the selected account was removed elsewhere, even a single survivor
+    // is still untried. Resume from the freshly loaded global cursor.
+    const candidates = active ? accounts : orderAccountsFromActive(accounts, store.getActiveAccount?.(providerId)?.id);
+    const nextCandidate = candidates.find(account => !tried.has(account.id));
 
     const next = nextCandidate ? store.activateAccount?.(providerId, nextCandidate.id) : undefined;
     if (!next) {
@@ -1022,10 +1025,12 @@ export class AccountStartNoticeProcessor implements Processor {
     const route = resolveAccountRoute(args, this.options.settingsPath);
     if (route) {
       const switched = await applyPreferredAccountRoute(args, store, this.options.settingsPath, route);
-      if (switched) {
+      if (switched || getRouteTargetAccountId(this.options.settingsPath, route) !== undefined) {
         args.state.startNoticeEmitted = true;
         return args.messageList;
       }
+    } else {
+      store.reload();
     }
 
     // A14: a route whose accounts are all unavailable is not a pre-emptive
