@@ -3,6 +3,7 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
+import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
 import { controlSizeClasses } from '@/ds/primitives/control-size';
 import {
   fieldErrorRim,
@@ -63,6 +64,7 @@ function Input({ className, size, testId, variant, ...props }: InputProps) {
       className={cn(inputVariants({ variant: resolveFieldVariant(variant), size }), fieldErrorRim, className)}
       data-testid={testId}
       {...props}
+      {...keepOwnAccessibleName(props)}
     />
   );
 }

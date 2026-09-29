@@ -319,7 +319,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       editable,
       variant,
       id,
-      'aria-label': ariaLabel = 'Code editor',
+      'aria-label': ariaLabelProp,
       'aria-labelledby': ariaLabelledByProp,
       'aria-describedby': ariaDescribedByProp,
       'aria-invalid': ariaInvalidProp,
@@ -327,7 +327,8 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     },
     ref,
   ) => {
-    const fieldAria = useFieldControlAria();
+    const fieldAria = useFieldControlAria({ 'aria-label': ariaLabelProp });
+    const ariaLabel = ariaLabelProp ?? 'Code editor';
     const controlId = id ?? fieldAria.id;
     const ariaLabelledBy = ariaLabelledByProp ?? fieldAria['aria-labelledby'];
     const ariaDescribedBy = ariaDescribedByProp ?? fieldAria['aria-describedby'];

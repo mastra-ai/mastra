@@ -1,6 +1,7 @@
 import { Switch as SwitchPrimitive } from '@base-ui/react/switch';
 import * as React from 'react';
 
+import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
 import { cn } from '@/lib/utils';
 import './switch.css';
 
@@ -29,7 +30,7 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
     const renderProps =
       asChild && React.isValidElement(children)
         ? { render: children as React.ReactElement }
-        : { render: <button type="button" />, nativeButton: true };
+        : { render: <button type="button" {...keepOwnAccessibleName(props)} />, nativeButton: true };
 
     return (
       <SwitchPrimitive.Root

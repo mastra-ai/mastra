@@ -5,6 +5,7 @@ import * as React from 'react';
 
 import { buttonVariants } from '../Button/Button';
 import type { TextButtonSize } from '../Button/Button';
+import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
@@ -150,6 +151,7 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
           className,
         )}
         {...props}
+        {...keepOwnAccessibleName(props)}
       >
         {children}
         {/* `SelectPrimitive.Icon` renders the provided element in place of its

@@ -5,7 +5,7 @@ import { comboboxItemClass, comboboxStyles, comboboxTriggerClass } from './combo
 import type { ComboboxVariant } from './combobox-styles';
 import { Button, isIconButtonSize } from '@/ds/components/Button/Button';
 import type { ButtonSize } from '@/ds/components/Button/Button';
-import { useFieldAriaIds } from '@/ds/components/Field/field-control-aria';
+import { keepOwnAccessibleName, useFieldAriaIds } from '@/ds/components/Field/field-control-aria';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
@@ -137,6 +137,7 @@ export function Combobox(props: ComboboxProps) {
       <BaseCombobox.Trigger
         id={id}
         aria-label={ariaLabel ?? (id || field ? undefined : multiple ? 'Select options' : 'Select option')}
+        {...keepOwnAccessibleName({ 'aria-label': ariaLabel })}
         aria-invalid={field?.invalid || undefined}
         aria-describedby={describedBy}
         data-shape={iconOnly ? 'icon' : undefined}
