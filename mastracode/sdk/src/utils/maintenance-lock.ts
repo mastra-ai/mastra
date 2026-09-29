@@ -88,13 +88,21 @@ function readPid(file: string): number | null {
  * PID holding the maintenance lock, `UNKNOWN_OWNER` while its pid file is still
  * being written, or null. Stale locks are removed.
  */
+// True while this process holds maintenance.lock, so an own-PID lock can be told
+// apart from a stale leftover whose PID we reused.
+let lockHeld = false;
+
 export function getMaintenanceLockOwner(): number | null {
   const lockPath = getMaintenanceLockPath();
   if (!fs.existsSync(lockPath)) return null;
   const pid = readPid(lockPath);
-  // No caller holds the lock while asking, so a lock naming our own PID is a
-  // leftover from a dead process whose PID we reused: reap it.
-  if (pid !== null && pid !== process.pid && isProcessAlive(pid)) return pid;
+  if (pid === process.pid) {
+    // We hold it (e.g. a concurrent prune in this process): a live owner.
+    if (lockHeld) return pid;
+    // Otherwise it is a leftover from a dead process whose PID we reused.
+  } else if (pid !== null && isProcessAlive(pid)) {
+    return pid;
+  }
   if (pid === null && !isMalformedPidFileStale(lockPath)) return UNKNOWN_OWNER;
   try {
     fs.unlinkSync(lockPath);
@@ -127,6 +135,11 @@ export function getLiveSessionPids(): number[] {
 // Refcounted: one process may start several sessions (e.g. repeated
 // createMastraCode() calls). The pid file exists while the count is > 0.
 let sessionRefs = 0;
+
+/** Test-only: drop every registration held by this process. */
+export function resetSessionRegistrationsForTesting(): void {
+  while (sessionRefs > 0) unregisterSession();
+}
 let exitHookInstalled = false;
 
 function getSessionPidPath(): string {
@@ -199,6 +212,7 @@ export function acquireMaintenanceLock(): () => void {
     try {
       // 'wx' makes creation atomic, so two prunes cannot both win.
       fs.writeFileSync(lockPath, String(process.pid), { flag: 'wx', mode: 0o644 });
+      lockHeld = true;
       break;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
@@ -213,7 +227,11 @@ export function acquireMaintenanceLock(): () => void {
     }
   }
 
+  let released = false;
   const release = () => {
+    if (released) return;
+    released = true;
+    lockHeld = false;
     if (readPid(lockPath) === process.pid) {
       try {
         fs.unlinkSync(lockPath);

@@ -14,6 +14,7 @@ import {
   getMaintenanceLockPath,
   registerSession,
   registerSessionAndWaitForMaintenance,
+  resetSessionRegistrationsForTesting,
   unregisterSession,
 } from '../maintenance-lock.js';
 
@@ -37,7 +38,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  unregisterSession();
+  resetSessionRegistrationsForTesting();
   for (const child of children.splice(0)) child.kill();
   if (prevDataDir === undefined) delete process.env.MASTRA_APP_DATA_DIR;
   else process.env.MASTRA_APP_DATA_DIR = prevDataDir;
@@ -219,5 +220,19 @@ describe('stale maintenance lock naming our own PID', () => {
     const release = acquireMaintenanceLock();
     expect(fs.readFileSync(getMaintenanceLockPath(), 'utf8')).toBe(String(process.pid));
     release();
+  });
+});
+
+describe('maintenance lock held by this process', () => {
+  it('refuses a second acquire in the same process and keeps the lock', () => {
+    const release = acquireMaintenanceLock();
+    try {
+      expect(() => acquireMaintenanceLock()).toThrow(MaintenanceLockError);
+      expect(getMaintenanceLockOwner()).toBe(process.pid);
+      expect(fs.readFileSync(getMaintenanceLockPath(), 'utf8')).toBe(String(process.pid));
+    } finally {
+      release();
+    }
+    expect(fs.existsSync(getMaintenanceLockPath())).toBe(false);
   });
 });
