@@ -494,7 +494,7 @@ function parseIssueEnvelope(envelope: LinearWebhookEnvelope): LinearIssueIngress
   const id = typeof raw.id === 'string' ? raw.id : undefined;
   const identifier = typeof raw.identifier === 'string' ? raw.identifier : undefined;
   const title = typeof raw.title === 'string' ? raw.title : undefined;
-  const url = typeof raw.url === 'string' ? raw.url : envelope.url ?? undefined;
+  const url = typeof raw.url === 'string' ? raw.url : (envelope.url ?? undefined);
   if (!id || !identifier || !title || !url) return undefined;
 
   const state = optionalObject(raw.state);
@@ -508,7 +508,7 @@ function parseIssueEnvelope(envelope: LinearWebhookEnvelope): LinearIssueIngress
       })
     : [];
 
-  const createdAt = typeof raw.createdAt === 'string' ? raw.createdAt : envelope.createdAt ?? '';
+  const createdAt = typeof raw.createdAt === 'string' ? raw.createdAt : (envelope.createdAt ?? '');
   const updatedAt = typeof raw.updatedAt === 'string' ? raw.updatedAt : createdAt;
 
   return {

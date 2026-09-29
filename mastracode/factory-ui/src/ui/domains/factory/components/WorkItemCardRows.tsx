@@ -51,6 +51,7 @@ export function WorkItemCardRows({
   const labelColors = metadataLabelColors(item.metadata);
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const external = knownExternalAuthor(item);
+  const verdict = columnStage === 'review' ? reviewVerdict(item.metadata) : undefined;
 
   return (
     <>
@@ -90,9 +91,14 @@ export function WorkItemCardRows({
           ))}
         </div>
       )}
-      {(status.kind !== 'idle' || external) && (
+      {(status.kind !== 'idle' || external || verdict) && (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
           <CardStatus status={status} />
+          {verdict && (
+            <Badge size="xs" variant={verdict.approved ? 'green' : 'orange'}>
+              {verdict.label}
+            </Badge>
+          )}
           {external && (
             <Tooltip>
               <TooltipTrigger
@@ -116,4 +122,14 @@ export function WorkItemCardRows({
       />
     </>
   );
+}
+
+/** The last verdict a review pass recorded; the card rests in Reviewing until the PR merges. */
+export function reviewVerdict(metadata: Record<string, unknown>): { approved: boolean; label: string } | undefined {
+  const verdict = metadata.reviewVerdict;
+  if (verdict !== 'approve' && verdict !== 'request changes') return undefined;
+  const sha = typeof metadata.reviewedHeadSha === 'string' ? ` · ${metadata.reviewedHeadSha.slice(0, 7)}` : '';
+  return verdict === 'approve'
+    ? { approved: true, label: `Approved${sha}` }
+    : { approved: false, label: `Changes requested${sha}` };
 }
