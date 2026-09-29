@@ -47,6 +47,7 @@ export function createEmptyWorkflowSnapshot(runId: string): Record<string, any> 
     serializedStepGraph: [],
     value: {},
     waitingPaths: {},
+    sleepTimers: {},
     status: 'pending',
     runId,
   };

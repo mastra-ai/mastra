@@ -366,6 +366,7 @@ export interface WorkflowState {
   suspendedPaths?: Record<string, number[]>;
   resumeLabels?: Record<string, WorkflowResumeLabel>;
   waitingPaths?: Record<string, number[]>;
+  sleepTimers?: Record<string, WorkflowSleepTimer>;
   requestContext?: Record<string, any>;
   tracingContext?: WorkflowStateTracingContext;
   // Step Information (processed) - optional when using field filtering
@@ -394,6 +395,40 @@ export type WorkflowStateField =
   | 'requestContext'
   | 'tracingContext';
 
+export interface WorkflowSleepTimer {
+  id: string;
+  stepId: string;
+  kind: 'sleep' | 'sleepUntil';
+  startedAt: number;
+  dueAt: number;
+  status: 'pending' | 'claimed';
+  claimToken?: string;
+  claimedAt?: number;
+  continuation: {
+    executionPath: number[];
+    stepResults: Record<string, SerializedStepResult<any, any, any, any>>;
+    activeStepsPath: Record<string, number[]>;
+    resumeSteps: string[];
+    prevResult: SerializedStepResult<any, any, any, any>;
+    requestContext: Record<string, any>;
+    timeTravel?: TimeTravelExecutionParams;
+    restart?: RestartExecutionParams;
+    resumeData?: any;
+    parentWorkflow?: any;
+    actor?: any;
+    perStep?: boolean;
+    format?: 'legacy' | 'vnext';
+    state?: Record<string, any>;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
+    forEachIndex?: number;
+    nestedRunId?: string;
+    resourceId?: string;
+  };
+}
+
 export interface WorkflowRunState {
   // Core state info
   runId: string;
@@ -409,6 +444,7 @@ export interface WorkflowRunState {
   suspendedPaths: Record<string, number[]>;
   resumeLabels: Record<string, WorkflowResumeLabel>;
   waitingPaths: Record<string, number[]>;
+  sleepTimers?: Record<string, WorkflowSleepTimer>;
   timestamp: number;
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;

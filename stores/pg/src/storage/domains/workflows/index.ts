@@ -4,6 +4,7 @@ import {
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
+  matchesExpectedSleepTimer,
   matchesExpectedWorkflowStatus,
   WorkflowsStorage,
   createStorageErrorId,
@@ -431,8 +432,11 @@ export class WorkflowsPG extends WorkflowsStorage {
 
         // `expectedStatus` is a compare-and-set guard, not state. It is checked here, inside the
         // row lock, and stripped so it can never be merged into the persisted snapshot.
-        const { expectedStatus, ...state } = opts;
-        if (!matchesExpectedWorkflowStatus(snapshot.status, expectedStatus)) {
+        const { expectedStatus, expectedSleepTimer, ...state } = opts;
+        if (
+          !matchesExpectedWorkflowStatus(snapshot.status, expectedStatus) ||
+          !matchesExpectedSleepTimer(snapshot.sleepTimers, expectedSleepTimer)
+        ) {
           return undefined;
         }
 

@@ -2,6 +2,7 @@ import type { Database } from '@google-cloud/spanner';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
+  matchesExpectedSleepTimer,
   matchesExpectedWorkflowStatus,
   WorkflowsStorage,
   TABLE_WORKFLOW_SNAPSHOT,
@@ -432,8 +433,11 @@ export class WorkflowsSpanner extends WorkflowsStorage {
                 new Error(`Snapshot not found for runId ${runId}`),
               );
             }
-            const { expectedStatus, ...state } = opts;
-            if (!matchesExpectedWorkflowStatus(snapshot.status, expectedStatus)) {
+            const { expectedStatus, expectedSleepTimer, ...state } = opts;
+            if (
+              !matchesExpectedWorkflowStatus(snapshot.status, expectedStatus) ||
+              !matchesExpectedSleepTimer(snapshot.sleepTimers, expectedSleepTimer)
+            ) {
               await tx.rollback();
               return;
             }
