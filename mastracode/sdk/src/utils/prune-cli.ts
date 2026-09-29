@@ -25,6 +25,7 @@ import { loadSettings } from '../onboarding/settings.js';
 
 import { acquireMaintenanceLock } from './maintenance-lock.js';
 import { detectProject, getStorageConfig } from './project.js';
+import type { StorageConfig } from './project.js';
 import { createStorage, createVectorStore } from './storage-factory.js';
 import {
   DEFAULT_RETENTION,
@@ -94,6 +95,10 @@ async function prune({ vacuum, keepMemory }: { vacuum: boolean; keepMemory: bool
   const project = detectProject(process.cwd());
   const storageConfig = getStorageConfig(project.rootPath, settings.storage, DEFAULT_CONFIG_DIR);
 
+  // A project .env can point storage elsewhere (startup honors it too), so say
+  // exactly what is about to be pruned before anything is deleted.
+  console.log(`Storage target: ${describeStorageTarget(storageConfig)}`);
+
   const { storage, backend, warning } = await createStorage(storageConfig);
   if (warning) console.log(warning);
 
@@ -140,4 +145,26 @@ async function prune({ vacuum, keepMemory }: { vacuum: boolean; keepMemory: bool
     }
     return 1;
   }
+}
+
+/** Credential-free URL: drops userinfo and the query string (e.g. ?authToken=). */
+function redactUrl(raw: string): string {
+  try {
+    const url = new URL(raw);
+    url.username = '';
+    url.password = '';
+    url.search = '';
+    return url.toString();
+  } catch {
+    return '<unparseable URL>';
+  }
+}
+
+export function describeStorageTarget(config: StorageConfig): string {
+  if (config.backend === 'libsql') {
+    return config.url.startsWith('file:') ? `libsql file ${config.url.slice('file:'.length)}` : `libsql ${redactUrl(config.url)}`;
+  }
+  if (config.connectionString) return `pg ${redactUrl(config.connectionString)}`;
+  const host = `${config.host ?? 'localhost'}${config.port ? `:${config.port}` : ''}`;
+  return `pg postgres://${host}/${config.database ?? ''}`;
 }

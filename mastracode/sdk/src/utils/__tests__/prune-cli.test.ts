@@ -61,7 +61,7 @@ vi.mock('../storage-maintenance.js', async importOriginal => {
 import { loadSettings } from '../../onboarding/settings.js';
 import { acquireMaintenanceLock, getMaintenanceLockPath, MaintenanceLockError } from '../maintenance-lock.js';
 import { detectProject, getStorageConfig } from '../project.js';
-import { runPruneCommand } from '../prune-cli.js';
+import { describeStorageTarget, runPruneCommand } from '../prune-cli.js';
 import { createStorage, createVectorStore } from '../storage-factory.js';
 import { DEFAULT_RETENTION, runStorageMaintenance } from '../storage-maintenance.js';
 import type { StorageMaintenance } from '../storage-maintenance.js';
@@ -333,5 +333,42 @@ describe('runPruneCommand', () => {
       else process.env.MASTRA_APP_DATA_DIR = prev;
       fs.rmSync(cwd, { recursive: true, force: true });
     }
+  });
+
+  it('prints the resolved storage target before touching the database', async () => {
+    // A project .env can redirect storage (startup honors it too), so the target
+    // must be visible before anything is deleted.
+    const order: string[] = [];
+    const storageImpl = vi.mocked(createStorage).getMockImplementation()!;
+    vi.mocked(createStorage).mockImplementation(async (...args) => {
+      order.push('createStorage');
+      return storageImpl(...args);
+    });
+    vi.mocked(runStorageMaintenance).mockImplementation(async () => {
+      order.push('maintenance');
+    });
+    vi.mocked(console.log).mockImplementation((line: unknown) => {
+      logged.push(String(line));
+      if (String(line).startsWith('Storage target:')) order.push('target');
+    });
+
+    await runPruneCommand([]);
+
+    expect(logged).toContain('Storage target: libsql file /tmp/mc-prune-test.db');
+    expect(order).toEqual(['target', 'createStorage', 'maintenance']);
+  });
+});
+
+describe('describeStorageTarget', () => {
+  it('never prints credentials', () => {
+    expect(describeStorageTarget({ backend: 'libsql', url: 'libsql://db.turso.io?authToken=SECRET', isRemote: true })).toBe(
+      'libsql libsql://db.turso.io',
+    );
+    expect(
+      describeStorageTarget({ backend: 'pg', connectionString: 'postgres://u:SECRET@db:5432/app?sslmode=require' }),
+    ).toBe('pg postgres://db:5432/app');
+    expect(
+      describeStorageTarget({ backend: 'pg', host: 'db', port: 5432, database: 'app', user: 'u', password: 'SECRET' }),
+    ).toBe('pg postgres://db:5432/app');
   });
 });
