@@ -50,6 +50,9 @@ export function createAdmission(options: {
     connectionTimeoutMillis: 5000,
     statement_timeout: 5000,
   });
+  pool.on('error', error => {
+    console.error('[mastra-render] Idle admission PostgreSQL client failed; the pool will replace it:', error.message);
+  });
   let ready: Promise<unknown> | undefined;
   const initialize = () =>
     (ready ??= (async () => {

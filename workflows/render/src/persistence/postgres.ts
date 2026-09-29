@@ -5,6 +5,9 @@ import type { RenderPersistence, RunRecord } from './types.js';
 /** Owns only the mastra_render_runs table. Mastra snapshots use the application's Mastra store. */
 export function createPostgresPersistence(config: PoolConfig): RenderPersistence {
   const pool = new Pool(config);
+  pool.on('error', error => {
+    console.error('[mastra-render] Idle PostgreSQL client failed; the pool will replace it:', error.message);
+  });
   let ready: Promise<unknown> | undefined;
   const initialize = () =>
     (ready ??= pool
@@ -24,6 +27,7 @@ export function createPostgresPersistence(config: PoolConfig): RenderPersistence
       }));
   return {
     durable: true,
+    /** Insert a run only if its workflow/run identity has never been reserved. */
     async create(record) {
       await initialize();
       const result = await pool.query(
@@ -32,6 +36,7 @@ export function createPostgresPersistence(config: PoolConfig): RenderPersistence
       );
       return result.rowCount === 1;
     },
+    /** Read the persisted binding, returning null when the identity does not exist. */
     async get(workflowId, runId) {
       await initialize();
       const result = await pool.query<{ record: RunRecord }>(
@@ -40,6 +45,7 @@ export function createPostgresPersistence(config: PoolConfig): RenderPersistence
       );
       return result.rows[0]?.record ?? null;
     },
+    /** Persist a new revision only while the stored revision still matches the caller's expectation. */
     async compareAndSwap(record, expectedRevision) {
       await initialize();
       const result = await pool.query(
@@ -48,6 +54,7 @@ export function createPostgresPersistence(config: PoolConfig): RenderPersistence
       );
       return result.rowCount === 1;
     },
+    /** Release this persistence instance's PostgreSQL pool. */
     async close() {
       await pool.end();
     },
