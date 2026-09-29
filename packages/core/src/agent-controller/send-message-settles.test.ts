@@ -37,7 +37,19 @@ async function createController() {
   });
   await controller.init();
   const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
-  return { controller, session };
+  return { agent, controller, session };
+}
+
+/** Resolves once the runtime has accepted the next signal sent through `agent`. */
+function onNextAcceptance(agent: Agent): Promise<void> {
+  const original = agent.sendSignal.bind(agent);
+  return new Promise(resolve => {
+    vi.spyOn(agent, 'sendSignal').mockImplementationOnce((...args: Parameters<typeof original>) => {
+      const result = original(...args);
+      void result.accepted.then(() => setTimeout(resolve, 0));
+      return result;
+    });
+  });
 }
 
 const TIMED_OUT = Symbol('timed out');
@@ -52,7 +64,11 @@ describe('Session.sendMessage settles', () => {
     const threadId = first.thread.getId()!;
     const sessions = [first];
     for (let i = 0; i < 3; i++) {
-      const session = await controller.createSession({ id: `session-${i}`, ownerId: `owner-${i}` });
+      const session = await controller.createSession({
+        id: `session-${i}`,
+        ownerId: `owner-${i}`,
+        scope: `scope-${i}`,
+      });
       session.thread.set({ threadId });
       await session.thread.ensureCurrentSubscription();
       sessions.push(session);
@@ -74,24 +90,26 @@ describe('Session.sendMessage settles', () => {
   });
 
   it('resolves when the subscription is torn down before the run ends', async () => {
-    const { session } = await createController();
+    const { agent, session } = await createController();
     vi.spyOn(session, 'processSubscribedThreadStream').mockReturnValue(new Promise(() => {}));
     session.thread.cleanupSubscription();
+    const accepted = onNextAcceptance(agent);
 
     const pending = session.sendMessage({ content: 'hello' });
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await accepted;
     session.stream.detach();
 
     expect(await settleWithin(pending)).toBeUndefined();
   });
 
   it('resolves when the run is aborted and agent_end never arrives', async () => {
-    const { session } = await createController();
+    const { agent, session } = await createController();
     vi.spyOn(session, 'processSubscribedThreadStream').mockReturnValue(new Promise(() => {}));
     session.thread.cleanupSubscription();
+    const accepted = onNextAcceptance(agent);
 
     const pending = session.sendMessage({ content: 'hello' });
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await accepted;
     session.abort();
 
     expect(await settleWithin(pending)).toBeUndefined();

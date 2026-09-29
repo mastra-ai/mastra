@@ -3242,16 +3242,24 @@ export class Session<TState = unknown> {
     // fails, the subscription is torn down, or the run is aborted, otherwise a
     // missed event (e.g. concurrent runs on one thread) hangs the caller forever.
     const waitersController = new AbortController();
+    // Register before awaiting acceptance so a teardown while it is pending is not missed.
+    let tornDown = false;
+    const teardown = this.stream.waitForTeardown(waitersController.signal).then(() => {
+      tornDown = true;
+    });
 
     try {
       const result = await accepted;
       if (result.action !== 'wake' && !waitForDelivery) return;
       runId = 'runId' in result ? result.runId : undefined;
       if (!runId || completedRunIds.has(runId)) return;
+      // A teardown during acceptance only ends the wait if nothing re-attached;
+      // sending may rebind the subscription on its own.
+      if (tornDown && !this.stream.isOpen()) return;
       const waits: Promise<unknown>[] = [
         completion,
         this.stream.waitForConsumerFailure(waitersController.signal),
-        this.stream.waitForTeardown(waitersController.signal),
+        tornDown ? this.stream.waitForTeardown(waitersController.signal) : teardown,
       ];
       // An abort still pending from an earlier run must not release this caller.
       if (!this.run.isAbortRequested()) waits.push(this.run.waitForAbortRequest(waitersController.signal));
