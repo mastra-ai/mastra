@@ -2201,11 +2201,18 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#usageCountInitialized = state.usageCountInitialized ?? false;
 
     if (state.usageCountMissing === undefined) {
-      // Legacy snapshots do not record which steps omitted usage counters. Any
-      // restored value may therefore be a partial aggregate, so fail closed.
-      this.#usageCountMissing = new Set(usageCountKeys);
-      for (const key of usageCountKeys) {
-        this.#usageCount[key] = undefined;
+      const hasPriorUsage =
+        (Array.isArray(state.bufferedSteps) && state.bufferedSteps.length > 0) ||
+        usageCountKeys.some(key => state.usageCount?.[key] !== undefined);
+
+      // Legacy snapshots do not record which completed steps omitted usage
+      // counters, so existing aggregates must fail closed. An empty snapshot
+      // taken before the first step can still accumulate resumed measurements.
+      this.#usageCountMissing = hasPriorUsage ? new Set(usageCountKeys) : new Set();
+      if (hasPriorUsage) {
+        for (const key of usageCountKeys) {
+          this.#usageCount[key] = undefined;
+        }
       }
     } else {
       this.#usageCountMissing = new Set(state.usageCountMissing);

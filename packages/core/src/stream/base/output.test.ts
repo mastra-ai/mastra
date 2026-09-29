@@ -795,6 +795,42 @@ describe('MastraModelOutput', () => {
       });
     });
 
+    it('accumulates usage after restoring an empty legacy state', () => {
+      const runId = 'test-run';
+      const original = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+      const legacyState: any = original.serializeState();
+      delete legacyState.usageCountInitialized;
+      delete legacyState.usageCountMissing;
+
+      const restored = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+        initialState: legacyState,
+      });
+      restored.updateUsageCount({ inputTokens: 10, outputTokens: 20, totalTokens: 30 });
+
+      expect(restored.serializeState()).toMatchObject({
+        usageCount: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        usageCountInitialized: true,
+        usageCountMissing: [
+          'reasoningTokens',
+          'cachedInputTokens',
+          'cacheCreationInputTokens',
+          'cacheCreationInputTokens5m',
+          'cacheCreationInputTokens1h',
+        ],
+      });
+    });
+
     it('fails closed when restoring legacy usage state without completeness metadata', () => {
       const runId = 'test-run';
       const original = new MastraModelOutput({
