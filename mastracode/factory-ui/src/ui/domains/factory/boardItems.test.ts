@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { externalLinkLabel, itemThreadSession, metadataLabelColors, workItemMeta } from './boardItems';
+import {
+  artifactIdentityLine,
+  externalLinkLabel,
+  itemThreadSession,
+  metadataLabelColors,
+  workItemMeta,
+} from './boardItems';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 
 function workItem(overrides: Partial<WorkItem> = {}): WorkItem {
@@ -91,6 +97,38 @@ describe('metadataLabelColors', () => {
         },
       }),
     ).toEqual({ bug: '#d73a4a', documentation: 'rebeccapurple' });
+  });
+});
+
+describe('artifactIdentityLine', () => {
+  it('shows the provider author and the human who started the latest Factory run', () => {
+    const item = workItem({
+      sessions: {
+        work: { sessionId: 'session-1', threadId: 'run-1', branch: 'factory/pr-1', startedBy: 'user-42' },
+      },
+      metadata: { githubPullRequestNumber: 22765, author: 'mastra-platform[bot]' },
+    });
+
+    expect(artifactIdentityLine(item, { 'user-42': { id: 'user-42', name: 'Ada Lovelace' } })).toBe(
+      'Author: mastra-platform[bot] · Started by: Ada Lovelace',
+    );
+  });
+
+  it('names automation without presenting the dispatcher as a person', () => {
+    const item = workItem({
+      source: 'gitlab-pr',
+      sessions: {
+        work: {
+          sessionId: 'session-1',
+          threadId: 'run-1',
+          branch: 'factory/mr-1',
+          startedBy: 'factory-rule-dispatcher',
+        },
+      },
+      metadata: { gitlabMergeRequestIid: 5, author: 'factory-service' },
+    });
+
+    expect(artifactIdentityLine(item, {})).toBe('Author: factory-service · Started by: Factory automation');
   });
 });
 

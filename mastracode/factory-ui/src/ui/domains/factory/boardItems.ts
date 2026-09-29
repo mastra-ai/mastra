@@ -3,6 +3,7 @@ import { workItemBranch, workItemThreadTitle } from '@mastra/factory/work-item-b
 import { isValid } from 'date-fns';
 
 import { relativeTime } from '../../../lib/date/relativeTime';
+import type { AuditActorProfile } from './services/audit';
 import type { WorkItem, WorkItemSessionRef, WorkItemSource } from './services/workItems';
 
 export const HIDDEN_CARD_LABELS = new Set([AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL]);
@@ -159,6 +160,20 @@ export function workItemMeta(item: WorkItem): string {
   const issueOwner = assignee ?? author;
   if (issueIdentifier !== undefined) return `${issueIdentifier}${issueOwner ? ` · ${issueOwner}` : ''} · ${age}`;
   return `${SOURCE_LABELS[item.source]} · ${age}`;
+}
+
+/** Provider author plus the trusted Factory actor that started the latest bound run. */
+export function artifactIdentityLine(
+  item: Pick<WorkItem, 'metadata' | 'sessions' | 'source'>,
+  actors: Record<string, AuditActorProfile>,
+): string | undefined {
+  if (item.source !== 'github-pr' && item.source !== 'gitlab-pr') return;
+  const author = typeof item.metadata.author === 'string' ? item.metadata.author.trim() : '';
+  const artifactSession = item.sessions.review ?? item.sessions.work ?? Object.values(item.sessions).at(-1);
+  if (!author || !artifactSession) return;
+  const actorId = artifactSession.startedBy;
+  const startedBy = actorId === 'factory-rule-dispatcher' ? 'Factory automation' : (actors[actorId]?.name ?? actorId);
+  return `Author: ${author} · Started by: ${startedBy}`;
 }
 
 /** Free-text card match over what names it on the board: its title and its issue key. */
