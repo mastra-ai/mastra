@@ -104,8 +104,8 @@ function FieldLabel({ className, required = false, size = 'default', children, o
         <>
           <span aria-hidden className="ml-0.5 text-destructive in-data-disabled:text-muted-foreground">
             *
-          </span>
-          <span className="sr-only"> (required)</span>
+          </span>{' '}
+          <span className="sr-only">(required)</span>
         </>
       ) : null}
     </FieldPrimitive.Label>
