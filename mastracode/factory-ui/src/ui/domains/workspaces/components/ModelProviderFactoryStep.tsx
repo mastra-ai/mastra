@@ -1,4 +1,5 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useState } from 'react';
 
 import { useProviderConnection } from '../hooks/useProviderConnection';
 import { FactoryDefaultModelForm } from './FactoryDefaultModelForm';
@@ -13,7 +14,19 @@ export interface ModelProviderFactoryStepProps {
 
 export function ModelProviderFactoryStep({ factoryId, completionError, onComplete }: ModelProviderFactoryStepProps) {
   const connection = useProviderConnection({ scope: 'org' });
+  const [browsingProviders, setBrowsingProviders] = useState(false);
   const error = connection.error ?? completionError;
+
+  // When the organization already has a provider, go straight to the model
+  // choice instead of making the user pick that provider from the list first.
+  const configuredProviders = [...connection.signInProviders, ...connection.keyProviders].filter(
+    connection.isConfigured,
+  );
+  const provider = connection.provider ?? (browsingProviders ? undefined : configuredProviders[0]);
+  const connected = provider ? connection.isConfigured(provider) : false;
+  // Members can only pick an already connected provider, so the list only
+  // offers them something when more than one is connected.
+  const canChangeProvider = connection.orgKeyAdmin || configuredProviders.length > 1;
 
   return (
     <section aria-label="Model provider setup" className="flex max-w-xl flex-col gap-5">
@@ -30,12 +43,20 @@ export function ModelProviderFactoryStep({ factoryId, completionError, onComplet
           </Txt>
         )}
 
-      {connection.connected && connection.provider ? (
+      {!connection.isPending && connected && provider ? (
         <FactoryDefaultModelForm
+          key={provider.provider}
           factoryId={factoryId}
-          provider={connection.provider}
+          provider={provider}
           onSaved={onComplete}
-          onChangeProvider={connection.clear}
+          onChangeProvider={
+            canChangeProvider
+              ? () => {
+                  setBrowsingProviders(true);
+                  connection.clear();
+                }
+              : undefined
+          }
         />
       ) : (
         <ModelProviderPicker connection={connection} />

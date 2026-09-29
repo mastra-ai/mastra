@@ -4,7 +4,7 @@
  * calls; a retry after the link step fails must reuse the Factory the first
  * attempt already created instead of creating another one.
  */
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
@@ -85,7 +85,6 @@ describe('EmptyFactoryState', () => {
 
       renderOnboarding();
 
-      await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
       await user.click(await screen.findByRole('button', { name: 'Finish setup' }));
 
       expect(await screen.findByRole('heading', { name: 'Connect your personal providers.' })).toBeInTheDocument();
@@ -96,6 +95,41 @@ describe('EmptyFactoryState', () => {
 
       await waitFor(() => expect(sessionStorage.getItem(ONBOARDING_STEP_KEY)).toBeNull());
       expect(sessionStorage.getItem(ONBOARDING_FACTORY_KEY)).toBeNull();
+    });
+  });
+
+  describe('given a member in an organization without a shared provider', () => {
+    it('skips the model step and explains how to get a provider', async () => {
+      sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-provider');
+      sessionStorage.setItem(ONBOARDING_FACTORY_KEY, 'fp-1');
+      server.use(
+        http.get(`${TEST_BASE_URL}/auth/me`, () =>
+          HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+          HttpResponse.json({ projects: [{ id: 'fp-1', name: 'hello' }] }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            orgKeyAdmin: false,
+            providers: [{ provider: 'openai', source: 'stored-user', userCredential: 'api_key' }],
+          }),
+        ),
+      );
+      const user = userEvent.setup();
+
+      renderOnboarding();
+
+      expect(await screen.findByRole('heading', { name: 'Connect your personal providers.' })).toBeInTheDocument();
+      expect(screen.getByText(/has not connected a shared provider yet/)).toBeInTheDocument();
+      expect(sessionStorage.getItem(ONBOARDING_STEP_KEY)).toBe('personal-provider');
+      expect(
+        within(screen.getByRole('list', { name: 'Factory setup progress' })).getAllByRole('listitem'),
+      ).toHaveLength(4);
+
+      await user.click(screen.getByRole('button', { name: 'Go back to previous step' }));
+
+      expect(await screen.findByRole('heading', { name: 'Connect the work behind the code.' })).toBeInTheDocument();
     });
   });
 

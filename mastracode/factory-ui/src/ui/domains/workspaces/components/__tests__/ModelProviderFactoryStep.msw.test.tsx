@@ -153,10 +153,9 @@ describe('Model provider onboarding', () => {
 
       renderWithProviders(<ModelProviderFactoryStep factoryId="factory-1" onComplete={onComplete} />);
 
-      await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
-
-      // Once the provider is set, the picker gives way to a focused model
-      // selection view: provider name, model field, and a Change escape hatch.
+      // An already connected organization provider skips the provider list and
+      // opens the model choice directly, with a Change escape hatch.
+      expect(await screen.findByRole('button', { name: 'Finish setup' })).toBeInTheDocument();
       expect(screen.getByText('OpenAI')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Change provider' })).toBeInTheDocument();
       expect(screen.queryByRole('searchbox', { name: 'Search model providers' })).not.toBeInTheDocument();
@@ -236,7 +235,7 @@ describe('Model provider onboarding', () => {
   });
 
   describe('when the user is not an organization admin', () => {
-    it('keeps shared providers selectable and disables new organization connections', async () => {
+    it('opens the model choice for the shared provider without the provider list', async () => {
       registerAuthHandler();
       server.use(
         http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
@@ -255,17 +254,14 @@ describe('Model provider onboarding', () => {
           }),
         ),
       );
-      const user = userEvent.setup();
-
       renderWithProviders(<ModelProviderFactoryStep factoryId="factory-1" onComplete={vi.fn()} />);
 
-      expect(await screen.findByRole('button', { name: 'OpenAI' })).toBeEnabled();
-      expect(screen.queryByText(/Ask an organization admin/)).not.toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Continue with Anthropic' })).toBeDisabled();
-      expect(screen.getByRole('button', { name: 'Groq' })).toBeDisabled();
-
-      await user.click(screen.getByRole('button', { name: 'OpenAI' }));
       expect(await screen.findByRole('button', { name: 'Finish setup' })).toBeInTheDocument();
+      expect(screen.getByText('OpenAI')).toBeInTheDocument();
+      expect(screen.queryByText(/Ask an organization admin/)).not.toBeInTheDocument();
+      // Members cannot connect another provider and only one is shared.
+      expect(screen.queryByRole('button', { name: 'Change provider' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Continue with Anthropic' })).not.toBeInTheDocument();
     });
 
     it('guides members to an admin when no organization provider is connected', async () => {
@@ -333,8 +329,9 @@ describe('Model provider onboarding', () => {
 
       renderWithProviders(<ModelProviderFactoryStep factoryId="factory-1" onComplete={vi.fn()} />);
 
-      await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
       expect(await screen.findByRole('button', { name: 'Finish setup' })).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Change provider' }));
+      expect(await screen.findByRole('button', { name: 'OpenAI' })).toBeInTheDocument();
     });
   });
 });

@@ -22,6 +22,7 @@ import { FactoryHalftoneField } from '../../auth/components/FactoryHalftoneField
 import { InitialFactoryStep } from './InitialFactoryStep';
 import { ModelProviderFactoryStep } from './ModelProviderFactoryStep';
 import { PersonalProviderFactoryStep } from './PersonalProviderFactoryStep';
+import { useProviderConnection } from '../hooks/useProviderConnection';
 import { ProjectManagementFactoryStep } from './ProjectManagementFactoryStep';
 import { VcsFactoryStep } from './VcsFactoryStep';
 import { useNavigate } from 'react-router';
@@ -66,6 +67,20 @@ export function EmptyFactoryState() {
   const [connectingRepositoryId, setConnectingRepositoryId] = useState<number | string | null>(null);
   const [githubRedirecting, setGithubRedirecting] = useState(false);
   const navigate = useNavigate();
+  const orgProviders = useProviderConnection({ scope: 'org' });
+  // Only admins can connect organization providers. A member in an organization
+  // without one has nothing to do on the model step, so it is left out.
+  const skipModelStep =
+    !orgProviders.isPending &&
+    orgProviders.authEnabled &&
+    !orgProviders.orgKeyAdmin &&
+    !orgProviders.hasConfiguredProvider;
+
+  useEffect(() => {
+    if (step !== 'model-provider' || !skipModelStep) return;
+    persistOnboardingStep('personal-provider');
+    setStep('personal-provider');
+  }, [skipModelStep, step]);
 
   useEffect(() => {
     if (persistedFactories.isPending || pendingFactory) return;
@@ -139,7 +154,9 @@ export function EmptyFactoryState() {
     }
   };
 
-  const steps: Step[] = ['initial', 'vcs', 'project-management', 'model-provider', 'personal-provider'];
+  const steps: Step[] = skipModelStep
+    ? ['initial', 'vcs', 'project-management', 'personal-provider']
+    : ['initial', 'vcs', 'project-management', 'model-provider', 'personal-provider'];
   const stepIndex = steps.indexOf(step);
   const previousStep = stepIndex > 0 ? steps[stepIndex - 1] : undefined;
   // Once a Factory has been created for the user's first repository pick, Back
@@ -147,6 +164,10 @@ export function EmptyFactoryState() {
   // server Factory or race against the retry that already links to it. Drop
   // the affordance in that case rather than shipping a destructive delete.
   const backDisabled = Boolean(pendingFactory) && previousStep === 'vcs';
+  const stepMeta =
+    step === 'personal-provider' && skipModelStep
+      ? { ...STEP_META[step], description: 'Add your own provider credentials before you start using your Factory.' }
+      : STEP_META[step];
 
   return (
     <main className="bg-sidebar text-foreground min-h-dvh">
@@ -185,16 +206,16 @@ export function EmptyFactoryState() {
             </div>
 
             <h1 className="max-w-xl text-[clamp(2rem,3.9vw,3.25rem)] leading-[1.1] font-[520] tracking-[0.01em] text-balance [font-stretch:112%]">
-              {STEP_META[step].title}
+              {stepMeta.title}
             </h1>
-            {STEP_META[step].description && (
+            {stepMeta.description && (
               <Txt
                 as="p"
                 variant="body"
                 tone="muted"
                 className="mt-6 max-w-lg text-[clamp(1rem,1.5vw,1.25rem)] leading-[1.4] tracking-[0.01em]"
               >
-                {STEP_META[step].description}
+                {stepMeta.description}
               </Txt>
             )}
 
@@ -227,7 +248,7 @@ export function EmptyFactoryState() {
                     persistBeforeRedirect('project-management');
                     connectLinear(baseUrl);
                   }}
-                  onContinue={() => goTo('model-provider')}
+                  onContinue={() => goTo(skipModelStep ? 'personal-provider' : 'model-provider')}
                 />
               )}
               {step === 'model-provider' && pendingFactory && (
@@ -238,7 +259,7 @@ export function EmptyFactoryState() {
                 />
               )}
               {step === 'personal-provider' && pendingFactory && (
-                <PersonalProviderFactoryStep onContinue={() => void finish()} />
+                <PersonalProviderFactoryStep hasOrgProvider={!skipModelStep} onContinue={() => void finish()} />
               )}
             </div>
           </div>

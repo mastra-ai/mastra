@@ -14,7 +14,8 @@ export interface FactoryDefaultModelFormProps {
   factoryId: string;
   provider: ProviderInfo;
   onSaved: () => void;
-  onChangeProvider: () => void;
+  /** Omitted when there is no other provider to switch to. */
+  onChangeProvider?: () => void;
 }
 
 /** The model a connected provider runs on, saved as the Factory default. */
@@ -44,9 +45,11 @@ export function FactoryDefaultModelForm({
             {providerDisplayName(provider.provider)}
           </Txt>
         </div>
-        <Button disabled={choice.saving} onClick={onChangeProvider}>
-          Change provider
-        </Button>
+        {onChangeProvider && (
+          <Button disabled={choice.saving} onClick={onChangeProvider}>
+            Change provider
+          </Button>
+        )}
       </div>
       <label className="flex flex-col gap-2">
         <Txt as="span" variant="caption" className="text-foreground">
