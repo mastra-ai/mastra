@@ -37,9 +37,13 @@ export function createAdmission(options: {
   connectionString: string;
   namespace: string;
   limits?: Partial<AdmissionLimits>;
+  /** Minimum delay between background status passes; defaults to five seconds. */
+  reconciliationIntervalMs?: number;
   getStatus(runId: string): Promise<string | null>;
 }): Admission {
   const limits = { ...defaultAdmissionLimits, ...options.limits };
+  const interval = options.reconciliationIntervalMs ?? 5000;
+  if (!Number.isSafeInteger(interval) || interval < 1) throw new Error('Invalid reconciliation interval');
   for (const [key, value] of Object.entries(limits)) {
     if (key !== 'enabled' && (!Number.isSafeInteger(value) || Number(value) < 1))
       throw new Error(`Admission limit ${key} must be a positive integer`);
@@ -83,40 +87,71 @@ export function createAdmission(options: {
       throw error;
     }));
   let reconciliation: Promise<void> | undefined;
-  /** Share at most three concurrent status checks across requests on this admission instance. */
-  const reconcile = () =>
-    (reconciliation ??= (async () => {
-      // Reconcile outside the admission transaction. Unknown/absent runs keep their reservation.
-      const active = await pool.query<{ run_id: string }>(
-        'SELECT run_id FROM mastra_render_admissions WHERE namespace=$1 AND settled_at IS NULL',
-        [options.namespace],
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let closing: Promise<void> | undefined;
+  let closed = false;
+  let refreshFailed = false;
+  let cursor = '';
+  /** Refresh at most 100 reservations with three workers; requests never trigger provider lookups. */
+  async function reconcile() {
+    await initialize();
+    const readBatch = () =>
+      pool.query<{ run_id: string }>(
+        'SELECT run_id FROM mastra_render_admissions WHERE namespace=$1 AND settled_at IS NULL AND run_id>$2 ORDER BY run_id LIMIT 100',
+        [options.namespace, cursor],
       );
-      let next = 0;
-      const results = await Promise.allSettled(
-        Array.from({ length: Math.min(3, active.rows.length) }, async () => {
-          while (next < active.rows.length) {
-            const row = active.rows[next++]!;
-            const status = await options.getStatus(row.run_id);
-            if (status && ['success', 'failed', 'canceled'].includes(status))
-              await pool.query(
-                'UPDATE mastra_render_admissions SET settled_at=now() WHERE namespace=$1 AND run_id=$2 AND settled_at IS NULL',
-                [options.namespace, row.run_id],
-              );
-          }
-        }),
-      );
-      // Drain all workers before releasing the shared pass, even when one lookup fails.
-      for (const result of results) if (result.status === 'rejected') throw result.reason;
-    })().finally(() => {
-      reconciliation = undefined;
-    }));
+    let active = await readBatch();
+    if (!active.rows.length && cursor) {
+      cursor = '';
+      active = await readBatch();
+    }
+    let next = 0;
+    const results = await Promise.allSettled(
+      Array.from({ length: Math.min(3, active.rows.length) }, async () => {
+        while (next < active.rows.length) {
+          const row = active.rows[next++]!;
+          const status = await options.getStatus(row.run_id);
+          if (status && ['success', 'failed', 'canceled'].includes(status))
+            await pool.query(
+              'UPDATE mastra_render_admissions SET settled_at=now() WHERE namespace=$1 AND run_id=$2 AND settled_at IS NULL',
+              [options.namespace, row.run_id],
+            );
+        }
+      }),
+    );
+    // Drain every started worker before another pass or pool shutdown can begin.
+    for (const result of results) if (result.status === 'rejected') throw result.reason;
+    cursor = active.rows.at(-1)?.run_id ?? '';
+  }
+  /** Schedule the next pass after completion, bounding work independently of submission traffic. */
+  function schedule() {
+    if (closed) return;
+    timer = setTimeout(() => {
+      reconciliation = reconcile()
+        .then(
+          () => {
+            refreshFailed = false;
+          },
+          () => {
+            refreshFailed = true;
+            console.error('[mastra-render] Admission status refresh failed; reservations remain active.');
+          },
+        )
+        .finally(() => {
+          reconciliation = undefined;
+          schedule();
+        });
+    }, interval);
+    timer.unref();
+  }
+  schedule();
   return {
-    /** Reconcile settled runs, then atomically reserve capacity or reconnect the same owner/input identity. */
+    /** Atomically check quotas and reserve capacity without making any provider status calls. */
     async reserve(runId, owner, input) {
+      if (closed) throw new AdmissionError(503, 'Admission is shutting down.');
       if (!runId || !owner) throw new Error('Admission requires a run and owner');
       const hash = createHash('sha256').update(JSON.stringify(input)).digest('hex');
       await initialize();
-      await reconcile();
       const connection = await pool.connect();
       try {
         await connection.query('BEGIN');
@@ -161,6 +196,8 @@ export function createAdmission(options: {
           );
         if (Number(counts.global_active) >= limits.globalActive || Number(counts.owner_active) >= limits.ownerActive)
           throw new AdmissionError(429, 'Too many active reviews. Wait for an existing review to finish.');
+        if (refreshFailed)
+          throw new AdmissionError(503, 'Status refresh is unavailable. Existing reservations remain active.');
         await connection.query(
           'INSERT INTO mastra_render_admissions(namespace,run_id,owner,input_hash) VALUES($1,$2,$3,$4)',
           [options.namespace, runId, owner, hash],
@@ -174,9 +211,14 @@ export function createAdmission(options: {
         connection.release();
       }
     },
-    /** Release the application admission pool after requests have drained. */
-    async close() {
-      await pool.end();
+    /** Stop the timer and drain started status work before releasing the owned pool. */
+    close() {
+      return (closing ??= (async () => {
+        closed = true;
+        clearTimeout(timer);
+        await reconciliation;
+        await pool.end();
+      })());
     },
   };
 }

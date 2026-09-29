@@ -15,12 +15,21 @@ const make = (namespace: string, limits: Parameters<typeof createAdmission>[0]['
     connectionString,
     namespace,
     limits,
+    reconciliationIntervalMs: 25,
     getStatus: async runId => states.get(runId) ?? null,
   });
   clients.push(client);
   return client;
 };
 const rejected = (status: number) => (error: unknown) => error instanceof AdmissionError && error.status === status;
+/** Wait for the independent maintenance timer, without using submission requests to refresh state. */
+async function until(check: () => Promise<boolean>) {
+  const deadline = Date.now() + 3000;
+  while (!(await check())) {
+    assert.ok(Date.now() < deadline, 'Background reconciliation did not finish');
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+}
 try {
   const namespace = `admission-test-${randomUUID()}`;
   const limits = { globalActive: 2, ownerActive: 2, ownerSubmissions: 100, globalSubmissions: 100 };
@@ -46,6 +55,15 @@ try {
   states.set(first.run_id, 'submission-unknown');
   await assert.rejects(a.reserve('while-unknown', 'another-owner', {}), rejected(429));
   states.set(first.run_id, 'canceled');
+  await until(
+    async () =>
+      (
+        await pool.query('SELECT settled_at FROM mastra_render_admissions WHERE namespace=$1 AND run_id=$2', [
+          namespace,
+          first.run_id,
+        ])
+      ).rows[0].settled_at !== null,
+  );
   assert.equal(await a.reserve('after-cancel', 'another-owner', {}), true);
   console.log(
     'PASS: atomic global admission across pools, ownership/input conflicts, restart, uncertain/canceling holds, terminal release',
@@ -81,15 +99,21 @@ try {
   await assert.rejects(disabled.reserve('new', 'alice', {}), rejected(503));
   console.log('PASS: per-owner active cap and circuit breaker preserve existing reservations');
 
+  let observedRefreshFailure = false;
   const broken = createAdmission({
     connectionString,
     namespace,
+    reconciliationIntervalMs: 25,
     getStatus: async () => {
+      observedRefreshFailure = true;
       throw new Error('provider unavailable');
     },
   });
   clients.push(broken);
-  await assert.rejects(broken.reserve('must-not-reserve', 'alice', {}), /provider unavailable/);
+  await until(async () => observedRefreshFailure);
+  await new Promise(resolve => setTimeout(resolve, 10));
+  await assert.rejects(broken.reserve('must-not-reserve', 'alice', {}), rejected(503));
+  await broken.close();
   const count = await pool.query('SELECT count(*) FROM mastra_render_admissions WHERE namespace=$1 AND run_id=$2', [
     namespace,
     'must-not-reserve',
@@ -109,9 +133,10 @@ try {
   let inFlight = 0,
     peak = 0,
     lookups = 0;
-  const concurrent = createAdmission({
+  const concurrentOptions: Parameters<typeof createAdmission>[0] = {
     connectionString,
     namespace: concurrentNamespace,
+    reconciliationIntervalMs: 25,
     limits: { globalActive: 20, ownerActive: 20, globalSubmissions: 100, ownerSubmissions: 100 },
     getStatus: async id => {
       lookups++;
@@ -124,7 +149,8 @@ try {
         inFlight--;
       }
     },
-  });
+  };
+  const concurrent = createAdmission({ ...concurrentOptions, reconciliationIntervalMs: 60000 });
   clients.push(concurrent);
   // Initialize the schema before seeding this isolated namespace.
   await concurrent.reserve('unknown-initial', 'owner', {});
@@ -136,14 +162,63 @@ try {
       'synthetic',
     ]);
   await Promise.all([concurrent.reserve('next-a', 'owner', {}), concurrent.reserve('next-b', 'owner', {})]);
+  assert.equal(lookups, 0, 'Submissions must not refresh provider state');
+  await concurrent.close();
+  const maintenance = createAdmission(concurrentOptions);
+  clients.push(maintenance);
+  await until(async () => lookups >= 10);
+  await maintenance.close();
   assert.equal(peak, 3);
-  assert.equal(lookups, 8, 'Concurrent callers should share one bounded reconciliation pass');
+  assert.equal(lookups, 10, 'A single background pass should include the two newly accepted reservations');
   const settled = await pool.query(
     'SELECT run_id FROM mastra_render_admissions WHERE namespace=$1 AND settled_at IS NOT NULL',
     [concurrentNamespace],
   );
   assert.deepEqual(settled.rows.map(row => row.run_id).sort(), ['terminal-0', 'terminal-1', 'terminal-2']);
-  console.log('PASS: real PostgreSQL reconciliation shares three concurrent lookups and retains unknown reservations');
+  console.log('PASS: real PostgreSQL background reconciliation bounds concurrency and retains unknown reservations');
+
+  for (const reason of ['disabled', 'owner_rate', 'global_rate', 'owner_active', 'global_active']) {
+    const isolated = `no-lookups-${reason}-${randomUUID()}`;
+    namespaces.push(isolated);
+    let lookups = 0;
+    const getStatus = async () => {
+      lookups++;
+      return 'running';
+    };
+    const seed = createAdmission({ connectionString, namespace: isolated, reconciliationIntervalMs: 60000, getStatus });
+    clients.push(seed);
+    await seed.reserve('existing', 'alice', { draft: 'same' });
+    await seed.close();
+    const limits = {
+      enabled: reason !== 'disabled',
+      ...(reason === 'owner_rate' ? { ownerSubmissions: 1 } : {}),
+      ...(reason === 'global_rate' ? { globalSubmissions: 1 } : {}),
+      ...(reason === 'owner_active' ? { ownerActive: 1 } : {}),
+      ...(reason === 'global_active' ? { globalActive: 1 } : {}),
+    };
+    const limited = createAdmission({
+      connectionString,
+      namespace: isolated,
+      limits,
+      reconciliationIntervalMs: 60000,
+      getStatus,
+    });
+    clients.push(limited);
+    for (let i = 0; i < 5; i++)
+      await assert.rejects(limited.reserve(`denied-${i}`, 'alice', {}), rejected(reason === 'disabled' ? 503 : 429));
+    assert.equal(await limited.reserve('existing', 'alice', { draft: 'same' }), false);
+    await assert.rejects(limited.reserve('existing', 'bob', { draft: 'same' }), rejected(409));
+    assert.equal(lookups, 0, 'Rejected or duplicate requests must not trigger provider work');
+    assert.equal(
+      Number(
+        (await pool.query('SELECT count(*) FROM mastra_render_admissions WHERE namespace=$1', [isolated])).rows[0]
+          .count,
+      ),
+      1,
+    );
+    await limited.close();
+    console.log(`PASS: ${reason} rejects repeated requests without provider lookups and preserves duplicates`);
+  }
 } finally {
   for (const namespace of new Set(namespaces))
     await pool.query('DELETE FROM mastra_render_admissions WHERE namespace=$1', [namespace]);

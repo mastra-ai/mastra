@@ -76,7 +76,9 @@ Accepted reservations remain active until the existing workflow status proves su
 
 Run the real PostgreSQL admission regression with `DATABASE_URL=... node node_modules/tsx/dist/cli.mjs scripts/admission-smoke.ts` from the package directory. It uses isolated namespaces and deletes only its synthetic reservation rows.
 
-Reconciliation shares at most three concurrent status lookups per admission instance. Simultaneous requests share the current pass. All started lookups finish before a failed pass rejects; unknown statuses remain reserved, and failures do not admit another run. Separate application processes each have their own three-lookup bound. Terminal settlement is still decided by the existing provider state.
+Submission requests check ownership, duplicate IDs, the circuit breaker and quotas against PostgreSQL without calling the provider. An independent background pass refreshes at most 100 unsettled reservations with three concurrent lookups. Passes are separated by at least five seconds after completion by default (`reconciliationIntervalMs` in `createAdmission`), including after failures. The cursor rotates across batches so unknown runs cannot permanently starve later reservations. Separate application processes have independent refresh bounds.
+
+Only verified terminal provider states release capacity. Unknown statuses remain reserved; a completed or canceled job can therefore occupy capacity until its background refresh runs. During a refresh outage, new reservations fail with 503 after that instance observes the failure, while duplicate reconnects remain available. Repeated rejected requests never start or accelerate a refresh. The server drains HTTP handlers, then stops and drains admission maintenance before closing provider persistence and Mastra storage.
 
 ### Operator recovery for an interrupted reservation
 

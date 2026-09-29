@@ -13,16 +13,22 @@ const database = vi.hoisted(() => ({
   active: [] as { run_id: string }[],
   settled: [] as string[],
   inserted: [] as string[],
+  counts: { global_rate: '0', owner_rate: '0', global_active: '0', owner_active: '0' },
 }));
 vi.mock('pg', async () => {
   const { EventEmitter } = await import('node:events');
   class Pool extends EventEmitter {
     query = vi.fn(async (sql: string, args: unknown[] = []) => {
-      if (sql.startsWith('SELECT run_id')) return { rows: database.active };
+      if (sql.startsWith('SELECT run_id'))
+        return {
+          rows: database.active
+            .filter(row => row.run_id > String(args[1] ?? '') && !database.settled.includes(row.run_id))
+            .sort((a, b) => a.run_id.localeCompare(b.run_id))
+            .slice(0, 100),
+        };
       if (sql.startsWith('UPDATE mastra_render_admissions')) database.settled.push(String(args[1]));
       if (sql.startsWith('INSERT INTO mastra_render_admissions')) database.inserted.push(String(args[1]));
-      if (sql.includes('AS global_rate'))
-        return { rows: [{ global_rate: '0', owner_rate: '0', global_active: '0', owner_active: '0' }] };
+      if (sql.includes('AS global_rate')) return { rows: [database.counts] };
       return { rows: [], rowCount: 0 };
     });
     connect = async () => ({ query: this.query, release() {} });
@@ -39,8 +45,37 @@ beforeEach(() => {
   database.active = [];
   database.settled = [];
   database.inserted = [];
+  database.counts = { global_rate: '0', owner_rate: '0', global_active: '0', owner_active: '0' };
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
+
+it.each(['disabled', 'owner_rate', 'global_rate', 'owner_active', 'global_active'] as const)(
+  'does no provider work for repeated %s admission rejections',
+  async reason => {
+    database.active = [{ run_id: 'existing' }];
+    if (reason !== 'disabled') database.counts[reason] = '100';
+    const getStatus = vi.fn(async () => 'running');
+    const admission = createAdmission({
+      connectionString: 'test',
+      namespace: 'n',
+      limits: { enabled: reason !== 'disabled' },
+      getStatus,
+    });
+    try {
+      for (let i = 0; i < 3; i++)
+        await expect(admission.reserve(`new-${i}`, 'owner', {})).rejects.toMatchObject({
+          status: reason === 'disabled' ? 503 : 429,
+        });
+      expect(getStatus).not.toHaveBeenCalled();
+      expect(database.inserted).toEqual([]);
+    } finally {
+      await admission.close();
+    }
+  },
+);
 
 it.each(['persistence', 'admission'])('handles idle %s connection errors without masking query errors', async kind => {
   const log = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -155,7 +190,8 @@ it('compiles lazily, retries failed compilation and caches per binding after com
   expect(compile).toHaveBeenCalledTimes(3);
 });
 
-it('shares bounded reconciliation across submissions and settles only terminal runs', async () => {
+it('refreshes in the background with three workers and preserves unknown reservations', async () => {
+  vi.useFakeTimers();
   database.active = Array.from({ length: 8 }, (_, i) => ({ run_id: String(i) }));
   let active = 0,
     peak = 0,
@@ -186,23 +222,50 @@ it('shares bounded reconciliation across submissions and settles only terminal r
       }
     },
   });
-  const pending = Promise.all([admission.reserve('a', 'owner', {}), admission.reserve('b', 'owner', {})]);
   try {
-    await vi.waitFor(() => expect(active).toBe(3), { timeout: 300 });
+    await admission.reserve('a', 'owner', {});
+    expect(calls).toBe(0);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(active).toBe(3);
+    await admission.reserve('b', 'owner', {});
+    expect(calls).toBe(3);
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(peak).toBe(3);
+    expect(calls).toBe(8);
+    expect(database.settled.sort()).toEqual(['0', '1', '2']);
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(calls).toBe(8);
   } finally {
     release();
-    await pending;
     await admission.close();
   }
-  expect(peak).toBe(3);
-  expect(calls).toBe(8);
-  expect(database.settled.sort()).toEqual(['0', '1', '2']);
 });
 
-it('drains failed reconciliation, fails admission closed and can retry safely', async () => {
+it('caps each background pass and rotates past unknown runs without request amplification', async () => {
+  vi.useFakeTimers();
+  database.active = Array.from({ length: 101 }, (_, i) => ({ run_id: String(i).padStart(3, '0') }));
+  const getStatus = vi.fn(async () => null);
+  const admission = createAdmission({ connectionString: 'test', namespace: 'n', getStatus });
+  try {
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(getStatus).toHaveBeenCalledTimes(100);
+    for (let i = 0; i < 10; i++) await admission.reserve(`new-${i}`, 'owner', {});
+    expect(getStatus).toHaveBeenCalledTimes(100);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(getStatus).toHaveBeenCalledTimes(101);
+    expect(getStatus).toHaveBeenLastCalledWith('100');
+    expect(database.settled).toEqual([]);
+  } finally {
+    await admission.close();
+  }
+});
+
+it('fails new admission closed after a refresh failure and recovers on a successful background pass', async () => {
+  vi.useFakeTimers();
+  vi.spyOn(console, 'error').mockImplementation(() => {});
   database.active = [{ run_id: 'bad' }, { run_id: 'slow' }, { run_id: 'unknown' }];
   let release!: () => void,
-    finished = false,
     failed = true;
   const gate = new Promise<void>(resolve => {
     release = resolve;
@@ -216,25 +279,43 @@ it('drains failed reconciliation, fails admission closed and can retry safely', 
       return null;
     },
   });
-  const attempt = admission.reserve('a', 'owner', {}).then(
-    () => {
-      throw new Error('admission unexpectedly succeeded');
-    },
-    error => {
-      finished = true;
-      return error;
-    },
-  );
-  await new Promise(resolve => setTimeout(resolve, 20));
   try {
-    expect(finished).toBe(false);
+    await vi.advanceTimersByTimeAsync(5000);
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(admission.reserve('a', 'owner', {})).rejects.toMatchObject({ status: 503 });
+    expect(database.inserted).toEqual([]);
+    expect(database.settled).toEqual([]);
+    failed = false;
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(await admission.reserve('a', 'owner', {})).toBe(true);
   } finally {
     release();
+    await admission.close();
   }
-  expect((await attempt).message).toBe('provider unavailable');
-  expect(database.inserted).toEqual([]);
-  expect(database.settled).toEqual([]);
-  failed = false;
-  expect(await admission.reserve('a', 'owner', {})).toBe(true);
+});
+
+it('drains started refresh work before closing its pool and never refreshes after close', async () => {
+  vi.useFakeTimers();
+  database.active = [{ run_id: 'slow' }];
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  const getStatus = vi.fn(async () => {
+    await gate;
+    return null;
+  });
+  const admission = createAdmission({ connectionString: 'test', namespace: 'n', getStatus });
+  const end = vi.spyOn(database.pools[0], 'end');
+  await vi.advanceTimersByTimeAsync(5000);
+  const closed = admission.close();
+  expect(end).not.toHaveBeenCalled();
+  await expect(admission.reserve('a', 'owner', {})).rejects.toMatchObject({ status: 503 });
+  release();
+  await closed;
   await admission.close();
+  expect(end).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(20000);
+  expect(getStatus).toHaveBeenCalledTimes(1);
 });
