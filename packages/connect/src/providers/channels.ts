@@ -293,28 +293,29 @@ const teamsChannel: ChannelProviderRegistration = {
   async create(options, runtime) {
     const mod = (await import('@mastra/teams')) as {
       TeamsProvider: new (config: Record<string, unknown>) => ChannelProvider;
+      TEAMS_DEV_PORTAL_SCOPE: string;
     };
     const safeOptions = stripReservedOptions('microsoft-teams', options);
-    // Reads the *current* connection through the runtime on every call, so a
-    // connection swapped on the platform takes effect on the next
-    // provisioning operation — no `sync()` needed.
+    // Mirrors the Slack/Telegram pattern: fetch the current credential on
+    // every call, let the platform's vendor own rotation, extract the token
+    // the provider asked for. Unlike Slack/Telegram, Teams provisioning
+    // spans two token audiences (Graph + Dev Portal), so the resolver is
+    // scope-aware — a single `getCredential()` call triggers the vendor's
+    // refresh cycle that re-mints the secondary Dev Portal token alongside
+    // the primary Graph token and serves both on the same response.
     const tokenResolver = async (scope: string | string[]): Promise<string> => {
+      const fresh = await runtime.getCredential();
       const scopes = Array.isArray(scope) ? scope : [scope];
-      const wantsDevPortal = scopes.some(entry => entry.includes('dev.teams.microsoft.com'));
-      // A single credentials fetch triggers the vendor's refresh cycle,
-      // which re-mints the secondary Dev Portal token alongside the Graph
-      // token and serves both on the same response.
-      const credential = await runtime.getCredential();
-      if (!wantsDevPortal) {
-        return credentialToken(credential);
+      if (!scopes.includes(mod.TEAMS_DEV_PORTAL_SCOPE)) {
+        return credentialToken(fresh);
       }
       const token =
-        credential.type === 'oauth2' ? credential.secondaryAccessTokens?.devPortalAccessToken?.accessToken : undefined;
+        fresh.type === 'oauth2' ? fresh.secondaryAccessTokens?.devPortalAccessToken?.accessToken : undefined;
       if (!token) {
         throw new MastraConnectError(
           'no_active_connection',
           `Teams connection ${runtime.getConnectionId()} has no Dev Portal token on its credential. ` +
-            `Reconnect with an integration that requests the ${'https://dev.teams.microsoft.com/AppDefinitions.ReadWrite'} scope.`,
+            `Reconnect with an integration that requests the ${mod.TEAMS_DEV_PORTAL_SCOPE} scope.`,
         );
       }
       return token;

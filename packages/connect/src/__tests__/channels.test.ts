@@ -207,7 +207,10 @@ function mockAllProviders() {
   vi.doMock('@mastra/slack', () => ({ SlackProvider: fakeSlack() }));
   vi.doMock('@mastra/telegram', () => ({ TelegramProvider: fakeTelegram() }));
   vi.doMock('@mastra/discord', () => ({ DiscordProvider: fakeDiscord() }));
-  vi.doMock('@mastra/teams', () => ({ TeamsProvider: fakeTeams() }));
+  vi.doMock('@mastra/teams', () => ({
+    TeamsProvider: fakeTeams(),
+    TEAMS_DEV_PORTAL_SCOPE: 'https://dev.teams.microsoft.com/AppDefinitions.ReadWrite',
+  }));
 }
 
 async function importChannels() {
