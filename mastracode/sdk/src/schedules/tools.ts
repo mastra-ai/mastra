@@ -10,6 +10,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import { parseInterval, validateInterval } from './interval.js';
+import { resolveScriptCommand } from './run-script.js';
 import { describeScheduleSource, shortScheduleId } from './scheduler.js';
 import type { ScheduleFile, ThreadSchedule, ThreadScheduler } from './scheduler.js';
 
@@ -143,6 +144,16 @@ Pass exactly one source: "prompt" (text sent each fire), "promptFile" (a file re
         const token = (input.script ?? input.promptFile)!;
         const file = resolveFile(token, input.script ? 'script' : 'prompt', fileOptions());
         if (!file) return { content: `File not found: ${token}`, isError: true };
+        if (file.mode === 'script') {
+          try {
+            resolveScriptCommand(file.path);
+          } catch (error) {
+            return {
+              content: `Can't run ${token}: ${error instanceof Error ? error.message : String(error)}`,
+              isError: true,
+            };
+          }
+        }
         schedule = scheduler.create(
           {
             trigger: input.trigger,

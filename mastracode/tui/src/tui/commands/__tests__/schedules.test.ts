@@ -143,6 +143,7 @@ describe('/schedules picker', () => {
     const [picker] = asked;
     expect(picker!.question).toBe('Schedules on this thread (1):');
     expect(picker!.allowCustomResponse).toBe(false);
+    expect(asked.every(question => question.title === 'Schedules')).toBe(true);
     expect(optionLabels(picker!)[0]).toBe('Create schedule');
     expect(picker!.options).toHaveLength(2);
     expect(picker!.options![1]).toMatchObject({
@@ -174,6 +175,7 @@ describe('/schedules create', () => {
       }),
     ]);
     expect(asked.at(-1)!.question).toContain('Create schedule every 5m — "check CI"?');
+    expect(asked.map(question => question.title)).toEqual(Array(asked.length).fill('Schedules'));
     expect(showInfo).toHaveBeenCalledWith(
       expect.stringMatching(/^Created schedule [0-9a-f]{8}: every 5m — "check CI", next at \d{2}:\d{2}:\d{2} \(in /),
     );
@@ -194,6 +196,15 @@ describe('/schedules create', () => {
       file: { path: path.join(workspaceDir, 'check.sh'), displayPath: './check.sh', mode: 'script' },
       extraPrompt: 'Report it',
     });
+  });
+
+  it("asks again for a script that can't run, instead of failing on every fire", async () => {
+    const { ctx, scheduler } = createContext();
+    answer('Create schedule', 'Script', 'notes.md', './check.sh', '', '5m', 'Create');
+    await handleSchedulesCommand(ctx, []);
+    expect(asked[3]!.question).toContain('is not executable and has no known interpreter');
+    expect(scheduler.list()).toHaveLength(1);
+    expect(scheduler.list()[0]).toMatchObject({ file: { displayPath: './check.sh', mode: 'script' } });
   });
 
   it('creates a prompt-file schedule, asking again until the path exists', async () => {

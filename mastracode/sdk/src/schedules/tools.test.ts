@@ -111,6 +111,14 @@ describe('schedule tools', () => {
     expect(scheduler.list()).toHaveLength(0);
   });
 
+  it("refuses a script that can't run instead of failing on every fire", async () => {
+    const { tools, scheduler } = setup({ '/project/notes.md': {} });
+    const result = await exec(tools.schedule_create, { trigger: every('5m'), script: 'notes.md' });
+    expect(result.isError).toBe(true);
+    expect(result.content).toMatch(/^Can't run notes\.md: .*is not executable and has no known interpreter/);
+    expect(scheduler.list()).toHaveLength(0);
+  });
+
   it('requires a memory-backed thread', async () => {
     const { tools, scheduler } = setup();
     const result = await exec(tools.schedule_create, { trigger: every('5m'), prompt: 'x' }, {});

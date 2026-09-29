@@ -1,7 +1,13 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { describeScheduleSource, parseInterval, shortScheduleId, validateInterval } from '@mastra/code-sdk/schedules';
+import {
+  describeScheduleSource,
+  parseInterval,
+  resolveScriptCommand,
+  shortScheduleId,
+  validateInterval,
+} from '@mastra/code-sdk/schedules';
 import type {
   ScheduleFile,
   ScheduleTrigger,
@@ -93,6 +99,7 @@ export async function handleSchedulesCommand(ctx: SlashCommandContext, args: str
   const rows = new Map(schedules.map(schedule => [scheduleLabel(schedule), schedule]));
 
   const picked = await askModalQuestion(ctx.state.ui, {
+    title: 'Schedules',
     question:
       schedules.length === 0 ? 'No schedules on this thread yet.' : `Schedules on this thread (${schedules.length}):`,
     options: [
@@ -112,6 +119,7 @@ export async function handleSchedulesCommand(ctx: SlashCommandContext, args: str
 
 async function createScheduleFlow(ctx: SlashCommandContext, scheduler: ThreadScheduler): Promise<void> {
   const kind = (await askModalQuestion(ctx.state.ui, {
+    title: 'Schedules',
     question: 'What should each fire send?',
     options: [...SOURCE_OPTIONS],
     allowCustomResponse: false,
@@ -126,6 +134,7 @@ async function createScheduleFlow(ctx: SlashCommandContext, scheduler: ThreadSch
 
   const summary = `every ${trigger.interval.label} — ${describeScheduleSource(source)}`;
   const confirm = await askModalQuestion(ctx.state.ui, {
+    title: 'Schedules',
     question: `Create schedule ${summary}?\nIt fires on clock boundaries and lasts until this Mastra Code session exits.`,
     options: [{ label: 'Create' }, { label: 'Cancel' }],
     allowCustomResponse: false,
@@ -155,7 +164,10 @@ async function createScheduleFlow(ctx: SlashCommandContext, scheduler: ThreadSch
 
 async function askSource(ctx: SlashCommandContext, kind: SourceKind): Promise<ThreadScheduleSource | null> {
   if (kind === 'Prompt') {
-    const prompt = await askModalQuestion(ctx.state.ui, { question: 'Prompt to send on every fire:' });
+    const prompt = await askModalQuestion(ctx.state.ui, {
+      title: 'Schedules',
+      question: 'Prompt to send on every fire:',
+    });
     return prompt?.trim() ? { prompt: prompt.trim() } : null;
   }
 
@@ -164,6 +176,7 @@ async function askSource(ctx: SlashCommandContext, kind: SourceKind): Promise<Th
   if (kind === 'Prompt file') return { file };
 
   const extra = await askModalQuestion(ctx.state.ui, {
+    title: 'Schedules',
     question: 'Prompt to send after the script output (optional, Enter to skip):',
     allowEmptyInput: true,
   });
@@ -177,14 +190,26 @@ async function askFile(ctx: SlashCommandContext, mode: ScheduleFile['mode']): Pr
   let problem = '';
   for (;;) {
     const answer = await askModalQuestion(ctx.state.ui, {
+      title: 'Schedules',
       question: `${problem}Path to the ${noun} (relative to ${cwd}):`,
     });
     const token = answer?.trim();
     if (!token) return null;
     const expanded = token.startsWith('~/') ? path.join(os.homedir(), token.slice(2)) : token;
     const absPath = path.resolve(cwd, expanded);
-    if (isFile(absPath)) return { path: absPath, displayPath: token, mode };
-    problem = `No file at ${absPath}.\n`;
+    if (!isFile(absPath)) {
+      problem = `No file at ${absPath}.\n`;
+      continue;
+    }
+    if (mode === 'script') {
+      try {
+        resolveScriptCommand(absPath);
+      } catch (error) {
+        problem = `Can't run it: ${errorMessage(error)}. Make it executable or use .sh, .js, .mjs, .cjs, .ts, or .py.\n`;
+        continue;
+      }
+    }
+    return { path: absPath, displayPath: token, mode };
   }
 }
 
@@ -200,6 +225,7 @@ async function askTrigger(ctx: SlashCommandContext): Promise<ScheduleTrigger | n
   let problem = '';
   for (;;) {
     const answer = await askModalQuestion(ctx.state.ui, {
+      title: 'Schedules',
       question: `${problem}How often? Minute steps must divide an hour; hour steps must divide a day.`,
       options: CADENCE_OPTIONS,
       allowCustomResponse: true,
@@ -226,6 +252,7 @@ async function manageScheduleFlow(
 ): Promise<void> {
   const id = shortScheduleId(schedule.id);
   const action = await askModalQuestion(ctx.state.ui, {
+    title: 'Schedules',
     question: `Schedule ${id}: every ${schedule.trigger.interval.label} — ${describeScheduleSource(schedule)}`,
     options: [
       schedule.status === 'paused'
@@ -262,6 +289,7 @@ async function manageScheduleFlow(
       return;
     case 'Delete': {
       const confirm = await askModalQuestion(ctx.state.ui, {
+        title: 'Schedules',
         question: `Delete schedule ${id}?`,
         options: [{ label: 'Delete' }, { label: 'Cancel' }],
         allowCustomResponse: false,
