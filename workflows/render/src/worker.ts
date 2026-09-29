@@ -142,10 +142,12 @@ export function registerRenderTasks({
             error: current.error ?? errorRecord(error),
             dispatchClosed: true,
             ...(!current.providerId ? { status: 'failed' as const } : {}),
-          }));
+          })).catch(() => console.error('[mastra-render] Failed to persist root error.'));
           throw error;
         } finally {
-          await updateRun(store, envelope.workflowId, envelope.runId, () => ({ dispatchClosed: true }));
+          await updateRun(store, envelope.workflowId, envelope.runId, () => ({ dispatchClosed: true })).catch(() =>
+            console.error('[mastra-render] Failed to close child dispatch; authority expires at its deadline.'),
+          );
         }
       }),
     );

@@ -10,6 +10,7 @@ import { init, createMemoryPersistence } from './index.js';
 import type { ProviderRun, RenderOptions, RenderTransport } from './index.js';
 import { registerRenderTasks } from './worker.js';
 import { json } from './protocol.js';
+import { RenderRun } from './run.js';
 import { getRenderTaskContext } from './runtime.js';
 
 function harness(options: Partial<RenderOptions> = {}) {
@@ -635,4 +636,73 @@ it('keeps the native binding when the worker finishes before the submission resp
   expect(record?.providerId).toBe([...h.runs.keys()][0]);
   expect(record?.dispatchClosed).toBe(true);
   expect(record?.result).toMatchObject({ status: 'success', result: 3 });
+});
+
+it.each(['success', 'failure'] as const)('preserves native %s when final bookkeeping fails', async outcome => {
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+  const h = harness();
+  const step = h.createStep({
+    id: 'work',
+    inputSchema: z.number(),
+    outputSchema: z.number(),
+    execute: async ({ inputData }) => {
+      if (outcome === 'failure') throw new Error('business failure');
+      return inputData;
+    },
+  });
+  const workflow = h
+    .createWorkflow({ id: randomUUID(), inputSchema: z.number(), outputSchema: z.number() })
+    .then(step)
+    .commit();
+  h.register(workflow);
+  const swap = h.provider.store.compareAndSwap.bind(h.provider.store);
+  vi.spyOn(h.provider.store, 'compareAndSwap').mockImplementation(async (record, revision) => {
+    const current = await h.provider.store.get(record.workflowId, record.runId);
+    if (current?.dispatchClosed && record.status === 'running') throw new Error('secondary bookkeeping failure');
+    return swap(record, revision);
+  });
+  try {
+    const run = await workflow.createRun();
+    const result = await run.start({ inputData: 1 });
+    expect(result.status).toBe(outcome === 'success' ? 'success' : 'failed');
+    const native = [...h.runs.values()][0]!;
+    if (outcome === 'success') expect(native.status).toBe('completed');
+    else expect((native.error as Error).message).toMatch(/^Mastra workflow .* failed$/);
+    expect((await h.provider.store.get(workflow.id, run.runId))?.dispatchClosed).toBe(true);
+    expect(log).toHaveBeenCalled();
+  } finally {
+    vi.restoreAllMocks();
+  }
+});
+
+it('preserves the original worker exception when both error and closure writes fail', async () => {
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+  const original = new Error('original worker failure');
+  vi.spyOn(RenderRun.prototype, 'executeLocal').mockRejectedValue(original);
+  const h = harness();
+  const step = h.createStep({
+    id: 'unused',
+    inputSchema: z.number(),
+    outputSchema: z.number(),
+    execute: async ({ inputData }) => inputData,
+  });
+  const workflow = h
+    .createWorkflow({ id: randomUUID(), inputSchema: z.number(), outputSchema: z.number() })
+    .then(step)
+    .commit();
+  h.register(workflow);
+  const swap = h.provider.store.compareAndSwap.bind(h.provider.store);
+  vi.spyOn(h.provider.store, 'compareAndSwap').mockImplementation(async (record, revision) => {
+    if (record.status === 'running' && record.dispatchClosed) throw new Error('secondary write failed');
+    return swap(record, revision);
+  });
+  try {
+    const result = await (await workflow.createRun()).start({ inputData: 1 });
+    expect(result.status).toBe('failed');
+    expect([...h.runs.values()][0]?.error).toBe(original);
+    expect(h.dispatched).toHaveLength(0);
+    expect(log).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.restoreAllMocks();
+  }
 });
