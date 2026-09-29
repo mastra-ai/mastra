@@ -4,10 +4,6 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
-const MetadataSchema = z.object({
-  botToken: z.string().describe('Discord bot token for authentication'),
-});
-
 export const deleteGuildMemberInputSchema = z.object({
   guild_id: z.string().describe('Guild ID. Example: "123456789012345678"'),
   user_id: z.string().describe('User ID of the member to delete. Example: "987654321098765432"'),

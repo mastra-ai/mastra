@@ -25,6 +25,7 @@ import {
   Project,
   SyntaxKind,
   type CallExpression,
+  type Identifier,
   type ImportDeclaration,
   type ObjectLiteralExpression,
   type SourceFile,
@@ -175,6 +176,48 @@ function unsupportedTopLevelStatementReason(source: SourceFile, createActionCall
     return `uses unsupported top-level statement: ${statement.getKindName()}`;
   }
   return undefined;
+}
+
+function unexportedDeclarationNames(statement: Statement): Identifier[] | undefined {
+  if (Node.isVariableStatement(statement)) {
+    if (statement.isExported()) return undefined;
+    const names = statement.getDeclarations().map(declaration => declaration.getNameNode());
+    return names.every((name): name is Identifier => Node.isIdentifier(name)) ? names : undefined;
+  }
+  if (
+    Node.isFunctionDeclaration(statement) ||
+    Node.isTypeAliasDeclaration(statement) ||
+    Node.isInterfaceDeclaration(statement) ||
+    Node.isEnumDeclaration(statement)
+  ) {
+    if (statement.isExported()) return undefined;
+    const name = statement.getNameNode();
+    return name ? [name] : undefined;
+  }
+  return undefined;
+}
+
+function withoutUnreferencedDeclarations(statements: Statement[], execInitializer: Node): Statement[] {
+  let kept = statements;
+  let changed = true;
+  while (changed) {
+    const next = kept.filter(statement => {
+      const names = unexportedDeclarationNames(statement);
+      if (!names) return true;
+      return names.some(name =>
+        name
+          .findReferencesAsNodes()
+          .some(
+            reference =>
+              execInitializer.containsRange(reference.getPos(), reference.getEnd()) ||
+              kept.some(other => other !== statement && other.containsRange(reference.getPos(), reference.getEnd())),
+          ),
+      );
+    });
+    changed = next.length !== kept.length;
+    kept = next;
+  }
+  return kept;
 }
 
 function usesNamedImport(declaration: ImportDeclaration, name: string): boolean {
@@ -591,10 +634,10 @@ function extractAction(
   }
 
   const moduleStatements = widenResponseEnums(
-    source
-      .getStatements()
-      .filter(statement => shouldKeepStatement(statement, createActionCall))
-      .map(statement => replaceProxyRequestType(sanitizeVendoredSource(statement.getText()), usesProxyRequestType)),
+    withoutUnreferencedDeclarations(
+      source.getStatements().filter(statement => shouldKeepStatement(statement, createActionCall)),
+      execInitializer,
+    ).map(statement => replaceProxyRequestType(sanitizeVendoredSource(statement.getText()), usesProxyRequestType)),
     inputSchemaName,
   );
 

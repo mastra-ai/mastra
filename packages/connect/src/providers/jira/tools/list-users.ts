@@ -116,11 +116,6 @@ async function resolveCloudId(platformProxy: PlatformProxy): Promise<{ cloudId: 
   return { cloudId: cloudId, baseUrl: baseUrl };
 }
 
-const MetadataSchema = z.object({
-  cloudId: z.string().optional(),
-  baseUrl: z.string().optional(),
-});
-
 export function listUsersTool(proxy: PlatformProxy) {
   return createTool({
     id: 'jira_list_users',

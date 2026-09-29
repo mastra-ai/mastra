@@ -4,10 +4,6 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
-const MetadataSchema = z.object({
-  botToken: z.string(),
-});
-
 export const updateGuildInputSchema = z.object({
   guild_id: z.string().describe('Guild ID to update. Example: "197038439483310086"'),
   name: z.string().min(2).max(100).optional().describe('Guild name (2-100 characters)'),

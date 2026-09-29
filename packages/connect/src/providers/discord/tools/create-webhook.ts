@@ -56,11 +56,6 @@ export const createWebhookOutputSchema = z.object({
   applicationId: z.string().optional(),
 });
 
-const MetadataSchema = z.object({
-  botToken: z.string().describe('Discord bot token for authentication'),
-  channelId: z.string().optional().describe('Optional default channel ID for creating webhooks'),
-});
-
 export function createWebhookTool(proxy: PlatformProxy) {
   return createTool({
     id: 'discord_create_webhook',

@@ -50,11 +50,6 @@ const RawIssueTypeSchema = z
 
 export const getIssueTypeOutputSchema = RawIssueTypeSchema;
 
-const JiraMetadataSchema = z.object({
-  cloudId: z.string().optional(),
-  baseUrl: z.string().optional(),
-});
-
 export function getIssueTypeTool(proxy: PlatformProxy) {
   return createTool({
     id: 'jira_get_issue_type',

@@ -24,15 +24,6 @@ export const likeTweetOutputSchema = z.object({
   liked: z.boolean().describe('Whether the tweet was successfully liked'),
 });
 
-const MetadataSchema = z.object({
-  userId: z
-    .string()
-    .optional()
-    .describe(
-      'The ID of the authenticated user who is liking the tweet. If not provided, will be fetched from /2/users/me',
-    ),
-});
-
 export function likeTweetTool(proxy: PlatformProxy) {
   return createTool({
     id: 'twitter_v2_like_tweet',

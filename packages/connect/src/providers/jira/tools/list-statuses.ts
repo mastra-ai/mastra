@@ -4,11 +4,6 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
-const MetadataSchema = z.object({
-  cloudId: z.string().optional(),
-  baseUrl: z.string().optional(),
-});
-
 export const listStatusesInputSchema = z.object({
   projectId: z.string().optional().describe('Project ID to filter statuses. Example: "10000"'),
   statusCategory: z.enum(['TODO', 'IN_PROGRESS', 'DONE']).optional().describe('Filter by status category'),

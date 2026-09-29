@@ -3,7 +3,7 @@
   "localId": "twitter-v2",
   "templateSha": "c3091db1e8a623113d581197a8ee0d5b1aa87136",
   "templateRepo": "NangoHQ/integration-templates",
-  "generatedAt": "2026-09-22T15:58:57.164Z",
+  "generatedAt": "2026-09-29T11:34:49.964Z",
   "toolCount": 27,
   "skippedActions": [],
   "files": {
@@ -23,7 +23,7 @@
     "tools/get-space.ts": "7c3424b369b5a5ab0c039743e3a5a7d3ad1da58f3e4c2906e6bd36b38afd8395",
     "tools/get-tweet.ts": "e705f34245961db66f7acbfc723e874963b5ecc2aea95330823cf304422cca6f",
     "tools/get-user.ts": "5a856dc15acda557aa5288724f80a4f1c67632116d87483d9a863d16b39b88ce",
-    "tools/like-tweet.ts": "23adb954cd0772f3f9c8e10b2418a5a5655452027f4976215675a9fa99fba2b6",
+    "tools/like-tweet.ts": "8740b3fc2196f71d7daaa31ea56c08e787ef2e1873b901a9716b4886cb2c9cb9",
     "tools/list-following.ts": "2c88d7a6f012a33a13ef77ff0d6417c00e78ecd9a0a8e09dba1cfc8744671c9b",
     "tools/list-liked-tweets.ts": "98c6d279e2d5f273d5f239f412795efc69fe02463fc84373edc1c25dc7e820ce",
     "tools/list-lists.ts": "23cf625ec04b30ce312a6f621f1161afd7b5edfffbb5de7b99fd3eaa0dcbe130",

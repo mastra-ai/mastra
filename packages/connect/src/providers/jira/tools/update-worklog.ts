@@ -21,11 +21,6 @@ export const updateWorklogInputSchema = z.object({
     .describe('The datetime when the work was started in ISO 8601 format. Example: "2021-01-17T12:34:00.000+0000"'),
 });
 
-const MetadataSchema = z.object({
-  cloudId: z.string().optional(),
-  baseUrl: z.string().optional(),
-});
-
 const VisibilitySchema = z.object({
   identifier: z.string().optional(),
   type: z.string().optional(),
