@@ -57,12 +57,16 @@ export function PageHeaderRoot({
   );
 
   return (
-    <header className={cn('relative flex w-full flex-col gap-2', className)} {...props}>
+    <header className={cn('relative flex w-full flex-col gap-1', className)} {...props}>
       {eyebrows}
       <div className="flex w-full items-start gap-3">
         {icons}
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          {headline.length > 0 && <div className="flex min-w-0 items-center gap-3">{headline}</div>}
+          {headline.length > 0 && (
+            <div className={cn('flex min-w-0 items-start gap-3', (icons.length > 0 || actions.length > 0) && 'py-1')}>
+              {headline}
+            </div>
+          )}
           {below}
         </div>
         {actions}

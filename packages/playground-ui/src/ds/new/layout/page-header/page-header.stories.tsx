@@ -154,6 +154,32 @@ export const EyebrowBackLink: Story = {
   ),
 };
 
+export const EverySlotWrapping: Story = {
+  render: () => (
+    <div className="w-80 py-10">
+      <PageHeader>
+        <PageHeader.Eyebrow>
+          <a href="#agents">
+            <ArrowLeftIcon aria-hidden />
+            Back to agents
+          </a>
+        </PageHeader.Eyebrow>
+        <PageHeader.Icon>
+          <BotIcon strokeWidth={2.5} />
+        </PageHeader.Icon>
+        <PageHeader.Title>Customer support escalation agent</PageHeader.Title>
+        <PageHeader.Meta beside>
+          <Badge variant="green">Live</Badge>
+        </PageHeader.Meta>
+        <PageHeader.Description>Routes urgent tickets to the on-call team.</PageHeader.Description>
+        <PageHeader.Action>
+          <Button size="sm">Edit</Button>
+        </PageHeader.Action>
+      </PageHeader>
+    </div>
+  ),
+};
+
 export const MetaBoth: Story = {
   render: () => (
     <StoryFrame>

@@ -15,7 +15,7 @@ export function PageHeaderMeta({ beside = false, className, ...props }: PageHead
       tone="muted"
       data-slot="page-header-meta"
       data-placement={beside ? 'beside' : 'below'}
-      className={cn('flex min-w-0 flex-wrap items-center gap-2', className)}
+      className={cn('flex min-w-0 flex-wrap items-center gap-2', beside && 'min-h-6 shrink-0', className)}
       {...props}
     />
   );
