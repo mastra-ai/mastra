@@ -5,6 +5,7 @@ import * as React from 'react';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { useAutoscroll } from '@/hooks/use-autoscroll';
+import { mergeRefs } from '@/lib/merge-refs';
 import { cn } from '@/lib/utils';
 
 type Orientation = 'vertical' | 'horizontal' | 'both';
@@ -259,7 +260,7 @@ export type ScrollAreaViewportProps = {
 };
 
 function useScrollAreaViewportContext() {
-  const viewport = React.useContext(ScrollAreaViewportContext);
+  const viewport = React.use(ScrollAreaViewportContext);
   if (!viewport) throw new Error('ScrollAreaViewport must be a direct child of ScrollArea');
   return viewport;
 }
@@ -267,24 +268,16 @@ function useScrollAreaViewportContext() {
 function ScrollAreaViewport({ className, children, ref }: ScrollAreaViewportProps) {
   const viewport = useScrollAreaViewportContext();
   const { areaRef } = viewport;
-
-  const setViewportNode = React.useCallback(
-    (node: HTMLDivElement | null) => {
-      areaRef.current = node;
-      if (typeof ref === 'function') ref(node);
-      else if (ref) ref.current = node;
-    },
-    [areaRef, ref],
-  );
+  const viewportRef = React.useMemo(() => mergeRefs(areaRef, ref), [areaRef, ref]);
 
   return (
     <ScrollAreaPrimitive.Viewport
-      ref={setViewportNode}
+      ref={viewportRef}
       className={cn(viewport.className, className)}
       style={viewport.style}
     >
       <ScrollAreaPrimitive.Content style={viewport.contentStyle}>
-        <ScrollAreaViewportContext.Provider value={null}>{children}</ScrollAreaViewportContext.Provider>
+        <ScrollAreaViewportContext value={null}>{children}</ScrollAreaViewportContext>
       </ScrollAreaPrimitive.Content>
     </ScrollAreaPrimitive.Viewport>
   );
@@ -336,9 +329,9 @@ function ScrollArea({
 
   return (
     <ScrollAreaPrimitive.Root className={cn('group/scroll-area relative overflow-hidden', className)} {...props}>
-      <ScrollAreaViewportContext.Provider value={viewport}>
+      <ScrollAreaViewportContext value={viewport}>
         {callerRendersViewport ? children : <ScrollAreaViewport>{children}</ScrollAreaViewport>}
-      </ScrollAreaViewportContext.Provider>
+      </ScrollAreaViewportContext>
       {scrollButtons && orientation !== 'vertical' && <ScrollButtons areaRef={areaRef} scrollButtons={scrollButtons} />}
       {(orientation === 'vertical' || orientation === 'both') && (
         <ScrollBar orientation="vertical" revealOnHover={revealScrollbarOnHover} />

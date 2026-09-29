@@ -1,6 +1,8 @@
 import { ArrowDownIcon } from 'lucide-react';
 import * as React from 'react';
 
+import { mergeRefs } from '@/lib/merge-refs';
+
 import {
   AUTO_SCROLL_ATTACH_THRESHOLD,
   DEFAULT_REACH_START_THRESHOLD,
@@ -48,19 +50,6 @@ export type {
   MessageScrollerScrollable,
   MessageScrollerVisibility,
 } from './message-scroller-context';
-
-const mergeRefs =
-  <TElement,>(...refs: Array<React.Ref<TElement> | undefined>) =>
-  (element: TElement | null) => {
-    refs.forEach(ref => {
-      if (!ref) return;
-      if (typeof ref === 'function') {
-        ref(element);
-        return;
-      }
-      ref.current = element;
-    });
-  };
 
 const scrollableMatches = (left: MessageScrollerScrollable, right: MessageScrollerScrollable) =>
   left.start === right.start && left.end === right.end;
