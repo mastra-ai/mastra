@@ -105,9 +105,16 @@ export class RenderProvider {
         error instanceof ClientError && error.statusCode >= 400 && error.statusCode < 500 && error.statusCode !== 408;
       await updateRun(this.store, record.workflowId, record.runId, current => ({
         // A worker claim proves acceptance; a lost response must not revoke its dispatch authority.
-        status: current.workerClaim ? current.status : rejected ? 'failed' : 'submission-unknown',
+        status:
+          current.workerClaim || current.status !== 'submitting'
+            ? current.status
+            : rejected
+              ? 'failed'
+              : 'submission-unknown',
         error: current.error ?? errorRecord(error),
-      }));
+      })).catch(() =>
+        console.error('[mastra-render] Failed to persist the submission outcome; do not resubmit this run.'),
+      );
       if (rejected) throw error;
       throw new RenderSubmissionUnknownError(record.runId, { cause: error });
     }
@@ -130,6 +137,12 @@ export class RenderProvider {
       }
       throw new RenderRunConflictError(`Concurrent binding updates did not settle for ${record.runId}`);
     } catch (error) {
+      await updateRun(this.store, record.workflowId, record.runId, current => ({
+        status: current.workerClaim || current.status !== 'submitting' ? current.status : 'submission-unknown',
+        error: current.error ?? errorRecord(error),
+      })).catch(() =>
+        console.error('[mastra-render] Failed to persist submission uncertainty; do not resubmit this run.'),
+      );
       throw new RenderSubmissionUnknownError(record.runId, { cause: error });
     }
   }

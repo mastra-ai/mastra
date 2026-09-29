@@ -706,3 +706,59 @@ it('preserves the original worker exception when both error and closure writes f
     vi.restoreAllMocks();
   }
 });
+
+it.each(['binding-throw', 'binding-contention', 'binding-and-state-write', 'start-and-state-write'] as const)(
+  'preserves submission uncertainty without a worker after %s',
+  async failure => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const original = new Error('accepted response or binding write lost');
+    const start = vi.fn(async () => {
+      if (failure === 'start-and-state-write') throw original;
+      return 'accepted-native-root';
+    });
+    const get = vi.fn(async () => {
+      throw new Error('An unbound record cannot query native status');
+    });
+    const h = harness({ transport: { start, get, cancel: async () => {} } });
+    const step = h.createStep({
+      id: 'never-started',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      execute: async ({ inputData }) => inputData,
+    });
+    const workflow = h
+      .createWorkflow({ id: randomUUID(), inputSchema: z.number(), outputSchema: z.number() })
+      .then(step)
+      .commit();
+    h.register(workflow);
+    const swap = h.provider.store.compareAndSwap.bind(h.provider.store);
+    vi.spyOn(h.provider.store, 'compareAndSwap').mockImplementation(async (record, revision) => {
+      if (failure.endsWith('and-state-write') || record.providerId) {
+        if (failure === 'binding-contention') return false;
+        throw original;
+      }
+      return swap(record, revision);
+    });
+    try {
+      const run = await workflow.createRun();
+      await expect(run.startAsync({ inputData: 1 })).rejects.toMatchObject({
+        name: 'RenderSubmissionUnknownError',
+        runId: run.runId,
+      });
+      const stored = await h.provider.store.get(workflow.id, run.runId);
+      expect(stored?.providerId).toBeUndefined();
+      expect(stored?.workerClaim).toBeUndefined();
+      if (!failure.endsWith('and-state-write')) {
+        expect(stored?.status).toBe('submission-unknown');
+        await expect(h.provider.wait(workflow.id, run.runId, AbortSignal.timeout(1000))).rejects.toMatchObject({
+          name: 'RenderSubmissionUnknownError',
+        });
+      }
+      await expect(run.startAsync({ inputData: 1 })).rejects.toThrow('already exists');
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(get).not.toHaveBeenCalled();
+    } finally {
+      vi.restoreAllMocks();
+    }
+  },
+);
