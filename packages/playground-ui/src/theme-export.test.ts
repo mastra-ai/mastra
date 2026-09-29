@@ -64,6 +64,7 @@ const deferredSemanticTokens = [
   'sidebar-ring',
   'sidebar-divider',
   'selected',
+  'ring',
 ] as const;
 
 const semanticAliases = {

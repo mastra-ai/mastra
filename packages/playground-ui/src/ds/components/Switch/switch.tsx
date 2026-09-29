@@ -1,7 +1,7 @@
 import { Switch as SwitchPrimitive } from '@base-ui/react/switch';
 import * as React from 'react';
 
-import { focusRing } from '@/ds/primitives/transitions';
+import { focusRingOffset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 import './switch.css';
 
@@ -41,7 +41,7 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
           'transition-colors duration-normal ease-out-custom motion-reduce:transition-none',
           'hover:bg-fill-active',
           'active:bg-fill-strong',
-          focusRing,
+          focusRingOffset,
           'data-[checked]:bg-foreground/90',
           'data-[checked]:hover:bg-foreground',
           'data-[checked]:active:bg-foreground/75',

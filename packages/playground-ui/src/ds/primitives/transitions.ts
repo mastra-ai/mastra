@@ -40,10 +40,16 @@ export const hoverEffects = {
   lift: 'hover:bg-foreground/10',
 } as const;
 
-export const focusRing = 'focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-border-focus';
+// An outline, not a ring: `ring-*` rewrites box-shadow and would erase a raised surface's rim and elevation.
+const focusLine = 'focus-visible:outline-1 focus-visible:outline-solid focus-visible:outline-border-focus';
+
+export const focusRing = `${focusLine} focus-visible:outline-offset-0`;
 
 // For focusables whose outer edge is clipped by an overflow container or a neighbour, such as full-bleed rows.
-export const focusRingInset = `${focusRing} focus-visible:ring-inset`;
+export const focusRingInset = `${focusLine} focus-visible:-outline-offset-1`;
+
+// For small solid controls (checkbox, radio, switch), where a line flush with the fill disappears into it.
+export const focusRingOffset = `${focusLine} focus-visible:outline-offset-2`;
 
 export type TransitionPreset = keyof typeof transitions;
 export type HoverEffect = keyof typeof hoverEffects;

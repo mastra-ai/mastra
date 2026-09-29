@@ -275,17 +275,22 @@ export const SurfaceFoundations: Story = {
 
       <FoundationSection
         label="Focus"
-        description="Neutral and never a halo. A field or raised surface repaints its own edge to its focus rim; anything without an edge — a row, link or tab — takes focusRing, 1px of --border-focus around it."
+        description="Neutral and never a halo. A field or raised surface repaints its own edge to its focus rim. Anything without an edge — a row, link, tab or small control — takes a 1px --border-focus outline: flush, inset where the edge is clipped, or offset where it would vanish into a solid fill."
       >
         <div className="flex flex-wrap items-end gap-6">
           <div className="w-44">
             <Specimen name="focusRing" note="Row, link, tab">
-              <div className="h-14 rounded-md bg-fill ring-1 ring-border-focus" />
+              <div className="h-14 rounded-md bg-fill outline-1 outline-border-focus" />
             </Specimen>
           </div>
           <div className="w-44">
             <Specimen name="focusRingInset" note="Full-bleed row whose outer edge is clipped">
-              <div className="h-14 rounded-md bg-fill ring-1 ring-border-focus ring-inset" />
+              <div className="h-14 rounded-md bg-fill outline-1 -outline-offset-1 outline-border-focus" />
+            </Specimen>
+          </div>
+          <div className="w-44">
+            <Specimen name="focusRingOffset" note="Checkbox, radio, switch">
+              <div className="h-14 rounded-md bg-foreground outline-1 outline-offset-2 outline-border-focus" />
             </Specimen>
           </div>
         </div>

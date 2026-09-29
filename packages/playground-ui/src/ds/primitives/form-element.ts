@@ -47,7 +47,7 @@ export const controlFocusBorderVisible = `outline-hidden focus-visible:outline-h
 // still on the trigger that opened the popup.
 const surfaceTintHover =
   '[&:hover:not(:focus-visible):not(:disabled):not([data-popup-open])]:[--surface-tint:var(--fill-subtle)]';
-const surfaceRimFocus = 'focus-visible:[--surface-rim:var(--surface-rim-focus)]';
+export const surfaceRimFocus = 'focus-visible:outline-hidden focus-visible:[--surface-rim:var(--surface-rim-focus)]';
 
 // The wrapper itself is never `:disabled` — the control it wraps is — so both
 // guards have to ask about descendants.
