@@ -71,11 +71,10 @@ export function Activity({
         {...props}
       >
         {children}
-        {status !== 'idle' && (
-          <span id={statusId} className="sr-only">
-            {status === 'running' ? 'Running' : 'Failed'}
-          </span>
-        )}
+        <span id={statusId} className="sr-only" aria-live="polite">
+          {status === 'running' && 'Running'}
+          {status === 'error' && 'Failed'}
+        </span>
       </Collapsible>
     </ActivityContext.Provider>
   );

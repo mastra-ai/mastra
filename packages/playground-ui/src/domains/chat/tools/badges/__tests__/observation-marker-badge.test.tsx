@@ -73,4 +73,33 @@ describe('ObservationMarkerBadge', () => {
       expect(screen.getByText('Model timed out')).toBeTruthy();
     });
   });
+
+  describe('when extractions arrive after the user closed the marker', () => {
+    it('opens again to show them', () => {
+      const completed = {
+        _state: 'complete' as const,
+        cycleId: 'cycle-4',
+        operationType: 'observation' as const,
+        tokensObserved: 1200,
+        observationTokens: 300,
+      };
+      const { rerender } = render(
+        <ObservationMarkerBadge toolName="mastra-memory-om-observation" omData={completed} />,
+      );
+      const marker = () => screen.getByRole('button', { name: /^Observed/ });
+
+      fireEvent.click(marker());
+      fireEvent.click(marker());
+      expect(marker().getAttribute('aria-expanded')).toBe('false');
+
+      rerender(
+        <ObservationMarkerBadge
+          toolName="mastra-memory-om-observation"
+          omData={{ ...completed, extractedValues: { mood: 'focused' } }}
+        />,
+      );
+
+      expect(marker().getAttribute('aria-expanded')).toBe('true');
+    });
+  });
 });

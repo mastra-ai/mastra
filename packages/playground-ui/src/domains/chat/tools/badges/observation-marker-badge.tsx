@@ -182,6 +182,11 @@ export const ObservationMarkerBadge = ({ toolName, omData }: ObservationMarkerBa
     extractedValueEntries(omData.extractedValues).length > 0 || (omData.extractionFailures?.length ?? 0) > 0;
   const opensItself = (state === 'failed' && isReflection) || hasExtractions;
   const [openedByUser, setOpenedByUser] = useState<boolean>();
+  const [openedItselfBefore, setOpenedItselfBefore] = useState(opensItself);
+  if (opensItself !== openedItselfBefore) {
+    setOpenedItselfBefore(opensItself);
+    if (opensItself) setOpenedByUser(undefined);
+  }
 
   return (
     <Activity
