@@ -1,7 +1,5 @@
 import { Mastra } from '@mastra/core/mastra';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { AdapterTestContext } from './test-helpers';
-import { createDefaultTestContext } from './test-helpers';
 
 /**
  * Configuration for HTTP logging test suite

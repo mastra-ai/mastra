@@ -1,7 +1,6 @@
 import { SpanType } from '@mastra/core/observability';
 import type {
   AnyExportedSpan,
-  ModelGenerationAttributes,
   ModelInferenceAttributes,
   RagEmbeddingAttributes,
   UsageStats,

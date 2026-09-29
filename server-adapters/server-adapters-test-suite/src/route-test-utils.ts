@@ -1,6 +1,6 @@
 import { getZodTypeName, getZodDef } from '@mastra/core/utils';
 import type { ServerRoute } from '@mastra/server/server-adapter';
-import { z, type ZodSchema } from 'zod';
+import type { z, ZodSchema } from 'zod';
 
 /**
  * Normalizes a route path to ensure consistent formatting.

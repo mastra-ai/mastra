@@ -18,11 +18,7 @@ import {
   stripMastraGatewayPrefix,
 } from '../providers/model-ids.js';
 import { buildCodexStagehandFetch, createCodexMiddleware } from '../providers/openai-codex.js';
-import {
-  isThinkingLevelSetting,
-  resolveDefaultThinkingLevel as resolveThinkingDefault,
-  THINKING_LEVEL_VALUES,
-} from '../thinking.js';
+import { isThinkingLevelSetting, resolveDefaultThinkingLevel as resolveThinkingDefault } from '../thinking.js';
 import type { ThinkingLevelSetting, ThinkingLevelSource } from '../thinking.js';
 export { isThinkingLevelSetting, THINKING_LEVEL_VALUES } from '../thinking.js';
 export type { ThinkingLevelSetting, ThinkingLevelSource } from '../thinking.js';

@@ -1,7 +1,9 @@
 import { expectTypeOf } from 'vitest';
 
-import { Classifier, type BooleanAnswer, type ChoiceAnswer } from '../../classifier';
-import { ModelSelectionProcessor, type ModelSelectionInstanceOptions, type ModelSelectionRegisteredOptions } from '.';
+import { Classifier } from '../../classifier';
+import type { BooleanAnswer, ChoiceAnswer } from '../../classifier';
+import { ModelSelectionProcessor } from '.';
+import type { ModelSelectionInstanceOptions, ModelSelectionRegisteredOptions } from '.';
 
 declare const model: ConstructorParameters<typeof Classifier>[0]['model'];
 

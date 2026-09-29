@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import { createServer } from 'node:http';
 import type { Server as HttpServer } from 'node:http';
@@ -7,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { RequestContext } from '@mastra/core/di';
 import { toStandardSchema } from '@mastra/schema-compat';
-import { Client, SdkErrorCode, SdkHttpError, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import { McpServer, createMcpHandler } from '@modelcontextprotocol/server';
 import type { CallToolResult } from '@modelcontextprotocol/server';

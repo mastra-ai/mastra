@@ -8,7 +8,8 @@ import type {
 } from '../../types.js';
 import type { LangfuseClientDependencies, LangfuseClientOptions } from './client.js';
 import { createLangfuseSpanImportId, createLangfuseTraceImportId, LANGFUSE_ID_ALGORITHM_VERSION } from './ids.js';
-import { LangfuseObservationsReader, type LangfuseReadWindow, type LangfuseTraceReadOptions } from './reader.js';
+import { LangfuseObservationsReader } from './reader.js';
+import type { LangfuseReadWindow, LangfuseTraceReadOptions } from './reader.js';
 import type { LangfuseObservation, LangfuseSourceTrace } from './types.js';
 
 const LANGFUSE_TYPE_MAP: Record<string, TraceImportSpan['spanType']> = {

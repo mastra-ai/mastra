@@ -1,4 +1,5 @@
-import { Batch, Decoder, GlideClient, type GlideClientConfiguration, type GlideString } from '@valkey/valkey-glide';
+import { Batch, Decoder, GlideClient } from '@valkey/valkey-glide';
+import type { GlideClientConfiguration, GlideString } from '@valkey/valkey-glide';
 
 export interface ValkeyMulti {
   del(key: string): ValkeyMulti;

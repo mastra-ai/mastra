@@ -5,8 +5,7 @@ import {
   computeModelOutputProviderMetadata,
 } from '../../../../loop/shared/steps/tool-result-commit-core';
 import type { Mastra } from '../../../../mastra';
-import { SpanType } from '../../../../observability';
-import type { ExportedSpan } from '../../../../observability';
+import type { SpanType, ExportedSpan } from '../../../../observability';
 import { persistProcessorDataChunk } from '../../../../stream/base/output';
 import { withToolPayloadTransformProviderMetadata } from '../../../../tools/payload-transform';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';

@@ -12,7 +12,6 @@ import type {
   ListTracesLightResponse,
   TraceQueryRequest,
   TraceQueryResponse,
-  TraceQueryTraceResponse,
   TraceQueryKeysetTraceResponse,
   TraceQueryGroupResponse,
   GetTraceQueryFieldsArgs,

@@ -2,12 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { ActiveModelPackRecord } from '../storage/domains/model-packs/base.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
-import {
-  applyActiveModelPack,
-  hydrateSessionModelPack,
-  type ModelPackHydrationDependencies,
-  type ModelPackHydrationSession,
-} from './model-pack-hydration.js';
+import { applyActiveModelPack, hydrateSessionModelPack } from './model-pack-hydration.js';
+import type { ModelPackHydrationDependencies, ModelPackHydrationSession } from './model-pack-hydration.js';
 
 const models = {
   build: 'anthropic/claude-opus-5',

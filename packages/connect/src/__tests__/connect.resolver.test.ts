@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { connect } from '../connect.js';
 import type { ConnectOptions } from '../connect.js';
 import { MastraConnectError } from '../errors.js';
-import { PROVIDERS, type ProviderRegistration, type ProxyProviderRegistration } from '../registry.js';
+import { PROVIDERS } from '../registry.js';
+import type { ProviderRegistration, ProxyProviderRegistration } from '../registry.js';
 
 // Test-only seam: the shipped barrel exports a readonly view; tests mutate the
 // underlying array to install fixture providers.

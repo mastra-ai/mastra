@@ -23,7 +23,6 @@ import type { Context } from 'hono';
 import type { RouteAuth } from '../../routes/route.js';
 import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '../../rules/types.js';
 import { requireExec } from '../../sandbox/materialization.js';
-import type { ExecutableSandbox } from '../../sandbox/materialization.js';
 import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
 import { peekSessionSandbox } from '../../sandbox/session-sandbox.js';
 import { sanitizeSegment } from '../../sandbox/workdir.js';
@@ -42,7 +41,7 @@ import type {
 import { listRepositoryCommits } from './commits.js';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.js';
 import type { GithubIntegration } from './integration.js';
-import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
+import { clearGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
 import type { GithubPatKind } from './pat.js';
 
 import { reclaimDeletedSessionSandbox } from './sandbox-release.js';

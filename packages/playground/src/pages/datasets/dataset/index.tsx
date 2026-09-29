@@ -26,7 +26,8 @@ import {
 import { DatasetItemDrawer } from '@/domains/datasets/components/items/dataset-item-drawer';
 import { DatasetItemPanelProvider } from '@/domains/datasets/context/dataset-item-panel-context';
 import { useDatasetItemsUrlState } from '@/domains/datasets/hooks/use-dataset-items-url-state';
-import { datasetCrumb, navCrumb, truncateItemIdCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
+import { datasetCrumb, navCrumb, truncateItemIdCrumb } from '@/domains/navigation/crumbs';
+import type { CrumbDef } from '@/domains/navigation/crumbs';
 
 function DatasetPageShell({ crumbs, children }: { crumbs: CrumbDef[]; children?: ReactNode }) {
   return (

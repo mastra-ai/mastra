@@ -11,7 +11,7 @@
 import { randomUUID } from 'node:crypto';
 import Docker from 'dockerode';
 import { afterAll, describe, expect, it } from 'vitest';
-import { DockerSandbox } from '../sandbox';
+import type { DockerSandbox } from '../sandbox';
 import { DockerTemplate } from './template';
 
 describe('DockerTemplate (integration)', () => {

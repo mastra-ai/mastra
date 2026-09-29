@@ -3,8 +3,6 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RequestContext } from '@mastra/core/request-context';
-import { LocalSandbox } from '@mastra/core/workspace';
-import type { LocalFilesystem } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({

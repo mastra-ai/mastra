@@ -1,4 +1,5 @@
-import { Agent, type AgentConfig } from '../../agent';
+import { Agent } from '../../agent';
+import type { AgentConfig } from '../../agent';
 
 import { WORKFLOW_BUILDER_AUTHORING_PLAYBOOK } from './authoring-playbook.js';
 

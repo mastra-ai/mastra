@@ -47,8 +47,8 @@ import {
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
   TraceQueryValidationError,
-  type TraceQueryPredicate,
 } from './trace-query';
+import type { TraceQueryPredicate } from './trace-query';
 
 const baseRequest = {
   timeRange: {

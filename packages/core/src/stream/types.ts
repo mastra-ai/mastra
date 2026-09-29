@@ -13,7 +13,7 @@ import type {
   LanguageModelRequestMetadata,
   LogProbs as LanguageModelV1LogProbs,
 } from '@internal/ai-sdk-v4';
-import type { CallSettings, ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
+import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
 import type { AgentSignalType } from '../agent/signals';

@@ -11,7 +11,6 @@ import { resolveFactoryStageRules } from './resolve.js';
 import type {
   FactoryCommitDecision,
   FactoryRuleActor,
-  FactoryRuleBoard,
   FactoryRuleCausalEntry,
   FactoryRuleRejectionCode,
   FactoryRuleStage,

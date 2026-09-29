@@ -32,7 +32,6 @@ import { hasAuthInit, isUserProvider } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
-import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import {
   buildAuthRoutes,
   createFactoryAuthGate,

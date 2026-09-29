@@ -2,7 +2,8 @@ import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
-import { DATASET_TARGET_TYPES, type DatasetTargetType } from '@/domains/datasets/components/target-type-options';
+import { DATASET_TARGET_TYPES } from '@/domains/datasets/components/target-type-options';
+import type { DatasetTargetType } from '@/domains/datasets/components/target-type-options';
 import { useProcessors } from '@/domains/processors/hooks/use-processors';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 

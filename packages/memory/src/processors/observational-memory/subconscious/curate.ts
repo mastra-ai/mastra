@@ -4,7 +4,8 @@ import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 
 import type { Memory } from '../../..';
 import { omError } from '../debug';
-import { Extractor, type ExtractorOnExtractedContext } from '../extractor';
+import { Extractor } from '../extractor';
+import type { ExtractorOnExtractedContext } from '../extractor';
 import type { ObservationalMemoryModel } from '../types';
 import { publishSubconsciousActivity, publishSubconsciousError } from './activity';
 import { createKnowledgeTools } from './knowledge-tools';

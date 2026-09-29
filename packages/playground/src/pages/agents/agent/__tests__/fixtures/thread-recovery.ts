@@ -1,5 +1,6 @@
 import type { MastraClient } from '@mastra/client-js';
-import { ChunkFrom, type ChunkType, type DataChunkType } from '@mastra/core/stream';
+import { ChunkFrom } from '@mastra/core/stream';
+import type { ChunkType, DataChunkType } from '@mastra/core/stream';
 
 export const emptyHistory: Awaited<ReturnType<MastraClient['listThreadMessages']>> = {
   messages: [],

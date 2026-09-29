@@ -1,9 +1,11 @@
 import {
   createProcessMemoryDiagnosticsFromEnvironment,
   startConfiguredProcessMemoryDiagnostics,
-  type ProcessMemoryDiagnostics,
-  type ProcessMemoryDiagnosticsEnvironment,
-  type ProcessMemoryDiagnosticsSetup,
+} from '@mastra/code-sdk/process-memory-diagnostics';
+import type {
+  ProcessMemoryDiagnostics,
+  ProcessMemoryDiagnosticsEnvironment,
+  ProcessMemoryDiagnosticsSetup,
 } from '@mastra/code-sdk/process-memory-diagnostics';
 
 export async function startTuiProcessMemoryDiagnostics(

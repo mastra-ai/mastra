@@ -1,6 +1,7 @@
 import type { TemplateBuilder as E2BTemplateBuilder } from 'e2b';
 import { describe, expect, it } from 'vitest';
-import { Template, type SandboxTemplateBuilder } from './template.js';
+import { Template } from './template.js';
+import type { SandboxTemplateBuilder } from './template.js';
 
 type Equal<Left, Right> =
   (<Value>() => Value extends Left ? 1 : 2) extends <Value>() => Value extends Right ? 1 : 2

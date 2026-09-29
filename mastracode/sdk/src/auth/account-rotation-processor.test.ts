@@ -38,7 +38,6 @@ import {
   getRequestAccountSelection,
   isRequestAccountRoutingExhausted,
   markRequestAccountRoutingExhausted,
-  setRequestAccountSelection,
 } from './account-routing-context.js';
 import { ProviderAuthRequiredError } from './provider-auth-error.js';
 import { anthropicOAuthProvider } from './providers/anthropic.js';

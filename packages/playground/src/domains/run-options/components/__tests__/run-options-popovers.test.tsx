@@ -5,7 +5,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { MemoryRouter } from 'react-router';
-import { stringify } from 'superjson';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { RequestContextPopover } from '../request-context-popover';

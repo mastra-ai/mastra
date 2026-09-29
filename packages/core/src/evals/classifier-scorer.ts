@@ -11,7 +11,8 @@ import type {
   ClassifierUsage,
 } from '../classifier';
 import type { Mastra } from '../mastra';
-import { createScorer, type MastraScorer, type ScorerConfig, type ScorerTypeShortcuts, type StepContext } from './base';
+import { createScorer } from './base';
+import type { MastraScorer, ScorerConfig, ScorerTypeShortcuts, StepContext } from './base';
 
 type ConfiguredClassifier = Classifier<ClassifierQuestions>;
 type QuestionsOf<TClassifier extends ConfiguredClassifier> =

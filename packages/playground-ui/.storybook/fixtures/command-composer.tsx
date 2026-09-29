@@ -1,4 +1,5 @@
-import { useRef, useState, type KeyboardEvent } from 'react';
+import { useRef, useState } from 'react';
+import type { KeyboardEvent } from 'react';
 import { reviewCommands } from './chat/commands';
 import { Button } from '@/ds/components/Button';
 import {

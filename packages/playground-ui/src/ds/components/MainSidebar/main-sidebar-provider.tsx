@@ -1,11 +1,7 @@
 import React from 'react';
 import type { CSSProperties } from 'react';
-import {
-  MainSidebarContext,
-  MobileDrawerContext,
-  type MobileDrawerContextValue,
-  type SidebarState,
-} from './main-sidebar-context';
+import { MainSidebarContext, MobileDrawerContext } from './main-sidebar-context';
+import type { MobileDrawerContextValue, SidebarState } from './main-sidebar-context';
 import type { LinkComponent } from '@/ds/types/link-component';
 
 const SIDEBAR_STATE_KEY = 'sidebar:state';

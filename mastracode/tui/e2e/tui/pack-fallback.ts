@@ -14,7 +14,7 @@
  *    stays on it after restart, and an abort + retrigger starts directly on
  *    the landed provider with no new request to the failed primary.
  */
-import { readFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { AuthStorage } from '@mastra/code-sdk/auth/storage';

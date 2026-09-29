@@ -7,12 +7,10 @@ import type { AgentController } from '@mastra/core/agent-controller';
 import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
-import {
-  SourceControlConnectionNotFoundError,
-  type SourceControlSession,
-  type SourceControlStorageHandle,
-} from '../storage/domains/source-control/base.js';
-import { applyStoredMemorySettings, type OMConfigurableSession } from './memory-settings-hydration.js';
+import { SourceControlConnectionNotFoundError } from '../storage/domains/source-control/base.js';
+import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import { applyStoredMemorySettings } from './memory-settings-hydration.js';
+import type { OMConfigurableSession } from './memory-settings-hydration.js';
 import { seedSessionOrg } from './org-seed.js';
 
 type FactorySession = Awaited<ReturnType<AgentController<MastraCodeState>['createSession']>>;

@@ -22,8 +22,8 @@ import type {
   DurableToolCallInput,
 } from '@mastra/core/agent/durable';
 import type { PubSub } from '@mastra/core/events';
-import { SpanType, InternalSpans } from '@mastra/core/observability';
-import type { AIModelGenerationSpan, ExportedSpan } from '@mastra/core/observability';
+import { InternalSpans } from '@mastra/core/observability';
+import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '@mastra/core/observability';
 import { PUBSUB_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Inngest } from 'inngest';
 import { z } from 'zod';

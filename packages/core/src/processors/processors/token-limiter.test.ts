@@ -7,7 +7,6 @@ import type { MastraDBMessage } from '../../agent/message-list';
 import { MessageList } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { IMastraLogger } from '../../logger';
-import { ProcessorRunner } from '../../processors/runner';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
 

@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Icon, type IconSize } from './Icon';
+import { Icon } from './Icon';
+import type { IconSize } from './Icon';
 import {
   AgentIcon,
   AgentCoinIcon,

@@ -143,7 +143,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createMockState } from '../../__tests__/agent-controller-mock.js';
 import { getReminderView } from '../../db-message-parts.js';
-import { DEFAULT_MAX_TURNS, GoalManager } from '../../goal-manager.js';
+import { DEFAULT_MAX_TURNS } from '../../goal-manager.js';
 import { handleGoalCommand, handleJudgeCommand, startGoalWithDefaults } from '../goal.js';
 
 describe('goal reminder metadata', () => {

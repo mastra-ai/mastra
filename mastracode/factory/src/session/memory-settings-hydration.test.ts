@@ -9,8 +9,10 @@ import {
   DEFAULT_OBSERVATION_THRESHOLD,
   DEFAULT_REFLECTION_THRESHOLD,
   hydrateSessionMemorySettings,
-  type MemorySettingsHydrationDependencies,
-  type MemorySettingsHydrationSession,
+} from './memory-settings-hydration.js';
+import type {
+  MemorySettingsHydrationDependencies,
+  MemorySettingsHydrationSession,
 } from './memory-settings-hydration.js';
 
 function createSession(state: Record<string, unknown> = {}, modelIds: { observer?: string; reflector?: string } = {}) {

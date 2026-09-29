@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MainSidebar } from './main-sidebar';
 import { MainSidebarProvider } from './main-sidebar-provider';
-import { SidebarNew, useSidebarNew, type SidebarNewSection } from '@/ds/new/sidebar';
+import { SidebarNew, useSidebarNew } from '@/ds/new/sidebar';
+import type { SidebarNewSection } from '@/ds/new/sidebar';
 import type { LinkComponentProps } from '@/ds/types/link-component';
 
 const mockMatchMedia = (matches: boolean) => {

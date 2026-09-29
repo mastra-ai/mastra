@@ -1,11 +1,8 @@
 import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { resolveProviderOMDefault } from '@mastra/code-sdk/onboarding/packs';
 
-import {
-  factoryMemorySettingsUserId,
-  type MemorySettingsRecord,
-  type MemorySettingsStorage,
-} from '../storage/domains/memory-settings/base.js';
+import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
+import type { MemorySettingsRecord, MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import { seedSessionOrg } from './org-seed.js';

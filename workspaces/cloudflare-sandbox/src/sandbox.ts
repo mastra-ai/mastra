@@ -13,11 +13,11 @@ import type {
   WorkspaceFilesystem,
 } from '@mastra/core/workspace';
 import { MastraSandbox, assertModesUnsupported } from '@mastra/core/workspace';
-import {
-  CloudflareSandboxBridgeClient,
-  type CloudflareMountBucketRequest,
-  type CloudflarePersistWorkspaceOptions,
-  type CloudflareSandboxBridgeClientOptions,
+import { CloudflareSandboxBridgeClient } from './bridge-client';
+import type {
+  CloudflareMountBucketRequest,
+  CloudflarePersistWorkspaceOptions,
+  CloudflareSandboxBridgeClientOptions,
 } from './bridge-client';
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 300_000;

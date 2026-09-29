@@ -19,7 +19,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { Agent } from '../../agent';
 import { InMemoryStore } from '../../storage/mock';
 import { AgentController } from '../agent-controller';
-import { SUSPENDED_RUN_AGENT_KEY, type Session } from '../session';
+import { SUSPENDED_RUN_AGENT_KEY } from '../session';
+import type { Session } from '../session';
 import { createMockWorkspace } from '../test-utils';
 
 function createController() {

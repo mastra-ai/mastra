@@ -1,4 +1,5 @@
-import { APICallError, type Experimental_EvaluationModelV4 as EvaluationModelV4 } from '@ai-sdk/provider-v7';
+import { APICallError } from '@ai-sdk/provider-v7';
+import type { Experimental_EvaluationModelV4 as EvaluationModelV4 } from '@ai-sdk/provider-v7';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraBase } from '../base';

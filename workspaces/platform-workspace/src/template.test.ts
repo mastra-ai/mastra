@@ -1,7 +1,8 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { serializeSandboxTemplate } from './template.js';
 import * as platformWorkspace from './index.js';
-import { Template, type SandboxTemplateBuilder, type SerializedSandboxTemplate } from './index.js';
+import { Template } from './index.js';
+import type { SandboxTemplateBuilder, SerializedSandboxTemplate } from './index.js';
 
 describe('Template', () => {
   it('serializes the supported E2B-shaped operations in order', () => {

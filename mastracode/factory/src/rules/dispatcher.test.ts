@@ -5,11 +5,8 @@ import { createLifecycleTestRegistry, createTestBoard } from '../boards/test-uti
 import { DecisionAttentionProvider, failedDecisionAttentionSpec } from '../routes/attention-providers.js';
 import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd } from '../session/run-audit.js';
 import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
-import {
-  FACTORY_RULE_MATERIALIZATION_KEY,
-  WorkItemUpdateConflictError,
-  type WorkItemsStorage,
-} from '../storage/domains/work-items/base.js';
+import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FACTORY_DISPATCH_CONSTANTS, FactoryDecisionDispatcher } from './dispatcher.js';
 import { FactoryTransitionService } from './transition-service.js';

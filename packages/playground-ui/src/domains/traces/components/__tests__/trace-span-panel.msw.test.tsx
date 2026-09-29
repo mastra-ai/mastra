@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import '@/test/jsdom-polyfills';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { TraceSpanPanel, type TraceSpanPanelProps } from '../trace-span-panel';
+import { TraceSpanPanel } from '../trace-span-panel';
+import type { TraceSpanPanelProps } from '../trace-span-panel';
 import { queryPageFromList } from './fixtures/thread-traces';
 import { TRACE_ID, panelTraceSpans, spanDetailById } from './fixtures/trace-span-panel';
 import { TestLinkProvider } from '@/test/link-provider';

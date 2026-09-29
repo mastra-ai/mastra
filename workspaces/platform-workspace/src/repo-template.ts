@@ -2,7 +2,8 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { repoCloneCommand, setupMarkerCommand, setupMarkerContent } from '@internal/workspace';
 
-import { Template, type SandboxTemplateBuilder } from './template.js';
+import { Template } from './template.js';
+import type { SandboxTemplateBuilder } from './template.js';
 
 const execFileAsync = promisify(execFile);
 type GitExec = (

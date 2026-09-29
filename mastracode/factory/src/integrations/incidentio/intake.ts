@@ -11,13 +11,8 @@ import type {
   ResolvedIntakeDispatch,
   UpdateIntakeIssueInput,
 } from '../../capabilities/intake.js';
-import {
-  IncidentioApiClient,
-  IncidentioApiError,
-  type IncidentioActor,
-  type IncidentioFollowUp,
-  type IncidentioIncident,
-} from './api.js';
+import { IncidentioApiError } from './api.js';
+import type { IncidentioApiClient, IncidentioActor, IncidentioFollowUp, IncidentioIncident } from './api.js';
 
 export const INCIDENTIO_INCIDENTS_SOURCE_ID = 'incidentio:incidents';
 export const INCIDENTIO_FOLLOW_UPS_SOURCE_ID = 'incidentio:follow-ups';

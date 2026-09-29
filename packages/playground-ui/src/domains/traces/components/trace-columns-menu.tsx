@@ -1,5 +1,6 @@
 import { Columns3Icon, PlusIcon, Columns3, X } from 'lucide-react';
-import { useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
 import { TRACE_CUSTOM_COLUMN_FIELDS, TRACE_CUSTOM_COLUMN_LABELS, TRACE_USAGE_COLUMNS } from '../trace-list-columns';
 import type { TraceColumnPreferences, TraceCustomColumn, TraceOptionalColumn } from '../trace-list-columns';
 import { Button } from '@/ds/components/Button';

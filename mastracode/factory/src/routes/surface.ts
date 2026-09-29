@@ -42,16 +42,10 @@ import type { MemorySettingsStorage } from '../storage/domains/memory-settings/b
 import type { ModelPacksStorage } from '../storage/domains/model-packs/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
-import {
-  SourceControlConnectionNotFoundError,
-  type SourceControlStorage,
-  type SourceControlStorageHandle,
-} from '../storage/domains/source-control/base.js';
-import {
-  isAgentActor,
-  type FactoryDispatchFailureCode,
-  type WorkItemsStorage,
-} from '../storage/domains/work-items/base.js';
+import { SourceControlConnectionNotFoundError } from '../storage/domains/source-control/base.js';
+import type { SourceControlStorage, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import { isAgentActor } from '../storage/domains/work-items/base.js';
+import type { FactoryDispatchFailureCode, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { workItemBranch, workItemBranchSource, workItemThreadTitle } from '../work-item-branch.js';
 import { buildAutomationRunRoutes } from './automation-runs.js';
 import { ConfigRoutes } from './config.js';

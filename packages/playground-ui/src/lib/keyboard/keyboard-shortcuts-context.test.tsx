@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
-import { StrictMode, useRef, type ReactNode } from 'react';
+import { StrictMode, useRef } from 'react';
+import type { ReactNode } from 'react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 
 import { KeyboardScope, KeyboardShortcutsProvider } from './keyboard-shortcuts-context';
-import { useKeydown, type UseKeydownArgs, type UseKeydownOptions } from './use-keydown';
+import { useKeydown } from './use-keydown';
+import type { UseKeydownArgs, UseKeydownOptions } from './use-keydown';
 
 const pressKey = (key: string, modifiers: Partial<KeyboardEventInit> = {}) =>
   fireEvent.keyDown(window, { key, ...modifiers });

@@ -20,16 +20,8 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, w
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import {
-  Node,
-  Project,
-  SyntaxKind,
-  type CallExpression,
-  type ImportDeclaration,
-  type ObjectLiteralExpression,
-  type SourceFile,
-  type Statement,
-} from 'ts-morph';
+import { Node, Project, SyntaxKind } from 'ts-morph';
+import type { CallExpression, ImportDeclaration, ObjectLiteralExpression, SourceFile, Statement } from 'ts-morph';
 import { format, resolveConfig } from 'prettier';
 
 import {
@@ -42,9 +34,10 @@ import {
   providersDir,
   templatesDir,
   validateProviderId,
-  type ProviderManifest,
 } from './provider-utils.js';
-import { templatePinFor, type TemplatePin } from './templates-config.js';
+import type { ProviderManifest } from './provider-utils.js';
+import { templatePinFor } from './templates-config.js';
+import type { TemplatePin } from './templates-config.js';
 
 /** Module specifier the upstream templates import their SDK from. */
 const TEMPLATE_SDK_MODULE = 'nango';

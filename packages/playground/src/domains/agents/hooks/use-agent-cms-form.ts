@@ -1,4 +1,5 @@
-import { MastraClientError, type CreateStoredAgentParams } from '@mastra/client-js';
+import { MastraClientError } from '@mastra/client-js';
+import type { CreateStoredAgentParams } from '@mastra/client-js';
 import type { AgentEditorConfig } from '@mastra/core/agent';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
@@ -24,9 +25,8 @@ import {
   formatUnknownPromptBlocksMessage,
   formatUnresolvedPromptBlocksMessage,
   instructionsResolveEmptyDueToDrafts,
-  type PromptBlockPublicationStatus,
-  type UnresolvedPromptBlock,
 } from '../utils/instruction-blocks-runtime';
+import type { PromptBlockPublicationStatus, UnresolvedPromptBlock } from '../utils/instruction-blocks-runtime';
 import { useStoredAgentMutations } from './use-stored-agents';
 
 type CreateOptions = {

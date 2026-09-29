@@ -1,7 +1,6 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV4CallOptions } from '@ai-sdk/provider-v7';
 import type {
-  CallSettings,
   IdGenerator,
   ModelMessage,
   StopCondition as StopConditionV5,

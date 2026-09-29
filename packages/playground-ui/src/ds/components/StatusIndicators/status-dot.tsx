@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { statusDotClass, type StatusPresentation, type StatusPresentationFn } from './status-dot-styles';
+import { statusDotClass } from './status-dot-styles';
+import type { StatusPresentation, StatusPresentationFn } from './status-dot-styles';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
