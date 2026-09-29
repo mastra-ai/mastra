@@ -53,6 +53,7 @@ function makeInitData() {
 afterEach(() => {
   if (globalRunRegistry.has(RUN_ID)) globalRunRegistry.delete(RUN_ID);
   vi.clearAllMocks();
+  vi.mocked(resolveRuntime.resolveTool).mockReset().mockReturnValue(undefined);
 });
 
 describe('durable tool-call cross-process workspace tool resolution', () => {
@@ -87,6 +88,54 @@ describe('durable tool-call cross-process workspace tool resolution', () => {
     expect(executeMock.mock.calls[0][1]).toEqual(expect.objectContaining({ workspace }));
     expect(result.error).toBeUndefined();
     expect(result.result).toEqual({ content: 'Hello, wonderful human!' });
+  });
+
+  it("prefers the owning agent's rebuilt tool over a Mastra-wide tool with the same id (#24795)", async () => {
+    const otherAgentExecute = vi.fn().mockResolvedValue({ from: 'agent-a' });
+    const ownerExecute = vi.fn().mockResolvedValue({ from: 'agent-b' });
+    vi.mocked(resolveRuntime.resolveTool).mockReturnValueOnce({
+      id: 'request_approval',
+      execute: otherAgentExecute,
+    } as any);
+    vi.mocked(resolveRuntime.rebuildRunToolsFromMastra).mockResolvedValueOnce({
+      tools: { request_approval: { id: 'request_approval', execute: ownerExecute } as any },
+      workspace: undefined,
+    });
+
+    const step = createDurableToolCallStep();
+    const result = await (step as any).execute({
+      inputData: { toolCallId: 'call-approve', toolName: 'request_approval', args: {} },
+      mastra: { getLogger: () => undefined, listTools: () => ({}) },
+      suspend: vi.fn(),
+      resumeData: undefined,
+      requestContext: new Map(),
+      getInitData: () => makeInitData(),
+      [PUBSUB_SYMBOL]: mockPubsub(),
+    });
+
+    expect(ownerExecute).toHaveBeenCalledTimes(1);
+    expect(otherAgentExecute).not.toHaveBeenCalled();
+    expect(result.result).toEqual({ from: 'agent-b' });
+  });
+
+  it('falls back to the Mastra-wide tool when the owning agent does not have it', async () => {
+    const globalExecute = vi.fn().mockResolvedValue({ from: 'global' });
+    vi.mocked(resolveRuntime.resolveTool).mockReturnValueOnce({ id: 'global_tool', execute: globalExecute } as any);
+    vi.mocked(resolveRuntime.rebuildRunToolsFromMastra).mockResolvedValueOnce({ tools: {}, workspace: undefined });
+
+    const step = createDurableToolCallStep();
+    const result = await (step as any).execute({
+      inputData: { toolCallId: 'call-global', toolName: 'global_tool', args: {} },
+      mastra: { getLogger: () => undefined, listTools: () => ({}) },
+      suspend: vi.fn(),
+      resumeData: undefined,
+      requestContext: new Map(),
+      getInitData: () => makeInitData(),
+      [PUBSUB_SYMBOL]: mockPubsub(),
+    });
+
+    expect(globalExecute).toHaveBeenCalledTimes(1);
+    expect(result.result).toEqual({ from: 'global' });
   });
 
   it('still emits ToolNotFoundError when the Mastra rebuild also has no such tool', async () => {
