@@ -53,7 +53,13 @@ export const paths: LinkComponentProviderProps['paths'] = {
   networkLink: (networkId: string) => `/networks/v-next/${networkId}/chat`,
   networkNewThreadLink: (networkId: string) => `/networks/v-next/${networkId}/chat/${uuid()}`,
   networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
-  scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
+  scorerLink: (scorerId: string, params?: { scoreId?: string; entity?: string }) => {
+    const search = new URLSearchParams();
+    if (params?.entity) search.set('entity', params.entity);
+    if (params?.scoreId) search.set('scoreId', params.scoreId);
+    const query = search.toString();
+    return query ? `/scorers/${scorerId}?${query}` : `/scorers/${scorerId}`;
+  },
   cmsScorersCreateLink: () => '/cms/scorers/create',
   cmsScorerEditLink: (scorerId: string) => `/cms/scorers/${scorerId}/edit`,
   cmsAgentCreateLink: () => '/cms/agents/create',

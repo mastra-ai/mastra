@@ -154,7 +154,7 @@ describe.each([false, true])('session.abort() during approval / suspension (#205
     await ended;
 
     const ds = session.displayState.get();
-    expect(ds.pendingApproval).toBeNull();
+    expect(ds.pendingApprovals.size).toBe(0);
     expect(ds.isRunning).toBe(false);
 
     // The gated call must be settled rather than left rendering as in-flight.
@@ -191,7 +191,7 @@ describe.each([false, true])('session.abort() during approval / suspension (#205
     const ended = waitForAgentEnd(session, events);
     session.subscribe((event: AgentControllerEvent) => {
       if (event.type === 'tool_approval_required') {
-        void session.respondToToolApproval({ decision: 'approve' });
+        void session.respondToToolApproval({ decision: 'approve', toolCallId: event.toolCallId });
       }
       if (!durable && event.type === 'agent_end' && event.reason === 'suspended') session.abort();
     });
@@ -313,7 +313,7 @@ describe.each([false, true])('session.abort() during approval / suspension (#205
     });
 
     const ds = session.displayState.get();
-    expect(ds.pendingApproval).toBeNull();
+    expect(ds.pendingApprovals.size).toBe(0);
     expect(ds.pendingSuspensions.size).toBe(0);
     expect(ds.isRunning).toBe(false);
     expect(controller.listActiveThreadRuns()).toHaveLength(0);
@@ -404,7 +404,7 @@ describe.each([false, true])('session.abort() during approval / suspension (#205
     });
 
     const ds = session.displayState.get();
-    expect(ds.pendingApproval).toBeNull();
+    expect(ds.pendingApprovals.size).toBe(0);
     expect(ds.pendingSuspensions.size).toBe(0);
     expect(ds.isRunning).toBe(false);
     expect(session.suspensions.hasPending()).toBe(false);

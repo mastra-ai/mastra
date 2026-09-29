@@ -714,7 +714,7 @@ function emitToolsFile(integrationId: string, actions: ExtractedAction[], pin: T
   return `// AUTO-GENERATED from ${pin.repo} @ ${pin.sha.slice(0, 12)} — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
-import { applyAllowTools } from '../../toolset.js';
+import { applyToolFilter } from '../../toolset.js';
 ${imports}
 
 export function create${toPascal(integrationId)}Tools(options?: ProviderToolsOptions) {
@@ -722,7 +722,7 @@ export function create${toPascal(integrationId)}Tools(options?: ProviderToolsOpt
   const tools = {
 ${toolEntries}
   };
-  return applyAllowTools(tools, options?.allowTools);
+  return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
 }
 `;
 }

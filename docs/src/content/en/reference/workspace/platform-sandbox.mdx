@@ -223,7 +223,7 @@ await sandbox.snapshot()
 
 Each `id` maps to one independent filesystem. Reusing the same `id` across unrelated sandboxes causes the platform to boot them from each other's checkpoint.
 
-Set `seedCheckpointName` to provide a boot-only fallback when the checkpoint for `id` doesn't exist yet. The platform restores the checkpoint for `id` first when both exist. Later snapshots continue writing to the checkpoint for `id`, so the seed remains unchanged.
+Set `seedCheckpointName` to provide a boot-only fallback when the checkpoint for `id` doesn't exist yet. The platform restores the checkpoint for `id` first when both exist. Later snapshots continue writing to the checkpoint for `id`. The seed remains unchanged.
 
 ```typescript
 const sandbox = new PlatformSandbox({

@@ -2,7 +2,7 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { ArrowRight, Inbox, RefreshCw } from 'lucide-react';
@@ -17,6 +17,7 @@ import type { FactoryAttentionGroup } from '../services/attention';
 import { playAttentionSoundOnce } from '../services/attentionSound';
 import { AttentionItemRow } from './AttentionItemRow';
 import { useAttentionItemActions } from './useAttentionItemActions';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 /** The inbox page's three sections as tabs; only the first one badges and rings. */
 const TAB_ORDER = ['attention', 'queue', 'activity'] satisfies FactoryAttentionGroup[];
@@ -87,7 +88,9 @@ export function SidebarAttention() {
         <PopoverTrigger id="attention-trigger" type="button" aria-label={triggerLabel(openCount, unreadCount)}>
           <span className="relative grid size-4 shrink-0 place-items-center" aria-hidden>
             <Inbox size={16} />
-            {openCount > 0 ? <span className="bg-warning1 absolute -top-0.5 -right-0.5 size-1.5 rounded-full" /> : null}
+            {openCount > 0 ? (
+              <span className="bg-warning-indicator absolute -top-0.5 -right-0.5 size-1.5 rounded-full" />
+            ) : null}
           </span>
           <MainSidebar.NavLabel className="flex items-center gap-2">
             <span className="min-w-0 flex-1 truncate">Needs attention</span>
@@ -137,29 +140,33 @@ export function SidebarAttention() {
               </div>
             ) : preview.isError ? (
               <div className="flex flex-col items-start gap-2.5 px-3.5 py-4">
-                <span className="text-caption text-muted-foreground">Unable to load attention items.</span>
+                <Txt as="span" variant="caption" tone="muted">
+                  Unable to load attention items.
+                </Txt>
                 <Button type="button" variant="ghost" size="sm" onClick={() => void preview.refetch()}>
                   <RefreshCw aria-hidden />
                   Try again
                 </Button>
               </div>
             ) : items.length > 0 ? (
-              <ScrollArea maxHeight="20rem" viewPortClassName="px-3.5 py-1.5">
-                <ul className="divide-border/50 divide-y">
-                  {items.map((item, index) => (
-                    <li
-                      key={item.key}
-                      className="animate-in fade-in slide-in-from-bottom-1"
-                      style={{ animationDelay: `${index * 40}ms`, animationFillMode: 'backwards' }}
-                    >
-                      <AttentionItemRow
-                        factoryId={factoryId}
-                        {...actions.rowProps(item)}
-                        onOpen={() => setOpen(false)}
-                      />
-                    </li>
-                  ))}
-                </ul>
+              <ScrollArea maxHeight="20rem">
+                <ScrollAreaViewport className="px-3.5 py-1.5">
+                  <ul className="divide-border/50 divide-y">
+                    {items.map((item, index) => (
+                      <li
+                        key={item.key}
+                        className="animate-in fade-in slide-in-from-bottom-1"
+                        style={{ animationDelay: `${index * 40}ms`, animationFillMode: 'backwards' }}
+                      >
+                        <AttentionItemRow
+                          factoryId={factoryId}
+                          {...actions.rowProps(item)}
+                          onOpen={() => setOpen(false)}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </ScrollAreaViewport>
               </ScrollArea>
             ) : (
               <div className="text-caption text-placeholder flex min-h-24 items-center justify-center px-3.5 text-center">

@@ -1,3 +1,4 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEffect, useRef } from 'react';
 
 import './sign-in-page.css';
@@ -269,9 +270,14 @@ export function FactoryHalftoneField({ variant = 'panel' }: { variant?: 'panel' 
         <span className="factory-stage-label">Ship</span>
       </div>
       <canvas ref={canvasRef} className="absolute inset-0 size-full cursor-crosshair" aria-hidden="true" />
-      <span className="factory-visual-hint text-meta text-placeholder pointer-events-none absolute right-0 bottom-8 hidden items-center gap-2 lg:inline-flex">
+      <Txt
+        as="span"
+        variant="meta"
+        tone="faint"
+        className="factory-visual-hint pointer-events-none absolute right-0 bottom-8 hidden items-center gap-2 lg:inline-flex"
+      >
         Move across the factory
-      </span>
+      </Txt>
     </div>
   );
 }

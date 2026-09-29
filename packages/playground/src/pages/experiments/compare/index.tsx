@@ -68,10 +68,10 @@ function CompareExperimentsPage() {
         <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
           <div className="py-5 text-center text-muted-foreground">
             <p>Select two experiments to compare.</p>
-            <p className="mt-2 text-body">
+            <Txt className="mt-2">
               Use the URL format: /experiments/compare?dataset={'{datasetId}'}&baseline={'{experimentIdA}'}&contender=
               {'{experimentIdB}'}
-            </p>
+            </Txt>
           </div>
         </div>
       </PageLayout>
@@ -102,13 +102,13 @@ function CompareExperimentsPage() {
         <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
           <div className="py-5 text-center text-muted-foreground">
             <p>Experiments must belong to the same dataset ({datasetId}) to be compared.</p>
-            <p className="mt-2 flex items-center justify-center gap-2 text-body">
+            <Txt className="mt-2 flex items-center justify-center gap-2">
               One of
               <ExperimentIdLink experimentId={experimentIdA} />
               and
               <ExperimentIdLink experimentId={experimentIdB} />
               was not found in it.
-            </p>
+            </Txt>
           </div>
         </div>
       </PageLayout>
@@ -126,11 +126,11 @@ function CompareExperimentsPage() {
                 Experiments comparison
               </Txt>
 
-              <p className="flex items-center gap-2 text-caption text-muted-foreground">
+              <Txt variant="caption" tone="muted" className="flex items-center gap-2">
                 <ExperimentIdLink experimentId={experimentIdA} />
                 and
                 <ExperimentIdLink experimentId={experimentIdB} />
-              </p>
+              </Txt>
             </div>
 
             <Tooltip>

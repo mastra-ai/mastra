@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI marketing heading: '%s'. Strip the puffery and name the topic plainly."
+message: "AI marketing heading: '%s'. Strip the puffery and state the topic plainly."
 level: error
 ignorecase: true
 scope: heading

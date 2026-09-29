@@ -5,6 +5,7 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { JudgeIcon } from '@mastra/playground-ui/icons/JudgeIcon';
 import { Trash2, ChevronRight } from 'lucide-react';
@@ -184,7 +185,9 @@ function ScorerConfigPanel({
           <Icon size="xs">
             <JudgeIcon className="text-muted-foreground" />
           </Icon>
-          <span className="text-column text-foreground">{scorerName}</span>
+          <Txt as="span" variant="column" tone="ink">
+            {scorerName}
+          </Txt>
         </div>
         {!readOnly && (
           <Button type="button" tooltip={`Remove ${scorerName}`} onClick={onRemove} variant="ghost" size="icon-sm">

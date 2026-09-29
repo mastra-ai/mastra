@@ -30,7 +30,6 @@ import {
   SetupCommandError,
 } from './integrations/github/sandbox.js';
 import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
-import { getFactorySessionAddress } from './rules/binding-context.js';
 import { requireExec } from './sandbox/materialization.js';
 import type { ExecutableSandbox } from './sandbox/materialization.js';
 import {
@@ -98,6 +97,29 @@ export const REVIEW_ONLY_FACTORY_SKILLS = new Set([
   'factory-rereview',
   'factory-review',
 ]);
+
+/**
+ * Skill caches rescanned outside the workspace resolver. The resolver records
+ * which role each cache was last scanned for; a rescan it did not perform makes
+ * that record untrustworthy, so the next reuse must rescan again.
+ */
+const rescannedOutsideResolver = new WeakMap<object, Promise<void>>();
+
+/**
+ * Rescan a session's skill cache so a role gained after the cache was built
+ * (a review binding minted after the session's workspace resolved) takes effect.
+ * The source still checks the live binding, so this never widens access.
+ */
+export async function rescanFactorySkills(skills: NonNullable<Workspace['skills']>): Promise<void> {
+  // Registered so the resolver waits it out: a refresh started meanwhile would
+  // join this scan (possibly for the old role) instead of starting a fresh one.
+  const pending = skills.refresh();
+  rescannedOutsideResolver.set(
+    skills,
+    pending.catch(() => {}),
+  );
+  await pending;
+}
 
 export class FactorySkillSource implements SkillSource {
   readonly #bundledSource = new LocalSkillSource({ basePath: BUNDLED_FACTORY_SKILLS_PATH });
@@ -288,7 +310,7 @@ export interface CreateWorkspaceFactoryOptions {
   /** Work-items storage used to resolve the session's run-binding role, so
    * review-board sessions get the reviewer PAT as `GH_TOKEN`. Optional —
    * without it every session uses the default (worker) PAT. */
-  workItems?: Pick<WorkItemsStorage, 'findRunBindingBySession'>;
+  workItems?: Pick<WorkItemsStorage, 'findActiveRunBindingForSession'>;
   /** Projects storage used to authorize workspace-free supervisor sessions. */
   projects?: Pick<FactoryProjectsStorage, 'get'>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
@@ -384,6 +406,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   // Review-skill visibility last used to populate each workspace's skill cache.
   const skillCacheReviewState = new Map<string, boolean>();
   const skillCacheRefreshes = new Map<string, Promise<void>>();
+  // The review check of the latest request to resolve each workspace. The skill
+  // source outlives the request that built it, so it must gate on this rather
+  // than on the context it was constructed with.
+  const skillReviewChecks = new Map<string, () => Promise<boolean>>();
 
   return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
@@ -482,22 +508,30 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         throw retiredError();
       }
       const target: SessionSandbox = requireExec(args.sandbox);
-      // Observability plus the post-checkout skill rescan run on every start
-      // (create or reconnect). Observability only — nothing reads these columns
-      // for decisions; the workdir was resolved (and memoized on the entry) by
-      // the guarded setup. The skill roots were reported empty by the
+      // Sandbox persistence plus the post-checkout skill rescan run on every
+      // start (create or reconnect). The persisted sandbox id is read back on
+      // resume to reattach; the workdir was resolved (and memoized on the
+      // entry) by the guarded setup. The skill roots were reported empty by the
       // unmaterialized-source guard before the checkout existed, so rescan now.
-      const publishStartSideEffects = () => {
-        void storage.sessions
-          .setSandbox({ id: session.id, sandboxId: target.id, sandboxWorkdir: sessionEntry.workdir ?? '' })
-          .catch(() => {});
+      // The physical-id write is awaited and its failure propagates: a start
+      // that completes before the id is durable lets a concurrent resume read a
+      // stale id and provision a replacement VM.
+      const publishStartSideEffects = async () => {
+        await storage.sessions.setSandbox({
+          id: session.id,
+          // Persist the provider's PHYSICAL, reattachable VM id so resume can
+          // reattach to the same VM. Providers with no separate physical id
+          // (e.g. local) fall back to the logical id, preserving prior behavior.
+          sandboxId: target.sandboxId ?? target.id,
+          sandboxWorkdir: sessionEntry.workdir ?? '',
+        });
         void constructedWorkspaces
           .get(workspaceId)
           ?.skills?.refresh()
           .catch(() => {});
       };
       if (!githubProvider) {
-        publishStartSideEffects();
+        await publishStartSideEffects();
         return;
       }
       const existingRegistration = githubTokenInjectors.get(workspaceId);
@@ -520,7 +554,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // that cannot accept the credential fails the reconnect here instead of
         // deferring the failure to a later token refresh.
         existingRegistration.inject(existingRegistration.ghToken);
-        publishStartSideEffects();
+        await publishStartSideEffects();
         return;
       }
       // First start: resolve the credential and authorize the constructing
@@ -548,12 +582,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       };
       githubTokenInjectors.set(workspaceId, tokenRegistration);
       registerGithubTokenContext(tokenRegistration);
-      publishStartSideEffects();
+      await publishStartSideEffects();
     };
     const constructSessionEntry = () =>
       getSessionSandbox(session.id, repoFullName, () => {
         const sandbox = createSessionSandboxInstance({
           sessionId: session.id,
+          // Physical VM id persisted from a prior start (undefined on first
+          // start). Providers that reattach by physical id use it to resume the
+          // original VM instead of provisioning a replacement.
+          sandboxId: session.sandboxId ?? undefined,
           repoFullName,
           // Stored nullable; the context speaks `undefined` for absent.
           setupCommand: projectRepository.setupCommand ?? undefined,
@@ -602,21 +640,36 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       await ctx.setState({ projectPath: workdir, projectName: repoFullName });
     }
 
+    // Keyed by the session, not the request's thread: a workspace built for a
+    // dispatcher kickoff has no live thread yet, but the session's binding
+    // already says which role it is serving. When the request does carry a
+    // thread, the binding must belong to it, so a stale thread reusing this
+    // session never inherits another run's role.
+    const findSessionBinding = async () => {
+      const binding = await workItems!.findActiveRunBindingForSession({
+        orgId: session.orgId,
+        factoryProjectId: connection.factoryProjectId,
+        sessionId: session.sessionId,
+      });
+      if (!binding || !ctx?.threadId) return binding;
+      return binding.threadId === ctx.threadId && binding.resourceId === ctx.resourceId ? binding : null;
+    };
     // Fails closed: without a readable active review binding, review skills stay hidden.
     const isReviewSession = async (): Promise<boolean> => {
       if (!workItems) return false;
       try {
-        const address = getFactorySessionAddress(requestContext);
-        const runBinding = address ? await workItems.findRunBindingBySession(address) : null;
-        return isActiveReviewBinding(runBinding, session.orgId);
+        return isActiveReviewBinding(await findSessionBinding(), session.orgId);
       } catch {
         return false;
       }
     };
-    const effectiveSkillExtension = skillExtension ?? createFactorySkillExtension(isReviewSession);
+    const effectiveSkillExtension =
+      skillExtension ??
+      createFactorySkillExtension((): Promise<boolean> => (skillReviewChecks.get(workspaceId) ?? isReviewSession)());
     const extensionId = effectiveSkillExtension ? `-${effectiveSkillExtension.id}` : '';
-    const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
+    const workspaceId: string = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
     const workspaceGeneration = workspaceRegistry.generation(session.sessionId);
+    if (!skillExtension) skillReviewChecks.set(workspaceId, isReviewSession);
     const configDir = DEFAULT_CONFIG_DIR;
 
     const getRepositoryAccess = () =>
@@ -632,9 +685,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const resolveGithubPatKind = async (fallback: GithubPatKind): Promise<GithubPatKind> => {
       if (!workItems) return 'default';
       try {
-        const address = getFactorySessionAddress(requestContext);
-        const runBinding = address ? await workItems.findRunBindingBySession(address) : null;
-        return isActiveReviewBinding(runBinding, session.orgId) ? 'reviewer' : 'default';
+        return isActiveReviewBinding(await findSessionBinding(), session.orgId) ? 'reviewer' : 'default';
       } catch {
         // Preserve the installed role when binding storage is temporarily unavailable.
         return fallback;
@@ -746,6 +797,19 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // The skill cache does not recheck the source on get(), so rescan when the
       // session's role flips; otherwise a cached review skill outlives the review binding.
       if (!skillExtension) {
+        // An outside rescan makes the recorded role untrustworthy. Wait for it to
+        // settle first, so the refresh below starts a scan for the current role
+        // rather than joining one started for the previous role.
+        const consumeOutsideRescan = async () => {
+          const outside = existing.skills && rescannedOutsideResolver.get(existing.skills);
+          if (!outside) return false;
+          await outside;
+          if (rescannedOutsideResolver.get(existing.skills!) === outside)
+            rescannedOutsideResolver.delete(existing.skills!);
+          skillCacheReviewState.delete(workspaceId);
+          return true;
+        };
+        await consumeOutsideRescan();
         let isReview = await isReviewSession();
         // Concurrent reuses share one refresh, and the state is recorded only
         // once the rescan succeeds. Wait out any in-flight rescan (it may have
@@ -754,6 +818,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           const inFlight = skillCacheRefreshes.get(workspaceId);
           if (inFlight) {
             await inFlight;
+            isReview = await isReviewSession();
+            continue;
+          }
+          if (await consumeOutsideRescan()) {
             isReview = await isReviewSession();
             continue;
           }
@@ -924,6 +992,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         githubTokenInjectors.delete(workspaceId);
         constructedWorkspaces.delete(workspaceId);
         skillCacheReviewState.delete(workspaceId);
+        skillReviewChecks.delete(workspaceId);
         // Retirement drops the memoized session sandbox so a later re-open
         // constructs (and the provider resolves) fresh instead of reusing an
         // instance whose VM the retirement path may stop or destroy.

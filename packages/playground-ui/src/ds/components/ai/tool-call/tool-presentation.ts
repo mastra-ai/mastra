@@ -23,7 +23,7 @@ export interface ToolPresentation {
   /** Salient argument shown next to the label: command, path, pattern… */
   detail?: string;
   /**
-   * What a command does, in the agent's words. `ToolCallPresentedHeader` shows it alone in place of
+   * What a command does, in the agent's words. `ActivityHeadline` shows it alone in place of
    * label and detail; both stay set for consumers that render them directly.
    */
   description?: string;
@@ -134,6 +134,26 @@ export function toolEdit(toolName: string, args: unknown): ToolEdit | undefined 
   const content = stringField(args, 'content');
   if (/write_file|create_file/i.test(toolName) && content !== undefined) return { path, content };
   return undefined;
+}
+
+export interface ToolArgumentsInput {
+  toolName: string;
+  args?: unknown;
+  argsText?: string;
+  hideArguments?: boolean;
+}
+
+function isEmptyObject(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && Object.keys(value).length === 0;
+}
+
+export function visibleToolArgumentsText({ args, argsText, hideArguments }: ToolArgumentsInput): string | undefined {
+  if (hideArguments || isEmptyObject(args)) return undefined;
+  return args === undefined ? argsText : stringifyToolValue(args);
+}
+
+export function hasToolArguments(input: ToolArgumentsInput): boolean {
+  return Boolean(toolEdit(input.toolName, input.args) || visibleToolArgumentsText(input));
 }
 
 /** Task tools draw in the docked task list, never as a transcript row. */

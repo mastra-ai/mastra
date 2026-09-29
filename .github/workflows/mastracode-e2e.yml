@@ -46,7 +46,32 @@ jobs:
             turbo-${{ runner.os }}-
 
       - name: Build Mastra Code
+        id: build
         run: pnpm run build:mastracode
 
+      - name: Typecheck Code SDK
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: pnpm --filter @mastra/code-sdk check
+
+      - name: Run ACP unit tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: pnpm --filter @mastra/code-sdk test:acp
+
+      - name: Check built SDK ACP conformance
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: pnpm --filter @mastra/code-sdk test:acp:conformance
+
+      - name: Upload ACP conformance reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: acp-conformance
+          path: |
+            mastracode/sdk/node_modules/.acp-conformance/report/
+            mastracode/sdk/node_modules/.acp-conformance/schema-source.json
+          include-hidden-files: true
+          retention-days: 14
+
       - name: Run Mastra Code E2E
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: pnpm --filter ./mastracode/tui run e2e:test -- --reporter=dot
