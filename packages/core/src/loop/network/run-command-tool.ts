@@ -12,7 +12,7 @@
  */
 
 import { exec } from 'node:child_process';
-import { resolve, normalize } from 'node:path';
+import nodePath from 'node:path';
 import { promisify } from 'node:util';
 
 import { z } from 'zod/v4';
@@ -26,9 +26,9 @@ const execAsync = promisify(exec);
  * These are rejected when found in command input.
  */
 const DANGEROUS_PATTERNS = [
-  /[;&|`$(){}[\]<>]/g, // Shell metacharacters
-  /\n|\r/g, // Newlines (command chaining)
-  /\\(?![ ])/g, // Backslashes (except escaped spaces)
+  /[;&|`$(){}[\]<>]/, // Shell metacharacters
+  /\n|\r/, // Newlines (command chaining)
+  /\\(?![ ])/, // Backslashes (except escaped spaces)
 ];
 
 /**
@@ -120,26 +120,31 @@ export interface RunCommandToolOptions {
 /**
  * Validates that a path is under one of the allowed base paths.
  */
-function isPathAllowed(targetPath: string, allowedBasePaths: string[]): boolean {
+export function isPathAllowed(
+  targetPath: string,
+  allowedBasePaths: string[],
+  pathImpl: typeof nodePath.posix = nodePath,
+): boolean {
   if (allowedBasePaths.length === 0) return true;
 
-  const normalizedTarget = normalize(resolve(targetPath));
+  const target = pathImpl.resolve(targetPath);
   return allowedBasePaths.some(basePath => {
-    const normalizedBase = normalize(resolve(basePath));
-    return normalizedTarget === normalizedBase || normalizedTarget.startsWith(normalizedBase + '/');
+    const rel = pathImpl.relative(pathImpl.resolve(basePath), target);
+    return rel === '' || (!rel.startsWith('..') && !pathImpl.isAbsolute(rel));
   });
 }
 
 /**
- * Extracts the base command from a command string.
+ * Extracts the base command from a command string, handling both `/` and `\\`
+ * separators and common Windows executable extensions.
  */
-function extractBaseCommand(command: string): string {
+export function extractBaseCommand(command: string): string {
   const trimmed = command.trim();
   const firstSpace = trimmed.indexOf(' ');
   const baseCmd = firstSpace === -1 ? trimmed : trimmed.substring(0, firstSpace);
-  // Handle paths like /usr/bin/git -> git
-  const lastSlash = baseCmd.lastIndexOf('/');
-  return lastSlash === -1 ? baseCmd : baseCmd.substring(lastSlash + 1);
+  const lastSep = Math.max(baseCmd.lastIndexOf('/'), baseCmd.lastIndexOf('\\'));
+  const name = lastSep === -1 ? baseCmd : baseCmd.substring(lastSep + 1);
+  return name.toLowerCase().replace(/\.(exe|cmd|bat|com)$/, '');
 }
 
 /**
@@ -204,7 +209,7 @@ export function createRunCommandTool(options: RunCommandToolOptions = {}) {
       }
 
       // Validate: extract and check base command
-      const baseCommand = extractBaseCommand(command).toLowerCase();
+      const baseCommand = extractBaseCommand(command);
 
       // Check blocked commands
       if (blockedCommands.has(baseCommand)) {

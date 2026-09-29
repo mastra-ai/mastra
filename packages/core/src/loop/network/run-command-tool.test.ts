@@ -1,0 +1,75 @@
+import path from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { createRunCommandTool, extractBaseCommand, isPathAllowed } from './run-command-tool';
+
+const run = (tool: ReturnType<typeof createRunCommandTool>, input: { command: string; cwd?: string }) =>
+  tool.execute!({ timeout: 10000, ...input } as any, {} as any) as Promise<any>;
+
+describe('isPathAllowed', () => {
+  it('handles POSIX paths', () => {
+    const p = path.posix;
+    expect(isPathAllowed('/base', ['/base'], p)).toBe(true);
+    expect(isPathAllowed('/base/sub/dir', ['/base'], p)).toBe(true);
+    expect(isPathAllowed('/base2', ['/base'], p)).toBe(false);
+    expect(isPathAllowed('/base/../etc', ['/base'], p)).toBe(false);
+    expect(isPathAllowed('/anything', [], p)).toBe(true);
+  });
+
+  it('handles Windows paths', () => {
+    const p = path.win32;
+    expect(isPathAllowed('C:\\base', ['C:\\base'], p)).toBe(true);
+    expect(isPathAllowed('C:\\base\\sub', ['C:\\base'], p)).toBe(true);
+    expect(isPathAllowed('c:\\BASE\\sub', ['C:\\base'], p)).toBe(true);
+    expect(isPathAllowed('C:/base/sub', ['C:\\base'], p)).toBe(true);
+    expect(isPathAllowed('C:\\base2', ['C:\\base'], p)).toBe(false);
+    expect(isPathAllowed('C:\\base\\..\\x', ['C:\\base'], p)).toBe(false);
+    expect(isPathAllowed('D:\\base\\sub', ['C:\\base'], p)).toBe(false);
+  });
+});
+
+describe('extractBaseCommand', () => {
+  it.each([
+    ['git status', 'git'],
+    ['/usr/bin/git status', 'git'],
+    ['C:\\tools\\git.exe status', 'git'],
+    ['.\\bin\\node -v', 'node'],
+    ['RM.EXE -rf x', 'rm'],
+    ['script.cmd', 'script'],
+  ])('%s -> %s', (input, expected) => {
+    expect(extractBaseCommand(input)).toBe(expected);
+  });
+});
+
+describe('createRunCommandTool', () => {
+  it('blocks Windows-path invocations of blocked commands', async () => {
+    const tool = createRunCommandTool({ allowUnsafeCharacters: true });
+    const res = await run(tool, { command: 'C:\\Windows\\rm.exe x' });
+    expect(res.success).toBe(false);
+    expect(res.message).toContain("'rm' is not permitted");
+  });
+
+  it('applies the allowlist to Windows-path invocations', async () => {
+    const tool = createRunCommandTool({ allowUnsafeCharacters: true, allowedCommands: ['git'] });
+    const res = await run(tool, { command: 'C:\\tools\\node.exe -v' });
+    expect(res.success).toBe(false);
+    expect(res.message).toContain('not in the allowed commands list');
+  });
+
+  it('rejects unsafe characters on every call', async () => {
+    const tool = createRunCommandTool();
+    for (let i = 0; i < 4; i++) {
+      const res = await run(tool, { command: 'echo a; echo b' });
+      expect(res.success).toBe(false);
+      expect(res.message).toContain('unsafe characters');
+    }
+  });
+
+  it('runs commands inside allowed base paths and rejects others', async () => {
+    const tool = createRunCommandTool({ allowedBasePaths: [process.cwd()] });
+    const ok = await run(tool, { command: 'node -v', cwd: process.cwd() });
+    expect(ok.success).toBe(true);
+    const bad = await run(tool, { command: 'node -v', cwd: path.resolve(process.cwd(), '..') });
+    expect(bad.success).toBe(false);
+    expect(bad.message).toContain('not within allowed paths');
+  });
+});
