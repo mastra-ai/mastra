@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 1.72.0-alpha.8
+
+### Patch Changes
+
+- Fixed `Session.sendMessage()` hanging forever when its run never produced a completion event, for example when several turns started at once on the same thread. It now rejects if the session's stream processing fails, and resolves if the run is aborted or the session's thread subscription is torn down. See [#25140](https://github.com/mastra-ai/mastra/issues/25140). ([#25375](https://github.com/mastra-ai/mastra/pull/25375))
+
+- Fixed evented workflow snapshots growing quadratically with `.foreach()` input size. Each iteration's progress record no longer stores a copy of the whole input array, so large foreach runs no longer produce huge snapshots that can stall storage. Fixes #24943. ([#25376](https://github.com/mastra-ai/mastra/pull/25376))
+
 ## 1.72.0-alpha.7
 
 ### Patch Changes
