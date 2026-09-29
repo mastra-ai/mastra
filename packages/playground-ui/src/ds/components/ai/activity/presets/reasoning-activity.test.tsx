@@ -2,21 +2,21 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { Reasoning } from './reasoning';
+import { ReasoningActivity } from './reasoning-activity';
 
 afterEach(() => cleanup());
 
-describe('Reasoning', () => {
+describe('ReasoningActivity', () => {
   describe('when there is reasoning text', () => {
     it('shows the text expanded by default', () => {
-      render(<Reasoning text="Let me think" />);
+      render(<ReasoningActivity text="Let me think" />);
 
       expect(screen.getByText('Let me think')).not.toBeNull();
       expect(screen.getByRole('button', { name: 'Reasoning' }).getAttribute('aria-expanded')).toBe('true');
     });
 
     it('starts collapsed when asked to, and opens on click', () => {
-      render(<Reasoning text="Let me think" defaultOpen={false} />);
+      render(<ReasoningActivity text="Let me think" defaultOpen={false} />);
       const toggle = screen.getByRole('button', { name: 'Reasoning' });
 
       expect(toggle.getAttribute('aria-expanded')).toBe('false');
@@ -27,7 +27,7 @@ describe('Reasoning', () => {
     });
 
     it('collapses and re-expands when the toggle is clicked', () => {
-      render(<Reasoning text="Let me think" />);
+      render(<ReasoningActivity text="Let me think" />);
       const toggle = screen.getByRole('button', { name: 'Reasoning' });
 
       fireEvent.click(toggle);
@@ -40,17 +40,17 @@ describe('Reasoning', () => {
     });
 
     it('renders markdown links and inline code', () => {
-      render(<Reasoning text="Check [the docs](https://mastra.ai/docs) before changing `agent.stream()`." />);
+      render(<ReasoningActivity text="Check [the docs](https://mastra.ai/docs) before changing `agent.stream()`." />);
 
       expect(screen.getByRole('link', { name: 'the docs' }).getAttribute('href')).toBe('https://mastra.ai/docs');
       expect(screen.getByText('agent.stream()').tagName).toBe('CODE');
     });
 
     it('keeps a collapsed passage closed when more reasoning arrives', () => {
-      const { rerender } = render(<Reasoning text="First thought" streaming />);
+      const { rerender } = render(<ReasoningActivity text="First thought" streaming />);
       fireEvent.click(screen.getByRole('button', { name: 'Reasoning' }));
 
-      rerender(<Reasoning text="First thought, then another" streaming />);
+      rerender(<ReasoningActivity text="First thought, then another" streaming />);
 
       expect(screen.queryByText('First thought, then another')).toBeNull();
       fireEvent.click(screen.getByRole('button', { name: 'Reasoning' }));
@@ -60,7 +60,7 @@ describe('Reasoning', () => {
 
   describe('when the reasoning was redacted', () => {
     it('shows the redaction notice instead of the text', () => {
-      render(<Reasoning text="secret" redacted />);
+      render(<ReasoningActivity text="secret" redacted />);
 
       expect(screen.getByText('Reasoning was redacted by the provider.')).not.toBeNull();
       expect(screen.queryByText('secret')).toBeNull();
@@ -69,7 +69,7 @@ describe('Reasoning', () => {
 
   describe('when there is nothing to show', () => {
     it.each(['', ' \n '])('renders nothing for blank text (%s)', text => {
-      const { container } = render(<Reasoning text={text} />);
+      const { container } = render(<ReasoningActivity text={text} />);
 
       expect(container.innerHTML).toBe('');
     });

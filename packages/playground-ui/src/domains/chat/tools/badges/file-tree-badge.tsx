@@ -1,233 +1,112 @@
-import { ChevronUpIcon, CopyIcon, CheckIcon, FolderTree, HardDrive } from 'lucide-react';
-import { useState, useEffect, useMemo } from 'react';
+import { HardDrive } from 'lucide-react';
 import type { DataMessagePart } from '../tool-card';
+import { parseToolArgs, workspaceMetadata } from './workspace-data-parts';
+import { WorkspaceLink } from './workspace-link';
 import type { MessageMetadata } from '@/domains/chat';
-import { SectionLabel } from '@/domains/chat/components/section-label';
+import { BadgeWrapper } from '@/domains/chat/components/badge-wrapper';
+import { awaitsToolApproval } from '@/domains/chat/tools/badges/awaits-tool-approval';
 import type { ToolApprovalButtonsProps } from '@/domains/chat/tools/badges/tool-approval-buttons';
 import { ToolApprovalButtons } from '@/domains/chat/tools/badges/tool-approval-buttons';
-import { Badge } from '@/ds/components/Badge';
-import { Button } from '@/ds/components/Button';
-import { CodeEditor } from '@/ds/components/CodeEditor';
+import { ActivityHeadline } from '@/ds/components/ai/activity';
+import type { ActivityStatus } from '@/ds/components/ai/activity';
+import { presentTool, ToolCallArguments, ToolCallOutput } from '@/ds/components/ai/tool-call';
 import { Txt } from '@/ds/components/Txt';
-import { Icon } from '@/ds/icons/Icon';
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { useLinkComponent } from '@/lib/framework';
-import { cn } from '@/utils/cn';
-
-// Matches the shape returned by workspace.getInfo()
-interface WorkspaceMetadata {
-  toolName?: string;
-  id?: string;
-  name?: string;
-  status?: string;
-  filesystem?: {
-    id?: string;
-    name?: string;
-    provider?: string;
-    status?: string;
-  };
-  sandbox?: {
-    id?: string;
-    name?: string;
-    provider?: string;
-    status?: string;
-  };
-}
-
-interface ParsedArgs {
-  path?: string;
-  maxDepth?: number;
-  showHidden?: boolean;
-  dirsOnly?: boolean;
-  exclude?: string;
-  extension?: string;
-}
 
 export interface FileTreeBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   toolName: string;
   args: Record<string, unknown> | string;
-  result: any;
+  result: unknown;
   metadata?: MessageMetadata;
   toolCalled?: boolean;
   dataParts?: ReadonlyArray<DataMessagePart>;
+  status?: ActivityStatus;
+}
+
+function listingOptions(args: Record<string, unknown>): string[] {
+  const options: string[] = [];
+  if (typeof args.maxDepth === 'number') options.push(`depth: ${args.maxDepth}`);
+  if (args.showHidden === true) options.push('hidden');
+  if (args.dirsOnly === true) options.push('dirs only');
+  if (typeof args.exclude === 'string' && args.exclude) options.push(`exclude: ${args.exclude}`);
+  if (typeof args.extension === 'string' && args.extension) options.push(`ext: ${args.extension}`);
+  return options;
+}
+
+function splitTreeResult(result: unknown): { tree: string; summary: string } {
+  if (typeof result !== 'string') return { tree: '', summary: '' };
+  const summaryStart = result.lastIndexOf('\n\n');
+  if (summaryStart === -1) return { tree: result, summary: '' };
+  return { tree: result.slice(0, summaryStart), summary: result.slice(summaryStart + 2) };
 }
 
 export const FileTreeBadge = ({
   toolName,
   args,
   result,
+  metadata,
   toolCallId,
   toolApprovalMetadata,
   isNetwork,
   toolCalled: toolCalledProp,
   dataParts,
+  status = 'idle',
 }: FileTreeBadgeProps) => {
-  // Expand by default when approval is required (so buttons are visible)
-  const [isCollapsed, setIsCollapsed] = useState(!toolApprovalMetadata);
-  const { isCopied, copyToClipboard } = useCopyToClipboard({ copiedDuration: 1500, showToast: false });
-
-  // Sync collapsed state when toolApprovalMetadata changes (like BadgeWrapper does)
-  useEffect(() => {
-    setIsCollapsed(!toolApprovalMetadata);
-  }, [toolApprovalMetadata]);
-  const { Link } = useLinkComponent();
-
-  // Parse args
-  let parsedArgs: ParsedArgs = { path: '.' };
-  try {
-    parsedArgs = typeof args === 'object' ? (args as ParsedArgs) : JSON.parse(args);
-  } catch {
-    // ignore
-  }
-
-  const { path = '.', maxDepth, showHidden, dirsOnly, exclude, extension } = parsedArgs;
-
-  // Build args display string
-  const argsDisplay: string[] = [];
-  if (maxDepth !== undefined && maxDepth !== 3) {
-    argsDisplay.push(`depth: ${maxDepth}`);
-  }
-  if (showHidden) {
-    argsDisplay.push('hidden');
-  }
-  if (dirsOnly) {
-    argsDisplay.push('dirs only');
-  }
-  if (exclude) {
-    argsDisplay.push(`exclude: ${exclude}`);
-  }
-  if (extension) {
-    argsDisplay.push(`ext: ${extension}`);
-  }
-
-  // Get tree output + summary from result string: "tree\n\nsummary"
-  let treeOutput = '';
-  let summary = '';
-  if (typeof result === 'string' && result) {
-    const lastDoubleNewline = result.lastIndexOf('\n\n');
-    if (lastDoubleNewline !== -1) {
-      treeOutput = result.slice(0, lastDoubleNewline);
-      summary = result.slice(lastDoubleNewline + 2);
-    } else {
-      treeOutput = result;
-    }
-  }
-
-  const hasResult = !!treeOutput;
-  const toolCalled = toolCalledProp ?? hasResult;
-
-  // Extract filesystem metadata from message data parts (via writer.custom), scoped to this tool call
-  const workspaceMetadata = useMemo(() => {
-    return (dataParts ?? []).find(
-      part => part.type === 'data' && part.name === 'workspace-metadata' && part.data?.toolCallId === toolCallId,
-    );
-  }, [dataParts, toolCallId]);
-
-  const wsMeta = workspaceMetadata?.data as WorkspaceMetadata | undefined;
-
-  const onCopy = () => {
-    if (!treeOutput || isCopied) return;
-    copyToClipboard(treeOutput);
-  };
+  const parsedArgs = parseToolArgs(args);
+  const path = typeof parsedArgs.path === 'string' && parsedArgs.path ? parsedArgs.path : '.';
+  const { icon: ToolIcon, label, detail = path } = presentTool(toolName, parsedArgs);
+  const options = listingOptions(parsedArgs);
+  const { tree, summary } = splitTreeResult(result);
+  const toolCalled = toolCalledProp ?? Boolean(tree);
+  const workspace = workspaceMetadata(dataParts, toolCallId);
+  const needsApproval = awaitsToolApproval({ toolApprovalMetadata, toolCalled });
+  const hasBody = Boolean(tree) || needsApproval;
 
   return (
-    <div className="mb-4" data-testid="file-tree-badge">
-      {/* Header row */}
-      <div className="flex flex-wrap items-center gap-2">
-        <button onClick={() => setIsCollapsed(s => !s)} className="flex min-w-0 items-center gap-2" type="button">
-          <Icon>
-            <ChevronUpIcon className={cn('transition-all', isCollapsed ? 'rotate-90' : 'rotate-180')} />
-          </Icon>
-          <Badge icon={<FolderTree className="text-span-workspace" size={16} />}>
-            List Files <span className="ml-1 text-foreground">{path}</span>
-            {argsDisplay.length > 0 && <span className="ml-1 text-muted-foreground">({argsDisplay.join(', ')})</span>}
-          </Badge>
-        </button>
-
-        {/* Filesystem badge - outside button to prevent overlap */}
-        {wsMeta?.filesystem && (
-          <Link
-            href={wsMeta.id ? `/workspaces/${wsMeta.id}?path=${encodeURIComponent(path)}` : '/workspaces'}
-            className="state-layer flex items-center gap-1.5 rounded border border-border bg-card px-1.5 py-0.5 text-caption text-foreground hover:border-border-strong"
-          >
-            <HardDrive className="size-3" />
-            <span>{wsMeta.name || wsMeta.filesystem.name}</span>
-          </Link>
-        )}
-
-        {/* Summary - show in header when collapsed */}
-        {isCollapsed && hasResult && summary && (
-          <Txt as="span" variant="caption" tone="ink">
-            {summary}
-          </Txt>
-        )}
-      </div>
-
-      {/* Content area */}
-      {!isCollapsed && (
-        <div className="pt-2">
-          {/* Approval UI - styled like ToolBadge/BadgeWrapper when awaiting approval */}
-          {toolApprovalMetadata && !toolCalled && (
-            <div className="flex flex-col gap-4 rounded-lg bg-background p-4">
-              <div>
-                <SectionLabel>Tool arguments</SectionLabel>
-                <CodeEditor data={parsedArgs as Record<string, unknown>} data-testid="tool-args" />
-              </div>
-              <ToolApprovalButtons
-                toolCalled={toolCalled}
-                toolCallId={toolCallId}
-                toolApprovalMetadata={toolApprovalMetadata}
-                toolName={toolName}
-                isNetwork={isNetwork}
-              />
-            </div>
-          )}
-
-          {/* Tree output panel - custom UI after tool has been called */}
-          {toolCalled && treeOutput && (
-            <div className="overflow-hidden rounded-md border border-border bg-background">
-              {/* Panel header with summary and copy button */}
-              <div className="flex items-center justify-between border-b border-border bg-card px-3 py-1.5">
-                {summary && (
-                  <Txt as="span" variant="caption" tone="ink">
-                    {summary}
-                  </Txt>
-                )}
-                <Button variant="default" size="icon-sm" tooltip="Copy tree" onClick={onCopy} disabled={!treeOutput}>
-                  <span className="grid">
-                    <span
-                      style={{ gridArea: '1/1' }}
-                      className={cn('transition-transform', isCopied ? 'scale-100' : 'scale-0')}
-                    >
-                      <CheckIcon size={14} />
-                    </span>
-                    <span
-                      style={{ gridArea: '1/1' }}
-                      className={cn('transition-transform', isCopied ? 'scale-0' : 'scale-100')}
-                    >
-                      <CopyIcon size={14} />
-                    </span>
-                  </span>
-                </Button>
-              </div>
-
-              {/* Tree content */}
-              <pre className="text-mastra-el-6 max-h-dropdown overflow-auto p-3 text-caption whitespace-pre">
-                {treeOutput}
-              </pre>
-            </div>
-          )}
-
-          {/* Loading state */}
-          {toolCalled && !hasResult && (
-            <div className="rounded-md border border-border bg-background px-3 py-2">
-              <Txt as="span" variant="caption" tone="ink">
-                Loading...
+    <BadgeWrapper
+      data-testid="file-tree-badge"
+      header={
+        <ActivityHeadline
+          icon={<ToolIcon aria-hidden />}
+          label={label}
+          detail={options.length > 0 ? `${detail} (${options.join(', ')})` : detail}
+        />
+      }
+      status={status}
+      extraInfo={
+        (summary || workspace?.filesystem) && (
+          <>
+            {summary && (
+              <Txt as="span" variant="meta" tone="muted" className="truncate">
+                {summary}
               </Txt>
-            </div>
-          )}
-        </div>
+            )}
+            {workspace?.filesystem && (
+              <WorkspaceLink
+                href={workspace.id ? `/workspaces/${workspace.id}?path=${encodeURIComponent(path)}` : '/workspaces'}
+                icon={<HardDrive className="size-3 shrink-0" aria-hidden />}
+              >
+                {workspace.name || workspace.filesystem.name}
+              </WorkspaceLink>
+            )}
+          </>
+        )
+      }
+      initialCollapsed={!toolApprovalMetadata}
+    >
+      {hasBody && (
+        <>
+          {needsApproval && <ToolCallArguments toolName={toolName} args={parsedArgs} data-testid="tool-args" />}
+          {tree && <ToolCallOutput text={tree} />}
+          <ToolApprovalButtons
+            toolCalled={toolCalled}
+            toolCallId={toolCallId}
+            toolApprovalMetadata={toolApprovalMetadata}
+            toolName={toolName}
+            isNetwork={isNetwork}
+            isGenerateMode={metadata?.mode === 'generate'}
+          />
+        </>
       )}
-    </div>
+    </BadgeWrapper>
   );
 };
