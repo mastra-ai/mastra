@@ -1163,6 +1163,22 @@ describe('session start (onSessionStart)', () => {
     expect(session.restoredModel()).toBe('openai/gpt-5.6');
   });
 
+  it("derives observational memory from the sender's provider credentials", async () => {
+    const deps = makeStartDeps({
+      defaultModelId: 'openai/gpt-5.6',
+      activePack: { build: 'deepseek/deepseek-chat' },
+    });
+    const session = makeSession();
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
+    expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
+    expect(session.om.observer.switchModel).not.toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
+    expect(session.model.switch).toHaveBeenLastCalledWith({ modelId: 'deepseek/deepseek-chat' });
+  });
+
   // The point of persisting the choice: the thread keeps the model it started
   // on. A later process — where the sender's pack and the factory default have
   // both moved on — must not retarget a conversation already under way.

@@ -577,19 +577,19 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
     if (!(await session.thread.getSetting({ key: modeModelKey }))) {
       const factoryModelId = await resolveFactoryDefaultModelId(projects, owner.factoryProjectId);
       const userModelId = await resolveActivePackBuildModel(modelPacks, owner);
+      const selectedModelId = userModelId ?? factoryModelId;
 
       await hydrateFactorySession(session, {
         orgId: owner.orgId,
         factoryProjectId: owner.factoryProjectId,
-        // The FACTORY model drives observational-memory's provider-aware
-        // fallback, even when the sender's pack supplies the model the session
-        // actually runs — a factory connected only to Anthropic should not
-        // observe with an uncredentialed provider.
         defaultModelId: factoryModelId,
+        // Slack runs with the linked sender's credentials. Derive OM's fallback
+        // from that sender's selected model rather than the factory model, which
+        // may belong to a provider the sender cannot access.
+        observationalMemoryModelId: selectedModelId,
         memorySettings,
       });
 
-      const selectedModelId = userModelId ?? factoryModelId;
       if (selectedModelId && selectedModelId !== factoryModelId) {
         // The sender's own choice beats the factory's. `switch` applies the model
         // and persists it as this mode's model on the thread in one step — which
