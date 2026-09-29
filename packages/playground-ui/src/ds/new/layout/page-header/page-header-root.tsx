@@ -1,5 +1,5 @@
 import { Children, isValidElement } from 'react';
-import type { ComponentPropsWithoutRef } from 'react';
+import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
 
 import { PageHeaderAction } from './page-header-action';
 import { PageHeaderDescription } from './page-header-description';
@@ -17,6 +17,49 @@ export interface PageHeaderRootProps extends Omit<ComponentPropsWithoutRef<'head
   isLoading?: boolean;
 }
 
+type LegacySlotProps = Pick<PageHeaderRootProps, 'title' | 'description' | 'icon' | 'isLoading'>;
+
+function legacySlots({ title, description, icon, isLoading }: LegacySlotProps): ReactNode[] {
+  if (title === undefined) return [];
+
+  const slots: ReactNode[] = [];
+  if (icon !== undefined && !isLoading) {
+    slots.push(<PageHeaderIcon key="icon">{icon}</PageHeaderIcon>);
+  }
+  slots.push(
+    <PageHeaderTitle key="title" isLoading={isLoading}>
+      {title}
+    </PageHeaderTitle>,
+  );
+  if (description !== undefined) {
+    slots.push(
+      <PageHeaderDescription key="description" isLoading={isLoading}>
+        {description}
+      </PageHeaderDescription>,
+    );
+  }
+  return slots;
+}
+
+function isSlot(child: ReactNode, type: ElementType) {
+  return isValidElement(child) && child.type === type;
+}
+
+function isBesideMeta(child: ReactNode) {
+  return isValidElement<PageHeaderMetaProps>(child) && child.type === PageHeaderMeta && Boolean(child.props.beside);
+}
+
+function groupSlots(items: ReactNode[]) {
+  const eyebrows = items.filter(child => isSlot(child, PageHeaderEyebrow));
+  const icons = items.filter(child => isSlot(child, PageHeaderIcon));
+  const headline = [...items.filter(child => isSlot(child, PageHeaderTitle)), ...items.filter(isBesideMeta)];
+  // Actions sit outside the title column so their height never affects title/meta/description alignment.
+  const actions = items.filter(child => isSlot(child, PageHeaderAction));
+  const placed = [...eyebrows, ...icons, ...headline, ...actions];
+  const below = items.filter(child => !placed.includes(child));
+  return { eyebrows, icons, headline, below, actions };
+}
+
 export function PageHeaderRoot({
   children,
   className,
@@ -26,36 +69,9 @@ export function PageHeaderRoot({
   isLoading,
   ...props
 }: PageHeaderRootProps) {
-  const items = [
-    ...(title !== undefined
-      ? [
-          !isLoading && icon !== undefined && <PageHeaderIcon key="icon">{icon}</PageHeaderIcon>,
-          <PageHeaderTitle key="title" isLoading={isLoading}>
-            {title}
-          </PageHeaderTitle>,
-          description !== undefined && (
-            <PageHeaderDescription key="description" isLoading={isLoading}>
-              {description}
-            </PageHeaderDescription>
-          ),
-        ]
-      : []),
-    ...Children.toArray(children),
-  ];
-
-  // Actions sit outside the title column so their height never affects title/meta/description alignment.
-  const actions = items.filter(child => isValidElement(child) && child.type === PageHeaderAction);
-  const eyebrows = items.filter(child => isValidElement(child) && child.type === PageHeaderEyebrow);
-  const icons = items.filter(child => isValidElement(child) && child.type === PageHeaderIcon);
-  const titles = items.filter(child => isValidElement(child) && child.type === PageHeaderTitle);
-  const beside = items.filter(
-    child => isValidElement<PageHeaderMetaProps>(child) && child.type === PageHeaderMeta && child.props.beside,
-  );
-  const headline = [...titles, ...beside];
+  const items = [...legacySlots({ title, description, icon, isLoading }), ...Children.toArray(children)];
+  const { eyebrows, icons, headline, below, actions } = groupSlots(items);
   const hasControls = icons.length > 0 || actions.length > 0;
-  const below = items.filter(
-    child => child !== false && ![...actions, ...eyebrows, ...icons, ...headline].includes(child),
-  );
 
   return (
     <header className={cn('relative flex w-full flex-col', !hasControls && 'gap-1', className)} {...props}>
