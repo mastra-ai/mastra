@@ -367,13 +367,7 @@ export class GoalManager {
     }
     if (!isCurrent()) return;
     this.persistGoalOnNextThreadCreate = false;
-    // A failed delete scoped to a thread survives switching away and back, so
-    // the next save on that thread retries it instead of reviving the goal.
-    if (this.pendingDelete?.threadId && this.pendingDelete.threadId === threadId) {
-      nextRecord = null;
-    } else if (!this.pendingDelete?.threadId) {
-      this.pendingDelete = null;
-    }
+    this.pendingDelete = null;
     this.threadId = threadId ?? undefined;
     this.agentId = agent?.id;
     this.record = nextRecord;

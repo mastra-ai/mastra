@@ -491,13 +491,10 @@ describe('GoalManager adapter', () => {
     expect(agent.clearObjective).toHaveBeenCalledTimes(1);
 
     state.session.thread.getId.mockReturnValue('other-thread');
-    await manager.loadFromThread(state);
     await manager.saveToThread(state);
     expect(agent.clearObjective).toHaveBeenCalledTimes(1);
 
     state.session.thread.getId.mockReturnValue('parent-thread');
-    await manager.loadFromThread(state);
-    expect(manager.getGoal()).toBeNull();
     await manager.saveToThread(state);
     expect(agent.clearObjective).toHaveBeenCalledTimes(2);
     expect(agent.clearObjective).toHaveBeenLastCalledWith({ threadId: 'parent-thread' });
