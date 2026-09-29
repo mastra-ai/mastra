@@ -578,6 +578,48 @@ describe('Stream ID Consistency', () => {
     expect(note.messageId).toBe(savedIn);
   });
 
+  it('should stamp a signal-typed data part written through the writer with the response message id', async () => {
+    const writeUserMessagePart = {
+      id: 'write-user-message-part',
+      processInputStep: async ({ stepNumber, writer }) => {
+        if (stepNumber > 0) {
+          await writer?.custom({ type: 'data-user-message', data: { id: 'not-a-signal-row', text: 'hi' } });
+        }
+        return {};
+      },
+    } satisfies Processor;
+
+    const agent = new Agent({
+      id: 'writer-signal-part-agent',
+      name: 'Writer signal part agent',
+      instructions: 'You are a helpful assistant.',
+      model: toolThenTextModel(),
+      memory,
+      inputProcessors: [writeUserMessagePart],
+      tools: {
+        lookup: createTool({
+          id: 'lookup',
+          description: 'lookup',
+          inputSchema: z.object({ q: z.string() }),
+          execute: async () => ({ ok: true }),
+        }),
+      },
+    });
+    agent.__registerMastra(mastra);
+
+    const threadId = globalThis.crypto.randomUUID();
+    const stream = await agent.stream('Hello!', { memory: { thread: threadId, resource: 'r' } });
+    const chunks: any[] = [];
+    for await (const chunk of stream.fullStream) chunks.push(chunk);
+
+    const part = chunks.find(c => c.type === 'data-user-message');
+    expect(part).toBeDefined();
+    const savedIn = await messageIdContaining(threadId, p => p.type === 'data-user-message');
+    expect(savedIn).toBeDefined();
+    expect(savedIn).not.toBe('not-a-signal-row');
+    expect(part.messageId).toBe(savedIn);
+  });
+
   it('should return generate response IDs that match database-saved message IDs (V2 model)', async () => {
     const model = new MockLanguageModelV2({
       doGenerate: async () => ({
