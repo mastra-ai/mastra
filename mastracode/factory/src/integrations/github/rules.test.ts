@@ -2224,6 +2224,67 @@ describe('GithubRules', () => {
     expect(decisions[0]?.workItemId).not.toBe(work.item.id);
   });
 
+  it('stops recording a pull request that closes without merging and ignores a replayed opening', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    const work = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github:10:issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['execute'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    await integrationStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: 'factory-pr-provenance:10:17',
+      threadId: 'thread-1',
+      status: 'active',
+      data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: work.item.id },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      transitionService: new FactoryTransitionService({
+        storage: workItems,
+        configVersion: 'factory-config-v1',
+        boards: createBoardRegistry(),
+      }),
+      storage: workItems,
+      boards: createBoardRegistry(),
+      isAutoRunEnabled: async () => true,
+      ownerId: 'worker-1',
+    });
+
+    await service.ingest(pullRequest('opened', 'delivery-open'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+    const cards = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+    expect(cards.find(card => card.externalSource?.type === 'pull-request')?.parentWorkItemId).toBe(work.item.id);
+    expect((await workItems.get({ orgId: 'org-1', id: work.item.id }))?.metadata?.openPullRequestNumber).toBe(17);
+    await service.ingest(pullRequest('closed', 'delivery-close'));
+    // An abandoned pull request must not leave the Work item blocked for agents.
+    expect((await workItems.get({ orgId: 'org-1', id: work.item.id }))?.metadata?.openPullRequestNumber).toBeNull();
+    await service.ingest(pullRequest('opened', 'delivery-open'));
+    expect((await workItems.get({ orgId: 'org-1', id: work.item.id }))?.metadata?.openPullRequestNumber).toBeNull();
+  });
+
   it('links an opened Review card to the work item whose session branch matches the PR head branch', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
     const work = await workItems.upsert({
@@ -2264,11 +2325,12 @@ describe('GithubRules', () => {
           metadata: expect.objectContaining({ headBranch: 'feature' }),
         }),
       }),
-      expect.objectContaining({
-        workItemId: work.item.id,
-        decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'review' }),
-      }),
     ]);
+    // An untrusted author's branch match links the card but must not move the
+    // Work item or mark it as having a pull request out.
+    const after = await workItems.get({ orgId: 'org-1', id: work.item.id });
+    expect(after?.stages).toEqual(['execute']);
+    expect(after?.metadata?.openPullRequestNumber).toBeUndefined();
   });
 
   it('answers a pull request opening for the pull request card and the item it was authored from', async () => {

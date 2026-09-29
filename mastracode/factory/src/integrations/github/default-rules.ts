@@ -154,6 +154,9 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
   if (context.item && context.pullRequestIntake !== true) {
     if (context.board !== 'work' || context.pullRequest.state !== 'open') return;
     if (!context.item.stages.includes('execute')) return;
+    // Resolution can match a Work item by branch alone, so a fork's pull
+    // request must not be able to move it: same bar as auto-starting a review.
+    if (!trustedGithubActor(context) && !context.pullRequest.factoryAuthored) return;
     return {
       type: 'transition',
       idempotencyKey: `${context.ingress.id}:out-for-review`,
@@ -192,7 +195,19 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
     } as const;
   }
   // Provenance bound the event to the originating Work item instead: the merge
-  // is what finishes the work, so it closes the Work card alongside its Review card.
+  // is what finishes the work, so it closes the Work card alongside its Review card —
+  // unless the card has since opened another pull request, which is still out.
+  const openPullRequestNumber = context.item.metadata?.openPullRequestNumber;
+  if (typeof openPullRequestNumber === 'number' && openPullRequestNumber !== context.pullRequest.number) {
+    return {
+      type: 'sendMessage',
+      idempotencyKey: `${context.ingress.id}:work-merged`,
+      role: 'work',
+      message:
+        `Pull request #${context.pullRequest.number} merged. Pull request #${openPullRequestNumber} is still open, ` +
+        'so this Work card stays in Review until it merges.',
+    } as const;
+  }
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:work-merged`,

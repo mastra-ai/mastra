@@ -1175,6 +1175,24 @@ describe('built-in board and integration handlers', () => {
     expect(decision).toMatchObject({ type: 'transition', board: 'work', stage: 'done' });
   });
 
+  it('keeps the Work item in Review when an older pull request merges while a newer one is open', async () => {
+    const context = githubContext('pullRequestMerged');
+    context.item = { ...item, metadata: { openPullRequestNumber: 18 } };
+    context.board = 'work';
+    context.pullRequest = { ...context.pullRequest!, number: 17, state: 'closed', merged: true };
+    const decision = await defaultGithubRules.pullRequestMerged?.(context);
+    expect(decision).toMatchObject({ type: 'sendMessage', role: 'work', message: expect.stringContaining('#18') });
+  });
+
+  it('does not move a Work item out for review for an untrusted pull request', async () => {
+    const context = githubContext('pullRequestOpened');
+    context.item = { ...item, stages: ['execute'] };
+    context.board = 'work';
+    context.actor = { type: 'github', login: 'forker', trusted: false, factoryAuthored: false };
+    context.pullRequest = { ...context.pullRequest!, state: 'open', factoryAuthored: false };
+    expect(await defaultGithubRules.pullRequestOpened?.(context)).toBeUndefined();
+  });
+
   it('cancels the Review card when the PR is closed without merging', async () => {
     const context = githubContext('pullRequestClosed');
     context.item = { ...item, source: 'github-pr', sourceKey: 'github-pr:17' };

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { boardForWorkItem, workItemPhaseSemantics } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntegrationTools } from '../integrations/base.js';
+import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactorySessionSourceLookup } from './binding-context.js';
 import { resolveFactorySessionAddress } from './binding-context.js';
@@ -135,7 +136,9 @@ export const REVIEW_VERDICTS = ['approve', 'request changes'] as const;
 
 const reviewVerdictInputSchema = z.object({
   verdict: z.enum(REVIEW_VERDICTS),
-  reviewedHeadSha: z.string().regex(/^[0-9a-f]{7,64}$/i),
+  reviewedHeadSha: z
+    .string()
+    .regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i, 'Use the full commit SHA of the reviewed head.'),
 });
 
 /**
@@ -170,19 +173,29 @@ function createReviewVerdictTool(
           throw new Error(`Only a card in Reviewing records a verdict; this one is in ${item.stages.join(', ')}.`);
         }
         const reviewedAt = new Date().toISOString();
-        await options.storage.update({
-          orgId: binding.orgId,
-          id: item.id,
-          userId: `agent:${binding.id}`,
-          patch: {
-            metadata: {
-              ...(item.metadata ?? {}),
-              reviewVerdict: verdict,
-              reviewedHeadSha: reviewedHeadSha.toLowerCase(),
-              reviewedAt,
+        // Revision-checked, so a merge that moves the card between the stage
+        // check and this write fails the call instead of stamping a Done card.
+        try {
+          await options.storage.update({
+            orgId: binding.orgId,
+            id: item.id,
+            userId: `agent:${binding.id}`,
+            expectedRevision: item.revision,
+            patch: {
+              metadata: {
+                ...(item.metadata ?? {}),
+                reviewVerdict: verdict,
+                reviewedHeadSha: reviewedHeadSha.toLowerCase(),
+                reviewedAt,
+              },
             },
-          },
-        });
+          });
+        } catch (error) {
+          if (!(error instanceof WorkItemUpdateConflictError)) throw error;
+          throw new Error(
+            'The Review card changed while recording the verdict; call again to record it on the current card.',
+          );
+        }
         // Mirror the verdict onto the Work item that authored the PR, so its
         // builder cannot close the work while changes are still requested.
         const parent = item.parentWorkItemId

@@ -659,7 +659,7 @@ describe('factory_transition_work_item', () => {
       await expect(
         execute(tools.factory_record_review_verdict as ExecutableTool, context, {
           verdict: 'request changes',
-          reviewedHeadSha: 'ABC1234DEF',
+          reviewedHeadSha: 'ABC1234DEF000000000000000000000000000000',
         }),
       ).resolves.toMatchObject({ status: 'recorded', verdict: 'request changes' });
 
@@ -668,7 +668,7 @@ describe('factory_transition_work_item', () => {
       expect(item?.metadata).toMatchObject({
         factoryAuthored: true,
         reviewVerdict: 'request changes',
-        reviewedHeadSha: 'abc1234def',
+        reviewedHeadSha: 'abc1234def000000000000000000000000000000',
         reviewedAt: expect.any(String),
       });
     });
@@ -692,7 +692,7 @@ describe('factory_transition_work_item', () => {
 
       await execute(tools.factory_record_review_verdict as ExecutableTool, context, {
         verdict: 'request changes',
-        reviewedHeadSha: 'abc1234',
+        reviewedHeadSha: 'abc1234def000000000000000000000000000000',
       });
 
       const work = await storage.get({ orgId: 'org-1', id: parent.item.id });
@@ -700,7 +700,7 @@ describe('factory_transition_work_item', () => {
       expect(work?.metadata).toMatchObject({
         note: 'kept',
         reviewVerdict: 'request changes',
-        reviewedHeadSha: 'abc1234',
+        reviewedHeadSha: 'abc1234def000000000000000000000000000000',
       });
     });
 
@@ -717,7 +717,7 @@ describe('factory_transition_work_item', () => {
       await expect(
         execute(tools.factory_record_review_verdict as ExecutableTool, context, {
           verdict: 'approve',
-          reviewedHeadSha: 'abc1234',
+          reviewedHeadSha: 'abc1234def000000000000000000000000000000',
         }),
       ).rejects.toThrow('Only a card in Reviewing records a verdict');
     });
@@ -740,9 +740,14 @@ describe('factory_transition_work_item', () => {
         transitionService: { transition: vi.fn() } as never,
       });
       const schema = (tools.factory_record_review_verdict as ExecutableTool).inputSchema;
-      expect(schema.safeParse({ verdict: 'approve', reviewedHeadSha: 'abc1234' }).success).toBe(true);
-      expect(schema.safeParse({ verdict: 'merge', reviewedHeadSha: 'abc1234' }).success).toBe(false);
+      expect(
+        schema.safeParse({ verdict: 'approve', reviewedHeadSha: 'abc1234def000000000000000000000000000000' }).success,
+      ).toBe(true);
+      expect(
+        schema.safeParse({ verdict: 'merge', reviewedHeadSha: 'abc1234def000000000000000000000000000000' }).success,
+      ).toBe(false);
       expect(schema.safeParse({ verdict: 'approve', reviewedHeadSha: 'HEAD; rm' }).success).toBe(false);
+      expect(schema.safeParse({ verdict: 'approve', reviewedHeadSha: 'abc1234' }).success).toBe(false);
     });
   });
 
