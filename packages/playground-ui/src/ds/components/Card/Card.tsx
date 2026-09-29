@@ -1,8 +1,9 @@
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
+import { surfaceRimFocus } from '@/ds/primitives/form-element';
 import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
-import { focusRingInset, focusRingOnRaisedSurface } from '@/ds/primitives/transitions';
+import { focusRingInset } from '@/ds/primitives/transitions';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
@@ -15,7 +16,7 @@ const cardVariants = cva(
         raised: '',
       },
       interactive: {
-        true: cn(surfaceStateLayerStyle, focusRingOnRaisedSurface, 'cursor-pointer active:scale-99'),
+        true: cn(surfaceStateLayerStyle, surfaceRimFocus, 'cursor-pointer active:scale-99'),
         false: '',
       },
     },

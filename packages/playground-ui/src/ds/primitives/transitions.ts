@@ -49,8 +49,5 @@ export const focusRingInset = `${focusLine} focus-visible:-outline-offset-1`;
 
 export const focusRingOffset = `${focusLine} focus-visible:outline-offset-2`;
 
-export const focusRingOnRaisedSurface =
-  'focus-visible:outline-hidden focus-visible:[--surface-rim:var(--border-focus)]';
-
 export type TransitionPreset = keyof typeof transitions;
 export type HoverEffect = keyof typeof hoverEffects;

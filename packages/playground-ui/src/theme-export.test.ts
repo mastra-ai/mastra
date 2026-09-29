@@ -380,7 +380,6 @@ describe('theme.css export', () => {
     // surfaces needs less than a line drawn inside one.
     for (const theme of [darkTheme, lightTheme]) {
       expect(theme).toMatch(/--surface-rim:/);
-      expect(theme).toMatch(/--surface-rim-focus:/);
       expect(theme).toMatch(/--elevation-lip:/);
     }
   });

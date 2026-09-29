@@ -112,7 +112,7 @@
    * the lip — and a 6% black ring in light, where no lip exists. Both are
    * below the divider, on purpose.
    *
-   * Focus moves that one edge (`--surface-rim-focus`) instead of adding a
+   * Focus moves that one edge to `--border-focus` instead of adding a
    * `border` beside it, which would read as two lines — and is why a field and
    * a card can be the same material. Hover does not touch it: the rim is the
    * loudest part of a borderless surface, so a pointer wash goes through
@@ -138,12 +138,10 @@
   --inset-highlight: oklch(100% 0 0deg / 7%);
   --inset-rim: oklch(100% 0 0deg / 7%);
   --surface-rim: oklch(100% 0 0deg / 5%);
-  --surface-rim-focus: oklch(100% 0 0deg / 14%);
   --elevation-raised: 0 1px 2px -1px oklch(0% 0 0deg / 22%), 0 2px 3px -2px oklch(0% 0 0deg / 14%);
   --dialog: var(--card);
   --field-on-surface: var(--gray-1);
   --field-rim-on-surface: oklch(100% 0 0deg / 5%);
-  --field-rim-focus-on-surface: oklch(100% 0 0deg / 14%);
   --elevation-overlay:
     0 2px 2px oklch(0% 0 0deg / 10%), 0 4px 4px oklch(0% 0 0deg / 10%), 0 8px 8px oklch(0% 0 0deg / 10%);
 }
@@ -171,12 +169,10 @@ html.light {
   --inset-highlight: oklch(100% 0 0deg / 55%);
   --inset-rim: oklch(0% 0 0deg / 8%);
   --surface-rim: oklch(0% 0 0deg / 8%);
-  --surface-rim-focus: oklch(0% 0 0deg / 18%);
   --elevation-raised: 0 1px 2px -1px oklch(0% 0 0deg / 5%), 0 1px 3px -2px oklch(0% 0 0deg / 4%);
   --dialog: var(--background);
   --field-on-surface: var(--background-3);
   --field-rim-on-surface: oklch(0% 0 0deg / 14%);
-  --field-rim-focus-on-surface: oklch(0% 0 0deg / 32%);
   --elevation-overlay:
     0 2px 4px -1px oklch(0% 0 0deg / 8%), 0 4px 8px -2px oklch(0% 0 0deg / 6%), 0 8px 16px -4px oklch(0% 0 0deg / 6%);
 }

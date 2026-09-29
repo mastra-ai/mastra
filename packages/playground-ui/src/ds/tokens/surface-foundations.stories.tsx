@@ -56,7 +56,7 @@ const overlayWashes: { token: FillToken; use: string }[] = [
   { token: 'surface-overlay-strong', use: 'The selected one, and a menu separator band' },
 ];
 
-const rimTokens = ['--surface-rim', '--surface-rim-focus'];
+const rimTokens = ['--surface-rim'];
 const tintTokens = ['--fill-tint'];
 
 const tintValues = [
@@ -261,8 +261,8 @@ export const SurfaceFoundations: Story = {
           <Specimen name="--surface-rim" note="Rest — every raised and overlay surface">
             <div className="h-20 rounded-md bg-card shadow-raised" />
           </Specimen>
-          <Specimen name="--surface-rim-focus" note="Focus — the same edge, never a second line beside it">
-            <div className="h-20 rounded-md bg-card shadow-raised [--surface-rim:var(--surface-rim-focus)]" />
+          <Specimen name="--border-focus" note="Focus — the same edge repainted, never a second line beside it">
+            <div className="h-20 rounded-md bg-card shadow-raised [--surface-rim:var(--border-focus)]" />
           </Specimen>
         </div>
         <Txt variant="caption" tone="muted">
