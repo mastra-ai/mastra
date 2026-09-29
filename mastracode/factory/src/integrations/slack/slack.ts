@@ -574,7 +574,17 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
     await seedSessionOrg(session, owner.orgId);
 
     const modeModelKey = `modeModelId_${session.mode.get()}`;
-    if (!(await session.thread.getSetting({ key: modeModelKey }))) {
+    const persistedModelId = await session.thread.getSetting({ key: modeModelKey });
+    if (typeof persistedModelId === 'string') {
+      // A restarted session restores its generation model from the thread, but
+      // still needs the project memory row and a provider-compatible fallback.
+      await hydrateFactorySession(session, {
+        orgId: owner.orgId,
+        factoryProjectId: owner.factoryProjectId,
+        observationalMemoryModelId: persistedModelId,
+        memorySettings,
+      });
+    } else {
       const factoryModelId = await resolveFactoryDefaultModelId(projects, owner.factoryProjectId);
       const userModelId = await resolveActivePackBuildModel(modelPacks, owner);
       const selectedModelId = userModelId ?? factoryModelId;
@@ -593,9 +603,7 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
       if (selectedModelId && selectedModelId !== factoryModelId) {
         // The sender's own choice beats the factory's. `switch` applies the model
         // and persists it as this mode's model on the thread in one step — which
-        // is what makes the choice outlive this process. A switch that fails is
-        // logged by the channel machinery and leaves the factory/SDK model that
-        // `hydrateFactorySession` already applied: the message still answers.
+        // is what makes the choice outlive this process.
         try {
           await session.model.switch({ modelId: selectedModelId });
         } catch (error) {
@@ -604,6 +612,14 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
             error: error instanceof Error ? error.message : String(error),
           });
           const currentModelId = session.model.get();
+          // The message continues on the factory/SDK model. Realign the OM
+          // fallback with that model while preserving explicit project settings.
+          await hydrateFactorySession(session, {
+            orgId: owner.orgId,
+            factoryProjectId: owner.factoryProjectId,
+            observationalMemoryModelId: currentModelId,
+            memorySettings,
+          });
           if (currentModelId && !factoryModelId) {
             try {
               await session.model.saveForMode({ modeId: session.mode.get(), modelId: currentModelId });

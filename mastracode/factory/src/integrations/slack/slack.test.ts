@@ -1179,6 +1179,27 @@ describe('session start (onSessionStart)', () => {
     expect(session.model.switch).toHaveBeenLastCalledWith({ modelId: 'deepseek/deepseek-chat' });
   });
 
+  it('realigns observational memory when the sender model cannot be applied', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const deps = makeStartDeps({
+      defaultModelId: 'anthropic/claude-opus-5',
+      activePack: { build: 'deepseek/deepseek-chat' },
+    });
+    const session = makeSession({ currentModel: 'anthropic/claude-opus-5' });
+    session.model.switch.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('missing credentials'));
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    expect(session.om.observer.switchModel).toHaveBeenLastCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
+    expect(session.om.reflector.switchModel).toHaveBeenLastCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
+    expect(session.om.observer.switchModel).not.toHaveBeenLastCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
+    expect(warn).toHaveBeenCalledWith("[slack] Failed to apply the sender's model pack model", {
+      modelId: 'deepseek/deepseek-chat',
+      error: 'missing credentials',
+    });
+    warn.mockRestore();
+  });
+
   // The point of persisting the choice: the thread keeps the model it started
   // on. A later process — where the sender's pack and the factory default have
   // both moved on — must not retarget a conversation already under way.
@@ -1287,24 +1308,24 @@ describe('session start (onSessionStart)', () => {
     expect(session.state.set).toHaveBeenLastCalledWith(expect.objectContaining({ observationThreshold: 222 }));
   });
 
-  // Memory settings are stored preference, not a choice made on this thread: a
-  // restarted process re-resolves the project's row at session creation, so the
-  // sender's row has to be re-applied even where the model is already decided.
-  it('re-applies the sender memory settings on a restarted session whose model is persisted', async () => {
+  // A restarted process restores the generation model from the thread, then
+  // uses that provider while reapplying the project and sender memory settings.
+  it('re-applies memory settings on a restarted session using the persisted model provider', async () => {
     const deps = makeStartDeps({
-      personalMemoryRecord: { observerModelId: 'openai/gpt-5.4-mini', reflectionThreshold: 333 },
+      personalMemoryRecord: { reflectionThreshold: 333 },
     });
-    const session = makeSession({ persistedModeModel: 'anthropic/claude-fable-5' });
+    const session = makeSession({ persistedModeModel: 'deepseek/deepseek-chat' });
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
-    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
+    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
+    expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
     expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ reflectionThreshold: 333 }));
-    // Still no model re-resolution: the two halves of the hook are independent.
+    // Still no model re-resolution: the persisted thread choice remains authoritative.
     expect(deps.modelPacks.getActive).not.toHaveBeenCalled();
     expect(deps.projects.getById).not.toHaveBeenCalled();
     expect(session.model.switch).not.toHaveBeenCalled();
-    expect(session.restoredModel()).toBe('anthropic/claude-fable-5');
+    expect(session.restoredModel()).toBe('deepseek/deepseek-chat');
   });
 
   // Reaching a storage domain can fail on its own (uninitialized table, a
