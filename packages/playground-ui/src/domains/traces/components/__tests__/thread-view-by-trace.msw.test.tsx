@@ -4,6 +4,7 @@ import '@/test/jsdom-polyfills';
 import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import type { ComponentProps } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { feedbackRecord, listFeedbackResponse } from '../../hooks/__tests__/fixtures/trace-feedback';
@@ -91,9 +92,15 @@ const renderView = ({
   search = '',
   withFeedback = true,
   onOpenScore = () => {},
-}: { search?: string; withFeedback?: boolean; onOpenScore?: (traceId: string, scoreId: string) => void } = {}) =>
+  paths,
+}: {
+  search?: string;
+  withFeedback?: boolean;
+  onOpenScore?: (traceId: string, scoreId: string) => void;
+  paths?: ComponentProps<typeof TestLinkProvider>['paths'];
+} = {}) =>
   renderWithProviders(
-    <TestLinkProvider>
+    <TestLinkProvider paths={paths}>
       <BrowserToolCallsProvider>
         <ActivatedSkillsProvider>
           <ThreadViewByTrace
@@ -445,6 +452,15 @@ describe('ThreadViewByTrace', () => {
       );
     });
 
+    it('hides "Go to trace" when the app has no trace route', async () => {
+      installHandlers();
+      installFeedbackHandlers();
+      renderView({ paths: { traceLink: () => '' } });
+
+      await showTrace(1, 'Chef agent run');
+      expect(traceColumn().queryByRole('link', { name: 'Go to trace' })).toBeNull();
+    });
+
     it('shows the span tree by default and swaps it for the feedback thread on the Feedback tab', async () => {
       installHandlers();
       installFeedbackHandlers();
@@ -505,6 +521,57 @@ describe('ThreadViewByTrace', () => {
       fireEvent.click(await traceColumn().findByRole('button', { name: /^Score / }));
 
       expect(onOpenScore).toHaveBeenCalledWith('trace-a', 'score-1');
+    });
+
+    describe('"Open scorer run"', () => {
+      const installScore = () =>
+        server.use(
+          http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/:spanId/scores`, ({ params }) =>
+            HttpResponse.json({
+              pagination: { total: 1, page: 0, perPage: 10, hasMore: false },
+              scores: [
+                {
+                  id: 'score-1',
+                  scorerId: 'scorer-1',
+                  entityId: 'chef',
+                  runId: 'run-1',
+                  score: 0.8,
+                  scorer: { name: 'Helpfulness' },
+                  source: 'LIVE',
+                  entity: {},
+                  traceId: String(params.traceId),
+                  spanId: String(params.spanId),
+                  createdAt: '2026-09-01T00:00:00.000Z',
+                  updatedAt: '2026-09-01T00:00:00.000Z',
+                } as ListScoresResponse['scores'][number],
+              ],
+            } satisfies ListScoresResponse),
+          ),
+        );
+
+      it('when scorerLink resolves, then it links to the scorer run built by the link provider', async () => {
+        installHandlers();
+        installFeedbackHandlers();
+        installScore();
+        renderView();
+
+        await showTrace(1, 'Chef agent run');
+        fireEvent.click(traceColumn().getByRole('tab', { name: /Scores/ }));
+        const link = await traceColumn().findByRole('link', { name: 'Open scorer run' });
+        expect(link.getAttribute('href')).toBe('/scorers/scorer-1?scoreId=score-1');
+      });
+
+      it('when the app has no scorer route, then the action is hidden', async () => {
+        installHandlers();
+        installFeedbackHandlers();
+        installScore();
+        renderView({ paths: { scorerLink: () => '' } });
+
+        await showTrace(1, 'Chef agent run');
+        fireEvent.click(traceColumn().getByRole('tab', { name: /Scores/ }));
+        expect(await traceColumn().findByRole('button', { name: /^Score / })).not.toBeNull();
+        expect(traceColumn().queryByRole('link', { name: 'Open scorer run' })).toBeNull();
+      });
     });
 
     it('shows the feedback count on the Feedback tab', async () => {

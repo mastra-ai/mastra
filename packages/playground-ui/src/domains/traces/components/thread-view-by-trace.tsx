@@ -131,16 +131,15 @@ function LoadedThreadViewByTrace({
         <ThreadTrace.LoadMoreSentinel ref={setEndOfListElement} />
       </ThreadTrace.List>
       <ThreadTrace.TracePanel
-        actions={traceId => (
-          <Button
-            render={<Link href={paths.traceLink(traceId)} />}
-            variant="ghost"
-            size="sm"
-            icon={<ExternalLinkIcon />}
-          >
-            Go to trace
-          </Button>
-        )}
+        actions={traceId => {
+          const traceHref = paths.traceLink(traceId);
+          if (!traceHref) return null;
+          return (
+            <Button render={<Link href={traceHref} />} variant="ghost" size="sm" icon={<ExternalLinkIcon />}>
+              Go to trace
+            </Button>
+          );
+        }}
       >
         {traceId => <TraceColumnTabs traceId={traceId} withFeedback={withFeedback} onOpenScore={onOpenScore} />}
       </ThreadTrace.TracePanel>
