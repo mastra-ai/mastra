@@ -15,7 +15,8 @@ import type {
 } from '@mastra/core/agent-controller';
 import { createCodingAgent } from '@mastra/core/coding-agent';
 import type { PubSub } from '@mastra/core/events';
-import { PROVIDER_REGISTRY } from '@mastra/core/llm';
+import { PROVIDER_REGISTRY, findGatewayForModel, getGatewayId } from '@mastra/core/llm';
+import type { MastraModelGatewayInterface } from '@mastra/core/llm';
 import type { ProviderConfig } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { defaultNotificationDeliveryDecision } from '@mastra/core/notifications';
@@ -103,7 +104,8 @@ import { PluginManager } from './plugins/manager.js';
 import { PluginSignalLane } from './plugins/signal-lane.js';
 import type { PluginProcessorEntries } from './plugins/types.js';
 import { PlanRejectionAbortProcessor } from './processors/plan-rejection-abort.js';
-import { createAmazonBedrockGateway } from './providers/amazon-bedrock-gateway.js';
+import { AMAZON_BEDROCK_GATEWAY_ID, createAmazonBedrockGateway } from './providers/amazon-bedrock-gateway.js';
+import { MASTRACODE_GATEWAY_ID } from './agents/mastracode-gateway.js';
 import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
 import { setAuthStorage as setKimiCodingAuthStorage } from './providers/kimi-coding.js';
@@ -458,6 +460,17 @@ function resolveInjectedStorageBackend(
   if (storage instanceof LibSQLStore || hasAncestorClassNamed(storage, 'LibSQLStore')) return 'libsql';
   if (storage instanceof PostgresStore || hasAncestorClassNamed(storage, 'PostgresStore')) return 'pg';
   throw new Error('storageBackend is required when injecting a custom storage instance.');
+}
+
+const SDK_RESOLVED_GATEWAY_IDS = new Set([MASTRACODE_GATEWAY_ID, AMAZON_BEDROCK_GATEWAY_ID, 'models.dev']);
+
+/** Whether the model router would resolve `modelId` through a gateway other than the SDK's own. */
+function routesToOtherGateway(modelId: string, gateways: MastraModelGatewayInterface[]): boolean {
+  try {
+    return !SDK_RESOLVED_GATEWAY_IDS.has(getGatewayId(findGatewayForModel(modelId, gateways)));
+  } catch {
+    return false;
+  }
 }
 
 export async function createMastraCodeAgentController(config?: MastraCodeConfig) {
@@ -1349,16 +1362,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     subagents,
     // Subagents resolve like the main agent: tenant credentials and
     // request-scoped custom providers come from the calling run's context.
-    // Ids addressed to another gateway registered on the controller's Mastra
-    // stay strings so the model router resolves them through that gateway.
-    resolveSubagentModel: (modelId, { requestContext }) => {
-      const gatewayId = modelId.split('/')[0];
-      const addressesOtherGateway =
-        gatewayId !== mastraCodeGateway.id &&
-        gatewayId !== amazonBedrockGateway.id &&
-        Object.values(controller.getMastra()?.listGateways() ?? {}).some(gateway => gateway.id === gatewayId);
-      return addressesOtherGateway ? modelId : resolveModel(modelId, { requestContext });
-    },
+    // Ids the model router would hand to another registered gateway (by
+    // prefix or `handlesModel`) stay strings so that gateway resolves them.
+    resolveSubagentModel: (modelId, { requestContext }) =>
+      routesToOtherGateway(modelId, Object.values(controller.getMastra()?.listGateways() ?? {}))
+        ? modelId
+        : resolveModel(modelId, { requestContext }),
     gateways: [amazonBedrockGateway, mastraCodeGateway],
     workspace: config?.workspace ?? (args => getDynamicWorkspace({ ...args, backgroundToolsEnabled })),
     browser: config?.browser,

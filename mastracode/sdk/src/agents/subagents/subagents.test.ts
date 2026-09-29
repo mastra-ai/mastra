@@ -23,9 +23,15 @@ afterEach(async () => {
 });
 
 describe('native subagents', () => {
-  it.each(['explore', 'execute'])(
-    'runs native %s against a real workspace',
-    async agentType => {
+  // The model router picks a registered gateway by id prefix or by
+  // `handlesModel`; subagent ids routed either way must reach that gateway.
+  it.each([
+    ['explore', 'prefix'],
+    ['execute', 'prefix'],
+    ['explore', 'handlesModel'],
+  ] as const)(
+    'runs native %s against a real workspace through a gateway matched by %s',
+    async (agentType, route) => {
       const directory = await mkdtemp(join(tmpdir(), 'native-runtime-'));
       directories.push(directory);
       await writeFile(join(directory, 'input.txt'), 'native fixture');
@@ -94,6 +100,7 @@ describe('native subagents', () => {
       controller.getMastra()!.addGateway({
         id: 'native-test',
         name: 'Native test',
+        ...(route === 'handlesModel' ? { handlesModel: (id: string) => id === 'fixture/model' } : {}),
         fetchProviders: async () => ({
           fixture: { name: 'Fixture', models: ['model'], apiKeyEnvVar: '', gateway: 'native-test' },
         }),
@@ -104,7 +111,11 @@ describe('native subagents', () => {
       const session = await controller.createSession({ id: 'runtime', ownerId: 'test' });
       const toolsets = await controller['buildToolsets'](session, new RequestContext());
       const result = await toolsets.controllerBuiltIn!.subagent!.execute!(
-        { agentType, task: 'Process the fixture', modelId: 'native-test/fixture/model' },
+        {
+          agentType,
+          task: 'Process the fixture',
+          modelId: route === 'prefix' ? 'native-test/fixture/model' : 'fixture/model',
+        },
         { workspace, agent: { toolCallId: 'native' } },
       );
       expect(result, JSON.stringify(result)).toMatchObject({ isError: false });
