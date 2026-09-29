@@ -38,6 +38,7 @@ import {
   validateStepStateData,
   validateStepRequestContext,
 } from '../utils';
+import { scopeOperationId } from './operation-id';
 
 export interface ExecuteStepParams extends ObservabilityContext {
   workflowId: string;
@@ -183,7 +184,7 @@ export async function executeStep(
   const stepSpan = await engine.createStepSpan({
     parentSpan: observabilityContext.tracingContext.currentSpan,
     stepId: step.id,
-    operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.start`,
+    operationId: scopeOperationId(`workflow.${workflowId}.run.${runId}.step.${step.id}.span.start`, executionContext),
     options: {
       name: `workflow step: '${step.id}'`,
       type: SpanType.WORKFLOW_STEP,
@@ -202,7 +203,10 @@ export async function executeStep(
     executionContext,
   });
 
-  const operationId = `workflow.${workflowId}.run.${runId}.step.${step.id}.running_ev`;
+  const operationId = scopeOperationId(
+    `workflow.${workflowId}.run.${runId}.step.${step.id}.running_ev`,
+    executionContext,
+  );
   await engine.onStepExecutionStart({
     step,
     inputData,
@@ -257,7 +261,10 @@ export async function executeStep(
         if (workflowResult.status === 'failed') {
           await engine.errorStepSpan({
             span: stepSpan as Span<SpanType.WORKFLOW_STEP>,
-            operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.error`,
+            operationId: scopeOperationId(
+              `workflow.${workflowId}.run.${runId}.step.${step.id}.span.error`,
+              executionContext,
+            ),
             errorOptions: {
               error:
                 workflowResult.error instanceof Error ? workflowResult.error : new Error(String(workflowResult.error)),
@@ -272,7 +279,10 @@ export async function executeStep(
 
           await engine.endStepSpan({
             span: stepSpan as Span<SpanType.WORKFLOW_STEP>,
-            operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
+            operationId: scopeOperationId(
+              `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
+              executionContext,
+            ),
             endOptions: {
               output,
               attributes: { status: workflowResult.status },
@@ -319,7 +329,7 @@ export async function executeStep(
   // Default engine: internal retry loop
   // Inngest engine: throws RetryAfterError for external retry handling
   const stepRetryResult = await engine.executeStepWithRetry(
-    `workflow.${workflowId}.step.${step.id}`,
+    scopeOperationId(`workflow.${workflowId}.step.${step.id}`, executionContext),
     async () => {
       if (validationError) {
         throw validationError;
@@ -533,7 +543,10 @@ export async function executeStep(
   delete executionContext.activeStepsPath[step.id];
 
   if (!skipEmits) {
-    const emitOperationId = `workflow.${workflowId}.run.${runId}.step.${step.id}.emit_result`;
+    const emitOperationId = scopeOperationId(
+      `workflow.${workflowId}.run.${runId}.step.${step.id}.emit_result`,
+      executionContext,
+    );
     await engine.wrapDurableOperation(emitOperationId, async () => {
       await emitStepResultEvents({
         stepId: step.id,
@@ -550,7 +563,7 @@ export async function executeStep(
   if (execResults.status != 'failed') {
     await engine.endStepSpan({
       span: stepSpan,
-      operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
+      operationId: scopeOperationId(`workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`, executionContext),
       endOptions: {
         output: execResults.output,
         attributes: {
