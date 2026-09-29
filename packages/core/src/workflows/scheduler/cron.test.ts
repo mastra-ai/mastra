@@ -13,6 +13,10 @@ describe('validateCron', () => {
     expect(() => validateCron('0 0 * * * *')).not.toThrow();
   });
 
+  it('accepts valid 7-part patterns (with year)', () => {
+    expect(() => validateCron('0 0 10 23 9 * 2026', 'UTC')).not.toThrow();
+  });
+
   it('accepts a valid IANA timezone', () => {
     expect(() => validateCron('0 9 * * *', 'America/New_York')).not.toThrow();
     expect(() => validateCron('0 9 * * *', 'Europe/London')).not.toThrow();
@@ -71,6 +75,18 @@ describe('computeNextFireAt', () => {
     expect(next).toBe(new Date('2026-01-02T14:00:00Z').getTime());
   });
 
+  it('returns a year-pinned occurrence and reports when it is exhausted', () => {
+    const cron = '0 0 10 23 9 * 2026';
+    const occurrence = new Date('2026-09-23T10:00:00Z').getTime();
+
+    expect(computeNextFireAt(cron, { after: new Date('2026-09-23T09:59:59Z').getTime(), timezone: 'UTC' })).toBe(
+      occurrence,
+    );
+    expect(() =>
+      computeNextFireAt(cron, { after: new Date('2026-09-23T10:00:01Z').getTime(), timezone: 'UTC' }),
+    ).toThrow('has no future occurrence');
+  });
+
   it('throws on invalid pattern', () => {
     expect(() => computeNextFireAt('not a cron')).toThrow();
   });
@@ -114,6 +130,20 @@ describe('computeInitialFire / computeNextFire', () => {
     expect(first.completed).toBe(false);
     const second = computeNextFire({ cron: '* * * * *', endAt, nextFireAt: first.nextFireAt }, first.nextFireAt);
     expect(second.completed).toBe(true);
+  });
+
+  it('completes a cron with no future occurrence without advancing nextFireAt', () => {
+    const nextFireAt = new Date('2026-09-23T10:00:00Z').getTime();
+    expect(
+      computeNextFire(
+        { cron: '0 0 10 23 9 * 2026', timezone: 'UTC', nextFireAt },
+        new Date('2026-09-23T10:00:01Z').getTime(),
+      ),
+    ).toEqual({ nextFireAt, completed: true });
+  });
+
+  it('still throws when the cron expression is malformed', () => {
+    expect(() => computeNextFire({ cron: 'not a cron', nextFireAt: 0 }, Date.now())).toThrow();
   });
 
   it('never completes an unbounded cron', () => {

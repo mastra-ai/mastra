@@ -46,19 +46,19 @@ export function validateCron(cron: string, timezone?: string): void {
  * @throws If the cron expression is invalid or has no future occurrence.
  */
 export function computeNextFireAt(cron: string, options?: { timezone?: string; after?: number }): number {
-  const job = new Cron(cron, { timezone: options?.timezone });
   const reference = options?.after !== undefined ? new Date(options.after) : new Date();
-  const next = job.nextRun(reference);
-  if (!next) {
+  const nextFireAt = findNextFireAt(cron, options?.timezone, reference);
+  if (nextFireAt === null) {
     throw new Error(`Cron expression "${cron}" has no future occurrence after ${reference.toISOString()}`);
   }
-  return next.getTime();
+  return nextFireAt;
 }
 
 /**
  * Resolve what a schedule claim should write after firing at `after`.
  *
  * - One-off (`runAt` set): keep `nextFireAt` and mark the row `completed`.
+ * - Cron with no future occurrence: keep `nextFireAt` and mark the row `completed`.
  * - Bounded cron (`endAt` set): advance to the next cron occurrence, or mark
  *   `completed` when that occurrence is after `endAt`.
  * - Unbounded cron: advance to the next cron occurrence.
@@ -70,8 +70,15 @@ export function computeNextFire(
   if (schedule.runAt != null) {
     return { nextFireAt: schedule.nextFireAt, completed: true };
   }
-  const nextFireAt = computeNextFireAt(schedule.cron, { timezone: schedule.timezone, after });
+  const nextFireAt = findNextFireAt(schedule.cron, schedule.timezone, new Date(after));
+  if (nextFireAt === null) {
+    return { nextFireAt: schedule.nextFireAt, completed: true };
+  }
   return { nextFireAt, completed: schedule.endAt != null && nextFireAt > schedule.endAt };
+}
+
+function findNextFireAt(cron: string, timezone: string | undefined, reference: Date): number | null {
+  return new Cron(cron, { timezone }).nextRun(reference)?.getTime() ?? null;
 }
 
 /**
