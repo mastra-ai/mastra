@@ -7,7 +7,7 @@ description: "Browse Synthetic model IDs, capabilities, context windows, and pri
 
 # <img src="https://models.dev/logos/synthetic.svg" alt="Synthetic logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Synthetic
 
-Access 9 Synthetic models through Mastra's model router. Authentication is handled automatically using the `SYNTHETIC_API_KEY` environment variable.
+Access 10 Synthetic models through Mastra's model router. Authentication is handled automatically using the `SYNTHETIC_API_KEY` environment variable.
 
 Learn more in the [Synthetic documentation](https://synthetic.new/pricing).
 
@@ -45,6 +45,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
+  {
+    "model": "synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 524288,
+    "maxOutput": 65536,
+    "inputCost": 0.6,
+    "outputCost": 1.2
+  },
   {
     "model": "synthetic/hf:MiniMaxAI/MiniMax-M3",
     "imageInput": true,

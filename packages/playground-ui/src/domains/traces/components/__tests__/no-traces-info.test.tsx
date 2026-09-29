@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import '@/test/jsdom-polyfills';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { NoTracesInfo } from '../no-traces-info';
@@ -29,7 +30,9 @@ describe('NoTracesInfo', () => {
     );
 
     expect(
-      screen.getByRole('heading', { name: 'No traces between Sep 1, 2026 09:00 and Sep 7, 2026 18:00' }),
+      screen.getByRole('heading', {
+        name: `No traces between ${new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(2026, 8, 1, 9, 0))} and ${new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(2026, 8, 7, 18, 0))}`,
+      }),
     ).toBeTruthy();
   });
 });

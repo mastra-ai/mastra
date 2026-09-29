@@ -16,7 +16,6 @@ export type ListSearchProps = {
    * (e.g. from a Reset button). If omitted, ListSearch manages its own state.
    */
   value?: string;
-  variant?: InputProps['variant'];
   /**
    * Opts out of the Cmd/Ctrl+Shift+F focus shortcut. Pass this on secondary
    * instances so two search fields on the same page don't fight over focus.
@@ -31,7 +30,6 @@ export const ListSearch = ({
   debounceMs = 300,
   size,
   value: controlledValue,
-  variant = 'outline',
   shortcutDisabled = false,
 }: ListSearchProps) => {
   const id = useId();
@@ -88,7 +86,6 @@ export const ListSearch = ({
       onChange={handleChange}
       onReset={handleReset}
       size={size}
-      variant={variant}
       inputRef={inputRef}
       className="w-full max-w-120"
     />

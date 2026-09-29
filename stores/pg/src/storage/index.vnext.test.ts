@@ -97,7 +97,7 @@ describe('PostgresStoreVNext', () => {
       });
     });
 
-    it('advertises trace and thread queries with or without delta polling', () => {
+    it('advertises trace query discovery and queries with or without delta polling', () => {
       const observability = store.stores.observability as ObservabilityStoragePostgresVNext;
       const originalFeatures = new Set(coreFeatures);
 
@@ -106,13 +106,38 @@ describe('PostgresStoreVNext', () => {
         expect(observability.getFeatures()).toEqual([
           'metrics',
           'logs',
+          'entity-type-discovery',
+          'entity-name-discovery',
+          'service-name-discovery',
+          'environment-discovery',
+          'tag-discovery',
+          'metric-discovery',
           'delta-polling',
           'trace-query',
+          'trace-query-root-duration',
+          'trace-query-discovery',
           'thread-query',
+          'trace-query-tenant-scope',
+          'feedback',
         ]);
 
         coreFeatures.delete('observability-delta-polling');
-        expect(observability.getFeatures()).toEqual(['metrics', 'logs', 'trace-query', 'thread-query']);
+        expect(observability.getFeatures()).toEqual([
+          'metrics',
+          'logs',
+          'entity-type-discovery',
+          'entity-name-discovery',
+          'service-name-discovery',
+          'environment-discovery',
+          'tag-discovery',
+          'metric-discovery',
+          'trace-query',
+          'trace-query-root-duration',
+          'trace-query-discovery',
+          'thread-query',
+          'trace-query-tenant-scope',
+          'feedback',
+        ]);
       } finally {
         coreFeatures.clear();
         for (const feature of originalFeatures) coreFeatures.add(feature);
@@ -194,6 +219,8 @@ describe.skipIf(!integrationEnabled)('PostgresStoreVNext / shared observability 
     sharedStorage = new ObservabilityStoragePostgresVNext({
       client: sharedClient,
       schemaName: sharedSchema,
+      // Shared conformance fixtures use fixed dates, outside the rolling discovery window.
+      discovery: { lookbackSeconds: 0 },
     });
     await sharedStorage.init();
   });
@@ -224,6 +251,7 @@ describe.skipIf(!integrationEnabled)('PostgresStoreVNext / shared observability 
       label: 'Postgres vNext',
       preferredStrategy: 'event-sourced',
       traceQuery: true,
+      traceQueryDiscovery: true,
       threadQuery: true,
     },
     cleanup: async storage => {

@@ -33,6 +33,7 @@ describe('unsubscribe acquired batches', () => {
     xGroupDestroy: ReturnType<typeof vi.fn>;
     xPendingRange: ReturnType<typeof vi.fn>;
     xClaim: ReturnType<typeof vi.fn>;
+    duplicate: ReturnType<typeof vi.fn>;
   };
   let reader: {
     on: ReturnType<typeof vi.fn>;
@@ -55,9 +56,11 @@ describe('unsubscribe acquired batches', () => {
         entries.map(e => ({ id: e.id, consumer: 'c', millisecondsSinceLastDelivery: 1, deliveriesCounter: 1 })),
       ),
       xClaim: vi.fn(() => claim.promise),
+      // Readers are created from the writer with duplicate().
+      duplicate: vi.fn(() => reader),
     };
     reader = { on: vi.fn(), connect: vi.fn(), quit: vi.fn(), xReadGroup: vi.fn(() => read.promise) };
-    clients.create.mockReset().mockReturnValueOnce(writer).mockReturnValueOnce(reader);
+    clients.create.mockReset().mockReturnValueOnce(writer);
     ps = new RedisStreamsPubSub({ reclaimIntervalMs: 10 });
   });
   afterEach(async () => {
@@ -153,5 +156,65 @@ describe('unsubscribe acquired batches', () => {
     await vi.advanceTimersByTimeAsync(100);
     expect(writer.xClaim).toHaveBeenCalledTimes(1);
     expect(cb).not.toHaveBeenCalled();
+  });
+
+  it('tears down a subscription whose subscribe round trip was still in flight when unsubscribe ran', async () => {
+    const connectGate = deferred<void>();
+    reader.connect = vi.fn(() => connectGate.promise);
+    const cb = vi.fn();
+    const sub = ps.subscribe('topic', cb);
+    const stop = ps.unsubscribe('topic', cb); // subscribe has not registered yet
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reader.quit).not.toHaveBeenCalled();
+    connectGate.resolve();
+    read.resolve(null);
+    await Promise.all([sub, stop]);
+    // Without awaiting the pending subscribe, unsubscribe would no-op and leak
+    // the reader connection plus its blocked read loop.
+    expect(reader.quit).toHaveBeenCalledTimes(1);
+    expect(writer.xGroupDestroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('close() tears down a subscription registered by an in-flight subscribe', async () => {
+    const connectGate = deferred<void>();
+    reader.connect = vi.fn(() => connectGate.promise);
+    const cb = vi.fn();
+    const sub = ps.subscribe('topic', cb);
+    const close = ps.close();
+    connectGate.resolve();
+    read.resolve(null);
+    await Promise.all([sub, close]);
+    expect(reader.quit).toHaveBeenCalledTimes(1);
+    expect(writer.quit).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolves unsubscribe and close when the awaited in-flight subscribe rejects', async () => {
+    const connectGate = deferred<void>();
+    reader.connect = vi.fn(() => connectGate.promise);
+    const cb = vi.fn();
+    const sub = ps.subscribe('topic', cb);
+    const stop = ps.unsubscribe('topic', cb); // waits on the pending subscribe
+    const close = ps.close(); // so does close
+    connectGate.reject(new Error('connect refused'));
+    await expect(sub).rejects.toThrow('connect refused');
+    // A rejected subscribe never registered, so both teardowns must settle
+    // cleanly with nothing left behind — not hang on the failed promise.
+    await expect(stop).resolves.toBeUndefined();
+    await expect(close).resolves.toBeUndefined();
+    expect(reader.quit).not.toHaveBeenCalled();
+    expect(writer.quit).toHaveBeenCalledTimes(1);
+    await expect(ps.subscribe('topic', cb)).rejects.toThrow('closed');
+  });
+
+  it('deduplicates concurrent subscribes for the same topic and callback', async () => {
+    const connectGate = deferred<void>();
+    reader.connect = vi.fn(() => connectGate.promise);
+    const cb = vi.fn();
+    const first = ps.subscribe('topic', cb);
+    const second = ps.subscribe('topic', cb);
+    connectGate.resolve();
+    await Promise.all([first, second]);
+    expect(writer.xGroupCreate).toHaveBeenCalledTimes(1);
+    expect(writer.duplicate).toHaveBeenCalledTimes(1);
   });
 });

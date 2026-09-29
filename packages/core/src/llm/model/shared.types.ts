@@ -39,6 +39,7 @@ export type OpenAICompatibleConfig =
       url?: string; // Optional custom URL endpoint
       apiKey?: string; // Optional API key (falls back to env vars)
       headers?: Record<string, string>; // Additional headers
+      api?: 'chat' | 'responses'; // OpenAI wire API for custom url; defaults to 'chat'
     }
   | {
       providerId: string; // Provider ID like "openai" or "custom-provider"
@@ -46,6 +47,7 @@ export type OpenAICompatibleConfig =
       url?: string; // Optional custom URL endpoint
       apiKey?: string; // Optional API key (falls back to env vars)
       headers?: Record<string, string>; // Additional headers
+      api?: 'chat' | 'responses'; // OpenAI wire API for custom url; defaults to 'chat'
     };
 
 type DoStreamResultPromiseV2 = PromiseLike<Awaited<ReturnType<LanguageModelV2['doStream']>>>;

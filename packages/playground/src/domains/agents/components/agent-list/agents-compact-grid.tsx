@@ -11,13 +11,13 @@ export interface AgentsCompactGridProps {
   hasSearch: boolean;
 }
 
-const compactGridClassName = 'grid grid-cols-1 gap-2 md:grid-cols-2';
+const compactGridClassName = 'grid grid-cols-1 gap-2 p-1 md:grid-cols-2';
 
 function AgentsCompactGridSkeleton() {
   return (
     <div className={compactGridClassName}>
       {Array.from({ length: 6 }, (_, index) => (
-        <Card key={index} appearance="surface" className="min-h-24">
+        <Card key={index} className="min-h-24">
           <CardContent density="compact" className="grid gap-2">
             <Skeleton className="h-4 w-36" />
             <Skeleton className="h-3 w-full max-w-72" />

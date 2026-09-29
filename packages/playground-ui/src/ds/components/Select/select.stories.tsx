@@ -45,7 +45,7 @@ export const Experimental: Story = {
 export const Sizes: Story = {
   render: () => (
     <div className="flex flex-col items-start gap-3">
-      {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
+      {(['sm', 'md', 'lg'] as const).map(size => (
         <Select key={size}>
           <SelectTrigger className="w-45" size={size}>
             <SelectValue placeholder={size} />
@@ -62,15 +62,15 @@ export const Sizes: Story = {
 };
 
 /**
- * A select is a field, so it offers the same button looks as everywhere:
- * `default` (the filled Button surface, the default here too), `outline`
- * (bordered, transparent) and `ghost` (borderless, for dense toolbars). It does
+ * A select is a field, so it shares the Input's surface rather than the Button's:
+ * `default` (the Input's overlay surface, the default here too) and `ghost`
+ * (borderless, for dense toolbars). It does
  * not expose the high-emphasis `primary` look.
  */
 export const Variants: Story = {
   render: () => (
     <div className="flex flex-col items-start gap-3">
-      {(['default', 'outline', 'ghost'] as const).map(variant => (
+      {(['default', 'ghost'] as const).map(variant => (
         <Select key={variant}>
           <SelectTrigger className="w-45" variant={variant}>
             <SelectValue placeholder={variant} />

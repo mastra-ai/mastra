@@ -90,7 +90,12 @@ describe('createMcpManager', () => {
 
   describe('init with server defs', () => {
     it('builds stdio server def correctly with stderr piped', async () => {
-      const stdioConfig: McpStdioServerConfig = { command: 'npx', args: ['-y', 'mcp-fs'], env: { HOME: '/tmp' } };
+      const stdioConfig: McpStdioServerConfig = {
+        command: 'npx',
+        args: ['-y', 'mcp-fs'],
+        env: { HOME: '/tmp' },
+        cwd: '/session/directory',
+      };
       setupConfig({ mcpServers: { fs: stdioConfig } });
 
       MockedMCPClient.mockImplementation(function (this: any) {
@@ -104,7 +109,13 @@ describe('createMcpManager', () => {
       expect(MockedMCPClient).toHaveBeenCalledWith({
         id: 'mastra-code-mcp',
         servers: {
-          fs: { command: 'npx', args: ['-y', 'mcp-fs'], env: { HOME: '/tmp' }, stderr: 'pipe' },
+          fs: {
+            command: 'npx',
+            args: ['-y', 'mcp-fs'],
+            env: { HOME: '/tmp' },
+            cwd: '/session/directory',
+            stderr: 'pipe',
+          },
         },
         timeout: 7 * 24 * 60 * 60 * 1000,
       });
@@ -188,6 +199,7 @@ describe('createMcpManager', () => {
             client_id: 'client-id',
             client_secret: 'client-secret',
           },
+          clientMetadataUrl: undefined,
           storage: expect.anything(),
         }),
       );
@@ -1147,7 +1159,11 @@ describe('createMcpManager', () => {
       const options = MockedMCPOAuthClientProvider.mock.calls[0]![0]!;
       expect(options.redirectUrl).toBe('http://127.0.0.1:1458/oauth/callback');
       expect(options.clientMetadata.redirect_uris).toEqual(['http://127.0.0.1:1458/oauth/callback']);
+      // No pre-registered client: the Client ID Metadata Document is the identity.
       expect(options.clientInformation).toBeUndefined();
+      expect(options.clientMetadataUrl).toBe('https://code.mastra.ai/.well-known/oauth-client/mastracode.json');
+      expect(options.clientMetadata.client_id).toBe('https://code.mastra.ai/.well-known/oauth-client/mastracode.json');
+      expect(options.clientMetadata.client_name).toBe('Mastra Code');
 
       // The provider is attached to the live server def so the client sees it
       const serverDef = (MockedMCPClient.mock.calls[0]![0]! as any).servers['api'];

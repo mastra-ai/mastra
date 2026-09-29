@@ -22,12 +22,6 @@ const composerSize: Record<CommentVariant, ControlSize> = {
   thread: 'md',
 };
 
-const composerInputVariant: Record<CommentVariant, 'default' | 'outline'> = {
-  default: 'outline',
-  embed: 'default',
-  thread: 'outline',
-};
-
 export interface CommentComposerInputProps extends InputGroupInputProps {
   /** Layout classes for the surrounding InputGroup. */
   groupClassName?: string;
@@ -39,7 +33,7 @@ export const CommentComposerInput = forwardRef<HTMLInputElement, CommentComposer
     const variant = useCommentVariant();
 
     return (
-      <InputGroup size={composerSize[variant]} variant={composerInputVariant[variant]} className={groupClassName}>
+      <InputGroup size={composerSize[variant]} className={groupClassName}>
         <InputGroupInput ref={ref} data-slot="comment-composer-input" {...props} />
         {children}
       </InputGroup>

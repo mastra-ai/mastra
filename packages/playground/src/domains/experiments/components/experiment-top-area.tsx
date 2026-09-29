@@ -1,14 +1,13 @@
 import type { DatasetExperiment } from '@mastra/client-js';
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { ClipboardCheck, MoreVertical, Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { RenameExperimentDialog } from '@/domains/experiments/components/rename-experiment-dialog';
 import { RerunExperimentButton } from '@/domains/experiments/components/rerun-experiment-button';
 import { experimentReviewQueueLink } from '@/lib/app-routing';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface ExperimentTopAreaProps {
   experiment: DatasetExperiment;
@@ -32,11 +31,11 @@ export function ExperimentTopArea({ experiment, onDeleteClick, children }: Exper
   const hasMenu = canRename || Boolean(onDeleteClick);
 
   return (
-    <PageLayout.TopArea>
-      <PageLayout.Row className="items-center justify-start gap-2">
-        <ButtonsGroup className="whitespace-nowrap">
+    <>
+      <ActionRow>
+        <ActionRow.Start className="whitespace-nowrap">
           <RerunExperimentButton experiment={experiment} />
-          <Button as={LinkComponent} to={experimentReviewQueueLink(experiment.id)} icon={<ClipboardCheck />}>
+          <Button render={<LinkComponent href={experimentReviewQueueLink(experiment.id)} />} icon={<ClipboardCheck />}>
             Review queue
           </Button>
           {hasMenu && (
@@ -60,12 +59,12 @@ export function ExperimentTopArea({ experiment, onDeleteClick, children }: Exper
               </DropdownMenu.Content>
             </DropdownMenu>
           )}
-        </ButtonsGroup>
-        {children}
-      </PageLayout.Row>
+        </ActionRow.Start>
+        {children && <ActionRow.End>{children}</ActionRow.End>}
+      </ActionRow>
 
       {/* Mounted on demand so the form state is seeded from the experiment each time it opens. */}
       {renameOpen && <RenameExperimentDialog experiment={experiment} open onOpenChange={setRenameOpen} />}
-    </PageLayout.TopArea>
+    </>
   );
 }

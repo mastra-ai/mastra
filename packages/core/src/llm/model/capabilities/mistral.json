@@ -22,7 +22,6 @@
     "devstral-small-2507",
     "labs-devstral-small-2512",
     "magistral-medium-latest",
-    "magistral-small",
     "ministral-3b-latest",
     "ministral-8b-latest",
     "mistral-large-2411",
@@ -43,7 +42,8 @@
     "pixtral-12b",
     "pixtral-large-latest",
     "voxtral-small-latest",
-    "zai-glm-5-2"
+    "zai-glm-5-2",
+    "zai-glm-5-3"
   ],
-  "structuredOutput": ["mistral-medium-2604", "mistral-medium-latest", "zai-glm-5-2"]
+  "structuredOutput": ["mistral-medium-2604", "mistral-medium-latest", "zai-glm-5-2", "zai-glm-5-3"]
 }

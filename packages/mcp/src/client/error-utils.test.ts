@@ -1,7 +1,7 @@
 import { SdkErrorCode, SdkHttpError } from '@modelcontextprotocol/client';
 import { describe, expect, it } from 'vitest';
 
-import { getMCPDiscoveryErrorDetails } from './error-utils';
+import { getMCPDiscoveryErrorDetails, isReconnectableMCPError } from './error-utils';
 
 describe('getMCPDiscoveryErrorDetails', () => {
   it('preserves MCP SDK 2 HTTP status and transport code through wrapped causes', () => {
@@ -108,5 +108,34 @@ describe('getMCPDiscoveryErrorDetails', () => {
     });
 
     expect(getMCPDiscoveryErrorDetails(partial)).toEqual({ message: 'request failed' });
+  });
+});
+
+describe('isReconnectableMCPError', () => {
+  it('treats transport-level failures as reconnectable', () => {
+    for (const message of [
+      'Not connected',
+      'Error POSTing to endpoint (HTTP 404): no healthy backend',
+      'connect ECONNREFUSED 127.0.0.1:1',
+      'fetch failed',
+      'Connection closed',
+      'TypeError: terminated',
+    ]) {
+      expect(isReconnectableMCPError(new Error(message)), message).toBe(true);
+    }
+  });
+
+  it('does not reconnect on legacy session or SSE wording, tool errors or non-errors', () => {
+    for (const message of [
+      'Session expired for object 42',
+      'No valid session ID provided',
+      'Server not initialized',
+      'SSE stream disconnected',
+      'Validation failed',
+    ]) {
+      expect(isReconnectableMCPError(new Error(message)), message).toBe(false);
+    }
+    expect(isReconnectableMCPError('fetch failed')).toBe(false);
+    expect(isReconnectableMCPError(undefined)).toBe(false);
   });
 });

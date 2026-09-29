@@ -1,6 +1,6 @@
-import type { LightSpanRecord } from '@mastra/core/storage';
 import { useEffect, useMemo, useState } from 'react';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
+import type { LightSpanRecord } from '../types';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
 import { TraceIdButton } from './trace-id-button';
 import { TraceSpanTree } from './trace-span-tree';

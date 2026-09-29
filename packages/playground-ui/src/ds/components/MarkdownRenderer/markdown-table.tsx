@@ -15,10 +15,9 @@ export function MarkdownTable({ node, children }: ComponentProps<'table'> & Extr
   return (
     <div className="my-3 w-fit max-w-full min-w-0">
       <div className="flex justify-end">
-        <ButtonsGroup spacing="close" aria-label="Table actions">
+        <ButtonsGroup size="sm" aria-label="Table actions">
           <Button
             type="button"
-            size="xs"
             variant="ghost"
             disabled={typeof markdown !== 'string'}
             onClick={() => {
@@ -33,7 +32,7 @@ export function MarkdownTable({ node, children }: ComponentProps<'table'> & Extr
             <DropdownMenu.Trigger
               disabled={typeof csv !== 'string'}
               render={
-                <Button type="button" size="icon-xs" variant="ghost" aria-label="More table options">
+                <Button type="button" size="icon-sm" variant="ghost" aria-label="More table options">
                   <ChevronDownIcon />
                 </Button>
               }

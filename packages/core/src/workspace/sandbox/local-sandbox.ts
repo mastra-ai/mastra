@@ -108,6 +108,11 @@ export interface LocalSandboxOptions extends Omit<MastraSandboxOptions, 'process
    * ```
    */
   env?: NodeJS.ProcessEnv;
+  /**
+   * Encoding used to decode command stdout/stderr (any WHATWG encoding label, e.g. 'gbk').
+   * Useful on Windows systems whose native commands emit a legacy code page. Default: 'utf-8'.
+   */
+  outputEncoding?: string;
   /** Default timeout for operations in ms (default: 30000) */
   timeout?: number;
   /**
@@ -189,6 +194,7 @@ export class LocalSandbox extends MastraSandbox<string> {
   declare readonly processes: LocalProcessManager;
   declare readonly mounts: MountManager;
   private readonly env: NodeJS.ProcessEnv;
+  private readonly _outputEncoding?: string;
   private _nativeSandboxConfig: NativeSandboxConfig;
   /**
    * SBPL the user wrote, read from `seatbeltProfilePath` at start. Set only when that file
@@ -230,6 +236,9 @@ export class LocalSandbox extends MastraSandbox<string> {
   constructor(options: LocalSandboxOptions = {}) {
     // Validate isolation backend before super (fail fast)
     const requestedIsolation = options.isolation ?? 'none';
+    if (requestedIsolation === 'seatbelt' && process.platform === 'win32') {
+      throw new IsolationUnavailableError('seatbelt', 'Seatbelt isolation is only supported on macOS, not Windows.');
+    }
     if (requestedIsolation !== 'none' && !isIsolationAvailable(requestedIsolation)) {
       const detection = detectIsolation();
       throw new IsolationUnavailableError(requestedIsolation, detection.message);
@@ -238,13 +247,14 @@ export class LocalSandbox extends MastraSandbox<string> {
     super({
       ...options,
       name: 'LocalSandbox',
-      processes: new LocalProcessManager({ env: options.env ?? {} }),
+      processes: new LocalProcessManager({ env: options.env ?? {}, outputEncoding: options.outputEncoding }),
     });
 
     this.id = options.id ?? this.generateId();
     this._createdAt = new Date();
     this.setWorkingDirectory(expandTilde(options.workingDirectory ?? path.join(process.cwd(), '.sandbox')));
     this.env = options.env ?? {};
+    this._outputEncoding = options.outputEncoding;
     this._nativeSandboxConfig = {
       ...options.nativeSandbox,
       readWritePaths: [...(options.nativeSandbox?.readWritePaths ?? [])],
@@ -280,6 +290,7 @@ export class LocalSandbox extends MastraSandbox<string> {
       workingDirectory: options.workingDirectory ?? this.workingDirectory,
       env: options.env ?? this.env,
       isolation: this.isolation,
+      outputEncoding: this._outputEncoding,
       nativeSandbox: {
         ...this._nativeSandboxConfig,
         readWritePaths: [...this._initialReadWritePaths],
@@ -495,8 +506,14 @@ export class LocalSandbox extends MastraSandbox<string> {
   private async _captureCheckpoint(name: string): Promise<void> {
     const target = this._checkpointPath(name);
     await fs.mkdir(this._checkpointsDirectory, { recursive: true });
-    const tmp = path.join(this._checkpointsDirectory, `.tmp-${name}-${crypto.randomBytes(6).toString('hex')}`);
-    const backup = path.join(this._checkpointsDirectory, `.bak-${name}-${crypto.randomBytes(6).toString('hex')}`);
+    const tmp = path.join(
+      this._checkpointsDirectory,
+      `.tmp-${name}-${Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(6))).toString('hex')}`,
+    );
+    const backup = path.join(
+      this._checkpointsDirectory,
+      `.bak-${name}-${Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(6))).toString('hex')}`,
+    );
     let targetMoved = false;
     try {
       await fs.cp(this.workingDirectory, tmp, { recursive: true });

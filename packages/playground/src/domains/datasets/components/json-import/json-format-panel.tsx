@@ -1,6 +1,8 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { ExternalLinkIcon, Check, Copy } from 'lucide-react';
 
@@ -25,13 +27,15 @@ export function JSONFormatPanel() {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-ui-sm text-neutral5 flex h-8 items-center font-medium">Each item looks like this</p>
+      <p className="flex h-8 items-center text-column text-foreground">Each item looks like this</p>
 
-      <dl className="border-border1 divide-border1 divide-y rounded-lg border">
+      <dl className="divide-y divide-border rounded-lg border border-border">
         {FIELDS.map(field => (
           <div key={field.name} className="grid grid-cols-[7rem_1fr] gap-3 px-3 py-2.5">
-            <dt className="text-ui-xs text-neutral6 font-mono">{field.name}</dt>
-            <dd className="text-ui-xs text-neutral4 flex flex-col items-start gap-1.5">
+            <dt className="text-meta text-foreground">
+              <InlineCode>{field.name}</InlineCode>
+            </dt>
+            <dd className="flex flex-col items-start gap-1.5 text-meta text-muted-foreground">
               <span>{field.description}</span>
               {field.required ? (
                 <Badge variant="green" size="xs">
@@ -47,10 +51,12 @@ export function JSONFormatPanel() {
         ))}
       </dl>
 
-      <div className="border-border1 overflow-hidden rounded-lg border">
-        <div className="border-border1 bg-surface3 flex items-center justify-between border-b py-1.5 pr-1.5 pl-3">
-          <span className="text-ui-xs text-neutral4 font-mono">example.json</span>
-          <Button icon={isCopied ? <Check /> : <Copy />} variant="ghost" size="xs" onClick={handleCopy}>
+      <div className="overflow-hidden rounded-lg border border-border">
+        <div className="flex items-center justify-between border-b border-border bg-card py-1.5 pr-1.5 pl-3">
+          <Txt as="span" variant="meta" tone="muted" font="mono">
+            example.json
+          </Txt>
+          <Button icon={isCopied ? <Check /> : <Copy />} variant="ghost" size="sm" onClick={handleCopy}>
             {isCopied ? 'Copied' : 'Copy'}
           </Button>
         </div>
@@ -67,10 +73,8 @@ export function JSONFormatPanel() {
 
       <Button
         variant="ghost"
-        as="a"
-        href={DOCS_URL}
-        target="_blank"
-        rel="noopener noreferrer"
+        render={<a href={DOCS_URL} target="_blank" rel="noopener noreferrer" />}
+
         className="self-start"
         icon={<ExternalLinkIcon />}
       >

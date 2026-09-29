@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { MemorySettingsRecord } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import {
+  applyPersonalMemorySettings,
   applyStoredMemorySettings,
   DEFAULT_OBSERVATION_THRESHOLD,
   DEFAULT_REFLECTION_THRESHOLD,
@@ -461,6 +462,115 @@ describe('hydrateSessionMemorySettings', () => {
 
     expect(warn).toHaveBeenCalledWith(
       '[Factory memory-settings hydration] Unable to apply stored memory settings.',
+      expect.any(Error),
+    );
+    warn.mockRestore();
+  });
+});
+
+describe('applyPersonalMemorySettings', () => {
+  /** Roles whose `modelId()` reports what the last switch selected. */
+  function createRoles(observer: string, reflector: string) {
+    const role = (initial: string) => {
+      let current = initial;
+      return {
+        modelId: () => current,
+        switchModel: vi.fn(async ({ modelId }: { modelId: string }) => {
+          current = modelId;
+        }),
+      };
+    };
+    return { observer: role(observer), reflector: role(reflector) };
+  }
+
+  function createPersonalSession(state: Record<string, unknown> = {}) {
+    return {
+      om: createRoles('anthropic/claude-haiku-4-5', 'anthropic/claude-haiku-4-5'),
+      state: { get: () => state, set: vi.fn().mockResolvedValue(undefined) },
+    };
+  }
+
+  const memorySettings = (record: MemorySettingsRecord | null) => ({ get: vi.fn().mockResolvedValue(record) });
+
+  // Where the personal row is silent, the value the session already runs with
+  // stands — the project's, or the provider-aware fallback resolved for it.
+  // Resetting to the built-in default here would move observation onto a
+  // provider the factory may hold no credentials for.
+  it('applies what the user saved and keeps what they never touched', async () => {
+    const session = createPersonalSession({
+      observationThreshold: 12_000,
+      reflectionThreshold: 21_000,
+      observeAttachments: false,
+    });
+
+    await applyPersonalMemorySettings(session, {
+      memorySettings: memorySettings(
+        memorySettingsRow({ observerModelId: 'openai/gpt-5.4-mini', observationThreshold: 222 }),
+      ),
+      orgId: 'org-1',
+      userId: 'user-1',
+    });
+
+    expect(session.om.observer.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.4-mini' });
+    // The reflector they never set keeps observing with the project's model.
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
+    expect(session.state.set).toHaveBeenCalledExactlyOnceWith({ observationThreshold: 222 });
+  });
+
+  it('leaves the observation models alone when the user only saved thresholds', async () => {
+    const session = createPersonalSession({ observeAttachments: 'auto' });
+
+    await applyPersonalMemorySettings(session, {
+      memorySettings: memorySettings(memorySettingsRow({ observerModelId: null, reflectorModelId: null })),
+      orgId: 'org-1',
+      userId: 'user-1',
+    });
+
+    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
+  });
+
+  it('does nothing without a stored row', async () => {
+    const session = createPersonalSession();
+
+    await applyPersonalMemorySettings(session, {
+      memorySettings: memorySettings(null),
+      orgId: 'org-1',
+      userId: 'user-1',
+    });
+
+    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(session.state.set).not.toHaveBeenCalled();
+  });
+
+  it('reads nothing without the domain', async () => {
+    const session = createPersonalSession();
+    const settings = memorySettings(memorySettingsRow());
+
+    await applyPersonalMemorySettings(session, {
+      memorySettings: undefined,
+      orgId: 'org-1',
+      userId: 'user-1',
+    });
+
+    expect(settings.get).not.toHaveBeenCalled();
+    expect(session.state.set).not.toHaveBeenCalled();
+  });
+
+  it('warns instead of throwing when the read fails', async () => {
+    const session = createPersonalSession();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    await expect(
+      applyPersonalMemorySettings(session, {
+        memorySettings: { get: vi.fn().mockRejectedValue(new Error('db down')) },
+        orgId: 'org-1',
+        userId: 'user-1',
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(warn).toHaveBeenCalledWith(
+      "[Factory memory-settings hydration] Unable to apply the user's memory settings.",
       expect.any(Error),
     );
     warn.mockRestore();

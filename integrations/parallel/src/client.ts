@@ -10,7 +10,19 @@ export function getParallelClient(config?: ParallelClientOptions): ParallelClien
     throw new Error('Parallel API key is required. Pass { apiKey } or set the PARALLEL_API_KEY environment variable.');
   }
 
-  return new Parallel({ ...config, apiKey });
+  const fetch = config?.fetch ?? globalThis.fetch;
+
+  return new Parallel({
+    ...config,
+    apiKey,
+    fetch: (url, init) => {
+      const headers = new Headers(init?.headers);
+      // Project-wide aggregate usage attribution. Append at the transport boundary to
+      // preserve SDK/caller headers and keep attribution on subsequent requests and retries.
+      headers.set('User-Agent', [headers.get('User-Agent'), 'mastra'].filter(Boolean).join(' '));
+      return fetch(url, { ...init, headers });
+    },
+  });
 }
 
 export function createLazyParallelClient(config?: ParallelClientOptions): () => ParallelClient {

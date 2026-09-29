@@ -1,5 +1,6 @@
 export const WORKFLOW_AUTHORING_TOOL_IDS = {
   listAgents: 'list-available-agents',
+  listClassifiers: 'list-available-classifiers',
   listTools: 'list-available-tools',
   listWorkflows: 'list-available-workflows',
   saveWorkflow: 'save-workflow',

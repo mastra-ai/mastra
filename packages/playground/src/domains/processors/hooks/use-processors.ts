@@ -1,35 +1,21 @@
+import type {
+  ExecuteProcessorResponse,
+  GetProcessorDetailResponse,
+  GetProcessorResponse,
+  ProcessorConfiguration,
+  ProcessorPhase,
+} from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { useMastraClient } from '@mastra/react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { usePlaygroundStore } from '@/store/playground-store';
 
-export type ProcessorPhase = 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep';
-
-export interface ProcessorInfo {
-  id: string;
-  name?: string;
-  description?: string;
-  phases: ProcessorPhase[];
-  agentIds: string[];
-  isWorkflow: boolean;
-}
-
-export interface ProcessorConfiguration {
-  agentId: string;
-  agentName: string;
-  type: 'input' | 'output';
-}
-
-export interface ProcessorDetail {
-  id: string;
-  name?: string;
-  description?: string;
-  phases: ProcessorPhase[];
-  configurations: ProcessorConfiguration[];
-  isWorkflow: boolean;
-}
-
-export type { MastraDBMessage };
+export type {
+  GetProcessorDetailResponse as ProcessorDetail,
+  GetProcessorResponse as ProcessorInfo,
+  MastraDBMessage,
+  ProcessorConfiguration,
+  ProcessorPhase,
+};
 
 export interface ExecuteProcessorParams {
   processorId: string;
@@ -38,25 +24,9 @@ export interface ExecuteProcessorParams {
   agentId?: string;
 }
 
-export interface ProcessorTripwireResult {
-  triggered: boolean;
-  reason?: string;
-  metadata?: unknown;
-}
+export type { ExecuteProcessorResponse };
 
-export interface ExecuteProcessorResponse {
-  success: boolean;
-  phase: string;
-  messages?: MastraDBMessage[];
-  messageList?: {
-    messages: MastraDBMessage[];
-  };
-  tripwire?: ProcessorTripwireResult;
-  error?: string;
-}
-
-export const useProcessors = (options?: { enabled?: boolean }) => {
-  const { requestContext } = usePlaygroundStore();
+export const useProcessors = (options?: { enabled?: boolean }, requestContext?: Record<string, any>) => {
   const client = useMastraClient();
 
   return useQuery({
@@ -66,9 +36,12 @@ export const useProcessors = (options?: { enabled?: boolean }) => {
   });
 };
 
-export const useProcessor = (processorId: string, options?: { enabled?: boolean }) => {
+export const useProcessor = (
+  processorId: string,
+  options?: { enabled?: boolean },
+  requestContext?: Record<string, any>,
+) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useQuery({
     queryKey: ['processor', processorId],
@@ -77,9 +50,8 @@ export const useProcessor = (processorId: string, options?: { enabled?: boolean 
   });
 };
 
-export const useExecuteProcessor = () => {
+export const useExecuteProcessor = (requestContext?: Record<string, any>) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useMutation({
     mutationFn: async ({

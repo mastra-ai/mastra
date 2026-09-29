@@ -558,6 +558,22 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    */
   hideSignals?: boolean | AgentSignalType[];
 
+  /**
+   * Durable agents only: close this caller's stream when the run suspends
+   * (for example for tool approval) so `fullStream` ends at the suspension
+   * boundary. Defaults to `false`. Ignored by non-durable agents, whose streams
+   * already end on suspension.
+   */
+  closeOnSuspend?: boolean;
+
+  /**
+   * Start eligible server-side tools as soon as their complete tool-call part is streamed.
+   * Enabled by default for `Agent.stream()`; set it to `false` to restore the previous
+   * scheduling, where a tool waited for the whole model step to finish. Only `Agent.stream()`
+   * supports it, and durable agents reject it.
+   */
+  eagerToolExecution?: boolean;
+
   /** Custom instructions that override the agent's default instructions for this execution */
   instructions?: SystemMessage;
 

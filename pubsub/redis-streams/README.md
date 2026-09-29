@@ -24,6 +24,22 @@ export const mastra = new Mastra({
 });
 ```
 
+For production deployments, set `streamIdleTtlMs` to put a sliding idle TTL on every stream (for example, `7 * 24 * 60 * 60 * 1000` for 7 days). Every write refreshes it, so actively written topics never expire, while abandoned ones (a crashed run, or open-ended topics that never reach a `clearTopic` call) are reclaimed by Redis once they go idle. Reads do not refresh the TTL, so keep it above the longest expected gap between writes on a live topic, including the time a grouped consumer may need to replay a backlog. Without it (the default), those streams stay in Redis forever and its memory grows without bound.
+
+### Redis Cluster
+
+Pass `cluster` (forwarded to `createCluster()` from `redis`) instead of `url`/`redisOptions`:
+
+```typescript
+import { RedisStreamsPubSub } from '@mastra/redis-streams';
+
+const pubsub = new RedisStreamsPubSub({
+  cluster: { rootNodes: [{ url: 'redis://node-1:6379' }, { url: 'redis://node-2:6379' }] },
+});
+```
+
+To build the client yourself (TLS, credential providers), pass an unconnected `client` instead; readers are created from it with `client.duplicate()` and the pubsub owns its lifecycle.
+
 ## Documentation
 
 - [Reference: RedisStreamsPubSub](https://mastra.ai/reference/pubsub/redis-streams)

@@ -1,7 +1,8 @@
 import type { BoardTransitionPolicy } from './transition-policy.js';
 
 export const workTransitionPolicy: BoardTransitionPolicy = context => {
-  const { item, requestedTriageType, actor, toStage, isHumanTransition } = context;
+  const { item, requestedTriageType, actor, fromStage, toStage, isHumanTransition, plansAutoApproved, planApproved } =
+    context;
   const triageAgent = actor.type === 'agent' && actor.role === 'triage';
   if (triageAgent && requestedTriageType === undefined) {
     return {
@@ -15,6 +16,22 @@ export const workTransitionPolicy: BoardTransitionPolicy = context => {
       type: 'reject',
       code: 'forbidden',
       reason: 'The persisted triage classification cannot be changed by a later transition.',
+    };
+  }
+  // Planning is the approval boundary. When project auto-approval is off, only a
+  // person or a successfully approved `submit_plan` result may move the card into Building.
+  if (
+    fromStage === 'planning' &&
+    toStage === 'execute' &&
+    actor.type !== 'human' &&
+    !plansAutoApproved &&
+    !planApproved
+  ) {
+    return {
+      type: 'reject',
+      code: 'approval_required',
+      reason:
+        'Auto-approve plans is off: a maintainer must approve the plan or move this work item into Building from the Factory UI.',
     };
   }
   const triageType = item.triageType ?? requestedTriageType;

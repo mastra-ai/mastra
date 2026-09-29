@@ -53,7 +53,6 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   { route: '/metrics', permission: 'observability:read', name: 'Metrics' },
   { route: '/intelligence', permission: 'observability:read', name: 'Intelligence' },
   { route: '/traces', permission: 'observability:read', name: 'Traces' },
-  { route: '/inbox', permission: 'observability:read', name: 'Inbox' },
   { route: '/logs', permission: 'logs:read', name: 'Logs' },
 
   // Evaluation - uses 'scores' resource (not 'scorers')
@@ -70,7 +69,6 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   { route: '/workspaces', permission: 'workspaces:read', name: 'Workspaces' },
 
   // Admin-only pages
-  { route: '/request-context', permission: '*', name: 'Request Context' },
 
   // UI-only pages (no corresponding API resource) - marked as public
   // These pages don't fetch protected data, so they're accessible to all authenticated users

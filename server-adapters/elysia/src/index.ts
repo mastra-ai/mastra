@@ -740,7 +740,11 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         const result = await route.handler(handlerParams);
         return this.sendResponse(route, ctx as any, result, prefix);
       } catch (error) {
-        this.mastra.getLogger()?.error('Error calling handler', {
+        const httpStatus =
+          error && typeof error === 'object' ? ((error as any).status ?? (error as any).details?.status) : undefined;
+        // 501 means an optional capability isn't provided by the configured storage or core: expected, not a server fault.
+        const logLevel = httpStatus === 501 ? 'warn' : 'error';
+        this.mastra.getLogger()?.[logLevel]('Error calling handler', {
           error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           path: route.path,
           method: route.method,

@@ -10,7 +10,7 @@
     "rollup": "^4.62.2",
     "verdaccio": "^6.7.4",
     "verdaccio-auth-memory": "^13.0.3",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "scripts": {
     "test": "vitest run"

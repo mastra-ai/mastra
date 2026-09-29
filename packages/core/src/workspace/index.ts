@@ -118,6 +118,7 @@ export type {
   SandboxInfo,
   SandboxLifecycleHook,
   SandboxStartHook,
+  SandboxStartOptions,
   MastraSandboxOptions,
   // Process management types
   ProcessInfo,

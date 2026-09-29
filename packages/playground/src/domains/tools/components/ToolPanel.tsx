@@ -1,5 +1,6 @@
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMemo, useEffect } from 'react';
 import { parse } from 'superjson';
@@ -9,8 +10,6 @@ import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useTool } from '@/domains/tools/hooks';
 import { useExecuteTool } from '@/domains/tools/hooks/use-execute-tool';
-import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 export interface ToolPanelProps {
   toolId: string;
@@ -41,7 +40,6 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
   const tool: any = agentTool || apiTool;
 
   const { mutateAsync: executeTool, isPending: isExecuting, data: result } = useExecuteTool();
-  const { requestContext: playgroundRequestContext } = usePlaygroundStore();
 
   useEffect(() => {
     if (error) {
@@ -50,16 +48,8 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
     }
   }, [error]);
 
-  const handleExecuteTool = async (data: any, schemaRequestContext?: Record<string, any>) => {
+  const handleExecuteTool = async (data: any, requestContext?: Record<string, any>) => {
     if (!tool) return;
-
-    // Merge global playground request context with schema request context.
-    // Schema values take precedence and explicitly override global values,
-    // including when schema values are empty strings (user intentionally cleared them).
-    const requestContext = {
-      ...(playgroundRequestContext ?? {}),
-      ...(schemaRequestContext ?? {}),
-    };
 
     return executeTool({
       toolId: tool.id,
@@ -84,7 +74,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
   if (!tool)
     return (
       <div className="px-4 py-8 text-center">
-        <Txt variant="header-md" className="text-neutral3">
+        <Txt variant="heading" tone="muted">
           Tool not found
         </Txt>
       </div>
@@ -93,7 +83,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
   if (!canExecuteTool)
     return (
       <div className="px-4 py-8 text-center">
-        <Txt variant="ui-sm" className="text-neutral3">
+        <Txt variant="caption" tone="muted">
           You don't have permission to execute tools.
         </Txt>
       </div>
@@ -107,7 +97,8 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
       handleExecuteTool={handleExecuteTool}
       toolDescription={tool.description}
       toolId={tool.id}
-      requestContextSchema={tool.requestContextSchema}
+      requestContextEntityType="tool"
+      requestContextEntityId={tool.id}
     />
   );
 };

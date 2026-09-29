@@ -97,6 +97,31 @@ describe('AgentController.createSession — cross-session isolation', () => {
     expect(b.state.get().counter).toBe(0);
   });
 
+  it('skips a guarded state update when ownership changes before it applies', async () => {
+    const storage = new InMemoryStore();
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'You are a test agent.',
+      model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+    });
+    const controller = new AgentController<{ counter: number }>({
+      workspace: createMockWorkspace(),
+      id: 'test-controller',
+      storage,
+      initialState: { counter: 0 },
+      modes: [{ id: 'build', name: 'Build', default: true, agent }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
+    let ownsUpdate = true;
+
+    const update = session.state.setIf({ counter: 5 }, () => ownsUpdate);
+    ownsUpdate = false;
+
+    await expect(update).resolves.toBe(false);
+    expect(session.state.get().counter).toBe(0);
+  });
+
   it('isolates event buses between sessions', async () => {
     const controller = createController(new InMemoryStore());
     await controller.init();
@@ -162,6 +187,28 @@ describe('AgentController.createSession — cross-session isolation', () => {
     const restarted = await restartedController.createSession();
 
     expect(restarted.thread.requireId()).toBe(threadId);
+  });
+
+  it('binds request-context thread setting writes to the originating thread', async () => {
+    const controller = createController(new InMemoryStore());
+    await controller.init();
+    const session = await controller.createSession({ resourceId: 'user-a' });
+    const originatingThreadId = session.thread.requireId();
+    const requestContext = await (controller as any).buildRequestContext(session, undefined, {
+      threadId: originatingThreadId,
+    });
+    const controllerContext = requestContext.get('controller');
+    expect(controllerContext.isThreadActive()).toBe(true);
+
+    const nextThread = await session.thread.create({ title: 'next' });
+    expect(controllerContext.isThreadActive()).toBe(false);
+    await controllerContext.setThreadSetting({ key: 'delayedSetting', value: 'origin' });
+
+    expect(session.thread.requireId()).toBe(nextThread.id);
+    expect(await session.thread.getSetting({ key: 'delayedSetting' })).toBeUndefined();
+    expect(await controllerContext.getThreadSetting('delayedSetting')).toBe('origin');
+    await session.thread.switch({ threadId: originatingThreadId });
+    expect(await session.thread.getSetting({ key: 'delayedSetting' })).toBe('origin');
   });
 });
 

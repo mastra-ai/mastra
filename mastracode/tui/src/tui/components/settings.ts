@@ -30,6 +30,7 @@ export interface SettingsConfig {
   libsqlUrl: string;
   experimentalGithubSignals: boolean;
   experimentalCrossAgentSignals: boolean;
+  backgroundToolsEnabled: boolean;
   webSearchProvider: WebSearchProviderSetting;
   tavilyKeyAvailable: boolean;
   parallelKeyAvailable: boolean;
@@ -45,6 +46,7 @@ export interface SettingsCallbacks {
   onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => void;
   onExperimentalGithubSignalsChange: (enabled: boolean) => boolean | void | Promise<boolean | void>;
   onExperimentalCrossAgentSignalsChange: (enabled: boolean) => boolean | void | Promise<boolean | void>;
+  onBackgroundToolsChange: (enabled: boolean) => void;
   onWebSearchProviderChange: (provider: WebSearchProviderSetting) => void;
   onApiKeys?: () => void;
   onClose: () => void;
@@ -383,7 +385,7 @@ export class SettingsComponent extends Box implements Focusable {
             {
               id: 'quietModeMaxToolPreviewLines',
               label: 'Quiet mode tool preview lines',
-              description: 'Maximum compact tool detail preview lines. Set to None to hide previews.',
+              description: 'Preview lines shown under each tool, including shell output. Set to None to hide previews.',
               currentValue: quietPreviewLinesLabel(config.quietModeMaxToolPreviewLines),
               submenu: (_currentValue: string, done: (value?: string) => void) =>
                 new SelectSubmenu(
@@ -392,7 +394,7 @@ export class SettingsComponent extends Box implements Focusable {
                     label: `  ${quietPreviewLinesLabel(lines)}`,
                     description:
                       lines === 0
-                        ? 'Hide compact tool detail previews'
+                        ? 'Hide tool previews and shell output'
                         : `Show up to ${lines} preview line${lines === 1 ? '' : 's'}`,
                   })),
                   String(config.quietModeMaxToolPreviewLines),
@@ -501,6 +503,27 @@ export class SettingsComponent extends Box implements Focusable {
               const accepted = await callbacks.onExperimentalCrossAgentSignalsChange(nextValue);
               config.experimentalCrossAgentSignals = accepted === false ? !nextValue : nextValue;
               done(config.experimentalCrossAgentSignals ? 'On' : 'Off');
+            },
+            () => done(),
+          ),
+      },
+      {
+        id: 'backgroundToolsEnabled',
+        label: 'Experimental background tools',
+        description: 'Allow eligible tools to run in the background (restart required).',
+        currentValue: config.backgroundToolsEnabled ? 'On' : 'Off',
+        submenu: (_currentValue, done) =>
+          new SelectSubmenu(
+            [
+              { value: 'on', label: '  On', description: 'Enable background tools and the activity center' },
+              { value: 'off', label: '  Off', description: 'Keep background tools disabled' },
+            ],
+            config.backgroundToolsEnabled ? 'on' : 'off',
+            value => {
+              const enabled = value === 'on';
+              callbacks.onBackgroundToolsChange(enabled);
+              config.backgroundToolsEnabled = enabled;
+              done(enabled ? 'On' : 'Off');
             },
             () => done(),
           ),

@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { providerFromError } from '../../auth/account-rotation-processor.js';
+
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
+
+function outboundRequest(index = 0): Request {
+  const [input, init] = fetchMock.mock.calls[index]!;
+  return input instanceof Request && !init ? input : new Request(input, init);
+}
 
 const anthropicStorage = {
   reload: vi.fn(),
@@ -76,13 +83,111 @@ describe('gateway oauth fetch wrappers', () => {
       headers: { 'anthropic-beta': 'server-side-fallback-2026-06-01' },
     });
 
-    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+    const headers = outboundRequest().headers;
     const betas = headers.get('anthropic-beta')!.split(',');
     expect(betas).toContain('server-side-fallback-2026-06-01');
     expect(betas).toContain('oauth-2025-04-20');
     expect(betas).toContain('claude-code-20250219');
     // No duplicates when a required beta is also present on the request.
     expect(new Set(betas).size).toBe(betas.length);
+  });
+
+  it('preserves Request method, body, and headers while replacing caller auth', async () => {
+    anthropicStorage.get.mockReturnValue({ type: 'oauth' });
+    anthropicStorage.getApiKey.mockResolvedValue('anthropic-token');
+    openAIStorage.get.mockReturnValue({
+      type: 'oauth',
+      access: 'codex-token',
+      expires: Date.now() + 60_000,
+      accountId: 'account-1',
+    });
+    githubCopilotStorage.get.mockReturnValue({
+      type: 'oauth',
+      access: 'tid=test;proxy-ep=proxy.individual.githubcopilot.com;',
+      refresh: 'ghu_x',
+      expires: Date.now() + 60_000,
+    });
+    githubCopilotStorage.getApiKey.mockResolvedValue('tid=test;proxy-ep=proxy.individual.githubcopilot.com;');
+    fetchMock.mockResolvedValue(new Response('{}', { status: 200 }));
+
+    const { buildAnthropicOAuthFetch } = await import('../claude-max.js');
+    const { buildOpenAICodexOAuthFetch } = await import('../openai-codex.js');
+    const { buildGitHubCopilotOAuthFetch } = await import('../github-copilot.js');
+    const wrappers = [
+      buildAnthropicOAuthFetch({ authStorage: anthropicStorage as any }),
+      buildOpenAICodexOAuthFetch({ authStorage: openAIStorage as any }),
+      buildGitHubCopilotOAuthFetch({ authStorage: githubCopilotStorage as any }),
+    ];
+
+    for (const wrapper of wrappers) {
+      fetchMock.mockClear();
+      const input = new Request('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer caller-secret',
+          'x-api-key': 'caller-key',
+          'x-request-only': 'preserved',
+          'x-source': 'request',
+        },
+        body: JSON.stringify({ messages: [{ role: 'user', content: 'hello' }] }),
+      });
+      await wrapper(input, { headers: { 'x-source': 'init', 'x-extra': 'preserved' } });
+
+      const outbound = outboundRequest();
+      expect(outbound.method).toBe('POST');
+      expect(await outbound.clone().json()).toEqual({ messages: [{ role: 'user', content: 'hello' }] });
+      expect(outbound.headers.get('x-source')).toBe('init');
+      expect(outbound.headers.get('x-request-only')).toBe('preserved');
+      expect(outbound.headers.get('x-extra')).toBe('preserved');
+      expect(outbound.headers.get('Authorization')).not.toBe('Bearer caller-secret');
+      expect(outbound.headers.has('x-api-key')).toBe(false);
+    }
+  });
+
+  it('carries the caller redirect and integrity policies onto the rebuilt request', async () => {
+    anthropicStorage.get.mockReturnValue({ type: 'oauth' });
+    anthropicStorage.getApiKey.mockResolvedValue('anthropic-token');
+    openAIStorage.get.mockReturnValue({
+      type: 'oauth',
+      access: 'codex-token',
+      expires: Date.now() + 60_000,
+      accountId: 'account-1',
+    });
+    githubCopilotStorage.get.mockReturnValue({
+      type: 'oauth',
+      access: 'tid=test;proxy-ep=proxy.individual.githubcopilot.com;',
+      refresh: 'ghu_x',
+      expires: Date.now() + 60_000,
+    });
+    githubCopilotStorage.getApiKey.mockResolvedValue('tid=test;proxy-ep=proxy.individual.githubcopilot.com;');
+    fetchMock.mockResolvedValue(new Response('{}', { status: 200 }));
+
+    const { buildAnthropicOAuthFetch } = await import('../claude-max.js');
+    const { buildOpenAICodexOAuthFetch } = await import('../openai-codex.js');
+    const { buildGitHubCopilotOAuthFetch } = await import('../github-copilot.js');
+    const wrappers = [
+      buildAnthropicOAuthFetch({ authStorage: anthropicStorage as any }),
+      buildOpenAICodexOAuthFetch({ authStorage: openAIStorage as any }),
+      buildGitHubCopilotOAuthFetch({ authStorage: githubCopilotStorage as any }),
+    ];
+
+    for (const wrapper of wrappers) {
+      fetchMock.mockClear();
+      // The wrappers hand `finalRequest` straight to fetch, so anything they
+      // drop is gone — `manual` redirects and SRI checks must survive.
+      const input = new Request('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ messages: [] }),
+        redirect: 'manual',
+        integrity: 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=',
+      });
+      await wrapper(input);
+
+      const outbound = outboundRequest();
+      expect(outbound.redirect).toBe('manual');
+      expect(outbound.integrity).toBe('sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=');
+    }
   });
 
   it('annotates OpenAI gateway fetch errors with the request URL', async () => {
@@ -117,12 +222,12 @@ describe('gateway oauth fetch wrappers', () => {
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [calledUrl, calledInit] = fetchMock.mock.calls[0];
+    const calledRequest = outboundRequest();
     // URL should be rewritten to the api host implied by proxy-ep, and the `/v1`
     // prefix that @ai-sdk/openai adds must be stripped — Copilot's endpoints live
     // at `/chat/completions` etc., not `/v1/chat/completions`.
-    expect(calledUrl.toString()).toBe('https://api.individual.githubcopilot.com/chat/completions');
-    const headers = calledInit?.headers as Headers;
+    expect(calledRequest.url).toBe('https://api.individual.githubcopilot.com/chat/completions');
+    const headers = calledRequest.headers;
     expect(headers.get('Authorization')).toMatch(/^Bearer /);
     expect(headers.get('Editor-Version')).toBeTruthy();
     expect(headers.get('Copilot-Integration-Id')).toBe('vscode-chat');
@@ -158,7 +263,7 @@ describe('gateway oauth fetch wrappers', () => {
       }),
     });
 
-    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+    const headers = outboundRequest().headers;
     expect(headers.get('x-initiator')).toBe('agent');
   });
 
@@ -175,9 +280,14 @@ describe('gateway oauth fetch wrappers', () => {
     const { buildGitHubCopilotOAuthFetch } = await import('../github-copilot.js');
     const fetchWithOAuth = buildGitHubCopilotOAuthFetch({ authStorage: githubCopilotStorage as any });
 
-    await expect(fetchWithOAuth('https://api.openai.com/v1/chat/completions', { headers: {} })).rejects.toMatchObject({
+    const error = await fetchWithOAuth('https://api.openai.com/v1/chat/completions', { headers: {} }).catch(
+      (caught: unknown) => caught,
+    );
+
+    expect(error).toMatchObject({
       requestUrl: 'https://api.individual.githubcopilot.com/chat/completions',
     });
+    expect(providerFromError(error)).toBe('github-copilot');
   });
 
   it('strips the `/v1` prefix from the request path for non-completions endpoints too', async () => {
@@ -194,12 +304,12 @@ describe('gateway oauth fetch wrappers', () => {
     const fetchWithOAuth = buildGitHubCopilotOAuthFetch({ authStorage: githubCopilotStorage as any });
 
     await fetchWithOAuth('https://api.openai.com/v1/responses', { headers: {} });
-    expect(fetchMock.mock.calls[0]![0].toString()).toBe('https://api.individual.githubcopilot.com/responses');
+    expect(outboundRequest().url).toBe('https://api.individual.githubcopilot.com/responses');
 
     fetchMock.mockClear();
     // Paths that don't start with `/v1` should be left alone.
     await fetchWithOAuth('https://api.openai.com/chat/completions', { headers: {} });
-    expect(fetchMock.mock.calls[0]![0].toString()).toBe('https://api.individual.githubcopilot.com/chat/completions');
+    expect(outboundRequest().url).toBe('https://api.individual.githubcopilot.com/chat/completions');
   });
 
   it('throws a friendly error when the user is not logged in to GitHub Copilot', async () => {
@@ -226,7 +336,7 @@ describe('gateway oauth fetch wrappers', () => {
     });
 
     expect(xaiStorage.reload).toHaveBeenCalled();
-    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+    const headers = outboundRequest().headers;
     expect(headers.get('Authorization')).toBe('Bearer xai-oauth-token');
     expect(headers.get('x-api-key')).toBeNull();
     expect(headers.get('Content-Type')).toBe('application/json');
@@ -245,7 +355,7 @@ describe('gateway oauth fetch wrappers', () => {
 
     await fetchWithOAuth(request);
 
-    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+    const headers = outboundRequest().headers;
     expect(headers.get('Authorization')).toBe('Bearer xai-oauth-token');
     expect(headers.get('Content-Type')).toBe('application/json');
     expect(headers.get('X-Request-ID')).toBe('request-1');

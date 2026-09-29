@@ -1,3 +1,4 @@
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { coreFeatures } from '@mastra/core/features';
 import { describe, expect, it, vi } from 'vitest';
@@ -21,6 +22,7 @@ import {
   stripExtractorSections,
   validateExtractorList,
 } from '../extractor';
+import { RETRY_CONFIG } from '../retry';
 import { WorkingMemoryExtractor } from '../working-memory-extractor';
 
 describe('Extractor', () => {
@@ -384,6 +386,60 @@ describe('Extractor', () => {
     expect(stream.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('inline');
   });
 
+  it('retries a transient provider failure in native output mode', async () => {
+    const originalRetryConfig = { ...RETRY_CONFIG };
+    RETRY_CONFIG.initialDelayMs = 1;
+    RETRY_CONFIG.maxDelayMs = 4;
+    RETRY_CONFIG.jitter = 0;
+    try {
+      const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+      const stream = vi
+        .fn()
+        .mockRejectedValueOnce(Object.assign(new Error('rate limited'), { statusCode: 429 }))
+        .mockResolvedValueOnce({ object: Promise.resolve({ priority: 'high' }) });
+
+      const result = await extractStructuredValues({
+        agent: { stream } as unknown as Agent<any, any, any, any>,
+        source: 'observer',
+        extractors: [priority],
+      });
+
+      expect(result.values).toEqual({ priority: 'high' });
+      expect(result.failures).toEqual([]);
+      expect(stream).toHaveBeenCalledTimes(2);
+      // Retried in the same (native) output mode rather than falling through to
+      // the json-prompt-injection fallback.
+      expect(stream.mock.calls[1]![1].structuredOutput.jsonPromptInjection).toBeUndefined();
+    } finally {
+      Object.assign(RETRY_CONFIG, originalRetryConfig);
+    }
+  });
+
+  it('retries a transient extraction failure once, independent of the stage retry budget, with no fallback ladder', async () => {
+    const originalRetryConfig = { ...RETRY_CONFIG };
+    RETRY_CONFIG.initialDelayMs = 1;
+    RETRY_CONFIG.maxDelayMs = 4;
+    RETRY_CONFIG.jitter = 0;
+    try {
+      const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+      const stream = vi.fn().mockRejectedValue(Object.assign(new Error('rate limited'), { statusCode: 429 }));
+
+      const result = await extractStructuredValues({
+        agent: { stream } as unknown as Agent<any, any, any, any>,
+        source: 'observer',
+        extractors: [priority],
+      });
+
+      expect(result.failures).toEqual([{ slug: 'priority', error: 'rate limited' }]);
+      // Fixed budget: initial call + 1 retry. The Observer/Reflector `maxRetries`
+      // (default 8) must not apply here, and there is no JSON-prompt fallback ladder.
+      expect(stream).toHaveBeenCalledTimes(2);
+      expect(stream.mock.calls.every(call => call[1].structuredOutput.jsonPromptInjection === undefined)).toBe(true);
+    } finally {
+      Object.assign(RETRY_CONFIG, originalRetryConfig);
+    }
+  });
+
   it('uses streaming for structured extraction', async () => {
     const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
     const generate = vi.fn();
@@ -488,6 +544,28 @@ describe('Extractor', () => {
       }),
     ).rejects.toThrow(/aborted/);
 
+    // Already-aborted signal short-circuits on the OM retry ladder, so no
+    // provider call is issued at all.
+    expect(stream).toHaveBeenCalledTimes(0);
+  });
+
+  it.each([
+    ['plain', () => new DOMException('aborted', 'AbortError')],
+    ['wrapped', () => new Error('request timeout', { cause: new DOMException('aborted', 'AbortError') })],
+    ['code-only', () => Object.assign(new Error('aborted'), { code: 'ABORT_ERR' })],
+  ])('rethrows %s mid-flight abort errors without retrying structured extraction', async (_label, createError) => {
+    const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+    const stream = vi.fn().mockRejectedValue(createError());
+
+    await expect(
+      extractStructuredValues({
+        agent: { stream } as unknown as Agent<any, any, any, any>,
+        source: 'observer',
+        extractors: [priority],
+        abortSignal: new AbortController().signal,
+      }),
+    ).rejects.toThrow();
+
     expect(stream).toHaveBeenCalledTimes(1);
   });
 
@@ -573,5 +651,217 @@ describe('Extractor', () => {
       'suggested-response',
       'preference',
     ]);
+  });
+});
+
+describe('WorkingMemoryExtractor schema enforcement', () => {
+  const colorSchema = z.strictObject({
+    preferredColor: z.enum(['blue', 'green']),
+    budget: z.number().nullable(),
+  });
+
+  function createSchemaMemory(schema: unknown) {
+    return {
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema } })),
+      getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{"type":"object"}' })),
+      getWorkingMemory: vi.fn(async () => '{"preferredColor":"blue","budget":100}'),
+      updateWorkingMemory: vi.fn(async () => undefined),
+    } as any;
+  }
+
+  async function runWorkingMemoryHook(schema: unknown, document: unknown) {
+    const memory = createSchemaMemory(schema);
+    const [resolved] = await resolveExtractors([new WorkingMemoryExtractor()], {
+      source: 'observer',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+    const result = await applyExtractorHooks({
+      source: 'observer',
+      extractors: [resolved!],
+      values: { 'working-memory': document },
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+    return { memory, result };
+  }
+
+  function createJsonModel(json: string) {
+    return new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: json },
+          { type: 'text-end', id: 'text-1' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }),
+    } as any);
+  }
+
+  it('persists a document that matches the configured schema', async () => {
+    const { memory, result } = await runWorkingMemoryHook(colorSchema, { preferredColor: 'green', budget: 200 });
+
+    expect(memory.updateWorkingMemory).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      workingMemory: JSON.stringify({ preferredColor: 'green', budget: 200 }),
+      memoryConfig: undefined,
+    });
+    expect(result.values).toEqual({ 'working-memory': { preferredColor: 'green', budget: 200 } });
+    expect(result.failures).toBeUndefined();
+  });
+
+  it.each([
+    ['a value outside the enum', { preferredColor: 'red', budget: 200 }, 'preferredColor'],
+    ['a field with the wrong type', { preferredColor: 'blue', budget: '200' }, 'budget'],
+    ['a missing required field', { preferredColor: 'blue' }, 'budget'],
+    ['an unknown field', { preferredColor: 'blue', budget: 200, nickname: 'Ty' }, 'nickname'],
+  ])('does not persist a document with %s', async (_label, document, invalidField) => {
+    const { memory, result } = await runWorkingMemoryHook(colorSchema, document);
+
+    expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
+    expect(result.values).toBeUndefined();
+    expect(result.failures).toEqual([
+      {
+        slug: 'working-memory',
+        error: expect.stringContaining('Working memory update does not match the configured schema'),
+      },
+    ]);
+    expect(result.failures![0]!.error).toContain(invalidField);
+  });
+
+  it('treats nulls in optional fields as not provided', async () => {
+    const schema = z.object({
+      name: z.string(),
+      city: z.string().optional(),
+      profile: z.object({ nickname: z.string().optional() }).optional(),
+    });
+
+    const { memory, result } = await runWorkingMemoryHook(schema, {
+      name: 'Tyler',
+      city: null,
+      profile: { nickname: null },
+    });
+
+    expect(memory.updateWorkingMemory).toHaveBeenCalledWith(
+      expect.objectContaining({ workingMemory: JSON.stringify({ name: 'Tyler', profile: {} }) }),
+    );
+    expect(result.failures).toBeUndefined();
+  });
+
+  it('treats nulls in optional fields of a nullable object as not provided', async () => {
+    const schema = z.object({
+      name: z.string(),
+      profile: z.object({ nickname: z.string().optional() }).nullable(),
+    });
+
+    const { memory, result } = await runWorkingMemoryHook(schema, { name: 'Tyler', profile: { nickname: null } });
+
+    expect(memory.updateWorkingMemory).toHaveBeenCalledWith(
+      expect.objectContaining({ workingMemory: JSON.stringify({ name: 'Tyler', profile: {} }) }),
+    );
+    expect(result.failures).toBeUndefined();
+  });
+
+  it('rejects a null for a key a strict schema does not declare', async () => {
+    const { memory, result } = await runWorkingMemoryHook(z.strictObject({ name: z.string() }), {
+      name: 'Tyler',
+      unexpected: null,
+    });
+
+    expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
+    expect(result.failures).toEqual([{ slug: 'working-memory', error: expect.stringContaining('unexpected') }]);
+  });
+
+  it('keeps null values allowed by a record schema', async () => {
+    const { memory } = await runWorkingMemoryHook(z.record(z.string(), z.string().nullable()), {
+      city: null,
+      name: 'Tyler',
+    });
+
+    expect(memory.updateWorkingMemory).toHaveBeenCalledWith(
+      expect.objectContaining({ workingMemory: JSON.stringify({ city: null, name: 'Tyler' }) }),
+    );
+  });
+
+  it('still rejects a null in a required field', async () => {
+    const { memory, result } = await runWorkingMemoryHook(z.object({ name: z.string() }), { name: null });
+
+    expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
+    expect(result.failures).toEqual([{ slug: 'working-memory', error: expect.stringContaining('name') }]);
+  });
+
+  it('persists the validator output', async () => {
+    const { memory } = await runWorkingMemoryHook(z.object({ name: z.string().trim() }), {
+      name: '  Tyler ',
+      extra: true,
+    });
+
+    expect(memory.updateWorkingMemory).toHaveBeenCalledWith(
+      expect.objectContaining({ workingMemory: JSON.stringify({ name: 'Tyler' }) }),
+    );
+  });
+
+  it('enforces a JSON Schema working memory config', async () => {
+    const jsonSchema = {
+      type: 'object',
+      properties: { preferredColor: { type: 'string', enum: ['blue', 'green'] } },
+      required: ['preferredColor'],
+    };
+
+    const invalid = await runWorkingMemoryHook(jsonSchema, { preferredColor: 'red' });
+    expect(invalid.memory.updateWorkingMemory).not.toHaveBeenCalled();
+    expect(invalid.result.failures).toEqual([{ slug: 'working-memory', error: expect.any(String) }]);
+
+    const valid = await runWorkingMemoryHook(jsonSchema, { preferredColor: 'blue' });
+    expect(valid.memory.updateWorkingMemory).toHaveBeenCalledWith(
+      expect.objectContaining({ workingMemory: JSON.stringify({ preferredColor: 'blue' }) }),
+    );
+  });
+
+  it('supports configured schemas with async refinements', async () => {
+    const schema = z.object({ name: z.string() }).refine(async value => value.name !== 'forbidden');
+
+    const valid = await runWorkingMemoryHook(schema, { name: 'Tyler' });
+    expect(valid.memory.updateWorkingMemory).toHaveBeenCalledTimes(1);
+
+    const invalid = await runWorkingMemoryHook(schema, { name: 'forbidden' });
+    expect(invalid.memory.updateWorkingMemory).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid document from structured extraction without dropping sibling extractors', async () => {
+    const memory = createSchemaMemory(colorSchema);
+    const extractors = await resolveExtractors(
+      [
+        new WorkingMemoryExtractor(),
+        new Extractor({ name: 'Topic', instructions: 'Extract the topic.', schema: z.string() }),
+      ],
+      { source: 'observer', threadId: 'thread-1', resourceId: 'resource-1', memory },
+    );
+    const model = createJsonModel('{"topic":"paint","working-memory":{"preferredColor":"red","budget":200}}');
+    const doStream = vi.spyOn(model, 'doStream');
+    const agent = new Agent({ id: 'extractor-agent', name: 'Extractor', instructions: 'Extract.', model });
+
+    const extraction = await extractStructuredValues({ agent, source: 'observer', extractors });
+    const result = await applyExtractorHooks({
+      source: 'observer',
+      extractors,
+      values: extraction.values,
+      failures: extraction.failures,
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+
+    expect(doStream).toHaveBeenCalledTimes(1);
+    expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
+    expect(result.values).toEqual({ topic: 'paint' });
+    expect(result.failures).toEqual([{ slug: 'working-memory', error: expect.stringContaining('preferredColor') }]);
   });
 });

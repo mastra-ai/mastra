@@ -147,10 +147,12 @@ The subagent reads these entries in its tools and dynamic configuration, such as
 Called after a delegation finishes. Use it to inspect results or provide feedback, or alternatively stop execution:
 
 - `context.bail()`: Stop the parent agent's loop immediately
-- Return `{ feedback: '...' }`: Add feedback that gets saved to the parent agent's memory and is visible to subsequent iterations
+- Return `{ feedback: '...' }`: Add feedback that gets saved to the parent agent's memory and is available on the next turn
 - Return `{ resultText: '...' }`: Replace the tool result text the parent model sees for this delegation, within the current run
 
 Set `resultText` when the subagent's own result would give the parent a misleading signal. For example, empty text from a subagent stopped on a tool-calls step looks like a successful but empty delegation to the parent model. You can also replace the error text from a failed delegation with a more useful message. This doesn't recover the delegation. The parent still receives a failed tool result. Unlike `feedback` on the next turn, `resultText` affects the parent's reasoning immediately.
+
+To stop the parent agent on failure and save feedback for a later turn, call `bail()` and return `feedback`:
 
 ```typescript title="src/mastra/agents/parent-agent.ts"
 const stream = await parentAgent.stream('Research AI trends', {
@@ -176,9 +178,38 @@ The `context` object includes:
 | Property | Description |
 | - | - |
 | `primitiveId` | The ID of the subagent that ran |
-| `result` | The subagent's response, including `text`, `usage`, `finishReason`, and `subAgentToolResults` |
-| `error` | Error if the delegation failed |
+| `result` | The subagent's response, including `text`, `usage`, `finishReason`, `subAgentToolResults`, `subAgentThreadId`, and `subAgentResourceId` when available |
+| `success` | Whether the delegation succeeded |
+| `error` | The original error if the delegation failed |
+| `messages` | The collected subagent transcript, including partial messages when available |
 | `bail()` | Function to stop the parent agent's loop |
+
+#### Failed delegations
+
+When a subagent run fails, the parent model receives a failed tool result with a generic error message. This doesn't automatically stop the parent agent, which can explain the failure or choose another approach. Call `context.bail()` to stop its loop instead.
+
+The hook receives `success: false`, the original `error`, and any collected partial results and messages. Returning `resultText` replaces the error text the parent model sees without changing the delegation's failed status or discarding its original cause. An empty string is also a valid replacement.
+
+To let the parent continue with a curated failure message instead of stopping its loop, return `resultText` without calling `bail()`:
+
+```typescript title="src/mastra/agents/parent-agent.ts"
+const stream = await parentAgent.stream('Research AI trends', {
+  maxSteps: 10,
+  delegation: {
+    onDelegationComplete: ({ success }) => {
+      if (!success) {
+        return {
+          resultText: 'The delegated task failed. Try another approach.',
+        }
+      }
+    },
+  },
+})
+```
+
+Prefer a curated message, as in this example. Returning `{ resultText: error.message }` explicitly forwards the underlying message to the parent model's provider, and the model may repeat it to the end user. Provider errors can contain sensitive information. A generic `resultText` isn't a redaction policy for logs, traces, or streamed error payloads.
+
+For delegations run as [background tasks](/docs/harness/background-tasks), configured retries can invoke `onDelegationComplete` once per attempt. Account for repeated calls if your hook has side effects.
 
 ### Hook errors
 

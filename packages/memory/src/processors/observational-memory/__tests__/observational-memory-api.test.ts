@@ -11,6 +11,7 @@
  */
 
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import { createObservabilityContext } from '@mastra/core/observability';
@@ -19,6 +20,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { BufferingCoordinator } from '../buffering-coordinator';
 import { Extractor } from '../extractor';
+import { skillResultRedactor } from '../hooks';
 import { ModelByInputTokens } from '../model-by-input-tokens';
 import { ObservationalMemory } from '../observational-memory';
 import { ObserverRunner } from '../observer-runner';
@@ -73,6 +75,61 @@ function createWorkingMemoryStateSignal(id: string, createdAt = new Date()): Mas
       },
     },
   };
+}
+
+/**
+ * Build an assistant message that activates a skill the way the pipeline
+ * persists it: the call streams in first, the result then merges into it, so a
+ * single terminal `state: 'result'` part carries the tool name and arguments.
+ * Returning it through `MessageList` keeps the fixture honest instead of
+ * hand-writing a call part + result part pair that never reaches storage.
+ */
+function createPersistedSkillMessage(
+  id: string,
+  threadId: string,
+  result = 'SECRET_SKILL_INSTRUCTIONS',
+): MastraDBMessage {
+  const messageList = new MessageList();
+  const createdAt = new Date();
+  messageList.add(
+    {
+      ...createTestMessage('', 'assistant', id, createdAt),
+      threadId,
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'call', toolCallId: 'skill-call', toolName: 'skill', args: { name: 'pdf' } },
+          },
+        ],
+      } as MastraMessageContentV2,
+    },
+    'response',
+  );
+  messageList.add(
+    {
+      ...createTestMessage('', 'assistant', id, createdAt),
+      threadId,
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'skill-call',
+              toolName: 'skill',
+              args: { name: 'pdf' },
+              result,
+            },
+          },
+        ],
+      } as MastraMessageContentV2,
+    },
+    'response',
+  );
+  return messageList.get.all.db()[0]!;
 }
 
 /** Generate N messages with padding to exceed token thresholds. */
@@ -187,6 +244,10 @@ function createOM(
     reflectionExtract?: Extractor<any>[];
     observationContinuationHints?: ContinuationHintsConfig;
     reflectionContinuationHints?: ContinuationHintsConfig;
+    observationMaxRetries?: number;
+    observationFailurePolicy?: 'abort' | 'continue';
+    reflectionMaxRetries?: number;
+    reflectionFailurePolicy?: 'abort' | 'continue';
     activateAfterIdle?: number | string;
     hooks?: ObserveHooks;
     hookExecution?: 'non-blocking' | 'await';
@@ -204,12 +265,16 @@ function createOM(
       bufferTokens: opts?.bufferTokens ?? false,
       extract: opts?.observationExtract,
       continuationHints: opts?.observationContinuationHints,
+      maxRetries: opts?.observationMaxRetries,
+      failurePolicy: opts?.observationFailurePolicy,
     },
     reflection: {
       model: opts?.reflectorModel ?? createMockReflectorModel(),
       observationTokens: opts?.observationTokens ?? 50_000,
       extract: opts?.reflectionExtract,
       continuationHints: opts?.reflectionContinuationHints,
+      maxRetries: opts?.reflectionMaxRetries,
+      failurePolicy: opts?.reflectionFailurePolicy,
     },
   });
 }
@@ -609,6 +674,35 @@ name: Tyler
       expect(hooks.onObservationEnd.mock.calls[0]![0].error.message).toMatch(/Observer failed/);
     });
 
+    it('reports the swallowed failure to onObservationEnd under failurePolicy continue', async () => {
+      const failingModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          throw new TypeError('fetch failed');
+        },
+        doStream: async () => {
+          throw new TypeError('fetch failed');
+        },
+      });
+      const continueOm = createOM(storage, {
+        observerModel: failingModel,
+        observationMaxRetries: 0,
+        observationFailurePolicy: 'continue',
+      });
+
+      const hooks = {
+        onObservationStart: vi.fn(),
+        onObservationEnd: vi.fn(),
+      };
+
+      const result = await continueOm.observe({ threadId, messages: createBulkMessages(10, threadId), hooks });
+
+      expect(result.observed).toBe(false);
+      expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+      const endArgs = hooks.onObservationEnd.mock.calls[0]![0] as { error?: Error };
+      expect(endArgs.error).toBeInstanceOf(Error);
+      expect(endArgs.error?.message).toMatch(/fetch failed/);
+    });
+
     it('gates reflection and pairs the end hook when an awaited reflection start hook fails', async () => {
       const reflectorModel = createMockReflectorModel();
       const doGenerate = vi.spyOn(reflectorModel, 'doGenerate');
@@ -841,6 +935,34 @@ name: Tyler
       expect(onObservationEnd).toHaveBeenCalledOnce();
       const record = await transformOm.getRecord(threadId);
       expect(record?.observedMessageIds).toContain(messages[0]!.id);
+    });
+
+    it('skillResultRedactor keeps skill results out of the observer prompt end-to-end', async () => {
+      const observerModel = createMockObserverModel();
+      const prompts = capturePrompts(observerModel);
+      const transformOm = createOM(storage, { observerModel, hooks: { beforeObservation: skillResultRedactor() } });
+      const messages = createBulkMessages(10, threadId);
+      // Build the skill message the way the pipeline persists it: the call
+      // streams first, the result then merges into it, leaving a single
+      // terminal `state: 'result'` part carrying the arguments. A hand-written
+      // call part + result part pair never reaches persistence, and the
+      // Observer reads the `Tool Call` line off the terminal part.
+      const skillMessage = createPersistedSkillMessage(`${threadId}-skill`, threadId);
+      // Guard the fixture itself: if the call and result did not collapse, the
+      // test would pass without exercising the shape production persists.
+      const skillParts = skillMessage.content.parts as Array<{ toolInvocation?: { state?: string } }>;
+      expect(skillParts).toHaveLength(1);
+      expect(skillParts[0]!.toolInvocation?.state).toBe('result');
+      messages.push(skillMessage);
+
+      await transformOm.observe({ threadId, resourceId: 'res-1', messages });
+
+      expect(prompts()).toContain('Message 0');
+      expect(prompts()).toContain('Tool Call skill');
+      expect(prompts()).not.toContain('SECRET_SKILL_INSTRUCTIONS');
+      // Filtered messages are still marked as observed.
+      const record = await transformOm.getRecord(threadId);
+      expect(record?.observedMessageIds).toContain(`${threadId}-skill`);
     });
 
     it('afterObservation can replace the observation text before it is persisted', async () => {
@@ -2603,6 +2725,26 @@ describe('getResolvedConfig()', () => {
     expect(config.scope).toBe('thread');
     expect(config.observation).toBeTruthy();
     expect(config.reflection).toBeTruthy();
+    expect(config.observation.maxRetries).toBe(8);
+    expect(config.observation.failurePolicy).toBe('abort');
+    expect(config.reflection.maxRetries).toBe(8);
+    expect(config.reflection.failurePolicy).toBe('abort');
+  });
+
+  it('should resolve independent observation and reflection failure controls', async () => {
+    const storage = createInMemoryStorage();
+    const om = createOM(storage, {
+      observationMaxRetries: 0,
+      observationFailurePolicy: 'continue',
+      reflectionMaxRetries: 1,
+      reflectionFailurePolicy: 'continue',
+    });
+
+    const config = await om.getResolvedConfig();
+    expect(config.observation.maxRetries).toBe(0);
+    expect(config.observation.failurePolicy).toBe('continue');
+    expect(config.reflection.maxRetries).toBe(1);
+    expect(config.reflection.failurePolicy).toBe('continue');
   });
 
   it('should reflect resource scope when configured', async () => {
@@ -4299,5 +4441,43 @@ describe('config-level hooks', () => {
         usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
       }),
     );
+  });
+});
+
+describe('maxRetries validation', () => {
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5])('rejects observation/reflection maxRetries of %s', value => {
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    for (const stage of ['observation', 'reflection'] as const) {
+      expect(
+        () =>
+          new ObservationalMemory({
+            storage,
+            scope: 'thread',
+            observation: {
+              model: 'mock/model',
+              messageTokens: 500,
+              ...(stage === 'observation' ? { maxRetries: value } : {}),
+            },
+            reflection: {
+              model: 'mock/model',
+              observationTokens: 10000,
+              ...(stage === 'reflection' ? { maxRetries: value } : {}),
+            },
+          }),
+      ).toThrow(`${stage}.maxRetries must be a finite non-negative integer`);
+    }
+  });
+
+  it('accepts zero retries', () => {
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage,
+          scope: 'thread',
+          observation: { model: 'mock/model', messageTokens: 500, maxRetries: 0 },
+          reflection: { model: 'mock/model', observationTokens: 10000, maxRetries: 0 },
+        }),
+    ).not.toThrow();
   });
 });

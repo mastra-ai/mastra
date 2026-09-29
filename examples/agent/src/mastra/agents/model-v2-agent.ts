@@ -87,6 +87,16 @@ export const chefModelV2Agent = new Agent({
   id: 'chef-model-v2-agent',
   name: 'Chef Agent V2 Model',
   description: 'A chef agent that can help you cook great meals with whatever ingredients you have available.',
+  metadata: {
+    suggestedPrompts: [
+      'I have eggs, spinach and feta — what can I cook tonight?',
+      'Plan a 3-course dinner for four with a 45-minute budget',
+      "What's the weather like, and suggest a matching comfort meal",
+      'Give me a vegan substitute for butter in a cake recipe',
+      'Help me meal-prep lunches for the week',
+      'Turn leftover rice into something interesting',
+    ],
+  },
   instructions: {
     content: `
       You are Michel, a practical and experienced home chef who helps people cook great meals with whatever

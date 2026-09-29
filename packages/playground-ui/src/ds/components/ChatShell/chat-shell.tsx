@@ -25,8 +25,10 @@ export type ChatShellProps = ComponentPropsWithoutRef<'div'> & {
  * composer docks inside it, every region shares one column.
  *
  * Tuned through custom properties, all defaulted here: `--chat-column` (column
- * width), `--chat-surface` (page colour), `--chat-fade` (the band the veil ramps
- * in across, above the composer), `--chat-veil` (strongest it ever gets — the
+ * width), `--chat-surface` (the colour the composer veil ramps to — the shell
+ * paints no fill of its own and inherits whatever surface hosts it, so this has
+ * to name that same surface), `--chat-fade` (the band the veil ramps in
+ * across, above the composer), `--chat-veil` (strongest it ever gets — the
  * transcript keeps showing through), `--chat-gutter` (room below the composer),
  * `--chat-inset-end` (room an overlay panel claims on the end edge).
  */
@@ -36,9 +38,9 @@ export function ChatShellRoot({ className, scroller, ...props }: ChatShellProps)
       <div
         data-slot="chat-shell"
         className={cn(
-          '@container relative isolate flex min-h-0 min-w-0 flex-col bg-(--chat-surface)',
+          '@container relative isolate flex min-h-0 min-w-0 flex-col',
           '[--chat-column:48rem] [--chat-fade:1.5rem] [--chat-gutter:0.75rem] [--chat-inset-end:0px]',
-          '[--chat-surface:var(--color-surface2)] [--chat-veil:70%]',
+          '[--chat-surface:var(--color-background)] [--chat-veil:70%]',
           className,
         )}
         {...props}

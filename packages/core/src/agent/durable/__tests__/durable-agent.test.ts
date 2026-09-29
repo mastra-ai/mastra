@@ -713,7 +713,7 @@ describe('createDurableAgentStream', () => {
     const runId = 'test-run-456';
     const receivedChunks: any[] = [];
 
-    const { output, cleanup } = createDurableAgentStream({
+    const { output, cleanup, ready } = createDurableAgentStream({
       pubsub,
       runId,
       messageId: 'msg-123',
@@ -727,10 +727,33 @@ describe('createDurableAgentStream', () => {
       },
     });
 
+    await ready;
     expect(output).toBeDefined();
 
-    // Clean up
     cleanup();
+  });
+
+  it('should terminate when subscription setup fails', async () => {
+    const { createDurableAgentStream } = await import('../stream-adapter');
+    const subscribeError = new Error('subscription failed');
+    vi.spyOn(pubsub, 'subscribeWithReplay').mockRejectedValueOnce(subscribeError);
+
+    const { output, cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId: 'test-subscription-failure',
+      messageId: 'msg-subscription-failure',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+    });
+    const onError = vi.fn();
+    const consumption = output.consumeStream({ onError });
+
+    await expect(ready).rejects.toBe(subscribeError);
+    await consumption;
+    expect(onError).toHaveBeenCalledWith(subscribeError);
+    expect(() => {
+      cleanup();
+      cleanup();
+    }).not.toThrow();
   });
 
   it('should live-tail when resuming with a pubsub that does not support offsets', async () => {
@@ -839,6 +862,37 @@ describe('createDurableAgentStream', () => {
     expect(chunks.length).toBe(1);
     expect(stepFinishes.length).toBe(1);
 
+    cleanup();
+  });
+
+  it('fires onFinish once when FINISH is published twice', async () => {
+    // A recovered run can publish FINISH while an observer that replays the
+    // topic has already seen the pre-crash one.
+    const { createDurableAgentStream, emitFinishEvent } = await import('../stream-adapter');
+
+    const runId = 'test-duplicate-finish';
+    const onFinish = vi.fn();
+    const { output, cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId,
+      messageId: 'msg-duplicate-finish',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      onFinish,
+    });
+    await ready;
+
+    const finishData = {
+      output: { text: 'done', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
+      stepResult: { reason: 'stop' as const, warnings: [], isContinued: false },
+    };
+    await emitFinishEvent(pubsub, runId, finishData);
+    await emitFinishEvent(pubsub, runId, finishData);
+
+    const chunks: any[] = [];
+    for await (const chunk of output.fullStream) chunks.push(chunk);
+
+    expect(chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(1);
+    expect(onFinish).toHaveBeenCalledTimes(1);
     cleanup();
   });
 });

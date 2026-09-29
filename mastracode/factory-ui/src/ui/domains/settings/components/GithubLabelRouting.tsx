@@ -91,7 +91,7 @@ export function GithubLabelRouting({
                 onChange={next => route(existing.label, next)}
               />
               <Button
-                size="xs"
+                size="sm"
                 variant="ghost"
                 aria-label={`Remove route for ${existing.label}`}
                 disabled={busy}
@@ -164,8 +164,8 @@ function BoardSelect({
       disabled={disabled}
       onValueChange={next => onChange(next === NO_BOARD ? null : next)}
     >
-      <SelectTrigger variant="outline" size="sm" aria-label={ariaLabel} className="w-auto">
-        <Txt as="span" variant="ui-sm">
+      <SelectTrigger size="sm" aria-label={ariaLabel} className="w-auto">
+        <Txt as="span" variant="caption">
           {current?.title ?? placeholder}
         </Txt>
       </SelectTrigger>

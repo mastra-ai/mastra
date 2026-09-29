@@ -1111,6 +1111,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 },
                 "totalTokens": 13,
               },
+              "usedFallbackValue": false,
               "warnings": [],
             }
           `);
@@ -1453,6 +1454,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 },
                 "totalTokens": 13,
               },
+              "usedFallbackValue": false,
               "warnings": [],
             }
           `);
@@ -1795,6 +1797,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 },
                 "totalTokens": 13,
               },
+              "usedFallbackValue": false,
               "warnings": [],
             }
           `);

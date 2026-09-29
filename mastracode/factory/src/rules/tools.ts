@@ -2,7 +2,8 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { boardForWorkItem } from '../boards/index.js';
+import { boardForWorkItem, workItemPhaseSemantics } from '../boards/index.js';
+import type { BoardRegistry } from '../boards/index.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactorySessionSourceLookup } from './binding-context.js';
@@ -42,6 +43,7 @@ export async function createFactoryTransitionTools(options: {
   storage: WorkItemsStorage;
   transitionService: Pick<FactoryTransitionService, 'transition'>;
   sessions?: FactorySessionSourceLookup;
+  boards?: BoardRegistry;
 }): Promise<IntegrationTools> {
   const resolution = await resolveFactorySessionAddress({
     requestContext: options.requestContext,
@@ -50,7 +52,23 @@ export async function createFactoryTransitionTools(options: {
   });
   if (!resolution) return {};
   const availableBinding = resolution.binding ?? (await options.storage.findActiveRunBinding(resolution.address));
-  if (!availableBinding) return {};
+  if (!availableBinding) {
+    // No live binding for this session. A resumed session whose binding was
+    // revoked when its work item reached a terminal stage was retired out from
+    // under the model: rather than silently drop the tool — which leaves the
+    // resumed run to rationalize a false blocked state — surface a tool that
+    // fails with the concrete reason. Threads that were never bound (or whose
+    // binding was rotated to a peer role, leaving the item still in flight) get
+    // no tool as before.
+    const retired = await options.storage.findRunBindingBySession(resolution.address);
+    if (retired && retired.status === 'revoked' && options.boards) {
+      const item = await options.storage.get({ orgId: retired.orgId, id: retired.workItemId });
+      if (item && workItemPhaseSemantics(options.boards, item)?.kind === 'terminal') {
+        return { factory_transition_work_item: createRetiredSessionTool(retired.workItemId, item.stages[0]) };
+      }
+    }
+    return {};
+  }
   let isTriage = false;
   if (availableBinding.role === 'triage') {
     const item = await options.storage.get({ orgId: availableBinding.orgId, id: availableBinding.workItemId });
@@ -110,4 +128,28 @@ export async function createFactoryTransitionTools(options: {
       },
     }),
   };
+}
+
+/**
+ * A retired session's transition tool: it exists only to fail loudly. The run's
+ * binding was revoked when its work item settled at a terminal stage, so there
+ * is nothing to transition. Registering it (instead of dropping the tool) stops
+ * a resumed model from inventing a false "blocked" state when the affordance it
+ * expects has silently vanished.
+ */
+function createRetiredSessionTool(workItemId: string, stage: string | undefined): IntegrationTools[string] {
+  return createTool({
+    id: 'factory_transition_work_item',
+    description:
+      'This Factory session has been retired: its work item already reached a terminal stage and the run binding was revoked. No further transitions can be requested from this session.',
+    inputSchema: transitionInputSchema,
+    requireApproval: false,
+    execute: async () => {
+      throw new Error(
+        `This Factory session has been retired: work item ${workItemId} reached a terminal stage${
+          stage ? ` (${stage})` : ''
+        } and its run binding was revoked. No transition can be requested from this session.`,
+      );
+    },
+  });
 }

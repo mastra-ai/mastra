@@ -53,7 +53,7 @@ async function createItem(
   storage: WorkItemsStorage,
   overrides: Partial<{
     orgId: string;
-    source: 'github-issue' | 'github-pr' | 'slack-thread';
+    source: 'github-issue' | 'github-pr' | 'gitlab-pr' | 'slack-thread';
     sourceKey: string;
     board: string;
     stages: string[];
@@ -70,8 +70,8 @@ async function createItem(
       input: {
         ...(overrides.board ? { board: overrides.board } : {}),
         externalSource: {
-          integrationId: source === 'slack-thread' ? 'slack' : 'github',
-          type: source === 'slack-thread' ? 'slack-thread' : source === 'github-pr' ? 'pull-request' : 'issue',
+          integrationId: source === 'slack-thread' ? 'slack' : source === 'gitlab-pr' ? 'gitlab' : 'github',
+          type: source === 'slack-thread' ? 'slack-thread' : source.endsWith('-pr') ? 'pull-request' : 'issue',
           externalId: overrides.sourceKey ?? '1',
         },
         title: 'Fix the bug',
@@ -746,8 +746,10 @@ describe('FactoryTransitionService', () => {
     });
     expect(approved).toMatchObject({ status: 'accepted', stage: 'planning' });
     const planningRevision = (approved as { revision: number }).revision;
-    // The person's move out of Triage is the approval; it is recorded once so
-    // the plan agent's own hop into Execute needs no second gesture.
+    // The person's move out of Triage accepts the item into the working lanes,
+    // but arming autonomy is not the same as approving the produced plan. With
+    // Auto-approve plans off and no plan pre-approval, the plan agent's own hop
+    // into Execute is still gated — the off-switch holds even when armed.
     const acceptedAt = (await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt;
     expect(acceptedAt).toBeInstanceOf(Date);
     expect(
@@ -755,25 +757,19 @@ describe('FactoryTransitionService', () => {
         row => row.decision.type === 'invokeSkill' && row.decision.role === 'plan',
       ),
     ).toHaveLength(1);
-    const executed = await service.transition({
+    const gated = await service.transition({
       ...request({ id: item.id, revision: planningRevision }, { stage: 'execute', identity: 'agent-execute' }),
       actor: { type: 'agent', bindingId: 'agent', role: 'plan' },
       ingress: { type: 'agent', identity: 'agent-execute' },
     });
-    expect(executed).toMatchObject({ status: 'accepted', stage: 'execute' });
+    expect(gated).toMatchObject({ status: 'rejected', code: 'approval_required' });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages.at(-1)).toBe('planning');
+    // No work build is queued while the plan awaits approval.
     expect(
       (await storage.listDeferredDecisions('org-1', PROJECT_ID)).filter(
         row => row.decision.type === 'invokeSkill' && row.decision.role === 'work',
       ),
-    ).toHaveLength(1);
-    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt).toEqual(acceptedAt);
-    const reviewed = await service.transition(
-      request(
-        { id: item.id, revision: (executed as { revision: number }).revision },
-        { stage: 'review', identity: 'review' },
-      ),
-    );
-    expect(reviewed).toMatchObject({ status: 'accepted', stage: 'review' });
+    ).toHaveLength(0);
   });
 
   it.each(['planning', 'execute'] as const)(
@@ -812,7 +808,11 @@ describe('FactoryTransitionService', () => {
         actor: { type: 'agent', bindingId: 'agent', role: 'work' },
         ingress: { type: 'agent', identity: 'continue-approved' },
       });
-      expect(continued.status).toBe('accepted');
+      if (stage === 'planning') {
+        expect(continued).toMatchObject({ status: 'rejected', code: 'approval_required' });
+      } else {
+        expect(continued.status).toBe('accepted');
+      }
       expect((await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt).toEqual(acceptedAt);
     },
   );
@@ -906,7 +906,51 @@ describe('FactoryTransitionService', () => {
     warn.mockRestore();
   });
 
-  it('keeps bugs autonomous and leaves grandfathered work and terminal transitions unaffected', async () => {
+  it('isolates a synchronous acceptance-hook failure after the transition commits', async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    const item = await createItem(storage);
+    const onAccepted = vi.fn(() => {
+      throw new Error('label sync threw');
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+      audit: seed.audit,
+      onAccepted,
+    });
+    const classified = await service.transition({
+      ...request(item, { stage: 'intake', identity: 'classify' }),
+      actor: { type: 'agent', bindingId: 'triage', role: 'triage' },
+      ingress: { type: 'agent', identity: 'classify' },
+      triageType: 'feature request',
+    });
+    const acceptRequest = {
+      ...request({ id: item.id, revision: (classified as { revision: number }).revision }, { stage: 'planning' }),
+      cause: 'board_drag',
+    };
+    const accepted = await service.transition(acceptRequest);
+    expect(accepted).toMatchObject({ status: 'accepted', stage: 'planning' });
+
+    const stored = await storage.get({ orgId: 'org-1', factoryProjectId: PROJECT_ID, id: item.id });
+    expect(stored).toMatchObject({ stages: ['planning'], acceptedAt: expect.any(Date) });
+
+    await vi.waitFor(() => expect(onAccepted).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(warn).toHaveBeenCalled());
+    expect(warn.mock.calls[0]?.[0]).toBe(`[factory] acceptance hook failed for work item ${item.id}:`);
+
+    const { events } = await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID });
+    expect(events.filter(event => event.action === 'factory.work_item.stage_moved')).toMatchObject([
+      { metadata: { transitionId: accepted.transitionId, to: 'planning' } },
+    ]);
+
+    expect(await service.transition(acceptRequest)).toEqual(accepted);
+    expect(onAccepted).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it('gates bug and grandfathered planning handoffs while leaving terminal transitions unaffected', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const bug = await createItem(storage, { metadata: { authorTrusted: true } });
     const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
@@ -924,7 +968,7 @@ describe('FactoryTransitionService', () => {
       actor: { type: 'agent', bindingId: 'work', role: 'work' },
       ingress: { type: 'agent', identity: 'bug-execute' },
     });
-    expect(executed).toMatchObject({ status: 'accepted', stage: 'execute' });
+    expect(executed).toMatchObject({ status: 'rejected', code: 'approval_required' });
     const legacy = await createItem(storage, { stages: ['planning'], sourceKey: 'legacy' });
     await expect(
       service.transition({
@@ -932,7 +976,7 @@ describe('FactoryTransitionService', () => {
         actor: { type: 'agent', bindingId: 'work', role: 'work' },
         ingress: { type: 'agent', identity: 'legacy-execute' },
       }),
-    ).resolves.toMatchObject({ status: 'accepted', stage: 'execute' });
+    ).resolves.toMatchObject({ status: 'rejected', code: 'approval_required' });
     const closed = await createItem(storage, { sourceKey: 'closed-feature' });
     await expect(
       service.transition({
@@ -1017,6 +1061,7 @@ describe('FactoryTransitionService', () => {
       workItemId: item.id,
       stage: 'done',
       revision: expect.any(Number),
+      actor: { type: 'human', id: 'user-1' },
     });
   });
 
@@ -1267,9 +1312,81 @@ describe('FactoryTransitionService', () => {
     expect(result).toMatchObject({
       status: 'rejected',
       code: 'invalid_transition',
-      reason: 'The Review board does not allow moving from review to planning.',
+      reason:
+        'The Review board does not allow moving from review to planning. Next stages declared from review: intake, done, canceled.',
     });
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['review']);
+  });
+
+  it('names the declared next stages when the requested stage is not a phase', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['triage'] });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+
+    const result = await service.transition(request(item, { stage: 'plan' as FactoryRuleStage }));
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'invalid_transition' });
+    expect(result.status === 'rejected' && result.reason).toMatch(
+      /^The \w+ board does not allow moving from triage to plan\. Next stages declared from triage: .*planning/,
+    );
+  });
+
+  it('says no next stage is declared when the phase has no outgoing transitions', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const board = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+    });
+    const item = await createItem(storage, { board: board.id, stages: ['shipped'] });
+    const service = new FactoryTransitionService({
+      storage,
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+    });
+
+    const result = await service.transition(request(item, { stage: 'queued' }));
+
+    expect(result).toMatchObject({
+      status: 'rejected',
+      code: 'invalid_transition',
+      reason: 'The Release board does not allow moving from shipped to queued. No next stage is declared from shipped.',
+    });
+  });
+
+  it('caps a long invalid_transition reason at the rejection limit', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const targets = Array.from({ length: 40 }, (_, index) => `target-phase-number-${index}`);
+    const board = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: {
+          title: 'Queued',
+          kind: 'resting',
+          outcomes: Object.fromEntries(targets.map(target => [target, target])),
+        },
+        ...Object.fromEntries(targets.map(target => [target, { title: target, kind: 'terminal' as const }])),
+      },
+    });
+    const item = await createItem(storage, { board: board.id, stages: ['queued'] });
+    const service = new FactoryTransitionService({
+      storage,
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+    });
+
+    const result = await service.transition(request(item, { stage: 'missing' as FactoryRuleStage }));
+    const replayed = await service.transition(request(item, { stage: 'missing' as FactoryRuleStage }));
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'invalid_transition' });
+    expect(result.status === 'rejected' && result.reason.length).toBe(512);
+    expect(replayed).toEqual(result);
   });
 
   it('starts nothing when a person parks a card back in Intake', async () => {
@@ -1330,6 +1447,21 @@ describe('FactoryTransitionService', () => {
 
     expect(result).toMatchObject({ status: 'accepted', stage: 'review', decisions: [] });
     expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
+  });
+
+  it('allows a GitLab merge request to enter Review like a GitHub pull request', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { board: 'review', source: 'gitlab-pr', stages: ['intake'] });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+
+    await expect(
+      service.transition({ ...request(item, { board: 'review', stage: 'review' }), cause: 'run_start' }),
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'review' });
+    const updated = await storage.get({ orgId: 'org-1', id: item.id });
+    expect(updated).not.toBeNull();
+    await expect(
+      service.transition(request(updated!, { board: 'work', stage: 'execute', identity: 'wrong-gitlab-board' })),
+    ).resolves.toMatchObject({ status: 'rejected', code: 'invalid_transition' });
   });
 
   it('lets the bound agent walk its parked card back into its lane without racing a second run', async () => {
@@ -1405,6 +1537,9 @@ describe('FactoryTransitionService', () => {
     const service = new FactoryTransitionService({
       configVersion: 'rules-v1',
       storage,
+      // The plan agent's planning -> execute handoff only stands when plans are
+      // auto-approved; the gate is exercised separately below.
+      autoApprovePlans: async () => true,
     });
 
     const result = await service.transition({
@@ -1880,7 +2015,7 @@ describe('phase semantics', () => {
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeInstanceOf(Date);
   });
 
-  it('guards an agent moving an externally authored card from Work rest into work, but not between working lanes', async () => {
+  it('guards an agent moving an externally authored card into work and out of Planning', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['intake'], metadata: { authorTrusted: false } });
     const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
@@ -1901,7 +2036,7 @@ describe('phase semantics', () => {
         ...request(item, { stage: 'execute', expectedRevision: moved.revision, identity: 'agent-2' }),
         actor: agent,
       }),
-    ).resolves.toMatchObject({ status: 'accepted' });
+    ).resolves.toMatchObject({ status: 'rejected', code: 'approval_required' });
   });
 
   describe('custom board declarations', () => {
@@ -2010,5 +2145,163 @@ describe('phase semantics', () => {
       expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeInstanceOf(Date);
       expect(onTerminalStage).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('Work board plan-approval gate on the stock planning handoff', () => {
+  async function planningItem(storage: WorkItemsStorage, sourceKey: string) {
+    return createItem(storage, { stages: ['planning'], sourceKey, metadata: { authorTrusted: true } });
+  }
+
+  function planAgentToExecute(item: { id: string; revision: number }, identity: string) {
+    return {
+      ...request(item, { stage: 'execute', identity }),
+      actor: { type: 'agent' as const, bindingId: 'plan-binding', role: 'plan' },
+      ingress: { type: 'agent' as const, identity },
+    };
+  }
+
+  it('refuses a plan agent moving planning -> execute when plans are not auto-approved', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const service = new FactoryTransitionService({
+      configVersion: 'plan-gate-v1',
+      storage,
+      autoApprovePlans: async () => false,
+    });
+    const item = await planningItem(storage, 'no-auto-approve');
+
+    const result = await service.transition(planAgentToExecute(item, 'plan-execute'));
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'approval_required' });
+    // The card rests in Planning and no build is queued off the rejected move.
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+      revision: item.revision,
+      stages: ['planning'],
+    });
+  });
+
+  it('refuses the move when no resolver is wired and the item is not preapproved', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const service = new FactoryTransitionService({ configVersion: 'plan-gate-v1', storage });
+    const item = await planningItem(storage, 'no-resolver');
+
+    expect(await service.transition(planAgentToExecute(item, 'plan-execute'))).toMatchObject({
+      status: 'rejected',
+      code: 'approval_required',
+    });
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: ['planning'] });
+  });
+
+  it('lets the plan agent advance when the project auto-approves plans', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const service = new FactoryTransitionService({
+      configVersion: 'plan-gate-v1',
+      storage,
+      autoApprovePlans: async () => true,
+    });
+    const item = await planningItem(storage, 'auto-approve');
+
+    const result = await service.transition(planAgentToExecute(item, 'plan-execute'));
+
+    expect(result).toMatchObject({ status: 'accepted', stage: 'execute' });
+    assert(result.status === 'accepted');
+    expect(result.decisions).toContainEqual(expect.objectContaining({ type: 'invokeSkill', role: 'work' }));
+  });
+
+  it('does not treat legacy item preapproval as permission to bypass the project setting', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const service = new FactoryTransitionService({
+      configVersion: 'plan-gate-v1',
+      storage,
+      autoApprovePlans: async () => false,
+    });
+    let item = await planningItem(storage, 'preapproved');
+    const updated = await storage.update({
+      orgId: 'org-1',
+      id: item.id,
+      userId: 'user-1',
+      patch: { plansPreapproved: true },
+    });
+    assert(updated);
+    item = updated.item;
+
+    expect(await service.transition(planAgentToExecute(item, 'plan-execute'))).toMatchObject({
+      status: 'rejected',
+      code: 'approval_required',
+    });
+  });
+
+  it('does not gate a human moving planning -> execute from the UI', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const service = new FactoryTransitionService({
+      configVersion: 'plan-gate-v1',
+      storage,
+      autoApprovePlans: async () => false,
+    });
+    const item = await planningItem(storage, 'human-move');
+
+    const result = await service.transition({
+      ...request(item, { stage: 'execute', identity: 'human-execute' }),
+      cause: 'board_drag',
+    });
+
+    expect(result).toMatchObject({ status: 'accepted', stage: 'execute' });
+  });
+
+  it.each(['work', 'triage'])('blocks a %s-role agent moving planning -> execute', async role => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const service = new FactoryTransitionService({
+      configVersion: 'plan-gate-v1',
+      storage,
+      autoApprovePlans: async () => false,
+    });
+    const item = await planningItem(storage, `${role}-agent`);
+
+    const result = await service.transition({
+      ...planAgentToExecute(item, `${role}-execute`),
+      actor: { type: 'agent', bindingId: `${role}-binding`, role },
+      ...(role === 'triage' ? { triageType: 'bug' as const } : {}),
+    });
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'approval_required' });
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: ['planning'] });
+  });
+
+  it('blocks a system rule moving planning -> execute without plan approval', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const service = new FactoryTransitionService({
+      configVersion: 'plan-gate-v1',
+      storage,
+      autoApprovePlans: async () => false,
+    });
+    const item = await planningItem(storage, 'unapproved-system-rule');
+
+    const result = await service.transition({
+      ...request(item, { stage: 'execute', identity: 'unapproved-system-rule' }),
+      actor: { type: 'system', id: 'factory-tool-result-rule' },
+      ingress: { type: 'rule', identity: 'unapproved-system-rule' },
+    });
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'approval_required' });
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: ['planning'] });
+  });
+
+  it('allows a transition that consumes an explicitly approved plan result', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const service = new FactoryTransitionService({
+      configVersion: 'plan-gate-v1',
+      storage,
+      autoApprovePlans: async () => false,
+    });
+    const item = await planningItem(storage, 'approved-plan-result');
+
+    const result = await service.transition({
+      ...request(item, { stage: 'execute', identity: 'approved-plan-result' }),
+      actor: { type: 'system', id: 'factory-tool-result-rule' },
+      ingress: { type: 'rule', identity: 'approved-plan-result' },
+      planApproved: true,
+    });
+
+    expect(result).toMatchObject({ status: 'accepted', stage: 'execute' });
   });
 });

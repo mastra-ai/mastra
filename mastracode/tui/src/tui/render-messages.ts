@@ -17,6 +17,7 @@ import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
 } from './chat-boundary-reconciliation.js';
+import { AccountSwitchNoticeComponent, PackFallbackNoticeComponent } from './components/account-switch-notice.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
 import type { ChatSpacingKind } from './components/chat-spacing.js';
@@ -40,7 +41,10 @@ import { TemporalGapComponent } from './components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
 import { PendingUserMessageComponent, UserMessageComponent } from './components/user-message.js';
 import {
+  collectCommandExits,
   getAssistantRenderParts,
+  getBackgroundCompletionView,
+  getBackgroundWorkLifecycleView,
   getMessageText,
   getNotificationSummaryView,
   getNotificationView,
@@ -465,6 +469,10 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
     });
     reminderComponent.setExpanded(state.toolOutputExpanded);
     state.allSystemReminderComponents.push(reminderComponent);
+    // Register before any of the insertion paths below return: the
+    // addUserMessage dedup guard keys on this map, so an unregistered reminder
+    // would render again if the same signal message is dispatched twice.
+    state.messageComponentsById.set(message.id, reminderComponent);
 
     // If the reminder anchors before a user message that has not been rendered
     // yet (its id is not mapped), fall back to inserting it before the latest
@@ -541,16 +549,81 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
   }
 
   if (kind === 'notification') {
+    const backgroundWork = getBackgroundWorkLifecycleView(message);
+    if (backgroundWork) {
+      const component = state.pendingTools.get(backgroundWork.originToolCallId);
+      const subagentComponent = state.pendingSubagents.get(backgroundWork.originToolCallId);
+      if (backgroundWork.taskId) {
+        component?.setBackgroundTaskId?.(backgroundWork.taskId);
+        subagentComponent?.setBackgroundTaskId(backgroundWork.taskId);
+      }
+      if (backgroundWork.tagName === 'work-cancelled') {
+        component?.cancelBackground?.();
+        state.pendingTools.delete(backgroundWork.originToolCallId);
+        state.pendingTaskToolIds?.delete(backgroundWork.originToolCallId);
+        subagentComponent?.cancel();
+        state.pendingSubagents.delete(backgroundWork.originToolCallId);
+      } else if (
+        component &&
+        (backgroundWork.tagName === 'work-completed' || backgroundWork.tagName === 'work-failed')
+      ) {
+        const status =
+          backgroundWork.tagName === 'work-completed'
+            ? 'Completed in background; reconciling result…'
+            : 'Background execution failed; reconciling error…';
+        component.updateResult({ content: [{ type: 'text', text: status }], isError: false }, true);
+        state.ui.requestRender();
+      }
+      return true;
+    }
+
     const notification = getNotificationView(message);
+    const backgroundCompletion = getBackgroundCompletionView(message);
+    if (backgroundCompletion?.eventId) {
+      const previous = state.messageComponentsById.get(backgroundCompletion.eventId);
+      if (previous) {
+        state.chatContainer.removeChild(previous as never);
+        const toolIndex = state.allToolComponents.indexOf(previous as any);
+        if (toolIndex >= 0) state.allToolComponents.splice(toolIndex, 1);
+        for (const [messageId, component] of state.messageComponentsById) {
+          if (component === previous) state.messageComponentsById.delete(messageId);
+        }
+        reconcileChatBoundarySpacers(state.chatContainer);
+      }
+    }
+    if (backgroundCompletion?.status === 'cancelled') {
+      const toolComponent = state.pendingTools.get(backgroundCompletion.originToolCallId);
+      const subagentComponent = state.pendingSubagents.get(backgroundCompletion.originToolCallId);
+      toolComponent?.setBackgroundTaskId?.(backgroundCompletion.taskId);
+      toolComponent?.updateResult(
+        { content: [{ type: 'text', text: 'Background execution cancelled.' }], isError: true },
+        true,
+      );
+      toolComponent?.cancelBackground?.();
+      state.pendingTools.delete(backgroundCompletion.originToolCallId);
+      state.pendingTaskToolIds?.delete(backgroundCompletion.originToolCallId);
+      subagentComponent?.setBackgroundTaskId(backgroundCompletion.taskId);
+      subagentComponent?.cancel();
+      state.pendingSubagents.delete(backgroundCompletion.originToolCallId);
+    }
     const component = new NotificationComponent({
       message: notification.message,
       source: notification.source,
       kind: notification.kind,
       priority: notification.priority,
       status: notification.status,
+      quietDisplayMode: state.quietMode ? 'quiet' : 'normal',
+      quietPreviewLineLimit: state.quietModeMaxToolPreviewLines,
+      backgroundCompletion,
     });
+    if (backgroundCompletion) {
+      state.allToolComponents.push(component as any);
+    }
     addChildBeforeFollowUps(state, component);
     state.messageComponentsById.set(message.id, component);
+    if (backgroundCompletion?.eventId) {
+      state.messageComponentsById.set(backgroundCompletion.eventId, component);
+    }
     state.ui.requestRender();
     return true;
   }
@@ -561,6 +634,7 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
       message: summary.message,
       pending: summary.pending,
       bySource: summary.bySource,
+      quietDisplayMode: state.quietMode ? 'quiet' : 'normal',
     });
     addChildBeforeFollowUps(state, component);
     state.messageComponentsById.set(message.id, component);
@@ -855,20 +929,35 @@ function getLatestMessageTimestamp(messages: MastraDBMessage[]): number | undefi
  * Re-render all existing messages from the controller thread into the chat container.
  * Called on thread switch and initial load.
  */
-export async function renderExistingMessages(state: TUIState): Promise<void> {
+export async function renderExistingMessages(state: TUIState, isCurrent: () => boolean = () => true): Promise<void> {
   const messages = await state.session.thread.listActiveMessages({ limit: STARTUP_MESSAGE_WINDOW_SIZE });
+  if (!isCurrent()) return;
   state.lastRenderedMessageAt = getLatestMessageTimestamp(messages);
 
   disposeAssistantRenderState(state);
   state.chatContainer.clear();
   state.pendingTools.clear();
   state.pendingTaskToolIds?.clear();
+  state.pendingSubagents.clear();
+  state.followUpComponents = [];
   state.allToolComponents = [];
   state.allSlashCommandComponents = [];
   state.allSystemReminderComponents = [];
   state.messageComponentsById.clear();
   state.pendingSignalMessageComponentsById.clear();
   state.allShellComponents = [];
+
+  const commandExits = collectCommandExits(messages);
+  const backgroundTasksByToolCallId = new Map<string, string>();
+  const cancelledBackgroundToolCalls = new Set<string>();
+  for (const message of messages) {
+    if (message.role !== 'signal') continue;
+    const completion = getBackgroundCompletionView(message);
+    if (completion) {
+      backgroundTasksByToolCallId.set(completion.originToolCallId, completion.taskId);
+      if (completion.status === 'cancelled') cancelledBackgroundToolCalls.add(completion.originToolCallId);
+    }
+  }
 
   // Local accumulator for detecting task clears during visible history reconstruction.
   // Startup only replays task state from the bounded message window. If no task
@@ -890,6 +979,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
         if (accumulatedParts.length === 0 && !(isFinal && hasTerminalMetadata(message))) return;
         const textMessage = buildAssistantSlice(message, accumulatedParts, { includeTerminalMetadata: isFinal });
         const textComponent = new AssistantMessageComponent(textMessage, state.hideThinkingBlock, getMarkdownTheme());
+        textComponent.setQuietModeDisplay(state.quietMode ? 'quiet' : 'normal');
         state.chatContainer.addChild(textComponent);
         accumulatedParts = [];
       };
@@ -906,6 +996,12 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           const hasResult = part.hasResult;
           const resultValue = part.result;
           const resultIsError = part.isError;
+          const isBackgroundPlaceholder =
+            !!state.options?.backgroundToolsEnabled &&
+            hasResult &&
+            !resultIsError &&
+            part.backgroundTask?.status === 'running' &&
+            !backgroundTasksByToolCallId.has(part.toolCallId);
 
           // Render subagent tool calls with dedicated component
           if (toolName === 'subagent') {
@@ -987,7 +1083,20 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
                 icons: pluginRenderConfig.icons,
               },
             );
-            subComponent.finish(isErr ?? false, 0, rawResult);
+            const backgroundTaskId =
+              (isBackgroundPlaceholder || part.backgroundTask?.status !== 'running'
+                ? part.backgroundTask?.taskId
+                : undefined) ?? backgroundTasksByToolCallId.get(part.toolCallId);
+            if (backgroundTaskId) {
+              subComponent.setBackgroundTaskId(backgroundTaskId);
+            }
+            if (cancelledBackgroundToolCalls.has(part.toolCallId)) {
+              subComponent.cancel();
+            } else if (isBackgroundPlaceholder) {
+              state.pendingSubagents.set(part.toolCallId, subComponent);
+            } else {
+              subComponent.finish(isErr ?? false, 0, rawResult);
+            }
             insertChatComponentWithBoundarySpacing(state.chatContainer, subComponent);
             state.allToolComponents.push(subComponent as any);
             continue;
@@ -1000,9 +1109,17 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             {
               showImages: false,
               collapsedByDefault: !state.toolOutputExpanded,
+              projectRoot: state.projectInfo?.rootPath,
             },
             state.ui,
           );
+          const backgroundTaskId =
+            (isBackgroundPlaceholder || part.backgroundTask?.status !== 'running'
+              ? part.backgroundTask?.taskId
+              : undefined) ?? backgroundTasksByToolCallId.get(part.toolCallId);
+          if (backgroundTaskId) {
+            toolComponent.setBackgroundTaskId(backgroundTaskId);
+          }
 
           if (hasResult) {
             toolComponent.updateResult(
@@ -1010,13 +1127,38 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
                 content: [
                   {
                     type: 'text',
-                    text: formatToolResult(resultValue),
+                    text: isBackgroundPlaceholder ? 'Running in background…' : formatToolResult(resultValue),
                   },
                 ],
                 isError: resultIsError,
               },
-              false,
+              isBackgroundPlaceholder,
             );
+            if (!isBackgroundPlaceholder) {
+              const exit = commandExits.get(part.toolCallId);
+              if (exit) toolComponent.setCommandExit(exit);
+              const runMs = exit?.executionTimeMs;
+              if (runMs !== undefined) {
+                const endedAt = part.endedAt ?? (part.startedAt ?? 0) + runMs;
+                toolComponent.setRecordedTiming(endedAt - runMs, endedAt);
+              } else {
+                toolComponent.setRecordedTiming(part.startedAt, part.endedAt);
+              }
+            }
+          } else {
+            // Nothing will deliver this call's result to a reloaded row, so show it stopped rather
+            // than running forever.
+            toolComponent.stopLiveUpdates();
+          }
+
+          if (cancelledBackgroundToolCalls.has(part.toolCallId)) {
+            toolComponent.updateResult(
+              { content: [{ type: 'text', text: 'Background execution cancelled.' }], isError: true },
+              true,
+            );
+            toolComponent.cancelBackground();
+          } else if (isBackgroundPlaceholder) {
+            state.pendingTools.set(part.toolCallId, toolComponent);
           }
 
           // Successful task transition tools render through the pinned task UI,
@@ -1078,6 +1220,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
                 ? resolvePlanPath(projectPath ?? process.cwd(), submittedPath)
                 : undefined;
               const recovered = recoverAbsPath ? await readPlanFile(recoverAbsPath) : undefined;
+              if (!isCurrent()) return;
               const planBody = submittedPlan?.plan ?? recovered?.plan ?? '';
               const planTitle = submittedPlan?.title || recovered?.title || 'Implementation Plan';
               const planResult = new PlanResultComponent({
@@ -1106,6 +1249,12 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             state.allToolComponents.push(toolComponent);
           } else {
           }
+        } else if (part.kind === 'account-switch') {
+          flushAccumulated();
+          state.chatContainer.addChild(new AccountSwitchNoticeComponent(part));
+        } else if (part.kind === 'pack-fallback') {
+          flushAccumulated();
+          state.chatContainer.addChild(new PackFallbackNoticeComponent(part));
         } else if (part.kind === 'om') {
           // Skip start markers in history — only show completed/failed results
           if (part.event === 'start') continue;
@@ -1169,15 +1318,21 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
     const currentTasks = (state.session.state.get() as { tasks?: TaskItemSnapshot[] } | undefined)?.tasks;
     if (!areTasksEqual(currentTasks, previousTasksAcc)) {
       try {
-        await state.session.state.set({ tasks: previousTasksAcc });
+        if (state.session.state.setIf) {
+          await state.session.state.setIf({ tasks: previousTasksAcc }, isCurrent);
+        } else if (isCurrent()) {
+          await state.session.state.set({ tasks: previousTasksAcc });
+        }
       } catch {
         // Custom controller state schemas may not accept TUI replayed task state.
         // Keep the reconstructed task list local to display state in that case.
       }
     }
+    if (!isCurrent()) return;
     state.session.displayState.restoreTasks(previousTasksAcc);
   }
 
+  if (!isCurrent()) return;
   reconcileChatBoundarySpacers(state.chatContainer);
   pruneChatContainer(state);
   state.ui.requestRender();

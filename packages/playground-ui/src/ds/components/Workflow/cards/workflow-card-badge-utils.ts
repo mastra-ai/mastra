@@ -218,6 +218,3 @@ export const getNodeIndicators = (props: WorkflowCardBadgesProps): WorkflowCardI
 
   return indicators;
 };
-
-export const getWorkflowCardAccentColor = (indicators: WorkflowCardIndicator[]): string | undefined =>
-  indicators[0]?.color;

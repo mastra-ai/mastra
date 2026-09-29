@@ -119,7 +119,7 @@ export function CommentComposer({
           aria-activedescendant={suggestionItems[mentions.activeIndex]?.id}
           autoFocus={variant === 'thread'}
           maxHeight={variant === 'panel' ? '4.5rem' : '10rem'}
-          className={cn('text-ui-sm', variant === 'panel' && 'min-h-9 pt-2')}
+          className={cn('text-caption', variant === 'panel' && 'min-h-9 pt-2')}
           onChange={event => {
             setDraft(event.target.value);
             mentions.onDraftChange(event.target.selectionStart);
@@ -130,7 +130,7 @@ export function CommentComposer({
           onKeyDown={onKeyDown}
         />
         {sendError ? (
-          <p role="alert" className="text-ui-xs text-error m-0 px-3 pb-1">
+          <p role="alert" className="text-meta text-error m-0 px-3 pb-1">
             {sendError}
           </p>
         ) : null}
@@ -138,7 +138,7 @@ export function CommentComposer({
           <Button
             type="submit"
             variant="primary"
-            size="icon-xs"
+            size="icon-sm"
             aria-label="Send comment"
             disabled={draft.trim().length === 0 || createComment.isPending}
           >

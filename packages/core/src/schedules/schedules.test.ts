@@ -333,6 +333,66 @@ describe('mastra.schedules canonical service', () => {
       await expect(mastra.schedules.update(wf.id, { prompt: 'nope' })).rejects.toThrow(/only apply to agent schedules/);
     });
 
+    it('persists resourceId on create, round-trips it, and allows updating it', async () => {
+      const { mastra } = makeMastra(['a']);
+
+      const wf = await mastra.schedules.create({
+        workflowId: 'daily-report',
+        cron: '0 6 * * *',
+        resourceId: 'tenant-1',
+      });
+      expect((wf as { resourceId?: string }).resourceId).toBe('tenant-1');
+
+      const fetched = await mastra.schedules.get(wf.id);
+      expect((fetched as { resourceId?: string })?.resourceId).toBe('tenant-1');
+
+      // resourceId is run-attribution metadata (not identity) and may be updated.
+      const updated = await mastra.schedules.update(wf.id, { resourceId: 'tenant-2' });
+      expect((updated as { resourceId?: string }).resourceId).toBe('tenant-2');
+    });
+
+    it('list filters workflow schedules by resourceId alongside agent schedules', async () => {
+      const { mastra } = makeMastra(['a']);
+
+      await mastra.schedules.create({ workflowId: 'daily-report', cron: '0 6 * * *', resourceId: 'tenant-1' });
+      await mastra.schedules.create({ workflowId: 'daily-report', cron: '0 7 * * *', resourceId: 'tenant-2' });
+      await mastra.schedules.create({ workflowId: 'daily-report', cron: '0 8 * * *' });
+      await mastra.schedules.create({
+        agentId: 'a',
+        cron: '*/5 * * * *',
+        prompt: 'A',
+        threadId: 't1',
+        resourceId: 'tenant-1',
+      });
+
+      const tenant1 = await mastra.schedules.list({ resourceId: 'tenant-1' });
+      expect(tenant1).toHaveLength(2);
+      expect(tenant1.map(s => ('agentId' in s ? 'agent' : 'workflow')).sort()).toEqual(['agent', 'workflow']);
+
+      expect(await mastra.schedules.list({ resourceId: 'tenant-2' })).toHaveLength(1);
+      // threadId stays agent-only: no workflow rows even when resourceId matches.
+      expect(await mastra.schedules.list({ resourceId: 'tenant-1', threadId: 't1' })).toHaveLength(1);
+    });
+
+    it('run publishes workflow.start carrying the schedule resourceId', async () => {
+      const { mastra } = makeMastra(['a']);
+      const wf = await mastra.schedules.create({
+        workflowId: 'daily-report',
+        cron: '0 6 * * *',
+        resourceId: 'tenant-1',
+      });
+
+      const publishSpy = vi.spyOn(mastra.pubsub, 'publish');
+      const fired = await mastra.schedules.run(wf.id);
+
+      const workflowStart = publishSpy.mock.calls.find(([topic]) => topic === 'workflows');
+      expect(workflowStart?.[1]).toMatchObject({
+        type: 'workflow.start',
+        runId: fired.claimId,
+        data: { workflowId: 'daily-report', runId: fired.claimId, resourceId: 'tenant-1' },
+      });
+    });
+
     it('run publishes workflow.start and records a manual trigger row', async () => {
       const { mastra } = makeMastra(['a']);
       const wf = await mastra.schedules.create({ workflowId: 'daily-report', cron: '0 6 * * *' });

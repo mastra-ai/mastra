@@ -2,6 +2,7 @@ import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { useMetricsFilters } from './use-metrics-filters';
 import { getOrCreate } from '@/lib/map';
+import { formatDate } from '@/utils/date-format';
 
 export interface ScorerSummary {
   scorer: string;
@@ -80,7 +81,7 @@ export function useScoresMetrics() {
 
       // Collapse all days into a single 24-hour view (00:00–23:00).
       // For each hour-of-day, average the values across all days in the range.
-      const hourBuckets = new Map<string, Map<string, { sum: number; count: number }>>();
+      const hourBuckets = new Map<number, Map<string, { sum: number; count: number }>>();
 
       for (let i = 0; i < scorerNames.length; i++) {
         const scorerId = scorerNames[i];
@@ -88,11 +89,7 @@ export function useScoresMetrics() {
         for (const s of series) {
           for (const point of s.points) {
             const ts = new Date(point.timestamp);
-            const hourKey = ts.toLocaleTimeString('en-US', {
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: false,
-            });
+            const hourKey = ts.getHours() * 60 + ts.getMinutes();
             const scorerMap = getOrCreate(hourBuckets, hourKey, () => new Map());
             const acc = getOrCreate(scorerMap, scorerId, () => ({ sum: 0, count: 0 }));
 
@@ -104,9 +101,11 @@ export function useScoresMetrics() {
 
       // Build sorted 24h chart data
       const overTimeData: ScoresOverTimePoint[] = Array.from(hourBuckets.entries())
-        .sort(([a], [b]) => a.localeCompare(b))
+        .sort(([a], [b]) => a - b)
         .map(([hourKey, scorerMap]) => {
-          const point: ScoresOverTimePoint = { time: hourKey };
+          const point: ScoresOverTimePoint = {
+            time: formatDate(new Date(2000, 0, 1, Math.floor(hourKey / 60), hourKey % 60), 'time') ?? '',
+          };
           for (const [scorerId, acc] of scorerMap) {
             point[scorerId] = +(acc.sum / acc.count).toFixed(2);
           }

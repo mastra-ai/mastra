@@ -14,7 +14,14 @@ import {
   pairOrphanedToolCalls,
   sanitizeOrphanedToolPairs,
 } from '../utils/provider-compat';
-import { getResponseProviderItemKey } from '../utils/response-item-metadata';
+import {
+  getResponseProviderItemId,
+  getResponseProviderItemKey,
+  getResponseResultItemId,
+  RESPONSE_ITEM_ID_PROVIDERS,
+  RESPONSE_RESULT_ITEM_ID_KEY,
+} from '../utils/response-item-metadata';
+import { unwrapLegacyToolOutput } from '../utils/unwrap-legacy-tool-output';
 
 /**
  * Merges text parts that share the same OpenAI-compatible itemId.
@@ -85,6 +92,116 @@ function mergeTextPartsWithDuplicateItemIds<T extends { type: string }>(parts: T
   }
 
   return result;
+}
+
+/**
+ * Detects a hosted OpenAI `tool_search` part that can no longer be replayed.
+ *
+ * A hosted (provider-executed) `tool_search` call only replays as a pair of
+ * `item_reference`s built from its Responses item ids. When those ids are
+ * gone (e.g. a UI round-trip stripped providerMetadata), the provider instead
+ * rebuilds a full `tool_search_call` without its required `arguments` and an
+ * orphaned `function_call_output` — both rejected by the API. Such parts are
+ * dropped from prompts; the model re-discovers tools on the next turn.
+ *
+ * A COMPLETED hosted search needs both ids — the call's and the output's. History
+ * persisted before the two were kept apart carries only one (whichever half wrote
+ * last), which conversion then copies onto both model parts, producing the same
+ * `item_reference` twice ("Duplicate item found"). One id is therefore as
+ * unreplayable as none. An in-flight call has no output yet, so its call id alone
+ * is complete.
+ *
+ * Client-executed `tool_search` (non-null `call_id` in the input) replays as
+ * a plain function call and is never dropped here.
+ */
+function isUnreplayableHostedToolSearchPart(part: AIV5Type.ToolUIPart): boolean {
+  if (AIV5.getToolName(part) !== 'tool_search') return false;
+
+  // Only a provider-executed search replays by item reference. A user-defined tool
+  // that happens to be named `tool_search` is an ordinary client function call on
+  // every provider, so it must survive even though it carries no item ids.
+  if (!part.providerExecuted) return false;
+
+  const callProviderMetadata =
+    'callProviderMetadata' in part ? (part.callProviderMetadata as Record<string, unknown> | undefined) : undefined;
+  const callItem = getResponseProviderItemId(callProviderMetadata);
+  if (callItem) {
+    // Both completed states emit a tool-call AND a tool-result, each carrying the
+    // part's call metadata, so a lone id lands on both. An in-flight call emits no
+    // result part, so its call id alone is complete.
+    const isCompleted = part.state === 'output-available' || part.state === 'output-error';
+    // Read the result id from the same namespace the call id came from -
+    // getResponseProviderItemId picks one namespace, and a pair stored under a
+    // DIFFERENT namespace does not make this id replayable.
+    if (!isCompleted || getResponseResultItemId(callProviderMetadata, callItem.provider)) return false;
+  }
+
+  const input = part.input;
+  if (input && typeof input === 'object' && typeof (input as Record<string, unknown>).call_id === 'string') {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Splits merged Responses item ids back onto their own tool parts.
+ *
+ * A stored tool part holds the result's item id under `resultItemId` when it
+ * differs from the call's (see {@link RESPONSE_RESULT_ITEM_ID_KEY}), and UI →
+ * model conversion copies the same metadata onto both the tool-call and the
+ * tool-result part. Rewrite each side to carry only its own id — call keeps
+ * `itemId`, result gets `resultItemId` as its `itemId` — so the provider emits
+ * two distinct `item_reference`s instead of the same one twice ("Duplicate
+ * item found").
+ */
+function splitResponsesToolItemReferences(modelMessages: AIV5Type.ModelMessage[]): AIV5Type.ModelMessage[] {
+  return modelMessages.map(msg => {
+    if (typeof msg.content === 'string') return msg;
+
+    let modified = false;
+    const content = msg.content.map(part => {
+      if (part.type !== 'tool-call' && part.type !== 'tool-result') return part;
+      const providerOptions = (part as { providerOptions?: Record<string, Record<string, unknown>> }).providerOptions;
+      if (!providerOptions) return part;
+
+      let rewritten: Record<string, Record<string, unknown>> | undefined;
+      const split = new Set<string>();
+      for (const provider of RESPONSE_ITEM_ID_PROVIDERS) {
+        const namespace = providerOptions[provider];
+        if (!namespace) continue;
+        const resultItemId = namespace[RESPONSE_RESULT_ITEM_ID_KEY];
+        if (typeof resultItemId !== 'string') continue;
+
+        const { [RESPONSE_RESULT_ITEM_ID_KEY]: _removed, ...rest } = namespace;
+        split.add(provider);
+        rewritten = {
+          ...(rewritten ?? providerOptions),
+          [provider]: part.type === 'tool-result' ? { ...rest, itemId: resultItemId } : rest,
+        };
+      }
+      if (!rewritten) return part;
+
+      // A namespace with no `resultItemId` has one id for both halves of the
+      // pair. On the call part that is correct; on the result part it is the
+      // call's id a second time ("Duplicate item found"), so drop it and let
+      // the split namespace carry the reference.
+      if (part.type === 'tool-result') {
+        for (const provider of RESPONSE_ITEM_ID_PROVIDERS) {
+          if (split.has(provider)) continue;
+          const leftover: Record<string, unknown> | undefined = rewritten[provider];
+          if (typeof leftover?.itemId !== 'string') continue;
+          const { itemId: _duplicate, ...withoutItemId } = leftover;
+          rewritten = { ...rewritten, [provider]: withoutItemId };
+        }
+      }
+
+      modified = true;
+      return { ...part, providerOptions: rewritten } as typeof part;
+    });
+
+    return modified ? ({ ...msg, content } as AIV5Type.ModelMessage) : msg;
+  });
 }
 
 /**
@@ -192,6 +309,10 @@ export function sanitizeV5UIMessages(
       // Filter out incomplete client-side tool calls (input-available without providerExecuted)
       // and input-streaming states.
       if (mode !== 'response') {
+        // Hosted tool_search parts whose Responses item ids were lost cannot be
+        // replayed in any state — drop them before the state-based checks below.
+        if (isUnreplayableHostedToolSearchPart(p)) return false;
+
         // Completed tools (client or provider) — keep them
         if (p.state === 'output-available' || p.state === 'output-error') return true;
         if (p.state === 'input-available') {
@@ -261,9 +382,16 @@ export function sanitizeV5UIMessages(
                 // convertToModelMessages to receive a raw array which gets stringified.
                 // See: https://github.com/mastra-ai/mastra/issues/17876
                 if (obj.type === 'content' && Array.isArray(obj.value)) return o;
-                // For other wrapped shapes (legacy), unwrap as before
-                if ('value' in obj) return obj.value;
-                return o;
+                // Unwrap AI SDK typed output wrappers before model-message conversion.
+                const isTypedOutputWrapper =
+                  (obj.type === 'text' ||
+                    obj.type === 'json' ||
+                    obj.type === 'error-text' ||
+                    obj.type === 'error-json') &&
+                  'value' in obj &&
+                  Object.keys(obj).length === 2;
+                if (isTypedOutputWrapper) return obj.value;
+                return unwrapLegacyToolOutput(o);
               })(),
             };
           }
@@ -538,6 +666,33 @@ function restoreAssistantFileProviderMetadata(
 export type ToolCallConversionMode = 'response' | 'prompt' | 'prompt-with-suspended';
 
 /**
+ * A step that dies after the model starts thinking but before the reasoning
+ * signature arrives leaves a step block holding only unsigned reasoning.
+ * Providers that require signed thinking (Anthropic, Bedrock) drop such parts,
+ * sending `content: []` and failing every later turn with a 400 (#24558).
+ */
+const REPLAYABLE_REASONING_KEYS = [
+  'signature',
+  'redactedData',
+  'itemId',
+  'reasoningEncryptedContent',
+  'thoughtSignature',
+];
+
+function hasReplayableReasoningMetadata(providerOptions: AIV5Type.ProviderMetadata | undefined): boolean {
+  return Object.values(providerOptions ?? {}).some(
+    value => !!value && typeof value === 'object' && REPLAYABLE_REASONING_KEYS.some(key => key in value),
+  );
+}
+
+function isUnforwardableReasoningOnlyMessage(message: AIV5Type.ModelMessage): boolean {
+  if (message.role !== 'assistant' || !Array.isArray(message.content) || message.content.length === 0) return false;
+  return message.content.every(
+    part => part.type === 'reasoning' && !hasReplayableReasoningMetadata(part.providerOptions),
+  );
+}
+
+/**
  * Converts AIV5 UI messages to AIV5 Model messages.
  * Handles sanitization, step-start insertion, provider options restoration, and Anthropic compatibility.
  *
@@ -579,10 +734,14 @@ export function aiV5UIMessagesToAIV5ModelMessages(
       }
     }
 
-    converted.push(...produced);
+    for (const message of produced) {
+      if (mode !== 'response' && isUnforwardableReasoningOnlyMessage(message)) continue;
+      converted.push(message);
+    }
   }
 
-  const withFileMetadata = restoreAssistantFileProviderMetadata(converted, preprocessed);
+  const withSplitItemReferences = splitResponsesToolItemReferences(converted);
+  const withFileMetadata = restoreAssistantFileProviderMetadata(withSplitItemReferences, preprocessed);
   const withMcpContentOutputs = applyMcpContentToolResultOutputs(withFileMetadata, dbMessages);
 
   // Add input field to tool-result parts for Anthropic API compatibility (fixes issue #11376)

@@ -4,6 +4,7 @@ import { Monitor, Moon, Sun } from 'lucide-react';
 
 import { useTheme } from '../ThemeProvider';
 import type { Theme } from '../ThemeProvider/theme-context';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -32,14 +33,14 @@ const SIZE_CONFIG = {
     itemWidth: 20,
     root: 'gap-px p-px',
     indicator: 'inset-y-px left-px',
-    item: 'h-4 [&_svg]:h-icon-sm [&_svg]:w-icon-sm',
+    item: 'h-4 [&_svg]:size-icon-xs',
   },
   sm: {
     itemGap: 1,
     itemWidth: 24,
     root: 'gap-px p-px',
     indicator: 'inset-y-px left-px',
-    item: 'h-5 [&_svg]:h-icon-sm [&_svg]:w-icon-sm',
+    item: 'h-5 [&_svg]:size-icon-xs',
   },
 } as const;
 
@@ -91,7 +92,8 @@ export const ThemeToggle = ({
       onValueChange={handleChange}
       aria-label={ariaLabel}
       className={cn(
-        'relative inline-flex w-fit items-center rounded-full border border-border1 bg-surface3',
+        raisedSurfaceStyle,
+        'relative inline-flex w-fit items-center rounded-full',
         sizeConfig.root,
         className,
       )}
@@ -99,7 +101,7 @@ export const ThemeToggle = ({
       <span
         aria-hidden="true"
         className={cn(
-          'pointer-events-none absolute rounded-full bg-surface5 motion-reduce:transition-none',
+          'pointer-events-none absolute rounded-full bg-fill-hover motion-reduce:transition-none',
           transitions.transform,
           sizeConfig.indicator,
         )}
@@ -114,7 +116,7 @@ export const ThemeToggle = ({
           className={cn(
             'relative inline-flex cursor-pointer items-center justify-center rounded-full',
             // Base UI exposes `data-checked` instead of Radix's `data-state="checked"`.
-            'text-icon3 hover:text-icon6 data-[checked]:text-icon6',
+            'text-muted-foreground hover:text-foreground data-[checked]:text-foreground',
             sizeConfig.item,
             'focus-visible:outline-hidden',
             'active:scale-90 motion-reduce:transition-none',

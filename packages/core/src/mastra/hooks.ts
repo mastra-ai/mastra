@@ -84,6 +84,20 @@ export function createOnScorerHook(mastra: Mastra) {
         targetMetadata,
       } as any);
 
+      if (runResult.notScorable) {
+        // The scorer declared this run has nothing to evaluate. There is no
+        // score to store, and storing one would put a vacuous value into the
+        // scorer's aggregates. The outcome is recorded on the scorer-run span.
+        const { step, reason } = runResult.notScorable;
+        mastra
+          .getLogger()
+          ?.debug?.(
+            `Scorer ${scorerId} declared run ${runResult.runId} not scorable in step "${step}"` +
+              (reason ? `: ${reason}` : ''),
+          );
+        return;
+      }
+
       const payload = {
         ...rest,
         ...runResult,

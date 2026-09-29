@@ -29,7 +29,7 @@ function getFileIcon(name: string): ReactNode {
       return <FileJson className="text-yellow-400" />;
     case 'md':
     case 'mdx':
-      return <FileText className="text-neutral4" />;
+      return <FileText className="text-muted-foreground" />;
     case 'png':
     case 'jpg':
     case 'jpeg':
@@ -38,7 +38,7 @@ function getFileIcon(name: string): ReactNode {
     case 'webp':
       return <Image className="text-purple-400" />;
     default:
-      return <File className="text-neutral4" />;
+      return <File className="text-muted-foreground" />;
   }
 }
 

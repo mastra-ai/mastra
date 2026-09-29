@@ -1,10 +1,12 @@
-import { format, isToday } from 'date-fns';
 import { Children, cloneElement, isValidElement } from 'react';
 import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
 import { dataListRowActionRevealStyles, dataListStickyStartStyles } from './shared';
 import type { DataListSticky } from './shared';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { cn } from '@/lib/utils';
+import { formatDate, formatTimestampPrecise } from '@/utils/date-format';
+import type { DatePreset } from '@/utils/date-format';
+import { getShortId } from '@/utils/id';
 
 export type DataListCellProps = {
   children?: ReactNode;
@@ -27,7 +29,7 @@ export function DataListCell({ children, className, as, sticky, ...rest }: DataL
   return (
     <Component
       className={cn(
-        'relative grid max-w-full min-w-0 items-center overflow-hidden text-ui-md whitespace-nowrap text-neutral3 empty:before:text-neutral2 empty:before:content-["—"]',
+        'relative grid max-w-full min-w-0 items-center overflow-hidden text-body-sm whitespace-nowrap text-muted-foreground empty:before:text-placeholder empty:before:content-["—"]',
         sticky === 'start' && dataListStickyStartStyles,
         className,
       )}
@@ -58,7 +60,7 @@ export function DataListActionsCell({ children, className, ...rest }: DataListCe
 }
 
 const dataListTruncateContentStyles =
-  'block min-w-0 max-w-full truncate empty:before:content-["—"] empty:before:text-neutral2 [&>*]:min-w-0 [&>*]:max-w-full [&>*]:overflow-hidden [&>*]:text-ellipsis [&>*]:whitespace-nowrap';
+  'block min-w-0 max-w-full truncate empty:before:content-["—"] empty:before:text-placeholder [&>*]:min-w-0 [&>*]:max-w-full [&>*]:overflow-hidden [&>*]:text-ellipsis [&>*]:whitespace-nowrap';
 const dataListInlineTextTruncateStyles = 'min-w-0 flex-1 truncate';
 
 function DataListInlineText({ children }: { children: string | number }) {
@@ -98,7 +100,7 @@ export type DataListTextCellProps = DataListCellProps & {
 
 export function DataListTextCell({ children, className, font = 'sans', ...rest }: DataListTextCellProps) {
   return (
-    <DataListCell className={cn(font === 'mono' && 'font-mono text-ui-smd', className)} {...rest}>
+    <DataListCell className={cn(font === 'mono' && 'font-mono text-body-sm', className)} {...rest}>
       <span className={dataListTruncateContentStyles}>
         <DataListTruncatedCellContent>{children}</DataListTruncatedCellContent>
       </span>
@@ -108,7 +110,7 @@ export function DataListTextCell({ children, className, font = 'sans', ...rest }
 
 export function DataListNameCell({ children, className }: DataListCellProps) {
   return (
-    <DataListCell className={cn('text-left font-medium text-neutral4', className)}>
+    <DataListCell className={cn('text-left text-label text-foreground', className)}>
       <span className={dataListTruncateContentStyles}>
         <DataListTruncatedCellContent>{children}</DataListTruncatedCellContent>
       </span>
@@ -118,7 +120,7 @@ export function DataListNameCell({ children, className }: DataListCellProps) {
 
 export function DataListDescriptionCell({ children, className }: DataListCellProps) {
   return (
-    <DataListCell className={cn('text-neutral2', className)}>
+    <DataListCell className={cn('text-muted-foreground', className)}>
       <span className={dataListTruncateContentStyles}>
         <DataListTruncatedCellContent>{children}</DataListTruncatedCellContent>
       </span>
@@ -133,7 +135,7 @@ export function DataListRowHeaderCell({ children, className, ...rest }: DataList
     <DataListCell
       sticky="start"
       className={cn(
-        'data-list-row-header -mr-3 -ml-3 w-auto max-w-none pr-3 pl-3 text-left text-ui-sm font-medium text-neutral2',
+        'data-list-row-header -mx-3 w-auto max-w-none px-3 text-left text-label text-foreground',
         className,
       )}
       {...rest}
@@ -147,22 +149,30 @@ export function DataListRowHeaderCell({ children, className, ...rest }: DataList
 
 export type DataListNumberCellProps = DataListCellProps & {
   /**
-   * Emphasizes the value with a brighter tone and semibold weight — use for the
+   * Emphasizes the value with the ink tone and the label role — use for the
    * primary metric in a row (e.g. a total or headline number).
    */
   highlight?: boolean;
+  font?: 'sans' | 'mono';
 };
 
 /**
  * Right-aligned numeric cell with tabular figures, for metric and summary
  * tables. Pass `highlight` for the emphasized column.
  */
-export function DataListNumberCell({ children, className, highlight, ...rest }: DataListNumberCellProps) {
+export function DataListNumberCell({
+  children,
+  className,
+  highlight,
+  font = 'sans',
+  ...rest
+}: DataListNumberCellProps) {
   return (
     <DataListCell
       className={cn(
-        'justify-items-end text-right text-ui-sm tabular-nums',
-        highlight ? 'font-semibold text-neutral4' : 'text-neutral3',
+        'justify-items-end text-right text-muted-foreground tabular-nums',
+        highlight && 'text-label text-foreground',
+        font === 'mono' && 'font-mono',
         className,
       )}
       {...rest}
@@ -172,16 +182,12 @@ export function DataListNumberCell({ children, className, highlight, ...rest }: 
   );
 }
 
-function getShortId(id: string | undefined): string {
-  return id?.slice(0, 8) ?? '';
-}
-
 export interface DataListIdCellProps {
   id: string;
 }
 
 export function DataListIdCell({ id }: DataListIdCellProps) {
-  return <DataListCell className="text-ui-smd text-neutral3 tracking-wide">{getShortId(id)}</DataListCell>;
+  return <DataListCell className="tracking-wide text-muted-foreground">{getShortId(id)}</DataListCell>;
 }
 
 export interface DataListSelectCellProps {
@@ -221,35 +227,26 @@ export function DataListSelectCell({ checked, onToggle, disabled, ...rest }: Dat
   );
 }
 
-function toDate(value: Date | string): Date | null {
-  const date = value instanceof Date ? value : new Date(value);
-  return isNaN(date.getTime()) ? null : date;
-}
-
 export interface DataListDateCellProps {
   timestamp: Date | string;
 }
 
-/** Compact date cell — `Today` or `MMM dd` (e.g. `May 19`). */
+/** Compact date cell — `Today`, `May 19` or `May 19, 2025`. */
 export function DataListDateCell({ timestamp }: DataListDateCellProps) {
-  const date = toDate(timestamp);
-  return (
-    <DataListCell className="text-ui-smd text-neutral2">
-      {date ? (isToday(date) ? 'Today' : format(date, 'MMM dd')) : null}
-    </DataListCell>
-  );
+  return <DataListCell className="text-muted-foreground">{formatDate(timestamp, 'date')}</DataListCell>;
 }
 
 export interface DataListCreatedCellProps {
   timestamp: Date | string;
+  /** Visible format. The hover title always shows the full date and time. */
+  preset?: Extract<DatePreset, 'date-time-seconds' | 'day-time-seconds'>;
 }
 
-/** Combined date + time cell — `MMM dd h:mm:ss a` (e.g. `Aug 31 1:07:47 pm`), no milliseconds. */
-export function DataListCreatedCell({ timestamp }: DataListCreatedCellProps) {
-  const date = toDate(timestamp);
+/** Locale-aware date and time cell with second precision. */
+export function DataListCreatedCell({ timestamp, preset = 'date-time-seconds' }: DataListCreatedCellProps) {
   return (
-    <DataListCell className="text-ui-smd text-neutral3 tabular-nums">
-      {date ? format(date, 'MMM dd h:mm:ss aaa') : null}
+    <DataListCell className="text-muted-foreground tabular-nums" title={formatDate(timestamp, 'date-time-seconds')}>
+      {formatDate(timestamp, preset)}
     </DataListCell>
   );
 }
@@ -259,17 +256,9 @@ export interface DataListTimeCellProps {
 }
 
 export function DataListTimeCell({ timestamp }: DataListTimeCellProps) {
-  const date = toDate(timestamp);
   return (
-    <DataListCell className="text-ui-smd text-neutral3 flex tabular-nums">
-      {date ? (
-        <>
-          {format(date, 'h:mm:ss')}
-          <span className="text-neutral2">
-            .{String(date.getMilliseconds()).padStart(3, '0')} {format(date, 'aaa')}
-          </span>
-        </>
-      ) : null}
+    <DataListCell className="flex text-muted-foreground tabular-nums">
+      {formatTimestampPrecise(timestamp, { withDate: false })}
     </DataListCell>
   );
 }

@@ -30822,7 +30822,7 @@
             {
               "type": "function_call_output",
               "call_id": "call_reT7kHMqWIvcpfN4V0pw6Twy",
-              "output": "0 matches across 0 files\n---"
+              "output": "0 matches across 0 files (1 path skipped: read error)\n---"
             }
           ],
           "text": {
@@ -53835,7 +53835,7 @@
             {
               "type": "function_call_output",
               "call_id": "call_CuTcA8SPa3MmP1bwq556CHBA",
-              "output": "0 matches across 0 files\n---"
+              "output": "0 matches across 0 files (1 path skipped: read error)\n---"
             }
           ],
           "text": {
@@ -76775,7 +76775,7 @@
             {
               "type": "function_call_output",
               "call_id": "call_9UIgM9JCSBlTj5QuIvmdWq2m",
-              "output": "0 matches across 0 files\n---"
+              "output": "0 matches across 0 files (1 path skipped: read error)\n---"
             }
           ],
           "text": {

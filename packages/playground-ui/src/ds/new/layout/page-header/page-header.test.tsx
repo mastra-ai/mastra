@@ -58,4 +58,43 @@ describe('PageHeader', () => {
   it('renders an empty header', () => {
     expect(renderToStaticMarkup(<PageHeader />)).toContain('<header');
   });
+
+  it('renders the action outside the title grid, aligned to the top', () => {
+    const markup = renderToStaticMarkup(
+      <PageHeader>
+        <PageHeader.Title>Environment</PageHeader.Title>
+        <PageHeader.Action>Edit</PageHeader.Action>
+      </PageHeader>,
+    );
+
+    // Action is a direct child of <header>, right after the closed title grid.
+    expect(markup).toMatch(
+      /<\/h1><\/div><div data-slot="page-header-action" class="[^"]*self-start[^"]*">Edit<\/div><\/header>$/,
+    );
+  });
+
+  it('keeps the title anchored to the top of the row regardless of action height', () => {
+    const withTallAction = renderToStaticMarkup(
+      <PageHeader>
+        <PageHeader.Title>Environment</PageHeader.Title>
+        <PageHeader.Action>
+          <div style={{ height: 120 }}>Tall action</div>
+        </PageHeader.Action>
+      </PageHeader>,
+    );
+
+    const withoutAction = renderToStaticMarkup(
+      <PageHeader>
+        <PageHeader.Title>Environment</PageHeader.Title>
+      </PageHeader>,
+    );
+
+    const titleClass = (markup: string) => markup.match(/<h1[^>]*class="([^"]*)"/)?.[1];
+    const tallActionTitleClass = titleClass(withTallAction);
+    const noActionTitleClass = titleClass(withoutAction);
+
+    expect(tallActionTitleClass).toBeDefined();
+    expect(tallActionTitleClass).toEqual(noActionTitleClass);
+    expect(tallActionTitleClass).toContain('self-start');
+  });
 });

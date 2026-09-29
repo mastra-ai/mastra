@@ -45,6 +45,7 @@ export async function getInputOptions(
       platform,
       isDev: true,
       bundlerOptions,
+      env,
     },
     noopLogger,
   );

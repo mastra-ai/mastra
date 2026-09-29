@@ -58,18 +58,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.45
   },
   {
-    "model": "tinfoil/deepseek-v4-flash",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 384000,
-    "inputCost": 0.3,
-    "outputCost": 0.7
-  },
-  {
     "model": "tinfoil/gemma4-31b",
     "imageInput": true,
     "audioInput": false,
@@ -80,6 +68,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 0.4,
     "outputCost": 1
+  },
+  {
+    "model": "tinfoil/glm-5-3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 1.8,
+    "outputCost": 5.75
   },
   {
     "model": "tinfoil/glm-5-3-flash",

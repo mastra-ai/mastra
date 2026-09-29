@@ -51,8 +51,8 @@ function crashResumedContext(
 
 async function prepareBoundItem(
   storage: WorkItemsStorage,
-  source: 'github-issue' | 'github-pr' = 'github-issue',
-  role: 'triage' | 'work' | 'plan' | 'review' = source === 'github-pr' ? 'review' : 'work',
+  source: 'github-issue' | 'github-pr' | 'gitlab-pr' = 'github-issue',
+  role: 'triage' | 'work' | 'plan' | 'review' = source.endsWith('-pr') ? 'review' : 'work',
 ) {
   return storage.prepareRunStart({
     orgId: 'org-1',
@@ -61,8 +61,8 @@ async function prepareBoundItem(
     workItem: {
       input: {
         externalSource: {
-          integrationId: 'github',
-          type: source === 'github-pr' ? 'pull-request' : 'issue',
+          integrationId: source.startsWith('gitlab-') ? 'gitlab' : 'github',
+          type: source.endsWith('-pr') ? 'pull-request' : 'issue',
           externalId: `${source}:1`,
         },
         title: 'Factory item',
@@ -417,6 +417,67 @@ describe('factory_transition_work_item', () => {
     ).rejects.toThrow(/binding is unavailable, revoked, or no longer matches/);
   });
 
+  it('offers a retired-session tool that fails loudly when the bound item reached a terminal stage', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepareBoundItem(storage);
+    const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
+    // The item settles at a terminal stage, then terminal cleanup revokes the seat.
+    await storage.commitTransition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: prepared.item.id,
+      expectedRevision: prepared.item.revision,
+      destinationStage: 'done',
+      actorId: 'user-1',
+      ingress: { identity: 'external-close', triggerType: 'github', transitionId: 'external-close' },
+      configVersion: 'rules-v1',
+      causalChain: [],
+      evaluation: { outcome: 'accepted', decisions: [] },
+    });
+    await storage.revokeRunBinding({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      bindingId: prepared.binding.id,
+      revokedAt: new Date(),
+    });
+
+    const tools = await createFactoryTransitionTools({
+      requestContext: requestContext(),
+      storage,
+      transitionService: service,
+      boards: createBoardRegistry(),
+    });
+    const tool = tools.factory_transition_work_item as ExecutableTool;
+    expect(tool).toBeDefined();
+    expect(tool.requireApproval).toBe(false);
+    await expect(
+      execute(tool, requestContext(), { stage: 'done', expectedRevision: 2, rationale: 'Continue.' }),
+    ).rejects.toThrow(/retired/i);
+  });
+
+  it('offers no tool when a revoked binding belongs to an item still in flight', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepareBoundItem(storage);
+    const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
+    // Binding revoked while the item stays in a working/resting lane (e.g. a peer
+    // role took over on another session): not a retirement, so no tool.
+    await storage.revokeRunBinding({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      bindingId: prepared.binding.id,
+      revokedAt: new Date(),
+    });
+
+    await expect(
+      createFactoryTransitionTools({
+        requestContext: requestContext(),
+        storage,
+        transitionService: service,
+        boards: createBoardRegistry(),
+      }),
+    ).resolves.toEqual({});
+  });
+
   it('keeps working when the next role takes its turn in the same session', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepareBoundItem(storage);
@@ -573,42 +634,45 @@ describe('factory_transition_work_item', () => {
     expect(transition).toHaveBeenCalledWith(expect.objectContaining({ board: 'review', workItemId: review.item.id }));
   });
 
-  it('recovers a review binding after crash-resume wipes session state and heals the security posture', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const prepared = await prepareBoundItem(storage, 'github-pr');
-    const transition = vi.fn(async () => ({ status: 'accepted' as const }));
-    const setState = vi.fn(async () => {});
-    const context = crashResumedContext(setState);
-    const sessions = {
-      getBySessionId: vi.fn(async () => ({ orgId: 'org-1', projectRepositoryId: 'repo-1', baseBranch: 'main' })),
-    };
+  it.each(['github-pr', 'gitlab-pr'] as const)(
+    'recovers a %s review binding after crash-resume wipes session state and heals the security posture',
+    async source => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const prepared = await prepareBoundItem(storage, source);
+      const transition = vi.fn(async () => ({ status: 'accepted' as const }));
+      const setState = vi.fn(async () => {});
+      const context = crashResumedContext(setState);
+      const sessions = {
+        getBySessionId: vi.fn(async () => ({ orgId: 'org-1', projectRepositoryId: 'repo-1', baseBranch: 'main' })),
+      };
 
-    const tools = await createFactoryTransitionTools({
-      requestContext: context,
-      storage,
-      transitionService: { transition } as never,
-      sessions,
-    });
+      const tools = await createFactoryTransitionTools({
+        requestContext: context,
+        storage,
+        transitionService: { transition } as never,
+        sessions,
+      });
 
-    expect(tools).toHaveProperty('factory_transition_work_item');
-    expect(sessions.getBySessionId).toHaveBeenCalledWith('resource-1');
-    expect(setState).toHaveBeenCalledWith({
-      factoryProjectId: PROJECT_ID,
-      factoryOrgId: 'org-1',
-      projectRepositoryId: 'repo-1',
-      untrustedCheckout: true,
-      baseRef: 'main',
-    });
+      expect(tools).toHaveProperty('factory_transition_work_item');
+      expect(sessions.getBySessionId).toHaveBeenCalledWith('resource-1');
+      expect(setState).toHaveBeenCalledWith({
+        factoryProjectId: PROJECT_ID,
+        factoryOrgId: 'org-1',
+        projectRepositoryId: 'repo-1',
+        untrustedCheckout: true,
+        baseRef: 'main',
+      });
 
-    await execute(tools.factory_transition_work_item as ExecutableTool, context, {
-      stage: 'review',
-      expectedRevision: prepared.item.revision,
-      rationale: 'Review complete.',
-    });
-    expect(transition).toHaveBeenCalledWith(
-      expect.objectContaining({ orgId: 'org-1', factoryProjectId: PROJECT_ID, workItemId: prepared.item.id }),
-    );
-  });
+      await execute(tools.factory_transition_work_item as ExecutableTool, context, {
+        stage: 'review',
+        expectedRevision: prepared.item.revision,
+        rationale: 'Review complete.',
+      });
+      expect(transition).toHaveBeenCalledWith(
+        expect.objectContaining({ orgId: 'org-1', factoryProjectId: PROJECT_ID, workItemId: prepared.item.id }),
+      );
+    },
+  );
 
   it('keeps untrustedCheckout on recovered review bindings when enrichment lookups fail', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
@@ -666,7 +730,11 @@ describe('factory_transition_work_item', () => {
     });
 
     expect(tools).toHaveProperty('factory_transition_work_item');
-    expect(setState).toHaveBeenCalledWith({ factoryProjectId: PROJECT_ID, factoryOrgId: 'org-1' });
+    expect(setState).toHaveBeenCalledWith({
+      factoryProjectId: PROJECT_ID,
+      factoryOrgId: 'org-1',
+      untrustedCheckout: false,
+    });
   });
 
   it('exposes nothing on crash-resume when no active binding matches the thread', async () => {

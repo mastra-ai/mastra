@@ -1,10 +1,4 @@
-import type {
-  LightSpanRecord,
-  ListBranchesArgs,
-  ListBranchesResponse,
-  ListTracesArgs,
-  ListTracesLightResponse,
-} from '@mastra/core/storage';
+import type { MastraClient } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import type { InfiniteData } from '@tanstack/react-query';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -12,6 +6,12 @@ import { useEffect, useRef, useState } from 'react';
 import type { TraceListMode } from '../trace-filters';
 import { useInView } from '@/hooks/use-in-view';
 import { is403ForbiddenError } from '@/lib/query-utils';
+
+type ListBranchesArgs = NonNullable<Parameters<MastraClient['listBranches']>[0]>;
+type ListBranchesResponse = Awaited<ReturnType<MastraClient['listBranches']>>;
+type ListTracesArgs = NonNullable<Parameters<MastraClient['listTraces']>[0]>;
+type ListTracesLightResponse = Awaited<ReturnType<MastraClient['listTracesLight']>>;
+type LightSpanRecord = ListTracesLightResponse['spans'][number] | ListBranchesResponse['branches'][number];
 
 /**
  * Per-MastraClient delta-polling support cache. Sticks once we observe a 501
@@ -318,6 +318,7 @@ export function mergeDeltaIntoPage0(
 }
 
 export interface UseTracesArgs extends TracesFilters {
+  enabled?: boolean;
   /** Optional overrides for the live-tail polling tunables. Any omitted fields fall back to the
    *  built-in defaults; pass only what you want to change. */
   polling?: TracesPollingConfig;
@@ -348,6 +349,7 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
   filters,
   listMode = 'traces',
   polling = {},
+  enabled = true,
 }: UseTracesArgs) => {
   const {
     deltaPollIntervalMs = DEFAULT_POLLING_CONFIG.deltaPollIntervalMs,
@@ -384,6 +386,7 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
 
   const query = useInfiniteQuery({
     queryKey: tracesQueryKey,
+    enabled,
     queryFn: ({ pageParam }) =>
       fetchTracesFn({
         client,
@@ -431,7 +434,7 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
         listMode,
       });
     },
-    enabled: !!cursor && !deltaUnsupported && autoRefetch,
+    enabled: enabled && !!cursor && !deltaUnsupported && autoRefetch,
     retry: false,
     refetchInterval: q => {
       if (q.state.error) return false;
@@ -500,7 +503,7 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
         filters,
         listMode,
       }),
-    enabled: !!cursor && !deltaUnsupported && autoRefetch,
+    enabled: enabled && !!cursor && !deltaUnsupported && autoRefetch,
     refetchInterval: page0StatusRefreshIntervalMs,
     refetchOnMount: false,
     retry: false,
@@ -530,8 +533,8 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
   // reads the current value without needing to re-attach.
   const autoRefetchRef = useRef(autoRefetch);
   useEffect(() => {
-    autoRefetchRef.current = autoRefetch;
-  }, [autoRefetch]);
+    autoRefetchRef.current = enabled && autoRefetch;
+  }, [enabled, autoRefetch]);
 
   useEffect(() => {
     const handler = () => {
@@ -547,10 +550,10 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
 
   useEffect(() => {
-    if (isEndOfListInView && hasNextPage && !isFetchingNextPage) {
+    if (enabled && isEndOfListInView && hasNextPage && !isFetchingNextPage) {
       void fetchNextPage();
     }
-  }, [isEndOfListInView, hasNextPage, isFetchingNextPage, fetchNextPage]);
+  }, [enabled, isEndOfListInView, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   // `isRefetching` aggregates every active fetch — page-mode (initial, next
   // page, manual resync, idle reset), the 60s page-0 status refresh, AND the

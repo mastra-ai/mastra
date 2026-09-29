@@ -386,12 +386,17 @@ export async function analyzeBundle(
     platform,
     isDev = false,
     bundlerOptions,
+    env = { 'process.env.NODE_ENV': JSON.stringify('production') },
   }: {
     outputDir: string;
     projectRoot: string;
     platform: BundlerPlatform;
     isDev?: boolean;
-    bundlerOptions?: Pick<BundlerOptions, 'externals' | 'enableSourcemap' | 'dynamicPackages'> | null;
+    bundlerOptions?: Pick<
+      BundlerOptions,
+      'externals' | 'externalsPreset' | 'enableSourcemap' | 'dynamicPackages'
+    > | null;
+    env?: Record<string, string>;
   },
   logger: IMastraLogger,
 ) {
@@ -413,7 +418,10 @@ export async function analyzeBundle(
 
   const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile: mastraEntry });
 
-  const { externalsPreset, mergedExternals } = normalizeExternals(bundlerOptions?.externals);
+  const { externalsPreset, mergedExternals } = normalizeExternals(
+    bundlerOptions?.externals,
+    bundlerOptions?.externalsPreset,
+  );
   const userDynamicPackages = bundlerOptions?.dynamicPackages ?? [];
 
   let index = 0;
@@ -428,6 +436,7 @@ export async function analyzeBundle(
   const allUsedExternals = new Map<string, ExternalDependencyInfo>();
   // Shared cache prevents re-analyzing the same workspace package across entries and recursive calls.
   const analyzeCache = new Map<string, Awaited<ReturnType<typeof analyzeEntry>>>();
+  const activeAnalyzeEntries = new Set<string>();
   for (const entry of entries) {
     const isVirtualFile = entry.includes('\n') || !existsSync(entry);
     const analyzeResult = await analyzeEntry({ entry, isVirtualFile }, mastraEntry, {
@@ -435,8 +444,12 @@ export async function analyzeBundle(
       sourcemapEnabled: bundlerOptions?.enableSourcemap ?? false,
       workspaceMap,
       projectRoot,
+      env,
       shouldCheckTransitiveDependencies: true,
       analyzeCache,
+      activeEntries: activeAnalyzeEntries,
+      externals: mergedExternals,
+      externalsPreset,
     });
 
     // Detect pino transports in the bundled output

@@ -47,7 +47,7 @@ function GoogleIcon({ className }: { className?: string }) {
 }
 
 export function ModelIcon({ model }: { model: string }) {
-  const cls = 'size-3.5 text-icon2 shrink-0';
+  const cls = 'size-3.5 text-placeholder shrink-0';
   if (model.startsWith('gpt-') || model.startsWith('text-embedding')) return <OpenAIIcon className={cls} />;
   if (model.startsWith('claude-')) return <AnthropicIcon className={cls} />;
   if (model.startsWith('deepseek-')) return <DeepSeekIcon className={cls} />;

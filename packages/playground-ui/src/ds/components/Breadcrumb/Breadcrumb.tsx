@@ -4,7 +4,8 @@ import { Icon } from '../../icons/Icon';
 import { SlashIcon } from '../../icons/SlashIcon';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { controlSizeClasses } from '@/ds/primitives/control-size';
-import { transitions } from '@/ds/primitives/transitions';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
 export interface BreadcrumbProps {
@@ -35,20 +36,43 @@ export interface CrumbProps {
   isLoading?: boolean;
   /**
    * Sibling control rendered next to the label (never inside it). Expected to be a
-   * `size="icon-sm"` ghost control: an icon-only Combobox switcher, a CopyButton, …
+   * `size="icon-sm"` ghost control, e.g. a CopyButton. Entity switchers go in `switcher`.
    */
   action?: React.ReactNode;
+  /**
+   * Entity switcher rendered next to the label; spread `crumbSwitcherTriggerProps` on it.
+   * On the current crumb there is nowhere to navigate, so its hit area covers the whole crumb.
+   */
+  switcher?: React.ReactNode;
   'data-testid'?: string;
 }
 
 export const CrumbSkeleton = (props: { 'data-testid'?: string }) => <Skeleton className="h-3 w-24" {...props} />;
 
-export const Crumb = ({ className, as, isCurrent, action, icon, isLoading, children, ...props }: CrumbProps) => {
+export const Crumb = ({
+  className,
+  as,
+  isCurrent,
+  action,
+  switcher,
+  icon,
+  isLoading,
+  children,
+  ...props
+}: CrumbProps) => {
   const Root = as || 'span';
+  const switcherCoversCrumb = Boolean(isCurrent && switcher);
 
   return (
     <>
-      <li className={cn('group flex h-form-sm min-w-0 items-center', isCurrent ? 'shrink' : 'shrink-0')}>
+      <li
+        className={cn(
+          'group flex h-control-sm min-w-0 items-center',
+          isCurrent ? 'shrink' : 'shrink-0',
+          switcherCoversCrumb &&
+            'relative rounded-full has-[[data-slot=crumb-switcher]_[data-popup-open]]:bg-fill-subtle has-[[data-slot=crumb-switcher]_button:enabled]:hover:bg-fill-subtle has-[[data-slot=crumb-switcher]_button:enabled]:active:bg-fill',
+        )}
+      >
         <Root
           aria-current={isCurrent ? 'page' : undefined}
           className={cn(
@@ -56,11 +80,11 @@ export const Crumb = ({ className, as, isCurrent, action, icon, isLoading, child
             // icon-sm control sitting next to it share height, radius, padding and colors.
             'inline-flex min-w-0 items-center gap-2 overflow-hidden rounded-full px-[.9em]',
             controlSizeClasses.sm,
-            transitions.colors,
+            controlStateColorTransition,
             // Long labels truncate: the current crumb gets more room than nav crumbs.
             isCurrent
-              ? 'max-w-xs cursor-default font-medium text-neutral6'
-              : 'max-w-48 cursor-pointer text-neutral4 hover:bg-neutral6/5 hover:text-neutral6 active:bg-neutral6/10',
+              ? 'max-w-xs cursor-default text-foreground'
+              : cn(quietTextHover, 'max-w-48 cursor-pointer hover:bg-fill-subtle active:bg-fill'),
             className,
           )}
           {...props}
@@ -84,11 +108,23 @@ export const Crumb = ({ className, as, isCurrent, action, icon, isLoading, child
             <span className="min-w-0 flex-1 truncate">{children}</span>
           )}
         </Root>
-        {action && <span className="h-form-sm -ml-1 flex shrink-0 items-center">{action}</span>}
+        {switcher && (
+          <span
+            data-slot="crumb-switcher"
+            className={cn(
+              '-ml-1 flex h-control-sm shrink-0 items-center',
+              switcherCoversCrumb &&
+                '[&_button]:bg-transparent! [&_button:enabled]:after:absolute [&_button:enabled]:after:inset-0 [&_button:enabled]:after:rounded-full',
+            )}
+          >
+            {switcher}
+          </span>
+        )}
+        {action && <span className="-ml-1 flex h-control-sm shrink-0 items-center">{action}</span>}
       </li>
       {!isCurrent && (
         <li role="separator" className="flex h-full items-center">
-          <Icon className={cn('text-neutral2', transitions.colors)}>
+          <Icon className="text-placeholder">
             <SlashIcon />
           </Icon>
         </li>

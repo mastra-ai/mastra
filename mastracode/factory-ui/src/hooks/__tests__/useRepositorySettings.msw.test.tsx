@@ -3,7 +3,7 @@
  *
  * Drives the real fetch/save services + React Query stack; only the network is
  * mocked (MSW). Handlers assert request bodies so the wire contract with
- * `/web/github/projects/:id/settings` stays pinned.
+ * `/web/source-control/projects/:id/settings` stays pinned for all providers.
  */
 import { act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -17,10 +17,10 @@ import { useRepositorySettingsQuery, useSaveRepositorySettingsMutation } from '.
 
 const ORIGIN = TEST_BASE_URL;
 const PROJECT = 'ghp_1';
-const SETTINGS_URL = `${ORIGIN}/web/github/projects/${PROJECT}/settings`;
+const SETTINGS_URL = `${ORIGIN}/web/source-control/projects/${PROJECT}/settings`;
 
 describe('project settings hooks', () => {
-  it('given a github project, when the query runs, then it resolves the stored setup command', async () => {
+  it('given a linked repository, when the query runs, then it resolves the stored setup command', async () => {
     server.use(
       http.get(SETTINGS_URL, () =>
         HttpResponse.json({ setupCommand: 'pnpm i && pnpm build', teardownCommand: 'pnpm local teardown' }),
@@ -37,7 +37,7 @@ describe('project settings hooks', () => {
     );
   });
 
-  it('given no github project id, when rendered, then the query stays idle', async () => {
+  it('given no project repository id, when rendered, then the query stays idle', async () => {
     const { result } = renderHookWithProviders(() => useRepositorySettingsQuery(undefined));
     expect(result.current.fetchStatus).toBe('idle');
     expect(result.current.data).toBeUndefined();
@@ -64,7 +64,7 @@ describe('project settings hooks', () => {
     });
     await waitForMutationsIdle(client);
 
-    expect(client.getQueryData(queryKeys.githubRepositorySettings(PROJECT))).toEqual({
+    expect(client.getQueryData(queryKeys.repositorySettings(PROJECT))).toEqual({
       setupCommand: 'pnpm i',
       teardownCommand: 'pnpm local teardown',
     });

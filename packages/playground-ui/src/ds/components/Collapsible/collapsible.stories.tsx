@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../Button';
+import { ScrollArea } from '../ScrollArea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './collapsible';
 
 const meta: Meta<typeof Collapsible> = {
@@ -19,13 +20,13 @@ export const Default: Story = {
   render: () => (
     <Collapsible className="w-[350px]">
       <CollapsibleTrigger asChild>
-        <Button variant="outline" className="w-full justify-between">
+        <Button className="w-full justify-between">
           Click to expand
           <ChevronDown className="size-4" />
         </Button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="border-border1 bg-surface2 mt-2 rounded-md border p-4">
-        <p className="text-neutral5 text-ui-md">This is the collapsible content. It can contain any elements.</p>
+      <CollapsibleContent className="mt-2 rounded-md border border-border bg-background p-4">
+        <p className="text-body text-foreground">This is the collapsible content. It can contain any elements.</p>
       </CollapsibleContent>
     </Collapsible>
   ),
@@ -35,13 +36,13 @@ export const DefaultOpen: Story = {
   render: () => (
     <Collapsible defaultOpen className="w-[350px]">
       <CollapsibleTrigger asChild>
-        <Button variant="outline" className="w-full justify-between">
+        <Button className="w-full justify-between">
           Section Title
           <ChevronDown className="size-4" />
         </Button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="border-border1 bg-surface2 mt-2 rounded-md border p-4">
-        <p className="text-neutral5 text-ui-md">This section is open by default.</p>
+      <CollapsibleContent className="mt-2 rounded-md border border-border bg-background p-4">
+        <p className="text-body text-foreground">This section is open by default.</p>
       </CollapsibleContent>
     </Collapsible>
   ),
@@ -52,23 +53,23 @@ export const SettingsSection: Story = {
     <div className="w-100 space-y-2">
       <Collapsible>
         <CollapsibleTrigger asChild>
-          <button className="text-neutral6 text-ui-md flex w-full items-center justify-between py-2 font-medium hover:text-white">
+          <button className="flex w-full items-center justify-between py-2 text-subheading text-foreground hover:text-white">
             Advanced Settings
             <ChevronDown className="size-4" />
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent className="space-y-3 pt-2">
           <div className="flex items-center justify-between">
-            <span className="text-neutral5 text-ui-md">Debug mode</span>
-            <span className="text-neutral3 text-ui-md">Disabled</span>
+            <span className="text-body text-foreground">Debug mode</span>
+            <span className="text-body text-muted-foreground">Disabled</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-neutral5 text-ui-md">Verbose logging</span>
-            <span className="text-neutral3 text-ui-md">Off</span>
+            <span className="text-body text-foreground">Verbose logging</span>
+            <span className="text-body text-muted-foreground">Off</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-neutral5 text-ui-md">Cache timeout</span>
-            <span className="text-neutral3 text-ui-md">300s</span>
+            <span className="text-body text-foreground">Cache timeout</span>
+            <span className="text-body text-muted-foreground">300s</span>
           </div>
         </CollapsibleContent>
       </Collapsible>
@@ -87,7 +88,7 @@ export const MultipleCollapsibles: Story = {
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="p-2">
-          <p className="text-neutral5 text-ui-md">Content for section 1</p>
+          <p className="text-body text-foreground">Content for section 1</p>
         </CollapsibleContent>
       </Collapsible>
       <Collapsible>
@@ -98,7 +99,7 @@ export const MultipleCollapsibles: Story = {
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="p-2">
-          <p className="text-neutral5 text-ui-md">Content for section 2</p>
+          <p className="text-body text-foreground">Content for section 2</p>
         </CollapsibleContent>
       </Collapsible>
       <Collapsible>
@@ -109,9 +110,34 @@ export const MultipleCollapsibles: Story = {
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="p-2">
-          <p className="text-neutral5 text-ui-md">Content for section 3</p>
+          <p className="text-body text-foreground">Content for section 3</p>
         </CollapsibleContent>
       </Collapsible>
     </div>
+  ),
+};
+
+export const FillsConstrainedPanel: Story = {
+  render: () => (
+    <Collapsible
+      defaultOpen
+      className="flex h-64 w-[350px] flex-col overflow-hidden rounded-md border border-border bg-background"
+    >
+      <CollapsibleTrigger className="flex w-full shrink-0 items-center justify-between px-4 py-2 text-subheading text-foreground">
+        Recent runs
+        <ChevronDown className="size-4" />
+      </CollapsibleTrigger>
+      <CollapsibleContent fill className="flex min-h-0 flex-col">
+        <ScrollArea className="min-h-0 flex-1 border-t border-border">
+          <ul className="divide-y divide-border">
+            {Array.from({ length: 20 }, (_, index) => (
+              <li key={index} className="px-4 py-2 text-body text-foreground">
+                Run {index + 1}
+              </li>
+            ))}
+          </ul>
+        </ScrollArea>
+      </CollapsibleContent>
+    </Collapsible>
   ),
 };

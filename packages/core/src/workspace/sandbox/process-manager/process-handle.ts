@@ -53,7 +53,7 @@ interface RetainedOutputChunk {
   dataBytes: number;
 }
 
-class RetainedOutputBuffer {
+export class RetainedOutputBuffer {
   private chunks: RetainedOutputChunk[] = [];
   private bytes = 0;
   private droppedBytes = 0;

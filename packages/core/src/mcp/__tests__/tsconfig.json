@@ -1,0 +1,6 @@
+{
+  "extends": "../../../tsconfig.build.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["v2-types.ts"],
+  "exclude": []
+}

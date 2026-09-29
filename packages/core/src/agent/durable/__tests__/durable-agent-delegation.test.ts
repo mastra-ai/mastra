@@ -191,6 +191,41 @@ describe('DurableAgent delegation hooks', () => {
     cleanup();
   });
 
+  it('derives sub-agent thread/resource identity from the caller (issue #23903)', async () => {
+    const subAgent = makeSubAgent('researchAgent', 'Dolphins are marine mammals.');
+    const streamSpy = vi.spyOn(subAgent, 'stream');
+
+    const supervisor = new Agent({
+      id: 'supervisor-delegation-identity',
+      name: 'supervisor-delegation-identity',
+      instructions: 'You orchestrate sub-agents.',
+      model: makeSupervisorModel('researchAgent', 'research dolphins') as LanguageModelV2,
+      agents: { researchAgent: subAgent },
+    });
+
+    const durableAgent = createDurableAgent({ agent: supervisor, pubsub });
+
+    const { fullStream, cleanup } = await durableAgent.stream('Research dolphins', {
+      maxSteps: 3,
+      memory: { thread: 'thread-1', resource: 'user-1' },
+    });
+
+    for await (const _chunk of fullStream) {
+      // no-op
+    }
+
+    // The delegation wrapper derives sub-agent identity from the args stamped by
+    // the tool-call step (`${callerResourceId}-${agentName}`). Without stamping,
+    // it falls back to a parent-derived constant shared by every caller.
+    expect(streamSpy).toHaveBeenCalledTimes(1);
+    const subAgentCallArgs = streamSpy.mock.calls[0] as unknown[];
+    const subAgentOptions = subAgentCallArgs?.[1] as { memory?: { thread?: unknown; resource?: unknown } } | undefined;
+    expect(subAgentOptions?.memory?.resource).toBe('user-1-researchAgent');
+    expect(subAgentOptions?.memory?.thread).toMatch(/^thread-1-/);
+
+    cleanup();
+  });
+
   it('applies onDelegationStart context mutations to the delegated run', async () => {
     let subAgentSawSpecialty: unknown;
 

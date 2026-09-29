@@ -6,8 +6,8 @@
  * `isZodError` check restores the correct field-path response shape.
  */
 import type { Server } from 'node:http';
-import type { AdapterTestContext } from '@internal/server-adapter-test-utils';
-import { createDefaultTestContext } from '@internal/server-adapter-test-utils';
+import type { AdapterTestContext } from '@mastra/server-adapters-test-suite';
+import { createDefaultTestContext } from '@mastra/server-adapters-test-suite';
 import Koa from 'koa';
 import bodyParser from 'koa-bodyparser';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';

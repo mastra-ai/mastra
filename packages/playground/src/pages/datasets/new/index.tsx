@@ -3,8 +3,12 @@ import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { DatabaseIcon } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { CreateDatasetForm } from '@/domains/datasets/components/create-dataset-form';
 import { isDatasetTargetType } from '@/domains/datasets/components/target-type-options';
+import { navCrumb } from '@/domains/navigation/crumbs';
+
+const crumbs = [navCrumb('/datasets'), { id: 'dataset-new', label: 'Create new dataset' }];
 
 function CreateDatasetPage() {
   const navigate = useNavigate();
@@ -21,10 +25,15 @@ function CreateDatasetPage() {
           .filter(Boolean)
       : undefined;
 
+  const handleSuccess = (datasetId: string) => {
+    void navigate(`/datasets/${datasetId}`);
+  };
+
   return (
-    <PageLayout height="full">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">Create new dataset</h1>
       <div />
-      <PageLayout.MainArea isCentered>
+      <div className="flex h-full items-center justify-center">
         <div className="w-full max-w-2xl overflow-y-auto px-4 py-5">
           <MainHeader className="mb-6 p-0">
             <MainHeader.Column>
@@ -40,12 +49,12 @@ function CreateDatasetPage() {
             <CreateDatasetForm
               targetType={targetType}
               targetIds={targetIds}
-              onSuccess={datasetId => void navigate(`/datasets/${datasetId}`)}
+              onSuccess={handleSuccess}
               onCancel={() => void navigate(-1)}
             />
           </Card>
         </div>
-      </PageLayout.MainArea>
+      </div>
     </PageLayout>
   );
 }

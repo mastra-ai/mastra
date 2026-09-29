@@ -1,8 +1,8 @@
-import { format } from 'date-fns';
-import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
+import { ExternalLinkIcon } from 'lucide-react';
 import type { LogsDatePreset } from '../log-filters';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
+import { formatDate } from '@/utils/date-format';
 
 const PRESET_LABELS: Record<Exclude<LogsDatePreset, 'all' | 'custom'>, string> = {
   'last-24h': 'the last 24 hours',
@@ -18,8 +18,6 @@ export interface NoLogsInfoProps {
   dateTo?: Date;
 }
 
-const DATE_FORMAT = 'MMM d, yyyy HH:mm';
-
 const LEVEL_TIP = 'Pick a wider range or lower the logging level — verbose entries (debug, info) may be filtered out.';
 
 function describeRange({ datePreset, dateFrom, dateTo }: NoLogsInfoProps): { title: string; description: string } {
@@ -31,13 +29,13 @@ function describeRange({ datePreset, dateFrom, dateTo }: NoLogsInfoProps): { tit
   }
   if (dateFrom && dateTo) {
     return {
-      title: `No logs between ${format(dateFrom, DATE_FORMAT)} and ${format(dateTo, DATE_FORMAT)}`,
+      title: `No logs between ${formatDate(dateFrom, 'date-time')} and ${formatDate(dateTo, 'date-time')}`,
       description: LEVEL_TIP,
     };
   }
   if (dateFrom) {
     return {
-      title: `No logs since ${format(dateFrom, DATE_FORMAT)}`,
+      title: `No logs since ${formatDate(dateFrom, 'date-time')}`,
       description: LEVEL_TIP,
     };
   }
@@ -50,24 +48,21 @@ function describeRange({ datePreset, dateFrom, dateTo }: NoLogsInfoProps): { tit
 export const NoLogsInfo = ({ datePreset, dateFrom, dateTo }: NoLogsInfoProps = {}) => {
   const { title, description } = describeRange({ datePreset, dateFrom, dateTo });
   return (
-    <div className="flex h-full items-center justify-center">
-      <EmptyState
-        iconSlot={<CircleSlashIcon />}
-        titleSlot={title}
-        descriptionSlot={description}
-        actionSlot={
-          <Button
-            variant="ghost"
-            as="a"
-            href="https://mastra.ai/en/docs/observability/logging"
-            target="_blank"
-            rel="noopener noreferrer"
-            icon={<ExternalLinkIcon />}
-          >
-            Logging Documentation
-          </Button>
-        }
-      />
-    </div>
+    <EmptyState
+      titleSlot={title}
+      descriptionSlot={description}
+      actionSlot={
+        <Button
+          variant="ghost"
+          render={
+            <a href="https://mastra.ai/en/docs/observability/logging" target="_blank" rel="noopener noreferrer" />
+          }
+          icon={<ExternalLinkIcon />}
+        >
+          Logging Documentation
+        </Button>
+      }
+      variant="fill"
+    />
   );
 };

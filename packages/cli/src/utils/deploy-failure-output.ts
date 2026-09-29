@@ -1,6 +1,6 @@
 import * as p from '@clack/prompts';
 
-import { MASTRA_STUDIO_URL } from '../commands/auth/client.js';
+import { MASTRA_PROJECTS_URL } from '../commands/auth/client.js';
 import { createBarLogWriter } from './clack-bar.js';
 import { selectFailureExcerpt } from './deploy-log-format.js';
 
@@ -12,7 +12,7 @@ export function deployDashboardUrl(
   ids: { orgId: string; projectId: string; deployId: string },
 ): string {
   const segment = kind === 'server' ? 'server-deploys' : 'deploys';
-  return `${MASTRA_STUDIO_URL}/orgs/${ids.orgId}/projects/${ids.projectId}/${segment}/${ids.deployId}`;
+  return `${MASTRA_PROJECTS_URL}/orgs/${ids.orgId}/projects/${ids.projectId}/${segment}/${ids.deployId}`;
 }
 
 /**

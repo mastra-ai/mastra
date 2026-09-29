@@ -1,5 +1,5 @@
 import type { RequestContext } from '@mastra/core/di';
-import type { StorageThreadType } from '@mastra/core/memory';
+import type { RouteResponse } from '../route-types.generated.js';
 
 import type {
   ClientOptions,
@@ -13,6 +13,32 @@ import type {
 
 import { requestContextQueryString } from '../utils';
 import { BaseResource } from './base';
+
+/**
+ * Serializes the message-listing filters both memory message routes accept. The network route
+ * takes the same filters under a different path, so the two callers share one serializer.
+ */
+export const memoryMessagesQuery = ({
+  agentId,
+  resourceId,
+  page,
+  perPage,
+  orderBy,
+  filter,
+  include,
+  includeSystemReminders,
+}: ListMemoryThreadMessagesParams): URLSearchParams => {
+  const query = new URLSearchParams();
+  if (agentId) query.set('agentId', agentId);
+  if (resourceId) query.set('resourceId', resourceId);
+  if (page !== undefined) query.set('page', String(page));
+  if (perPage !== undefined) query.set('perPage', String(perPage));
+  if (orderBy) query.set('orderBy', JSON.stringify(orderBy));
+  if (filter) query.set('filter', JSON.stringify(filter));
+  if (include) query.set('include', JSON.stringify(include));
+  if (includeSystemReminders !== undefined) query.set('includeSystemReminders', String(includeSystemReminders));
+  return query;
+};
 
 /**
  * MemoryThread resource for interacting with memory threads.
@@ -60,7 +86,7 @@ export class MemoryThread extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing thread details including title and metadata
    */
-  get(requestContext?: RequestContext | Record<string, any>): Promise<StorageThreadType> {
+  get(requestContext?: RequestContext | Record<string, any>): Promise<RouteResponse<'GET /memory/threads/:threadId'>> {
     const agentIdParam = this.getAgentIdQueryParam('?');
     const contextParam = requestContextQueryString(requestContext, agentIdParam ? '&' : '?');
     return this.request(`/memory/threads/${this.threadId}${agentIdParam}${contextParam}`);
@@ -72,7 +98,7 @@ export class MemoryThread extends BaseResource {
    *                 `agentId` is required by the server; pass it here if not supplied on the constructor.
    * @returns Promise containing updated thread details
    */
-  update(params: UpdateMemoryThreadParams): Promise<StorageThreadType> {
+  update(params: UpdateMemoryThreadParams): Promise<RouteResponse<'PATCH /memory/threads/:threadId'>> {
     const agentId = this.requireAgentId(params.agentId, 'update');
     const { agentId: _omitAgentId, requestContext, ...body } = params;
     const agentIdParam = `?agentId=${agentId}`;
@@ -91,7 +117,7 @@ export class MemoryThread extends BaseResource {
    */
   delete(
     opts: { agentId?: string; requestContext?: RequestContext | Record<string, any> } = {},
-  ): Promise<{ result: string }> {
+  ): Promise<RouteResponse<'DELETE /memory/threads/:threadId'>> {
     const agentId = this.requireAgentId(opts.agentId, 'delete');
     const agentIdParam = `?agentId=${agentId}`;
     const contextParam = requestContextQueryString(opts.requestContext, '&');
@@ -110,21 +136,8 @@ export class MemoryThread extends BaseResource {
       requestContext?: RequestContext | Record<string, any>;
     } = {},
   ): Promise<ListMemoryThreadMessagesResponse> {
-    const { page, perPage, orderBy, filter, include, resourceId, requestContext, includeSystemReminders } = params;
-    const queryParams: Record<string, string> = {};
-
-    if (this.agentId) queryParams.agentId = this.agentId;
-    if (resourceId) queryParams.resourceId = resourceId;
-    if (page !== undefined) queryParams.page = String(page);
-    if (perPage !== undefined) queryParams.perPage = String(perPage);
-    if (orderBy) queryParams.orderBy = JSON.stringify(orderBy);
-    if (filter) queryParams.filter = JSON.stringify(filter);
-    if (include) queryParams.include = JSON.stringify(include);
-    if (includeSystemReminders !== undefined) queryParams.includeSystemReminders = String(includeSystemReminders);
-
-    const query = new URLSearchParams(queryParams);
-    const queryString = query.toString();
-    const url = `/memory/threads/${this.threadId}/messages${queryString ? `?${queryString}` : ''}${requestContextQueryString(requestContext, queryString ? '&' : '?')}`;
+    const query = memoryMessagesQuery({ ...params, agentId: params.agentId ?? this.agentId }).toString();
+    const url = `/memory/threads/${this.threadId}/messages${query ? `?${query}` : ''}${requestContextQueryString(params.requestContext, query ? '&' : '?')}`;
     return this.request(url);
   }
 
@@ -143,7 +156,7 @@ export class MemoryThread extends BaseResource {
       | { agentId?: string; requestContext?: RequestContext | Record<string, any> }
       | RequestContext
       | Record<string, any> = {},
-  ): Promise<{ success: boolean; message: string }> {
+  ): Promise<RouteResponse<'POST /memory/messages/delete'>> {
     const { agentId: explicitAgentId, requestContext } = normalizeWriteOpts(opts);
     const agentId = this.requireAgentId(explicitAgentId, 'deleteMessages');
     const queryString = `agentId=${agentId}`;
@@ -178,7 +191,7 @@ export class MemoryThread extends BaseResource {
    * @param params - Transfer parameters including the target `resourceId`, optional `agentId`, and request context.
    * @returns Promise containing the transferred thread with its new `resourceId`
    */
-  transfer(params: TransferMemoryThreadParams): Promise<StorageThreadType> {
+  transfer(params: TransferMemoryThreadParams): Promise<RouteResponse<'POST /memory/threads/:threadId/transfer'>> {
     const { agentId, requestContext, ...body } = params;
     const resolvedAgentId = agentId ?? this.agentId;
     const agentIdParam = resolvedAgentId ? `?agentId=${resolvedAgentId}` : '';

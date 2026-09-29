@@ -20,6 +20,15 @@ export type WorkflowScheduleTarget = {
   initialState?: unknown;
   requestContext?: Record<string, unknown>;
   /**
+   * Resource this schedule's runs are attributed to. When set, every run the
+   * schedule fires (via the cron scheduler or a manual fire) is created and
+   * persisted with this `resourceId`, so scheduled runs can be correlated and
+   * filtered per resource in multi-tenant setups. Pure run-attribution
+   * metadata — unlike an agent schedule's `resourceId`, it is not part of the
+   * schedule's identity and can be changed with a partial update.
+   */
+  resourceId?: string;
+  /**
    * Content hash of the target workflow's serialized step graph, written by
    * declarative schedule reconciliation on deploy. At claim time the
    * scheduler compares this against the hash of its *locally registered*

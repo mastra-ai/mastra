@@ -24,6 +24,7 @@ import {
 } from '../__utils__/auth';
 import { resetStorage } from '../__utils__/reset-storage';
 import { expectCurrentBreadcrumb } from '../__utils__/route-header';
+import { revealFoldedSidebarItems } from '../__utils__/sidebar';
 
 test.describe('Auth Infrastructure', () => {
   test.afterEach(async () => {
@@ -157,6 +158,7 @@ test.describe('Auth Infrastructure', () => {
       await expectCurrentBreadcrumb(page, 'Agents');
 
       // With RBAC off, permission-gated links are visible again.
+      await revealFoldedSidebarItems(page);
       await expect(page.getByRole('link', { name: /^Tools$/i })).toBeVisible();
       await expect(page.getByRole('link', { name: /^MCP Servers$/i })).toBeVisible();
     });

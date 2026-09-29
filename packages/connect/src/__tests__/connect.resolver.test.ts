@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { connect } from '../connect.js';
 import type { ConnectOptions } from '../connect.js';
 import { MastraConnectError } from '../errors.js';
-import { PROVIDERS, type ProviderRegistration } from '../registry.js';
+import { PROVIDERS, type ProviderRegistration, type ProxyProviderRegistration } from '../registry.js';
 
 // Test-only seam: the shipped barrel exports a readonly view; tests mutate the
 // underlying array to install fixture providers.
@@ -14,7 +14,7 @@ const TOKEN = 'fake-test-token';
 function installProvider(
   integrationId: string,
   envVar: string,
-): ProviderRegistration & { createToolsSpy: ReturnType<typeof vi.fn> } {
+): ProxyProviderRegistration & { createToolsSpy: ReturnType<typeof vi.fn> } {
   const createTools = vi
     .fn()
     .mockReturnValue({ [`${integrationId}_fake_tool`]: { id: `${integrationId}_fake_tool` } } as never);
@@ -36,8 +36,13 @@ function makeConnection(overrides?: Record<string, unknown>) {
   };
 }
 
+function platformResponse(input: string | URL | Request, connections: unknown[]): Response {
+  const path = new URL(String(input)).pathname;
+  return path === '/v2/integrations' ? Response.json({ integrations: [] }) : Response.json({ connections });
+}
+
 function resolverOptions(connections: () => unknown[], extra?: { ttlMs?: number }) {
-  const fetchMock = vi.fn().mockImplementation(async () => Response.json({ connections: connections() }));
+  const fetchMock = vi.fn().mockImplementation(async input => platformResponse(input, connections()));
   return {
     fetchMock,
     options: {
@@ -95,7 +100,7 @@ describe('connect resolver caching and liveness', () => {
     vi.setSystemTime(start + 29_999);
     await tools();
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('serves stale tools immediately after TTL and picks up an attached integration on the next resolution', async () => {
@@ -119,7 +124,7 @@ describe('connect resolver caching and liveness', () => {
 
     const fresh = await tools();
     expect(Object.keys(fresh).sort()).toEqual(['linear_fake_tool', 'notion_fake_tool']);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it('drops a detached integration on the next refresh', async () => {
@@ -147,8 +152,8 @@ describe('connect resolver caching and liveness', () => {
     let fail = false;
     const fetchMock = vi
       .fn()
-      .mockImplementation(async () =>
-        fail ? Promise.reject(new Error('network down')) : Response.json({ connections: [makeConnection()] }),
+      .mockImplementation(async input =>
+        fail ? Promise.reject(new Error('network down')) : platformResponse(input, [makeConnection()]),
       );
     const tools = connect({
       projectId: 'proj_1',
@@ -176,8 +181,8 @@ describe('connect resolver caching and liveness', () => {
     let fail = false;
     const fetchMock = vi
       .fn()
-      .mockImplementation(async () =>
-        fail ? Promise.reject(new Error('network down')) : Response.json({ connections: [makeConnection()] }),
+      .mockImplementation(async input =>
+        fail ? Promise.reject(new Error('network down')) : platformResponse(input, [makeConnection()]),
       );
     const tools = connect({
       projectId: 'proj_1',
@@ -198,7 +203,7 @@ describe('connect resolver caching and liveness', () => {
       String(call[0]).includes('platform refresh failed'),
     );
     expect(refreshWarnings).toHaveLength(1);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it('applies a cooldown after a failed background refresh instead of refetching every resolution', async () => {
@@ -207,8 +212,8 @@ describe('connect resolver caching and liveness', () => {
     let fail = false;
     const fetchMock = vi
       .fn()
-      .mockImplementation(async () =>
-        fail ? Promise.reject(new Error('network down')) : Response.json({ connections: [makeConnection()] }),
+      .mockImplementation(async input =>
+        fail ? Promise.reject(new Error('network down')) : platformResponse(input, [makeConnection()]),
       );
     const tools = connect({
       projectId: 'proj_1',
@@ -222,21 +227,21 @@ describe('connect resolver caching and liveness', () => {
     vi.setSystemTime(start + 1_001);
     await tools();
     await flush();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
 
     // Still inside the failure cooldown: stale resolutions must not refetch.
     vi.setSystemTime(start + 2_000);
     await tools();
     await tools();
     await flush();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
 
     // After the cooldown a stale resolution revalidates again.
     vi.setSystemTime(start + 40_000);
     fail = false;
     await tools();
     await flush();
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
   });
 
   it('refresh() rejects when the platform fetch fails even with a cached snapshot', async () => {
@@ -244,8 +249,8 @@ describe('connect resolver caching and liveness', () => {
     let fail = false;
     const fetchMock = vi
       .fn()
-      .mockImplementation(async () =>
-        fail ? Promise.reject(new Error('network down')) : Response.json({ connections: [makeConnection()] }),
+      .mockImplementation(async input =>
+        fail ? Promise.reject(new Error('network down')) : platformResponse(input, [makeConnection()]),
       );
     const tools = connect({
       projectId: 'proj_1',
@@ -275,10 +280,15 @@ describe('connect resolver caching and liveness', () => {
     await expect(tools()).rejects.toMatchObject({ code: 'platform_error' });
   });
 
-  it('performs a single fetch for concurrent cold resolutions', async () => {
+  it('performs one platform snapshot fetch for concurrent cold resolutions', async () => {
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
-    let resolveFetch!: (response: Response) => void;
-    const fetchMock = vi.fn(() => new Promise<Response>(resolve => (resolveFetch = resolve)));
+    const pending: Array<{ input: string | URL | Request; resolve: (response: Response) => void }> = [];
+    const fetchMock = vi.fn(
+      (input: string | URL | Request) =>
+        new Promise<Response>(resolve => {
+          pending.push({ input, resolve });
+        }),
+    );
     const tools = connect({
       projectId: 'proj_1',
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch },
@@ -286,12 +296,13 @@ describe('connect resolver caching and liveness', () => {
 
     const p1 = tools();
     const p2 = tools();
-    resolveFetch(Response.json({ connections: [makeConnection()] }));
+    await vi.waitFor(() => expect(pending).toHaveLength(2));
+    for (const request of pending) request.resolve(platformResponse(request.input, [makeConnection()]));
     const [r1, r2] = await Promise.all([p1, p2]);
 
     expect(Object.keys(r1)).toEqual(['linear_fake_tool']);
     expect(r2).toBe(r1);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('invalidate() forces a refetch on the next resolution', async () => {
@@ -303,7 +314,7 @@ describe('connect resolver caching and liveness', () => {
     tools.invalidate();
     await tools();
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it('refresh() fetches immediately and updates the cache', async () => {
@@ -321,10 +332,10 @@ describe('connect resolver caching and liveness', () => {
 
     const next = await tools();
     expect(next).toBe(fresh);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
-  it('warns once for a registered provider with no connection yet, then picks it up once attached', async () => {
+  it('silently skips a registered provider with no connection, then picks it up once attached', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
     installProvider('notion', 'MASTRA_NOTION_CONNECTION_ID');
@@ -336,15 +347,12 @@ describe('connect resolver caching and liveness', () => {
     const start = Date.now();
     const first = await tools();
     expect(Object.keys(first)).toEqual(['notion_fake_tool']);
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('will appear automatically'));
+    expect(warnSpy).not.toHaveBeenCalled();
 
     vi.setSystemTime(start + 1_001);
     await tools();
     await flush();
-    const missingWarns = warnSpy.mock.calls.filter((call: unknown[]) =>
-      String(call[0]).includes('will appear automatically'),
-    );
-    expect(missingWarns).toHaveLength(1);
+    expect(warnSpy).not.toHaveBeenCalled();
 
     connections = [notionConnection, makeConnection()];
     const after = await tools.refresh();
@@ -388,5 +396,91 @@ describe('connect resolver caching and liveness', () => {
     await tools();
 
     expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('catalog availability', () => {
+  it('resolves checked-in providers when the catalog request fails', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const fetchMock = vi.fn().mockImplementation(async input => {
+      const path = new URL(String(input)).pathname;
+      return path === '/v2/integrations'
+        ? new Response('upstream error', { status: 503 })
+        : Response.json({ connections: [makeConnection()] });
+    });
+    const tools = connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch },
+    });
+
+    expect(Object.keys(await tools())).toEqual(['linear_fake_tool']);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Platform catalog unavailable'));
+  });
+
+  it('ignores disabled catalog-only integrations when the catalog fails', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const fetchMock = vi.fn().mockImplementation(async input => {
+      const path = new URL(String(input)).pathname;
+      return path === '/v2/integrations'
+        ? new Response('upstream error', { status: 503 })
+        : Response.json({
+            connections: [makeConnection(), makeConnection({ id: 'c_mcp1', integrationId: 'catalog-mcp' })],
+          });
+    });
+    const tools = connect({
+      projectId: 'proj_1',
+      integrations: { 'catalog-mcp': { disabled: true } },
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch },
+    });
+
+    expect(Object.keys(await tools())).toEqual(['linear_fake_tool']);
+  });
+
+  it('rejects when the catalog fails and an active connection has no checked-in provider', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const fetchMock = vi.fn().mockImplementation(async input => {
+      const path = new URL(String(input)).pathname;
+      return path === '/v2/integrations'
+        ? new Response('upstream error', { status: 503 })
+        : Response.json({
+            connections: [makeConnection(), makeConnection({ id: 'c_mcp1', integrationId: 'catalog-mcp' })],
+          });
+    });
+    const tools = connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch },
+    });
+
+    await expect(tools()).rejects.toMatchObject({ code: 'platform_error' });
+  });
+});
+
+describe('disconnect lifecycle', () => {
+  it('waits for the in-flight refresh and defers refreshes requested meanwhile', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    let release: () => void = () => {};
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const fetchMock = vi.fn().mockImplementation(async input => {
+      await gate;
+      return platformResponse(input, [makeConnection()]);
+    });
+    const tools = connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch },
+    });
+
+    const events: string[] = [];
+    const first = tools().then(() => events.push('first refresh'));
+    const closed = tools.disconnect().then(() => events.push('disconnect'));
+    const deferred = tools.refresh().then(() => events.push('deferred refresh'));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    release();
+    await Promise.all([first, closed, deferred]);
+    expect(events).toEqual(['first refresh', 'disconnect', 'deferred refresh']);
+    // The deferred refresh ran only after cleanup, so it fetched again.
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 });

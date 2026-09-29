@@ -1,9 +1,11 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage/mock';
+import { createTool } from '../../tools';
 import {
   DEFAULT_GOAL_JUDGE_PROMPT,
   DEFAULT_GOAL_MAX_RUNS,
@@ -66,6 +68,50 @@ function goalJudgeModel(
     },
   });
 }
+
+// First LLM step calls a tool, then it answers. A tool iteration is where the
+// goal state processor is projected without a preceding judge run.
+function toolThenAnswerModel() {
+  let call = 0;
+  return new MockLanguageModelV2({
+    doStream: async () => {
+      call++;
+      const chunks: any[] = [
+        { type: 'stream-start', warnings: [] },
+        { type: 'response-metadata', id: `id-${call}`, modelId: 'mock-model-id', timestamp: new Date(0) },
+      ];
+      if (call % 2 === 1) {
+        chunks.push({ type: 'tool-call', toolCallId: `call-${call}`, toolName: 'ping', input: '{}' });
+        chunks.push({
+          type: 'finish',
+          finishReason: 'tool-calls',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        });
+      } else {
+        chunks.push({ type: 'text-start', id: 'text-1' });
+        chunks.push({ type: 'text-delta', id: 'text-1', delta: 'Working on it.' });
+        chunks.push({ type: 'text-end', id: 'text-1' });
+        chunks.push({
+          type: 'finish',
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        });
+      }
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream(chunks),
+      };
+    },
+  });
+}
+
+const pingTool = createTool({
+  id: 'ping',
+  description: 'ping',
+  inputSchema: z.object({}),
+  execute: async () => ({ ok: true }),
+});
 
 function makeAgent(goal?: GoalConfig, model = singleStepModel()) {
   const agent = new Agent({
@@ -521,6 +567,58 @@ describe('in-loop goal scoring', () => {
     expect(record?.runsUsed).toBe(2);
   });
 
+  it('parks an objective left active at the run budget when a later run re-enters the goal step', async () => {
+    // A `waiting` verdict deliberately keeps the record `active` (waiting is a
+    // per-turn display state, not a lifecycle state), which can leave an active
+    // objective sitting at its budget. The next run re-enters the goal step with
+    // nothing left to judge: the budget guard must park the objective rather
+    // than emit a stale `active` continuation chunk (which the UI renders as
+    // `continue` on every later turn).
+    let judgeCalls = 0;
+    const judge = goalJudgeModel([{ decision: 'waiting', reason: 'waiting for your review' }], () => {
+      judgeCalls++;
+    });
+    const agent = makeAgent({ judge: judge as any, maxRuns: 1 });
+    await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
+
+    const firstStream = await agent.stream('go', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 10,
+    });
+    for await (const _ of firstStream.fullStream) {
+      void _;
+    }
+    expect(judgeCalls).toBe(1);
+    // Waiting keeps the record active by design.
+    expect((await agent.getObjective({ threadId: THREAD }))?.status).toBe('active');
+    expect((await agent.getObjective({ threadId: THREAD }))?.runsUsed).toBe(1);
+
+    const goalChunks: any[] = [];
+    const secondStream = await agent.stream('again', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 10,
+    });
+    for await (const chunk of secondStream.fullStream) {
+      if (chunk.type === 'goal') goalChunks.push(chunk);
+    }
+
+    // The guard is a backstop: no further judge call, no run past the budget.
+    expect(judgeCalls).toBe(1);
+    const resultChunks = goalChunks.filter(c => !c.payload.pending);
+    expect(resultChunks).toHaveLength(1);
+    expect(resultChunks[0].payload).toMatchObject({
+      objective: 'Reach the goal',
+      passed: false,
+      status: 'paused',
+      maxRunsReached: true,
+    });
+    expect(resultChunks[0].payload.pausedReason).toContain('budget');
+
+    const record = await agent.getObjective({ threadId: THREAD });
+    expect(record?.status).toBe('paused');
+    expect(record?.runsUsed).toBe(1);
+  });
+
   it('does not re-score a budget-exhausted (now paused) objective on a later run', async () => {
     // An objective that stops at the run budget is parked as `paused`. A
     // subsequent run on the same thread must not burn another judge call or push
@@ -560,6 +658,92 @@ describe('in-loop goal scoring', () => {
     const record = await agent.getObjective({ threadId: THREAD });
     expect(record?.runsUsed).toBe(2);
     expect(record?.status).toBe('paused');
+  });
+
+  // Regression: when `inputProcessors` is a function, the Agent folds the
+  // signal-provider processors into it, so the `Array.isArray` walk in
+  // `__registerMastra` never reaches the goal state processor. It then resolved
+  // no store and projected `status: none` mid-run — which the model reads as
+  // "the goal was cancelled" and abandons the run (MastraCode's thread showed
+  // exactly that: `<current-objective status="none">` followed by the assistant
+  // announcing the goal had ended, one step before the real verdict arrived).
+  it('does not retract an active objective mid-run when inputProcessors is a function', async () => {
+    const agent = new Agent({
+      id: 'goal-agent',
+      name: 'goal-agent',
+      instructions: 'You work toward goals.',
+      model: toolThenAnswerModel(),
+      tools: { ping: pingTool },
+      memory: new MockMemory(),
+      goal: { judge: goalJudgeModel([{ decision: 'continue', reason: 'keep going' }]) as any, maxRuns: 5 },
+      // Function form: mirrors how MastraCode composes its processor lane.
+      inputProcessors: () => [],
+    });
+    new Mastra({ agents: { 'goal-agent': agent }, storage: new InMemoryStore(), logger: false });
+    await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
+
+    const objectiveSignals: any[] = [];
+    const stream = await agent.stream('go', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 6,
+    });
+    for await (const chunk of stream.fullStream) {
+      const anyChunk = chunk as any;
+      if (anyChunk.type === 'data-signal' && anyChunk.data?.tagName === 'current-objective') {
+        objectiveSignals.push(anyChunk.data);
+      }
+    }
+
+    // The tool-iteration boundary is where the bad projection landed. The
+    // objective is unchanged across attempts, so it must be projected exactly
+    // once — an append-only snapshot that re-added it every step duplicated the
+    // objective in context (and retracted it whenever a step could not resolve
+    // the store).
+    expect(objectiveSignals.length).toBe(1);
+    expect(objectiveSignals.map(s => s.attributes?.status)).not.toContain('none');
+  });
+
+  // Regression: the projection is append-only, so it must not be re-added once
+  // the objective is already in the window. `runsUsed` advances on every judge
+  // pass, and keying the projection on it made every step look like a change.
+  it('projects an unchanged objective once across multiple attempts', async () => {
+    const agent = new Agent({
+      id: 'goal-agent',
+      name: 'goal-agent',
+      instructions: 'You work toward goals.',
+      model: singleStepModel(),
+      memory: new MockMemory(),
+      goal: {
+        judge: goalJudgeModel([
+          { decision: 'continue', reason: 'not yet' },
+          { decision: 'continue', reason: 'still not yet' },
+          { decision: 'done', reason: 'complete' },
+        ]) as any,
+        maxRuns: 5,
+      },
+    });
+    new Mastra({ agents: { 'goal-agent': agent }, storage: new InMemoryStore(), logger: false });
+    await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
+
+    const objectiveSignals: any[] = [];
+    const goalChunks: any[] = [];
+    const stream = await agent.stream('go', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 10,
+    });
+    for await (const chunk of stream.fullStream) {
+      const anyChunk = chunk as any;
+      if (anyChunk.type === 'data-signal' && anyChunk.data?.tagName === 'current-objective') {
+        objectiveSignals.push(anyChunk.data);
+      }
+      if (anyChunk.type === 'goal') goalChunks.push(anyChunk);
+    }
+
+    // Three completed attempts prove the judge kept re-evaluating the same
+    // objective; the projection still appears once.
+    expect(goalChunks.filter(c => c.payload?.status === 'active').length).toBeGreaterThan(1);
+    expect(objectiveSignals.length).toBe(1);
+    expect(objectiveSignals[0].contents).toContain('Reach the goal');
   });
 
   it('resumes a budget-exhausted goal when maxRuns is raised and status is set back to active', async () => {

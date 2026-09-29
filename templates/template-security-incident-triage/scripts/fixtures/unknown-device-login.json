@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "source": "reference-auth",
+  "sourceEventId": "unknown-device-login",
+  "kind": "unknown_device_login",
+  "occurredAt": "2026-09-01T12:02:00.000Z",
+  "tenantId": "org_reference",
+  "subjectId": "user_reference",
+  "sessionId": "session_device_reference",
+  "deviceId": "device_unrecognized_reference",
+  "ip": "200.160.2.3",
+  "actor": { "id": "user_reference", "type": "user" },
+  "target": { "id": "device_unrecognized_reference", "type": "device" },
+  "changes": { "signal": "device-not-in-allowlist" }
+}

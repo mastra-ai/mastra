@@ -67,7 +67,7 @@ const componentEntries = (directory: string, prefix: string) => {
 const typeDeclarations = () =>
   dts({
     insertTypesEntry: true,
-    exclude: ['vite.config.ts', 'src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/__tests__/**'],
+    exclude: ['vite.config.ts', 'src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/__tests__/**', 'src/test/**'],
     afterDiagnostic: diagnostics => {
       if (diagnostics.length > 0) {
         throw new Error(`vite-plugin-dts found ${diagnostics.length} type error(s); see log above.`);
@@ -96,15 +96,18 @@ const createLibConfig = (isProduction: boolean): UserConfig => ({
       entry: {
         style: resolve(srcDir, 'style.ts'),
         tokens: resolve(srcDir, 'ds/tokens/index.ts'),
+        'lib/framework': resolve(srcDir, 'lib/framework.tsx'),
         ...fileEntries('src/utils', 'utils'),
         ...fileEntries('src/domains', 'domains'),
         ...fileEntries('src/ee', 'ee'),
         ...fileEntries('src/ds/primitives', 'primitives'),
         ...fileEntries('src/lib/resize', 'resize'),
         ...fileEntries('src/lib/keyboard', 'keyboard'),
-        ...fileEntries('src/store', 'store'),
+        ...fileEntries('src/lib/sort', 'sort'),
+        ...fileEntries('src/components', 'components'),
         ...fileEntries('src/ds/icons', 'icons'),
         ...fileEntries('src/hooks', 'hooks'),
+        ...fileEntries('src/lib/form', 'lib/form'),
         ...componentEntries('src/ds/components', 'components'),
         ...componentEntries('src/ds/layout', 'layout'),
         ...componentEntries('src/ds/new', 'new'),
@@ -116,7 +119,6 @@ const createLibConfig = (isProduction: boolean): UserConfig => ({
     target: 'esnext',
     minify: false,
     rollupOptions: {
-      external: ['motion/react'],
       output: {
         hoistTransitiveImports: false,
       },

@@ -21,6 +21,7 @@
     "@mastra/factory": "workspace:*",
     "@mastra/playground-ui": "workspace:*",
     "@mastra/react": "workspace:*",
+    "@nangohq/frontend": "0.71.6",
     "@tanstack/react-query": "^5.90.21",
     "@xyflow/react": "^12.10.1",
     "d3-force": "^3.0.0",

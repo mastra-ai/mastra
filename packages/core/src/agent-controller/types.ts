@@ -662,12 +662,22 @@ export interface AgentControllerDisplayState {
   toolInputBuffers: Map<string, { text: string; toolName: string }>;
 
   // ── Tool approval ────────────────────────────────────────────────────
-  /** A tool awaiting user approval (null when no approval pending) */
-  pendingApproval: {
-    toolCallId: string;
-    toolName: string;
-    args: unknown;
-  } | null;
+  /**
+   * Tools awaiting user approval, keyed by toolCallId. Each entry carries the
+   * thread that produced the call, so an approval parked on one thread can never
+   * shadow another thread's. More than one can be parked at once (e.g. a
+   * foreground run and a background/sub-agent run on a detached thread).
+   */
+  pendingApprovals: Map<
+    string,
+    {
+      toolCallId: string;
+      toolName: string;
+      args: unknown;
+      /** Thread that produced the gated call, when the producer knew it. */
+      threadId?: string;
+    }
+  >;
 
   // ── Tool suspension ─────────────────────────────────────────────────
   /**
@@ -723,7 +733,7 @@ export function defaultDisplayState(): AgentControllerDisplayState {
     tokenUsage: createEmptyTokenUsage(),
     activeTools: new Map(),
     toolInputBuffers: new Map(),
-    pendingApproval: null,
+    pendingApprovals: new Map(),
     pendingSuspensions: new Map(),
     activeSubagents: new Map(),
     omProgress: defaultOMProgressState(),
@@ -799,43 +809,66 @@ export type AgentControllerEvent =
         | { type: 'part'; index: number; part: MastraMessagePart };
     }
   | { type: 'message_end'; id: string }
-  | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown }
-  | { type: 'tool_approval_required'; toolCallId: string; toolName: string; args: unknown }
-  | {
-      type: 'tool_suspended';
-      toolCallId: string;
-      toolName: string;
-      args: unknown;
-      suspendPayload: unknown;
-      resumeSchema?: string;
-    }
-  | { type: 'tool_suspension_cancelled'; toolCallId: string; toolName: string; reason: string }
-  | { type: 'tool_update'; toolCallId: string; partialResult: unknown }
-  | {
-      type: 'tool_end';
-      toolCallId: string;
-      result: unknown;
-      isError: boolean;
-      /**
-       * True when the tool call resolved without ever running because the user
-       * denied its approval gate or the run was aborted while it was parked
-       * waiting for approval. `isError` stays `false` in that case (the tool
-       * did not fail — it simply never executed), so subscribers that gate on
-       * "the tool actually did work" must exclude `denied === true`.
-       */
-      denied?: boolean;
-      providerMetadata?: Record<string, unknown>;
-    }
-  | { type: 'tool_input_start'; toolCallId: string; toolName: string }
-  | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: unknown; toolName?: string }
-  | { type: 'tool_input_end'; toolCallId: string }
-  | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
-  | { type: 'command_exit'; toolCallId: string; exitCode: number; success: boolean }
+  | ({ threadId?: string } & (
+      | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown; title?: string }
+      | { type: 'tool_approval_required'; toolCallId: string; toolName: string; args: unknown }
+      | {
+          type: 'tool_suspended';
+          toolCallId: string;
+          toolName: string;
+          args: unknown;
+          suspendPayload: unknown;
+          resumeSchema?: string;
+        }
+      | { type: 'tool_suspension_cancelled'; toolCallId: string; toolName: string; reason: string }
+      | { type: 'tool_update'; toolCallId: string; partialResult: unknown }
+      | {
+          type: 'tool_end';
+          toolCallId: string;
+          result: unknown;
+          isError: boolean;
+          /**
+           * True when the tool call resolved without ever running because the user
+           * denied its approval gate or the run was aborted while it was parked
+           * waiting for approval. `isError` stays `false` in that case (the tool
+           * did not fail — it simply never executed), so subscribers that gate on
+           * "the tool actually did work" must exclude `denied === true`.
+           */
+          denied?: boolean;
+          providerMetadata?: Record<string, unknown>;
+        }
+      | {
+          type: 'tool_input_start';
+          toolCallId: string;
+          toolName: string;
+          title?: string;
+          /**
+           * Assistant message the tool call belongs to, so consumers can attribute
+           * streamed arguments to the model step that produced them. Tool-call chunks
+           * can precede this step's `message_start`, so the id is the only way to tell
+           * one step's arguments from the next step's.
+           */
+          messageId?: string;
+        }
+      | {
+          type: 'tool_input_delta';
+          toolCallId: string;
+          argsTextDelta: unknown;
+          toolName?: string;
+          /** Assistant message the tool call belongs to; see `tool_input_start.messageId`. */
+          messageId?: string;
+        }
+      | { type: 'tool_input_end'; toolCallId: string; messageId?: string }
+      | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
+      | { type: 'command_exit'; toolCallId: string; exitCode: number; success: boolean }
+    ))
   | { type: 'usage_update'; usage: TokenUsage }
   | { type: 'info'; message: string }
   | {
       type: 'error';
       error: Error;
+      /** Provider finish reason when a response ended without normal completion. */
+      finishReason?: string;
       errorType?: string;
       retryable?: boolean;
       retryDelay?: number;
@@ -1008,6 +1041,8 @@ export interface AgentControllerRequestState<TState = unknown> {
   get: () => Readonly<TState>;
   /** Update session-owned controller state. */
   set: (updates: Partial<TState>) => Promise<void>;
+  /** Apply an update only while a caller-owned identity still matches. */
+  setIf?: (updates: Partial<TState>, shouldApply: () => boolean) => Promise<boolean>;
   /** Update session-owned controller state from the latest snapshot in a serialized transaction. */
   update: <TResult>(updater: AgentControllerRequestStateUpdater<TState, TResult>) => Promise<TResult>;
 }
@@ -1054,7 +1089,16 @@ export interface AgentControllerRequestContext<TState = unknown> {
   /** Update controller state from the latest state snapshot in a serialized transaction. */
   updateState?: <TResult>(updater: AgentControllerRequestStateUpdater<TState, TResult>) => Promise<TResult>;
 
-  /** Current thread ID */
+  /** Read a setting from the thread captured for this request. */
+  getThreadSetting?: (key: string) => Promise<unknown>;
+
+  /** Persist a setting on the thread captured for this request. */
+  setThreadSetting?: (setting: { key: string; value: unknown }) => Promise<void>;
+
+  /** Whether the thread captured for this request is still active in the session. */
+  isThreadActive?: () => boolean;
+
+  /** Thread ID captured for this request. */
   threadId: string | null;
 
   /** Current resource ID */

@@ -800,6 +800,118 @@ describe('Workspace Handlers', () => {
   });
 
   // ===========================================================================
+  // Regression: %-containing filenames (issue #24620)
+  //
+  // Handlers must NOT decode the incoming path again — framework adapters
+  // already deliver decoded values. Double-decoding made `a%20b.txt` resolve
+  // to `a b.txt`, returning/deleting the wrong file.
+  // ===========================================================================
+  describe('Regression: %-containing paths are not double-decoded (issue #24620)', () => {
+    it('READ resolves the literal %-name, not its decoded form', async () => {
+      const files = new Map([
+        ['/a%20b.txt', 'percent-file'],
+        ['/a b.txt', 'space-file'],
+      ]);
+      const workspace = createWorkspace('test-workspace', { files });
+      const mastra = createMastra(workspace);
+
+      const result = await WORKSPACE_FS_READ_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
+        path: '/a%20b.txt',
+        encoding: 'utf-8',
+      });
+
+      expect(result.path).toBe('/a%20b.txt');
+      expect(result.content).toBe('percent-file');
+    });
+
+    it('DELETE removes the literal %-name and leaves the decoded-form file intact', async () => {
+      const files = new Map([
+        ['/a%20b.txt', 'percent-file'],
+        ['/a b.txt', 'space-file'],
+      ]);
+      const workspace = createWorkspace('test-workspace', { files });
+      const mastra = createMastra(workspace);
+
+      const result = await WORKSPACE_FS_DELETE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
+        path: '/a%20b.txt',
+      });
+
+      expect(result.success).toBe(true);
+      expect(workspace.filesystem!.deleteFile).toHaveBeenCalledWith('/a%20b.txt', expect.anything());
+      // The wrong file must NOT be touched.
+      expect(files.has('/a%20b.txt')).toBe(false);
+      expect(files.has('/a b.txt')).toBe(true);
+    });
+
+    it('READ passes a trailing-% name through unchanged (previously threw)', async () => {
+      const files = new Map([['/100%.txt', 'done']]);
+      const workspace = createWorkspace('test-workspace', { files });
+      const mastra = createMastra(workspace);
+
+      const result = await WORKSPACE_FS_READ_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
+        path: '/100%.txt',
+        encoding: 'utf-8',
+      });
+
+      expect(result.path).toBe('/100%.txt');
+      expect(result.content).toBe('done');
+    });
+
+    it('WRITE uses the JSON body path verbatim', async () => {
+      const files = new Map<string, string>();
+      const workspace = createWorkspace('test-workspace', { files });
+      const mastra = createMastra(workspace);
+
+      const result = await WORKSPACE_FS_WRITE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
+        path: '/100%.txt',
+        content: 'body',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.path).toBe('/100%.txt');
+      expect(files.get('/100%.txt')).toBe('body');
+    });
+
+    it('MKDIR uses the JSON body path verbatim', async () => {
+      const workspace = createWorkspace('test-workspace');
+      const mastra = createMastra(workspace);
+
+      const result = await WORKSPACE_FS_MKDIR_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
+        path: '/100%dir',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.path).toBe('/100%dir');
+      expect(workspace.filesystem!.mkdir).toHaveBeenCalledWith('/100%dir', { recursive: true });
+    });
+
+    it('STAT resolves the literal %-name', async () => {
+      const files = new Map([['/file%20name.txt', 'content']]);
+      const workspace = createWorkspace('test-workspace', { files });
+      const mastra = createMastra(workspace);
+
+      const result = await WORKSPACE_FS_STAT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
+        path: '/file%20name.txt',
+      });
+
+      expect(result.path).toBe('/file%20name.txt');
+      expect(result.type).toBe('file');
+    });
+  });
+
+  // ===========================================================================
   // Search Routes
   // ===========================================================================
   describe('WORKSPACE_SEARCH_ROUTE', () => {

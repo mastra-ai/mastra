@@ -101,8 +101,7 @@ createWorkflowTestSuite({
   },
 
   beforeAll: async () => {
-    vi.unmock('crypto');
-    vi.unmock('node:crypto');
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockRestore();
   },
 
   afterAll: async () => {
@@ -495,6 +494,37 @@ describe('Workflow (Evented Engine Specific)', () => {
       const result = await runWorkflow(workflow, id);
       expect(result.status).toBe('success');
       expect((result as any).state).toEqual({ first: 1, second: 1 });
+    });
+
+    it('treats a throwing branch condition as falsy and runs the remaining branches', async () => {
+      const id = 'conditional-throwing-condition';
+      const step1 = makeBranchStep('branch1', 5, { first: 1 });
+      const step2 = makeBranchStep('branch2', 5, { second: 1 });
+
+      const workflow = createWorkflow({
+        id,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema,
+        steps: [step1, step2],
+      });
+      workflow
+        .branch([
+          [
+            async () => {
+              throw new Error('condition boom');
+            },
+            step1,
+          ],
+          [async () => true, step2],
+        ])
+        .commit();
+
+      const result = await runWorkflow(workflow, id);
+      expect(result.status).toBe('success');
+      expect(result.steps.branch1).toBeUndefined();
+      expect(result.steps.branch2?.status).toBe('success');
+      expect((result as any).state).toEqual({ first: 0, second: 1 });
     });
 
     it('exposes the merged state to the step after the parallel block', async () => {

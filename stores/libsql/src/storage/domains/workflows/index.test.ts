@@ -1,3 +1,4 @@
+import { createSampleSuspendedSnapshotWithThread } from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
 import { TABLE_WORKFLOW_SNAPSHOT, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
@@ -77,5 +78,73 @@ describe('WorkflowsLibSQL — snapshot serialization', () => {
     const listedSnapshot = listed.runs[0]!.snapshot as WorkflowRunState;
     expect(listedSnapshot.result).toEqual({ result: 3 });
     expect((listedSnapshot.context as any)['add-numbers'].output).toEqual({ result: 3 });
+  });
+});
+
+describe('WorkflowsLibSQL — threadId filter pushdown', () => {
+  let workflows: WorkflowsLibSQL;
+  const workflowName = 'thread-filter-workflow';
+  let agenticRunIdA: string;
+  let durableRunIdA: string;
+
+  beforeEach(async () => {
+    const client = createClient({ url: ':memory:' });
+    const db = new LibSQLDB({ client, maxRetries: 1, initialBackoffMs: 10 });
+    await db.createTable({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+    });
+    workflows = new WorkflowsLibSQL({ client });
+
+    const agenticA = createSampleSuspendedSnapshotWithThread({ threadId: 'thread-a', layout: 'agentic-loop' });
+    agenticRunIdA = agenticA.runId;
+    const durableA = createSampleSuspendedSnapshotWithThread({ threadId: 'thread-a', layout: 'durable' });
+    durableRunIdA = durableA.runId;
+    const agenticB = createSampleSuspendedSnapshotWithThread({ threadId: 'thread-b', layout: 'agentic-loop' });
+    const durableB = createSampleSuspendedSnapshotWithThread({ threadId: 'thread-b', layout: 'durable' });
+
+    for (const { snapshot, runId } of [agenticA, durableA, agenticB, durableB]) {
+      await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+    }
+  });
+
+  it('returns only runs matching the threadId, across both snapshot layouts', async () => {
+    const { runs } = await workflows.listWorkflowRuns({ workflowName, threadId: 'thread-a' });
+
+    expect(runs.map(run => run.runId).sort()).toEqual([agenticRunIdA, durableRunIdA].sort());
+  });
+
+  it('returns no runs for an unknown threadId', async () => {
+    const { runs } = await workflows.listWorkflowRuns({ workflowName, threadId: 'thread-nope' });
+    expect(runs).toHaveLength(0);
+  });
+
+  it('ignores memory info attached to non-suspended steps, matching the canonical extraction', async () => {
+    // The canonical extraction (getSnapshotMemoryInfo) only reads __streamState from
+    // steps whose status is 'suspended'; the SQL predicate must not match more than that.
+    const runId = 'running-step-run';
+    const snapshot = {
+      runId,
+      status: 'running',
+      value: {},
+      context: {
+        'some-step': {
+          status: 'running',
+          payload: {},
+          suspendPayload: { __streamState: { messageList: { memoryInfo: { threadId: 'thread-a' } } } },
+        },
+        input: {},
+      },
+      activePaths: [],
+      serializedStepGraph: [],
+      suspendedPaths: {},
+      waitingPaths: {},
+      timestamp: Date.now(),
+    } as unknown as WorkflowRunState;
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+
+    const { runs } = await workflows.listWorkflowRuns({ workflowName, threadId: 'thread-a' });
+    expect(runs.map(run => run.runId)).not.toContain(runId);
+    expect(runs).toHaveLength(2);
   });
 });

@@ -49,7 +49,6 @@ export function TopicTraceDetailsPanel({
           spanId={selectedSpanId}
           span={spanDetail.data?.span}
           isLoading={spanDetail.isLoading}
-          onClose={() => onSpanSelect?.(undefined)}
           onPrevious={handlePreviousSpan}
           onNext={handleNextSpan}
         />

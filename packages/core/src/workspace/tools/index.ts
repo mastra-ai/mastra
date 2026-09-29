@@ -22,7 +22,7 @@ export {
 } from './execute-command';
 export { getProcessOutputTool } from './get-process-output';
 export { killProcessTool } from './kill-process';
-export { grepTool } from './grep';
+export { grepTool, createGrepTool, type GrepToolOptions } from './grep';
 export { lspInspectTool } from './lsp-inspect';
 export { computerScreenshotTool } from './computer-screenshot';
 export { computerClickTool } from './computer-click';

@@ -27,7 +27,7 @@ export function SettingsHeader({
 }: ComponentProps<'header'> & { action?: ReactNode }) {
   return (
     <header
-      className={cn('flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-4', className)}
+      className={cn('flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4', className)}
       {...props}
     >
       <div className="flex min-w-0 flex-col gap-1">{children}</div>
@@ -45,12 +45,12 @@ export function SettingsTitle({
 
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-2">
-      <Txt as="h2" id={titleId} variant="title" className={className} {...props} />
+      <Txt as="h2" id={titleId} variant="subheading" tone="ink" className={className} {...props} />
       {accessory}
     </div>
   );
 }
 
 export function SettingsDescription({ className, ...props }: ComponentProps<'p'>) {
-  return <Txt as="p" variant="caption" className={className} {...props} />;
+  return <Txt as="p" variant="caption" tone="muted" className={className} {...props} />;
 }

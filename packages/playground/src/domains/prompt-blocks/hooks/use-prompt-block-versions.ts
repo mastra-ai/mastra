@@ -8,22 +8,23 @@ import type {
 } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 export type { ListPromptBlockVersionsParams, CreatePromptBlockVersionParams };
 
 /**
  * Hook to list versions of a stored prompt block
  */
-export const usePromptBlockVersions = ({
-  blockId,
-  params,
-}: {
-  blockId: string;
-  params?: ListPromptBlockVersionsParams;
-}) => {
+export const usePromptBlockVersions = (
+  {
+    blockId,
+    params,
+  }: {
+    blockId: string;
+    params?: ListPromptBlockVersionsParams;
+  },
+  requestContext?: Record<string, any>,
+) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useQuery<ListPromptBlockVersionsResponse>({
     queryKey: ['prompt-block-versions', blockId, params, requestContext],
@@ -35,9 +36,11 @@ export const usePromptBlockVersions = ({
 /**
  * Hook to get a single version of a stored prompt block
  */
-export const usePromptBlockVersion = ({ blockId, versionId }: { blockId: string; versionId: string }) => {
+export const usePromptBlockVersion = (
+  { blockId, versionId }: { blockId: string; versionId: string },
+  requestContext?: Record<string, any>,
+) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useQuery<PromptBlockVersionResponse>({
     queryKey: ['prompt-block-version', blockId, versionId, requestContext],
@@ -49,10 +52,9 @@ export const usePromptBlockVersion = ({ blockId, versionId }: { blockId: string;
 /**
  * Hook to create a new version of a stored prompt block
  */
-export const useCreatePromptBlockVersion = ({ blockId }: { blockId: string }) => {
+export const useCreatePromptBlockVersion = ({ blockId }: { blockId: string }, requestContext?: Record<string, any>) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useMutation<PromptBlockVersionResponse, Error, CreatePromptBlockVersionParams | undefined>({
     mutationFn: (params?: CreatePromptBlockVersionParams) =>
@@ -67,10 +69,12 @@ export const useCreatePromptBlockVersion = ({ blockId }: { blockId: string }) =>
 /**
  * Hook to activate a specific version of a stored prompt block
  */
-export const useActivatePromptBlockVersion = ({ blockId }: { blockId: string }) => {
+export const useActivatePromptBlockVersion = (
+  { blockId }: { blockId: string },
+  requestContext?: Record<string, any>,
+) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useMutation<ActivatePromptBlockVersionResponse, Error, string>({
     mutationFn: (versionId: string) => client.getStoredPromptBlock(blockId).activateVersion(versionId, requestContext),
@@ -84,10 +88,12 @@ export const useActivatePromptBlockVersion = ({ blockId }: { blockId: string }) 
 /**
  * Hook to restore a specific version of a stored prompt block (creates a new version from an old one)
  */
-export const useRestorePromptBlockVersion = ({ blockId }: { blockId: string }) => {
+export const useRestorePromptBlockVersion = (
+  { blockId }: { blockId: string },
+  requestContext?: Record<string, any>,
+) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useMutation<PromptBlockVersionResponse, Error, string>({
     mutationFn: (versionId: string) => client.getStoredPromptBlock(blockId).restoreVersion(versionId, requestContext),
@@ -101,10 +107,9 @@ export const useRestorePromptBlockVersion = ({ blockId }: { blockId: string }) =
 /**
  * Hook to delete a specific version of a stored prompt block
  */
-export const useDeletePromptBlockVersion = ({ blockId }: { blockId: string }) => {
+export const useDeletePromptBlockVersion = ({ blockId }: { blockId: string }, requestContext?: Record<string, any>) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useMutation<DeletePromptBlockVersionResponse, Error, string>({
     mutationFn: (versionId: string) => client.getStoredPromptBlock(blockId).deleteVersion(versionId, requestContext),

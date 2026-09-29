@@ -13,7 +13,7 @@ export interface ThreadTraceHighlight {
 
 export interface ThreadTraceContextValue {
   traceIds: string[];
-  /** The row the reader came from (e.g. "View full thread"); starts expanded and scrolls into view on mount. */
+  /** The row the reader came from (e.g. "Open full thread"); starts expanded and scrolls into view on mount. */
   anchorTraceId: string | null;
   selected: ThreadTraceSelectedSpan | null;
   /** Select a span (opens the side panel) or pass `undefined` to close it. */

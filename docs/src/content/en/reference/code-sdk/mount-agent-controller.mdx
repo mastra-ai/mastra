@@ -195,6 +195,29 @@ const { controller } = await mountAgentControllerOnMastra({ mastra })
 ]}
 />
 
+## Nested controllers in plugins
+
+A plugin that boots another controller in the same process must borrow the host's storage instead of opening the same database files with its own native SQLite library.
+
+### `context.getStorage()`
+
+The optional accessor on `MastraCodePluginContext` returns the host's `storage` (`MastraCompositeStore`), `storageBackend` (`'libsql' | 'pg'`), and optional `vector` (`MastraVector`). Call it when the tool runs, then pass the returned object to `bootLocalAgentController()`:
+
+```typescript
+import { bootLocalAgentController } from '@mastra/code-sdk'
+import type { MastraCodePluginContext } from '@mastra/code-sdk/plugin'
+
+async function bootNestedController(context: MastraCodePluginContext) {
+  const sharedStorage = context.getStorage?.()
+  if (!sharedStorage) {
+    throw new Error('This plugin requires host-provided shared storage.')
+  }
+  return bootLocalAgentController({ cwd: context.cwd, ...sharedStorage })
+}
+```
+
+The host owns these instances. Stop the nested controller's workers and destroy its controller when finished, but don't close the borrowed stores or invoke its storage-maintenance methods. If the accessor is unavailable on an older host, don't fall back to opening the same database files.
+
 ## Related
 
 - [AgentController class](/reference/agent-controller/agent-controller-class)

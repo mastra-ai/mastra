@@ -30,14 +30,14 @@ export const AgentChannels = ({ agentId }: AgentChannelsProps) => {
 
   if (!platforms || platforms.length === 0) {
     return (
-      <Txt variant="ui-sm" className="text-neutral6">
+      <Txt variant="caption" tone="ink">
         No channel platforms configured.
       </Txt>
     );
   }
 
   return (
-    <ul className="divide-border1 divide-y">
+    <ul className="divide-y divide-border">
       {platforms.map(platform => (
         <ChannelRow key={platform.id} platform={platform} agentId={agentId} />
       ))}
@@ -74,11 +74,11 @@ function ChannelRow({ platform, agentId }: ChannelRowProps) {
       <PlatformIcon platform={platform.id} className="h-5 w-5 shrink-0" />
 
       <span className="flex min-w-0 flex-1 flex-col">
-        <Txt as="span" variant="ui-md" className="text-neutral5 truncate">
+        <Txt as="span" variant="body" tone="ink" className="truncate">
           {platform.name}
         </Txt>
         {activeInstallation ? (
-          <Txt variant="ui-xs" className="text-neutral3 truncate">
+          <Txt variant="meta" tone="muted" className="truncate">
             {activeInstallation.displayName || 'Workspace'}
           </Txt>
         ) : null}

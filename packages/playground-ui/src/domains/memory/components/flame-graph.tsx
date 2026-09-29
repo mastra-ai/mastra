@@ -14,10 +14,12 @@ import {
 } from 'recharts';
 
 import { Button } from '../../../ds/components/Button';
+import { Txt } from '../../../ds/components/Txt';
+import { overlaySurfaceStyle } from '../../../ds/primitives/raised-surface';
 import type { ExtractedOmMarker } from '../lib/extract-markers';
 import { tToTimestampMs } from '../lib/replay-selection';
 import type { TDomain } from '../lib/timeline';
-import { formatTimeDisplay, tToTimestamp } from '../lib/timeline';
+import { tToTimestamp } from '../lib/timeline';
 import type { MemoryMessage, OMHistoryRecord } from '../types';
 import {
   getAreaRowYMax,
@@ -30,6 +32,7 @@ import {
   toMessageData,
   toSelectedT,
 } from './flame-graph-data';
+import { formatDate } from '@/utils/date-format';
 
 export interface ZoomRange {
   left: number;
@@ -63,12 +66,14 @@ function TimeAxis({ domain }: { domain: TDomain }) {
   const ticks = [0, 0.25, 0.5, 0.75, 1];
   return (
     <div className="grid grid-cols-[6rem_1fr] items-center">
-      <p className="text-icon3 border-border1/50 text-ui-xs flex items-center self-stretch border-r pl-3 font-medium">
+      <p className="flex items-center self-stretch border-r border-border/50 pl-3 text-meta text-muted-foreground">
         Time
       </p>
-      <div className="text-icon3 text-ui-xs flex justify-between px-1 py-1.5 font-mono">
+      <div className="flex justify-between px-1 py-1.5 text-meta text-muted-foreground">
         {ticks.map(t => (
-          <span key={t}>{formatTimeDisplay(tToTimestamp(t, domain))}</span>
+          <Txt key={t} as="span" variant="meta" font="mono">
+            {formatDate(tToTimestamp(t, domain), 'date-time-seconds', { timeZone: 'UTC' })}
+          </Txt>
         ))}
       </div>
     </div>
@@ -88,22 +93,25 @@ export function FlameTooltip({
 }) {
   if (!active || !payload?.length) return null;
   const t = payload[0]?.payload?.t;
-  const time = domain != null && t != null ? formatTimeDisplay(tToTimestamp(t, domain)) : null;
+  const time =
+    domain != null && t != null ? formatDate(tToTimestamp(t, domain), 'date-time-seconds', { timeZone: 'UTC' }) : null;
   const visibleEntries = payload.filter(entry => entry.name !== 't' && entry.name !== 'time' && entry.value != null);
 
   if (showValue) {
     return (
-      <div className="border-border1 bg-surface3 text-ui-xs flex flex-col gap-0.5 rounded border px-2 py-1.5 font-mono shadow">
+      <div className={`${overlaySurfaceStyle} flex flex-col gap-0.5 rounded px-2 py-1.5 text-meta tabular-nums`}>
         {time && (
           <div className="flex items-center justify-between gap-3">
-            <span className="text-icon3">time</span>
-            <span className="text-neutral6">{time}</span>
+            <span className="text-muted-foreground">time</span>
+            <Txt as="span" variant="meta" font="mono" tone="ink">
+              {time}
+            </Txt>
           </div>
         )}
         {visibleEntries.map(entry => (
           <div key={entry.name} className="flex items-center justify-between gap-3">
-            <span className="text-icon3">{entry.name}</span>
-            <span className="text-neutral6">
+            <span className="text-muted-foreground">{entry.name}</span>
+            <span className="text-foreground">
               {typeof entry.value === 'number' ? Math.round(entry.value).toLocaleString() : String(entry.value)}
             </span>
           </div>
@@ -113,8 +121,12 @@ export function FlameTooltip({
   }
 
   return (
-    <div className="border-border1 bg-surface3 text-ui-xs rounded border px-2 py-1 font-mono shadow">
-      {time && <span className="text-neutral6">{time}</span>}
+    <div className={`${overlaySurfaceStyle} rounded px-2 py-1 text-meta`}>
+      {time && (
+        <Txt as="span" variant="meta" font="mono" tone="ink">
+          {time}
+        </Txt>
+      )}
     </div>
   );
 }
@@ -134,8 +146,8 @@ function AreaRow({ label, data, dataKey, color, gradientId, domain, zoomDomain, 
   const yMax = getAreaRowYMax(data, dataKey, threshold);
 
   return (
-    <div className="border-border1/50 relative grid grid-cols-[6rem_1fr] items-center border-b hover:z-10">
-      <p className="text-icon3 border-border1/50 text-ui-xs flex items-center self-stretch border-r pl-3 font-medium">
+    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border/50 hover:z-10">
+      <p className="flex items-center self-stretch border-r border-border/50 pl-3 text-meta text-muted-foreground">
         {label}
       </p>
       <div>
@@ -183,8 +195,8 @@ interface EventRowProps {
 
 function EventRow({ label, data, color, height = 32, domain, zoomDomain }: EventRowProps) {
   return (
-    <div className="border-border1/50 relative grid grid-cols-[6rem_1fr] items-center border-b hover:z-10">
-      <p className="text-icon3 border-border1/50 text-ui-xs flex items-center self-stretch border-r pl-3 font-medium">
+    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border/50 hover:z-10">
+      <p className="flex items-center self-stretch border-r border-border/50 pl-3 text-meta text-muted-foreground">
         {label}
       </p>
       <div>
@@ -244,8 +256,8 @@ function CombinedRow({
   const combinedData = toCombinedRowData(areaData, areaDataKey, eventData);
 
   return (
-    <div className="border-border1/50 relative grid grid-cols-[6rem_1fr] items-center border-b hover:z-10">
-      <p className="text-icon3 border-border1/50 text-ui-xs flex items-center self-stretch border-r pl-3 font-medium">
+    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border/50 hover:z-10">
+      <p className="flex items-center self-stretch border-r border-border/50 pl-3 text-meta text-muted-foreground">
         {label}
       </p>
       <div>
@@ -352,9 +364,9 @@ function ZoomTrack({
   }, [toTimestamp, zoomLeft, zoomRight, onZoomLeftChange, onZoomRightChange]);
 
   return (
-    <div className="border-border1/50 grid grid-cols-[6rem_1fr] items-center border-b">
-      <div className="border-border1/50 flex items-center gap-1 self-stretch border-r pl-3">
-        <p className="text-icon3 text-ui-xs font-medium">Zoom</p>
+    <div className="grid grid-cols-[6rem_1fr] items-center border-b border-border/50">
+      <div className="flex items-center gap-1 self-stretch border-r border-border/50 pl-3">
+        <p className="text-meta text-muted-foreground">Zoom</p>
         <Button variant="ghost" size="icon-sm" aria-label="Reset zoom" onClick={onReset}>
           <RotateCcw className="size-3" />
         </Button>
@@ -380,22 +392,22 @@ function ZoomTrack({
       >
         <div
           data-zoom-part="before"
-          className="bg-surface2/60 absolute inset-y-0 left-0"
+          className="absolute inset-y-0 left-0 bg-background/60"
           style={{ width: `${leftPercent}%` }}
         />
         <div
           data-zoom-part="band"
-          className="border-border1/30 bg-neutral6/5 absolute inset-y-0 border-y"
+          className="absolute inset-y-0 border-y border-border/30 bg-fill-subtle"
           style={{ left: `${leftPercent}%`, right: `${100 - rightPercent}%` }}
         />
         <div
           data-zoom-part="after"
-          className="bg-surface2/60 absolute inset-y-0 right-0"
+          className="absolute inset-y-0 right-0 bg-background/60"
           style={{ width: `${100 - rightPercent}%` }}
         />
         <div
           data-zoom-handle="left"
-          className="bg-neutral6/50 hover:bg-neutral6 absolute inset-y-0 w-1 cursor-col-resize"
+          className="absolute inset-y-0 w-1 cursor-col-resize bg-foreground/50 hover:bg-foreground"
           style={{ left: `${leftPercent}%`, transform: 'translateX(-50%)' }}
           onMouseDown={e => {
             e.preventDefault();
@@ -405,7 +417,7 @@ function ZoomTrack({
         />
         <div
           data-zoom-handle="right"
-          className="bg-neutral6/50 hover:bg-neutral6 absolute inset-y-0 w-1 cursor-col-resize"
+          className="absolute inset-y-0 w-1 cursor-col-resize bg-foreground/50 hover:bg-foreground"
           style={{ left: `${rightPercent}%`, transform: 'translateX(-50%)' }}
           onMouseDown={e => {
             e.preventDefault();

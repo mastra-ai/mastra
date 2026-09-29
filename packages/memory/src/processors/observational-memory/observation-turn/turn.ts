@@ -122,6 +122,11 @@ export class ObservationTurn {
     return this._context;
   }
 
+  /** Whether the turn has been ended and can no longer accept steps. */
+  get ended(): boolean {
+    return this._ended;
+  }
+
   /** The current step, if one exists. */
   get currentStep(): ObservationStep | undefined {
     return this._currentStep;

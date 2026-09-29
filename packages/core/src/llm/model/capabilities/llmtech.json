@@ -1,5 +1,5 @@
 {
-  "attachment": ["unsloth/Qwen3.8-27B-NVFP4"],
-  "temperature": ["unsloth/Qwen3.8-27B-NVFP4"],
-  "structuredOutput": ["unsloth/Qwen3.8-27B-NVFP4"]
+  "attachment": ["nvidia/Qwen3.8-27B-NVFP4"],
+  "temperature": ["nvidia/Qwen3.8-27B-NVFP4"],
+  "structuredOutput": ["nvidia/Qwen3.8-27B-NVFP4"]
 }

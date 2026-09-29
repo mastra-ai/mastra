@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -8,9 +8,11 @@ import {
   createBrowserFromSettings,
   getCustomProviderId,
   loadSettings,
+  migrateAccountPreferences,
   migrateLegacyVariedPack,
   parseCustomProviders,
   parseThreadSettings,
+  pruneRemovedAccountPreferences,
   parseViewportInput,
   resolveDefaultThinkingLevel,
   resolveLspSetting,
@@ -36,6 +38,8 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
     models: {
       activeModelPackId: 'anthropic',
       modePackOverrides: {},
+      packFallbacks: {},
+      packAccountPreferences: {},
       modeDefaults: {},
       modeThinkingDefaults: {},
       activeOmPackId: null,
@@ -83,6 +87,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
     },
     shellPassthrough: { mode: 'default' },
     voice: { enabled: false, engine: 'cloud', provider: 'openai', model: 'whisper-1' },
+    backgroundTools: { enabled: false },
     signals: {
       unixSocketPubSub: false,
       experimentalGithubSignals: false,
@@ -215,6 +220,211 @@ function withTempSettingsFile(run: (filePath: string) => void): void {
     rmSync(dir, { recursive: true, force: true });
   }
 }
+
+describe('atomic writes', () => {
+  it('preserves an existing file mode across the rename', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, '{}', { encoding: 'utf-8', mode: 0o600 });
+      chmodSync(filePath, 0o600);
+
+      saveSettings(createSettings(), filePath);
+
+      expect(statSync(filePath).mode & 0o777).toBe(0o600);
+    });
+  });
+
+  it('creates new files owner-only', () => {
+    withTempSettingsFile(filePath => {
+      saveSettings(createSettings(), filePath);
+
+      expect(statSync(filePath).mode & 0o777).toBe(0o600);
+    });
+  });
+});
+
+describe('packFallbacks parsing', () => {
+  it('defaults to an empty map when unset', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, '{}', 'utf-8');
+
+      expect(loadSettings(filePath).models.packFallbacks).toEqual({});
+    });
+  });
+
+  it('round-trips a configured chain through save and load', () => {
+    withTempSettingsFile(filePath => {
+      const settings = createSettings();
+      settings.models.packFallbacks = { anthropic: 'openai', openai: 'github-copilot' };
+      saveSettings(settings, filePath);
+
+      expect(loadSettings(filePath).models.packFallbacks).toEqual({
+        anthropic: 'openai',
+        openai: 'github-copilot',
+      });
+    });
+  });
+
+  it('drops malformed values with the usual parsing tolerance', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          models: { packFallbacks: { anthropic: 'openai', openai: 42, 'github-copilot': '' } },
+        }),
+        'utf-8',
+      );
+
+      expect(loadSettings(filePath).models.packFallbacks).toEqual({ anthropic: 'openai' });
+    });
+  });
+
+  it('drops entries whose source or target pack no longer exists', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          models: {
+            packFallbacks: {
+              anthropic: 'openai',
+              openai: 'no-such-pack',
+              'custom:deleted': 'anthropic',
+              'custom:kept': 'anthropic',
+            },
+          },
+          customModelPacks: [
+            { name: 'kept', models: { build: 'anthropic/claude-sonnet-4-5' }, createdAt: '2026-01-01T00:00:00.000Z' },
+          ],
+        }),
+        'utf-8',
+      );
+
+      expect(loadSettings(filePath).models.packFallbacks).toEqual({
+        anthropic: 'openai',
+        'custom:kept': 'anthropic',
+      });
+    });
+  });
+});
+
+describe('packAccountPreferences parsing', () => {
+  it('defaults to an empty map when unset', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, '{}', 'utf-8');
+
+      expect(loadSettings(filePath).models.packAccountPreferences).toEqual({});
+    });
+  });
+
+  it('round-trips valid per-pack model preferences', () => {
+    withTempSettingsFile(filePath => {
+      const settings = createSettings();
+      settings.models.packAccountPreferences = {
+        anthropic: { 'anthropic/claude-fable-5': 'anthropic:account-a' },
+        'custom:My Pack': { 'openai/gpt-5.4': 'openai-codex:account-b' },
+      };
+      saveSettings(settings, filePath);
+
+      expect(loadSettings(filePath).models.packAccountPreferences).toEqual(settings.models.packAccountPreferences);
+    });
+  });
+
+  it('drops malformed values and bindings for missing packs or models', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          models: {
+            packAccountPreferences: {
+              anthropic: {
+                'anthropic/claude-fable-5': 'anthropic:account-a',
+                'anthropic/not-in-pack': 'anthropic:stale',
+                'anthropic/claude-haiku-4-5': 42,
+              },
+              'custom:My Pack': { 'openai/gpt-5.4': 'openai-codex:account-b' },
+              'custom:deleted': { 'openai/gpt-5.4': 'openai-codex:account-c' },
+              openai: 'not-an-object',
+            },
+          },
+          customModelPacks: [
+            {
+              name: 'My Pack',
+              models: { plan: 'openai/gpt-5.4', build: 'anthropic/claude-sonnet-4-5', fast: 'openai/gpt-5.4-mini' },
+              createdAt: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+        }),
+        'utf-8',
+      );
+
+      expect(loadSettings(filePath).models.packAccountPreferences).toEqual({
+        anthropic: { 'anthropic/claude-fable-5': 'anthropic:account-a' },
+        'custom:My Pack': { 'openai/gpt-5.4': 'openai-codex:account-b' },
+      });
+    });
+  });
+
+  it('removes deleted account bindings while preserving unrelated preferences', () => {
+    const settings = createSettings();
+    settings.models.packAccountPreferences = {
+      anthropic: {
+        'anthropic/claude-fable-5': 'anthropic:removed',
+        'anthropic/claude-haiku-4-5': 'anthropic:kept',
+      },
+      openai: { 'openai/gpt-5.6-sol': 'openai-codex:removed' },
+    };
+
+    pruneRemovedAccountPreferences(settings, ['anthropic:removed', 'openai-codex:removed']);
+
+    expect(settings.models.packAccountPreferences).toEqual({
+      anthropic: { 'anthropic/claude-haiku-4-5': 'anthropic:kept' },
+    });
+  });
+
+  it('migrates account bindings when re-authentication changes the account id', () => {
+    const settings = createSettings();
+    settings.models.packAccountPreferences = {
+      anthropic: {
+        'anthropic/claude-fable-5': 'anthropic:old',
+        'anthropic/claude-haiku-4-5': 'anthropic:kept',
+      },
+      'custom:Daily': { 'anthropic/claude-fable-5': 'anthropic:old' },
+    };
+
+    migrateAccountPreferences(settings, 'anthropic:old', 'anthropic:new');
+
+    expect(settings.models.packAccountPreferences).toEqual({
+      anthropic: {
+        'anthropic/claude-fable-5': 'anthropic:new',
+        'anthropic/claude-haiku-4-5': 'anthropic:kept',
+      },
+      'custom:Daily': { 'anthropic/claude-fable-5': 'anthropic:new' },
+    });
+  });
+
+  it('keeps a preference for a built-in model override and drops the replaced model', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          models: {
+            modePackOverrides: { anthropic: { fast: 'anthropic/claude-opus-4-6' } },
+            packAccountPreferences: {
+              anthropic: {
+                'anthropic/claude-opus-4-6': 'anthropic:account-a',
+                'anthropic/claude-haiku-4-5': 'anthropic:account-b',
+              },
+            },
+          },
+        }),
+        'utf-8',
+      );
+
+      expect(loadSettings(filePath).models.packAccountPreferences).toEqual({
+        anthropic: { 'anthropic/claude-opus-4-6': 'anthropic:account-a' },
+      });
+    });
+  });
+});
 
 describe('MCP discovery settings parsing', () => {
   it('defaults external MCP discovery to disabled', () => {
@@ -419,6 +629,31 @@ describe('customProviders parsing/persistence', () => {
       });
       expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(2);
       vi.mocked(JSON.parse).mockRestore();
+    });
+  });
+
+  it('keeps native background tools disabled unless explicitly enabled', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ onboarding: {}, models: {}, preferences: {}, storage: {} }), 'utf-8');
+      expect(loadSettings(filePath).backgroundTools.enabled).toBe(false);
+
+      const settings = createSettings();
+      settings.backgroundTools.enabled = true;
+      saveSettings(settings, filePath);
+      expect(loadSettings(filePath).backgroundTools.enabled).toBe(true);
+
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: {},
+          storage: {},
+          backgroundTools: { enabled: 'yes' },
+        }),
+        'utf-8',
+      );
+      expect(loadSettings(filePath).backgroundTools.enabled).toBe(false);
     });
   });
 

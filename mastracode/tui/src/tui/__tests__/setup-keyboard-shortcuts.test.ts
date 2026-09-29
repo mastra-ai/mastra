@@ -115,6 +115,7 @@ function createState(isRunning: boolean) {
       allSlashCommandComponents: [],
       allSystemReminderComponents: [],
       allShellComponents: [],
+      chatContainer: { children: [] },
       ui: { requestRender: vi.fn(), start: vi.fn(), stop: vi.fn() },
       goalManager: {
         isActive: vi.fn(() => false),
@@ -228,6 +229,19 @@ describe('setupKeyboardShortcuts', () => {
     expect(stop).toHaveBeenCalledOnce();
     expect(exit).toHaveBeenCalledWith(0);
     expect(state.session.abort).not.toHaveBeenCalled();
+  });
+
+  it('does not register background shortcuts when background tools are disabled', () => {
+    const { state, actions } = createState(false);
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage: vi.fn(),
+    });
+
+    expect(actions.has('openBackgroundActivityCenter')).toBe(false);
+    expect(actions.has('clearFinishedBackgroundActivities')).toBe(false);
   });
 
   it('defaults slash-command autocomplete to the first visible built-in command before custom commands', () => {

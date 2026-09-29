@@ -10,6 +10,7 @@ const processedSpans: any[] = [];
 const mockForceFlush = vi.fn().mockResolvedValue(undefined);
 const mockShutdown = vi.fn().mockResolvedValue(undefined);
 const processorConstructorArgs: any[] = [];
+const converterConstructorArgs: any[] = [];
 
 vi.mock('@langfuse/otel', () => {
   class MockLangfuseSpanProcessor {
@@ -70,6 +71,9 @@ vi.mock('@mastra/otel-exporter', () => {
   }
 
   class MockSpanConverter {
+    constructor(params: any) {
+      converterConstructorArgs.push(params);
+    }
     convertSpan = vi.fn().mockImplementation((span: any) => ({
       name: span.name,
       attributes: {
@@ -77,6 +81,9 @@ vi.mock('@mastra/otel-exporter', () => {
         'gen_ai.provider.name': span.attributes?.provider,
         'gen_ai.usage.input_tokens': span.attributes?.usage?.inputTokens,
         'gen_ai.usage.output_tokens': span.attributes?.usage?.outputTokens,
+        ...(span.attributes?.usage?.outputDetails?.reasoning !== undefined
+          ? { 'gen_ai.usage.reasoning_tokens': span.attributes.usage.outputDetails.reasoning }
+          : {}),
         'mastra.span.type': span.type,
         ...(span.metadata
           ? Object.fromEntries(Object.entries(span.metadata).map(([k, v]) => [`mastra.metadata.${k}`, v]))
@@ -131,6 +138,7 @@ describe('LangfuseExporter', () => {
   beforeEach(() => {
     processedSpans.length = 0;
     processorConstructorArgs.length = 0;
+    converterConstructorArgs.length = 0;
     clientConstructorArgs.length = 0;
     mockScoreCreate.mockClear();
     mockForceFlush.mockClear();
@@ -220,6 +228,34 @@ describe('LangfuseExporter', () => {
           exportMode: 'batched',
         }),
       );
+    });
+
+    it('passes resource attributes to the span converter after init', async () => {
+      exporter = new LangfuseExporter({
+        publicKey: 'pk-test',
+        secretKey: 'sk-test',
+        resourceAttributes: { 'service.version': 'my-app-2.3.1' },
+      });
+      exporter.init({ config: { serviceName: 'my-app' } } as any);
+      await exportSpan(exporter, makeSpan());
+
+      expect(converterConstructorArgs[0]).toEqual(
+        expect.objectContaining({
+          serviceName: 'my-app',
+          config: { resourceAttributes: { 'service.version': 'my-app-2.3.1' } },
+        }),
+      );
+    });
+
+    it('passes resource attributes to the standalone span converter', async () => {
+      exporter = new LangfuseExporter({
+        publicKey: 'pk-test',
+        secretKey: 'sk-test',
+        resourceAttributes: { 'service.version': 'my-app-2.3.1' },
+      });
+      await exportSpan(exporter, makeSpan());
+
+      expect(converterConstructorArgs[0].config.resourceAttributes).toEqual({ 'service.version': 'my-app-2.3.1' });
     });
 
     it('uses immediate export mode when realtime is true', () => {
@@ -432,6 +468,41 @@ describe('LangfuseExporter', () => {
       expect(attrs['mastra.completion_start_time']).toBeUndefined();
     });
 
+    it.each([
+      {
+        name: 'maps a provider-reported USD total',
+        source: 'provider_reported',
+        cost: 0.0123,
+        expected: JSON.stringify({ total: 0.0123 }),
+      },
+      {
+        name: 'does not map a registry estimate',
+        source: 'pricing_registry',
+        cost: 0.0099,
+        expected: undefined,
+      },
+    ])('$name', async ({ source, cost, expected }) => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          attributes: {
+            model: 'anthropic/claude-sonnet-4',
+            provider: 'openrouter',
+            usage: { inputTokens: 10, outputTokens: 5 },
+            costContext: {
+              provider: 'openrouter',
+              estimatedCost: cost,
+              costUnit: 'USD',
+              costMetadata: { source, providerCostFields: ['usage.cost'] },
+            },
+          },
+        }),
+      );
+
+      expect(processedSpans[0].attributes['langfuse.observation.cost_details']).toBe(expected);
+    });
+
     it('maps userId to user.id', async () => {
       exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
       await exportSpan(exporter, makeSpan({ metadata: { userId: 'user-123' } }));
@@ -478,6 +549,25 @@ describe('LangfuseExporter', () => {
       expect(attrs['gen_ai.output.messages']).toBe(JSON.stringify({ text: 'Hi there' }));
       expect(attrs['langfuse.observation.input']).toBeUndefined();
       expect(attrs['langfuse.observation.output']).toBeUndefined();
+    });
+
+    it('uses the Langfuse semconv key for inclusive reasoning usage', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          attributes: {
+            model: 'gpt-6-luna',
+            provider: 'azure.openai.responses',
+            usage: { inputTokens: 39_056, outputTokens: 2_023, outputDetails: { reasoning: 1_632 } },
+          },
+        }),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['gen_ai.usage.output_tokens']).toBe(2_023);
+      expect(attrs['gen_ai.usage.reasoning.output_tokens']).toBe(1_632);
+      expect(attrs['gen_ai.usage.reasoning_tokens']).toBeUndefined();
     });
 
     it('maps root-span input/output to langfuse.trace.input/output', async () => {
@@ -556,12 +646,12 @@ describe('LangfuseExporter', () => {
       expect(attrs['mastra.metadata.traceName']).toBeUndefined();
     });
 
-    it('maps version metadata to langfuse.trace.version', async () => {
+    it('maps version metadata to langfuse.version', async () => {
       exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
       await exportSpan(exporter, makeSpan({ metadata: { version: '2.1.0' } }));
 
       const attrs = processedSpans[0].attributes;
-      expect(attrs['langfuse.trace.version']).toBe('2.1.0');
+      expect(attrs['langfuse.version']).toBe('2.1.0');
       expect(attrs['mastra.metadata.version']).toBeUndefined();
     });
 
@@ -758,7 +848,7 @@ describe('LangfuseExporter', () => {
       expect(attrs['user.id']).toBe('user-123');
       expect(attrs['session.id']).toBe('thread-1');
       expect(attrs['langfuse.trace.name']).toBe('custom-trace-name');
-      expect(attrs['langfuse.trace.version']).toBe('2.1.0');
+      expect(attrs['langfuse.version']).toBe('2.1.0');
       expect(attrs['langfuse.trace.metadata.userId']).toBeUndefined();
       expect(attrs['langfuse.trace.metadata.threadId']).toBeUndefined();
       expect(attrs['langfuse.trace.metadata.sessionId']).toBeUndefined();

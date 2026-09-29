@@ -1,6 +1,6 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { ComposerAttachments } from '@mastra/playground-ui/components/Composer';
-import { X } from 'lucide-react';
+import { ImageEntry } from '@mastra/playground-ui/domains/chat/attachments/attachment-preview-dialog';
+import { ComposerAttachment } from '@mastra/playground-ui/domains/chat/attachments/composer-attachment';
+import { ComposerAttachmentList } from '@mastra/playground-ui/domains/chat/attachments/composer-attachment-list';
 
 import type { PendingImage } from './useComposerImages';
 
@@ -14,26 +14,12 @@ export function ComposerImageAttachments({
   if (images.length === 0) return null;
 
   return (
-    <ComposerAttachments className="mx-3 mt-3 flex max-w-none justify-start gap-2 pb-0">
+    <ComposerAttachmentList>
       {images.map(image => (
-        <div key={image.id} className="relative">
-          <img
-            src={`data:${image.mediaType};base64,${image.data}`}
-            alt={image.filename ?? 'Attached image'}
-            className="border-border1 h-14 w-14 rounded-md border object-cover"
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-xs"
-            onClick={() => onRemove(image.id)}
-            className="bg-surface3 absolute -top-1 -right-1 rounded-full"
-            aria-label="Remove image"
-          >
-            <X size={10} />
-          </Button>
-        </div>
+        <ComposerAttachment key={image.id} name={image.filename ?? 'image'} onRemove={() => onRemove(image.id)}>
+          <ImageEntry src={`data:${image.mediaType};base64,${image.data}`} name={image.filename} />
+        </ComposerAttachment>
       ))}
-    </ComposerAttachments>
+    </ComposerAttachmentList>
   );
 }

@@ -194,7 +194,6 @@ const MobileInitialCtas = () => {
       </Button>
       <Button
         icon={<Settings2 />}
-        variant="outline"
         onClick={() => startViewTransition(() => next())}
         data-testid="agent-builder-mobile-initial-cta-config"
       >
