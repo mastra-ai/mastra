@@ -39,6 +39,7 @@ export class RenderProvider {
   readonly transport: RenderTransport;
   readonly contextKeys: readonly string[];
   readonly workflows = new Map<string, WorkflowBinding>();
+  /** Validate provider configuration and initialize durable persistence and native transport. */
   constructor(readonly options: RenderOptions) {
     if (!options.workflowSlug || !options.buildId)
       throw new RenderProtocolError('workflowSlug and buildId are required');
@@ -54,25 +55,28 @@ export class RenderProvider {
     this.contextKeys = [...(options.requestContextKeys ?? [])];
   }
 
+  /** Register a unique workflow and lazily cache its first successful committed manifest. */
   register(workflow: AnyWorkflow, root?: Omit<TaskPolicy, 'retry'>): WorkflowBinding {
     if (this.workflows.has(workflow.id)) throw new RenderProtocolError(`Duplicate workflow id ${workflow.id}`);
+    let manifest: Manifest | undefined;
     const binding: WorkflowBinding = {
       workflow,
       provider: this,
       rootPolicy: { ...taskPolicy(root, this.options.rootTask), retry: NO_RETRY },
       manifest: () =>
-        compileManifest(
+        (manifest ??= compileManifest(
           workflow,
           this.options.buildId,
           { retry: DEFAULT_RETRY, ...this.options.stepDefaults },
           binding.rootPolicy,
-        ),
+        )),
     };
     this.workflows.set(workflow.id, binding);
     workflowBindings.set(workflow, binding);
     return binding;
   }
 
+  /** Reserve a one-shot run ID and persist Render acceptance; retain ambiguous submissions without retrying. */
   async submit(binding: WorkflowBinding, envelope: RootEnvelope): Promise<RunRecord> {
     json([envelope], 'task arguments');
     const now = Date.now();
@@ -117,6 +121,7 @@ export class RenderProvider {
     }
   }
 
+  /** Reconcile one persisted run with native terminal state without regressing an active coordinator. */
   async getRun(workflowId: string, runId: string): Promise<RunRecord | null> {
     const record = await this.store.get(workflowId, runId);
     if (!record || terminal(record.status) || !record.providerId) return record;
@@ -154,6 +159,7 @@ export class RenderProvider {
     throw new RenderProtocolError(`Unsupported Render task status ${remote.status}`);
   }
 
+  /** Wait for terminal state using completion events and bounded polling; abort stops only this waiter. */
   async wait(workflowId: string, runId: string, signal?: AbortSignal): Promise<RunRecord> {
     let useEvents = !!this.transport.waitForEvent;
     while (true) {
@@ -178,6 +184,7 @@ export class RenderProvider {
     }
   }
 
+  /** Persist cancellation intent before the native call and preserve any terminal result won by a race. */
   async cancel(workflowId: string, runId: string): Promise<void> {
     const record = await this.getRun(workflowId, runId);
     if (!record) throw new RenderRunConflictError(`Unknown run ${runId}`);
