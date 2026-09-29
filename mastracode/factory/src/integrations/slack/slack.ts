@@ -584,6 +584,12 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
         observationalMemoryModelId: persistedModelId,
         memorySettings,
       });
+      // Subagent models live in session state only, so restore the ones this
+      // thread pinned at its first start instead of re-resolving them.
+      for (const agentType of SUBAGENT_TYPES) {
+        const modelId = await session.thread.getSetting({ key: pinnedSubagentModelKey(agentType) });
+        if (typeof modelId === 'string') await applySubagentModel(session, agentType, modelId);
+      }
     } else {
       const factoryModelId = await resolveFactoryDefaultModelId(projects, owner.factoryProjectId);
       const userPackModels = await resolveActivePackModels(modelPacks, owner);
@@ -643,25 +649,19 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
       }
 
       // Subagents follow the sender's pack like the TUI does (explore→fast,
-      // plan→plan, execute→build); roles the pack leaves empty keep the
-      // factory default `hydrateFactorySession` applied.
-      if (userPackModels) {
-        const packSubagentModels = [
-          ['explore', userPackModels.fast],
-          ['plan', userPackModels.plan],
-          ['execute', userPackModels.build],
-        ] as const;
-        for (const [agentType, modelId] of packSubagentModels) {
-          if (!modelId) continue;
-          try {
-            await session.subagents.model.set({ modelId, agentType });
-          } catch (error) {
-            console.warn("[slack] Failed to apply the sender's model pack subagent model", {
-              agentType,
-              modelId,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
+      // plan→plan, execute→build); roles the pack leaves empty use the factory
+      // default. Pinned on the thread like the main model, so a restart
+      // restores these rather than whatever pack or default exists by then.
+      const packSubagentModels = {
+        explore: userPackModels?.fast,
+        plan: userPackModels?.plan,
+        execute: userPackModels?.build,
+      };
+      for (const agentType of SUBAGENT_TYPES) {
+        const modelId = packSubagentModels[agentType] || factoryModelId;
+        if (!modelId) continue;
+        if (await applySubagentModel(session, agentType, modelId)) {
+          await session.thread.setSetting({ key: pinnedSubagentModelKey(agentType), value: modelId });
         }
       }
     }
@@ -688,6 +688,28 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
  * a pack saved without a build model all mean "no personal preference", which
  * falls through to the factory default rather than failing the dispatch.
  */
+const SUBAGENT_TYPES = ['explore', 'plan', 'execute'] as const;
+const pinnedSubagentModelKey = (agentType: string) => `slackSubagentModelId_${agentType}`;
+
+/** Best-effort: a subagent model that can't be applied must not fail the message. */
+async function applySubagentModel(
+  session: Parameters<ChannelSessionStart>[0]['session'],
+  agentType: (typeof SUBAGENT_TYPES)[number],
+  modelId: string,
+): Promise<boolean> {
+  try {
+    await session.subagents.model.set({ modelId, agentType });
+    return true;
+  } catch (error) {
+    console.warn('[slack] Failed to apply the subagent model', {
+      agentType,
+      modelId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
 async function resolveActivePackModels(
   modelPacks: ModelPacksStorage | undefined,
   owner: { orgId: string; userId: string },

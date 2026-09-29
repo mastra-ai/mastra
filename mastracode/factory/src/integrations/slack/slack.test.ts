@@ -1394,6 +1394,28 @@ describe('session start (onSessionStart)', () => {
     expect(session.restoredModel()).toBe('openai/gpt-5.6');
   });
 
+  // Subagent models aren't persisted on the thread, so a restarted process must
+  // apply them again rather than falling back to the server-wide settings.
+  it('re-applies subagent models when a restarted session restores its thread model', async () => {
+    const settings = new Map<string, unknown>();
+    await createChannelSessionStartHook(makeStartDeps({ activePack: { fast: 'openai/gpt-5.6-mini' } }) as any)(
+      startArgs(makeSession({ settings })) as any,
+    );
+
+    // The pack changed since the thread started; the thread keeps its models.
+    const restarted = makeSession({ settings });
+    const restartDeps = makeStartDeps({ activePack: { fast: 'openai/gpt-5.7-mini' } });
+    await createChannelSessionStartHook(restartDeps as any)(startArgs(restarted) as any);
+
+    expect(restarted.model.switch).not.toHaveBeenCalled();
+    expect(restartDeps.modelPacks.getActive).not.toHaveBeenCalled();
+    expect(restarted.subagents.model.set.mock.calls.map(([arg]) => arg)).toEqual([
+      { modelId: 'openai/gpt-5.6-mini', agentType: 'explore' },
+      { modelId: 'anthropic/claude-opus-5', agentType: 'plan' },
+      { modelId: 'anthropic/claude-opus-5', agentType: 'execute' },
+    ]);
+  });
+
   // Subagents follow the sender's pack the way the TUI applies packs, so a
   // Slack thread doesn't strand them on models the sender never chose.
   it("gives subagents the sender's pack models, falling back to the factory default", async () => {
@@ -1410,7 +1432,7 @@ describe('session start (onSessionStart)', () => {
 
     const noPack = makeSession();
     await createChannelSessionStartHook(makeStartDeps() as any)(startArgs(noPack) as any);
-    const noPackCalls = noPack.subagents.model.set.mock.calls.map(([arg]) => arg);
+    const noPackCalls = noPack.subagents.model.set.mock.calls.slice(-3).map(([arg]) => arg);
     expect(noPackCalls).toEqual(
       ['explore', 'plan', 'execute'].map(agentType => ({ modelId: 'anthropic/claude-opus-5', agentType })),
     );
