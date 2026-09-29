@@ -216,6 +216,34 @@ export type ToolDisplayEvent =
       displayName: string;
       argsSummary: string;
       args: unknown;
+    }
+  /**
+   * Fired once after the user approves an approval card. Only `post` results
+   * are honored: the returned message replaces the approval card in place.
+   * Returning nothing (or a blank message) keeps the default "Approved" card.
+   */
+  | {
+      kind: 'approved';
+      toolCallId: string;
+      toolName: string;
+      displayName: string;
+      argsSummary: string;
+      args: unknown;
+    }
+  /**
+   * Fired once after the user denies an approval card. Only `post` results
+   * are honored: the returned message replaces the approval card in place.
+   * Returning nothing (or a blank message) keeps the default "Denied" card.
+   * `byUser` is the denying user's name, or undefined in DMs.
+   */
+  | {
+      kind: 'denied';
+      toolCallId: string;
+      toolName: string;
+      displayName: string;
+      argsSummary: string;
+      args: unknown;
+      byUser?: string;
     };
 
 /** Context about which driver is consuming the function-form result. */

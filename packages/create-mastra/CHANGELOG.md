@@ -1,5 +1,7 @@
 # create-mastra
 
+## 1.31.4-alpha.10
+
 ## 1.31.4-alpha.9
 
 ## 1.31.4-alpha.8

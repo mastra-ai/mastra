@@ -291,6 +291,15 @@ export interface FactoryAttentionReceiptRecord extends FactoryAttentionIdentity 
   updatedAt: Date;
 }
 
+/** Stages in which a bound run can still act on its work item. */
+export const ACTIVE_RUN_BINDING_STAGES: ReadonlySet<string> = new Set([
+  'intake',
+  'triage',
+  'planning',
+  'execute',
+  'review',
+]);
+
 interface SetAttentionReceiptInput {
   orgId: string;
   factoryProjectId: string;

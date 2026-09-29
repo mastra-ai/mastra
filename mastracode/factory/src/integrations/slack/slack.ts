@@ -35,11 +35,12 @@ import type { FactoryActorExternalIdentity } from '../../storage/domains/comment
 import { actorFromChannelAuthor } from '../../storage/domains/comments/actor.js';
 import type { CommentsDomain } from '../../storage/domains/comments/domain.js';
 import type { MemorySettingsStorage } from '../../storage/domains/memory-settings/base.js';
-import type { ModelPacksStorage } from '../../storage/domains/model-packs/base.js';
+import type { ActiveModelPackRecord, ModelPacksStorage } from '../../storage/domains/model-packs/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { ExternalWorkItemSource, WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { FactoryChannelsConfig } from '../base.js';
+import { prepareSessionRunContext } from '../subscription-session.js';
 
 import { resolveEmojiShortcodes } from './emoji.js';
 import { slackCommentSource } from './feed-publisher.js';
@@ -584,9 +585,16 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
         observationalMemoryModelId: persistedModelId,
         memorySettings,
       });
+      // Subagent models live in session state only, so restore the ones this
+      // thread pinned at its first start instead of re-resolving them.
+      for (const agentType of SUBAGENT_TYPES) {
+        const modelId = await session.thread.getSetting({ key: pinnedSubagentModelKey(agentType) });
+        if (typeof modelId === 'string') await applySubagentModel(session, agentType, modelId);
+      }
     } else {
       const factoryModelId = await resolveFactoryDefaultModelId(projects, owner.factoryProjectId);
-      const userModelId = await resolveActivePackBuildModel(modelPacks, owner);
+      const userPackModels = await resolveActivePackModels(modelPacks, owner);
+      const userModelId = userPackModels?.build || undefined;
       const selectedModelId = userModelId ?? factoryModelId;
 
       await hydrateFactorySession(session, {
@@ -640,6 +648,23 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
           await session.model.saveForMode({ modeId: session.mode.get(), modelId: currentModelId });
         }
       }
+
+      // Subagents follow the sender's pack like the TUI does (explore→fast,
+      // plan→plan, execute→build); roles the pack leaves empty use the factory
+      // default. Pinned on the thread like the main model, so a restart
+      // restores these rather than whatever pack or default exists by then.
+      const packSubagentModels = {
+        explore: userPackModels?.fast,
+        plan: userPackModels?.plan,
+        execute: userPackModels?.build,
+      };
+      for (const agentType of SUBAGENT_TYPES) {
+        const modelId = packSubagentModels[agentType] || factoryModelId;
+        if (!modelId) continue;
+        if (await applySubagentModel(session, agentType, modelId)) {
+          await session.thread.setSetting({ key: pinnedSubagentModelKey(agentType), value: modelId });
+        }
+      }
     }
 
     // The sender's own observational-memory settings, applied last so they beat
@@ -656,22 +681,44 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
   };
 }
 
+const SUBAGENT_TYPES = ['explore', 'plan', 'execute'] as const;
+const pinnedSubagentModelKey = (agentType: string) => `slackSubagentModelId_${agentType}`;
+
+/** Best-effort: a subagent model that can't be applied must not fail the message. */
+async function applySubagentModel(
+  session: Parameters<ChannelSessionStart>[0]['session'],
+  agentType: (typeof SUBAGENT_TYPES)[number],
+  modelId: string,
+): Promise<boolean> {
+  try {
+    await session.subagents.model.set({ modelId, agentType });
+    return true;
+  } catch (error) {
+    console.warn('[slack] Failed to apply the subagent model', {
+      agentType,
+      modelId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
 /**
- * The `build` model of the sender's active model pack — the model that user
- * chose for themselves — or `undefined` when they have no pack.
+ * The models of the sender's active model pack — the models that user chose
+ * for themselves — or `undefined` when they have no pack.
  *
  * Best-effort by design: an uninitialized model-packs domain, a read failure, or
  * a pack saved without a build model all mean "no personal preference", which
  * falls through to the factory default rather than failing the dispatch.
  */
-async function resolveActivePackBuildModel(
+async function resolveActivePackModels(
   modelPacks: ModelPacksStorage | undefined,
   owner: { orgId: string; userId: string },
-): Promise<string | undefined> {
+): Promise<ActiveModelPackRecord['models'] | undefined> {
   if (!modelPacks) return undefined;
   try {
     const active = await modelPacks.getActive({ orgId: owner.orgId, userId: owner.userId });
-    return active?.models.build || undefined;
+    return active?.models;
   } catch (error) {
     console.warn('[slack] model pack lookup failed for a new session', {
       orgId: owner.orgId,
@@ -703,6 +750,40 @@ async function findInternalThread(mastra: Mastra | undefined, thread: HandlerThr
   return threads[0];
 }
 
+async function prepareExistingSessionOwnerContext(
+  thread: HandlerThread,
+  deps: SlackChannelDeps,
+  ctx: ChannelHandlerContext,
+  options: { expectedOrgId?: string; requireInternalThread: boolean },
+): Promise<'ready' | 'organization-mismatch'> {
+  const sourceControls = configuredSourceControls(deps);
+  if (sourceControls.length === 0 && !options.requireInternalThread) return 'ready';
+
+  const internalThread = await findInternalThread(ctx.mastra, thread);
+  if (!internalThread) {
+    if (options.requireInternalThread) {
+      throw new Error(`Could not resolve the internal Slack thread for ${thread.id}.`);
+    }
+    return 'ready';
+  }
+  if (sourceControls.length === 0 || internalThread.resourceId.startsWith('channel:')) return 'ready';
+  if (!options.expectedOrgId) {
+    throw new Error(`Could not authorize the owner of Slack Factory session ${internalThread.resourceId}.`);
+  }
+
+  const preparation = await prepareSessionRunContext(
+    ctx.requestContext,
+    internalThread.resourceId,
+    { sessions: createSourceControlSessionLookup(sourceControls) },
+    { expectedOrgId: options.expectedOrgId },
+  );
+  if (preparation === 'organization-mismatch') return preparation;
+  if (preparation === 'unavailable') {
+    throw new Error(`Could not authorize the owner of Slack Factory session ${internalThread.resourceId}.`);
+  }
+  return 'ready';
+}
+
 /**
  * Build the "new session" handler for mention / direct-message events. A mention or
  * DM on a not-yet-subscribed thread starts a NEW session; once subscribed, later
@@ -717,11 +798,13 @@ async function findInternalThread(mastra: Mastra | undefined, thread: HandlerThr
 async function gateDispatch(
   thread: HandlerThread,
   message: HandlerMessage,
-  { accountLinks, projects }: SlackChannelDeps,
+  deps: SlackChannelDeps,
   ctx: ChannelHandlerContext,
+  options: { requireInternalThread: boolean } = { requireInternalThread: false },
 ): Promise<{
   routed?: { link: ChannelAccountLink; factoryProjectId: string; slackWorkItemsEnabled: boolean };
 } | null> {
+  const { accountLinks, projects } = deps;
   const sender = await resolveLinkedSender({ thread, message, accountLinks });
   if (sender.status === 'blocked') return null;
   // Linked senders must also route to a Factory project before a run starts.
@@ -733,6 +816,14 @@ async function gateDispatch(
     // stamping only in the routed branch would silently run them on default
     // credentials.
     ctx.requestContext.set('user', { id: sender.link.userId, organizationId: sender.link.orgId });
+    const ownerContext = await prepareExistingSessionOwnerContext(thread, deps, ctx, {
+      expectedOrgId: sender.link.orgId,
+      requireInternalThread: options.requireInternalThread,
+    });
+    if (ownerContext === 'organization-mismatch') {
+      await thread.post('This thread belongs to a Factory session in another organization.');
+      return null;
+    }
 
     const route = await resolveFactoryForLink({ thread, ...sender, accountLinks, projects });
     if (route.status === 'blocked') return null;
@@ -866,7 +957,7 @@ async function reportPreDispatchError(
     messageId: message.id,
     authorId: message.author.userId,
   };
-  const logger = ctx.mastra?.getLogger();
+  const logger = typeof ctx.mastra?.getLogger === 'function' ? ctx.mastra.getLogger() : undefined;
   const logError = (line: string) => (logger ? logger.error(line) : console.error(line));
   logError(`[slack] Pre-dispatch failure ${JSON.stringify({ ...correlation, error: preDispatchErrorDetails(error) })}`);
   try {
@@ -1051,7 +1142,7 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       // resolve a factory (e.g. the default was cleared or its factory
       // deleted mid-conversation).
       try {
-        const gate = await gateDispatch(thread, message, deps, ctx);
+        const gate = await gateDispatch(thread, message, deps, ctx, { requireInternalThread: true });
         if (!gate) return;
       } catch (error) {
         await reportPreDispatchError(thread, message, ctx, error);

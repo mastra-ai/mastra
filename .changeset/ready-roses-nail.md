@@ -106,7 +106,7 @@ const color = getSignalColor('goal');
 **Other changes**
 
 - Tool approval buttons read `Approved` or `Declined` after a decision, and their accessible names follow (`Approved search`, `Declined search`).
-- Ramp steps stay inside sRGB. Chart, span, and syntax roles are picked to stay distinguishable under common color-vision deficiencies and to meet 3:1 against the page in both themes. The sequential chart scale runs light-to-dark in light mode and dark-to-light in dark mode.
+- Ramp steps stay inside sRGB. Chart, span, and syntax roles are picked to stay distinguishable under common color-vision deficiencies and to meet 3:1 against the page in both themes. The sequential chart scale starts at the step with the most contrast against the page: dark-to-light in light mode and light-to-dark in dark mode.
 - Scorer spans are pink, and workspace, memory, and provider spans are now on clearly separate hues.
 - Light-mode destructive buttons darken on hover and press, like dark mode.
 - Notes in `Notice` use the neutral `muted` surface.

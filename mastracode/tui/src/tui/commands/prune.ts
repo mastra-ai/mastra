@@ -13,6 +13,7 @@
  *   /prune keep-memory          prune, but keep chat history (messages/threads)
  *   /prune vacuum keep-memory   flags combine in any order
  */
+import { acquireMaintenanceLock, MaintenanceLockError } from '@mastra/code-sdk/utils/maintenance-lock';
 import { runStorageMaintenance } from '@mastra/code-sdk/utils/storage-maintenance';
 
 import type { SlashCommandContext } from './types.js';
@@ -32,6 +33,20 @@ export async function handlePruneCommand(ctx: SlashCommandContext, args: string[
   }
   const vacuum = flags.has('vacuum');
   const keepMemory = flags.has('keep-memory');
+
+  // Same lock as `mastracode prune`: refuse while another session is open, and
+  // hold new sessions back until maintenance is done. This session is
+  // registered under our own PID, which the live-session check skips.
+  let releaseLock: () => void;
+  try {
+    releaseLock = acquireMaintenanceLock();
+  } catch (err) {
+    if (err instanceof MaintenanceLockError) {
+      ctx.showError(err.message);
+      return;
+    }
+    throw err;
+  }
 
   // Hand the terminal back so progress prints as plain text and the deletes
   // can't freeze the UI or race the agent's own writes. The TUI's alternate
@@ -68,6 +83,8 @@ export async function handlePruneCommand(ctx: SlashCommandContext, args: string[
   } catch (err) {
     log(`Storage maintenance failed: ${err instanceof Error ? err.message : String(err)}`);
     exitCode = 1;
+  } finally {
+    releaseLock();
   }
   // The storage connection is closed — a fresh process is required either way.
   if (ctx.exit) ctx.exit(exitCode);

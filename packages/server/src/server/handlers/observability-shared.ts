@@ -23,6 +23,7 @@ export const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling'
 export const OBSERVABILITY_DELTA_POLLING_UPGRADE_MESSAGE =
   'Delta polling requires a newer @mastra/core with observability delta polling support. Please upgrade.';
 const OBSERVABILITY_TRACE_QUERY_STORAGE_FEATURE = 'trace-query';
+const OBSERVABILITY_TRACE_AGGREGATE_STORAGE_FEATURE = 'trace-aggregate';
 const OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE = 'trace-query-root-duration';
 const OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE = 'trace-query-context-ids';
 const TRACE_QUERY_CONTEXT_ID_FIELDS = new Set(['runId', 'sessionId', 'userId', 'organizationId']);
@@ -44,6 +45,14 @@ export function supportsTraceQueryDiscoveryCore() {
     typeof coreStorage.planTraceQueryValues === 'function' &&
     typeof coreStorage.getTraceQueryCanonicalFieldDescriptors === 'function' &&
     typeof coreStorage.TraceQueryResourceLimitError === 'function'
+  );
+}
+
+export function supportsTraceAggregateCore() {
+  return (
+    coreStorage.traceAggregateRequestSchema !== undefined &&
+    coreStorage.traceAggregateResponseSchema !== undefined &&
+    typeof coreStorage.planTraceAggregate === 'function'
   );
 }
 
@@ -104,6 +113,14 @@ export function assertObservabilityTraceQuerySupported(observabilityStore: Obser
 
   throw new HTTPException(501, {
     message: 'Advanced trace queries are not supported by the configured observability store',
+  });
+}
+
+export function assertObservabilityTraceAggregateSupported(observabilityStore: ObservabilityStorage) {
+  if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_AGGREGATE_STORAGE_FEATURE)) return;
+
+  throw new HTTPException(501, {
+    message: 'Trace aggregation is not supported by the configured observability store',
   });
 }
 
@@ -400,6 +417,15 @@ export const NEW_ROUTE_DEFS = {
     summary: 'Query traces',
     description:
       'Returns completed logical traces or distinct thread groups matching an advanced trace query. Thread grouping remains supported but is deprecated; use queryTraceThreads instead.',
+    requiresPermission: 'observability:read',
+  },
+
+  AGGREGATE_TRACES: {
+    method: 'POST',
+    path: '/observability/traces/aggregate',
+    summary: 'Aggregate traces',
+    description:
+      'Returns grouped and optionally time-bucketed measures (counts, durations, error rates) over completed logical traces matching an advanced trace predicate',
     requiresPermission: 'observability:read',
   },
 

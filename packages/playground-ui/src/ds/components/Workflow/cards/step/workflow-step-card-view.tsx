@@ -99,7 +99,7 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
           'has-focus-visible:outline-1 has-focus-visible:outline-offset-4 has-focus-visible:outline-border-focus',
           isSelected && 'outline-1 outline-offset-4 outline-border-focus',
           isBodyExpanded && 'border-dashed border-muted-foreground/40 shadow-none',
-          isWaiting && 'border-info-edge',
+          isWaiting && 'border-info-indicator',
           isHovered && !isSelected && 'bg-muted',
         )}
         data-workflow-node

@@ -23,7 +23,7 @@ export function ClickRippleOverlay({ ripples, onAnimationEnd }: ClickRippleOverl
   if (ripples.length === 0) return null;
 
   return (
-    <>
+    <span className="pointer-events-none absolute inset-0 opacity-40">
       {ripples.map(ripple => (
         <span
           key={ripple.id}
@@ -37,6 +37,6 @@ export function ClickRippleOverlay({ ripples, onAnimationEnd }: ClickRippleOverl
           onAnimationEnd={() => onAnimationEnd(ripple.id)}
         />
       ))}
-    </>
+    </span>
   );
 }

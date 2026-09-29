@@ -1,5 +1,30 @@
 # @mastra/server
 
+## 1.72.0-alpha.10
+
+### Minor Changes
+
+- Added `POST /observability/traces/aggregate`, which returns grouped and optionally time-bucketed trace measures such as counts, duration percentiles, and error rates. The endpoint requires the `observability:read` permission and uses the same error contract as `POST /observability/traces/query`: malformed JSON returns 400, invalid queries return 422 with structured `issues`, and execution timeouts return 504. Observability stores that do not support the `trace-aggregate` capability return 501 with code `TRACE_AGGREGATE_UNSUPPORTED`. ([#25501](https://github.com/mastra-ai/mastra/pull/25501))
+
+  ```ts
+  const response = await fetch('/api/observability/traces/aggregate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+      groupBy: ['entityName'],
+      interval: '1d',
+      measures: ['count', 'duration.p95', 'errorRate'],
+    }),
+  });
+  // { rows: [{ dimensions, bucket, measures }], truncated }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`ed67acc`](https://github.com/mastra-ai/mastra/commit/ed67acc3213d469ed69610c304c604693cfec383), [`5f1efad`](https://github.com/mastra-ai/mastra/commit/5f1efad5c2230a4de715cad3f01859b4ff9d255b), [`75c2ee1`](https://github.com/mastra-ai/mastra/commit/75c2ee1280a5441eb66c31f23a53a52b42244686), [`9a35897`](https://github.com/mastra-ai/mastra/commit/9a3589783a40157759f939f5c63bba3c8aef1c1c), [`d3a22a7`](https://github.com/mastra-ai/mastra/commit/d3a22a78f12e094118ce80ec35b63987009644e2), [`e4e0f90`](https://github.com/mastra-ai/mastra/commit/e4e0f9000d73396609ae2f2b6c31259ade43078c), [`caf94f9`](https://github.com/mastra-ai/mastra/commit/caf94f9c1927f737370b6118264bd16c7210a765), [`6c9f7ab`](https://github.com/mastra-ai/mastra/commit/6c9f7abf9bdce0a52450398b31d497519465bb80), [`91196d5`](https://github.com/mastra-ai/mastra/commit/91196d5a6d582c0f494622d0378f33e22d881659), [`f36019c`](https://github.com/mastra-ai/mastra/commit/f36019c24193e0d29f920663851198bf45e3d12f)]:
+  - @mastra/core@1.72.0-alpha.10
+
 ## 1.72.0-alpha.9
 
 ### Patch Changes
