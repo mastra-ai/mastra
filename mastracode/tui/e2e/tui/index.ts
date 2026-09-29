@@ -75,9 +75,9 @@ import { githubSignalsUnsubscribeReloadScenario } from './github-signals-unsubsc
 import { goalApiErrorStopsLoopScenario } from './goal-api-error-stops-loop.js';
 import { goalDurationToolApprovalScenario } from './goal-duration-tool-approval.js';
 import { goalFreshThreadPersistenceScenario } from './goal-fresh-thread-persistence.js';
+import { goalJudgeEscLoadedScenario, goalJudgeEscUnloadedScenario } from './goal-judge-esc-pause.js';
 import { goalJudgeOmModelIsolationScenario } from './goal-judge-om-model-isolation.js';
 import { goalJudgeSingleRenderScenario } from './goal-judge-single-render.js';
-import { goalJudgeEscLoadedScenario, goalJudgeEscUnloadedScenario } from './goal-judge-esc-pause.js';
 import { goalMaxRunsEndsGoalScenario } from './goal-max-runs-ends-goal.js';
 import { goalResumeSingleRenderScenario } from './goal-resume-single-render.js';
 import { goalSurvivesNewThreadScenario } from './goal-survives-new-thread.js';
