@@ -1,0 +1,5 @@
+{
+  "attachment": ["bee-brood", "bee-buzz", "bee-cell", "bee-comb", "bee-hive", "bee-swarm"],
+  "temperature": ["bee-brood", "bee-buzz", "bee-cell", "bee-comb", "bee-hive"],
+  "structuredOutput": ["bee-buzz", "bee-comb", "bee-hive"]
+}

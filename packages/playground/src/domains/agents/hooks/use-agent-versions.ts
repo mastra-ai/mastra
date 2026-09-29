@@ -9,7 +9,6 @@ import type {
 } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useQuery, useMutation, useQueryClient, skipToken } from '@tanstack/react-query';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 export type { ListAgentVersionsParams, CreateAgentVersionParams };
 
@@ -22,9 +21,11 @@ type UseAgentVersionsParams = {
 /**
  * Hook to list versions of a stored agent
  */
-export const useAgentVersions = ({ agentId, params, enabled = true }: UseAgentVersionsParams) => {
+export const useAgentVersions = (
+  { agentId, params, enabled = true }: UseAgentVersionsParams,
+  requestContext?: Record<string, any>,
+) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useQuery<ListAgentVersionsResponse>({
     queryKey: ['agent-versions', agentId, params, requestContext],
@@ -36,9 +37,11 @@ export const useAgentVersions = ({ agentId, params, enabled = true }: UseAgentVe
 /**
  * Hook to get a single version of a stored agent
  */
-export const useAgentVersion = ({ agentId, versionId }: { agentId: string; versionId: string }) => {
+export const useAgentVersion = (
+  { agentId, versionId }: { agentId: string; versionId: string },
+  requestContext?: Record<string, any>,
+) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useQuery<AgentVersionResponse>({
     queryKey: ['agent-version', agentId, versionId, requestContext],
@@ -50,10 +53,9 @@ export const useAgentVersion = ({ agentId, versionId }: { agentId: string; versi
 /**
  * Hook to create a new version of a stored agent
  */
-export const useCreateAgentVersion = ({ agentId }: { agentId: string }) => {
+export const useCreateAgentVersion = ({ agentId }: { agentId: string }, requestContext?: Record<string, any>) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useMutation<AgentVersionResponse, Error, CreateAgentVersionParams | undefined>({
     mutationFn: (params?: CreateAgentVersionParams) =>
@@ -68,10 +70,9 @@ export const useCreateAgentVersion = ({ agentId }: { agentId: string }) => {
 /**
  * Hook to activate a specific version of a stored agent
  */
-export const useActivateAgentVersion = ({ agentId }: { agentId: string }) => {
+export const useActivateAgentVersion = ({ agentId }: { agentId: string }, requestContext?: Record<string, any>) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useMutation<ActivateAgentVersionResponse, Error, string>({
     mutationFn: (versionId: string) => client.getStoredAgent(agentId).activateVersion(versionId, requestContext),
@@ -85,10 +86,9 @@ export const useActivateAgentVersion = ({ agentId }: { agentId: string }) => {
 /**
  * Hook to restore a specific version of a stored agent (creates a new version from an old one)
  */
-export const useRestoreAgentVersion = ({ agentId }: { agentId: string }) => {
+export const useRestoreAgentVersion = ({ agentId }: { agentId: string }, requestContext?: Record<string, any>) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useMutation<AgentVersionResponse, Error, string>({
     mutationFn: (versionId: string) => client.getStoredAgent(agentId).restoreVersion(versionId, requestContext),
@@ -102,10 +102,9 @@ export const useRestoreAgentVersion = ({ agentId }: { agentId: string }) => {
 /**
  * Hook to delete a specific version of a stored agent
  */
-export const useDeleteAgentVersion = ({ agentId }: { agentId: string }) => {
+export const useDeleteAgentVersion = ({ agentId }: { agentId: string }, requestContext?: Record<string, any>) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useMutation<DeleteAgentVersionResponse, Error, string>({
     mutationFn: (versionId: string) => client.getStoredAgent(agentId).deleteVersion(versionId, requestContext),
@@ -118,17 +117,19 @@ export const useDeleteAgentVersion = ({ agentId }: { agentId: string }) => {
 /**
  * Hook to compare two versions of a stored agent
  */
-export const useCompareAgentVersions = ({
-  agentId,
-  fromVersionId,
-  toVersionId,
-}: {
-  agentId: string;
-  fromVersionId: string;
-  toVersionId: string;
-}) => {
+export const useCompareAgentVersions = (
+  {
+    agentId,
+    fromVersionId,
+    toVersionId,
+  }: {
+    agentId: string;
+    fromVersionId: string;
+    toVersionId: string;
+  },
+  requestContext?: Record<string, any>,
+) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useQuery<CompareVersionsResponse>({
     queryKey: ['agent-versions-compare', agentId, fromVersionId, toVersionId, requestContext],

@@ -38,12 +38,17 @@ tokens:
   - "\\bfight(?:s|ing)? (?:the|a|an|its) [a-z]+ for\\b"
 
   # --- Kept honest: a check as the conscience ("the gates that keep them
-  # honest," "keeps a before-and-after comparison honest"). The one
-  # standard-library match is a Go comment using the same figure, so it
-  # fires by design. The object slot admits up to three words after a
-  # documentation-corpus audit (2026-09) found the compound object
-  # escaping.
-  - "\\bke(?:eps?|eping|pt) (?:it|them|us|everyone|everybody) honest\\b"
+  # honest," "keeps a before-and-after comparison honest," "keeps this
+  # honest"). The one standard-library match is a Go comment using the
+  # same figure, so it fires by design. The object slot admits up to
+  # three words after a documentation-corpus audit (2026-09) found the
+  # compound object escaping. The bare demonstrative and reflexive
+  # objects ("keeps this honest," "keep ourselves honest") sat between
+  # the two tokens until the maintainer spotted one; they match twice
+  # more across the seven pre-LLM corpora, a Go proposal's linker that
+  # will "keep everything honest" and a Go comment stripping a variable
+  # "to keep ourselves honest," each the figure.
+  - "\\bke(?:eps?|eping|pt) (?:it|them|us|me|you|this|that|these|those|things|everything|everyone|everybody|itself|myself|yourself|ourselves|themselves) honest\\b"
   - "\\bke(?:eps?|eping|pt) (?:the|a|an|its|every|each|this|that|these|those|all|both) (?:[a-z'-]+ ){1,3}honest\\b"
 
   # --- Honest numbers: candor credited to a count ("an honest count,"

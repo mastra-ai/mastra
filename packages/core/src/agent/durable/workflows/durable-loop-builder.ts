@@ -7,6 +7,7 @@ import { decideContinuation } from '../../../loop/shared/continuation-core';
 import { drainSignalsToTranscript } from '../../../loop/shared/steps/signal-drain-core';
 import { getAbortReason, isMastraTimeoutError } from '../../../loop/timeout';
 import { pruneAgentLoopSnapshot } from '../../../loop/workflows/prune-snapshot';
+import type { StepResultReads } from '../../../loop/workflows/prune-snapshot';
 import type { Mastra } from '../../../mastra';
 import { InternalSpans } from '../../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
@@ -31,6 +32,7 @@ import {
   modelListEntrySchema,
   durableAgenticOutputSchema,
   baseIterationStateSchema,
+  durableOptionsSchema,
   createBaseIterationStateUpdate,
   resolveDurableToolCallConcurrency,
   executeDurableAgentScorers,
@@ -43,6 +45,14 @@ import {
   createDurableToolCallStep,
   createDurableLLMMappingStep,
 } from './steps';
+
+const COLLECT_TOOL_RESULTS_STEP_ID = 'collect-tool-results';
+
+/**
+ * The outer step that publishes FINISH. Recovery reads its saved status to tell
+ * whether FINISH already went out before a crash.
+ */
+export const MAP_FINAL_OUTPUT_STEP_ID = 'map-final-output';
 
 /**
  * Options for creating a durable agentic workflow
@@ -114,7 +124,7 @@ const durableAgenticInputSchema = z.object({
   modelList: z.array(modelListEntrySchema).optional(),
   // Serializable scorers configuration, resolved from Mastra by name at runtime
   scorers: z.record(z.string(), z.any()).optional(),
-  options: z.any(),
+  options: durableOptionsSchema,
   state: z.any(),
   messageId: z.string(),
   // Exported AGENT_RUN / MODEL_GENERATION span data, threaded so the run shares one trace
@@ -197,18 +207,16 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
   }
 
   /**
-   * Engine-aware snapshot pruning. The evented engine replaces its in-flight
-   * `stepResults` with the storage-merged context at every step boundary, so
-   * persisted step outputs are still *live* data for later same-iteration
-   * steps (`collect-tool-results` re-reads `durable-llm-execution`'s output).
-   * The `running`-only history strip (#20747) assumes storage is write-only
-   * during execution — true on the default engine, false on evented — so
-   * evented retains running history. See `pruneAgentLoopSnapshot` for the
-   * full rationale and why retention stays bounded.
+   * Engine-aware snapshot pruning. The `running`-only history strip (#20747)
+   * keeps what a crash-restart reads back, including `stepResultReads`: steps
+   * that read an earlier step's result via `getStepResult` (reader → sources).
+   * The evented engine additionally reads persisted step results back at every
+   * step boundary during normal execution, so it retains running history. See
+   * `pruneAgentLoopSnapshot` for the rationale.
    */
-  protected pruneSnapshotHook(): typeof pruneAgentLoopSnapshot {
-    if (this.#options?.engine !== 'evented') return pruneAgentLoopSnapshot;
-    return args => pruneAgentLoopSnapshot({ ...args, retainRunningHistory: true });
+  protected pruneSnapshotHook(stepResultReads: StepResultReads = {}): typeof pruneAgentLoopSnapshot {
+    const retainRunningHistory = this.#options?.engine === 'evented';
+    return args => pruneAgentLoopSnapshot({ ...args, retainRunningHistory, stepResultReads });
   }
 
   // ── Runtime hooks ──────────────────────────────────────────────────────
@@ -398,7 +406,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // Agent-loop snapshots are pure resume artifacts — strip everything a
           // resume never reads before persisting. Engine-aware: evented
           // retains running history (see pruneSnapshotHook).
-          pruneSnapshot: this.pruneSnapshotHook(),
+          pruneSnapshot: this.pruneSnapshotHook({ [COLLECT_TOOL_RESULTS_STEP_ID]: [llmExecutionStep.id] }),
           validateInputs: false,
           // Deliberate divergence from the main loop (#21529): the workflow
           // engine's own step events repeatedly serialized cumulative
@@ -486,6 +494,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         .map(
           async ({ inputData, getStepResult, getInitData }) => {
             const toolResults = inputData as DurableToolCallOutput[];
+            // Direct read of an earlier step: declared to pruneSnapshotHook above
+            // so snapshot pruning keeps it for a crash-restart.
             const llmOutput = getStepResult(llmExecutionStep.id) as DurableLLMStepOutput;
             const initData = getInitData() as IterationState;
 
@@ -498,7 +508,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               state: llmOutput?.state ?? initData.state,
             };
           },
-          { id: 'collect-tool-results' },
+          { id: COLLECT_TOOL_RESULTS_STEP_ID },
         )
         // Step 5: Map tool results back to state
         .then(llmMappingStep)
@@ -930,7 +940,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
 
             return finalOutput;
           },
-          { id: 'map-final-output' },
+          { id: MAP_FINAL_OUTPUT_STEP_ID },
         )
         // Execute scorers (fire-and-forget, doesn't affect main result)
         .map(

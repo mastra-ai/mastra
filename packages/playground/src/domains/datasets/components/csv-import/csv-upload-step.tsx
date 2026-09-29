@@ -2,6 +2,7 @@
 
 import { FieldBlock, fieldErrorId } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Upload } from 'lucide-react';
@@ -101,9 +102,9 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
           // Default state
           'border-border bg-background',
           // Drag over state
-          isDragOver && 'border-accent1/50 bg-accent1/5',
+          isDragOver && 'border-success-edge bg-success-subtle',
           // Error state
-          error && 'border-accent2/50 bg-accent2/5',
+          error && 'border-destructive-edge bg-destructive-subtle',
           // Disabled during parsing
           isParsing && 'cursor-wait opacity-60',
         )}
@@ -111,7 +112,9 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
         {isParsing ? (
           <>
             <Spinner />
-            <span className="text-body text-muted-foreground">Parsing CSV...</span>
+            <Txt as="span" tone="muted">
+              Parsing CSV...
+            </Txt>
           </>
         ) : (
           <>
@@ -119,8 +122,12 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
               <Upload className="h-8 w-8" />
             </Icon>
             <div className="flex flex-col items-center gap-1">
-              <span className="text-subheading text-placeholder">Click to upload or drag and drop</span>
-              <span className="text-caption text-muted-foreground">CSV files only</span>
+              <Txt as="span" variant="subheading" tone="faint">
+                Click to upload or drag and drop
+              </Txt>
+              <Txt as="span" variant="caption" tone="muted">
+                CSV files only
+              </Txt>
             </div>
           </>
         )}

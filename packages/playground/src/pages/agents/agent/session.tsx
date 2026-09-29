@@ -1,8 +1,11 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
+import { BrowserToolCallsProvider } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
@@ -10,24 +13,25 @@ import { SessionHeader } from '@/components/session-header';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
 import { AgentChatLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
 import { AgentUnavailable } from '@/domains/agents/components/agent-unavailable';
-import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
 import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-observational-memory-context';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
-import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-settings';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
-import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
-import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
+import { AgentRunActions } from '@/domains/run-options/components/agent-run-actions';
 
 function AgentSession() {
   const { agentId, threadId } = useParams();
   const [searchParams] = useSearchParams();
-  const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
-  const { data: memory } = useMemory(agentId!);
+  const {
+    data: agent,
+    isLoading: isAgentLoading,
+    error,
+  } = useAgent(agentId!, useEntityRequestContext('agent', agentId!)[0]);
+  const { data: memory } = useMemory(agentId!, useEntityRequestContext('agent', agentId!)[0]);
   const navigate = useNavigate();
   const isNewThread = threadId === 'new';
 
@@ -36,11 +40,14 @@ function AgentSession() {
 
   const hasMemory = Boolean(memory?.result);
 
-  const { refetch: refreshThreads } = useThreads({
-    resourceId: agentId!,
-    agentId: agentId!,
-    isMemoryEnabled: hasMemory,
-  });
+  const { refetch: refreshThreads } = useThreads(
+    {
+      resourceId: agentId!,
+      agentId: agentId!,
+      isMemoryEnabled: hasMemory,
+    },
+    useEntityRequestContext('agent', agentId!)[0],
+  );
 
   useEffect(() => {
     if (!hasMemory) return;
@@ -89,49 +96,46 @@ function AgentSession() {
   };
 
   return (
-    <TracingSettingsProvider entityId={agentId!} entityType="agent">
-      <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
-        <SchemaRequestContextProvider>
-          <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId} resourceId={agentId!}>
-            <BrowserToolCallsProvider key={`browser-${agentId}-${actualThreadId}`}>
-              <BrowserSessionProvider
-                key={`session-${agentId}-${actualThreadId}`}
-                agentId={agentId!}
-                threadId={actualThreadId}
-                enabled={Boolean(agent?.hasBrowser ?? agent?.browserTools?.length)}
-              >
-                <ThreadInputProvider>
-                  <ObservationalMemoryProvider>
-                    <ActivatedSkillsProvider>
-                      <PageLayout variant="fit">
-                        <h1 className="sr-only">{agentId}</h1>
-                        <SessionHeader />
-                        <div className="relative grid h-full min-h-0">
-                          <AgentChat
-                            key={actualThreadId}
-                            agentId={agentId!}
-                            agentName={agent?.name}
-                            modelVersion={agent?.modelVersion}
-                            supportsMemory={agent?.supportsMemory}
-                            threadId={actualThreadId}
-                            memory={hasMemory}
-                            refreshThreadList={handleRefreshThreadList}
-                            modelList={agent?.modelList}
-                            messageId={messageId}
-                            isNewThread={isNewThread}
-                            hideModelSwitcher
-                          />
-                        </div>
-                      </PageLayout>
-                    </ActivatedSkillsProvider>
-                  </ObservationalMemoryProvider>
-                </ThreadInputProvider>
-              </BrowserSessionProvider>
-            </BrowserToolCallsProvider>
-          </WorkingMemoryProvider>
-        </SchemaRequestContextProvider>
-      </AgentSettingsProvider>
-    </TracingSettingsProvider>
+    <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
+      <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId} resourceId={agentId!}>
+        <BrowserToolCallsProvider key={`browser-${agentId}-${actualThreadId}`}>
+          <BrowserSessionProvider
+            key={`session-${agentId}-${actualThreadId}`}
+            agentId={agentId!}
+            threadId={actualThreadId}
+            enabled={Boolean(agent?.hasBrowser ?? agent?.browserTools?.length)}
+          >
+            <ThreadInputProvider>
+              <ObservationalMemoryProvider>
+                <ActivatedSkillsProvider>
+                  <PageLayout variant="fit">
+                    <h1 className="sr-only">{agentId}</h1>
+                    <SessionHeader />
+                    <div className="relative grid h-full min-h-0">
+                      <AgentChat
+                        key={actualThreadId}
+                        agentId={agentId!}
+                        agentName={agent?.name}
+                        modelVersion={agent?.modelVersion}
+                        supportsMemory={agent?.supportsMemory}
+                        threadId={actualThreadId}
+                        memory={hasMemory}
+                        refreshThreadList={handleRefreshThreadList}
+                        modelList={agent?.modelList}
+                        messageId={messageId}
+                        isNewThread={isNewThread}
+                        hideModelSwitcher
+                        runOptionsSlot={<AgentRunActions agentId={agentId!} />}
+                      />
+                    </div>
+                  </PageLayout>
+                </ActivatedSkillsProvider>
+              </ObservationalMemoryProvider>
+            </ThreadInputProvider>
+          </BrowserSessionProvider>
+        </BrowserToolCallsProvider>
+      </WorkingMemoryProvider>
+    </AgentSettingsProvider>
   );
 }
 

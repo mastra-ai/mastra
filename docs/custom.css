@@ -700,6 +700,11 @@ input[type='search']::-ms-clear {
   }
 }
 
+.sidebar-group-name > .menu__list-item-collapsible > .menu__link {
+  height: 1.5rem;
+  padding-block: 0;
+}
+
 .sidebar-group-name > .menu__list-item-collapsible span[class*='categoryLinkLabel'] {
   text-transform: uppercase;
   letter-spacing: 0.025em;

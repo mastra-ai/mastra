@@ -318,7 +318,7 @@ export function createDurableToolCallStep() {
         args = argsFromInput;
         resumeDataFromArgs = resumeDataFromInput;
       }
-      // Non-transient data-* chunks emitted by output processors via
+      // Non-transient data-* chunks emitted by output processors or tools via
       // writer.custom() during this tool call. This step's messageList is a
       // local copy whose mutations don't cross the step boundary, so parts are
       // collected here and carried on the output record for the mapping step
@@ -453,24 +453,8 @@ export function createDurableToolCallStep() {
         ) as typeof tool;
       }
 
-      if (!tool) {
-        tool = resolveTool(toolName, mastra as Mastra);
-      }
-
-      if (!tool && mastra) {
-        mastraTools = (mastra as Mastra).listTools?.() as Record<string, any> | undefined;
-        if (mastraTools) {
-          tool = findProviderToolByName(mastraTools as any, toolName) as typeof tool;
-          if (!tool) {
-            tool = Object.values(mastraTools).find(
-              (t: any) => t && typeof t === 'object' && 'id' in t && t.id === toolName,
-            ) as typeof tool;
-          }
-        }
-      }
-
       // Cross-process fallback: workspace/skill tools are per-request closures
-      // never registered at the Mastra-instance level, so the lookups above miss
+      // never registered at the Mastra-instance level, so the registry lookups miss
       // them when the durable steps run on a separate process (e.g. the
       // @mastra/inngest connect() worker) whose registry is empty. Rebuild the
       // full toolset from the agent — the same rebuild the LLM step already does
@@ -518,6 +502,25 @@ export function createDurableToolCallStep() {
           }
           if (!tool) {
             tool = Object.values(rebuiltTools).find(
+              (t: any) => t && typeof t === 'object' && 'id' in t && t.id === toolName,
+            ) as typeof tool;
+          }
+        }
+      }
+
+      // Mastra-wide lookup runs only after the owning agent's tools (registry or
+      // rebuild) miss: tool ids are not unique across agents, so a global lookup
+      // first could execute another agent's same-id tool on a cold worker.
+      if (!tool) {
+        tool = resolveTool(toolName, mastra as Mastra);
+      }
+
+      if (!tool && mastra) {
+        mastraTools = (mastra as Mastra).listTools?.() as Record<string, any> | undefined;
+        if (mastraTools) {
+          tool = findProviderToolByName(mastraTools as any, toolName) as typeof tool;
+          if (!tool) {
+            tool = Object.values(mastraTools).find(
               (t: any) => t && typeof t === 'object' && 'id' in t && t.id === toolName,
             ) as typeof tool;
           }
@@ -998,8 +1001,13 @@ export function createDurableToolCallStep() {
 
       // Provide outputWriter so context.writer.write() / context.writer.custom()
       // emit chunks through pubsub (matching the regular agent's tool streaming).
+      // Non-transient data-* chunks are also collected for persistence, as the
+      // regular agent does for tool-written data parts (#25122).
       const outputWriter = pubsub
         ? async (chunk: any) => {
+            if (typeof chunk?.type === 'string' && chunk.type.startsWith('data-') && !chunk.transient) {
+              collectProcessorDataPart({ type: chunk.type, data: chunk.data, messageId: chunk.messageId });
+            }
             await emitChunkEvent(pubsub, runId, chunk as ChunkType);
           }
         : undefined;
@@ -1493,6 +1501,7 @@ export function createDurableToolCallStep() {
             result: completedTask.result,
             providerMetadata: backgroundResultMetadata(bgOutcome.taskId, 'completed'),
             ...(bgOutcome.status === 'started' ? (approvalGrant ?? {}) : {}),
+            ...(processorDataParts.length ? { processorDataParts } : {}),
           };
         }
 
@@ -1726,6 +1735,7 @@ export function createDurableToolCallStep() {
               },
               {
                 policy: registryEntry?.toolPayloadTransform,
+                toolTransform: (tool as { transform?: any })?.transform,
                 tools: registryEntry?.tools,
                 logger: logger as any,
               },
@@ -1785,6 +1795,7 @@ export function createDurableToolCallStep() {
               },
               {
                 policy: registryEntry?.toolPayloadTransform,
+                toolTransform: (tool as { transform?: any })?.transform,
                 tools: registryEntry?.tools,
                 logger: logger as any,
               },

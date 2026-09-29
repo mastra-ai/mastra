@@ -1,4 +1,5 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { MessageSquare } from 'lucide-react';
 import { Link } from 'react-router';
 
@@ -9,8 +10,7 @@ import { isPullRequestSource } from '../services/workItems';
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 
-const RELATED_ITEM_LINK_CLASS =
-  'text-meta text-muted-foreground hover:text-foreground focus-visible:outline-accent1 relative z-10 flex w-fit max-w-full items-center gap-1 rounded-sm outline-none hover:underline focus-visible:outline-2 focus-visible:outline-offset-2';
+const RELATED_ITEM_LINK_CLASS = `text-meta text-muted-foreground hover:text-foreground relative z-10 flex w-fit max-w-full items-center gap-1 rounded-sm hover:underline ${focusRing}`;
 
 export function RelatedWorkItemLink({
   item,
@@ -41,7 +41,14 @@ export function RelatedWorkItemLink({
         <PullRequestStatusIcon status={pullRequestStatus} size={12} decorative />
       )}
       <span className="truncate">{reference ?? item.title}</span>
-      {live && <MessageSquare data-live-session-indicator size={11} className="text-accent1 shrink-0" aria-hidden />}
+      {live && (
+        <MessageSquare
+          data-live-session-indicator
+          size={11}
+          className="text-badge-green-indicator shrink-0"
+          aria-hidden
+        />
+      )}
     </>
   );
   let tooltip = reference === undefined ? relation : `${relation} · ${item.title}`;

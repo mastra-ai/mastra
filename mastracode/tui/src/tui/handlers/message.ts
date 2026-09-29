@@ -53,6 +53,21 @@ function getRawParts(message: MastraDBMessage): MessagePart[] {
   return getContent(message)?.parts ?? [];
 }
 
+/**
+ * Quiet mode keeps "Thinking..." out of the chat and shows it in the status line above the input
+ * while the streaming message's latest content is reasoning.
+ */
+function syncQuietThinkingStatus(ctx: EventHandlerContext, message?: MastraDBMessage): void {
+  const { state } = ctx;
+  const latest = message
+    ? getRawParts(message).findLast(
+        part => part.type === 'text' || part.type === 'reasoning' || part.type === 'tool-invocation',
+      )
+    : undefined;
+  const thinking = state.quietMode && state.hideThinkingBlock && latest?.type === 'reasoning';
+  state.idleCounter?.setThinking(thinking);
+}
+
 function isToolPart(part: MessagePart): boolean {
   return part.type === 'tool-invocation';
 }
@@ -138,6 +153,7 @@ export function handleMessageStart(ctx: EventHandlerContext, message: MastraDBMe
   }
 
   if (message.role === 'assistant') {
+    syncQuietThinkingStatus(ctx, message);
     // Clear tool component references when starting a new assistant message
     state.lastAskUserComponent = undefined;
     state.lastSubmitPlanComponent = undefined;
@@ -164,6 +180,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: MastraDBM
   }
 
   if (message.role !== 'assistant') return;
+  syncQuietThinkingStatus(ctx, message);
 
   const renderParts = getAssistantRenderParts(message);
   const toolParts = renderParts.filter((part): part is ToolRenderPart => part.kind === 'tool');
@@ -208,7 +225,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: MastraDBM
       const component = new ToolExecutionComponentEnhanced(
         tool.toolName,
         tool.args as Record<string, unknown>,
-        { showImages: false, collapsedByDefault: !state.toolOutputExpanded },
+        { showImages: false, collapsedByDefault: !state.toolOutputExpanded, projectRoot: state.projectInfo?.rootPath },
         state.ui,
       );
       component.setExpanded(state.toolOutputExpanded);
@@ -246,6 +263,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: MastraDBM
 export function handleMessageEnd(ctx: EventHandlerContext, message: MastraDBMessage): void {
   const { state } = ctx;
   if (message.role === 'signal' || message.role === 'user') return;
+  syncQuietThinkingStatus(ctx);
 
   if (state.streamingComponent && message.role === 'assistant') {
     state.streamingMessage = message;

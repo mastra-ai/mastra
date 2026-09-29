@@ -268,7 +268,7 @@ export function SkillEditDialog({
       className="h-full"
     >
       <SideDialog.Top>
-        <span className="flex flex-1 items-center gap-2">
+        <SideDialog.Heading as="h2" className="flex-1 items-center">
           {dialogTitle}
           {isViewMode && skill?.visibility === 'private' && (
             <Tooltip>
@@ -282,7 +282,7 @@ export function SkillEditDialog({
               <TooltipContent>Only visible to you</TooltipContent>
             </Tooltip>
           )}
-        </span>
+        </SideDialog.Heading>
         <div className="mr-6 flex items-center gap-2">
           {isViewMode && isOwner && (
             <Button size="sm" onClick={() => setIsEditing(true)} icon={<Pencil />}>
@@ -380,7 +380,7 @@ export function SkillEditDialog({
                 </button>
 
                 {isAdmin && (!hasFilesystem || !workspaceId) && (
-                  <div className="mb-4 flex items-start gap-2 rounded-lg bg-yellow-500/10 p-3 text-caption text-yellow-600">
+                  <div className="mb-4 flex items-start gap-2 rounded-lg bg-warning-subtle p-3 text-caption text-warning-subtle-foreground">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                     <span>
                       {!workspaceId

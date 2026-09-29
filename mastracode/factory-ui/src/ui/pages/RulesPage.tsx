@@ -50,14 +50,14 @@ const STATUS_STYLE: Record<
   FactoryDecisionStatus,
   { icon: LucideIcon; tone: BadgeVariant; label: string; live?: true }
 > = {
-  pending: { icon: CircleDashed, tone: 'blue', label: 'queued' },
-  proposed: { icon: CirclePause, tone: 'yellow', label: 'awaiting approval' },
+  pending: { icon: CircleDashed, tone: 'info', label: 'queued' },
+  proposed: { icon: CirclePause, tone: 'warning', label: 'awaiting approval' },
   dismissed: { icon: CircleSlash, tone: 'neutral', label: 'dismissed' },
   superseded: { icon: CircleSlash, tone: 'neutral', label: 'superseded' },
   leased: { icon: CircleDashed, tone: 'cyan', label: 'running', live: true },
   retry: { icon: CircleDashed, tone: 'orange', label: 'retrying', live: true },
-  succeeded: { icon: CircleCheck, tone: 'green', label: 'done' },
-  failed: { icon: CircleX, tone: 'red', label: 'failed' },
+  succeeded: { icon: CircleCheck, tone: 'success', label: 'done' },
+  failed: { icon: CircleX, tone: 'destructive', label: 'failed' },
 };
 
 /** Rule decisions and their durable queued effects for the active Factory. */
@@ -237,11 +237,11 @@ function DecisionRow({
       <Txt as="span" variant="column" className="text-foreground shrink-0 truncate">
         {decision.type}
       </Txt>
-      <Badge size="xs" variant={tone} emphasis="muted" {...(live ? { indicator: 'pulse' as const } : {})}>
+      <Badge size="xs" variant={tone} emphasis="subtle" {...(live ? { indicator: 'pulse' as const } : {})}>
         {label}
       </Badge>
       {decision.attempts > 1 ? (
-        <Badge size="xs" variant="neutral" emphasis="muted" icon={<Repeat aria-hidden />} title="Attempts">
+        <Badge size="xs" variant="neutral" emphasis="subtle" icon={<Repeat aria-hidden />} title="Attempts">
           {decision.attempts}
         </Badge>
       ) : null}

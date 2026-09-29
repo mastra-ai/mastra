@@ -1,6 +1,7 @@
 import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
+import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
@@ -19,6 +20,7 @@ import {
 import type { VersionOverrides } from '../../request-context';
 import { getRequestContextInputValues } from '../../request-context/input-source';
 import { toStandardSchema } from '../../schema';
+import { asJsonSchema } from '../../stream/base/schema';
 import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
 import type { CoreTool, ToolHooks, ToolPayloadTransformPolicy } from '../../tools/types';
 import { boundedStringify, deepMerge } from '../../utils';
@@ -37,6 +39,7 @@ import type {
   AgentMethodType,
   AgentModelManagerConfig,
   GoalConfig,
+  ModelFallbackSettings,
   ToolsetsInput,
   ToolsInput,
 } from '../types';
@@ -134,8 +137,11 @@ interface DurablePreparationAgent {
   requestContextSchema?: StandardSchemaWithJSON<unknown>;
   getDefaultOptions(opts: { requestContext: RequestContext }): AgentExecutionOptions | Promise<AgentExecutionOptions>;
   getInstructions(opts: { requestContext: RequestContext }): AgentInstructions | Promise<AgentInstructions>;
-  getModel(opts: { requestContext: RequestContext }): MastraLanguageModel | Promise<MastraLanguageModel>;
-  getModelList(requestContext: RequestContext): Promise<AgentModelManagerConfig[] | null>;
+  __getModelAndModelList(opts: { requestContext: RequestContext }): Promise<{
+    model: MastraLanguageModel;
+    modelList: AgentModelManagerConfig[] | null;
+    fallbackTimeouts: Array<ModelFallbackSettings['timeout'] | undefined>;
+  }>;
   getMemory(opts: { requestContext: RequestContext }): Promise<MastraMemory | undefined>;
   getWorkspace(opts: { requestContext: RequestContext }): Promise<Workspace | undefined>;
   listScorers(opts: {
@@ -155,6 +161,7 @@ interface DurablePreparationAgent {
     methodType?: AgentMethodType;
     backgroundTaskEnabled?: boolean;
     backgroundTaskPolicy?: AgentExecutionOptions<any>['backgroundTaskPolicy'];
+    model?: MastraLanguageModel;
   }): Promise<Record<string, CoreTool>>;
   listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
   listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
@@ -308,6 +315,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         (rawExecOptions ?? {}) as Record<string, unknown>,
       ) as AgentExecutionOptions<OUTPUT>);
 
+  validateModelTimeoutSettings(execOptions.modelSettings?.timeout);
+
   if (execOptions.eagerToolExecution) {
     throw new Error('eagerToolExecution is not supported by durable agents');
   }
@@ -320,6 +329,16 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   }
   if (mergedVersions) {
     requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
+  }
+
+  // Resolve and validate the complete model selection before durable preparation
+  // can persist a thread or run user-defined processors, tools, or hooks.
+  const { model, modelList, fallbackTimeouts } = await typedAgent.__getModelAndModelList({ requestContext });
+  if (!model) {
+    throw new Error('Agent model not available');
+  }
+  for (const timeout of fallbackTimeouts) {
+    validateModelTimeoutSettings(timeout);
   }
 
   // 4. Resolve thread/memory context
@@ -579,15 +598,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       methodType,
       backgroundTaskEnabled: Boolean(backgroundTaskManager),
       backgroundTaskPolicy: execOptions?.backgroundTaskPolicy,
+      model,
     });
   } catch (error) {
     logger?.warn?.(`[DurableAgent] Error converting tools: ${error}`);
-  }
-
-  // 8. Get model (and model list if configured)
-  const model = await typedAgent.getModel({ requestContext });
-  if (!model) {
-    throw new Error('Agent model not available');
   }
 
   // Client-executed results fire only after processors accept the request and
@@ -607,8 +621,6 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       logger,
     });
   }
-
-  const modelList = await typedAgent.getModelList(requestContext);
 
   // 8b. Get scorers configuration
   const overrideScorers = (execOptions as any)?.scorers;
@@ -637,9 +649,12 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 10. Serialize structured output if provided
   let serializedStructuredOutput: SerializableStructuredOutput | undefined;
+  const structuredOutputSchema = execOptions?.structuredOutput?.schema
+    ? toStandardSchema(execOptions.structuredOutput.schema)
+    : undefined;
   if (execOptions?.structuredOutput) {
     const so = execOptions.structuredOutput as any;
-    if (so.schema) {
+    if (structuredOutputSchema) {
       serializedStructuredOutput = {
         jsonPromptInjection: so.jsonPromptInjection,
         // `instructions` means two different things depending on `model`: structuring-agent
@@ -650,13 +665,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         // only output guidance. Withhold it there and let the generated schema instruction stand.
         instructions: so.model ? undefined : so.instructions,
         useAgent: so.useAgent,
+        // Always convert to plain JSON Schema: this crosses step boundaries as JSON, and a
+        // live Zod/standard-schema instance does not survive that round trip.
+        schema: asJsonSchema(structuredOutputSchema),
       };
-      // Convert Zod schema to JSON Schema if possible
-      if (typeof so.schema === 'object' && 'type' in so.schema) {
-        serializedStructuredOutput.schema = so.schema;
-      } else if (typeof so.schema === 'object' && 'jsonSchema' in so.schema) {
-        serializedStructuredOutput.schema = so.schema.jsonSchema;
-      }
     }
   }
 
@@ -845,10 +857,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // text through `createObjectStreamTransformer`, producing `object-result`
     // chunks. Cross-process engines lose this slot and structured output
     // degrades to raw text.
-    structuredOutput: execOptions?.structuredOutput?.schema
+    structuredOutput: structuredOutputSchema
       ? {
-          ...execOptions.structuredOutput,
-          schema: toStandardSchema(execOptions.structuredOutput.schema),
+          ...execOptions!.structuredOutput,
+          schema: structuredOutputSchema,
         }
       : undefined,
     // Call-time returnScorerData flag. Also serialized into the workflow

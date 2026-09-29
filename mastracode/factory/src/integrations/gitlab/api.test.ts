@@ -24,12 +24,12 @@ describe('GitLabApiClient', () => {
     expect(() => new GitLabApiClient({ baseUrl: 'http://localhost:8080', accessToken: 'token' })).not.toThrow();
     expect(() => new GitLabApiClient({ baseUrl: 'http://127.0.0.1:8080', accessToken: 'token' })).not.toThrow();
     expect(() => new GitLabApiClient({ baseUrl: 'http://[::1]:8080', accessToken: 'token' })).not.toThrow();
-    expect(() => new GitLabApiClient({ baseUrl: 'https://user:secret@gitlab.example.com', accessToken: 'token' })).toThrow(
-      /credentials, query, or fragment/,
-    );
-    expect(() => new GitLabApiClient({ baseUrl: 'https://gitlab.example.com/?key=secret', accessToken: 'token' })).toThrow(
-      /credentials, query, or fragment/,
-    );
+    expect(
+      () => new GitLabApiClient({ baseUrl: 'https://user:secret@gitlab.example.com', accessToken: 'token' }),
+    ).toThrow(/credentials, query, or fragment/);
+    expect(
+      () => new GitLabApiClient({ baseUrl: 'https://gitlab.example.com/?key=secret', accessToken: 'token' }),
+    ).toThrow(/credentials, query, or fragment/);
   });
 
   it('checks the current identity without listing projects', async () => {

@@ -293,7 +293,7 @@ export const weatherTool = createTool({
 })
 ```
 
-`toModelOutput` also works with client-side tools. For tools passed through `clientTools`, the mapping runs on the client after the tool executes, and the transformed output is sent back to the server alongside the raw result. For tools defined on the server without an `execute` function (the browser runs the tool and sends the result back on the next request), the server definition's `toModelOutput` is applied to the incoming result, so the model receives the transformed content instead of the raw tool result.
+`toModelOutput` also works with client-side tools. For tools passed through `clientTools`, the mapping runs on the client after the tool executes, and the transformed output is sent back to the server alongside the raw result. For tools defined on the server without an `execute` function (the browser runs the tool and sends the result back on the next request), the server definition's `toModelOutput` is applied to the incoming result. The model receives the transformed content instead of the raw tool result.
 
 ## Transform tool payloads for UI and transcripts
 
@@ -337,6 +337,8 @@ export const customerTool = createTool({
 ```
 
 Your application code still receives the raw `ssn` from the tool. Browser-facing streams get the `display` output, and user-visible transcript messages get the `transcript` output.
+
+When a DurableAgent can finish a tool call after a process restart, declare required transcript redaction in the tool's `transform.transcript` configuration. A per-invocation transform passed to the DurableAgent lives in the in-process run registry and can't be recovered in a fresh process. The durable worker re-resolves the tool-level transform from the registered tool.
 
 For more phases, including `input`, `inputDelta`, `error`, `approval`, `suspend`, and `resume`, see the [`createTool()` reference](/reference/tools/create-tool#example-with-transform). For shared rules across several tools, configure the agent-level `transform` policy in the [`Agent` constructor](/reference/agents/agent#constructor-parameters).
 
