@@ -116,7 +116,10 @@ export const Extractions = ({ extractedValues, extractionFailures = [] }: Extrac
         </div>
       ))}
       {extractionFailures.map(failure => (
-        <div key={failure.slug} className="rounded-md border border-error/20 bg-error/5 p-2 text-error">
+        <div
+          key={failure.slug}
+          className="rounded-md border border-destructive-edge bg-destructive-subtle p-2 text-destructive-subtle-foreground"
+        >
           <Txt as="div" variant="meta" className="tracking-wide uppercase">
             {failure.slug}
           </Txt>

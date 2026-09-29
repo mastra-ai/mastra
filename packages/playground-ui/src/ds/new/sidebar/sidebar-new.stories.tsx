@@ -119,7 +119,7 @@ function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) 
             <a
               href="/projects"
               aria-label="Project list"
-              className="flex min-w-0 flex-1 rounded-md focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden"
+              className="flex min-w-0 flex-1 rounded-md focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-border-focus focus-visible:outline-hidden"
             >
               <SidebarNew.Brand
                 logo={<LogoWithoutText className="size-6" />}
@@ -149,7 +149,7 @@ function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) 
                 <a
                   href="/projects"
                   aria-label="Project list"
-                  className="flex min-w-0 flex-1 rounded-md focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden"
+                  className="flex min-w-0 flex-1 rounded-md focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-border-focus focus-visible:outline-hidden"
                 >
                   <SidebarNew.Brand logo={<LogoWithoutText className="size-6" />} title="Mastra Platform" />
                 </a>
@@ -251,7 +251,7 @@ function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) 
             value="$4"
             status="Credits are low"
             tone="warning"
-            icon={<AlertTriangle className="size-3 shrink-0 text-notice-warning" aria-hidden />}
+            icon={<AlertTriangle className="size-3 shrink-0 text-warning-indicator" aria-hidden />}
             href="/organization/billing"
             linkLabel="Credit balance"
           />

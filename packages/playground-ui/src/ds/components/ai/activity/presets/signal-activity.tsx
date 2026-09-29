@@ -15,7 +15,7 @@ export interface SignalActivityProps {
 
 const signalKinds = {
   state: {
-    icon: <Layers className="text-purple-400" aria-hidden />,
+    icon: <Layers className="text-badge-purple-indicator" aria-hidden />,
     body: { variant: 'caption' },
   },
   reactive: {
@@ -23,7 +23,7 @@ const signalKinds = {
     body: { variant: 'caption' },
   },
   reminder: {
-    icon: <Info className="text-accent3" aria-hidden />,
+    icon: <Info className="text-info-indicator" aria-hidden />,
     body: { variant: 'meta', font: 'mono' },
   },
 } as const;

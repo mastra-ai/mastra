@@ -23,13 +23,13 @@ const STATUS_LABELS: Record<WorkspaceChangeStatus, string> = {
 };
 
 const STATUS_CLASSES: Record<WorkspaceChangeStatus, string> = {
-  modified: 'text-notice-info/70!',
-  added: 'text-notice-success/70!',
-  deleted: 'text-notice-destructive/70!',
-  renamed: 'text-notice-info/70!',
-  copied: 'text-notice-success/70!',
-  untracked: 'text-notice-success/70!',
-  conflicted: 'text-notice-destructive/70!',
+  modified: 'text-info-indicator!',
+  added: 'text-success-indicator!',
+  deleted: 'text-destructive-indicator!',
+  renamed: 'text-info-indicator!',
+  copied: 'text-success-indicator!',
+  untracked: 'text-success-indicator!',
+  conflicted: 'text-destructive-indicator!',
 };
 const FOLDER_CLASS = 'text-muted-foreground!';
 
@@ -46,8 +46,8 @@ function ChangeCounts({ additions, deletions, binary }: Pick<WorkspaceChange, 'a
         deletions === 1 ? 'deletion' : 'deletions'
       }`}
     >
-      <span className="text-notice-success/70">+{additions}</span>
-      <span className="text-notice-destructive/70">−{deletions}</span>
+      <span className="text-success-indicator">+{additions}</span>
+      <span className="text-destructive-indicator">−{deletions}</span>
     </span>
   );
 }
@@ -245,7 +245,7 @@ function DiffViewer({
       ) : null}
       {error ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">
-          <Txt variant="caption" className="text-error">
+          <Txt variant="caption" className="text-destructive-indicator">
             {error.message}
           </Txt>
         </div>
@@ -350,7 +350,7 @@ export function WorkspaceChangesPanel({
       ) : null}
       {error ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">
-          <Txt variant="caption" className="text-error">
+          <Txt variant="caption" className="text-destructive-indicator">
             {error.message}
           </Txt>
         </div>

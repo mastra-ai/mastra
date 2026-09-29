@@ -5,9 +5,8 @@ import type { CSSProperties, ReactNode } from 'react';
 import './signals-empty-state.css';
 import { Button } from '../../../ds/components/Button';
 import { Card } from '../../../ds/components/Card';
-import { nodeColor } from '../../../ds/components/SankeyChart/sankeyColor';
 import type { LinkComponent } from '../../../ds/types/link-component';
-import { getSignalHue } from '../signal-colors';
+import { getSignalColor } from '../signal-colors';
 import { BUILT_IN_SIGNAL_CATALOG, orderedSignals, signalDescription, signalLabel } from '../signal-formatting';
 import { TraceIcon } from '@/ds/icons/TraceIcon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -20,13 +19,13 @@ const traceRows = [
 ];
 
 const signalStyle = (label: string): CSSProperties => ({
-  color: nodeColor(getSignalHue(label)),
+  color: getSignalColor(label),
 });
 
 const PipelineConnector = () => (
   <div aria-hidden="true" className="relative hidden h-full items-center lg:flex">
     <div className="w-full border-t border-dashed border-border" />
-    <span className="signals-pipeline-connector absolute left-1/2 size-2.5 -translate-x-1/2 rounded-full bg-positive1 shadow-[0_0_12px_currentColor]" />
+    <span className="signals-pipeline-connector absolute left-1/2 size-2.5 -translate-x-1/2 rounded-full bg-brand-green shadow-[0_0_12px_currentColor]" />
   </div>
 );
 
@@ -193,7 +192,7 @@ export const SignalsEmptyState = ({
       <div className="mx-auto w-full max-w-260">
         <header>
           <p className="flex items-center gap-2 font-mono text-caption tracking-wider text-muted-foreground uppercase">
-            <span aria-hidden="true" className="size-2 rounded-full bg-accent1" />
+            <span aria-hidden="true" className="size-2 rounded-full bg-brand-green" />
             Trace Intelligence
           </p>
           <h1 className="mt-2 text-display tracking-tight text-foreground">
@@ -240,10 +239,10 @@ export const SignalsEmptyState = ({
             <h2 className="text-heading text-foreground">Trace Intelligence</h2>
             <p className="mt-0.5 text-caption text-muted-foreground">Finds recurring themes</p>
             <div aria-hidden="true" className="relative mt-5 flex size-20 items-center justify-center">
-              <span className="signals-engine-pulse absolute size-20 rounded-full border border-positive1/15" />
-              <span className="absolute size-14 rounded-full border border-positive1/25" />
-              <span className="absolute size-9 rounded-full border border-positive1/40 bg-positive1/5 shadow-[0_0_24px_var(--color-positive1)]" />
-              <CpuIcon className="relative size-4 text-positive1" />
+              <span className="signals-engine-pulse absolute size-20 rounded-full border border-brand-green" />
+              <span className="absolute size-14 rounded-full border border-brand-green" />
+              <span className="absolute size-9 rounded-full border border-brand-green bg-fill-subtle" />
+              <CpuIcon className="relative size-4 text-brand-green" />
             </div>
             <p className="mt-3 max-w-40 text-meta text-muted-foreground">
               Clusters similar trace signals into themes for each dimension
@@ -259,7 +258,7 @@ export const SignalsEmptyState = ({
             <div className="mt-3 flex flex-wrap gap-2">
               {signalDefinitions.map(signal => (
                 <span
-                  className="signals-chip inline-flex items-center gap-2 rounded border border-current/25 bg-card px-2.5 py-1.5 text-column shadow-[0_0_14px_color-mix(in_oklch,currentColor_12%,transparent)]"
+                  className="signals-chip inline-flex items-center gap-2 rounded border border-border bg-card px-2.5 py-1.5 text-column"
                   key={signal.key}
                   style={signalStyle(signal.key)}
                 >
@@ -293,7 +292,7 @@ export const SignalsEmptyState = ({
           <div className="flex min-w-0 items-start gap-3">
             <span
               aria-hidden="true"
-              className="mt-1.5 size-2 shrink-0 rounded-full bg-warning1 shadow-[0_0_9px_currentColor]"
+              className="mt-1.5 size-2 shrink-0 rounded-full bg-warning-indicator shadow-[0_0_9px_currentColor]"
             />
             <div className="min-w-0 flex-1">
               <p className="text-caption text-muted-foreground">

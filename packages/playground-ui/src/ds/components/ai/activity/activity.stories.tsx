@@ -120,14 +120,14 @@ export const EveryKind: Story = {
         <Code>{'export const config = {};'}</Code>
       </ActivityItem>
       <ActivityItem
-        icon={<Layers className="text-purple-400" aria-hidden />}
+        icon={<Layers className="text-badge-purple-indicator" aria-hidden />}
         label="factory-phase"
         badges={<Badge size="xs">delta</Badge>}
         detail="Stage: building → review"
         aria-label="Signal: factory-phase"
       />
       <ActivityItem
-        icon={<Bell className="text-warning1" aria-hidden />}
+        icon={<Bell className="text-warning-indicator" aria-hidden />}
         label="github / issue-opened"
         badges={
           <Badge size="xs" variant="orange">

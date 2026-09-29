@@ -64,8 +64,22 @@ export const Submitting: Story = {
   },
 };
 
-export const Approved: Story = { args: { status: 'approved' }, play: Submitting.play };
-export const Declined: Story = { args: { status: 'declined' }, play: Submitting.play };
+export const Approved: Story = {
+  args: { status: 'approved' },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('button', { name: `Approved ${args.toolName}` })).toBeDisabled();
+    await expect(canvas.getByRole('button', { name: `Decline ${args.toolName}` })).toBeDisabled();
+  },
+};
+export const Declined: Story = {
+  args: { status: 'declined' },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('button', { name: `Approve ${args.toolName}` })).toBeDisabled();
+    await expect(canvas.getByRole('button', { name: `Declined ${args.toolName}` })).toBeDisabled();
+  },
+};
 
 export const Keyboard: Story = {
   args: { autoFocus: true },

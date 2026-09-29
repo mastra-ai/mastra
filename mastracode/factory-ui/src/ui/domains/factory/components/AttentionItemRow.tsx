@@ -29,12 +29,27 @@ import { RAIL_ROW_BODY } from './Timeline';
 
 /** What landed: the glyph the rail hangs the row off, and the word the row's badge wears. */
 const KIND = {
-  mention: { glyph: MessageSquare, label: 'mention', tone: 'text-accent1', badge: 'green' },
+  mention: { glyph: MessageSquare, label: 'mention', tone: 'text-badge-green-indicator', badge: 'green' },
   activity: { glyph: MessagesSquare, label: 'comment', tone: 'text-muted-foreground', badge: 'neutral' },
-  'automation-failed': { glyph: TriangleAlert, label: 'failed', tone: 'text-error', badge: 'red' },
-  'automation-proposed': { glyph: Sparkles, label: 'suggested', tone: 'text-warning1', badge: 'orange' },
-  'supervisor-finding': { glyph: Brain, label: 'finding', tone: 'text-accent1', badge: 'blue' },
-  'agent-waiting': { glyph: Hourglass, label: 'waiting', tone: 'text-warning1', badge: 'orange' },
+  'automation-failed': {
+    glyph: TriangleAlert,
+    label: 'failed',
+    tone: 'text-destructive-indicator',
+    badge: 'destructive',
+  },
+  'automation-proposed': {
+    glyph: Sparkles,
+    label: 'suggested',
+    tone: 'text-warning-indicator',
+    badge: 'orange',
+  },
+  'supervisor-finding': { glyph: Brain, label: 'finding', tone: 'text-badge-green-indicator', badge: 'blue' },
+  'agent-waiting': {
+    glyph: Hourglass,
+    label: 'waiting',
+    tone: 'text-warning-indicator',
+    badge: 'orange',
+  },
 } satisfies Record<
   FactoryAttentionItem['kind'],
   { glyph: typeof MessageSquare; label: string; tone: string; badge: BadgeVariant }
@@ -124,14 +139,14 @@ export function AttentionItemRow({
         to={factoryAttentionTargetPath(factoryId, item.target)}
         onClick={onOpen}
         aria-label={`${destinationLabel(item)} for ${item.title}`}
-        className="focus-visible:outline-accent1 absolute inset-0 rounded-lg outline-none focus-visible:outline-2 focus-visible:-outline-offset-2"
+        className="focus-visible:outline-border-focus absolute inset-0 rounded-lg outline-none focus-visible:outline-2 focus-visible:-outline-offset-2"
       />
       <span className="flex w-full items-center gap-2">
         <span className="sr-only">{item.read ? 'Read' : 'Unread'}</span>
         <span className="text-column text-foreground min-w-0 flex-1 truncate">{item.title}</span>
         <Badge
           variant={KIND[item.kind].badge}
-          emphasis={item.read ? 'muted' : 'default'}
+          emphasis={item.read ? 'subtle' : 'strong'}
           size="xs"
           icon={createElement(KIND[item.kind].glyph)}
           className={MASKED_BY_ACTIONS}

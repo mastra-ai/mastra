@@ -16,13 +16,13 @@ import { cn } from '@/utils/cn';
 import { formatDuration, formatElapsed } from '@/utils/duration';
 
 const SANDBOX_STATUS_DOT: Record<string, string> = {
-  running: 'bg-green-500',
-  starting: 'bg-yellow-500',
-  initializing: 'bg-yellow-500',
+  running: 'bg-success-indicator',
+  starting: 'bg-warning-indicator',
+  initializing: 'bg-warning-indicator',
   stopped: 'bg-muted-foreground',
   paused: 'bg-muted-foreground',
-  error: 'bg-red-500',
-  failed: 'bg-red-500',
+  error: 'bg-destructive-indicator',
+  failed: 'bg-destructive-indicator',
 };
 
 interface SandboxExit {
@@ -45,7 +45,7 @@ export interface SandboxExecutionBadgeProps extends Omit<ToolApprovalButtonsProp
 const ExitStatus = ({ exit }: { exit: SandboxExit }) => {
   if (exit.exitCode === undefined || exit.success) return null;
   return (
-    <Txt as="span" variant="meta" className={exit.killed ? 'text-warning1' : 'text-error'}>
+    <Txt as="span" variant="meta" className={exit.killed ? 'text-warning-indicator' : 'text-destructive-indicator'}>
       {exit.killed ? 'killed' : `exit ${exit.exitCode}`}
     </Txt>
   );
@@ -114,7 +114,7 @@ export const SandboxExecutionBadge = ({
                   aria-hidden
                   className={cn(
                     'size-1.5 shrink-0 rounded-full',
-                    SANDBOX_STATUS_DOT[workspace.sandbox.status ?? ''] ?? 'bg-accent6',
+                    SANDBOX_STATUS_DOT[workspace.sandbox.status ?? ''] ?? 'bg-warning-indicator',
                   )}
                 />
               }

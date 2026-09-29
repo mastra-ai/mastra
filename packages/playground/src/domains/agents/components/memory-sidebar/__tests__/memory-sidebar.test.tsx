@@ -235,8 +235,8 @@ describe('MemorySidebar', () => {
   it('renders the Memory card as an overlay above the thread list by default', async () => {
     const { container } = renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
 
-    // Threads view is the default: the thread list (with New Chat) is visible.
-    const newChat = await screen.findByText('New Chat');
+    // Threads view is the default: the thread list (with New Thread) is visible.
+    const newChat = await screen.findByText('New Thread');
     expect(newChat).not.toBeNull();
     expect(await screen.findByText('My first chat')).not.toBeNull();
 
@@ -244,7 +244,7 @@ describe('MemorySidebar', () => {
     const card = screen.getByTestId('memory-sidebar-card');
     expect(card.textContent).toMatch(/memory/i);
     expect(card.getAttribute('aria-pressed')).toBe('false');
-    expect(screen.getByTestId('memory-sidebar-thread-layer').textContent).toContain('New Chat');
+    expect(screen.getByTestId('memory-sidebar-thread-layer').textContent).toContain('New Thread');
     expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('absolute');
     expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('z-10');
     expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('rounded-xl');
@@ -277,9 +277,9 @@ describe('MemorySidebar', () => {
   it('replaces the panel with an empty state and docs CTA when memory is disabled', async () => {
     renderSidebar([], false);
 
-    // The empty state explains memory is required; the thread list / New Chat is not rendered.
+    // The empty state explains memory is required; the thread list / New Thread is not rendered.
     expect(await screen.findByText('Memory not enabled')).not.toBeNull();
-    expect(screen.queryByText('New Chat')).toBeNull();
+    expect(screen.queryByText('New Thread')).toBeNull();
 
     // The memory card is hidden entirely when memory is off.
     expect(screen.queryByTestId('memory-sidebar-card')).toBeNull();
@@ -514,7 +514,7 @@ describe('MemorySidebar', () => {
 
     fireEvent.click(screen.getByTestId('memory-sidebar-card'));
 
-    expect(await screen.findByText('New Chat')).not.toBeNull();
+    expect(await screen.findByText('New Thread')).not.toBeNull();
     expect(screen.queryByText('Clone Thread')).toBeNull();
   });
 
@@ -548,6 +548,6 @@ describe('MemorySidebar', () => {
     renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
 
     // Falls back to the thread list instead of an unknown view value.
-    expect(await screen.findByText('New Chat')).not.toBeNull();
+    expect(await screen.findByText('New Thread')).not.toBeNull();
   });
 });

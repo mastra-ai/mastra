@@ -13,7 +13,7 @@ export function SkillMessage({ activation }: { activation: SkillActivation }) {
     <ActivityItem
       label="Skill"
       detail={args ? `${name} ${args}` : name}
-      icon={<BookOpen className="text-accent3" aria-hidden />}
+      icon={<BookOpen className="text-span-skill" aria-hidden />}
       data-skill-name={name}
       aria-label={`Skill: ${name}`}
     >
