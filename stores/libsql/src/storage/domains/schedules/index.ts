@@ -114,12 +114,21 @@ export class SchedulesLibSQL extends SchedulesStorage {
       tableName: TABLE_SCHEDULE_TRIGGERS,
       schema: TABLE_SCHEMAS[TABLE_SCHEDULE_TRIGGERS],
     });
-    // Tables created before ownership support lack these columns.
-    await this.#db.alterTable({
-      tableName: TABLE_SCHEDULES,
-      schema: TABLE_SCHEMAS[TABLE_SCHEDULES],
-      ifNotExists: ['owner_type', 'owner_id'],
-    });
+    // Tables created before ownership support lack these columns. Another
+    // process sharing the database may add them between our check and ALTER;
+    // that duplicate-column failure is fine once both columns exist.
+    try {
+      await this.#db.alterTable({
+        tableName: TABLE_SCHEDULES,
+        schema: TABLE_SCHEMAS[TABLE_SCHEDULES],
+        ifNotExists: ['owner_type', 'owner_id'],
+      });
+    } catch (error) {
+      const migrated =
+        (await this.#db.hasColumn(TABLE_SCHEDULES, 'owner_type')) &&
+        (await this.#db.hasColumn(TABLE_SCHEDULES, 'owner_id'));
+      if (!migrated) throw error;
+    }
 
     await this.#client.batch(
       [

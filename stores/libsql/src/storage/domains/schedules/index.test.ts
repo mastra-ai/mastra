@@ -142,4 +142,34 @@ describe('SchedulesLibSQL legacy schema migration', () => {
     await expect(second.init()).resolves.toBeUndefined();
     expect(await second.listTriggers('legacy-schedule')).toHaveLength(1);
   });
+
+  it('tolerates another process adding the ownership columns mid-migration', async () => {
+    // Return the pre-migration column list once, after another "process" has
+    // already added the columns, so our ALTER hits a duplicate column.
+    let raced = false;
+    const racingClient = new Proxy(client, {
+      get(target, prop) {
+        if (prop !== 'execute') {
+          const value = Reflect.get(target, prop, target);
+          return typeof value === 'function' ? value.bind(target) : value;
+        }
+        return async (stmt: Parameters<typeof client.execute>[0]) => {
+          const sql = typeof stmt === 'string' ? stmt : stmt.sql;
+          if (!raced && sql === 'PRAGMA table_info("mastra_schedules")') {
+            raced = true;
+            const stale = await target.execute(stmt);
+            await target.execute('ALTER TABLE mastra_schedules ADD COLUMN "owner_type" TEXT DEFAULT NULL');
+            await target.execute('ALTER TABLE mastra_schedules ADD COLUMN "owner_id" TEXT DEFAULT NULL');
+            return stale;
+          }
+          return target.execute(stmt);
+        };
+      },
+    });
+
+    const store = new SchedulesLibSQL({ client: racingClient });
+    await expect(store.init()).resolves.toBeUndefined();
+    expect(raced).toBe(true);
+    expect(await columns('mastra_schedules')).toEqual(expect.arrayContaining(['owner_type', 'owner_id']));
+  });
 });
