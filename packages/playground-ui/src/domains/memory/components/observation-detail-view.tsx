@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Checkbox } from '../../../ds/components/Checkbox';
-import { CodeDiff } from '../../../ds/components/CodeDiff';
 import { EmptyState } from '../../../ds/components/EmptyState';
 import { Skeleton } from '../../../ds/components/Skeleton';
 import { Txt } from '../../../ds/components/Txt';
@@ -9,6 +8,8 @@ import { observationPriorityByEmoji, observationPriorityTone } from '../lib/obse
 import type { ObservationPriority } from '../lib/observation-priority';
 import type { OMHistoryRecord } from '../types';
 import { formatDate } from '@/utils/date-format';
+
+const CodeDiff = lazy(() => import('../../../ds/components/CodeDiff').then(({ CodeDiff }) => ({ default: CodeDiff })));
 
 type ParsedItem = {
   text: string;
@@ -317,10 +318,15 @@ export function ObservationDetailView({
 
         <div data-testid="observation-detail-body" className="flex-1 overflow-y-auto p-4">
           {showDiff && previousRecord ? (
-            <CodeDiff
-              codeA={typeof previousRecord.activeObservations === 'string' ? previousRecord.activeObservations : ''}
-              codeB={activeObservations}
-            />
+            <Suspense fallback={<Skeleton className="h-32" />}>
+              <CodeDiff
+                codeA={typeof previousRecord.activeObservations === 'string' ? previousRecord.activeObservations : ''}
+                codeB={activeObservations}
+                filename="observations.md"
+                layout="unified"
+                className="rounded-xl"
+              />
+            </Suspense>
           ) : activeObservations ? (
             <ObservationContent observations={activeObservations} />
           ) : (

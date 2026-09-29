@@ -5,12 +5,15 @@ import { Tree } from '@mastra/playground-ui/components/Tree';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowLeft, FileDiff, Folder, FolderOpen, RefreshCw } from 'lucide-react';
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 
 import type { WorkspaceChange, WorkspaceChanges, WorkspaceChangeStatus } from '../../../../api/types';
 import { useWorkspaceDiff } from '../../../../hooks/use-fs';
-import { WorkspaceDiffLines } from './WorkspaceDiffLines';
 import { treeRowContainmentClass } from '../layout';
+
+const CodeDiff = lazy(() =>
+  import('@mastra/playground-ui/components/CodeDiff').then(({ CodeDiff }) => ({ default: CodeDiff })),
+);
 
 const STATUS_LABELS: Record<WorkspaceChangeStatus, string> = {
   modified: 'Modified',
@@ -251,9 +254,16 @@ function DiffViewer({
         </div>
       ) : null}
       {!isLoading && !error && patch ? (
-        <ScrollArea className="min-h-0 flex-1 font-mono text-xs leading-5">
-          <WorkspaceDiffLines patch={patch} truncated={truncated} />
-        </ScrollArea>
+        <div className="min-h-0 flex-1 overflow-auto p-2">
+          <Suspense fallback={<Spinner size="sm" />}>
+            <CodeDiff patch={patch} />
+          </Suspense>
+          {truncated ? (
+            <Txt variant="meta" className="text-muted-foreground block p-3">
+              Diff truncated at 512 KB.
+            </Txt>
+          ) : null}
+        </div>
       ) : null}
       {!isLoading && !error && !patch ? <ChangesEmptyState available /> : null}
     </section>
