@@ -119,6 +119,15 @@ describe('ProjectRoutes', () => {
         ).status,
       ).toBe(404);
 
+      const forbidden = await mount(seed, {
+        auth: fakeRouteAuth({ isOrganizationAdmin: async () => false }),
+      }).request(path, { method: 'POST' });
+      expect(forbidden.status).toBe(403);
+      expect(await forbidden.json()).toEqual({
+        error: 'forbidden',
+        message: 'Organization administrator access is required to update running sessions.',
+      });
+
       const response = await mount(seed).request(path, { method: 'POST' });
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({

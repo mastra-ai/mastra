@@ -340,6 +340,15 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
           if ('response' in tenant) return tenant.response;
+          if (!(await this.deps.auth.isOrganizationAdmin(context, tenant.orgId))) {
+            return context.json(
+              {
+                error: 'forbidden',
+                message: 'Organization administrator access is required to update running sessions.',
+              },
+              403,
+            );
+          }
           const parsedPath = FACTORY_ROUTE_CONTRACTS.projectApplyDefaultModel.pathSchema.safeParse({
             id: context.req.param('id'),
           });
