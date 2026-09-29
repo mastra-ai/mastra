@@ -1,4 +1,4 @@
-import { stringToColor } from '@mastra/playground-ui/utils/colors';
+import { hueColors, hueForName } from '@mastra/playground-ui/utils/colors';
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgentColors } from '../agent-color-context';
@@ -36,13 +36,10 @@ describe('AgentColorProvider', () => {
       </AgentColorProvider>,
     );
     const consumer = getByTestId('consumer');
-    expect(consumer.getAttribute('data-bg')).toBe(stringToColor('agent_123'));
-    expect(consumer.getAttribute('data-fg')).toBe(stringToColor('agent_123', 20));
-    expect(consumer.getAttribute('data-tint')).toBe(stringToColor('agent_123', 50));
-    // Background uses lightness 90%, foreground uses lightness 20%, tint uses lightness 50%.
-    expect(consumer.getAttribute('data-bg')).toMatch(/hsl\(-?\d+, 100%, 90%\)/);
-    expect(consumer.getAttribute('data-fg')).toMatch(/hsl\(-?\d+, 100%, 20%\)/);
-    expect(consumer.getAttribute('data-tint')).toMatch(/hsl\(-?\d+, 100%, 50%\)/);
+    const expected = hueColors(hueForName('agent_123'));
+    expect(consumer.getAttribute('data-bg')).toBe(expected.background);
+    expect(consumer.getAttribute('data-fg')).toBe(expected.foreground);
+    expect(consumer.getAttribute('data-tint')).toBe(expected.tint);
   });
 
   it('keeps the color object referentially stable across re-renders with the same agentId', () => {
@@ -72,7 +69,7 @@ describe('AgentColorProvider', () => {
       </AgentColorProvider>,
     );
     const consumer = getByTestId('consumer');
-    expect(consumer.getAttribute('data-bg')).toBe(stringToColor('alpha'));
+    expect(consumer.getAttribute('data-bg')).toBe(hueColors(hueForName('alpha')).background);
 
     rerender(
       <AgentColorProvider agentId="omega">
@@ -80,7 +77,7 @@ describe('AgentColorProvider', () => {
       </AgentColorProvider>,
     );
 
-    expect(consumer.getAttribute('data-bg')).toBe(stringToColor('omega'));
+    expect(consumer.getAttribute('data-bg')).toBe(hueColors(hueForName('omega')).background);
   });
 });
 

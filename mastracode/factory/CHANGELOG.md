@@ -1,5 +1,76 @@
 # @mastra/factory
 
+## 0.18.0-alpha.9
+
+### Patch Changes
+
+- Transcript rows share one line style. Tool calls, reasoning, signals, notifications, skills and the "Thinking" indicator show an icon and a label, with a chevron only when there is more to show. A state signal names its state and shows its mode as a badge. A row whose message fits on its line no longer offers a disclosure that only repeats the line, and a tool call with nothing to show, including one that returned `null` or an empty result, has no disclosure at all. ([#24694](https://github.com/mastra-ai/mastra/pull/24694))
+
+- Factory reviews now flag a visible misconfiguration warning when the review token is the PR author. Previously GitHub rejected the approve/request-changes submission and the verdict silently fell back to a plain PR comment. The verdict is still published as a PR comment (so the repair loop keeps working), with a warning placed after the verdict line explaining that a separate reviewer token is required for the verdict to count toward branch protection. ([#25391](https://github.com/mastra-ai/mastra/pull/25391))
+
+- Fixed Slack sessions using observational-memory models from an incompatible provider. New and restarted sessions now use a memory model compatible with their running model, including after a model switch fails. ([#25412](https://github.com/mastra-ai/mastra/pull/25412))
+
+- Updated dependencies [[`93fe2d6`](https://github.com/mastra-ai/mastra/commit/93fe2d6a9e47861d90cc0fd0080aefdb8cabb612), [`561e2a6`](https://github.com/mastra-ai/mastra/commit/561e2a6c8a44dbfd91eae390e14671462497cf85), [`8156816`](https://github.com/mastra-ai/mastra/commit/815681621dd88997608c5b7e8f0f87fe03cd1d18), [`94ba70e`](https://github.com/mastra-ai/mastra/commit/94ba70ea6ba8a53f5e4010392bf3bbaecde7966d), [`a7895fc`](https://github.com/mastra-ai/mastra/commit/a7895fce693e499c08c4784c57d4c4f46c0e1ccb), [`5197f81`](https://github.com/mastra-ai/mastra/commit/5197f81d6a5641f80f0ee6596ac085653b38cca3), [`0c2fe6c`](https://github.com/mastra-ai/mastra/commit/0c2fe6c00909795234270c8ea2c2c53882d63798), [`dd01709`](https://github.com/mastra-ai/mastra/commit/dd01709f780562f9ff8c72d977f3da5ae265970e)]:
+  - @mastra/core@1.72.0-alpha.9
+  - @mastra/code-sdk@1.9.0-alpha.9
+
+## 0.18.0-alpha.8
+
+### Patch Changes
+
+- Pushes to a Factory-authored pull request now start a re-review automatically. Previously, once the review card reached Done, the re-review triggered by a new push waited for approval that was never requested, so someone had to click Re-review by hand. Pull requests from other authors still wait for approval as before. ([#25371](https://github.com/mastra-ai/mastra/pull/25371))
+
+- Fixed Factory cards looking finished while a review is still asking for changes. ([#25377](https://github.com/mastra-ai/mastra/pull/25377))
+
+  - **Review cards:** a review pass now records its verdict on the card and leaves it in Reviewing. The card shows "Changes requested" or "Approved" with the reviewed commit. A merged pull request moves a Review card to Done, a pull request closed without merging moves it to Canceled, and the next push starts a re-review automatically.
+  - **Work cards:** a Work card now moves from Building to Review when its pull request opens, shows the review verdict there, and moves to Done when the pull request merges. Agents can't move a Work card to Done while its pull request is still open or while the review requests changes.
+
+- Updated dependencies [[`4d187b7`](https://github.com/mastra-ai/mastra/commit/4d187b79d7ecce4d2f357f5fe385b414a532ff19), [`2a28888`](https://github.com/mastra-ai/mastra/commit/2a28888f7dfee74f84ec548c9c222cfd1aa7f393)]:
+  - @mastra/core@1.72.0-alpha.8
+  - @mastra/code-sdk@1.9.0-alpha.8
+
+## 0.18.0-alpha.7
+
+### Minor Changes
+
+- Added the `factory_review_source` tool for Factory review-role sessions. It returns the Factory session URL that produced the review (the only field published on the PR/MR), the PR/MR author recorded at intake, the review card's own external source, and the intake-stamped repository identity. The review skills (`factory-review`, `factory-rereview`, `factory-gitlab-review`, `factory-gitlab-rereview`) now require calling this tool before publishing, cross-checking `triggeredBy` and `reviewTarget` against the PR/MR fetched at Phase 1 (with `boundRepository` as the binding-side repository identity when the card carries no URL), and including `sessionUrl` as a `Factory Session` block in the published body. This makes misattributed reviews (e.g. a review that lands on the wrong PR, or approves and requests changes at once) traceable back to the exact session that produced them, and blocks a wrong-target review before it publishes. ([#25013](https://github.com/mastra-ai/mastra/pull/25013))
+
+  The tool takes no arguments and is only registered in review-role sessions where `MASTRACODE_PUBLIC_URL` is set to a non-blank browser-facing UI origin (a blank or whitespace-only value counts as unset, matching the Slack session-link surface). From an agent inside such a session:
+
+  ```ts
+  const { sessionUrl, triggeredBy, reviewTarget, boundRepository } = await tools.factory_review_source.execute({});
+  // sessionUrl:      "https://factory.example.com/factories/<projectId>/workspaces/<sessionId>/threads/<threadId>"
+  // triggeredBy:     "octocat" | null
+  // reviewTarget:    { integrationId: "github", type: "pull-request", externalId: "github-pr:42", url: "https://github.com/acme/repo/pull/42" | null }
+  // boundRepository: { provider: "github", repositoryId: 12345 } | { provider: "gitlab", host: "gitlab.example.com" | null, projectId: 101 } | null
+
+  // Publish only `sessionUrl` on the PR/MR — `triggeredBy`, `reviewTarget`, and
+  // `boundRepository` are inputs to the in-run cross-check and stay in the
+  // session handoff so nothing on the review card's upstream (e.g. a Linear/Jira
+  // issue slug) is leaked into a public review body:
+  const publishedBlock = ['## Factory Session', `- Session: ${sessionUrl}`].join('\n');
+  ```
+
+  The skills instruct the agent to end every published review body with a `## Factory Session` section carrying `sessionUrl` verbatim, so a suspicious review can be traced back to the session that produced it.
+
+### Patch Changes
+
+- Fixed Investigate on an Intake card not starting its triage session. The held triage run was marked finished without running because moving the card into Triage looked like the card had moved on from the run. ([#25364](https://github.com/mastra-ai/mastra/pull/25364))
+
+- Review cards now show a merged pull request as merged as soon as the merge arrives, instead of offering Re-review until the next background sync. ([#25369](https://github.com/mastra-ai/mastra/pull/25369))
+
+- Stopped comments and edits on a closed issue from queuing a new triage run on its finished card. ([#25370](https://github.com/mastra-ai/mastra/pull/25370))
+
+- Fixed automated reviews failing with "Skill not found: factory-review". Review sessions started by the Factory now recognize their review role right away, so the review skills and the reviewer GitHub token are available from the first run. ([#25341](https://github.com/mastra-ai/mastra/pull/25341))
+
+- Fixed automated pull request reviews failing with "Skill not found: factory-review." when the review session was opened before its review role was assigned. The run now picks up the review skills at kickoff instead of retrying until it gives up. ([#25341](https://github.com/mastra-ai/mastra/pull/25341))
+
+- Fixed interrupted worker messages reporting successful delivery and recording a success audit. ([#24321](https://github.com/mastra-ai/mastra/pull/24321))
+
+- Updated dependencies [[`9ce3444`](https://github.com/mastra-ai/mastra/commit/9ce3444d1a6b17e72b0a20c74603abaf252a843e), [`3b77788`](https://github.com/mastra-ai/mastra/commit/3b77788a08df1e754282d39c42823e6e1c5f2742), [`987257a`](https://github.com/mastra-ai/mastra/commit/987257a34cda8a153fe592c31d75fbb1dee55202), [`65a93a2`](https://github.com/mastra-ai/mastra/commit/65a93a2a3b1434d605a6a417cb83d2d58e16bfc0), [`fd92729`](https://github.com/mastra-ai/mastra/commit/fd92729380a29f2a0ec822e39f3c09eb9aaa5ac5), [`79c3b1f`](https://github.com/mastra-ai/mastra/commit/79c3b1fa4d470585a00558b317ed47db9b1decd4), [`4092ef2`](https://github.com/mastra-ai/mastra/commit/4092ef29aad09f2ba5f90c92a4d4d3bd444eae67), [`9ce3444`](https://github.com/mastra-ai/mastra/commit/9ce3444d1a6b17e72b0a20c74603abaf252a843e), [`5026973`](https://github.com/mastra-ai/mastra/commit/50269736f432cee1170627b2b6f88ba1431e837f)]:
+  - @mastra/core@1.72.0-alpha.7
+  - @mastra/code-sdk@1.9.0-alpha.7
+
 ## 0.17.3-alpha.6
 
 ### Patch Changes

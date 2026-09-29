@@ -38,7 +38,7 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
                   <div className="flex items-center gap-2">
                     <RefreshCw className="size-3.5 shrink-0 opacity-70" />
                     <span>Retry</span>
-                    <Badge size="xs" variant={tripwire.retry ? 'green' : 'red'}>
+                    <Badge size="xs" variant={tripwire.retry ? 'success' : 'destructive'}>
                       {tripwire.retry ? 'Allowed' : 'Not allowed'}
                     </Badge>
                   </div>
@@ -48,7 +48,7 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
                   <div className="flex items-center gap-2">
                     <Tag className="size-3.5 shrink-0 opacity-70" />
                     <span>Processor</span>
-                    <Badge size="xs" variant="yellow">
+                    <Badge size="xs" variant="warning">
                       {tripwire.processorId}
                     </Badge>
                   </div>

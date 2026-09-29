@@ -82,6 +82,8 @@ export const traceAToolSpan = {
   name: 'Recipe lookup',
   spanType: SpanType.TOOL_CALL,
   parentSpanId: 'span-a',
+  input: { dish: 'pasta' },
+  output: { recipe: 'carbonara' },
 };
 
 export const traceASpans: GetTraceResponse = {

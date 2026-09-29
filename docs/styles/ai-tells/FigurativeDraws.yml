@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI overused verb: '%s'. Name the source or the comparison directly. Disable this rule for art or card-game prose."
+message: "AI overused verb: '%s'. Give the source or the comparison directly. Disable this rule for art or card-game prose."
 level: error
 nonword: true
 ignorecase: true

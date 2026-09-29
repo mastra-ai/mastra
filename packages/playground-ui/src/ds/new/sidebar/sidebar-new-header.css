@@ -1,0 +1,7 @@
+/* Holds opacity while the sidebar collapses, so leftover hover doesn't flash the toggle. */
+@keyframes sidebar-hold {
+  from,
+  to {
+    opacity: var(--sidebar-hold-opacity);
+  }
+}

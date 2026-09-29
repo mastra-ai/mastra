@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { listRepositoryCommits } from './commits.js';
 
-const ACCESS = { cloneUrl: 'https://github.com/acme/repo.git', authorization: { scheme: 'bearer' as const, token: 't0k' } };
+const ACCESS = {
+  cloneUrl: 'https://github.com/acme/repo.git',
+  authorization: { scheme: 'bearer' as const, token: 't0k' },
+};
 
 function github() {
   return { versionControl: { getRepositoryAccess: vi.fn(async () => ACCESS) } };
@@ -39,7 +42,10 @@ describe('listRepositoryCommits', () => {
       {
         sha: 'abc123',
         html_url: 'https://github.com/acme/repo/commit/abc123',
-        commit: { message: 'fix(factory): stop the drift\n\nlonger body', author: { name: 'Ada', date: '2026-08-31T10:00:00Z' } },
+        commit: {
+          message: 'fix(factory): stop the drift\n\nlonger body',
+          author: { name: 'Ada', date: '2026-08-31T10:00:00Z' },
+        },
         author: { login: 'ada', avatar_url: 'https://avatars/ada' },
       },
     ]);

@@ -1,5 +1,6 @@
 import { ArrowDownRightIcon, ArrowUpRightIcon } from 'lucide-react';
 import { Badge } from '@/ds/components/Badge';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
@@ -28,13 +29,19 @@ export function MetricsKpiCardChange({
 
   return (
     <div className={cn('flex items-center gap-1.5', className)}>
-      <Badge variant={isGood ? 'green' : 'red'} emphasis="muted" size="xs" icon={<Icon />} className="tabular-nums">
+      <Badge
+        variant={isGood ? 'success' : 'destructive'}
+        emphasis="subtle"
+        size="xs"
+        icon={<Icon />}
+        className="tabular-nums"
+      >
         {formattedChange}
       </Badge>
-      <span className="text-meta text-placeholder">
+      <Txt as="span" variant="meta" tone="faint">
         vs prior period
         {prevValue ? <span className="sr-only">, previous value {prevValue}</span> : null}
-      </span>
+      </Txt>
     </div>
   );
 }

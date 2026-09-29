@@ -7,6 +7,7 @@ import type { BoardCardStatus } from '../boardCardStatus';
 import { externalLinkLabel, metadataLabelColors, metadataLabels } from '../boardItems';
 import { CardLabels, CardStatus, REVEAL_ON_CARD_HOVER, SourceTitle } from './BoardCardParts';
 import { SourceIcon } from './BoardIcons';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 // The card and its open copy draw these same rows, so opening moves nothing.
 export function CandidateCardRows({
@@ -28,12 +29,14 @@ export function CandidateCardRows({
     <>
       <div className="absolute top-2 right-2 z-20 flex items-center gap-1.5">{controls}</div>
       <div className="flex min-w-0 flex-col gap-1.5">
-        <span className="text-meta text-placeholder truncate pr-16">{candidate.meta}</span>
+        <Txt as="span" variant="meta" tone="faint" className="truncate pr-16">
+          {candidate.meta}
+        </Txt>
         <div className="flex min-w-0 items-center gap-1.5">
           <SourceIcon source={candidate.source} />
-          <span className="text-label text-foreground min-w-0 flex-1 truncate font-semibold">
+          <Txt as="span" variant="label" tone="ink" className="min-w-0 flex-1 truncate font-semibold">
             <SourceTitle source={candidate.source} title={candidate.title} id={titleId} />
-          </span>
+          </Txt>
           {/* Triage reads the source before deciding, so keep it one click away. */}
           <a
             href={candidate.url}
