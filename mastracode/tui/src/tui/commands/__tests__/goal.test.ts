@@ -971,6 +971,45 @@ describe('handleGoalCommand', () => {
     expect(abort).not.toHaveBeenCalled();
   });
 
+  it('reports /goal clear as done when the retry on reload succeeds', async () => {
+    let stored: Record<string, unknown> | undefined;
+    const agent = {
+      id: 'agent-1',
+      setObjective: vi.fn(async (objective: string, opts: Record<string, unknown>) => {
+        stored = { objective, status: 'active', runsUsed: 0, activeDurationMs: 0, startedAt: 1, updatedAt: 1, ...opts };
+        return stored;
+      }),
+      getObjective: vi.fn(async () => stored),
+      clearObjective: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('storage blip'))
+        .mockImplementation(async () => {
+          stored = undefined;
+        }),
+      updateObjectiveOptions: vi.fn(),
+    };
+    const goalManager = new GoalManager();
+    const abort = vi.fn();
+    const state = createMockState({
+      threadId: 'thread-1',
+      controller: { getCurrentAgent: vi.fn(() => agent) },
+      session: { abort, run: { isRunning: vi.fn(() => true) }, suspensions: { hasPending: vi.fn(() => false) } },
+      extra: { goalManager, pendingInlineQuestions: [], pendingAskUserComponents: new Map() },
+    }) as any;
+    await goalManager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+    const showInfo = vi.fn();
+    const showError = vi.fn();
+    const ctx = { state, showInfo, showError, updateStatusLine: vi.fn() } as any;
+
+    await handleGoalCommand(ctx, ['clear']);
+
+    expect(agent.clearObjective).toHaveBeenCalledTimes(2);
+    expect(showError).not.toHaveBeenCalled();
+    expect(showInfo).toHaveBeenCalledWith('Goal cleared.');
+    expect(goalManager.getGoal()).toBeNull();
+    expect(abort).toHaveBeenCalled();
+  });
+
   it('aborts the in-flight turn when /goal clear is called while running', async () => {
     const goalManager = {
       clear: vi.fn(),

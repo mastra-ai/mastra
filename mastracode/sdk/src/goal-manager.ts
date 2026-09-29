@@ -324,8 +324,8 @@ export class GoalManager {
    * pre-migration goal must not resurface from the legacy key after a clear.
    * Like the save, this is best-effort: a failed durable delete also skips the
    * legacy wipe. A pending {@link clear} stays pending until both writes
-   * succeed, so a later save or load retries it. Resolves to whether the delete
-   * landed.
+   * succeed, so a later save retries it; loading the thread retries it once
+   * and then drops it. Resolves to whether the delete landed.
    */
   async deleteFromThread(state: GoalManagerState): Promise<boolean> {
     const threadId = state.session.thread.getId();
