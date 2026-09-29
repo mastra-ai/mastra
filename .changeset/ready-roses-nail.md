@@ -1,5 +1,5 @@
 ---
-'@mastra/playground-ui': major
+'@mastra/playground-ui': minor
 ---
 
 Added chromatic color ramps and theme-aware status, badge, product, chart, and span colors. Every resting color is now a solid ramp step in both themes, so a badge or notice looks the same whatever surface it sits on.
