@@ -9,7 +9,6 @@ export const RAIL_LIST = 'm-0 flex list-none flex-col gap-6 p-0';
 const RAIL_LINE =
   'bg-border-strong absolute top-7 -bottom-6 left-[0.875rem] w-px -translate-x-1/2 [mask-image:linear-gradient(to_bottom,transparent,#000_min(30%,1rem),#000_calc(100%-min(30%,1rem)),transparent)]';
 
-/** `-fg` is the on-surface tone: it flips light on dark, which a bare glyph needs and the badge fills do not. */
 export const RAIL_MARK_TONE: Record<BadgeVariant, string> = {
   studio: 'text-product-studio-foreground',
   server: 'text-product-server-foreground',
@@ -18,18 +17,18 @@ export const RAIL_MARK_TONE: Record<BadgeVariant, string> = {
   workers: 'text-product-workers-foreground',
   'persistent-server': 'text-product-persistent-server-foreground',
   neutral: 'text-muted-foreground',
-  green: 'text-badge-green-foreground',
-  red: 'text-badge-red-foreground',
-  yellow: 'text-badge-yellow-foreground',
-  blue: 'text-badge-blue-foreground',
+  green: 'text-badge-green-indicator',
+  red: 'text-badge-red-indicator',
+  yellow: 'text-badge-yellow-indicator',
+  blue: 'text-badge-blue-indicator',
   success: 'text-success-indicator',
   destructive: 'text-destructive-indicator',
   info: 'text-info-indicator',
   warning: 'text-warning-indicator',
-  purple: 'text-badge-purple-foreground',
-  orange: 'text-badge-orange-foreground',
-  cyan: 'text-badge-cyan-foreground',
-  pink: 'text-badge-pink-foreground',
+  purple: 'text-badge-purple-indicator',
+  orange: 'text-badge-orange-indicator',
+  cyan: 'text-badge-cyan-indicator',
+  pink: 'text-badge-pink-indicator',
 };
 
 export function DayHeading({ children }: { children: ReactNode }) {

@@ -9,7 +9,7 @@ export function GoalStatus() {
   if (!goal || goal.status === 'done') return null;
 
   return (
-    <span className="text-destructive-indicator [&_svg]:text-destructive-indicator inline-flex items-center gap-1">
+    <span className="text-badge-pink-indicator [&_svg]:text-badge-pink-indicator inline-flex items-center gap-1">
       <Target size={13} /> {goal.status === 'paused' ? 'goal paused' : 'pursuing goal'}
     </span>
   );

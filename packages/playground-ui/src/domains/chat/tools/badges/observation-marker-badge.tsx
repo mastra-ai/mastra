@@ -231,7 +231,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
   const textColor = 'text-info-subtle-foreground';
   const completeBgColor = 'bg-success-subtle';
   const completeTextColor = 'text-success-subtle-foreground';
-  const completeHoverBgColor = 'hover:opacity-80';
+  const completeHoverLayer = 'state-layer';
   // Same colors for expanded state
   const expandedBgColor = 'bg-success-subtle';
   const expandedBorderColor = 'border-success-edge';
@@ -300,7 +300,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
         <div className="my-1">
           <button
             onClick={handleToggle}
-            className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 ${completeBgColor} ${completeTextColor} text-column ${completeHoverBgColor} cursor-pointer`}
+            className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 ${completeBgColor} ${completeTextColor} text-column ${completeHoverLayer} cursor-pointer`}
           >
             {isExpanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
             {isReflection ? <Brain className="size-3" /> : <ObservationIcon className="size-3" />}
@@ -436,7 +436,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
         <div className="my-1">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-destructive-subtle px-2 py-1 text-column text-destructive-subtle-foreground hover:opacity-80"
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-destructive-subtle px-2 py-1 text-column text-destructive-subtle-foreground state-layer"
           >
             {isExpanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
             <XCircle className="size-3" />
@@ -538,7 +538,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
         <div className="my-1">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-dashed border-destructive-edge bg-destructive-subtle px-2 py-1 text-column text-destructive-subtle-foreground hover:opacity-80"
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-dashed border-destructive-edge bg-destructive-subtle px-2 py-1 text-column text-destructive-subtle-foreground state-layer"
           >
             {isExpanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
             <XCircle className="size-3" />
@@ -587,7 +587,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
         <div className="my-1">
           <button
             onClick={handleToggle}
-            className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 ${completeBgColor} ${completeTextColor} text-column ${completeHoverBgColor} cursor-pointer`}
+            className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 ${completeBgColor} ${completeTextColor} text-column ${completeHoverLayer} cursor-pointer`}
           >
             {isExpanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
             {isReflection ? <Brain className="size-3" /> : <ObservationIcon className="size-3" />}

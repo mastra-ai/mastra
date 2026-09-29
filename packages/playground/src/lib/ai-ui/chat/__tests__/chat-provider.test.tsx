@@ -334,16 +334,12 @@ describe('ChatProvider', () => {
               expect(screen.getByTestId('approval-request-state').textContent).toBe('running');
               await act(async () => gates[index].resolve());
               await waitFor(() => expect(screen.getByTestId('approval-request-state').textContent).toBe('idle'));
-              expect(
-                within(cards[index])
-                  .getByRole('button', { name: `Approve ${toolName}` })
-                  .hasAttribute('disabled'),
-              ).toBe(true);
-              expect(
-                within(cards[index])
-                  .getByRole('button', { name: `Decline ${toolName}` })
-                  .hasAttribute('disabled'),
-              ).toBe(true);
+              const otherAction = action === 'Approve' ? 'Decline' : 'Approve';
+              for (const decidedName of [`${action}d ${toolName}`, `${otherAction} ${toolName}`]) {
+                expect(within(cards[index]).getByRole('button', { name: decidedName }).hasAttribute('disabled')).toBe(
+                  true,
+                );
+              }
               if (index === 0)
                 expect(
                   within(cards[1])
@@ -781,8 +777,7 @@ describe('ChatProvider', () => {
     const omPart = latestMessages
       .flatMap(message => (Array.isArray(message.content?.parts) ? message.content.parts : []))
       .find(part => (part as { toolCallId?: string }).toolCallId === 'om-buffering-cycle-reload') as
-      | { state?: string; output?: { omData?: Record<string, unknown> } }
-      | undefined;
+      { state?: string; output?: { omData?: Record<string, unknown> } } | undefined;
 
     expect(omPart?.state).toBe('output-available');
     expect(omPart?.output?.omData?.observations).toEqual(['remembered after reload']);

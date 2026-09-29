@@ -8,8 +8,8 @@ import { Button } from '@/ds/components/Button';
 export type TimelineMarkerKind = 'selected' | 'compare-point';
 
 const MARKER_TICK_CLASSES: Record<TimelineMarkerKind, string> = {
-  selected: 'bg-info-indicator border-info-edge',
-  'compare-point': 'bg-info-indicator border-info-edge',
+  selected: 'bg-foreground border-border-strong',
+  'compare-point': 'bg-foreground border-border-strong',
 };
 
 /**
@@ -48,8 +48,8 @@ export function TimelineTrack({
             aria-label={snapshotTickLabel(snapshot, totalCount)}
             aria-pressed={marker === 'compare-point' ? grabbed : undefined}
             className={`absolute top-4 size-3.5 -translate-1/2 rounded-full border-2 ${
-              marker ? MARKER_TICK_CLASSES[marker] : 'border-background bg-muted hover:bg-info-subtle'
-            } ${grabbed ? 'ring-2 ring-info-indicator' : ''}`}
+              marker ? MARKER_TICK_CLASSES[marker] : 'border-background bg-muted hover:bg-fill-hover'
+            } ${grabbed ? 'ring-2 ring-foreground' : ''}`}
             data-marker={marker}
             onClick={() => onTickSelect(index)}
             style={{ left: `${positions[index]}%` }}

@@ -24,9 +24,9 @@ function getFileIcon(name: string): ReactNode {
     case 'tsx':
     case 'js':
     case 'jsx':
-      return <FileCode className="text-blue-700 dark:text-blue-400" />;
+      return <FileCode className="text-badge-blue-indicator" />;
     case 'json':
-      return <FileJson className="text-yellow-700 dark:text-yellow-400" />;
+      return <FileJson className="text-badge-yellow-indicator" />;
     case 'md':
     case 'mdx':
       return <FileText className="text-muted-foreground" />;
@@ -36,7 +36,7 @@ function getFileIcon(name: string): ReactNode {
     case 'gif':
     case 'svg':
     case 'webp':
-      return <Image className="text-purple-700 dark:text-purple-400" />;
+      return <Image className="text-badge-purple-indicator" />;
     default:
       return <File className="text-muted-foreground" />;
   }
@@ -44,9 +44,9 @@ function getFileIcon(name: string): ReactNode {
 
 function getFolderIcon(isOpen: boolean): ReactNode {
   return isOpen ? (
-    <FolderOpen className="text-yellow-700 dark:text-yellow-400" />
+    <FolderOpen className="text-badge-yellow-indicator" />
   ) : (
-    <Folder className="text-yellow-700 dark:text-yellow-400" />
+    <Folder className="text-badge-yellow-indicator" />
   );
 }
 

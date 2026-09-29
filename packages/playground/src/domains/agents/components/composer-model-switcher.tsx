@@ -146,8 +146,11 @@ export const ComposerModelWarning = () => {
         <div className="flex max-w-full min-w-0 items-start gap-1 text-caption text-warning-indicator">
           <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />
           <span className="min-w-0 break-words">
-            Set <code className="rounded bg-warning-subtle px-1 py-0.5 break-all text-warning-subtle-foreground">{envVar}</code> to use
-            this provider
+            Set{' '}
+            <code className="rounded bg-warning-subtle px-1 py-0.5 break-all text-warning-subtle-foreground">
+              {envVar}
+            </code>{' '}
+            to use this provider
           </span>
         </div>
       )}

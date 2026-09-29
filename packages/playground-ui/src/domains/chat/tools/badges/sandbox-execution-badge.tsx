@@ -241,7 +241,7 @@ export const SandboxExecutionBadge = ({
           <Icon>
             <ChevronUpIcon className={cn('transition-all', isCollapsed ? 'rotate-90' : 'rotate-180')} />
           </Icon>
-          <Badge icon={<TerminalSquare className="text-warning-indicator" size={16} />}>{displayName}</Badge>
+          <Badge icon={<TerminalSquare className="text-span-workspace" size={16} />}>{displayName}</Badge>
           {execMeta?.sandbox && (
             <Link
               href={execMeta.id ? `/workspaces/${execMeta.id}` : '/workspaces'}
@@ -270,7 +270,9 @@ export const SandboxExecutionBadge = ({
                 (exitSuccess ? (
                   <CheckIcon className="text-success-indicator" size={14} />
                 ) : wasKilled ? (
-                  <span className="rounded bg-badge-orange-strong px-1.5 py-0.5 text-meta text-badge-orange-foreground">killed</span>
+                  <span className="rounded bg-badge-orange-strong px-1.5 py-0.5 text-meta text-badge-orange-foreground">
+                    killed
+                  </span>
                 ) : (
                   <span className="rounded bg-destructive-subtle px-1.5 py-0.5 text-meta text-destructive-subtle-foreground">
                     exit {exitCode}

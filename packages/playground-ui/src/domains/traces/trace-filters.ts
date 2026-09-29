@@ -68,7 +68,6 @@ export type {
 } from './trace-query-filters';
 export { isTraceFilterGroup } from './trace-query-filters';
 import { hueAccentColor, hueForName } from '@/lib/colors';
-import type { CategoricalHue } from '@/lib/colors';
 
 type EntityTypeValue = `${EntityType}`;
 
@@ -337,45 +336,42 @@ const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
   'feedback.comment': 'Feedback comment',
 };
 
-/** Icon and hue for each known trace filter key. Hues are spread by hand — hashing
- *  the ids clusters them (e.g. `environment`/`entityName`/`timeRange` all land on green). */
-const TRACE_FILTER_BAR_FIELD_META: Record<string, { icon: LucideIcon; hue: CategoricalHue }> = {
-  timeRange: { icon: ClockIcon, hue: 'orange' },
-  rootEntityType: { icon: BoxIcon, hue: 'purple' },
-  entityName: { icon: TagIcon, hue: 'purple' },
-  entityId: { icon: FingerprintIcon, hue: 'pink' },
-  status: { icon: ActivityIcon, hue: 'red' },
-  tags: { icon: TagsIcon, hue: 'pink' },
-  serviceName: { icon: ServerIcon, hue: 'cyan' },
-  environment: { icon: GlobeIcon, hue: 'green' },
-  traceId: { icon: WaypointsIcon, hue: 'blue' },
-  runId: { icon: PlayIcon, hue: 'blue' },
-  threadId: { icon: MessageSquareIcon, hue: 'blue' },
-  sessionId: { icon: LayersIcon, hue: 'green' },
-  requestId: { icon: RadioIcon, hue: 'yellow' },
-  resourceId: { icon: HashIcon, hue: 'green' },
-  userId: { icon: UserIcon, hue: 'orange' },
-  organizationId: { icon: BuildingIcon, hue: 'green' },
-  experimentId: { icon: FlaskConicalIcon, hue: 'green' },
-  'spans.name': { icon: GitBranchIcon, hue: 'blue' },
-  'spans.spanType': { icon: ShapesIcon, hue: 'purple' },
-  'spans.model': { icon: CpuIcon, hue: 'purple' },
-  'spans.provider': { icon: CloudIcon, hue: 'blue' },
-  'spans.durationMs': { icon: TimerIcon, hue: 'orange' },
-  'spans.error': { icon: TriangleAlertIcon, hue: 'red' },
-  'scores.scorerId': { icon: GaugeIcon, hue: 'green' },
-  'scores.score': { icon: PercentIcon, hue: 'green' },
-  'feedback.feedbackType': { icon: ThumbsUpIcon, hue: 'cyan' },
-  'feedback.value': { icon: StarIcon, hue: 'yellow' },
-  'feedback.comment': { icon: MessageCircleIcon, hue: 'blue' },
+const TRACE_FILTER_BAR_FIELD_META: Record<string, { icon: LucideIcon; color: string }> = {
+  timeRange: { icon: ClockIcon, color: hueAccentColor('yellow') },
+  rootEntityType: { icon: BoxIcon, color: hueAccentColor('purple') },
+  entityName: { icon: TagIcon, color: hueAccentColor('cyan') },
+  entityId: { icon: FingerprintIcon, color: hueAccentColor('pink') },
+  status: { icon: ActivityIcon, color: hueAccentColor('orange') },
+  tags: { icon: TagsIcon, color: hueAccentColor('pink') },
+  serviceName: { icon: ServerIcon, color: hueAccentColor('cyan') },
+  environment: { icon: GlobeIcon, color: hueAccentColor('green') },
+  traceId: { icon: WaypointsIcon, color: hueAccentColor('blue') },
+  runId: { icon: PlayIcon, color: hueAccentColor('purple') },
+  threadId: { icon: MessageSquareIcon, color: hueAccentColor('blue') },
+  sessionId: { icon: LayersIcon, color: hueAccentColor('orange') },
+  requestId: { icon: RadioIcon, color: hueAccentColor('yellow') },
+  resourceId: { icon: HashIcon, color: hueAccentColor('green') },
+  userId: { icon: UserIcon, color: hueAccentColor('orange') },
+  organizationId: { icon: BuildingIcon, color: hueAccentColor('cyan') },
+  experimentId: { icon: FlaskConicalIcon, color: hueAccentColor('pink') },
+  'spans.name': { icon: GitBranchIcon, color: hueAccentColor('blue') },
+  'spans.spanType': { icon: ShapesIcon, color: hueAccentColor('purple') },
+  'spans.model': { icon: CpuIcon, color: hueAccentColor('green') },
+  'spans.provider': { icon: CloudIcon, color: hueAccentColor('cyan') },
+  'spans.durationMs': { icon: TimerIcon, color: hueAccentColor('orange') },
+  'spans.error': { icon: TriangleAlertIcon, color: 'var(--destructive-indicator)' },
+  'scores.scorerId': { icon: GaugeIcon, color: hueAccentColor('green') },
+  'scores.score': { icon: PercentIcon, color: hueAccentColor('yellow') },
+  'feedback.feedbackType': { icon: ThumbsUpIcon, color: hueAccentColor('purple') },
+  'feedback.value': { icon: StarIcon, color: hueAccentColor('yellow') },
+  'feedback.comment': { icon: MessageCircleIcon, color: hueAccentColor('blue') },
 };
 
 export const traceFilterFieldIcon = (fieldId: string) => TRACE_FILTER_BAR_FIELD_META[fieldId]?.icon;
 
 /** Stable per-field accent; known keys use a curated hue, others fall back to a hashed one. */
 export const traceFilterFieldColor = (fieldId: string) => {
-  const hue = TRACE_FILTER_BAR_FIELD_META[fieldId]?.hue;
-  return hueAccentColor(hue ?? hueForName(fieldId));
+  return TRACE_FILTER_BAR_FIELD_META[fieldId]?.color ?? hueAccentColor(hueForName(fieldId));
 };
 
 const traceFieldBase = (id: string) => ({
@@ -599,9 +595,8 @@ export function filterBarExpressionToTraceFilters(expression: FilterBarExpressio
 }
 
 function filterBarGroupToTraceGroup(group: FilterBarGroup): TraceFilterGroup {
-  const nodes = group.nodes.map(
-    (node): TraceFilterNode =>
-      isFilterBarGroup(node) ? filterBarGroupToTraceGroup(node) : { id: node.id, ...filterBarItemToTraceToken(node) },
+  const nodes = group.nodes.map((node): TraceFilterNode =>
+    isFilterBarGroup(node) ? filterBarGroupToTraceGroup(node) : { id: node.id, ...filterBarItemToTraceToken(node) },
   );
   // Empty groups are kept: "Advanced filter…" emits one and opens its editor, and the
   // FilterBar prunes it itself when the popover closes without any condition.

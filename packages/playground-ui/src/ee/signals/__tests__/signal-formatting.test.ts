@@ -1,7 +1,7 @@
 import type { SignalCatalogEntry } from '@mastra/client-js';
 import { describe, expect, it } from 'vitest';
 
-import { getSignalAreaClass, getSignalColor } from '../signal-colors';
+import { getSignalColor } from '../signal-colors';
 import {
   SIGNAL_DESCRIPTIONS,
   SIGNAL_PROCESSING_ORDER,
@@ -209,8 +209,14 @@ describe('getSignalColor', () => {
         const name = `custom_signal_${index}`;
         expect(getSignalColor(name)).toBe(getSignalColor(name));
         expect(builtIn).not.toContain(getSignalColor(name));
-        expect(getSignalAreaClass(name)).toMatch(/^fill-[a-z]+-100 dark:fill-[a-z]+-soft-950$/);
+        expect(getSignalColor(name)).not.toBe('var(--chart-red)');
       }
+    });
+  });
+
+  describe('when the name matches an inherited object property', () => {
+    it('treats it as a custom signal', () => {
+      expect(['var(--chart-pink)', 'var(--chart-yellow)']).toContain(getSignalColor('constructor'));
     });
   });
 });

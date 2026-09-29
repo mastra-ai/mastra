@@ -44,9 +44,9 @@ import { runLayout } from './layout';
 const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Project', thread: 'Session' };
 
 const RUNG_RING: Record<KnowledgeRung, string> = {
-  org: 'border-purple-600 dark:border-purple-300',
-  resource: 'border-purple-600 dark:border-purple-500',
-  thread: 'border-cyan-600 dark:border-cyan-400',
+  org: 'border-badge-purple-indicator',
+  resource: 'border-badge-purple-edge',
+  thread: 'border-badge-cyan-indicator',
 };
 
 function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
@@ -64,7 +64,7 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
         className={[
           'flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-full border-2 text-center transition-shadow duration-200',
           RUNG_RING[node.rung],
-          selected ? 'ring-2 ring-purple-600 dark:ring-purple-300' : '',
+          selected ? 'ring-badge-purple-indicator ring-2' : '',
         ].join(' ')}
         style={{ background: 'var(--badge-purple-strong)' }}
       >
@@ -131,11 +131,11 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
           // A selected record (open in the flyout) lights its edge up.
           data?.focused
             ? {
-                stroke: pinned ? 'var(--knowledge-pin)' : 'var(--foreground)',
+                stroke: pinned ? 'var(--badge-yellow-indicator)' : 'var(--foreground)',
                 strokeWidth: 2.5,
               }
             : pinned
-              ? { stroke: 'var(--knowledge-pin-edge)', strokeWidth: 2 }
+              ? { stroke: 'var(--badge-yellow-indicator)', strokeWidth: 2 }
               : source.startsWith('record:') || target.startsWith('record:')
                 ? { stroke: 'var(--muted-foreground)', strokeWidth: 1.2 }
                 : { stroke: 'var(--badge-purple-edge)', strokeWidth: 1.4 }
@@ -183,7 +183,7 @@ function RecordNodeComponent({ data }: NodeProps<RecordFlowNode>) {
           ? 'border-yellow-300 bg-yellow-400 text-yellow-950 shadow-raised'
           : 'border-foreground bg-foreground',
         // The selected record (open in the flyout) glows hard.
-        focused ? (record.pinned ? 'ring-2 ring-yellow-600 dark:ring-yellow-300' : 'ring-2 ring-foreground') : '',
+        focused ? (record.pinned ? 'ring-badge-yellow-indicator ring-2' : 'ring-2 ring-foreground') : '',
       ].join(' ')}
       style={{ width: size, height: size }}
     >
@@ -479,22 +479,10 @@ function KnowledgeGraphInner({
 
   return (
     <div
-      className="knowledge-graph border-border bg-background relative h-full w-full overflow-hidden rounded-xl border"
+      className="border-border bg-background relative h-full w-full overflow-hidden rounded-xl border"
       data-testid="knowledge-graph"
     >
       <style>{`
-        .knowledge-graph {
-          --knowledge-pin: var(--yellow-600);
-          --knowledge-pin-edge: var(--yellow-700);
-          --knowledge-accent: var(--purple-600);
-          --knowledge-accent-fill: var(--purple-500);
-        }
-        .dark .knowledge-graph {
-          --knowledge-pin: var(--yellow-400);
-          --knowledge-pin-edge: var(--yellow-500);
-          --knowledge-accent: var(--purple-400);
-          --knowledge-accent-fill: var(--purple-500);
-        }
         @keyframes knowledgeArrive {
           0% { opacity: 0; transform: scale(0.4); }
           60% { opacity: 1; transform: scale(1.08); }
@@ -502,11 +490,11 @@ function KnowledgeGraphInner({
         }
         .knowledge-arrive [data-testid='knowledge-node'] {
           animation: knowledgeArrive 0.9s ease-out;
-          box-shadow: 0 0 0 2px var(--knowledge-accent) !important;
+          box-shadow: 0 0 0 2px var(--chart-purple) !important;
         }
         .react-flow__edge.knowledge-arrive path {
           animation: knowledgeArrive 0.9s ease-out;
-          stroke: var(--knowledge-accent) !important;
+          stroke: var(--chart-purple) !important;
         }
       `}</style>
       <TruncationBanner payload={payload} />
@@ -586,8 +574,8 @@ function KnowledgeGraphInner({
           pannable
           zoomable
           style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8 }}
-          nodeColor="var(--knowledge-accent-fill)"
-          nodeStrokeColor="var(--knowledge-accent)"
+          nodeColor="var(--purple-500)"
+          nodeStrokeColor="var(--chart-purple)"
           nodeStrokeWidth={3}
           nodeBorderRadius={999}
           maskColor="var(--scrim)"
@@ -655,9 +643,7 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
       >
         <div className="text-foreground mb-1 flex items-center gap-1.5">
           Record
-          {record.pinned ? (
-            <Pin size={11} className="text-yellow-700 dark:text-yellow-400" aria-label="Pinned" />
-          ) : null}
+          {record.pinned ? <Pin size={11} className="text-badge-yellow-indicator" aria-label="Pinned" /> : null}
         </div>
         <div className="text-muted-foreground leading-relaxed">{record.text}</div>
       </div>

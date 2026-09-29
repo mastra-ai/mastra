@@ -305,14 +305,14 @@ export const MemorySearch = ({
                                 tone={result.threadId !== currentThreadId ? undefined : 'muted'}
                                 className={cn(
                                   'max-w-[150px] truncate',
-                                  result.threadId !== currentThreadId && 'text-blue-700 dark:text-blue-400',
+                                  result.threadId !== currentThreadId && 'text-info-indicator',
                                 )}
                                 title={result.threadTitle}
                               >
                                 • {result.threadTitle}
                               </Txt>
                               {result.threadId !== currentThreadId && (
-                                <ExternalLink className="h-3 w-3 text-blue-700 dark:text-blue-400" />
+                                <ExternalLink className="h-3 w-3 text-info-indicator" />
                               )}
                             </div>
                           )}

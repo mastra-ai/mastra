@@ -32,7 +32,7 @@ function segment(first: boolean, last: boolean) {
 function CommitMark({ head }: { head: boolean }) {
   return head ? (
     <span
-      className="bg-background size-2.5 rounded-full border-2 border-green-600 dark:border-green-400"
+      className="border-badge-green-indicator bg-background size-2.5 rounded-full border-2"
       aria-label="Tip of the branch"
     />
   ) : (

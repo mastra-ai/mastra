@@ -115,7 +115,7 @@ function RecordCard({
         record.pinned ? 'bg-badge-yellow-subtle' : 'bg-card',
         expanded
           ? record.pinned
-            ? 'border-yellow-600 dark:border-yellow-400'
+            ? 'border-badge-yellow-indicator'
             : 'border-badge-purple-edge'
           : record.pinned
             ? 'border-badge-yellow-edge'
@@ -137,11 +137,7 @@ function RecordCard({
         <div className="text-foreground text-xs leading-relaxed">
           <RecordText text={record.text} onNodeRef={onNodeRef} />
           {record.pinned ? (
-            <Pin
-              size={11}
-              className="ml-1 inline text-yellow-700 dark:text-yellow-400"
-              aria-label="Pinned knowledge record"
-            />
+            <Pin size={11} className="text-badge-yellow-indicator ml-1 inline" aria-label="Pinned knowledge record" />
           ) : null}
         </div>
         <div className="text-muted-foreground mt-1.5 flex items-center gap-2 text-[10px]">
@@ -158,7 +154,7 @@ function RecordCard({
               {record.sourceThreadId ? (
                 <button
                   type="button"
-                  className="flex items-center gap-1 text-purple-700 hover:underline dark:text-purple-300"
+                  className="text-badge-purple-indicator flex items-center gap-1 hover:underline"
                   onClick={() => onOpenThread?.(record.sourceThreadId)}
                 >
                   <span className="max-w-40 truncate">{record.sourceThreadId}</span>
@@ -240,7 +236,7 @@ export function KnowledgeFlyout({
   return (
     <aside
       data-testid="knowledge-flyout"
-      className="border-border bg-background shadow-overlay absolute inset-y-0 right-0 z-20 flex w-[380px] flex-col overflow-hidden rounded-l-xl border-l backdrop-blur transition-transform duration-300"
+      className="border-border bg-background shadow-overlay absolute inset-y-0 right-0 z-20 flex w-[380px] flex-col overflow-hidden rounded-l-xl border-l transition-transform duration-300"
       aria-label="Knowledge node details"
     >
       {nodeQuery.isPending ? (
@@ -316,9 +312,7 @@ export function KnowledgeFlyout({
                       <div
                         key={record.id}
                         className={
-                          record.id === focusRecordId
-                            ? 'rounded-lg ring-2 ring-purple-600 dark:ring-purple-400'
-                            : undefined
+                          record.id === focusRecordId ? 'ring-badge-purple-indicator rounded-lg ring-2' : undefined
                         }
                       >
                         <RecordCard

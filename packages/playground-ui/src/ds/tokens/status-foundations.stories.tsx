@@ -115,7 +115,7 @@ export const StatusFoundations: Story = {
 
       <FoundationSection
         label="Badge"
-        description="One row's worth of status. Badges tint their color ramp and muted softens the tint; the indicator has its own stronger color."
+        description="One row's worth of status. Badges tint their color ramp and subtle softens the tint; the indicator has its own stronger color."
         surface="sidebar"
       >
         <SpecimenGroup label="Neutral">
@@ -168,7 +168,7 @@ export const StatusFoundations: Story = {
           ))}
         </div>
         <Txt variant="caption" tone="muted">
-          Success indicators use step 500 in dark mode and step 600 in light mode.
+          Success indicators use step 400 in dark mode and step 700 in light mode.
         </Txt>
       </FoundationSection>
 

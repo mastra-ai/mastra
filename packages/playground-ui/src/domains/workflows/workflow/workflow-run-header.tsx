@@ -4,6 +4,7 @@ import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import type { WorkflowRunTiming } from '../context/workflow-step-timing';
 import { resolveRunTiming } from '../context/workflow-step-timing';
+import { workflowStatusTone } from '../workflow-status-tone';
 import { Badge } from '@/ds/components/Badge';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { RelativeTimestamp } from '@/ds/components/RelativeTimestamp';
@@ -20,7 +21,7 @@ export function WorkflowRunStatusBadge({ status }: { status?: WorkflowRunStatus 
   return (
     <Badge
       size="md"
-      variant={status === 'paused' ? 'warning' : 'neutral'}
+      variant={workflowStatusTone(status)}
       emphasis="subtle"
       icon={status && <WorkflowRunStatusIcon status={status} />}
     >
@@ -49,7 +50,7 @@ function RunWaiting({ since }: { since: number }) {
   const waiting = formatDuration(useTimeDiff({ startedAt: since }));
 
   return (
-    <span className="flex items-center gap-1.5 text-meta text-info-indicator tabular-nums" title="Waiting for input">
+    <span className="flex items-center gap-1.5 text-meta text-warning-indicator tabular-nums" title="Waiting for input">
       <Pause aria-hidden className="size-3.5" />
       {waiting}
     </span>

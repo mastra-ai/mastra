@@ -1,7 +1,6 @@
 /* Toast tokens live here — only consumed by `.mastra-toaster` so they don't need to ship in
-   index.css for every component. The bg/border use color-mix on theme-scoped notice tokens,
-   so the single :root declaration computes correctly under `html.light` too. Only the shadow
-   needs an explicit per-theme override (light gets a gloss highlight, dark stays elevation-only). */
+   index.css for every component. The bg/border alias theme-scoped status roles, so the single
+   :root declaration flips with the theme. */
 :root {
   --toast-success-bg: var(--success-subtle);
   --toast-success-border: var(--success-edge);

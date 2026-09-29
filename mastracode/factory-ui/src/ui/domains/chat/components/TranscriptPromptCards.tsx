@@ -11,7 +11,7 @@ import { SubmitPlanCard } from './SubmitPlanCard';
 import { resultBlock, stringify, truncate } from './transcript-shared';
 
 const promptCardSuspension =
-  'border-border border-l-destructive-indicator bg-fill my-2 min-w-0 rounded-lg border border-l-4 px-4 py-3';
+  'border-border border-l-warning-indicator bg-fill my-2 min-w-0 rounded-lg border border-l-4 px-4 py-3';
 const promptTitle = 'mb-1.5 text-sm font-semibold text-foreground';
 const promptActions = 'mt-2 flex gap-2';
 

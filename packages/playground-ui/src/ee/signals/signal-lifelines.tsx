@@ -64,7 +64,6 @@ export function SignalLifelines({
               signalName={signalName}
               snapshots={snapshots}
               positions={positions}
-              color={color}
               onThemeSelect={onThemeSelect}
             />
           ))}

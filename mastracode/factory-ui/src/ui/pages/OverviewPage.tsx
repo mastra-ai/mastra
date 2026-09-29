@@ -122,7 +122,7 @@ export function OverviewContent({
           <div className="flex items-center gap-3">
             {supervisorHealth.data?.findings.length ? (
               <Link
-                className="text-meta text-green-700 hover:text-red-700 dark:text-green-400 dark:hover:text-red-400"
+                className="text-meta text-badge-green-indicator hover:text-badge-red-indicator"
                 to={`/factories/${factoryProjectId ?? ''}/supervisor`}
               >
                 {supervisorHealth.data.findings.length} supervisor{' '}

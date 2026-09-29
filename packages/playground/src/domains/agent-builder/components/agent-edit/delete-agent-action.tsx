@@ -75,7 +75,7 @@ const DeleteAgentDialog = ({
           </AlertDialog.Cancel>
           <Button
             icon={<Trash2 />}
-            variant="primary"
+            variant="destructive"
             data-testid="agent-builder-delete-agent-confirm"
             disabled={isPending || isDependentsLoading}
             onClick={() => {
