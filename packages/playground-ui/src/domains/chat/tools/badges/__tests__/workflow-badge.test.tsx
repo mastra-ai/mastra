@@ -77,4 +77,23 @@ describe('WorkflowBadge', () => {
     // The badge loads only its own run, never the full runs list with every snapshot.
     expect(listRequests).not.toHaveBeenCalled();
   });
+
+  it('offers nothing to open when the call never started a run', async () => {
+    server.use(http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}`, () => HttpResponse.json(badgeWorkflow)));
+
+    render(
+      <WorkflowBadge
+        workflowId={WORKFLOW_ID}
+        toolName={`workflow-${WORKFLOW_ID}`}
+        toolCallId="call-1"
+        toolApprovalMetadata={undefined}
+        isNetwork={false}
+        result={undefined}
+      />,
+      { wrapper: Providers },
+    );
+
+    await waitFor(() => expect(screen.getByText(badgeWorkflow.name)).toBeTruthy());
+    expect(screen.queryByRole('button', { name: badgeWorkflow.name })).toBeNull();
+  });
 });

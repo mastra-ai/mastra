@@ -1,6 +1,8 @@
 import type { TextPart } from '@mastra/react/ui';
 
 import type { MessageMetadata } from '../message-metadata';
+import { parseSkillActivation } from '../skill-activation';
+import { SkillMessage } from '../skill-message';
 import { SystemReminderBadge } from '../system-reminder-badge';
 import { InMessageAttachment } from './in-message-attachment';
 import { MessageText } from './message-text';
@@ -22,6 +24,10 @@ export interface UserTextPartRendererProps {
 export const UserTextPartRenderer = ({ part, metadata }: UserTextPartRendererProps) => {
   const text = part.text ?? '';
 
+  const skillActivation = parseSkillActivation(text);
+  if (skillActivation) {
+    return <SkillMessage activation={skillActivation} />;
+  }
   if (text.trimStart().startsWith('<system-reminder')) {
     return <SystemReminderBadge text={text} />;
   }

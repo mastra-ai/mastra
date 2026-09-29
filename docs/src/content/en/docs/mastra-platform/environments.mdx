@@ -60,7 +60,7 @@ Variables are applied when a deploy starts. To apply changed variables to a runn
 mastra env restart staging
 ```
 
-To see the set an environment's deploys actually run with, with managed variables listed by name, pull them into a local env file. Each environment is pulled on its own, so the file never mixes in another environment's values:
+To see the set an environment's deploys actually run with, with managed variables listed by name, pull them into a local env file. Each environment is pulled on its own. The file never mixes in another environment's values:
 
 ```bash
 mastra env vars pull staging --output .env.staging

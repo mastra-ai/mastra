@@ -29,8 +29,8 @@ export function TraceDataPanel(props: TraceDataPanelProps) {
         sideView={sideView}
         onSideViewChange={setSideView}
       />
-      <Dialog variant="new" open={isScoringOpen} onOpenChange={setIsScoringOpen}>
-        <DialogContent className="max-w-xl">
+      <Dialog open={isScoringOpen} onOpenChange={setIsScoringOpen}>
+        <DialogContent size="lg">
           <DialogHeader>
             <DialogTitle>Score trace</DialogTitle>
           </DialogHeader>

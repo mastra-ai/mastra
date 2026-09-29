@@ -460,7 +460,7 @@ When using adapters, configure these features directly with your framework. For 
 
 Server adapters register MCP (Model Context Protocol) routes during `registerRoutes()` when MCP servers are configured in your Mastra instance. MCP allows external tools and services to connect to your Mastra server and interact with your agents.
 
-Each server is exposed at `/api/mcp/:serverId/mcp` over Streamable HTTP. Every request is self-contained, so the routes work unchanged in serverless environments like Cloudflare Workers or Vercel Edge.
+Each server is exposed at `/api/mcp/:serverId/mcp` over Streamable HTTP. Because every request is self-contained, the routes work unchanged in serverless environments like Cloudflare Workers or Vercel Edge.
 
 Pass `mcpOptions` to control how the authenticated principal reaches tools. When using the Mastra deployer (the standard `mastra dev` / `mastra build` path), set it in your server config:
 

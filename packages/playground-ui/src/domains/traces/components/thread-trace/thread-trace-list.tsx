@@ -12,7 +12,12 @@ export interface ThreadTraceListProps extends ComponentProps<'div'> {
 export function ThreadTraceList({ className, innerClassName, children, ...props }: ThreadTraceListProps) {
   const { listRef } = useThreadTrace();
   return (
-    <div ref={listRef} data-slot="thread-trace-list" className={cn('min-h-0 overflow-y-auto', className)} {...props}>
+    <div
+      ref={listRef}
+      data-slot="thread-trace-list"
+      className={cn('min-h-0 overflow-x-hidden overflow-y-auto', className)}
+      {...props}
+    >
       <div data-slot="thread-trace-list-inner" className={cn('relative min-h-full', innerClassName)}>
         {children}
       </div>

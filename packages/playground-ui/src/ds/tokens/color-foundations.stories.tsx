@@ -3,21 +3,21 @@ import { Txt } from '../components/Txt/Txt';
 import { Colors } from './colors';
 import { FoundationPage, FoundationSection, Specimen, SpecimenGroup } from './foundations-layout';
 
-const meta: Meta = {
+const meta = {
   title: 'Foundations/Color',
   parameters: {
     layout: 'fullscreen',
     docs: {
       description: {
         component:
-          'Background tokens describe structural nesting, gray tokens describe contrast strength, and the semantic tokens name the role a component asks for. Components reference roles; the ramps underneath them are the raw material.',
+          'Ramps, semantic roles, product colors, charts, spans, and brand colors each have one home in Foundations. A token being available does not mean Factory or Playground currently uses it.',
       },
     },
   },
-};
+} satisfies Meta;
 
 export default meta;
-type Story = StoryObj;
+type Story = StoryObj<typeof meta>;
 
 type ColorToken = keyof typeof Colors;
 
@@ -62,9 +62,17 @@ const textTones: { token: ColorToken; className: string; role: string; sample: s
   },
 ];
 
-const accentKeys = Object.keys(Colors).filter(key => /^accent\d$/.test(key)) as ColorToken[];
-const accentDarkKeys = Object.keys(Colors).filter(key => /^accent\dDark$/.test(key)) as ColorToken[];
-const accentDarkerKeys = Object.keys(Colors).filter(key => /^accent\dDarker$/.test(key)) as ColorToken[];
+const hues = ['red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink'];
+const steps = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
+const softSteps = new Set([300, 600, 900, 950]);
+const products = [
+  { role: 'studio', label: 'Studio' },
+  { role: 'server', label: 'Server' },
+  { role: 'observability', label: 'Observability' },
+  { role: 'factory', label: 'Factory' },
+  { role: 'workers', label: 'Workers' },
+  { role: 'persistent-server', label: 'Persistent server' },
+] as const;
 
 const chartSeriesTokens = [
   { token: 'chart-blue', note: 'Primary series: p50 latency, input tokens, completed runs' },
@@ -77,35 +85,21 @@ const chartSeriesTokens = [
   { token: 'chart-red', note: 'Errors, stacked on --chart-blue' },
 ];
 
-const chartSoftSteps = [1, 2, 3, 4, 5];
+const chartSequentialSteps = [1, 2, 3, 4, 5];
 
 const spanTypeTokens = [
-  { token: 'span-type-agent', label: 'Agent' },
-  { token: 'span-type-workflow', label: 'Workflow' },
-  { token: 'span-type-model', label: 'Model' },
-  { token: 'span-type-mcp', label: 'MCP' },
-  { token: 'span-type-tool', label: 'Tool' },
-  { token: 'span-type-provider', label: 'Provider Tool' },
-  { token: 'span-type-memory', label: 'Memory' },
-  { token: 'span-type-workspace', label: 'Workspace' },
-  { token: 'span-type-skill', label: 'Skill' },
-  { token: 'span-type-scorer', label: 'Scorer' },
-  { token: 'span-type-other', label: 'Other' },
+  { token: 'span-agent', label: 'Agent' },
+  { token: 'span-workflow', label: 'Workflow' },
+  { token: 'span-model', label: 'Model' },
+  { token: 'span-mcp', label: 'MCP' },
+  { token: 'span-tool', label: 'Tool' },
+  { token: 'span-provider', label: 'Provider Tool' },
+  { token: 'span-memory', label: 'Memory' },
+  { token: 'span-workspace', label: 'Workspace' },
+  { token: 'span-skill', label: 'Skill' },
+  { token: 'span-scorer', label: 'Scorer' },
+  { token: 'span-other', label: 'Other' },
 ];
-
-const tokenCount =
-  backgrounds.length +
-  grayTokens.length +
-  grayAlphaTokens.length +
-  surfaceRoles.length +
-  textTones.length +
-  2 +
-  accentKeys.length +
-  accentDarkKeys.length +
-  accentDarkerKeys.length +
-  chartSeriesTokens.length +
-  chartSoftSteps.length +
-  spanTypeTokens.length;
 
 const Swatch = ({ value, height = 'h-16' }: { value: string; height?: string }) => (
   <div
@@ -119,8 +113,8 @@ const Swatch = ({ value, height = 'h-16' }: { value: string; height?: string }) 
 const RampRow = ({ tokens }: { tokens: string[] }) => (
   <div className="flex min-w-0 flex-col gap-3">
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-5 lg:grid-cols-10">
-      {tokens.map((token, index) => (
-        <Specimen key={token} name={String(index + 1)}>
+      {tokens.map(token => (
+        <Specimen key={token} name={`--${token}`}>
           <Swatch value={`var(--${token})`} />
         </Specimen>
       ))}
@@ -137,18 +131,6 @@ const RampRow = ({ tokens }: { tokens: string[] }) => (
   </div>
 );
 
-const AccentRow = ({ label, tokens }: { label: string; tokens: ColorToken[] }) => (
-  <SpecimenGroup label={label}>
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-      {tokens.map(token => (
-        <Specimen key={token} name={`--${token}`}>
-          <Swatch value={Colors[token]} />
-        </Specimen>
-      ))}
-    </div>
-  </SpecimenGroup>
-);
-
 const SeriesSwatch = ({ value }: { value: string }) => (
   <div role="img" aria-label={`${value} swatch`} className="flex flex-col border border-border">
     <div className="bg-background p-1.5">
@@ -162,19 +144,20 @@ const SeriesSwatch = ({ value }: { value: string }) => (
 );
 
 export const ColorFoundations: Story = {
-  name: 'Color foundations',
-  render: (_args, context) => (
+  name: 'Ramps',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Background, gray, and chromatic scales. Semantic roles are built from these ramps; some local visuals use steps directly.',
+      },
+    },
+  },
+  render: () => (
     <FoundationPage
-      eyebrow={`Color / ${tokenCount} tokens`}
-      title="Color foundations"
-      description="Backgrounds encode nesting. Gray encodes contrast. Semantic roles name what a component is asking for, so the same markup holds in both themes."
-      aside={
-        <Txt variant="meta" font="mono" tone="muted" className="uppercase">
-          Mode / {context.globals.theme === 'light' ? 'Light' : 'Dark'}
-        </Txt>
-      }
-      note="Foundation CSS properties. Components reference the semantic roles, never the ramp."
-      noteAside="Gray runs from subtle 1 to strong 10."
+      eyebrow="Color"
+      title="Ramps"
+      description="Background, gray, and chromatic scales. Semantic roles are built from these ramps; some local visuals use steps directly."
     >
       <FoundationSection label="Backgrounds" description="The three structural surfaces, outer to inner.">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -201,6 +184,47 @@ export const ColorFoundations: Story = {
         <RampRow tokens={grayAlphaTokens} />
       </FoundationSection>
 
+      <FoundationSection
+        label="Chromatic ramps"
+        description="Shared primitives, from light 50 to dark 950. The soft row under 300, 600, 900 and 950 is a lower-chroma companion that badges and subtle status fills are built on. Roles select a step for each theme."
+      >
+        {hues.map(hue => (
+          <SpecimenGroup key={hue} label={hue}>
+            <div className="grid grid-cols-3 gap-3 sm:grid-cols-6 lg:grid-cols-11">
+              {steps.map(step => (
+                <Specimen key={step} name={`--${hue}-${step}`}>
+                  <Swatch value={`var(--${hue}-${step})`} />
+                </Specimen>
+              ))}
+            </div>
+            <div className="grid grid-cols-3 gap-3 sm:grid-cols-6 lg:grid-cols-11">
+              {steps.map(step =>
+                softSteps.has(step) ? (
+                  <Specimen key={step} name={`--${hue}-soft-${step}`}>
+                    <Swatch value={`var(--${hue}-soft-${step})`} />
+                  </Specimen>
+                ) : (
+                  <div key={step} />
+                ),
+              )}
+            </div>
+          </SpecimenGroup>
+        ))}
+      </FoundationSection>
+    </FoundationPage>
+  ),
+};
+
+export const SemanticColors: Story = {
+  parameters: {
+    docs: { description: { story: 'Surface and text roles. Values adapt to the active theme.' } },
+  },
+  render: () => (
+    <FoundationPage
+      eyebrow="Color"
+      title="Semantic Colors"
+      description="Surface and text roles adapt to the active theme."
+    >
       <FoundationSection label="Surfaces" description="The role a container asks for instead of a ramp step.">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {surfaceRoles.map(surface => (
@@ -211,15 +235,12 @@ export const ColorFoundations: Story = {
         </div>
       </FoundationSection>
 
-      <FoundationSection
-        label="Text"
-        description="Three tones, and the distance between them is the whole hierarchy — never a fourth grey."
-      >
+      <FoundationSection label="Text" description="The three main text roles, from primary ink to placeholder.">
         <div className="flex flex-col gap-4">
           {textTones.map(tone => (
             <div key={tone.token} className="grid gap-1 sm:grid-cols-[11rem_minmax(0,1fr)] sm:items-baseline sm:gap-4">
               <div className="flex items-baseline gap-2">
-                <Txt variant="meta" font="mono" tone="muted">
+                <Txt variant="meta" font="mono" tone="muted" title={`--${tone.token}`}>
                   --{tone.token}
                 </Txt>
                 <Txt variant="meta" tone="faint">
@@ -233,45 +254,57 @@ export const ColorFoundations: Story = {
           ))}
         </div>
       </FoundationSection>
+    </FoundationPage>
+  ),
+};
 
+export const ProductColors: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Strong and subtle fills share a foreground for each product. Component examples live under Elements / Products.',
+      },
+    },
+  },
+  render: () => (
+    <FoundationPage
+      eyebrow="Color"
+      title="Product Colors"
+      description="Strong and subtle fills share a foreground for each product. Component examples live under Elements / Products."
+    >
       <FoundationSection
-        label="Destructive"
-        description="The one chromatic role in the shell: a destructive action and the text that rides on it."
+        label="Product roles"
+        description="Product identity, with strong and subtle fills and a shared foreground."
       >
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="w-40">
-            <Specimen name="--destructive" note="Danger fill and message text">
-              <Swatch value={Colors.destructive} />
-            </Specimen>
-          </div>
-          <div className="w-40">
-            <Specimen name="--destructive-foreground" note="Only on a destructive fill">
-              <Swatch value={Colors['destructive-foreground']} />
-            </Specimen>
-          </div>
-          <div className="flex items-center gap-3">
-            <Txt variant="caption" className="text-destructive">
-              Field is required.
-            </Txt>
-            <span className="inline-flex rounded-md bg-destructive px-3 py-1 text-label text-destructive-foreground">
-              Delete thread
-            </span>
-          </div>
+        <div className="grid grid-cols-1 gap-6">
+          {products.map(({ role, label }) => (
+            <SpecimenGroup key={role} label={label}>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {[`--product-${role}`, `--product-${role}-subtle`, `--product-${role}-foreground`].map(token => (
+                  <Specimen key={token} name={token}>
+                    <Swatch value={`var(${token})`} />
+                  </Specimen>
+                ))}
+              </div>
+            </SpecimenGroup>
+          ))}
         </div>
       </FoundationSection>
+    </FoundationPage>
+  ),
+};
 
+export const Charts: Story = {
+  render: () => (
+    <FoundationPage
+      eyebrow={`Color / ${chartSeriesTokens.length + chartSequentialSteps.length} tokens`}
+      title="Charts"
+      description="Categorical series and sequential scales, shown as fills, dots, and lines."
+    >
       <FoundationSection
-        label="Accents"
-        description="Hue for status and series, not for chrome: a base, a filled background and a deeper one."
-      >
-        <AccentRow label="Base" tokens={accentKeys} />
-        <AccentRow label="Dark" tokens={accentDarkKeys} />
-        <AccentRow label="Darker" tokens={accentDarkerKeys} />
-      </FoundationSection>
-
-      <FoundationSection
-        label="Charts"
-        description="Series colour picked by role, one hue stepped by lightness for an ordered measure, and an identity colour per span type. Every specimen paints its token as a fill on the canvas and as a dot and a line on the sidebar, the three marks these colours ship as."
+        label="Chart colors"
+        description="Use categorical roles for distinct series and sequential steps for ordered values."
       >
         <SpecimenGroup label="Categorical, by role">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -284,22 +317,66 @@ export const ColorFoundations: Story = {
         </SpecimenGroup>
         <SpecimenGroup label="Ordered by lightness">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-            {chartSoftSteps.map(step => (
-              <Specimen key={step} name={`--chart-soft-${step}`}>
-                <SeriesSwatch value={`var(--chart-soft-${step})`} />
+            {chartSequentialSteps.map(step => (
+              <Specimen key={step} name={`--chart-sequential-${step}`}>
+                <SeriesSwatch value={`var(--chart-sequential-${step})`} />
               </Specimen>
             ))}
           </div>
         </SpecimenGroup>
-        <SpecimenGroup label="Span types, trace timeline">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
-            {spanTypeTokens.map(span => (
-              <Specimen key={span.token} name={`--${span.token}`} note={span.label}>
-                <SeriesSwatch value={`var(--${span.token})`} />
+      </FoundationSection>
+    </FoundationPage>
+  ),
+};
+
+export const SpanTypes: Story = {
+  name: 'Span types',
+  render: () => (
+    <FoundationPage
+      eyebrow={`Color / ${spanTypeTokens.length} tokens`}
+      title="Span types"
+      description="Identity colors for spans in the trace timeline."
+    >
+      <FoundationSection label="Trace timeline" description="The same span role resolves in light and dark themes.">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+          {spanTypeTokens.map(span => (
+            <Specimen key={span.token} name={`--${span.token}`} note={span.label}>
+              <SeriesSwatch value={`var(--${span.token})`} />
+            </Specimen>
+          ))}
+        </div>
+      </FoundationSection>
+    </FoundationPage>
+  ),
+};
+
+const brandColors = [
+  { name: 'Green', token: 'brand-green', hex: '#7aff78' },
+  { name: 'Orange', token: 'brand-orange', hex: '#fdac53' },
+  { name: 'Pink', token: 'brand-pink', hex: '#ff69cc' },
+  { name: 'Purple', token: 'brand-purple', hex: '#b588fe' },
+  { name: 'Blue', token: 'brand-blue', hex: '#6ccdfb' },
+  { name: 'Red', token: 'brand-red', hex: '#ff4758' },
+  { name: 'Yellow', token: 'brand-yellow', hex: '#e7e67b' },
+];
+
+export const BrandColors: Story = {
+  render: () => (
+    <FoundationPage
+      eyebrow="Color / 7 brand colors"
+      title="Brand Colors"
+      description="Mastra's brand palette. These values stay the same in light and dark themes."
+    >
+      <FoundationSection label="Mastra" description="Brand colors are separate from status and chart roles.">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {brandColors.map(({ name, token, hex }) => (
+            <SpecimenGroup key={token} label={name}>
+              <Specimen name={`--color-${token}`} note={hex}>
+                <Swatch value={`var(--color-${token})`} />
               </Specimen>
-            ))}
-          </div>
-        </SpecimenGroup>
+            </SpecimenGroup>
+          ))}
+        </div>
       </FoundationSection>
     </FoundationPage>
   ),

@@ -84,17 +84,25 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
                 {score.traceId && (
                   <>
                     <DataKeysAndValues.Key>Trace Id</DataKeysAndValues.Key>
-                    <DataKeysAndValues.ValueLink href={paths.traceLink(score.traceId)} as={Link}>
-                      {score.traceId}
-                    </DataKeysAndValues.ValueLink>
+                    {paths.traceLink(score.traceId) ? (
+                      <DataKeysAndValues.ValueLink href={paths.traceLink(score.traceId)} as={Link}>
+                        {score.traceId}
+                      </DataKeysAndValues.ValueLink>
+                    ) : (
+                      <DataKeysAndValues.Value>{score.traceId}</DataKeysAndValues.Value>
+                    )}
                   </>
                 )}
                 {score.spanId && score.traceId && (
                   <>
                     <DataKeysAndValues.Key>Span Id</DataKeysAndValues.Key>
-                    <DataKeysAndValues.ValueLink href={paths.traceLink(score.traceId, score.spanId)} as={Link}>
-                      {score.spanId}
-                    </DataKeysAndValues.ValueLink>
+                    {paths.traceLink(score.traceId, score.spanId) ? (
+                      <DataKeysAndValues.ValueLink href={paths.traceLink(score.traceId, score.spanId)} as={Link}>
+                        {score.spanId}
+                      </DataKeysAndValues.ValueLink>
+                    ) : (
+                      <DataKeysAndValues.Value>{score.spanId}</DataKeysAndValues.Value>
+                    )}
                   </>
                 )}
               </DataKeysAndValues>

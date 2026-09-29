@@ -63,13 +63,14 @@ export const FavoriteButton = ({
         if (!signedIn) return;
         toggle.mutate({ favorited: !isFavorited });
       }}
-      className={cn('shrink-0', signedIn ? 'cursor-pointer' : 'cursor-not-allowed', className)}
+      className={cn(
+        'shrink-0',
+        signedIn ? 'cursor-pointer' : 'cursor-not-allowed',
+        isFavorited && '[&_svg]:text-badge-yellow-indicator',
+        className,
+      )}
     >
-      <Star
-        size={iconSizes[size]}
-        className={cn('shrink-0', isFavorited && 'fill-current text-yellow-300')}
-        aria-hidden
-      />
+      <Star size={iconSizes[size]} className={cn('shrink-0', isFavorited && 'fill-current')} aria-hidden />
       {showCount && typeof favoriteCount === 'number' && (
         <span className="leading-none whitespace-nowrap">
           <span className="tabular-nums">{favoriteCount}</span> {countLabel}

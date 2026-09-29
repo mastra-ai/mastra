@@ -1,6 +1,7 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Card } from '@mastra/playground-ui/components/Card';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ExperimentFlowChain } from './experiment-flow-chain';
@@ -19,7 +20,9 @@ export interface ExperimentSideRailProps {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="grid gap-3">
-      <h2 className="text-body tracking-widest text-placeholder uppercase">{title}</h2>
+      <Txt as="h2" tone="faint" className="tracking-widest uppercase">
+        {title}
+      </Txt>
       {children}
     </section>
   );

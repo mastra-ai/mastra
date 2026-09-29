@@ -4,6 +4,7 @@ import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { hasResumableFactoryOnboarding } from '../../workspaces/services/onboardingFlow';
 import { Navigate, Outlet, ScrollRestoration, useLocation } from 'react-router';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 export const RootGuards = () => {
   return (
@@ -57,9 +58,9 @@ function AuthNotConfiguredScreen() {
   return (
     <div className="bg-sidebar grid h-dvh w-full place-items-center px-6 text-center">
       <div className="max-w-md space-y-3">
-        <h1 className="text-heading text-foreground font-semibold">
+        <Txt as="h1" variant="heading" tone="ink" className="font-semibold">
           This MastraCode server has no authentication provider configured
-        </h1>
+        </Txt>
         <p className="text-muted-foreground text-sm leading-6">
           MastraCode web requires authenticated remote Factories. Configure a supported auth provider on the server,
           then reload this page.

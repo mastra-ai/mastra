@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
@@ -116,8 +117,12 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
         <div className="border-b border-border p-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-subheading text-foreground">Clone Thread</h3>
-              <p className="mt-1 text-caption text-muted-foreground">Create a copy of this conversation</p>
+              <Txt as="h3" variant="subheading" tone="ink">
+                Clone Thread
+              </Txt>
+              <Txt variant="caption" tone="muted" className="mt-1">
+                Create a copy of this conversation
+              </Txt>
             </div>
             <Button onClick={handleCloneThread} disabled={isCloning} icon={<GitFork />}>
               {isCloning ? 'Cloning...' : 'Clone'}
@@ -127,10 +132,12 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
       )}
 
       <div className="border-b border-border p-4">
-        <h3 className="text-subheading text-foreground">Recent Messages</h3>
-        <p className="mt-1 text-caption text-muted-foreground">
+        <Txt as="h3" variant="subheading" tone="ink">
+          Recent Messages
+        </Txt>
+        <Txt variant="caption" tone="muted" className="mt-1">
           {getRecentMessagesSettings(config?.lastMessages, config?.messageHistory).description}
-        </p>
+        </Txt>
       </div>
 
       {/* Observational Memory Section - moved above Semantic Recall */}
@@ -145,19 +152,25 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
         <div className="border-b border-border p-4">
           <div className="mb-2">
             <div className="mb-2 flex items-center gap-2">
-              <h3 className="text-subheading text-foreground">Semantic Recall</h3>
+              <Txt as="h3" variant="subheading" tone="ink">
+                Semantic Recall
+              </Txt>
               {searchMemoryData?.searchScope && (
-                <span
+                <Txt
+                  as="span"
+                  variant="column"
                   className={cn(
-                    'rounded px-2 py-0.5 text-column',
-                    searchScope === 'resource' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400',
+                    'rounded px-2 py-0.5',
+                    searchScope === 'resource'
+                      ? 'bg-badge-purple-strong text-badge-purple-foreground'
+                      : 'bg-badge-blue-strong text-badge-blue-foreground',
                   )}
                   title={
                     searchScope === 'resource' ? 'Searching across all threads' : 'Searching within current thread only'
                   }
                 >
                   {searchScope}
-                </span>
+                </Txt>
               )}
             </div>
           </div>
@@ -171,15 +184,15 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
             />
           ) : (
             <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
-              <p className="mb-3 text-body text-muted-foreground">
+              <Txt tone="muted" className="mb-3">
                 Semantic recall is not enabled for this agent. Enable it to search through conversation history.
-              </p>
+              </Txt>
               <a
                 href="https://mastra.ai/en/docs/memory/semantic-recall"
                 target="_blank"
                 rel="noopener noreferrer"
                 className={cn(
-                  'inline-flex items-center gap-2 text-body text-blue-400 hover:text-blue-300',
+                  'inline-flex items-center gap-2 text-body text-info-indicator hover:underline',
                   controlStateColorTransition,
                 )}
               >
@@ -203,12 +216,20 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
         <div className="border-b border-border p-4">
           <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
             <div className="mb-1 flex items-center gap-2">
-              <span className="rounded bg-green-500/20 px-2 py-0.5 text-column text-green-400">Remote</span>
-              <h3 className="text-subheading text-foreground">Gateway</h3>
+              <Txt
+                as="span"
+                variant="column"
+                className="rounded bg-badge-green-strong px-2 py-0.5 text-badge-green-foreground"
+              >
+                Remote
+              </Txt>
+              <Txt as="h3" variant="subheading" tone="ink">
+                Gateway
+              </Txt>
             </div>
-            <p className="text-caption text-muted-foreground">
+            <Txt variant="caption" tone="muted">
               Memory is managed by the Gateway. Threads and observations are stored remotely.
-            </p>
+            </Txt>
           </div>
         </div>
       )}

@@ -2,7 +2,6 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Badge, type BadgeVariant } from '../components/Badge';
 import { Notice, type NoticeVariant } from '../components/Notice';
 import { Txt } from '../components/Txt/Txt';
-import { Colors } from './colors';
 import { FoundationPage, FoundationSection, Specimen, SpecimenGroup } from './foundations-layout';
 
 const meta: Meta = {
@@ -12,7 +11,7 @@ const meta: Meta = {
     docs: {
       description: {
         component:
-          'Three families carry state: a notice tints a whole message, a badge labels one row, and the brand green ramp is the product colour underneath both. Each family ships a base and a matching foreground, because a status is always a wash plus the ink that has to stay legible on it.',
+          'A notice tints a whole message; a badge labels one row. Their fills, edges, indicators, and foregrounds each have a named role. The green ramp they draw from lives in Color / Ramps.',
       },
     },
   },
@@ -21,14 +20,12 @@ const meta: Meta = {
 export default meta;
 type Story = StoryObj;
 
-type ColorToken = keyof typeof Colors;
-
 const noticeVariants: { variant: NoticeVariant; title: string; message: string; note: string }[] = [
   {
     variant: 'success',
     title: 'Deployed',
     message: 'The workflow finished and every step reported back.',
-    note: 'Base at 20% for the wash and the rim, foreground at full',
+    note: 'Solid surface with a separate border and foreground',
   },
   {
     variant: 'destructive',
@@ -52,49 +49,55 @@ const noticeVariants: { variant: NoticeVariant; title: string; message: string; 
     variant: 'note',
     title: 'Aside',
     message: 'Documentation lifted out of the flow of a message.',
-    note: 'The one opaque base: a surface, not a tint, so it takes --border',
+    note: 'Neutral surface with the shared border',
   },
 ];
 
-const badgeHues: BadgeVariant[] = ['green', 'red', 'blue', 'yellow', 'purple', 'orange', 'cyan', 'pink'];
+const badgeHues: BadgeVariant[] = ['success', 'destructive', 'info', 'warning', 'purple', 'orange', 'cyan', 'pink'];
+const badgeTokenHue: Partial<Record<BadgeVariant, string>> = {
+  success: 'green',
+  destructive: 'red',
+  info: 'blue',
+  warning: 'yellow',
+};
 
-const greenSteps = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950] as const;
+const statusRoles = ['success', 'destructive', 'warning', 'info'];
+const statusParts = ['subtle', 'edge', 'indicator', 'subtle-foreground'];
+const badgeParts = ['strong', 'subtle', 'edge', 'indicator', 'foreground'];
 
-const statusAliases: { token: ColorToken; aliasOf?: ColorToken; note: string }[] = [
-  { token: 'warning1', aliasOf: 'accent6', note: 'Alias of --accent6 — amber' },
-  { token: 'positive1', aliasOf: 'accent1', note: 'Alias of --accent1 — green' },
-  { token: 'negative1', aliasOf: 'accent2', note: 'Alias of --accent2 — red' },
-  { token: 'error', note: 'Its own red, off the ramp — form and request failures' },
-];
-
-const tokenCount = noticeVariants.length * 2 + (badgeHues.length * 2 + 1) + greenSteps.length + statusAliases.length;
+const StatusSwatch = ({ token }: { token: string }) => (
+  <Specimen name={`--${token}`}>
+    <div
+      role="img"
+      aria-label={`--${token} swatch`}
+      className="h-16 border border-border"
+      style={{ background: `var(--${token})` }}
+    />
+  </Specimen>
+);
 
 export const StatusFoundations: Story = {
   name: 'Status foundations',
   render: (_args, context) => (
     <FoundationPage
-      eyebrow={`Status / ${tokenCount} tokens`}
+      eyebrow="Status"
       title="Status foundations"
-      description="Status is the only place the shell is allowed to be chromatic, so each family is deliberately small: five notices, eight badge hues, one brand ramp. Hue carries the meaning; the paired foreground carries the contrast."
+      description="Notice and badge examples show the roles in context. Each status and badge token is named once below, including roles these examples do not use."
       aside={
         <Txt variant="meta" font="mono" tone="muted" className="uppercase">
           Mode / {context.globals.theme === 'light' ? 'Light' : 'Dark'}
         </Txt>
       }
       note="Light is not the dark value dimmed: the base keeps its saturation while the foreground flips to a deep tint, because ink has to darken when the surface turns white."
-      noteAside="Utilities: bg-notice-*, text-notice-*-fg, bg-badge-*, text-badge-*-fg."
+      noteAside="Utilities: bg-{status}-subtle, border-{status}-edge, text-{status}-subtle-foreground, bg-badge-{hue}-strong, text-badge-{hue}-foreground."
     >
       <FoundationSection
         label="Notice"
-        description="Admonitions, rendered here by the Notice component itself so the page cannot drift from it. The base paints the wash and the rim at 20% alpha, never the text; the -fg is the text and icon on top of it."
+        description="Admonitions, rendered here by the Notice component itself so the page cannot drift from it. Status roles supply an opaque background, border, and foreground."
       >
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {noticeVariants.map(entry => (
-            <Specimen
-              key={entry.variant}
-              name={`--notice-${entry.variant} / --notice-${entry.variant}-fg`}
-              note={entry.note}
-            >
+            <Specimen key={entry.variant} name={entry.title} note={entry.note}>
               <Notice variant={entry.variant} title={entry.title}>
                 <Notice.Message>{entry.message}</Notice.Message>
               </Notice>
@@ -105,15 +108,15 @@ export const StatusFoundations: Story = {
 
       <FoundationSection
         label="Badge"
-        description="One row's worth of status. Same two-part recipe as a notice at a smaller scale: the base fills at 20%, at 10% when muted, and solid for the indicator dot; the -fg is the label."
+        description="One row's worth of status. Strong and subtle fills use the same foreground; indicators can stand beside either."
         surface="sidebar"
       >
         <SpecimenGroup label="Neutral">
           <div className="max-w-80">
-            <Specimen name="--badge-neutral-fg" note="Ink only — the fill is --fill, no hue to pair with">
+            <Specimen name="Neutral badge" note="Its fill is --fill, with no hue to pair with">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge>Draft</Badge>
-                <Badge emphasis="muted">Draft</Badge>
+                <Badge emphasis="subtle">Draft</Badge>
                 <Badge indicator="dot">Draft</Badge>
               </div>
             </Specimen>
@@ -122,10 +125,10 @@ export const StatusFoundations: Story = {
         <SpecimenGroup label="Hues">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {badgeHues.map(hue => (
-              <Specimen key={hue} name={`--badge-${hue} / --badge-${hue}-fg`}>
+              <Specimen key={hue} name={`${hue} badge`}>
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant={hue}>{hue}</Badge>
-                  <Badge variant={hue} emphasis="muted">
+                  <Badge variant={hue} emphasis="subtle">
                     {hue}
                   </Badge>
                   <Badge variant={hue} indicator="dot">
@@ -139,44 +142,42 @@ export const StatusFoundations: Story = {
       </FoundationSection>
 
       <FoundationSection
-        label="Brand green"
-        description="The product colour, as an eleven-step ramp. theme/colors.css clears Tailwind's own green and remaps the scale onto this ramp, so bg-green-500 in this codebase is brand green — reading a Tailwind swatch to predict it will be wrong."
+        label="Status roles"
+        description="Each notice has a fill, edge, indicator, and foreground. Destructive controls also have a pressed subtle fill."
       >
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
-          {greenSteps.map(step => (
-            <Specimen key={step} name={`--brand-green-${step}`} note={`bg-green-${step}`}>
-              <div
-                role="img"
-                aria-label={`brand green ${step} swatch`}
-                className="h-16 border border-border"
-                style={{ background: Colors[`green-${step}`] }}
-              />
-            </Specimen>
-          ))}
-        </div>
-        <Txt variant="caption" tone="muted">
-          Step 500 is the notice success colour, which is why a healthy run and the brand read as the same green.
-        </Txt>
+        {statusRoles.map(role => (
+          <SpecimenGroup key={role} label={role}>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+              {statusParts.map(part => (
+                <StatusSwatch key={part} token={`${role}-${part}`} />
+              ))}
+              {role === 'destructive' && <StatusSwatch token="destructive-subtle-active" />}
+            </div>
+          </SpecimenGroup>
+        ))}
       </FoundationSection>
 
       <FoundationSection
-        label="Semantic aliases"
-        description="Older surfaces name a status instead of an accent. These are pointers onto the accent ramp, not a fourth palette — each swatch is split, alias on the left and source on the right, so a seam would mean one of them moved."
+        label="Badge roles"
+        description="The colored badges add strong and subtle fills, an edge, an indicator, and text."
       >
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {statusAliases.map(alias => (
-            <Specimen key={alias.token} name={`--${alias.token}`} note={alias.note}>
-              <div
-                role="img"
-                aria-label={`${alias.token} swatch`}
-                className="flex h-16 overflow-hidden border border-border"
-              >
-                <div className="flex-1" style={{ background: Colors[alias.token] }} />
-                {alias.aliasOf && <div className="flex-1" style={{ background: Colors[alias.aliasOf] }} />}
+        <SpecimenGroup label="Neutral">
+          <div className="max-w-40">
+            <StatusSwatch token="badge-neutral-foreground" />
+          </div>
+        </SpecimenGroup>
+        {badgeHues.map(hue => {
+          const tokenHue = badgeTokenHue[hue] ?? hue;
+          return (
+            <SpecimenGroup key={hue} label={hue}>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                {badgeParts.map(part => (
+                  <StatusSwatch key={part} token={`badge-${tokenHue}-${part}`} />
+                ))}
               </div>
-            </Specimen>
-          ))}
-        </div>
+            </SpecimenGroup>
+          );
+        })}
       </FoundationSection>
     </FoundationPage>
   ),

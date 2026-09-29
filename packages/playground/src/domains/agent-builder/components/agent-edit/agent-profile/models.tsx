@@ -243,7 +243,7 @@ interface StaleWarningProps {
 const StaleWarning = ({ provider, modelId }: StaleWarningProps) => {
   return (
     <div
-      className="mx-4 mb-4 flex items-start gap-2 rounded-md border border-accent6 bg-accent6Dark/40 px-3 py-2 text-accent6"
+      className="mx-4 mb-4 flex items-start gap-2 rounded-md border border-warning-edge bg-warning-subtle px-3 py-2 text-warning-subtle-foreground"
       data-testid="model-detail-stale-warning"
       role="alert"
     >

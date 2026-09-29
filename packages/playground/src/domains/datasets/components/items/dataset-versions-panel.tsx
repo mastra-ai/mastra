@@ -135,7 +135,7 @@ export function DatasetVersionsPanel({
                           aria-hidden="true"
                         />
                       )}
-                      <span className="flex min-w-0 flex-1 items-center gap-2 text-caption">
+                      <Txt as="span" variant="caption" className="flex min-w-0 flex-1 items-center gap-2">
                         <span className="shrink-0 font-medium text-foreground">v.{item.version}</span>
                         {createdAtDate && (
                           <span className="min-w-0 flex-1 truncate text-muted-foreground">
@@ -143,7 +143,7 @@ export function DatasetVersionsPanel({
                           </span>
                         )}
                         {item.isCurrent && <span className="shrink-0 text-muted-foreground">latest</span>}
-                      </span>
+                      </Txt>
                     </span>
                   </ThreadListItem>
                 );
