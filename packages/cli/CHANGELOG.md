@@ -1,5 +1,18 @@
 # mastra
 
+## 1.31.4-alpha.10
+
+### Patch Changes
+
+- Fixed Studio colors that lost contrast after the color role update: code chips inside warning notices, observational memory badges, the memory usage bar's middle tier, the browser click ripple, the reference viewer spinner, selected review items, experiment filter color, the agent greeting shimmer, the AWS logo in the file browser, schedule run links and mocked tool pills. ([#25484](https://github.com/mastra-ai/mastra/pull/25484))
+
+- Studio and Factory show keyboard focus the same way everywhere: one thin neutral outline, with no glow, no thicker or offset outlines on some screens, and no browser-default outline on elements that had no focus style of their own. Cards keep their shadow while focused. ([#25441](https://github.com/mastra-ai/mastra/pull/25441))
+
+- Updated dependencies [[`ed67acc`](https://github.com/mastra-ai/mastra/commit/ed67acc3213d469ed69610c304c604693cfec383), [`5f1efad`](https://github.com/mastra-ai/mastra/commit/5f1efad5c2230a4de715cad3f01859b4ff9d255b), [`75c2ee1`](https://github.com/mastra-ai/mastra/commit/75c2ee1280a5441eb66c31f23a53a52b42244686), [`9a35897`](https://github.com/mastra-ai/mastra/commit/9a3589783a40157759f939f5c63bba3c8aef1c1c), [`d3a22a7`](https://github.com/mastra-ai/mastra/commit/d3a22a78f12e094118ce80ec35b63987009644e2), [`e4e0f90`](https://github.com/mastra-ai/mastra/commit/e4e0f9000d73396609ae2f2b6c31259ade43078c), [`caf94f9`](https://github.com/mastra-ai/mastra/commit/caf94f9c1927f737370b6118264bd16c7210a765), [`6c9f7ab`](https://github.com/mastra-ai/mastra/commit/6c9f7abf9bdce0a52450398b31d497519465bb80), [`91196d5`](https://github.com/mastra-ai/mastra/commit/91196d5a6d582c0f494622d0378f33e22d881659), [`f36019c`](https://github.com/mastra-ai/mastra/commit/f36019c24193e0d29f920663851198bf45e3d12f), [`98745ea`](https://github.com/mastra-ai/mastra/commit/98745ea500826ae4363e153500ddac449f9dab12)]:
+  - @mastra/core@1.72.0-alpha.10
+  - @mastra/loggers@1.3.3-alpha.1
+  - @mastra/deployer@1.72.0-alpha.10
+
 ## 1.31.4-alpha.9
 
 ### Patch Changes

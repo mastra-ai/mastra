@@ -1,5 +1,77 @@
 # @mastra/core
 
+## 1.72.0-alpha.10
+
+### Minor Changes
+
+- Added an optional `sandboxId` to the `WorkspaceSandbox` interface so hosts can read a provider's physical, reattachable sandbox id and persist it for deterministic reattach. ([#24004](https://github.com/mastra-ai/mastra/pull/24004))
+
+  ```ts
+  const id = sandbox.sandboxId ?? sandbox.id; // physical id when the provider exposes one
+  ```
+
+### Patch Changes
+
+- Fixed `foreach` over a nested workflow failing with "already resumed by another caller" when one iteration suspended while others were still starting. Each iteration now starts its own child workflow run, and suspended iterations can be resumed individually with `forEachIndex`. ([#25394](https://github.com/mastra-ai/mastra/pull/25394))
+
+- Fixed cross-agent wakes with `requireClaimedOwner` failing with "No claimed thread owner responded" when the owning agent was alive but slow to answer (for example on a busy host or CI). Owner discovery for wakes now retries with growing timeouts for up to 1 second before giving up, and the error states how long it waited. ([#25488](https://github.com/mastra-ai/mastra/pull/25488))
+
+  Both limits can be tuned with environment variables:
+
+  - `MASTRA_AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS` — per-attempt wait (default `100`)
+  - `MASTRA_AGENT_THREAD_WAKE_OWNER_DISCOVERY_DEADLINE_MS` — total wake discovery budget (default `1000`)
+
+- Fixed `run.restart()` on the default workflow engine after a process crash during a nested workflow resume. Restart no longer fails with "This workflow run was not suspended", and the resumed step keeps its resume data and completes instead of suspending again. Fixes [#25187](https://github.com/mastra-ai/mastra/issues/25187). ([#25234](https://github.com/mastra-ai/mastra/pull/25234))
+
+  Fixed `timeTravel()` ignoring resume values such as `false` or `0`.
+
+- Fixed model fallback logging so recovered failures no longer page as errors. When a model in a `models` chain fails and another model is still available, Mastra now logs a single warning naming the failed and next model instead of two error-level records. Failures of the last model in the chain are still reported as errors. ([#25489](https://github.com/mastra-ai/mastra/pull/25489))
+
+- Fixed `structuredOutput.jsonPromptInjection: false` being ignored when a structuring `model` is set. The main model's prompt no longer receives the full JSON schema on every step when you opt out of injection. ([#25478](https://github.com/mastra-ai/mastra/pull/25478))
+
+- Fixed durable tool payload transforms after cross-process recovery. ([#25387](https://github.com/mastra-ai/mastra/pull/25387))
+
+- A function-form `toolDisplay` on a channel adapter can now render the approval card's final state after a user clicks Approve or Deny. Previously, Mastra always replaced a custom approval card with its own English "Approved" or "Denied" text, which also showed the tool's internal registry key. ([#25486](https://github.com/mastra-ai/mastra/pull/25486))
+
+  The function now receives `approved` and `denied` events (`denied` includes `byUser`). Return `{ kind: 'post', message }` to replace the card:
+
+  ```ts
+  channels: {
+    adapters: {
+      slack: {
+        adapter: createSlackAdapter(),
+        toolDisplay: event => {
+          if (event.kind === 'approved') return { kind: 'post', message: 'Onaylandı' };
+          if (event.kind === 'denied') return { kind: 'post', message: `Reddedildi: ${event.byUser ?? ''}` };
+          return undefined;
+        },
+      },
+    },
+  },
+  ```
+
+  If the function returns nothing, a blank message, or throws, the default card is shown.
+
+  If your function switches exhaustively on `event.kind`, add cases for the two new kinds:
+
+  ```ts
+  case 'approved':
+    return { kind: 'post', message: 'Approved' };
+  case 'denied':
+    return { kind: 'post', message: `Denied${event.byUser ? ` by ${event.byUser}` : ''}` };
+  ```
+
+- Corrected the `ToolSearchProcessor` `search.minScore` documentation. Scores are raw BM25 relevance plus name-match boosts and can exceed 1, rather than falling in a 0-1 range. ([#25498](https://github.com/mastra-ai/mastra/pull/25498))
+
+- `result.text` now keeps the answer when an output processor trips the wire. It matches `result.steps[].text`, `getFullOutput().text` and `result.response.messages`. Check `result.tripwire` to see whether the output was rejected. ([#25483](https://github.com/mastra-ai/mastra/pull/25483))
+
+  ```ts
+  const result = await agent.generate('...');
+  if (result.tripwire) {
+    // result.text still holds the rejected answer for logging or review
+  }
+  ```
+
 ## 1.72.0-alpha.9
 
 ### Minor Changes

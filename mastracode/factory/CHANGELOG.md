@@ -1,5 +1,27 @@
 # @mastra/factory
 
+## 0.18.0-alpha.10
+
+### Patch Changes
+
+- Improved Factory default model changes to ask whether running work and review sessions should switch too. New runs always use the saved default; existing sessions keep their current model unless the user explicitly switches them, and switched sessions adopt the new model on their next step. ([#25337](https://github.com/mastra-ai/mastra/pull/25337))
+
+- Fixed subagents in Factory sessions ignoring the project's default model. Explore, plan, and execute subagents now use the Factory default model instead of per-subagent models from the server's settings, which could name providers the Factory has no credentials for. ([#25460](https://github.com/mastra-ai/mastra/pull/25460))
+
+  In Slack threads, subagents follow the sender's active model pack (explore uses the pack's fast model, plan uses plan, execute uses build), matching the main agent. When the sender has no pack they use the Factory default.
+
+- Fixed Factory colors that lost contrast after the color role update: the sidebar Beta badge is brand green again and no longer clipped, invalid work item fields show a red border, project nodes in the knowledge graph have a visible ring, and the overview funnel shows people in pale purple again. ([#25484](https://github.com/mastra-ai/mastra/pull/25484))
+
+- Fixed missing Slack feedback when Factory message preparation fails before dispatch. ([#25362](https://github.com/mastra-ai/mastra/pull/25362))
+
+- Fixed session resume silently provisioning a replacement VM instead of reattaching to the original sandbox. Factory now persists the provider's physical sandbox id and forwards it back on resume, so providers that reattach by id (like Railway) reconnect to the same VM instead of orphaning it and doubling compute cost. Refs #23974. ([#24004](https://github.com/mastra-ai/mastra/pull/24004))
+
+- Fixed replies from another linked Slack user using the responder's model credentials. Existing Factory Slack threads now keep using the session owner's provider credentials while preserving the responder's message attribution. Responders must belong to the session owner's organization, and subscribed follow-ups are rejected when the existing internal thread or owning session cannot be found. ([#25474](https://github.com/mastra-ai/mastra/pull/25474))
+
+- Updated dependencies [[`20534a1`](https://github.com/mastra-ai/mastra/commit/20534a11d8a8dc40d14230e3e0a1f521931e224f), [`ed67acc`](https://github.com/mastra-ai/mastra/commit/ed67acc3213d469ed69610c304c604693cfec383), [`20534a1`](https://github.com/mastra-ai/mastra/commit/20534a11d8a8dc40d14230e3e0a1f521931e224f), [`5f1efad`](https://github.com/mastra-ai/mastra/commit/5f1efad5c2230a4de715cad3f01859b4ff9d255b), [`75c2ee1`](https://github.com/mastra-ai/mastra/commit/75c2ee1280a5441eb66c31f23a53a52b42244686), [`688d373`](https://github.com/mastra-ai/mastra/commit/688d3738e1d3948870f4415b56516bb259c4d047), [`9a35897`](https://github.com/mastra-ai/mastra/commit/9a3589783a40157759f939f5c63bba3c8aef1c1c), [`d3a22a7`](https://github.com/mastra-ai/mastra/commit/d3a22a78f12e094118ce80ec35b63987009644e2), [`e4e0f90`](https://github.com/mastra-ai/mastra/commit/e4e0f9000d73396609ae2f2b6c31259ade43078c), [`caf94f9`](https://github.com/mastra-ai/mastra/commit/caf94f9c1927f737370b6118264bd16c7210a765), [`6c9f7ab`](https://github.com/mastra-ai/mastra/commit/6c9f7abf9bdce0a52450398b31d497519465bb80), [`91196d5`](https://github.com/mastra-ai/mastra/commit/91196d5a6d582c0f494622d0378f33e22d881659), [`f36019c`](https://github.com/mastra-ai/mastra/commit/f36019c24193e0d29f920663851198bf45e3d12f)]:
+  - @mastra/code-sdk@1.9.0-alpha.10
+  - @mastra/core@1.72.0-alpha.10
+
 ## 0.18.0-alpha.9
 
 ### Patch Changes
