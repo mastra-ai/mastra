@@ -161,7 +161,7 @@ html.light {
   --brand-green-indicator: var(--green-700);
 
   --destructive-bright: var(--red-500);
-  --warning-bright: var(--yellow-500);
+  --warning-bright: var(--yellow-400);
   --success-bright: var(--green-500);
   --info-bright: var(--blue-500);
   --session-initializing: var(--orange-500);
