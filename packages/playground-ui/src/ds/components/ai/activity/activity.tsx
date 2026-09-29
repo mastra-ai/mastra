@@ -93,13 +93,15 @@ export const ActivityTrigger = ({ className, children, ...props }: ComponentProp
       )}
       {...props}
     >
-      <div id={lineId}>{children}</div>
       {foldable && (
         <CollapsibleTrigger
           aria-labelledby={lineId}
           className="absolute inset-0 cursor-pointer rounded-md focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden"
         />
       )}
+      <div id={lineId} className={cn(foldable && 'pointer-events-none relative')}>
+        {children}
+      </div>
     </div>
   );
 };
@@ -122,7 +124,7 @@ export const ActivityLeading = ({ className, children, ...props }: ComponentProp
   if (!children) return null;
 
   return (
-    <span className={cn('relative z-10 flex shrink-0', className)} {...props}>
+    <span className={cn('pointer-events-auto flex shrink-0', className)} {...props}>
       {children}
     </span>
   );
@@ -134,7 +136,7 @@ export const ActivityIcon = ({ className, ...props }: ComponentProps<'span'>) =>
   return (
     <span
       className={cn(
-        '[&_svg]:stroke-1.75 flex size-4 shrink-0 items-center justify-center [&_svg]:size-3.5 [&_svg]:shrink-0',
+        'flex size-4 shrink-0 items-center justify-center [&_svg]:size-3.5 [&_svg]:shrink-0 [&_svg]:[stroke-width:1.75]',
         status === 'error' ? 'text-error/80' : 'text-placeholder',
         className,
       )}
