@@ -35,7 +35,7 @@ import type { FactoryActorExternalIdentity } from '../../storage/domains/comment
 import { actorFromChannelAuthor } from '../../storage/domains/comments/actor.js';
 import type { CommentsDomain } from '../../storage/domains/comments/domain.js';
 import type { MemorySettingsStorage } from '../../storage/domains/memory-settings/base.js';
-import type { ModelPacksStorage } from '../../storage/domains/model-packs/base.js';
+import type { ActiveModelPackRecord, ModelPacksStorage } from '../../storage/domains/model-packs/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { ExternalWorkItemSource, WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
@@ -586,7 +586,8 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
       });
     } else {
       const factoryModelId = await resolveFactoryDefaultModelId(projects, owner.factoryProjectId);
-      const userModelId = await resolveActivePackBuildModel(modelPacks, owner);
+      const userPackModels = await resolveActivePackModels(modelPacks, owner);
+      const userModelId = userPackModels?.build || undefined;
       const selectedModelId = userModelId ?? factoryModelId;
 
       await hydrateFactorySession(session, {
@@ -640,6 +641,29 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
           await session.model.saveForMode({ modeId: session.mode.get(), modelId: currentModelId });
         }
       }
+
+      // Subagents follow the sender's pack like the TUI does (explore→fast,
+      // plan→plan, execute→build); roles the pack leaves empty keep the
+      // factory default `hydrateFactorySession` applied.
+      if (userPackModels) {
+        const packSubagentModels = [
+          ['explore', userPackModels.fast],
+          ['plan', userPackModels.plan],
+          ['execute', userPackModels.build],
+        ] as const;
+        for (const [agentType, modelId] of packSubagentModels) {
+          if (!modelId) continue;
+          try {
+            await session.subagents.model.set({ modelId, agentType });
+          } catch (error) {
+            console.warn("[slack] Failed to apply the sender's model pack subagent model", {
+              agentType,
+              modelId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+      }
     }
 
     // The sender's own observational-memory settings, applied last so they beat
@@ -657,21 +681,21 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
 }
 
 /**
- * The `build` model of the sender's active model pack — the model that user
- * chose for themselves — or `undefined` when they have no pack.
+ * The models of the sender's active model pack — the models that user chose
+ * for themselves — or `undefined` when they have no pack.
  *
  * Best-effort by design: an uninitialized model-packs domain, a read failure, or
  * a pack saved without a build model all mean "no personal preference", which
  * falls through to the factory default rather than failing the dispatch.
  */
-async function resolveActivePackBuildModel(
+async function resolveActivePackModels(
   modelPacks: ModelPacksStorage | undefined,
   owner: { orgId: string; userId: string },
-): Promise<string | undefined> {
+): Promise<ActiveModelPackRecord['models'] | undefined> {
   if (!modelPacks) return undefined;
   try {
     const active = await modelPacks.getActive({ orgId: owner.orgId, userId: owner.userId });
-    return active?.models.build || undefined;
+    return active?.models;
   } catch (error) {
     console.warn('[slack] model pack lookup failed for a new session', {
       orgId: owner.orgId,
