@@ -1349,7 +1349,16 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     subagents,
     // Subagents resolve like the main agent: tenant credentials and
     // request-scoped custom providers come from the calling run's context.
-    resolveSubagentModel: (modelId, { requestContext }) => resolveModel(modelId, { requestContext }),
+    // Ids addressed to another gateway registered on the controller's Mastra
+    // stay strings so the model router resolves them through that gateway.
+    resolveSubagentModel: (modelId, { requestContext }) => {
+      const gatewayId = modelId.split('/')[0];
+      const addressesOtherGateway =
+        gatewayId !== mastraCodeGateway.id &&
+        gatewayId !== amazonBedrockGateway.id &&
+        Object.values(controller.getMastra()?.listGateways() ?? {}).some(gateway => gateway.id === gatewayId);
+      return addressesOtherGateway ? modelId : resolveModel(modelId, { requestContext });
+    },
     gateways: [amazonBedrockGateway, mastraCodeGateway],
     workspace: config?.workspace ?? (args => getDynamicWorkspace({ ...args, backgroundToolsEnabled })),
     browser: config?.browser,
