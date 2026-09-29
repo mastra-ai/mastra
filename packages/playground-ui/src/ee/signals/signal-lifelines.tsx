@@ -2,13 +2,12 @@ import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 
 import { LifelineRow } from './lifeline-row';
-import { getSignalHue } from './signal-colors';
+import { getSignalColor } from './signal-colors';
 import { signalDescription, signalLabel } from './signal-formatting';
 import type { ThemeSelection } from './theme-drilldown-data';
 import { buildThemeLifelines } from './theme-lifelines-data';
 import type { ThemeFlowResponse, ThemeSnapshot, TraceSignalName } from './types';
 import { useTraceIntelligence } from './use-trace-intelligence';
-import { nodeColor } from '@/ds/components/SankeyChart';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 
@@ -28,12 +27,12 @@ export function SignalLifelines({
   const { signalCatalog } = useTraceIntelligence();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const rows = buildThemeLifelines(flows, signalName);
-  const hue = getSignalHue(signalName);
+  const color = getSignalColor(signalName);
   const label = signalLabel(signalCatalog, signalName);
 
   return (
     <section aria-label={`${label} lifelines`} className="min-w-0">
-      <Txt as="h3" variant="column" font="mono" className="tracking-widest uppercase" style={{ color: nodeColor(hue) }}>
+      <Txt as="h3" variant="column" font="mono" className="tracking-widest uppercase" style={{ color }}>
         <Tooltip>
           <TooltipTrigger
             render={
@@ -68,7 +67,6 @@ export function SignalLifelines({
               signalName={signalName}
               snapshots={snapshots}
               positions={positions}
-              hue={hue}
               onThemeSelect={onThemeSelect}
             />
           ))}

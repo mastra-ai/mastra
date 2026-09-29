@@ -29,7 +29,13 @@ export function MetricsKpiCardChange({
 
   return (
     <div className={cn('flex items-center gap-1.5', className)}>
-      <Badge variant={isGood ? 'green' : 'red'} emphasis="muted" size="xs" icon={<Icon />} className="tabular-nums">
+      <Badge
+        variant={isGood ? 'success' : 'destructive'}
+        emphasis="subtle"
+        size="xs"
+        icon={<Icon />}
+        className="tabular-nums"
+      >
         {formattedChange}
       </Badge>
       <Txt as="span" variant="meta" tone="faint">

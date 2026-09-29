@@ -9,7 +9,7 @@ export function MetricsKpiCardError({
   className?: string;
 }) {
   return (
-    <Txt as="span" variant="meta" className={cn('text-accent2', className)}>
+    <Txt as="span" variant="meta" className={cn('text-destructive-indicator', className)}>
       {message}
     </Txt>
   );

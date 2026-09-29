@@ -72,29 +72,29 @@ function getMountIcon(mount: FileEntry['mount']) {
     case 'aws-s3':
     case 's3':
       // S3 or S3-compatible storage
-      return <AmazonIcon className="h-4 w-4 text-[#FF9900]" />;
+      return <AmazonIcon className="h-4 w-4 text-badge-orange-indicator" />;
     case 'google-cloud':
     case 'google-cloud-storage':
     case 'gcs':
       return <GoogleIcon className="h-4 w-4" />;
     case 'azure-blob':
     case 'azure':
-      return <AzureIcon className="h-4 w-4 text-[#0078D4]" />;
+      return <AzureIcon className="h-4 w-4 text-badge-blue-indicator" />;
     case 'cloudflare':
     case 'cloudflare-r2':
     case 'r2':
-      return <Cloud className="h-4 w-4 text-[#F38020]" />;
+      return <Cloud className="h-4 w-4 text-badge-orange-indicator" />;
     case 'minio':
-      return <HardDrive className="h-4 w-4 text-red-400" />;
+      return <HardDrive className="h-4 w-4 text-badge-red-indicator" />;
     case 'database':
-      return <Database className="h-4 w-4 text-emerald-400" />;
+      return <Database className="h-4 w-4 text-badge-green-indicator" />;
     case 'local':
     case 'folder':
-      return <Folder className="h-4 w-4 text-amber-400" />;
+      return <Folder className="h-4 w-4 text-badge-yellow-indicator" />;
     case 'hard-drive':
       return <HardDrive className="h-4 w-4 text-muted-foreground" />;
     case 'cloud':
-      return <Cloud className="h-4 w-4 text-sky-400" />;
+      return <Cloud className="h-4 w-4 text-badge-cyan-indicator" />;
     default:
       // Default to cloud icon for unknown providers
       return <Cloud className="h-4 w-4 text-muted-foreground" />;
@@ -109,7 +109,11 @@ function getFileIcon(entry: FileEntry, isOpen = false) {
     if (mount) {
       return getMountIcon(mount);
     }
-    return isOpen ? <FolderOpen className="h-4 w-4 text-amber-400" /> : <Folder className="h-4 w-4 text-amber-400" />;
+    return isOpen ? (
+      <FolderOpen className="h-4 w-4 text-badge-yellow-indicator" />
+    ) : (
+      <Folder className="h-4 w-4 text-badge-yellow-indicator" />
+    );
   }
 
   const ext = name.split('.').pop()?.toLowerCase();
@@ -118,9 +122,9 @@ function getFileIcon(entry: FileEntry, isOpen = false) {
     case 'tsx':
     case 'js':
     case 'jsx':
-      return <FileCode className="h-4 w-4 text-blue-400" />;
+      return <FileCode className="h-4 w-4 text-badge-blue-indicator" />;
     case 'json':
-      return <FileJson className="h-4 w-4 text-yellow-400" />;
+      return <FileJson className="h-4 w-4 text-badge-yellow-indicator" />;
     case 'md':
     case 'mdx':
       return <FileText className="h-4 w-4 text-muted-foreground" />;
@@ -130,7 +134,7 @@ function getFileIcon(entry: FileEntry, isOpen = false) {
     case 'gif':
     case 'svg':
     case 'webp':
-      return <Image className="h-4 w-4 text-purple-400" />;
+      return <Image className="h-4 w-4 text-badge-purple-indicator" />;
     default:
       return <File className="h-4 w-4 text-muted-foreground" />;
   }
@@ -315,8 +319,8 @@ export function FileBrowser({
           </div>
         ) : error ? (
           <div className="px-4 py-8 text-center">
-            <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10">
-              <AlertCircle className="h-6 w-6 text-red-400" />
+            <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-destructive-subtle">
+              <AlertCircle className="h-6 w-6 text-destructive-indicator" />
             </div>
             <Txt variant="subheading" tone="ink" className="mb-1">
               Failed to load directory
@@ -342,7 +346,7 @@ export function FileBrowser({
                     }}
                     className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-fill-subtle"
                   >
-                    <FolderOpen className="h-4 w-4 text-amber-400" />
+                    <FolderOpen className="h-4 w-4 text-badge-yellow-indicator" />
                     <Txt as="span" tone="ink">
                       ..
                     </Txt>
@@ -369,11 +373,11 @@ export function FileBrowser({
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <span tabIndex={0} className="flex items-center">
-                                <AlertCircle className="h-4 w-4 text-red-400" />
+                                <AlertCircle className="h-4 w-4 text-destructive-indicator" />
                               </span>
                             </TooltipTrigger>
                             <TooltipContent className="max-w-xs">
-                              <span className="text-red-400">Error:</span>{' '}
+                              <span className="text-destructive-indicator">Error:</span>{' '}
                               {entry.mount.error || 'Failed to connect to this filesystem'}
                             </TooltipContent>
                           </Tooltip>
@@ -385,7 +389,7 @@ export function FileBrowser({
                               <TooltipTrigger asChild>
                                 <span
                                   tabIndex={0}
-                                  className={`rounded px-1.5 py-0.5 text-caption ${isError ? 'bg-red-400/10 text-red-400' : 'bg-muted text-muted-foreground'}`}
+                                  className={`rounded px-1.5 py-0.5 text-caption ${isError ? 'bg-destructive-subtle text-destructive-subtle-foreground' : 'bg-muted text-muted-foreground'}`}
                                 >
                                   {mountLabel}
                                 </span>
@@ -394,7 +398,7 @@ export function FileBrowser({
                             </Tooltip>
                           ) : (
                             <span
-                              className={`rounded px-1.5 py-0.5 text-caption ${isError ? 'bg-red-400/10 text-red-400' : 'bg-muted text-muted-foreground'}`}
+                              className={`rounded px-1.5 py-0.5 text-caption ${isError ? 'bg-destructive-subtle text-destructive-subtle-foreground' : 'bg-muted text-muted-foreground'}`}
                             >
                               {mountLabel}
                             </span>
@@ -409,7 +413,7 @@ export function FileBrowser({
                         <button
                           onClick={() => handleDelete(entry)}
                           aria-label={`Delete ${entry.name}`}
-                          className="p-2 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 hover:text-red-400"
+                          className="p-2 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 hover:text-destructive-indicator"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>

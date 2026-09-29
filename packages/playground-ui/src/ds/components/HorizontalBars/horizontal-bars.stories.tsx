@@ -4,11 +4,11 @@ import { HorizontalBars } from './horizontal-bars';
 
 const fmt = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v));
 
-const singleSegment = [{ label: 'Requests', color: '#6366f1' }];
+const singleSegment = [{ label: 'Requests', color: 'var(--chart-blue)' }];
 
 const stackedSegments = [
-  { label: 'Input', color: '#3b82f6' },
-  { label: 'Output', color: '#93c5fd' },
+  { label: 'Input', color: 'var(--chart-blue-deep)' },
+  { label: 'Output', color: 'var(--chart-blue)' },
 ];
 
 const singleData = [
@@ -21,9 +21,9 @@ const singleData = [
 
 const statusSegments = [
   { label: 'Completed', color: 'var(--muted-foreground)' },
-  { label: 'Running', color: '#facc15' },
-  { label: 'Pending', color: '#fb923c' },
-  { label: 'Failed', color: '#f87171' },
+  { label: 'Running', color: 'var(--warning-indicator)' },
+  { label: 'Pending', color: 'var(--chart-orange)' },
+  { label: 'Failed', color: 'var(--destructive-indicator)' },
 ];
 
 const statusData = [

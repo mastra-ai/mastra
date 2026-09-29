@@ -161,7 +161,9 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
                   variant="column"
                   className={cn(
                     'rounded px-2 py-0.5',
-                    searchScope === 'resource' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400',
+                    searchScope === 'resource'
+                      ? 'bg-badge-purple-strong text-badge-purple-foreground'
+                      : 'bg-badge-blue-strong text-badge-blue-foreground',
                   )}
                   title={
                     searchScope === 'resource' ? 'Searching across all threads' : 'Searching within current thread only'
@@ -190,7 +192,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
                 target="_blank"
                 rel="noopener noreferrer"
                 className={cn(
-                  'inline-flex items-center gap-2 text-body text-blue-400 hover:text-blue-300',
+                  'inline-flex items-center gap-2 text-body text-info-indicator hover:underline',
                   controlStateColorTransition,
                 )}
               >
@@ -214,7 +216,11 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
         <div className="border-b border-border p-4">
           <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
             <div className="mb-1 flex items-center gap-2">
-              <Txt as="span" variant="column" className="rounded bg-green-500/20 px-2 py-0.5 text-green-400">
+              <Txt
+                as="span"
+                variant="column"
+                className="rounded bg-badge-green-strong px-2 py-0.5 text-badge-green-foreground"
+              >
                 Remote
               </Txt>
               <Txt as="h3" variant="subheading" tone="ink">

@@ -33,7 +33,7 @@ export function WorkflowDebugControls({
           <Txt as="span" variant="meta" tone="muted">
             Next step
           </Txt>
-          <Badge size="sm" icon={<Pause />} emphasis="muted">
+          <Badge size="sm" icon={<Pause />} emphasis="subtle">
             Step by step
           </Badge>
         </div>

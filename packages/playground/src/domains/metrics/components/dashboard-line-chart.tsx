@@ -1,8 +1,7 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { CHART_TICK_FONT_SIZE } from '@mastra/playground-ui/tokens';
+import { CHART_LABEL_COLOR, CHART_TICK_FONT_SIZE } from '@mastra/playground-ui/tokens';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { CustomTooltip } from './chart-card';
-const LABEL_COLOR = '#a1a1aa';
 
 type Series = {
   dataKey: string;
@@ -53,16 +52,16 @@ export function DashboardLineChart({
       <div style={{ height }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data}>
-            <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+            <CartesianGrid stroke="var(--border)" vertical={false} />
             <XAxis
               dataKey="time"
-              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: LABEL_COLOR, fontVariantNumeric: 'tabular-nums' }}
+              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_LABEL_COLOR, fontVariantNumeric: 'tabular-nums' }}
               tickLine={false}
               axisLine={false}
               interval={5}
             />
             <YAxis
-              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: LABEL_COLOR, fontVariantNumeric: 'tabular-nums' }}
+              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_LABEL_COLOR, fontVariantNumeric: 'tabular-nums' }}
               tickLine={false}
               axisLine={false}
               width={30}

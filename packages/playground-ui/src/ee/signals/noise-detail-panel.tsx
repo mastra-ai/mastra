@@ -100,7 +100,9 @@ export function NoiseDetailPanel({
                     Loading noise details…
                   </Txt>
                 )}
-                {noiseQuery.isError && <Txt className="mt-4 text-red-500">Unable to load noise details.</Txt>}
+                {noiseQuery.isError && (
+                  <Txt className="mt-4 text-destructive-indicator">Unable to load noise details.</Txt>
+                )}
                 {noiseQuery.data && (
                   <Txt tone="ink" font="mono" className="mt-4 tabular-nums">
                     {shareSentence(
@@ -127,7 +129,9 @@ export function NoiseDetailPanel({
                     Loading examples…
                   </Txt>
                 )}
-                {examplesQuery.isError && <Txt className="mt-3 text-red-500">Unable to load examples.</Txt>}
+                {examplesQuery.isError && (
+                  <Txt className="mt-3 text-destructive-indicator">Unable to load examples.</Txt>
+                )}
                 {examplesQuery.data && (
                   <>
                     {examplesQuery.data.examples.length === 0 ? (

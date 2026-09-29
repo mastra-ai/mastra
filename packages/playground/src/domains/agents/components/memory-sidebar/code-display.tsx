@@ -27,13 +27,17 @@ export function CodeDisplay({
               type="button"
               onClick={onCopy}
               aria-label="Copy code"
-              className="absolute inset-0 z-10 rounded-md focus-visible:ring-2 focus-visible:ring-accent1 focus-visible:outline-hidden"
+              className="absolute inset-0 z-10 rounded-md focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-hidden"
             />
           )}
           <pre className="pointer-events-none text-meta whitespace-pre-wrap">{content}</pre>
           {isDraft && (
             <div className="mt-1.5">
-              <Txt as="span" variant="meta" className="rounded-full bg-yellow-500/20 px-1.5 py-0.5 text-yellow-500">
+              <Txt
+                as="span"
+                variant="meta"
+                className="rounded-full bg-warning-subtle px-1.5 py-0.5 text-warning-subtle-foreground"
+              >
                 Draft - Save changes to apply
               </Txt>
             </div>
@@ -42,7 +46,7 @@ export function CodeDisplay({
             <Txt
               as="span"
               variant="meta"
-              className="pointer-events-none absolute top-2 right-2 z-20 rounded-full bg-green-500/20 px-1.5 py-0.5 text-green-500"
+              className="pointer-events-none absolute top-2 right-2 z-20 rounded-full bg-success-subtle px-1.5 py-0.5 text-success-subtle-foreground"
             >
               Copied!
             </Txt>

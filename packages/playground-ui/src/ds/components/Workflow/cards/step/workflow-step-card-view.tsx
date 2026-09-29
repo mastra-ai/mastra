@@ -29,22 +29,22 @@ const statusLabels = {
 } satisfies Record<ReportedStatus, string>;
 
 const statusLineClasses: Partial<Record<ReportedStatus, string>> = {
-  success: 'after:bg-positive1',
-  failed: 'after:bg-negative1',
-  tripwire: 'after:bg-warning1',
-  waiting: 'after:bg-accent5',
-  paused: 'after:bg-muted-foreground',
+  success: 'after:bg-success-indicator',
+  failed: 'after:bg-destructive-indicator',
+  tripwire: 'after:bg-warning-indicator',
+  waiting: 'after:bg-warning-indicator',
+  paused: 'after:bg-warning-indicator',
   skipped: 'after:bg-muted-foreground',
 };
 
 const footerStatusClasses: Partial<Record<ReportedStatus, string>> = {
-  success: 'text-positive1',
-  failed: 'text-negative1',
-  suspended: 'text-warning1',
-  tripwire: 'text-warning1',
+  success: 'text-success-indicator',
+  failed: 'text-destructive-indicator',
+  suspended: 'text-warning-indicator',
+  tripwire: 'text-warning-indicator',
 };
 
-const suspendedWickStyle: CSSProperties & { '--belt-hue': string } = { '--belt-hue': 'var(--warning1)' };
+const suspendedWickStyle: CSSProperties & { '--belt-hue': string } = { '--belt-hue': 'var(--warning-indicator)' };
 
 export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
   const {
@@ -96,10 +96,10 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
           'relative rounded-xl border border-transparent text-foreground transition-[border-color,background-color,box-shadow] [--card-radius:calc(var(--radius-xl)-2px)] motion-reduce:transition-none',
           'after:pointer-events-none after:absolute after:inset-x-4 after:-top-px after:h-px after:mask-x-from-76%',
           displayStatus && statusLineClasses[displayStatus],
-          'has-focus-visible:outline-2 has-focus-visible:outline-offset-4 has-focus-visible:outline-accent3',
+          'has-focus-visible:outline-2 has-focus-visible:outline-offset-4 has-focus-visible:outline-border-focus',
           isSelected && 'outline-1 outline-offset-4 outline-border-focus',
           isBodyExpanded && 'border-dashed border-muted-foreground/40 shadow-none',
-          isWaiting && 'border-accent3',
+          isWaiting && 'border-info-edge',
           isHovered && !isSelected && 'bg-muted',
         )}
         data-workflow-node
@@ -137,7 +137,7 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
               )}
               <WorkflowTiming duration={props.duration} date={props.date} />
               {isWaiting && (
-                <Txt as="span" variant="meta" className="text-accent3">
+                <Txt as="span" variant="meta" className="text-info-indicator">
                   Next step in debug
                 </Txt>
               )}
@@ -148,7 +148,7 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
                   </span>
                   {foreachProgress.totalCount > 0 ? (
                     <progress
-                      className="h-1 w-full appearance-none border-0 bg-muted accent-positive1 [&::-moz-progress-bar]:bg-positive1 [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-positive1"
+                      className="h-1 w-full appearance-none border-0 bg-muted accent-success-indicator [&::-moz-progress-bar]:bg-success-indicator [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-success-indicator"
                       aria-label={`${label} completed items`}
                       value={foreachProgress.completedCount}
                       max={foreachProgress.totalCount}

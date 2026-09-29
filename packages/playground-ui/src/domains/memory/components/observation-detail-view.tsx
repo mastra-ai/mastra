@@ -5,13 +5,15 @@ import { EmptyState } from '../../../ds/components/EmptyState';
 import { Skeleton } from '../../../ds/components/Skeleton';
 import { Txt } from '../../../ds/components/Txt';
 import { cn } from '../../../lib/utils';
+import { observationPriorityByEmoji, observationPriorityTone } from '../lib/observation-priority';
+import type { ObservationPriority } from '../lib/observation-priority';
 import type { OMHistoryRecord } from '../types';
 import { formatDate } from '@/utils/date-format';
 
 type ParsedItem = {
   text: string;
   time: string | null;
-  priority: 'high' | 'medium' | 'low' | 'complete' | null;
+  priority: ObservationPriority | null;
   children: ParsedItem[];
 };
 
@@ -29,14 +31,6 @@ function formatObservationTime(time: string | null) {
   return formatDate(new Date(2000, 0, 1, Number(hours), Number(minutes)), 'time') ?? time;
 }
 
-function getPriorityFromEmoji(emoji?: string): ParsedItem['priority'] {
-  if (emoji === '🔴') return 'high';
-  if (emoji === '🟡') return 'medium';
-  if (emoji === '🟢') return 'low';
-  if (emoji === '✅') return 'complete';
-  return null;
-}
-
 function priorityClasses(priority: ParsedItem['priority'], nested: boolean) {
   if (nested) {
     return {
@@ -45,38 +39,15 @@ function priorityClasses(priority: ParsedItem['priority'], nested: boolean) {
       time: 'text-muted-foreground',
     };
   }
-  switch (priority) {
-    case 'high':
-      return {
-        card: 'border-purple-400/30 bg-purple-500/10',
-        text: 'text-foreground',
-        time: 'text-purple-200/80',
-      };
-    case 'medium':
-      return {
-        card: 'border-blue-400/30 bg-blue-500/10',
-        text: 'text-foreground',
-        time: 'text-blue-200/80',
-      };
-    case 'low':
-      return {
-        card: 'border-emerald-400/30 bg-emerald-500/10',
-        text: 'text-foreground',
-        time: 'text-emerald-200/80',
-      };
-    case 'complete':
-      return {
-        card: 'border-green-400/30 bg-green-500/10',
-        text: 'text-foreground',
-        time: 'text-green-200/80',
-      };
-    default:
-      return {
-        card: 'border-border bg-background',
-        text: 'text-foreground',
-        time: 'text-muted-foreground',
-      };
+  if (!priority) {
+    return {
+      card: 'border-border bg-background',
+      text: 'text-foreground',
+      time: 'text-muted-foreground',
+    };
   }
+  const tone = observationPriorityTone[priority];
+  return { card: tone.card, text: 'text-foreground', time: tone.time };
 }
 
 function parseItem(line: string): ParsedItem | null {
@@ -99,9 +70,9 @@ function parseItem(line: string): ParsedItem | null {
   if (trimmed.startsWith('*')) {
     let rest = trimmed.slice(1).trimStart();
     let priority: ParsedItem['priority'] = null;
-    for (const emoji of ['🔴', '🟡', '🟢', '✅']) {
+    for (const [emoji, emojiPriority] of Object.entries(observationPriorityByEmoji)) {
       if (rest.startsWith(emoji)) {
-        priority = getPriorityFromEmoji(emoji);
+        priority = emojiPriority;
         rest = rest.slice(emoji.length).trimStart();
         break;
       }
@@ -269,7 +240,7 @@ function ObservationHistoryPanel({
               type="button"
               className={cn(
                 'w-full cursor-pointer truncate border-l-2 border-l-transparent px-3 py-2 text-left text-caption text-muted-foreground hover:bg-fill-subtle',
-                isSelected && 'border-l-accent1 bg-fill-hover',
+                isSelected && 'border-l-border-strong bg-fill-hover',
               )}
               onClick={() => onSelectRecord(record.id)}
             >

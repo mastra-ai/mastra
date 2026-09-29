@@ -187,10 +187,10 @@ function WorkflowRow({
         <EntityList.TextCell className="text-center">
           {runningCount > 0 ? (
             <span
-              className="inline-flex items-center gap-1.5 text-positive1"
+              className="inline-flex items-center gap-1.5 text-info-indicator"
               aria-label={`${runningCount} run${runningCount === 1 ? '' : 's'} in progress`}
             >
-              <span aria-hidden className="size-2 rounded-full bg-positive1 motion-safe:animate-pulse" />
+              <span aria-hidden className="size-2 rounded-full bg-info-indicator motion-safe:animate-pulse" />
               {runningCount}
             </span>
           ) : (
@@ -200,7 +200,7 @@ function WorkflowRow({
         <EntityList.TextCell className="text-center">
           {suspendedCount > 0 ? (
             <span
-              className="inline-flex items-center gap-1.5 text-warning1"
+              className="inline-flex items-center gap-1.5 text-warning-indicator"
               aria-label={`${suspendedCount} run${suspendedCount === 1 ? '' : 's'} awaiting input`}
             >
               <PauseIcon aria-hidden className="size-3.5" />

@@ -1,8 +1,7 @@
 import type { SignalCatalogEntry } from '@mastra/client-js';
 import { Info } from 'lucide-react';
-import { getSignalHue } from './signal-colors';
+import { getSignalColor } from './signal-colors';
 import { orderedSignals, signalDescription, signalLabel } from './signal-formatting';
-import { nodeColor } from '@/ds/components/SankeyChart';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
@@ -41,7 +40,7 @@ export function TraceIntelligenceExplainer({ signalCatalog }: { signalCatalog: r
                 variant="meta"
                 font="mono"
                 className="tracking-widest uppercase"
-                style={{ color: nodeColor(getSignalHue(signalName)) }}
+                style={{ color: getSignalColor(signalName) }}
               >
                 {signalLabel(signalCatalog, signalName)}
               </Txt>{' '}

@@ -372,8 +372,8 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
             {/* Prominent validation summary banner */}
             {schemaValidation.invalidCount > 0 ? (
-              <div className="bg-warning/10 border-warning/30 rounded-md border p-3">
-                <div className="text-warning flex items-center gap-2 font-medium">
+              <div className="rounded-md border border-warning-edge bg-warning-subtle p-3">
+                <div className="flex items-center gap-2 font-medium text-warning-subtle-foreground">
                   <Txt as="span" variant="heading">
                     ⚠
                   </Txt>
@@ -384,8 +384,8 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
                 </Txt>
               </div>
             ) : (
-              <div className="bg-success/10 border-success/30 rounded-md border p-3">
-                <div className="text-success flex items-center gap-2 font-medium">
+              <div className="rounded-md border border-success-edge bg-success-subtle p-3">
+                <div className="flex items-center gap-2 font-medium text-success-subtle-foreground">
                   <Txt as="span" variant="heading">
                     ✓
                   </Txt>
@@ -430,7 +430,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
               <div className="mt-1 text-body text-muted-foreground">
                 {importResult?.success ?? 0} item{importResult?.success !== 1 ? 's' : ''} imported
                 {importResult && importResult.errors > 0 && (
-                  <span className="text-accent2">
+                  <span className="text-destructive-indicator">
                     {' '}
                     ({importResult.errors} error{importResult.errors !== 1 ? 's' : ''})
                   </span>

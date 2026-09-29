@@ -415,7 +415,7 @@ export default function Workspace() {
                 <Button
                   size="md"
                   className="w-full max-w-md justify-start"
-                  icon={selectedWorkspace?.source === 'agent' ? <Bot className="text-accent1" /> : <Server />}
+                  icon={selectedWorkspace?.source === 'agent' ? <Bot className="text-span-agent" /> : <Server />}
                 >
                   <span className="flex-1 truncate text-left">
                     {selectedWorkspace?.name ?? 'Select workspace'}
@@ -432,7 +432,7 @@ export default function Workspace() {
                 {workspaces.map(workspace => (
                   <DropdownMenu.RadioItem key={workspace.id} value={workspace.id} className="gap-3">
                     {workspace.source === 'agent' ? (
-                      <Bot className="shrink-0 text-accent1" />
+                      <Bot className="shrink-0 text-span-agent" />
                     ) : (
                       <Server className="shrink-0" />
                     )}
@@ -444,7 +444,7 @@ export default function Workspace() {
                     </div>
                     <div className="flex shrink-0 gap-1">
                       {workspace.safety?.readOnly && (
-                        <Badge size="xs" variant="yellow">
+                        <Badge size="xs" variant="warning">
                           Read-only
                         </Badge>
                       )}
@@ -462,7 +462,7 @@ export default function Workspace() {
         {workspaces.length === 1 && selectedWorkspace && (
           <div className="flex items-center gap-2 text-body text-muted-foreground">
             {selectedWorkspace.source === 'agent' ? (
-              <Bot className="h-4 w-4 text-accent1" />
+              <Bot className="h-4 w-4 text-span-agent" />
             ) : (
               <Server className="h-4 w-4" />
             )}
@@ -471,7 +471,7 @@ export default function Workspace() {
               <span className="text-muted-foreground">({selectedWorkspace.agentName})</span>
             )}
             {isReadOnly && (
-              <Badge size="xs" variant="yellow">
+              <Badge size="xs" variant="warning">
                 Read-only
               </Badge>
             )}
@@ -641,9 +641,9 @@ function WorkspaceSearchPanel({
             Search Indexed Files
           </Txt>
           {showInitWarning && (
-            <Txt variant="caption" className="mb-3 text-amber-400">
-              File search requires <code className="text-amber-300">workspace.init()</code> to index files from your
-              configured <code className="text-amber-300">autoIndexPaths</code>.
+            <Txt variant="caption" className="mb-3 text-warning-indicator">
+              File search requires <code className="text-warning-indicator">workspace.init()</code> to index files from
+              your configured <code className="text-warning-indicator">autoIndexPaths</code>.
             </Txt>
           )}
           <SearchWorkspacePanel

@@ -108,7 +108,7 @@ export const AgentBadge = ({
   return (
     <BadgeWrapper
       data-testid="agent-badge"
-      icon={<AgentIcon className="text-accent1" />}
+      icon={<AgentIcon className="text-span-agent" />}
       title={agentId}
       status={status}
       initialCollapsed={shouldCollapseContent}
@@ -168,7 +168,7 @@ export const AgentBadge = ({
       })}
 
       {isError && errorText && (
-        <ToolCallMono copyText={errorText} data-testid="agent-error" className="text-error/90">
+        <ToolCallMono copyText={errorText} data-testid="agent-error" className="text-destructive-indicator">
           {errorText}
         </ToolCallMono>
       )}

@@ -260,7 +260,7 @@ function ProviderHeading({ children }: { children: string }) {
 
 function RepositoryError({ message }: { message: string }) {
   return (
-    <Txt variant="caption" role="alert" className="text-notice-destructive-fg m-0">
+    <Txt variant="caption" role="alert" className="text-destructive-indicator m-0">
       {message}
     </Txt>
   );
@@ -321,7 +321,11 @@ function RepositoryRows({
               </Txt>
             </span>
             {isConnecting ? (
-              <Spinner size="sm" aria-label={`Connecting ${repo.fullName}`} className="text-accent1 shrink-0" />
+              <Spinner
+                size="sm"
+                aria-label={`Connecting ${repo.fullName}`}
+                className="text-badge-green-indicator shrink-0"
+              />
             ) : (
               <Txt
                 as="span"

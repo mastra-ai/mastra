@@ -12,6 +12,7 @@ import {
   Timer,
 } from 'lucide-react';
 import type { Step } from '../context/use-current-run';
+import { workflowStatusTone, workflowStatusToneBar, workflowStatusToneText } from '../workflow-status-tone';
 import type { TimelineRow } from './workflow-timeline-utils';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
@@ -19,22 +20,17 @@ import { cn } from '@/utils/cn';
 import { formatDuration } from '@/utils/duration';
 
 const statusPresentation = {
-  success: { label: 'Completed', icon: Check, color: 'text-positive1', bar: 'bg-muted-foreground/60' },
-  failed: { label: 'Failed', icon: CircleX, color: 'text-negative1', bar: 'bg-negative1/60' },
-  suspended: { label: 'Needs input', icon: Pause, color: 'text-accent3', bar: 'bg-accent3/60' },
-  waiting: { label: 'Waiting', icon: Timer, color: 'text-muted-foreground', bar: 'bg-muted-foreground/40' },
-  paused: { label: 'Paused', icon: Pause, color: 'text-muted-foreground', bar: 'bg-muted-foreground/40' },
-  skipped: { label: 'Skipped', icon: SkipForward, color: 'text-muted-foreground', bar: 'bg-muted-foreground/25' },
-  running: { label: 'Running', icon: Loader2, color: 'text-accent6', bar: 'bg-accent6/60' },
-  canceled: { label: 'Canceled', icon: CircleSlash, color: 'text-muted-foreground', bar: 'bg-muted-foreground/40' },
-} satisfies Record<Step['status'], { label: string; icon: typeof Check; color: string; bar: string }>;
+  success: { label: 'Completed', icon: Check },
+  failed: { label: 'Failed', icon: CircleX },
+  suspended: { label: 'Needs input', icon: Pause },
+  waiting: { label: 'Waiting', icon: Timer },
+  paused: { label: 'Paused', icon: Pause },
+  skipped: { label: 'Skipped', icon: SkipForward },
+  running: { label: 'Running', icon: Loader2 },
+  canceled: { label: 'Canceled', icon: CircleSlash },
+} satisfies Record<Step['status'], { label: string; icon: typeof Check }>;
 
-const unknownStatus = {
-  label: 'Status unavailable',
-  icon: CircleHelp,
-  color: 'text-muted-foreground',
-  bar: 'bg-muted-foreground/25',
-};
+const unknownStatus = { label: 'Status unavailable', icon: CircleHelp };
 
 export interface WorkflowTimelineRowProps {
   row: TimelineRow;
@@ -57,6 +53,7 @@ export function WorkflowTimelineRow({
 }: WorkflowTimelineRowProps) {
   const status = Object.hasOwn(statusPresentation, row.status) ? statusPresentation[row.status] : unknownStatus;
   const StatusIcon = status.icon;
+  const tone = workflowStatusTone(row.status);
   const parentPath = row.stepId.slice(0, row.stepId.lastIndexOf('.'));
   const label = row.isNestedEntry ? row.stepId.slice(row.stepId.lastIndexOf('.') + 1) : row.stepId;
 
@@ -87,7 +84,7 @@ export function WorkflowTimelineRow({
           aria-label={status.label}
           className={cn(
             'grid size-6 flex-none place-items-center rounded-md border border-border bg-background',
-            status.color,
+            workflowStatusToneText[tone],
           )}
         >
           <StatusIcon aria-hidden className={cn('size-3.5', row.status === 'running' && 'motion-safe:animate-spin')} />
@@ -111,7 +108,7 @@ export function WorkflowTimelineRow({
             data-testid="workflow-timeline-bar"
             data-offset={row.timing.offsetPct}
             data-width={row.timing.widthPct}
-            className={cn('absolute top-0 h-full min-w-0.5 rounded-sm', status.bar)}
+            className={cn('absolute top-0 h-full min-w-0.5 rounded-sm', workflowStatusToneBar[tone])}
             style={{ left: `${row.timing.offsetPct}%`, width: `${row.timing.widthPct}%` }}
           />
         )}

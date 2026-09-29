@@ -28,7 +28,7 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
   const getIconAndTitle = () => {
     if (isValidationError) {
       return {
-        icon: <AlertTriangleIcon className="text-yellow-500" />,
+        icon: <AlertTriangleIcon className="text-warning-indicator" />,
         title: 'Template Installed with Warnings',
       };
     }
@@ -61,8 +61,8 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
           </summary>
           <div className="mt-4 max-h-60 space-y-2 overflow-auto rounded bg-muted p-3 text-left text-caption">
             {validationErrors.map((error, index) => (
-              <div key={index} className="border-l-2 border-destructive pl-2">
-                <div className="font-medium text-destructive">
+              <div key={index} className="border-l-2 border-destructive-indicator pl-2">
+                <div className="font-medium text-destructive-indicator">
                   {error.type === 'typescript' ? '🔴 TypeScript Error' : '⚠️ Lint Error'}
                 </div>
                 <pre className="mt-1 text-caption wrap-break-word whitespace-pre-wrap text-muted-foreground">

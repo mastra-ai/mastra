@@ -78,7 +78,7 @@ export function ScheduleTriggersList({
             variant="caption"
             font="mono"
             tone={isLinked ? undefined : 'muted'}
-            className={isLinked ? 'whitespace-nowrap text-accent1' : 'whitespace-nowrap'}
+            className={isLinked ? 'whitespace-nowrap text-success-indicator' : 'whitespace-nowrap'}
           >
             {t.runId}
           </Txt>
@@ -94,7 +94,7 @@ export function ScheduleTriggersList({
                   <Txt
                     as="span"
                     variant="caption"
-                    className="inline-flex items-center gap-1.5 whitespace-nowrap text-accent2"
+                    className="inline-flex items-center gap-1.5 whitespace-nowrap text-destructive-indicator"
                   >
                     <AlertTriangleIcon size={14} />
                     publish failed
@@ -114,7 +114,7 @@ export function ScheduleTriggersList({
                 {errorMessage ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="inline-flex text-accent2">
+                      <span className="inline-flex text-destructive-indicator">
                         <AlertTriangleIcon size={14} />
                       </span>
                     </TooltipTrigger>
@@ -130,7 +130,7 @@ export function ScheduleTriggersList({
                 {showDriftWarning ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="inline-flex text-accent3">
+                      <span className="inline-flex text-info-indicator">
                         <AlertTriangleIcon size={14} />
                       </span>
                     </TooltipTrigger>

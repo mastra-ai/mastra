@@ -81,7 +81,7 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
 
       {data.error ? (
         <ComparisonSection title="Error" tone="negative" actions={<CopyButton content={data.error.message} />}>
-          <Txt tone="muted" className="rounded-xl border border-negative1/40 bg-negative1/5 p-4 break-words">
+          <Txt tone="muted" className="rounded-xl border border-destructive-edge bg-destructive-subtle p-4 break-words">
             {data.error.message}
           </Txt>
         </ComparisonSection>

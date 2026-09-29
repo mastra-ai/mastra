@@ -29,7 +29,7 @@ function ObjectGroup({ label, children }: Pick<ObjectWrapperProps, 'label' | 'ch
           {label}
         </span>
         {invalid && (
-          <Txt as="span" variant="meta" className="ml-auto shrink-0 text-accent2">
+          <Txt as="span" variant="meta" className="ml-auto shrink-0 text-destructive-indicator">
             Needs input
           </Txt>
         )}

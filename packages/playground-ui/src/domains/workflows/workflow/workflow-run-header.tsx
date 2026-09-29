@@ -4,6 +4,7 @@ import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import type { WorkflowRunTiming } from '../context/workflow-step-timing';
 import { resolveRunTiming } from '../context/workflow-step-timing';
+import { workflowStatusTone } from '../workflow-status-tone';
 import { Badge } from '@/ds/components/Badge';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { RelativeTimestamp } from '@/ds/components/RelativeTimestamp';
@@ -20,8 +21,8 @@ export function WorkflowRunStatusBadge({ status }: { status?: WorkflowRunStatus 
   return (
     <Badge
       size="md"
-      variant={status === 'paused' ? 'yellow' : 'neutral'}
-      emphasis="muted"
+      variant={workflowStatusTone(status)}
+      emphasis="subtle"
       icon={status && <WorkflowRunStatusIcon status={status} />}
     >
       {formatRunStatus(status)}
@@ -55,7 +56,7 @@ function RunWaiting({ since }: { since: number }) {
     <Txt
       as="span"
       variant="meta"
-      className="flex items-center gap-1.5 text-accent3 tabular-nums"
+      className="flex items-center gap-1.5 text-warning-indicator tabular-nums"
       title="Waiting for input"
     >
       <Pause aria-hidden className="size-3.5" />
@@ -85,7 +86,7 @@ export function RunWorkflowHeader({
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <WorkflowRunStatusBadge status={status} />
           {resourceId && (
-            <Badge size="md" variant="neutral" emphasis="muted" className="min-w-0">
+            <Badge size="md" variant="neutral" emphasis="subtle" className="min-w-0">
               <span className="min-w-0 truncate" title={`Resource ${resourceId}`}>
                 {resourceId}
               </span>

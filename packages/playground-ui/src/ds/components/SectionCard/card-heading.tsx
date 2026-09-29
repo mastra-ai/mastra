@@ -19,22 +19,21 @@ export function CardHeading({
   className,
   descriptionClassName,
 }: CardHeadingProps) {
-  const danger = tone === 'danger';
   return (
     <>
-      <Txt as="h3" variant="heading" tone="ink" id={id} className={cn(danger && 'text-accent2', className)}>
+      <Txt
+        as="h3"
+        variant="heading"
+        tone="ink"
+        id={id}
+        className={cn(tone === 'danger' && 'text-destructive-subtle-foreground', className)}
+      >
         {title}
       </Txt>
       {description != null && (
-        <p
-          className={cn(
-            'mt-1 max-w-[62ch]',
-            danger ? 'text-caption text-accent2/70' : 'text-caption text-muted-foreground',
-            descriptionClassName,
-          )}
-        >
+        <Txt variant="caption" tone="muted" className={cn('mt-1 max-w-[62ch]', descriptionClassName)}>
           {description}
-        </p>
+        </Txt>
       )}
     </>
   );

@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 import { EXAMPLES_PAGE_SIZE, ExamplesPager } from './examples-pager';
 import { useThemeDetail, useThemeExamples, useThemeHistory } from './hooks';
-import { getSignalHue } from './signal-colors';
+import { getSignalColor } from './signal-colors';
 import { formatSnapshotDate, shareSentence, signalDescription, signalLabel } from './signal-formatting';
 import type { SelectedTheme, ThemeSelection, ThemeSelectionStats } from './theme-drilldown-data';
 import { chronologicalHistoryPoints, themeTrendDirection } from './theme-trend';
@@ -17,7 +17,6 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from '@/ds/components/Drawer';
-import { nodeColor } from '@/ds/components/SankeyChart';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -104,7 +103,7 @@ export function ThemeDetailPanel({
               variant="column"
               font="mono"
               className="tracking-widest"
-              style={{ color: nodeColor(getSignalHue(signalName)) }}
+              style={{ color: getSignalColor(signalName) }}
             >
               {signalDisplayDescription ? (
                 <Tooltip>
@@ -130,7 +129,7 @@ export function ThemeDetailPanel({
           {insightTraceId === undefined && (
             <>
               {detailQuery.isPending && <Txt tone="muted">Loading theme details…</Txt>}
-              {detailQuery.isError && <Txt className="text-red-500">Unable to load theme details.</Txt>}
+              {detailQuery.isError && <Txt className="text-destructive-indicator">Unable to load theme details.</Txt>}
               {detailQuery.data && !detailQuery.data.theme && (
                 <section>
                   <Txt as="h2" variant="subheading" tone="ink">
@@ -181,7 +180,9 @@ export function ThemeDetailPanel({
                         Loading examples…
                       </Txt>
                     )}
-                    {examplesQuery.isError && <Txt className="mt-3 text-red-500">Unable to load examples.</Txt>}
+                    {examplesQuery.isError && (
+                      <Txt className="mt-3 text-destructive-indicator">Unable to load examples.</Txt>
+                    )}
                     {examplesQuery.data && (
                       <>
                         {examplesQuery.data.examples.length === 0 ? (
@@ -233,7 +234,9 @@ export function ThemeDetailPanel({
                           Loading trend…
                         </Txt>
                       )}
-                      {historyQuery.isError && <Txt className="mt-3 text-red-500">Unable to load the trend.</Txt>}
+                      {historyQuery.isError && (
+                        <Txt className="mt-3 text-destructive-indicator">Unable to load the trend.</Txt>
+                      )}
                       {oldestHistoryPoint !== undefined && (
                         <>
                           <Txt tone="ink" className="mt-3">
@@ -245,10 +248,7 @@ export function ThemeDetailPanel({
                             · {themeTrendDirection(historyPoints)}
                           </Txt>
                           {historyPoints.length >= 2 && (
-                            <ThemeTrendChart
-                              points={historyPoints}
-                              color={nodeColor(getSignalHue(signalName ?? 'goal'))}
-                            />
+                            <ThemeTrendChart points={historyPoints} signalName={signalName ?? 'goal'} />
                           )}
                         </>
                       )}

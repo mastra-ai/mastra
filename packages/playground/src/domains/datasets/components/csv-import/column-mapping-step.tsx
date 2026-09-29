@@ -62,7 +62,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
                   {zone.label}
                 </Txt>
                 {zone.required && (
-                  <Txt as="span" variant="caption" className="text-accent1">
+                  <Txt as="span" variant="caption" tone="muted">
                     *
                   </Txt>
                 )}
@@ -77,7 +77,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
                   <div
                     ref={provided.innerRef}
                     {...provided.droppableProps}
-                    className={`flex min-h-header-default flex-wrap items-center gap-2 rounded-lg border-2 border-dashed p-2 transition-colors ${snapshot.isDraggingOver ? 'border-accent1/50 bg-accent1/5' : 'border-border'} ${needsAttention ? 'border-warning bg-warning/5' : ''} `}
+                    className={`flex min-h-header-default flex-wrap items-center gap-2 rounded-lg border-2 border-dashed p-2 transition-colors ${snapshot.isDraggingOver ? 'border-border-strong bg-fill-subtle' : 'border-border'} ${needsAttention ? 'border-warning-edge bg-warning-subtle' : ''} `}
                   >
                     {isEmpty && !snapshot.isDraggingOver && (
                       <Txt as="span" variant="caption" tone="muted" className="italic">
@@ -93,7 +93,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
                               ref={provided.innerRef}
                               {...provided.draggableProps}
                               style={provided.draggableProps.style}
-                              className={`inline-flex items-center gap-1.5 rounded-md bg-background px-2.5 py-1.5 text-subheading text-placeholder ${snapshot.isDragging ? 'ring-2 shadow-overlay ring-accent1/30' : 'hover:bg-fill-subtle'}`}
+                              className={`inline-flex items-center gap-1.5 rounded-md bg-background px-2.5 py-1.5 text-subheading text-placeholder ${snapshot.isDragging ? 'ring-2 shadow-overlay ring-border-strong' : 'hover:bg-fill-subtle'}`}
                             >
                               <span
                                 {...provided.dragHandleProps}
@@ -127,7 +127,9 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
         })}
 
         {/* Validation message */}
-        {!inputHasColumns && <div className="text-warning text-body">At least one column must be mapped to Input</div>}
+        {!inputHasColumns && (
+          <div className="text-body text-warning-indicator">At least one column must be mapped to Input</div>
+        )}
       </div>
     </DragDropContext>
   );
