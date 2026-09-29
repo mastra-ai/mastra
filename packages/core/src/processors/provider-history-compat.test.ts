@@ -7,6 +7,7 @@ import {
   anthropicStripEmptySignedReasoningContent,
   anthropicStripForeignReasoningContent,
   azureSystemReminderTransform,
+  bedrockMantleGptOssUserContent,
   cerebrasStripReasoningContent,
   isMaybeAnthropic,
   isMaybeAnthropicWithoutAssistantPrefill,
@@ -14,6 +15,7 @@ import {
   isMaybeCerebras,
   isMaybeGoogleWithoutTrailingModelTurn,
   ProviderHistoryCompat,
+  ProviderRequestCompat,
   stripForeignProviderExecutedTools,
 } from './provider-history-compat';
 import type { CompatRule } from './provider-history-compat';
@@ -2156,5 +2158,69 @@ describe('anthropicOrphanedThinkingStep', () => {
 
     expect(await new ProviderHistoryCompat().processAPIError(args)).toBeUndefined();
     expect(JSON.stringify(args.messageList.get.all.db())).toContain('SIG_A');
+  });
+});
+
+describe('bedrockMantleGptOssUserContent', () => {
+  const mantle = { provider: 'bedrock-mantle.chat', modelId: 'openai.gpt-oss-20b' };
+  const multiPart: LanguageModelV2Prompt = [
+    { role: 'system', content: 'sys' },
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'context' },
+        { type: 'text', text: 'question' },
+      ],
+    },
+  ];
+  const apply = (model: unknown, prompt = multiPart) =>
+    bedrockMantleGptOssUserContent.applyToPrompt!({ prompt, model: model as any });
+
+  it('merges all-text multi-part user messages for Mantle GPT-OSS chat without mutating input', () => {
+    const snapshot = structuredClone(multiPart);
+    for (const modelId of ['openai.gpt-oss-20b', 'openai.gpt-oss-safeguard-20b']) {
+      const result = apply({ ...mantle, modelId });
+      expect(result?.[1]).toEqual({ role: 'user', content: [{ type: 'text', text: 'context\n\nquestion' }] });
+    }
+    expect(multiPart).toEqual(snapshot);
+  });
+
+  it('leaves non-text and providerOptions parts untouched', () => {
+    const prompt: LanguageModelV2Prompt = [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'a' },
+          { type: 'file', data: 'aGk=', mediaType: 'image/png' },
+        ],
+      },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'a' },
+          { type: 'text', text: 'b', providerOptions: { openai: { x: 1 } } },
+        ],
+      },
+    ];
+    expect(apply(mantle, prompt)).toBeUndefined();
+  });
+
+  it('does not apply to other providers or models', () => {
+    expect(apply({ provider: 'bedrock-mantle.responses', modelId: 'openai.gpt-oss-20b' })).toBeUndefined();
+    expect(apply({ provider: 'bedrock-mantle.chat', modelId: 'qwen.qwen3-32b' })).toBeUndefined();
+    expect(apply({ provider: 'amazon-bedrock', modelId: 'anthropic.claude-sonnet-4' })).toBeUndefined();
+    expect(apply({ provider: 'openai.chat', modelId: 'gpt-oss-20b' })).toBeUndefined();
+    expect(apply('bedrock-mantle/openai.gpt-oss-20b')).toBeUndefined();
+  });
+
+  it('is applied by the always-on ProviderRequestCompat processor', () => {
+    const result = new ProviderRequestCompat().processLLMRequest({ prompt: multiPart, model: mantle } as any);
+    expect(result && 'prompt' in result && result.prompt[1]!.content).toHaveLength(1);
+    expect(
+      new ProviderRequestCompat().processLLMRequest({
+        prompt: multiPart,
+        model: { provider: 'openai.chat', modelId: 'x' },
+      } as any),
+    ).toBeUndefined();
   });
 });

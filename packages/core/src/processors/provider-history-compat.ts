@@ -948,6 +948,61 @@ export const anthropicOrphanedThinkingStep: CompatRule = {
 // Default rule set
 // ---------------------------------------------------------------------------
 
+// Mastra's own `providerOptions.mastra` stamps (e.g. createdAt) never reach the wire.
+function hasWireProviderOptions(providerOptions: Record<string, unknown> | undefined): boolean {
+  return !!providerOptions && Object.keys(providerOptions).some(key => key !== 'mastra');
+}
+
+export function isBedrockMantleGptOssChat(model: unknown): boolean {
+  if (!model || typeof model !== 'object') return false;
+  const { provider, modelId } = model as { provider?: unknown; modelId?: unknown };
+  return provider === 'bedrock-mantle.chat' && typeof modelId === 'string' && modelId.startsWith('openai.gpt-oss-');
+}
+
+/**
+ * Bedrock Mantle's Chat Completions endpoint rejects array-form `content` on
+ * user messages for `openai.gpt-oss-*` models ("Invalid 'messages': Invalid
+ * 'content'"). The AI SDK OpenAI chat converter only emits a plain string when
+ * a user message has exactly one text part, and Mastra routinely produces
+ * multi-part user messages (multi-part input, memory/context injection).
+ * Merge all-text user messages into a single text part at the provider
+ * boundary so they serialize as a string. Messages with parts carrying
+ * provider-specific `providerOptions` (e.g. cache breakpoints) are left as-is.
+ */
+export const bedrockMantleGptOssUserContent: CompatRule = {
+  name: 'bedrock-mantle-gpt-oss-user-content',
+  applyToPrompt({ prompt, model }) {
+    if (!isBedrockMantleGptOssChat(model)) return undefined;
+    let changed = false;
+    const next = prompt.map(message => {
+      if (message.role !== 'user' || message.content.length < 2) return message;
+      if (!message.content.every(part => part.type === 'text' && !hasWireProviderOptions(part.providerOptions))) {
+        return message;
+      }
+      changed = true;
+      const text = message.content.map(part => (part.type === 'text' ? part.text : '')).join('\n\n');
+      return { ...message, content: [{ type: 'text' as const, text }] };
+    });
+    return changed ? next : undefined;
+  },
+};
+
+/**
+ * Always-on provider-boundary processor that applies narrowly model-scoped
+ * request rewrites for every Agent. Unlike {@link ProviderHistoryCompat}, it
+ * has no reactive retry behavior.
+ * @internal
+ */
+export class ProviderRequestCompat implements Processor<'provider-request-compat'> {
+  readonly id = 'provider-request-compat' as const;
+  readonly name = 'Provider Request Compat';
+
+  processLLMRequest({ prompt, model, messageList }: ProcessLLMRequestArgs): ProcessLLMRequestResult {
+    const next = bedrockMantleGptOssUserContent.applyToPrompt!({ prompt, model, messageList });
+    return next ? { prompt: next } : undefined;
+  }
+}
+
 /**
  * All built-in compat rules. Extend by passing additional rules to the
  * `ProviderHistoryCompat` constructor.
@@ -962,6 +1017,7 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   azureSystemReminderTransform,
   openaiOrphanItemId,
   anthropicOrphanedThinkingStep,
+  bedrockMantleGptOssUserContent,
 ];
 
 // ---------------------------------------------------------------------------
@@ -1008,6 +1064,10 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  *   see that thinking merged into the next step. Reactive (matches the
  *   "thinking blocks ... cannot be modified" 400); a recovery seatbelt for
  *   already-corrupted history.
+ * - **bedrock-mantle-gpt-oss-user-content** — merges all-text multi-part user
+ *   messages into a single text part for `bedrock-mantle.chat` +
+ *   `openai.gpt-oss-*`, which reject array-form user `content`. Preemptive.
+ *   Also applied to every Agent by default at the provider boundary.
  *
  * To add custom rules, pass them to the constructor:
  * ```ts
