@@ -1740,8 +1740,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     const textFromSteps = steps.map((step: any) => step.text || '').join('');
 
     const fullOutput: FullOutput<OUTPUT> = {
-      // A processOutputStream tripwire can end the run before any step completes.
-      text: steps.length > 0 ? textFromSteps : await this.text,
+      // After a tripwire, `text` already holds the resolved output (and a processOutputStream
+      // tripwire can end the run before any step completes), so reuse it to stay in sync.
+      text: this.tripwire || steps.length === 0 ? await this.text : textFromSteps,
       usage: await this.usage,
       steps,
       finishReason: await this.finishReason,

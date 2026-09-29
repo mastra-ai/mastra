@@ -3907,8 +3907,12 @@ describe('output tripwire text disclosure (#24443)', () => {
       expect(stream.tripwire?.reason).toBe(`rejected at ${hook}`);
       expect(stream.tripwire?.processorId).toBe(`tripwire-${hook}`);
       expect(full.text).toBe(text);
-      if (steps.length > 0) expect(steps.map(s => s.text).join('')).toBe(text);
       const responseText = assistantText(response?.messages ?? []);
+      if (hook === 'processOutputResult') {
+        expect(steps.length).toBeGreaterThan(0);
+        expect(responseText).toBe(ANSWER);
+      }
+      if (steps.length > 0) expect(steps.map(s => s.text).join('')).toBe(text);
       if (responseText) expect(responseText).toBe(text);
       if (hook !== 'processOutputStep') expect(text).toBe(ANSWER);
     });
@@ -3916,6 +3920,10 @@ describe('output tripwire text disclosure (#24443)', () => {
     it(`generate(): text agrees with steps when ${hook} trips`, async () => {
       const result = await makeAgent(hook).generate('Do you deliver here?');
       expect(result.tripwire?.reason).toBe(`rejected at ${hook}`);
+      if (hook === 'processOutputResult') {
+        expect(result.steps.length).toBeGreaterThan(0);
+        expect(assistantText(result.response?.messages ?? [])).toBe(ANSWER);
+      }
       if (result.steps.length > 0) expect(result.steps.map(s => s.text).join('')).toBe(result.text);
       if (hook !== 'processOutputStep') expect(result.text).toBe(ANSWER);
     });

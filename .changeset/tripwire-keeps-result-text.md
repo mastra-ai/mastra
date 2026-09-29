@@ -2,7 +2,7 @@
 '@mastra/core': patch
 ---
 
-Fixed `result.text` being blanked when an output processor trips the wire from `processOutputResult`, while `result.steps[].text` and `result.response.messages` still contained the full answer. After a tripwire, `text`, `steps[].text`, `getFullOutput().text` and `response.messages` now agree, and the rejection is reported through `result.tripwire`.
+`result.text` now keeps the answer when an output processor trips the wire. It matches `result.steps[].text`, `getFullOutput().text` and `result.response.messages`. Check `result.tripwire` to see whether the output was rejected.
 
 ```ts
 const result = await agent.generate('...');
