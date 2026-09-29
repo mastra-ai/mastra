@@ -38,7 +38,7 @@ describe('Factory tool body', () => {
   });
 
   describe('when a tool takes no arguments and returns nothing', () => {
-    it('offers nothing to open', () => {
+    it.each([null, ''])('offers nothing to open when the result is %j', result => {
       renderWithProviders(
         <ToolCard
           tool={{
@@ -48,7 +48,7 @@ describe('Factory tool body', () => {
             argsText: '',
             status: 'done',
             output: '',
-            result: null,
+            result,
           }}
         />,
       );

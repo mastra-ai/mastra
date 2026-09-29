@@ -21,7 +21,7 @@ import { ToolTime } from '../ToolTime';
 
 function toolResultText(tool: ToolCall): string | undefined {
   if (tool.status === 'running' || tool.result === undefined || tool.result === null) return undefined;
-  return stripSerializedAnsi(stringifyToolValue(tool.result));
+  return stripSerializedAnsi(stringifyToolValue(tool.result)) || undefined;
 }
 
 function toolHasBody(tool: ToolCall, command: string | undefined): boolean {
