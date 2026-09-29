@@ -24,10 +24,10 @@ function TimelinePreview({ value: initialValue, onCommit, ...props }: React.Comp
   const [value, setValue] = useState<DateRangeValue>(initialValue);
 
   return (
-    <div className="border-border1 bg-surface2 grid w-[min(52rem,calc(100vw-3rem))] gap-5 rounded-xl border p-6">
-      <div className="text-ui-sm flex items-center justify-between gap-4">
-        <span className="text-neutral3">Selected range</span>
-        <span className="text-neutral5 font-mono">
+    <div className="grid w-[min(52rem,calc(100vw-3rem))] gap-5 rounded-xl border border-border bg-background p-6">
+      <div className="flex items-center justify-between gap-4 text-caption">
+        <span className="text-muted-foreground">Selected range</span>
+        <span className="font-mono text-foreground">
           {value.from} – {value.to}
         </span>
       </div>

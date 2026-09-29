@@ -1,5 +1,5 @@
 import type { TraceSignalDefinition } from '@mastra/client-js';
-import { Settings } from 'lucide-react';
+import { Settings, ArchiveRestore, Archive, Pencil, LayoutGrid } from 'lucide-react';
 import { useState } from 'react';
 
 import { useTraceIntelligence } from '../use-trace-intelligence';
@@ -37,7 +37,7 @@ export function TraceSignalSettingsPanel({ onClose }: { onClose: () => void }) {
     <aside id="trace-signal-settings" aria-label="Trace signal settings" className="min-h-0">
       <DataDetailsPanel>
         <DataDetailsPanel.Header>
-          <DataDetailsPanel.Heading className="text-neutral5 items-center font-medium">
+          <DataDetailsPanel.Heading className="items-center font-medium text-foreground">
             <Settings aria-hidden="true" /> Trace signal settings
           </DataDetailsPanel.Heading>
           <DataDetailsPanel.CloseButton onClick={onClose} tooltip="Close settings" />
@@ -124,14 +124,20 @@ function TraceSignalSettingsContent() {
       <section aria-labelledby="custom-signals-heading">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 id="custom-signals-heading" className="text-ui-md text-neutral4 font-medium">
+            <h3 id="custom-signals-heading" className="text-subheading text-muted-foreground">
               Custom signals
             </h3>
-            <p className="text-ui-xs text-neutral3">
+            <p className="text-meta text-muted-foreground">
               {active.length} of {limit} active organization definitions
             </p>
           </div>
-          <Button size="sm" variant="primary" disabled={!canManage || atLimit} onClick={openCreateForm}>
+          <Button
+            icon={<LayoutGrid />}
+            size="sm"
+            variant="primary"
+            disabled={!canManage || atLimit}
+            onClick={openCreateForm}
+          >
             Create signal
           </Button>
         </div>
@@ -140,23 +146,30 @@ function TraceSignalSettingsContent() {
             <Notice.Message>Archive an active definition before creating or restoring another.</Notice.Message>
           </Notice>
         ) : null}
-        <div className="divide-border1 divide-y">
+        <div className="divide-y divide-border">
           {active.map(definition => (
             <div key={definition.id} className="flex min-h-16 items-center justify-between gap-4 py-2">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-ui-sm text-neutral4 truncate">{definition.displayLabel}</span>
+                  <span className="truncate text-caption text-muted-foreground">{definition.displayLabel}</span>
                   <Badge variant="neutral" size="sm">
                     v{definition.version}
                   </Badge>
                 </div>
-                <p className="text-ui-xs text-neutral3 truncate">{definition.description || definition.name}</p>
+                <p className="truncate text-meta text-muted-foreground">{definition.description || definition.name}</p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <Button size="sm" variant="ghost" disabled={!canManage} onClick={() => openEditForm(definition)}>
+                <Button
+                  icon={<Pencil />}
+                  size="sm"
+                  variant="ghost"
+                  disabled={!canManage}
+                  onClick={() => openEditForm(definition)}
+                >
                   Edit
                 </Button>
                 <Button
+                  icon={<Archive />}
                   size="sm"
                   variant="ghost"
                   disabled={
@@ -182,19 +195,20 @@ function TraceSignalSettingsContent() {
             </div>
           ))}
         </div>
-        {active.length === 0 ? <p className="text-ui-sm text-neutral3 py-3">No custom signals yet.</p> : null}
+        {active.length === 0 ? <p className="py-3 text-caption text-muted-foreground">No custom signals yet.</p> : null}
       </section>
 
       {archived.length > 0 ? (
         <details>
-          <summary className="text-ui-sm text-neutral4 cursor-pointer">
+          <summary className="cursor-pointer text-caption text-muted-foreground">
             Archived definitions ({archived.length})
           </summary>
-          <div className="divide-border1 mt-2 divide-y">
+          <div className="mt-2 divide-y divide-border">
             {archived.map(definition => (
               <div key={definition.id} className="flex min-h-12 items-center justify-between gap-3 py-2">
-                <span className="text-ui-sm text-neutral3">{definition.displayLabel}</span>
+                <span className="text-caption text-muted-foreground">{definition.displayLabel}</span>
                 <Button
+                  icon={<ArchiveRestore />}
                   size="sm"
                   variant="ghost"
                   disabled={
@@ -212,7 +226,7 @@ function TraceSignalSettingsContent() {
         </details>
       ) : null}
 
-      <p className="text-ui-xs text-neutral3">
+      <p className="text-meta text-muted-foreground">
         Enabling a signal starts collection for new traces. Entity status shows when enough generated data has been
         processed and clustered.
       </p>

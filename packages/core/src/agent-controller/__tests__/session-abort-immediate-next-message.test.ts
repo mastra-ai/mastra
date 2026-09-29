@@ -64,6 +64,14 @@ async function createHarness(id: string) {
     releaseFirst = resolve;
   });
 
+  // Resolves when the first run's model call actually begins. `agent_start`
+  // fires before the provider request, so tests that need a genuinely in-flight
+  // run must wait on this rather than a tick after `agent_start`.
+  let signalFirstCall!: () => void;
+  const firstCallStarted = new Promise<void>(resolve => {
+    signalFirstCall = resolve;
+  });
+
   let callCount = 0;
   const agent = new Agent({
     id: `${id}-agent`,
@@ -72,6 +80,7 @@ async function createHarness(id: string) {
     model: new MastraLanguageModelV2Mock({
       doStream: async () => {
         callCount++;
+        if (callCount === 1) signalFirstCall();
         return { stream: callCount === 1 ? heldStream(firstGate) : textStream('second reply') };
       },
     }),
@@ -96,7 +105,7 @@ async function createHarness(id: string) {
     events.push(event);
   });
 
-  return { session, events, releaseFirst };
+  return { session, events, releaseFirst, firstCallStarted, getCallCount: () => callCount };
 }
 
 /** Resolve once `count` events of `type` have been observed, or after `timeoutMs`. */
@@ -119,20 +128,36 @@ function waitForEventCount(
   });
 }
 
-function waitForFirstActive(session: any, events: AgentControllerEvent[]) {
+function waitForFirstActive(events: AgentControllerEvent[], firstCallStarted: Promise<void>) {
   return waitForEventCount(events, 'agent_start', 1).then(() => {
-    // Give the model stream a tick to emit its first delta so the run is
-    // genuinely in-flight when we abort.
-    return new Promise<void>(resolve => setTimeout(resolve, 0));
+    // Wait until the model request has actually begun so the run is genuinely
+    // in-flight when the test aborts. A tick after `agent_start` is not enough:
+    // `agent_start` fires before the provider call, so aborting there can land
+    // before the first request and let the follow-up run claim this run's held
+    // stream, which stalls the follow-up's lifecycle instead of exercising the
+    // post-abort path this suite is about.
+    //
+    // Bound the wait: if `sendMessage` fails before `doStream`, the promise never
+    // resolves, and an unbounded await would stall until the suite timeout with
+    // no indication of why. Fail with the reason instead.
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    return Promise.race([
+      firstCallStarted,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error('waitForFirstActive: the first model call never started')), 5_000);
+      }),
+    ]).finally(() => {
+      if (timeout) clearTimeout(timeout);
+    });
   });
 }
 
 describe('immediate message after Session.abort() (#23456)', () => {
   it('Given an in-flight run, When steer() aborts and immediately sends, Then a second run starts and the session returns to idle', async () => {
-    const { session, events, releaseFirst } = await createHarness('steer');
+    const { session, events, releaseFirst, firstCallStarted } = await createHarness('steer');
 
     void session.sendMessage({ content: 'first message' }).catch(() => {});
-    await waitForFirstActive(session, events);
+    await waitForFirstActive(events, firstCallStarted);
 
     // steer() = abort() + immediate sendMessage() with a distinct instruction.
     const steered = session.steer({ content: 'second message' });
@@ -146,10 +171,10 @@ describe('immediate message after Session.abort() (#23456)', () => {
   });
 
   it('Given an in-flight run, When abort() is followed synchronously by sendMessage(), Then a second run starts and the session returns to idle', async () => {
-    const { session, events, releaseFirst } = await createHarness('abort-send');
+    const { session, events, releaseFirst, firstCallStarted } = await createHarness('abort-send');
 
     void session.sendMessage({ content: 'first message' }).catch(() => {});
-    await waitForFirstActive(session, events);
+    await waitForFirstActive(events, firstCallStarted);
 
     session.abort();
     const sent = session.sendMessage({ content: 'second message' });
@@ -163,11 +188,11 @@ describe('immediate message after Session.abort() (#23456)', () => {
   });
 
   it('Control: two sequential sends (no abort) each start their own run', async () => {
-    const { session, events, releaseFirst } = await createHarness('control-sequential');
+    const { session, events, releaseFirst, firstCallStarted } = await createHarness('control-sequential');
 
     // Let the first run finish normally before sending the second.
     const first = session.sendMessage({ content: 'first message' });
-    await waitForFirstActive(session, events);
+    await waitForFirstActive(events, firstCallStarted);
     releaseFirst();
     await first;
     await session.sendMessage({ content: 'second message' });
@@ -178,10 +203,10 @@ describe('immediate message after Session.abort() (#23456)', () => {
   });
 
   it('Given the prior stream still finalizing past the idle-wait timeout, When a message is sent right after abort(), Then a fresh subscribed run still starts and the session returns to idle', async () => {
-    const { session, events, releaseFirst } = await createHarness('slow-teardown');
+    const { session, events, releaseFirst, firstCallStarted, getCallCount } = await createHarness('slow-teardown');
 
     void session.sendMessage({ content: 'first message' }).catch(() => {});
-    await waitForFirstActive(session, events);
+    await waitForFirstActive(events, firstCallStarted);
 
     // Model the ">1s teardown" manifestation of #23456: `waitForStreamIdle`
     // returns on its timeout escape *before* the old run tears down, so its
@@ -205,6 +230,10 @@ describe('immediate message after Session.abort() (#23456)', () => {
     await waitForEventCount(events, 'agent_end', 1, 10_000);
     expect(events.filter(e => e.type === 'agent_end').length).toBeGreaterThanOrEqual(1);
     expect(session.displayState.get().isRunning).toBe(false);
+    // The follow-up must reach the model, not just produce lifecycle events: a
+    // signal misrouted onto the aborting run would leave the session idle with
+    // matching event counts while the second message is silently dropped.
+    expect(getCallCount()).toBeGreaterThanOrEqual(2);
 
     // Release the held first stream so the harness tears down cleanly.
     releaseFirst();

@@ -1,9 +1,11 @@
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
-import { X } from 'lucide-react';
 import { useContext, useEffect, useRef } from 'react';
+import { buttonVariants } from '../Button/Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip/tooltip';
 import { TabListContext } from './tabs-context';
-import { transitions, focusRing } from '@/ds/primitives/transitions';
+import { controlSizeClasses } from '@/ds/primitives/control-size';
+import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
 export type TabProps = {
@@ -28,7 +30,7 @@ export const Tab = ({
   className,
 }: TabProps) => {
   const list = useContext(TabListContext);
-  const ref = useRef<HTMLButtonElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
   const register = list?.register;
   const unregister = list?.unregister;
   const overflowed = list?.hiddenValues.has(value) ?? false;
@@ -43,34 +45,54 @@ export const Tab = ({
         width: element.getBoundingClientRect().width,
         element,
         onClick,
+        onClose,
       });
+    measure();
+    if (!('ResizeObserver' in globalThis)) return;
     const observer = new ResizeObserver(measure);
     observer.observe(element);
-    measure();
     return () => observer.disconnect();
-  }, [register, value, children, disabled, onClick]);
+  }, [register, value, children, disabled, onClick, onClose]);
   useEffect(() => () => unregister?.(value), [unregister, value]);
+  // The tab renders as a <div>, so the recipe's `disabled:` pseudo never matches; mirror it on the
+  // aria/data attributes Base UI sets.
+  const size = list?.size ?? 'md';
+  const tabClassName =
+    list?.variant === 'pill-ghost'
+      ? cn(
+          buttonVariants({ variant: 'ghost', size }),
+          'relative z-10 whitespace-nowrap',
+          'data-[active]:text-foreground',
+          'aria-disabled:cursor-not-allowed aria-disabled:opacity-50',
+          'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50',
+          className,
+        )
+      : cn(
+          // `sm` mirrors the `sm` button box so tabs sit level with sibling `size="sm"` controls.
+          size === 'sm' ? controlSizeClasses.sm : 'text-label',
+          quietTextHover,
+          attention && 'relative',
+          'flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap outline-none',
+          controlStateColorTransition,
+          focusRing.visible,
+          'data-[active]:text-foreground',
+          'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-muted-foreground',
+          'aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:text-muted-foreground',
+          'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[disabled]:hover:text-muted-foreground',
+          className,
+        );
   const tab = (
     <BaseTabs.Tab
       ref={ref}
+      render={<div />}
+      nativeButton={false}
       data-overflowed={overflowed || undefined}
       aria-hidden={overflowed || undefined}
       value={value}
       disabled={disabled || overflowed}
       data-slot="tab"
-      className={cn(
-        'text-ui-md font-normal text-neutral3',
-        attention && 'relative',
-        'flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap outline-none',
-        transitions.colors,
-        focusRing.visible,
-        'hover:text-neutral4',
-        'data-[active]:text-neutral5',
-        'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-neutral3',
-        'aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:text-neutral3',
-        'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[disabled]:hover:text-neutral3',
-        className,
-      )}
+      data-closable={onClose ? '' : undefined}
+      className={tabClassName}
       onClick={onClick}
     >
       {children}
@@ -80,26 +102,12 @@ export const Tab = ({
           <span className="sr-only"> Needs attention</span>
         </>
       )}
-      {onClose && (
-        <button
-          type="button"
-          onClick={e => {
-            e.stopPropagation();
-            onClose();
-          }}
-          className={cn('rounded p-0.5 hover:bg-surface4', transitions.colors, 'hover:text-neutral5')}
-          aria-label="Close tab"
-        >
-          <X className="size-3" />
-        </button>
-      )}
     </BaseTabs.Tab>
   );
-
   if (disabled && disabledTooltip) {
     return (
       <Tooltip>
-        <TooltipTrigger asChild>{tab}</TooltipTrigger>
+        <TooltipTrigger render={<span tabIndex={0} className="inline-flex" />}>{tab}</TooltipTrigger>
         <TooltipContent>{disabledTooltip}</TooltipContent>
       </Tooltip>
     );

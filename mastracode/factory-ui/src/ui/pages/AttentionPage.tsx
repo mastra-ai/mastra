@@ -2,7 +2,6 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Archive, Inbox, Mail } from 'lucide-react';
 import { useDeferredValue, useState } from 'react';
 import { useSearchParams } from 'react-router';
@@ -10,10 +9,15 @@ import { useSearchParams } from 'react-router';
 import { useFactoryAttentionHistory, useMarkAllFactoryAttentionRead } from '../../hooks/useFactoryAttention';
 import { dayHeading, groupByDay } from '../domains/factory/activity';
 import { AttentionItemRow, KindIcon } from '../domains/factory/components/AttentionItemRow';
+import { RepositoryPickerDialog } from '../domains/factory/components/RepositoryPickerDialog';
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
 import { DayHeading, RailRow, RAIL_LIST } from '../domains/factory/components/Timeline';
 import { useAttentionItemActions } from '../domains/factory/components/useAttentionItemActions';
-import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
+import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { attentionCountsIn, attentionGroupOf } from '../domains/factory/services/attention';
 import type {
   FactoryAttentionGroup,
@@ -78,7 +82,22 @@ function AttentionRail({
 }
 
 export function AttentionPage() {
-  return <DocumentFactoryPageShell>{factory => <AttentionContent factoryId={factory.id} />}</DocumentFactoryPageShell>;
+  const factory = useActiveFactory();
+  const slots = useSidebarHeaderSlots();
+  return (
+    <PageLayout
+      {...slots}
+      variant="narrow"
+      header={
+        <PageHeader>
+          <PageHeader.Title>Needs attention</PageHeader.Title>
+          <PageHeader.Description>Mentions, failures, and work waiting on you.</PageHeader.Description>
+        </PageHeader>
+      }
+    >
+      <AttentionContent factoryId={factory.id} />
+    </PageLayout>
+  );
 }
 
 export function AttentionContent({ factoryId }: { factoryId: string }) {
@@ -87,7 +106,8 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
   const view = attentionView(searchParams.get('view'));
   const normalizedSearch = useDeferredValue(search.trim());
   const attention = useFactoryAttentionHistory(factoryId, view, normalizedSearch);
-  const rowProps = useAttentionItemActions(factoryId);
+  const actions = useAttentionItemActions(factoryId);
+  const rowProps = actions.rowProps;
   const markAllRead = useMarkAllFactoryAttentionRead(factoryId);
   const pages = attention.data?.pages ?? [];
   const summary = pages[0];
@@ -99,37 +119,16 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
   const interrupting = itemsIn('attention');
 
   return (
-    <section className="mx-auto flex w-full max-w-4xl flex-col gap-6 pb-16" aria-labelledby="attention-heading">
+    <div className="mt-6 flex flex-col gap-6 pb-16">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 id="attention-heading" className="text-ui-lg text-icon6 m-0 font-semibold">
-            Needs attention
-          </h1>
-          <p className="text-ui-sm text-icon3 mt-1 mb-0">Mentions, failures, and work waiting on you.</p>
-        </div>
-        {!normalizedSearch && view !== 'archived' && unreadCount > 0 ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={markAllRead.isPending}
-            onClick={() => markAllRead.mutate()}
-          >
-            {markAllRead.isPending ? 'Marking…' : 'Mark all open as read'}
-          </Button>
-        ) : null}
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <ButtonsGroup spacing="close" role="group" aria-label="Attention filter">
+        <ButtonsGroup size="sm" role="group" aria-label="Attention filter">
           {VIEWS.map(option => {
             const Icon = option.icon;
             return (
               <Button
                 key={option.value}
                 type="button"
-                variant={view === option.value ? 'primary' : 'outline'}
-                size="sm"
+                variant={view === option.value ? 'primary' : 'default'}
                 aria-pressed={view === option.value}
                 onClick={() => setSearchParams(option.value === 'open' ? {} : { view: option.value })}
               >
@@ -139,13 +138,26 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
             );
           })}
         </ButtonsGroup>
-        <Input
-          aria-label="Search attention items"
-          placeholder="Search"
-          value={search}
-          onChange={event => setSearch(event.target.value)}
-          className="w-64"
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          {!normalizedSearch && view !== 'archived' && unreadCount > 0 ? (
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              disabled={markAllRead.isPending}
+              onClick={() => markAllRead.mutate()}
+            >
+              {markAllRead.isPending ? 'Marking…' : 'Mark all open as read'}
+            </Button>
+          ) : null}
+          <Input
+            aria-label="Search attention items"
+            placeholder="Search"
+            value={search}
+            onChange={event => setSearch(event.target.value)}
+            className="w-64"
+          />
+        </div>
       </div>
 
       {attention.isPending ? (
@@ -158,13 +170,16 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
           </Button>
         </Notice>
       ) : items.length === 0 ? (
-        <div className="text-ui-sm text-icon2 flex min-h-40 items-center justify-center text-center">
-          {attention.hasNextPage
-            ? 'Loading older items…'
-            : search
-              ? 'No attention items match your search.'
-              : `No ${view} attention items.`}
-        </div>
+        <EmptyState
+          className="w-full"
+          titleSlot={
+            attention.hasNextPage
+              ? 'Loading older items…'
+              : search
+                ? 'No attention items match your search.'
+                : `No ${view} attention items.`
+          }
+        />
       ) : (
         <>
           {interrupting.length > 0 ? (
@@ -178,11 +193,11 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
             return (
               <section key={section.group} aria-labelledby={section.headingId} className="flex flex-col gap-4">
                 <span className="flex items-center gap-2">
-                  <h2 id={section.headingId} className="text-ui-sm text-icon3 m-0 font-medium">
+                  <h2 id={section.headingId} className="text-column text-muted-foreground m-0">
                     {section.heading}
                   </h2>
                   {unread > 0 ? (
-                    <span className="bg-surface4 text-ui-xs text-icon3 min-w-5 rounded-full px-1.5 py-0.5 text-center leading-none font-medium tabular-nums">
+                    <span className="bg-fill text-meta text-muted-foreground min-w-5 rounded-full px-1.5 py-0.5 text-center leading-none tabular-nums">
                       {unread}
                     </span>
                   ) : null}
@@ -194,12 +209,20 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
         </>
       )}
 
+      {actions.repositorySelection ? (
+        <RepositoryPickerDialog
+          repositories={actions.repositories}
+          onClose={actions.closeRepositorySelection}
+          onSelect={actions.selectRepository}
+        />
+      ) : null}
+
       <LoadMoreSentinel
         hasNextPage={attention.hasNextPage}
         isFetchingNextPage={attention.isFetchingNextPage}
         onLoadMore={() => void attention.fetchNextPage()}
         label="Load more attention items"
       />
-    </section>
+    </div>
   );
 }

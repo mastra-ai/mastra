@@ -1,9 +1,13 @@
 'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
+import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { X } from 'lucide-react';
 import { useState } from 'react';
-import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 import { DEFAULT_SCORERS_HELPER_TEXT, DEFAULT_SCORERS_LABEL } from './default-scorers-copy';
 import { ScorerSelector } from './experiment-trigger/scorer-selector';
 import { SchemaConfigSection } from './schema-config-section';
@@ -95,7 +99,7 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
       {targetType && !showCustomSchema ? (
         <button
           type="button"
-          className="text-neutral3 hover:text-accent1 text-xs transition-colors"
+          className={cn('text-caption text-muted-foreground hover:text-accent1', controlStateColorTransition)}
           onClick={() => setShowCustomSchema(true)}
         >
           + Custom schema
@@ -111,10 +115,15 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
       )}
 
       <div className="flex justify-end gap-2 pt-4">
-        <Button type="button" onClick={onCancel}>
+        <Button icon={<X />} type="button" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" variant="primary" disabled={createDataset.isPending || !name.trim()}>
+        <Button
+          icon={<DatasetsIcon />}
+          type="submit"
+          variant="primary"
+          disabled={createDataset.isPending || !name.trim()}
+        >
           {createDataset.isPending ? 'Creating...' : 'Create Dataset'}
         </Button>
       </div>

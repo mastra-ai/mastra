@@ -2,6 +2,7 @@ import { AlertDialog as AlertDialogPrimitive } from '@base-ui/react/alert-dialog
 import * as React from 'react';
 
 import { buttonVariants } from '@/ds/components/Button/Button';
+import { dialogSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { asChildRenderProps } from '@/lib/as-child';
 import { cn } from '@/lib/utils';
 
@@ -50,7 +51,7 @@ type AlertDialogOverlayProps = Omit<AlertDialogPrimitive.Backdrop.Props, 'classN
 const AlertDialogOverlay = React.forwardRef<HTMLDivElement, AlertDialogOverlayProps>(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Backdrop
     ref={ref}
-    className={cn('dialog-overlay-anim fixed inset-0 z-50 bg-overlay backdrop-blur-xs', className)}
+    className={cn('dialog-overlay-anim fixed inset-0 z-50 bg-scrim backdrop-blur-xs', className)}
     {...props}
   />
 ));
@@ -70,7 +71,8 @@ const AlertDialogContent = React.forwardRef<HTMLDivElement, AlertDialogContentPr
         'dialog-content-anim',
         'fixed top-[50%] left-[50%] z-50 grid translate-[-50%]',
         'w-full max-w-[calc(100%-2rem)] sm:max-w-lg',
-        'rounded-xl border border-border1/40 bg-surface2/96 shadow-dialog backdrop-blur-md',
+        'rounded-xl backdrop-blur-md',
+        dialogSurfaceStyle,
         className,
       )}
       {...props}
@@ -80,17 +82,17 @@ const AlertDialogContent = React.forwardRef<HTMLDivElement, AlertDialogContentPr
 AlertDialogContent.displayName = 'AlertDialogContent';
 
 const AlertDialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn('flex flex-col gap-0.5 px-4 py-3 text-left', className)} {...props} />
+  <div className={cn('flex flex-col gap-0.5 px-3 py-2.5 text-left', className)} {...props} />
 );
 AlertDialogHeader.displayName = 'AlertDialogHeader';
 
 const AlertDialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn('flex flex-col-reverse gap-1.5 px-4 py-2.5 sm:flex-row sm:justify-end', className)} {...props} />
+  <div className={cn('flex flex-col-reverse gap-1.5 px-3 py-2 sm:flex-row sm:justify-end', className)} {...props} />
 );
 AlertDialogFooter.displayName = 'AlertDialogFooter';
 
 const AlertDialogBody = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn('max-h-[50vh] overflow-y-auto px-4 py-3.5', className)} {...props} />
+  <div className={cn('max-h-[50vh] overflow-y-auto p-3', className)} {...props} />
 );
 AlertDialogBody.displayName = 'AlertDialogBody';
 
@@ -99,7 +101,7 @@ type AlertDialogTitleProps = Omit<AlertDialogPrimitive.Title.Props, 'className'>
 };
 
 const AlertDialogTitle = React.forwardRef<HTMLHeadingElement, AlertDialogTitleProps>(({ className, ...props }, ref) => (
-  <AlertDialogPrimitive.Title ref={ref} className={cn('text-ui-md font-medium', className)} {...props} />
+  <AlertDialogPrimitive.Title ref={ref} className={cn('text-subheading', className)} {...props} />
 ));
 AlertDialogTitle.displayName = 'AlertDialogTitle';
 
@@ -109,7 +111,11 @@ type AlertDialogDescriptionProps = Omit<AlertDialogPrimitive.Description.Props, 
 
 const AlertDialogDescription = React.forwardRef<HTMLParagraphElement, AlertDialogDescriptionProps>(
   ({ className, ...props }, ref) => (
-    <AlertDialogPrimitive.Description ref={ref} className={cn('text-ui-sm text-neutral3', className)} {...props} />
+    <AlertDialogPrimitive.Description
+      ref={ref}
+      className={cn('text-caption text-muted-foreground', className)}
+      {...props}
+    />
   ),
 );
 AlertDialogDescription.displayName = 'AlertDialogDescription';

@@ -12,11 +12,24 @@ export interface ModelProviderFactoryStepProps {
 }
 
 export function ModelProviderFactoryStep({ factoryId, completionError, onComplete }: ModelProviderFactoryStepProps) {
-  const connection = useProviderConnection();
+  const connection = useProviderConnection({ scope: 'org' });
   const error = connection.error ?? completionError;
 
   return (
     <section aria-label="Model provider setup" className="flex max-w-xl flex-col gap-5">
+      <Txt as="p" variant="body" tone="muted" className="m-0">
+        Connect an organization provider so everyone can use the default model for Factory runs.
+      </Txt>
+
+      {!connection.isPending &&
+        connection.authEnabled &&
+        !connection.orgKeyAdmin &&
+        !connection.hasConfiguredProvider && (
+          <Txt as="p" variant="caption" tone="muted" className="m-0">
+            Ask an organization admin to connect a provider, then return here to continue.
+          </Txt>
+        )}
+
       {connection.connected && connection.provider ? (
         <FactoryDefaultModelForm
           factoryId={factoryId}
@@ -29,7 +42,7 @@ export function ModelProviderFactoryStep({ factoryId, completionError, onComplet
       )}
 
       {error && (
-        <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg m-0" role="alert">
+        <Txt as="p" variant="caption" className="text-notice-destructive-fg m-0" role="alert">
           {error}
         </Txt>
       )}
@@ -38,6 +51,7 @@ export function ModelProviderFactoryStep({ factoryId, completionError, onComplet
         keyProvider={connection.keyDialogProvider}
         oauth={connection.activeOAuth}
         authEnabled={connection.authEnabled}
+        fixedScope="org"
         onCloseKeyDialog={connection.closeKeyDialog}
         onCloseOAuth={connection.closeOAuth}
         onCompleteOAuth={connection.completeOAuth}

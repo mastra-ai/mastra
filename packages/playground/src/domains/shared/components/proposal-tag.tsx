@@ -1,3 +1,5 @@
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check, Pencil, X } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 
@@ -31,7 +33,7 @@ export function ProposalTag({
 
   if (isEditing) {
     return (
-      <span className="bg-surface3 border-border1 inline-flex items-center gap-0.5 rounded-md border px-1">
+      <span className="inline-flex items-center gap-0.5 rounded-md border border-border bg-card px-1">
         <input
           ref={inputRef}
           value={editValue}
@@ -47,7 +49,7 @@ export function ProposalTag({
             }
           }}
           onBlur={handleConfirm}
-          className="text-neutral4 w-20 bg-transparent py-0.5 text-xs outline-hidden"
+          className="w-20 bg-transparent py-0.5 text-caption text-muted-foreground outline-hidden"
         />
         <button
           type="button"
@@ -55,7 +57,7 @@ export function ProposalTag({
             e.preventDefault();
             handleConfirm();
           }}
-          className="text-positive1 hover:text-positive2 p-0.5"
+          className="hover:text-positive2 p-0.5 text-positive1"
         >
           <Check className="h-3 w-3" />
         </button>
@@ -64,7 +66,7 @@ export function ProposalTag({
   }
 
   return (
-    <span className="bg-surface3 border-border1 text-neutral4 group inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5 text-xs">
+    <span className="group inline-flex items-center gap-0.5 rounded-md border border-border bg-card px-1.5 py-0.5 text-caption text-muted-foreground">
       {tag}
       <button
         type="button"
@@ -72,7 +74,7 @@ export function ProposalTag({
           setEditValue(tag);
           setIsEditing(true);
         }}
-        className="text-neutral2 hover:text-neutral4 p-0.5 opacity-0 transition-opacity group-hover:opacity-100"
+        className={cn(quietTextHover, 'p-0.5 opacity-0 transition-opacity group-hover:opacity-100')}
         title="Edit tag"
       >
         <Pencil className="h-3 w-3" />
@@ -80,7 +82,7 @@ export function ProposalTag({
       <button
         type="button"
         onClick={onRemove}
-        className="text-neutral2 hover:text-negative1 p-0.5 opacity-0 transition-opacity group-hover:opacity-100"
+        className="p-0.5 text-placeholder opacity-0 transition-opacity group-hover:opacity-100 hover:text-negative1"
         title="Remove tag"
       >
         <X className="h-3 w-3" />

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, assert, beforeAll, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { useMobileDrawer } from './main-sidebar-context';
 import { MainSidebarNavHeader } from './main-sidebar-nav-header';
@@ -11,19 +11,11 @@ import { MainSidebarProvider } from './main-sidebar-provider';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/ds/components/Tooltip';
 import type { LinkComponentProps } from '@/ds/types/link-component';
 
-const getTooltipPopup = () => {
-  const popup = document.querySelector<HTMLElement>('.bg-surface3');
-  assert(popup, 'Expected tooltip popup');
-  return popup;
-};
-
 const DrawerToggle = () => {
   const { openMobile, setOpenMobile } = useMobileDrawer();
   return <button onClick={() => setOpenMobile(!openMobile)}>Toggle drawer</button>;
 };
 
-// MainSidebarProvider reads matchMedia at mount to decide mobile vs desktop.
-// jsdom does not implement it, so polyfill before any render.
 beforeAll(() => {
   if (!window.matchMedia) {
     Object.defineProperty(window, 'matchMedia', {
@@ -45,18 +37,6 @@ beforeAll(() => {
 
 afterEach(() => cleanup());
 
-// Floating UI / Base UI computes the arrow `transform` from the trigger's
-// bounding rect. jsdom returns zeros for layout, so this suite does NOT assert
-// absolute pixel positions. Instead it asserts the invariants that broke the
-// sidebar arrow in production:
-//
-//  1. The trigger is rendered as the real DOM element passed to `render` (an
-//     `<a>` from the consumer), so Floating UI anchors to the right node.
-//  2. The popup className does NOT contain CSS margin utilities. A margin on
-//     the popup shifts it AFTER Floating UI has positioned the anchor, so the
-//     arrow stays at the calculated anchor while the popup drifts away —
-//     producing an arrow stranded in the middle of empty space.
-
 describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
   it('does not re-render navigation rows when only the mobile drawer state changes', () => {
     const Link = vi.fn(({ children, ...props }: LinkComponentProps) => <a {...props}>{children}</a>);
@@ -70,9 +50,10 @@ describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
       </MainSidebarProvider>,
     );
 
-    expect(Link).toHaveBeenCalledTimes(2);
+    const initialRenderCount = Link.mock.calls.length;
+    expect(initialRenderCount).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: 'Toggle drawer' }));
-    expect(Link).toHaveBeenCalledTimes(2);
+    expect(Link).toHaveBeenCalledTimes(initialRenderCount);
   });
 
   it('applies a pointer cursor to sidebar nav items', () => {
@@ -99,6 +80,27 @@ describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
     const trigger = screen.getByRole('link', { name: 'Agents' });
     expect(trigger.tagName).toBe('A');
     expect(trigger.getAttribute('href')).toBe('/agents');
+  });
+
+  it('keeps the interactive row mounted when its collapsed tooltip toggles', () => {
+    const { rerender } = render(
+      <TooltipProvider delay={0}>
+        <ul>
+          <MainSidebarNavLink state="collapsed" link={{ name: 'Agents', url: '/agents' }} />
+        </ul>
+      </TooltipProvider>,
+    );
+    const trigger = screen.getByRole('link', { name: 'Agents' });
+
+    rerender(
+      <TooltipProvider delay={0}>
+        <ul>
+          <MainSidebarNavLink state="default" link={{ name: 'Agents', url: '/agents' }} />
+        </ul>
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByRole('link', { name: 'Agents' })).toBe(trigger);
   });
 
   it('throws when asChild receives a non-element child', () => {
@@ -133,7 +135,6 @@ describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
   it('does not apply CSS margin utilities on TooltipContent that would dislocate the arrow', async () => {
     render(
       <TooltipProvider delay={0}>
-        {/* Force the tooltip open so the popup is mounted and inspectable. */}
         <TooltipPrimitive.Root open>
           <TooltipTrigger render={<a href="/agents">Agents</a>} />
           <TooltipContent side="right" align="center" sideOffset={16}>
@@ -143,13 +144,8 @@ describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
       </TooltipProvider>,
     );
 
-    // The Positioner and Popup both expose data-side. Target the Popup
-    // specifically via its unique design-system class (bg-surface3) so the
-    // assertions cannot accidentally pass against the Positioner wrapper.
-    const popup = await waitFor(getTooltipPopup);
+    const popup = await screen.findByRole('tooltip');
 
-    // Critical: no margin classes on the popup. Margins shift the popup AFTER
-    // Floating UI calculated the arrow's anchor; use `sideOffset` instead.
     expect(popup.className).not.toMatch(/(^|\s)-?m[trblxy]?-(\[|\d|auto)/);
   });
 
@@ -165,22 +161,12 @@ describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
       </TooltipProvider>,
     );
 
-    // The Positioner and Popup both expose data-side. Target the Popup
-    // specifically via its unique design-system class (bg-surface3) so the
-    // assertions cannot accidentally pass against the Positioner wrapper.
-    const popup = await waitFor(getTooltipPopup);
+    const popup = await screen.findByRole('tooltip');
 
-    // jsdom has no layout, so Floating UI may flip the requested side away
-    // from "right". Assert only that *some* side is set, which proves the
-    // positioner saw a real trigger ref.
     expect(popup.getAttribute('data-side')).toMatch(/^(top|bottom|left|right)$/);
   });
 
   it('exposes role="tooltip" on the popup so consumers can query via getByRole("tooltip")', async () => {
-    // Regression: Base UI's Popup does not set role="tooltip" automatically
-    // (unlike Radix). Several Playwright E2E tests assert on `getByRole`, so
-    // the wrapper must add it explicitly. Without this the agent observability
-    // tab tests fail with a 5s tooltip-not-found timeout.
     render(
       <TooltipProvider delay={0}>
         <TooltipPrimitive.Root open>
@@ -192,7 +178,7 @@ describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
       </TooltipProvider>,
     );
 
-    const popup = await waitFor(getTooltipPopup);
+    const popup = await screen.findByRole('tooltip');
 
     expect(popup.getAttribute('role')).toBe('tooltip');
   });

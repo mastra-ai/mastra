@@ -65,7 +65,18 @@ import type {
   GetScorePercentilesArgs,
   GetScorePercentilesResponse,
 } from './scores';
-import type { TraceQueryResponse, TrustedTraceQueryPlan } from './trace-query';
+import type { TraceAggregateResponse } from './trace-aggregate';
+import type { TrustedTraceAggregatePlan } from './trace-aggregate-planner';
+import type {
+  GetTraceQueryValuesResponse,
+  QueryThreadsResult,
+  TraceQueryObservedFieldsResult,
+  TraceQueryResponse,
+  TrustedThreadQueryPlan,
+  TrustedTraceQueryObservedFieldsPlan,
+  TrustedTraceQueryPlan,
+  TrustedTraceQueryValuesPlan,
+} from './trace-query';
 import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -93,7 +104,42 @@ import type {
 import { extractBranchSpans, getBranchArgsSchema, toLightSpanRecord } from './tracing';
 import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './types';
 
-export type ObservabilityStorageFeature = 'delta-polling' | 'metrics' | 'logs' | 'trace-query';
+/**
+ * Optional observability APIs a store can declare via {@link ObservabilityStorage.getFeatures}.
+ *
+ * - `delta-polling`: cursor-based `mode: 'delta'` on list endpoints
+ * - `metrics`: metric list/aggregate/breakdown/timeseries/percentiles
+ * - `logs`: `listLogs`
+ * - `entity-type-discovery`, `entity-name-discovery`, `service-name-discovery`,
+ *   `environment-discovery`, `tag-discovery`: the matching `get*` filter discovery method
+ * - `metric-discovery`: `getMetricNames`, `getMetricLabelKeys`, `getMetricLabelValues`
+ * - `trace-query`: `queryTraces`
+ * - `trace-aggregate`: `aggregateTraces`
+ * - `trace-query-root-duration`: `durationMs` predicates in trace/thread queries
+ * - `trace-query-context-ids`: `runId`, `sessionId`, `userId` and `organizationId` predicates in trace/thread queries
+ * - `trace-query-discovery`: `getTraceQueryObservedFields`, `getTraceQueryValues`
+ * - `thread-query`: `queryThreads`
+ * - `trace-query-tenant-scope`: enforcing a trusted tenant scope on trace/thread queries
+ * - `feedback`: the feedback CRUD, review-status and analytics methods
+ */
+export type ObservabilityStorageFeature =
+  | 'delta-polling'
+  | 'metrics'
+  | 'logs'
+  | 'entity-type-discovery'
+  | 'entity-name-discovery'
+  | 'service-name-discovery'
+  | 'environment-discovery'
+  | 'tag-discovery'
+  | 'metric-discovery'
+  | 'trace-query'
+  | 'trace-aggregate'
+  | 'trace-query-root-duration'
+  | 'trace-query-discovery'
+  | 'thread-query'
+  | 'trace-query-tenant-scope'
+  | 'feedback'
+  | 'trace-query-context-ids';
 
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).
@@ -355,6 +401,56 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support advanced trace queries',
+    });
+  }
+
+  /**
+   * Executes a validated trace-aggregate plan.
+   */
+  async aggregateTraces(_plan: TrustedTraceAggregatePlan): Promise<TraceAggregateResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_AGGREGATE_TRACES_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support trace aggregation',
+    });
+  }
+
+  /**
+   * Discovers observed metadata fields over a validated trace population.
+   */
+  async getTraceQueryObservedFields(
+    _plan: TrustedTraceQueryObservedFieldsPlan,
+  ): Promise<TraceQueryObservedFieldsResult> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_TRACE_QUERY_DISCOVERY_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support trace-query discovery',
+    });
+  }
+
+  /**
+   * Discovers values for an eligible field over a validated trace population.
+   */
+  async getTraceQueryValues(_plan: TrustedTraceQueryValuesPlan): Promise<GetTraceQueryValuesResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_TRACE_QUERY_DISCOVERY_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support trace-query discovery',
+    });
+  }
+
+  /**
+   * Executes a validated thread-query plan.
+   */
+  async queryThreads(_plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_QUERY_THREADS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support advanced thread queries',
     });
   }
 

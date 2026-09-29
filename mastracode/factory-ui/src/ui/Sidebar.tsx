@@ -1,5 +1,5 @@
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
-import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarNew } from '@mastra/playground-ui/new/sidebar';
 import { Settings } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
@@ -64,13 +64,15 @@ export function Sidebar() {
   const settingsOpen = useSettingsOpen();
 
   return (
-    <MainSidebar className="h-full">
-      <MainSidebar.Nav aria-label={settingsOpen ? 'Settings sections' : 'Main'}>
-        <div className="mt-1 mb-2 flex items-center gap-2 pt-1 pl-3">
-          <LogoWithoutText aria-label="Mastra" role="img" className="text-icon6 h-4 w-auto" />
-          <BetaBadge />
-          <SidebarGlobalSearchButton />
-        </div>
+    <SidebarNew aria-label="Main sidebar" className="h-full">
+      <SidebarNew.CommandHeader>
+        <SidebarNew.Brand
+          logo={<LogoWithoutText aria-label="Mastra" role="img" className="text-foreground h-4 w-auto" />}
+          title={<BetaBadge />}
+        />
+        <SidebarGlobalSearchButton />
+      </SidebarNew.CommandHeader>
+      <SidebarNew.Nav aria-label={settingsOpen ? 'Settings sections' : 'Main'}>
         {settingsOpen ? (
           <SettingsNavigation />
         ) : (
@@ -86,11 +88,11 @@ export function Sidebar() {
             </section>
           </div>
         )}
-      </MainSidebar.Nav>
-      <MainSidebar.Bottom role="region" aria-label="Attention, account, and settings">
+      </SidebarNew.Nav>
+      <SidebarNew.Footer aria-label="Attention, account, and settings">
         <SidebarFooter />
-      </MainSidebar.Bottom>
-    </MainSidebar>
+      </SidebarNew.Footer>
+    </SidebarNew>
   );
 }
 
@@ -112,10 +114,10 @@ function SidebarFooter() {
   };
 
   return (
-    <MainSidebar.NavList>
+    <SidebarNew.NavList>
       <SidebarAttention />
       <SidebarAccountLink />
-      <MainSidebar.NavLink
+      <SidebarNew.NavLink
         asChild
         link={{
           name: 'Settings',
@@ -132,9 +134,9 @@ function SidebarFooter() {
           aria-current={settingsOpen ? 'page' : undefined}
         >
           <Settings />
-          <MainSidebar.NavLabel>Settings</MainSidebar.NavLabel>
+          <SidebarNew.NavLabel>Settings</SidebarNew.NavLabel>
         </button>
-      </MainSidebar.NavLink>
-    </MainSidebar.NavList>
+      </SidebarNew.NavLink>
+    </SidebarNew.NavList>
   );
 }

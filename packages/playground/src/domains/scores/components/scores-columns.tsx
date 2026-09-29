@@ -8,10 +8,7 @@ export function ScoresColumnsMenu({ visibleColumns, toggleColumn }: Omit<ScoresC
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger asChild>
-        <Button>
-          <Columns3Icon />
-          Columns
-        </Button>
+        <Button icon={<Columns3Icon />}>Columns</Button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end">
         <DropdownMenu.Label>Toggle columns</DropdownMenu.Label>

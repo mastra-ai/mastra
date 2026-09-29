@@ -9,7 +9,7 @@ export function exportItemsToJSON(items: DatasetItem[], filename: string): void 
     input: item.input,
     groundTruth: item.groundTruth,
     metadata: item.metadata,
-    createdAt: item.createdAt instanceof Date ? item.createdAt.toISOString() : item.createdAt,
+    createdAt: item.createdAt,
   }));
 
   // Generate formatted JSON

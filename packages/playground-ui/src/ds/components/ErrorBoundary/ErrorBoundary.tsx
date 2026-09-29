@@ -1,6 +1,7 @@
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Bug, RefreshCw, RotateCcw } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '../Button';
+import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
 export type ErrorBoundaryVariant = 'section' | 'inline';
@@ -158,47 +159,48 @@ function DefaultErrorFallback({
         </div>
         <h3
           className={cn(
-            'font-medium text-neutral6',
-            isInline ? 'text-ui-md' : 'text-ui-lg @md:text-header-md @lg:text-header-lg',
+            'text-foreground',
+            isInline ? 'text-subheading' : 'text-subheading @md:text-heading @lg:text-title',
           )}
         >
           {title ?? 'Something went wrong'}
         </h3>
-        <p className={cn('text-neutral3', isInline ? 'text-ui-sm' : 'text-ui-md @lg:text-ui-lg')}>
+        <p className={cn('text-muted-foreground', isInline ? 'text-caption' : 'text-body')}>
           {description ?? 'An unexpected error occurred while rendering this part of the page.'}
         </p>
         <p
           className={cn(
-            'rounded-md bg-surface3 px-3 py-2 font-mono break-words text-neutral4',
-            isInline ? 'text-ui-xs' : 'text-ui-sm',
+            'rounded-md bg-card px-3 py-2 font-mono break-words text-muted-foreground',
+            isInline ? 'text-meta' : 'text-caption',
           )}
         >
           {error.message}
         </p>
         <div className={cn('flex flex-wrap items-center justify-center gap-2', isInline ? 'mt-1' : 'mt-2')}>
-          <Button variant="primary" size={isInline ? 'sm' : 'lg'} onClick={reset}>
+          <Button icon={<RotateCcw />} variant="primary" size={isInline ? 'sm' : 'lg'} onClick={reset}>
             Try again
           </Button>
-          <Button variant="default" size={isInline ? 'sm' : 'lg'} onClick={() => window.location.reload()}>
+          <Button
+            icon={<RefreshCw />}
+            variant="default"
+            size={isInline ? 'sm' : 'lg'}
+            onClick={() => window.location.reload()}
+          >
             Reload page
           </Button>
           <Button
-            as="a"
+            icon={<Bug />}
+            render={<a href="https://github.com/mastra-ai/mastra/issues" target="_blank" rel="noopener noreferrer" />}
             variant="default"
             size={isInline ? 'sm' : 'lg'}
-            href="https://github.com/mastra-ai/mastra/issues"
-            target="_blank"
-            rel="noopener noreferrer"
           >
             Report issue
           </Button>
         </div>
         {stack ? (
           <details className={cn('w-full text-left', isInline ? 'mt-1' : 'mt-2')}>
-            <summary className="text-ui-sm text-neutral3 hover:text-neutral4 cursor-pointer">
-              Show error details
-            </summary>
-            <pre className="bg-surface3 text-ui-xs text-neutral4 mt-2 max-h-64 overflow-auto rounded-md p-3 break-words whitespace-pre-wrap">
+            <summary className={cn('cursor-pointer text-caption', quietTextHover)}>Show error details</summary>
+            <pre className="mt-2 max-h-64 overflow-auto rounded-md bg-card p-3 text-meta break-words whitespace-pre-wrap text-muted-foreground">
               {stack}
             </pre>
           </details>

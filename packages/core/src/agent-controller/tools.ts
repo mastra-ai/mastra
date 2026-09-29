@@ -116,6 +116,10 @@ export interface CreateSubagentToolOptions {
 export function createSubagentTool(opts: CreateSubagentToolOptions) {
   const { subagents, resolveModel, controllerTools, fallbackModelId, mastra } = opts;
 
+  if (subagents.length === 0) {
+    throw new Error('createSubagentTool requires at least one subagent');
+  }
+
   const subagentIds = subagents.map(s => s.id);
 
   const typeDescriptions = subagents.map(s => `- **${s.id}** (${s.name}): ${s.description}`).join('\n');

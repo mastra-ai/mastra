@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import '@/test/jsdom-polyfills';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { SpanDataPanelView } from '../span-data-panel-view';
@@ -10,17 +11,16 @@ const baseProps: SpanDataPanelViewProps = {
   traceId: 'trace-1',
   spanId: 'span-1',
   span: spanFixture,
-  onClose: vi.fn(),
 };
 
 afterEach(cleanup);
 
 describe('SpanDataPanelView — header summary', () => {
-  it('shows started, ended and duration in the header, not in the details list', () => {
+  it('shows started and duration in the header (end is implied), not in the details list', () => {
     render(<SpanDataPanelView {...baseProps} />);
 
     expect(screen.getByLabelText(/^Started at/)).toBeTruthy();
-    expect(screen.getByLabelText(/^Ended at/)).toBeTruthy();
+    expect(screen.queryByLabelText(/^Ended at/)).toBeNull();
     // Same `X.XXX s` format as the timeline timing column.
     expect(screen.getByLabelText(/^Duration/).textContent).toBe('1.000 s');
     expect(screen.queryByText('Started')).toBeNull();
@@ -45,6 +45,53 @@ describe('SpanDataPanelView — header summary', () => {
     expect(runId.textContent).toContain('run-abcd');
     expect(runId.textContent).not.toContain('run-abcdefghijklmnop');
     expect(screen.queryByText('Run Id')).toBeNull();
+  });
+});
+
+describe('SpanDataPanelView — span id in the header', () => {
+  const fullId = 'span-0123456789abcdef';
+
+  it('shows the id truncated without a # prefix', () => {
+    render(<SpanDataPanelView {...baseProps} spanId={fullId} />);
+
+    const heading = screen.getByRole('heading', { name: /^Span span-0123456…/ });
+    expect(heading.textContent).not.toContain('#');
+    expect(screen.queryByText(fullId)).toBeNull();
+  });
+
+  it('shows the copy action instead of the full id in a tooltip', async () => {
+    render(<SpanDataPanelView {...baseProps} spanId={fullId} />);
+
+    fireEvent.focus(screen.getByRole('button', { name: 'span-0123456…' }));
+
+    expect((await screen.findByRole('tooltip')).textContent).toBe('Copy to clipboard');
+    expect(screen.queryByText(fullId)).toBeNull();
+  });
+
+  it('copies the full id on click', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    render(<SpanDataPanelView {...baseProps} spanId={fullId} />);
+
+    const button = screen.getByRole('button', { name: 'span-0123456…' });
+    fireEvent.click(button);
+
+    expect(writeText).toHaveBeenCalledWith(fullId);
+    expect((await screen.findByRole('tooltip')).textContent).toBe('Copied to clipboard');
+    expect(button.textContent).toBe('span-0123456…');
+    expect(button.querySelector('svg')).toBeNull();
+  });
+
+  it('copies a short id by clicking the id itself', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(<SpanDataPanelView {...baseProps} spanId="span-1" />);
+
+    expect(screen.getByRole('heading', { name: /^Span span-1/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'span-1' }));
+    expect(writeText).toHaveBeenCalledWith('span-1');
+    expect((await screen.findByRole('tooltip')).textContent).toBe('Copied to clipboard');
   });
 });
 

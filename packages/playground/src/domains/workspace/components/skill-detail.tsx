@@ -1,5 +1,8 @@
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import {
   FileText,
   Code,
@@ -69,26 +72,22 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
     <div className="min-w-0 space-y-6 overflow-hidden">
       {/* Header */}
       <div className="flex items-start gap-4">
-        <div className="bg-surface5 rounded-lg p-3">
-          <SkillIcon className="text-neutral4 h-6 w-6" />
+        <div className="rounded-lg bg-card p-3">
+          <SkillIcon className="h-6 w-6 text-muted-foreground" />
         </div>
         <div className="flex-1">
-          <h1 className="text-neutral6 text-xl font-semibold">{skill.name}</h1>
-          <p className="text-neutral4 mt-1 text-sm">{skill.description}</p>
+          <h1 className="text-heading text-foreground">{skill.name}</h1>
+          <p className="mt-1 text-body text-muted-foreground">{skill.description}</p>
         </div>
       </div>
 
       {/* Metadata */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <MetadataCard label="Source" value={sourceInfo.label} icon={sourceInfo.icon} />
-        <MetadataCard label="Path" value={skill.path} icon={<FolderOpen className="h-3.5 w-3.5" />} />
+        <MetadataCard label="Path" value={skill.path} icon={<FolderOpen />} />
         {skill.license && <MetadataCard label="License" value={skill.license} />}
         {skill.compatibility != null && <MetadataCard label="Compatibility" value={skill.compatibility} />}
-        <MetadataCard
-          label="References"
-          value={`${skill.references.length} files`}
-          icon={<FileText className="h-3.5 w-3.5" />}
-        />
+        <MetadataCard label="References" value={`${skill.references.length} files`} icon={<FileText />} />
       </div>
 
       {/* Instructions */}
@@ -102,7 +101,11 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
               e.stopPropagation();
               setShowRawInstructions(!showRawInstructions);
             }}
-            className="text-neutral4 hover:text-neutral5 hover:bg-surface4 flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors"
+            className={cn(
+              'flex items-center gap-1.5 rounded px-2 py-1 text-caption hover:bg-fill-subtle',
+              quietTextHover,
+              controlStateColorTransition,
+            )}
             title={showRawInstructions ? 'Show rendered' : 'Show source'}
           >
             {showRawInstructions ? <Eye className="h-3.5 w-3.5" /> : <FileCode2 className="h-3.5 w-3.5" />}
@@ -119,7 +122,7 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
                 margin: 0,
                 padding: '1rem',
                 backgroundColor: 'transparent',
-                fontSize: '0.875rem',
+                fontSize: 'var(--text-body)',
               }}
             >
               {rawSkillMd ?? skill.instructions}
@@ -142,10 +145,10 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
               <button
                 key={ref}
                 onClick={() => onReferenceClick?.(ref)}
-                className="hover:bg-surface4 flex w-full items-center gap-2 rounded px-3 py-2 text-left transition-colors"
+                className="flex w-full items-center gap-2 rounded px-3 py-2 text-left hover:bg-fill-subtle"
               >
-                <FileText className="text-neutral3 h-4 w-4" />
-                <span className="text-neutral5 text-sm">{ref}</span>
+                <FileText className="h-4 w-4 text-muted-foreground" />
+                <span className="text-body text-foreground">{ref}</span>
               </button>
             ))}
           </div>
@@ -161,9 +164,9 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
         >
           <div className="space-y-1">
             {skill.scripts.map(script => (
-              <div key={script} className="bg-surface3 flex items-center gap-2 rounded px-3 py-2">
-                <Code className="text-neutral3 h-4 w-4" />
-                <span className="text-neutral5 text-sm">{script}</span>
+              <div key={script} className="flex items-center gap-2 rounded bg-card px-3 py-2">
+                <Code className="h-4 w-4 text-muted-foreground" />
+                <span className="text-body text-foreground">{script}</span>
               </div>
             ))}
           </div>
@@ -179,9 +182,9 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
         >
           <div className="space-y-1">
             {skill.assets.map(asset => (
-              <div key={asset} className="bg-surface3 flex items-center gap-2 rounded px-3 py-2">
-                <Image className="text-neutral3 h-4 w-4" />
-                <span className="text-neutral5 text-sm">{asset}</span>
+              <div key={asset} className="flex items-center gap-2 rounded bg-card px-3 py-2">
+                <Image className="h-4 w-4 text-muted-foreground" />
+                <span className="text-body text-foreground">{asset}</span>
               </div>
             ))}
           </div>
@@ -189,9 +192,9 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
       )}
 
       {/* Path */}
-      <div className="border-border1 border-t pt-4">
-        <p className="text-neutral3 text-xs">
-          Path: <code className="bg-surface4 rounded px-1 py-0.5">{skill.path}</code>
+      <div className="border-t border-border pt-4">
+        <p className="text-caption text-muted-foreground">
+          Path: <code className="rounded bg-muted px-1 py-0.5">{skill.path}</code>
         </p>
       </div>
     </div>
@@ -231,11 +234,11 @@ function formatDisplayValue(value: unknown): string {
 function MetadataCard({ label, value, icon }: { label: string; value: unknown; icon?: React.ReactNode }) {
   const displayValue = formatDisplayValue(value);
   return (
-    <div className="bg-surface3 rounded-lg p-3">
-      <p className="text-neutral3 mb-1 text-xs">{label}</p>
+    <div className="rounded-lg bg-card p-3">
+      <p className="mb-1 text-caption text-muted-foreground">{label}</p>
       <div className="flex items-center gap-1.5">
-        {icon && <span className="text-neutral4">{icon}</span>}
-        <p className="text-neutral5 truncate text-sm font-medium" title={displayValue}>
+        {icon && <span className="text-muted-foreground">{icon}</span>}
+        <p className="truncate text-subheading text-foreground" title={displayValue}>
           {displayValue}
         </p>
       </div>
@@ -257,19 +260,19 @@ function CollapsibleSection({
   children: React.ReactNode;
 }) {
   return (
-    <div className="border-border1 min-w-0 overflow-hidden rounded-lg border">
-      <div className="bg-surface3 hover:bg-surface4 flex items-center transition-colors">
+    <div className="min-w-0 overflow-hidden rounded-lg border border-border">
+      <div className="state-layer flex items-center bg-card">
         <button onClick={onToggle} className="flex flex-1 items-center gap-2 px-4 py-3">
           {isExpanded ? (
-            <ChevronDown className="text-neutral3 h-4 w-4" />
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
           ) : (
-            <ChevronRight className="text-neutral3 h-4 w-4" />
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
           )}
-          <span className="text-neutral5 text-sm font-medium">{title}</span>
+          <span className="text-subheading text-foreground">{title}</span>
         </button>
         {headerAction && <div className="pr-3">{headerAction}</div>}
       </div>
-      {isExpanded && <div className="bg-surface2 w-0 min-w-full overflow-x-auto p-4">{children}</div>}
+      {isExpanded && <div className="w-0 min-w-full overflow-x-auto bg-background p-4">{children}</div>}
     </div>
   );
 }

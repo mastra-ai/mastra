@@ -1,5 +1,7 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
+import { chooseMetricsInterval, formatMetricsBucketLabel } from '../metrics-interval';
+import type { MetricsInterval } from '../metrics-interval';
 import { useMetricsFilters } from './use-metrics-filters';
 
 export interface LatencyPoint {
@@ -12,17 +14,16 @@ export interface LatencyPoint {
   p95: number;
 }
 
-export const LATENCY_INTERVAL: '1h' = '1h';
-
 async function fetchPercentiles(
   client: ReturnType<typeof useMastraClient>,
   metricName: string,
   filters: Record<string, unknown>,
+  interval: MetricsInterval,
 ): Promise<LatencyPoint[]> {
   const res = await client.getMetricPercentiles({
     name: metricName,
     percentiles: [0.5, 0.95],
-    interval: LATENCY_INTERVAL,
+    interval,
     filters,
   });
 
@@ -37,7 +38,7 @@ async function fetchPercentiles(
     const ts = new Date(p.timestamp);
     const tsMs = ts.getTime();
     return {
-      time: ts.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+      time: formatMetricsBucketLabel(ts, interval),
       tsMs,
       p50: Math.round(p.value),
       p95: Math.round(p95Map.get(tsMs) ?? 0),
@@ -47,17 +48,18 @@ async function fetchPercentiles(
 
 export function useLatencyMetrics() {
   const client = useMastraClient();
-  const { filters, filterKey } = useMetricsFilters();
+  const { timestamp, filters, filterKey } = useMetricsFilters();
+  const interval = chooseMetricsInterval(timestamp);
 
   return useQuery({
-    queryKey: ['metrics', 'latency', filterKey],
+    queryKey: ['metrics', 'latency', filterKey, interval],
     queryFn: async () => {
       const [agentData, workflowData, toolData] = await Promise.all([
-        fetchPercentiles(client, 'mastra_agent_duration_ms', filters),
-        fetchPercentiles(client, 'mastra_workflow_duration_ms', filters),
-        fetchPercentiles(client, 'mastra_tool_duration_ms', filters),
+        fetchPercentiles(client, 'mastra_agent_duration_ms', filters, interval),
+        fetchPercentiles(client, 'mastra_workflow_duration_ms', filters, interval),
+        fetchPercentiles(client, 'mastra_tool_duration_ms', filters, interval),
       ]);
-      return { agentData, workflowData, toolData, interval: LATENCY_INTERVAL };
+      return { agentData, workflowData, toolData, interval };
     },
   });
 }

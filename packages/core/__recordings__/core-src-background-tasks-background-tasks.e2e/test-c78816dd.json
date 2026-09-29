@@ -5,11 +5,11 @@
     "testName": "Background Tasks E2E > runs a foreground tool normally",
     "model": "gpt-4o-mini",
     "createdAt": "2026-07-14T16:54:58.958Z",
-    "updatedAt": "2026-09-02T22:23:25.735Z"
+    "updatedAt": "2026-09-08T23:05:26.376Z"
   },
   "recordings": [
     {
-      "hash": "60bfbbd87f642be7",
+      "hash": "8077702287ead4a1",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -18,7 +18,7 @@
           "input": [
             {
               "role": "system",
-              "content": "You are a helpful assistant with access to tools. When asked to research something, use the research tool. When asked to greet someone, use the greet tool.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- research (default: background)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"enabled\": true/false, \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- If you don't include \"_background\", the tool's default configuration is used.\n- When a tool runs in the background, you'll receive a placeholder result with a task ID. You can reference this in your response to the user.\n\nIMPORTANT: \"_background\" field is always an object. The fields in the _background field should be inside the _background object, not outside of it."
+              "content": "You are a helpful assistant with access to tools. When asked to research something, use the research tool. When asked to greet someone, use the greet tool.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- research (default: background)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"disposition\": \"foreground\" | \"deferred\" | \"awaited\", \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override. Tools listed with \"default: background\" run in the background unless you set \"disposition\": \"foreground\". Tools listed with \"default: foreground\" run inline unless you explicitly request \"deferred\" or \"awaited\" — for those tools, omitting \"_background\" never starts background work.\n\nDispositions:\n- \"deferred\": the tool runs in the background while you continue; you receive a placeholder result with a task ID and are notified when the task completes.\n- \"awaited\": the tool runs as a durable background task but your run waits for its result before continuing.\n- \"foreground\": the tool runs inline and returns its real result immediately.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- When a tool runs deferred, you'll receive a placeholder result with a task ID. You can reference this in your response to the user.\n\nIMPORTANT: \"_background\" field is always an object. The fields in the _background field should be inside the _background object, not outside of it."
             },
             {
               "role": "user",
@@ -44,17 +44,34 @@
                     "description": "The topic to research"
                   },
                   "_background": {
-                    "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "description": "Optional: override how this specific call executes (foreground, deferred, or awaited). When omitted, the tool's configured default disposition applies. The enabled boolean remains supported for compatibility.",
                     "anyOf": [
                       {
                         "type": "object",
                         "properties": {
                           "enabled": {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "description": "Force deferred (true) or foreground (false) execution for this call.",
                             "anyOf": [
                               {
-                                "description": "Force background (true) or foreground (false) execution for this call.",
+                                "description": "Force deferred (true) or foreground (false) execution for this call.",
                                 "type": "boolean"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "disposition": {
+                            "description": "Choose foreground, deferred, or awaited execution for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Choose foreground, deferred, or awaited execution for this call.",
+                                "type": "string",
+                                "enum": [
+                                  "foreground",
+                                  "deferred",
+                                  "awaited"
+                                ]
                               },
                               {
                                 "type": "null"
@@ -88,12 +105,14 @@
                         },
                         "required": [
                           "enabled",
+                          "disposition",
                           "timeoutMs",
                           "maxRetries"
                         ],
                         "additionalProperties": false,
                         "x-optional": [
                           "enabled",
+                          "disposition",
                           "timeoutMs",
                           "maxRetries"
                         ]
@@ -136,7 +155,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1788387803624
+        "timestamp": 1788908724716
       },
       "response": {
         "status": 200,
@@ -145,11 +164,11 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a34feb3d7e08e68e-DFW",
+          "cf-ray": "a3819909fcf7df67-DFW",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 02 Sep 2026 22:23:24 GMT",
-          "openai-processing-ms": "851",
+          "date": "Tue, 08 Sep 2026 23:05:25 GMT",
+          "openai-processing-ms": "739",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
@@ -157,21 +176,21 @@
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "10000000",
           "x-ratelimit-remaining-requests": "9999",
-          "x-ratelimit-remaining-tokens": "9999302",
+          "x-ratelimit-remaining-tokens": "9999130",
           "x-ratelimit-reset-requests": "6ms",
-          "x-ratelimit-reset-tokens": "4ms",
-          "x-request-id": "req_26b52a2c94d14c618bb6d51488044008"
+          "x-ratelimit-reset-tokens": "5ms",
+          "x-request-id": "req_77934fa855dd48aebb980571c67b30fb"
         },
         "body": {
-          "id": "resp_0ffb5a6dd5c016c7006a98a1dbe0ec87d183c2d2a0819abe00",
+          "id": "resp_0293206193664f46006aa094b4dd3487d1a570f129404df2b9",
           "object": "response",
-          "created_at": 1788387803,
+          "created_at": 1788908724,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1788387804,
+          "completed_at": 1788908725,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -182,11 +201,11 @@
           "moderation": null,
           "output": [
             {
-              "id": "fc_0ffb5a6dd5c016c7006a98a1dc691887d1b1b9c1d72f1229dc",
+              "id": "fc_0293206193664f46006aa094b55a8087d181c11c0e6ad045a8",
               "type": "function_call",
               "status": "completed",
               "arguments": "{\"name\":\"Alice\"}",
-              "call_id": "call_KMQu790CY6lu3BkVI6WySJr0",
+              "call_id": "call_v0tJu0FN4VNhqoYfruTMFt4t",
               "name": "greet"
             }
           ],
@@ -244,17 +263,34 @@
                     "description": "The topic to research"
                   },
                   "_background": {
-                    "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "description": "Optional: override how this specific call executes (foreground, deferred, or awaited). When omitted, the tool's configured default disposition applies. The enabled boolean remains supported for compatibility.",
                     "anyOf": [
                       {
                         "type": "object",
                         "properties": {
                           "enabled": {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "description": "Force deferred (true) or foreground (false) execution for this call.",
                             "anyOf": [
                               {
-                                "description": "Force background (true) or foreground (false) execution for this call.",
+                                "description": "Force deferred (true) or foreground (false) execution for this call.",
                                 "type": "boolean"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "disposition": {
+                            "description": "Choose foreground, deferred, or awaited execution for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Choose foreground, deferred, or awaited execution for this call.",
+                                "type": "string",
+                                "enum": [
+                                  "foreground",
+                                  "deferred",
+                                  "awaited"
+                                ]
                               },
                               {
                                 "type": "null"
@@ -288,12 +324,14 @@
                         },
                         "required": [
                           "enabled",
+                          "disposition",
                           "timeoutMs",
                           "maxRetries"
                         ],
                         "additionalProperties": false,
                         "x-optional": [
                           "enabled",
+                          "disposition",
                           "timeoutMs",
                           "maxRetries"
                         ]
@@ -341,7 +379,7 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 481,
+            "input_tokens": 653,
             "input_tokens_details": {
               "cache_write_tokens": 0,
               "cached_tokens": 0
@@ -350,7 +388,7 @@
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 496
+            "total_tokens": 668
           },
           "user": null,
           "metadata": {}
@@ -359,7 +397,7 @@
       }
     },
     {
-      "hash": "af604c67e1ff4644",
+      "hash": "83b2862b2c5df07b",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -368,7 +406,7 @@
           "input": [
             {
               "role": "system",
-              "content": "You are a helpful assistant with access to tools. When asked to research something, use the research tool. When asked to greet someone, use the greet tool.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- research (default: background)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"enabled\": true/false, \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- If you don't include \"_background\", the tool's default configuration is used.\n- When a tool runs in the background, you'll receive a placeholder result with a task ID. You can reference this in your response to the user.\n\nIMPORTANT: \"_background\" field is always an object. The fields in the _background field should be inside the _background object, not outside of it."
+              "content": "You are a helpful assistant with access to tools. When asked to research something, use the research tool. When asked to greet someone, use the greet tool.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- research (default: background)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"disposition\": \"foreground\" | \"deferred\" | \"awaited\", \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override. Tools listed with \"default: background\" run in the background unless you set \"disposition\": \"foreground\". Tools listed with \"default: foreground\" run inline unless you explicitly request \"deferred\" or \"awaited\" — for those tools, omitting \"_background\" never starts background work.\n\nDispositions:\n- \"deferred\": the tool runs in the background while you continue; you receive a placeholder result with a task ID and are notified when the task completes.\n- \"awaited\": the tool runs as a durable background task but your run waits for its result before continuing.\n- \"foreground\": the tool runs inline and returns its real result immediately.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- When a tool runs deferred, you'll receive a placeholder result with a task ID. You can reference this in your response to the user.\n\nIMPORTANT: \"_background\" field is always an object. The fields in the _background field should be inside the _background object, not outside of it."
             },
             {
               "role": "user",
@@ -381,13 +419,13 @@
             },
             {
               "type": "function_call",
-              "call_id": "call_KMQu790CY6lu3BkVI6WySJr0",
+              "call_id": "call_v0tJu0FN4VNhqoYfruTMFt4t",
               "name": "greet",
               "arguments": "{\"name\":\"Alice\"}"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_KMQu790CY6lu3BkVI6WySJr0",
+              "call_id": "call_v0tJu0FN4VNhqoYfruTMFt4t",
               "output": "{\"greeting\":\"Hello, Alice!\"}"
             }
           ],
@@ -405,17 +443,34 @@
                     "description": "The topic to research"
                   },
                   "_background": {
-                    "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "description": "Optional: override how this specific call executes (foreground, deferred, or awaited). When omitted, the tool's configured default disposition applies. The enabled boolean remains supported for compatibility.",
                     "anyOf": [
                       {
                         "type": "object",
                         "properties": {
                           "enabled": {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "description": "Force deferred (true) or foreground (false) execution for this call.",
                             "anyOf": [
                               {
-                                "description": "Force background (true) or foreground (false) execution for this call.",
+                                "description": "Force deferred (true) or foreground (false) execution for this call.",
                                 "type": "boolean"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "disposition": {
+                            "description": "Choose foreground, deferred, or awaited execution for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Choose foreground, deferred, or awaited execution for this call.",
+                                "type": "string",
+                                "enum": [
+                                  "foreground",
+                                  "deferred",
+                                  "awaited"
+                                ]
                               },
                               {
                                 "type": "null"
@@ -449,12 +504,14 @@
                         },
                         "required": [
                           "enabled",
+                          "disposition",
                           "timeoutMs",
                           "maxRetries"
                         ],
                         "additionalProperties": false,
                         "x-optional": [
                           "enabled",
+                          "disposition",
                           "timeoutMs",
                           "maxRetries"
                         ]
@@ -497,7 +554,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1788387804623
+        "timestamp": 1788908725591
       },
       "response": {
         "status": 200,
@@ -506,11 +563,11 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a34feb43bd5ae68e-DFW",
+          "cf-ray": "a381990f7bcddf67-DFW",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 02 Sep 2026 22:23:25 GMT",
-          "openai-processing-ms": "977",
+          "date": "Tue, 08 Sep 2026 23:05:26 GMT",
+          "openai-processing-ms": "672",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
@@ -518,21 +575,21 @@
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "10000000",
           "x-ratelimit-remaining-requests": "9999",
-          "x-ratelimit-remaining-tokens": "9999273",
+          "x-ratelimit-remaining-tokens": "9999101",
           "x-ratelimit-reset-requests": "6ms",
-          "x-ratelimit-reset-tokens": "4ms",
-          "x-request-id": "req_eccfc009737545f2b85efa2132a30595"
+          "x-ratelimit-reset-tokens": "5ms",
+          "x-request-id": "req_88d7e932f1944fd9bea379268bd5f45b"
         },
         "body": {
-          "id": "resp_0669d81db337188c006a98a1dcd43c87d19a6eede248cd247a",
+          "id": "resp_092c5ef1dfeed54a006aa094b5bcc087d18ca8b0b35885fd17",
           "object": "response",
-          "created_at": 1788387804,
+          "created_at": 1788908725,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1788387805,
+          "completed_at": 1788908726,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -543,7 +600,7 @@
           "moderation": null,
           "output": [
             {
-              "id": "msg_0669d81db337188c006a98a1dd857887d18b63db511ca2bbd5",
+              "id": "msg_092c5ef1dfeed54a006aa094b6331087d1adc51d8569f5f599",
               "type": "message",
               "status": "completed",
               "content": [
@@ -611,17 +668,34 @@
                     "description": "The topic to research"
                   },
                   "_background": {
-                    "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "description": "Optional: override how this specific call executes (foreground, deferred, or awaited). When omitted, the tool's configured default disposition applies. The enabled boolean remains supported for compatibility.",
                     "anyOf": [
                       {
                         "type": "object",
                         "properties": {
                           "enabled": {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "description": "Force deferred (true) or foreground (false) execution for this call.",
                             "anyOf": [
                               {
-                                "description": "Force background (true) or foreground (false) execution for this call.",
+                                "description": "Force deferred (true) or foreground (false) execution for this call.",
                                 "type": "boolean"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "disposition": {
+                            "description": "Choose foreground, deferred, or awaited execution for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Choose foreground, deferred, or awaited execution for this call.",
+                                "type": "string",
+                                "enum": [
+                                  "foreground",
+                                  "deferred",
+                                  "awaited"
+                                ]
                               },
                               {
                                 "type": "null"
@@ -655,12 +729,14 @@
                         },
                         "required": [
                           "enabled",
+                          "disposition",
                           "timeoutMs",
                           "maxRetries"
                         ],
                         "additionalProperties": false,
                         "x-optional": [
                           "enabled",
+                          "disposition",
                           "timeoutMs",
                           "maxRetries"
                         ]
@@ -708,7 +784,7 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 510,
+            "input_tokens": 682,
             "input_tokens_details": {
               "cache_write_tokens": 0,
               "cached_tokens": 0
@@ -717,7 +793,7 @@
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 516
+            "total_tokens": 688
           },
           "user": null,
           "metadata": {}

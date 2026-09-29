@@ -79,6 +79,63 @@ describe('OpenAISchemaCompatLayer', () => {
       expect(result.additionalProperties).toBe(false);
     });
 
+    it('keeps numeric format and range keywords only in the typed branch', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          pageSize: { type: 'integer', format: 'int32', description: 'Max files.' },
+          ratio: { type: 'number', minimum: 0, maximum: 1, multipleOf: 0.5 },
+          count: { type: ['integer', 'null'], format: 'int64', exclusiveMinimum: 0 },
+        },
+      };
+      const result = compat.processToJSONSchema(structuredClone(schema) as any) as Record<string, any>;
+      const { pageSize, ratio, count } = result.properties;
+
+      expect(pageSize).toEqual({
+        description: 'Max files.',
+        anyOf: [{ type: 'integer', format: 'int32', description: 'Max files.' }, { type: 'null' }],
+      });
+      for (const keyword of ['minimum', 'maximum', 'multipleOf', 'format']) {
+        expect(ratio).not.toHaveProperty(keyword);
+      }
+      expect(ratio.anyOf.map((b: any) => b.type)).toEqual(['number', 'null']);
+      expect(ratio.description).toContain('greater than or equal to 0');
+      expect(ratio.description).toContain('lower than or equal to 1');
+      expect(ratio.description).toContain('multiple of 0.5');
+      expect(count).toEqual({
+        description: 'constraints: greater than 0',
+        anyOf: [{ type: 'integer', format: 'int64' }, { type: 'null' }],
+      });
+    });
+
+    it('keeps a string format on the string branch of a mixed string/integer type', () => {
+      const schema = {
+        type: 'object',
+        properties: { when: { type: ['string', 'integer'], format: 'date-time' } },
+      };
+      const result = compat.processToJSONSchema(structuredClone(schema) as any) as Record<string, any>;
+      const { when } = result.properties;
+
+      expect(when).not.toHaveProperty('format');
+      const [stringBranch, integerBranch, nullBranch] = when.anyOf;
+      expect(stringBranch.type).toBe('string');
+      expect(integerBranch).toEqual({ type: 'integer' });
+      expect(nullBranch).toEqual({ type: 'null' });
+      expect(stringBranch.format ?? stringBranch.description).toContain('date-time');
+    });
+
+    it('keeps a numeric format on the integer branch of a mixed string/integer type', () => {
+      const schema = {
+        type: 'object',
+        properties: { size: { type: ['string', 'integer'], format: 'int32' } },
+      };
+      const result = compat.processToJSONSchema(structuredClone(schema) as any) as Record<string, any>;
+      const { size } = result.properties;
+
+      expect(size).not.toHaveProperty('format');
+      expect(size.anyOf).toEqual([{ type: 'string' }, { type: 'integer', format: 'int32' }, { type: 'null' }]);
+    });
+
     it('still accepts an object, a string, and null through the compat validation path', async () => {
       const compatSchema = compat.processToCompatSchema(structuredClone(searchToolSchema) as any);
 
@@ -617,6 +674,53 @@ describe('OpenAISchemaCompatLayer', () => {
 
       const perLevel = sizes[1]! - sizes[0]!;
       expect(sizes[2]!).toBe(sizes[1]! + 6 * perLevel);
+    });
+
+    it('allows null for optional typed scalar enum and const properties', async () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          encoding: { type: 'string', enum: ['utf8', 'base64'] },
+          kind: { type: 'string', const: 'input' },
+          requiredEncoding: { type: 'string', enum: ['utf8', 'base64'] },
+          requiredKind: { type: 'string', const: 'input' },
+        },
+        required: ['requiredEncoding', 'requiredKind'],
+      } as const;
+      const compatSchema = compat.processToCompatSchema(schema);
+      const result = compatSchema['~standard'].jsonSchema.input({ target: 'draft-07' }) as Record<string, any>;
+
+      const encoding = result.properties.encoding;
+      expect(encoding).not.toHaveProperty('enum');
+      expect(encoding.anyOf).toEqual([{ type: 'string', enum: ['utf8', 'base64'] }, { type: 'null' }]);
+
+      const kind = result.properties.kind;
+      expect(kind).not.toHaveProperty('const');
+      expect(kind.anyOf).toEqual([{ type: 'string', const: 'input' }, { type: 'null' }]);
+
+      const validate = new Ajv({ strict: false }).compile(result);
+      expect(validate({ encoding: null, kind: null, requiredEncoding: 'utf8', requiredKind: 'input' })).toBe(true);
+      expect(validate({ encoding: 'base64', kind: 'input', requiredEncoding: 'utf8', requiredKind: 'input' })).toBe(
+        true,
+      );
+      expect(validate({ encoding: 'hex', kind: 'output', requiredEncoding: 'utf8', requiredKind: 'input' })).toBe(
+        false,
+      );
+      expect(validate({ encoding: null, kind: null, requiredEncoding: null, requiredKind: null })).toBe(false);
+
+      const nullResult: any = await compatSchema['~standard'].validate({
+        encoding: null,
+        kind: null,
+        requiredEncoding: 'utf8',
+        requiredKind: 'input',
+      });
+      expect(nullResult).not.toHaveProperty('issues');
+      expect(nullResult.value).toEqual({
+        encoding: undefined,
+        kind: undefined,
+        requiredEncoding: 'utf8',
+        requiredKind: 'input',
+      });
     });
   });
 

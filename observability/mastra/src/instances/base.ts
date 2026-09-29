@@ -6,7 +6,7 @@ import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { RegisteredLogger } from '@mastra/core/logger';
-import { SpanType, TracingEventType, noOpLoggerContext } from '@mastra/core/observability';
+import { InternalSpans, SpanType, TracingEventType, noOpLoggerContext } from '@mastra/core/observability';
 import type {
   Span,
   ObservabilityExporter,
@@ -44,6 +44,7 @@ import { resolveModelId } from '../model-id';
 import { NoOpSpan } from '../spans';
 import { isPlainRecord, mergeMetadata, stripUndefined } from '../spans/metadata';
 import { addUsageStats } from '../usage';
+import { isMastraBuiltInStorageExporter, isMastraPlatformDeployment } from './platform-policy';
 
 function hasMetadataKey(metadata: unknown, key: string): boolean {
   if (!metadata || typeof metadata !== 'object') {
@@ -113,12 +114,17 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   constructor(config: ObservabilityInstanceConfig) {
     super({ component: RegisteredLogger.OBSERVABILITY, name: config.serviceName });
 
+    const exporters = config.exporters ?? [];
+    const effectiveExporters = isMastraPlatformDeployment()
+      ? exporters.filter(exporter => !isMastraBuiltInStorageExporter(exporter))
+      : exporters;
+
     // Apply defaults for optional fields
     this.config = {
       serviceName: config.serviceName,
       name: config.name,
       sampling: config.sampling ?? { type: SamplingStrategyType.ALWAYS },
-      exporters: config.exporters ?? [],
+      exporters: effectiveExporters,
       spanOutputProcessors: config.spanOutputProcessors ?? [],
       bridge: config.bridge ?? undefined,
       includeInternalSpans: config.includeInternalSpans ?? false,
@@ -256,6 +262,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // Tags are only passed for root spans (no parent)
     const tags = !options.parent ? tracingOptions?.tags : undefined;
 
+    // A caller-supplied name replaces the default entity name on root spans only,
+    // so one workflow or agent can label each run for trace lists.
+    const name = !options.parent && tracingOptions?.rootSpanName ? tracingOptions.rootSpanName : rest.name;
+
     // Extract traceId and parent ids from tracingOptions for root spans (no parent)
     // These allow nested workflows to join the parent workflow's trace.
     // tracingOptions.parentSpanId is the public external-correlation channel,
@@ -268,6 +278,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
     const span = this.createSpan<TType>({
       ...rest,
+      name,
       traceId,
       parentSpanId,
       externalParentSpanId,
@@ -329,6 +340,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       entityType: cached.entityType,
       entityId: cached.entityId,
       entityName: cached.entityName,
+      tracingPolicy: cached.isInternal ? { internal: InternalSpans.ALL } : undefined,
     });
 
     // Wire up lifecycle events (but skip SPAN_STARTED since it was already emitted)
@@ -398,6 +410,15 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * Adds to both the bus (for event routing) and the config (for getExporters).
    */
   registerExporter(exporter: ObservabilityExporter): void {
+    if (isMastraPlatformDeployment() && isMastraBuiltInStorageExporter(exporter)) {
+      this.logger.warn('Storage exporter registration skipped on Mastra Platform', {
+        exporterName: exporter.name,
+        serviceName: this.config.serviceName,
+        instanceName: this.config.name,
+      });
+      return;
+    }
+
     this.observabilityBus.registerExporter(exporter);
     this.config.exporters ??= [];
     if (this.config.exporters.includes(exporter)) {
@@ -712,7 +733,18 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       }
 
       try {
-        span = processor.process(span);
+        const processed = processor.process(span);
+        // exportSpan/isValid are instance members of the live span, so a copy
+        // can't be exported: a plain copy throws for started/updated spans and is
+        // silently dropped for ended spans, and a copy that forwards exportSpan
+        // exports the original's unredacted data. Require the same instance.
+        if (processed !== undefined && processed !== span) {
+          this.logger.error(
+            `[Observability] Processor error [name=${processor.name}]: process() must return the span it received (or undefined to drop it), not a copy. Span dropped.`,
+          );
+          return undefined;
+        }
+        span = processed;
       } catch (error) {
         this.logger.error(`[Observability] Processor error [name=${processor.name}]`, error);
         // Continue with other processors

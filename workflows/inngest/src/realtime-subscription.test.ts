@@ -48,6 +48,90 @@ describe('Inngest realtime subscriptions', () => {
     expect(close).toHaveBeenCalledTimes(1);
   });
 
+  describe('agent control routing', () => {
+    it('subscribes agent.control topics on the agent-control realtime topic of the run channel', async () => {
+      const { InngestPubSub } = await import('./pubsub');
+      subscribeMock.mockResolvedValue({ close: vi.fn() });
+      const pubsub = new InngestPubSub(new Inngest({ id: 'control-subscribe-test' }), 'workflow-id');
+
+      await pubsub.subscribe('agent.control.run-1', vi.fn());
+
+      expect(subscribeMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          channel: 'agent:run-1',
+          topics: ['agent-control'],
+          onMessage: expect.any(Function),
+        }),
+      );
+    });
+
+    it('delivers abort-request events to control subscribers with generated id/createdAt', async () => {
+      const { InngestPubSub } = await import('./pubsub');
+      subscribeMock.mockResolvedValue({ close: vi.fn() });
+      const pubsub = new InngestPubSub(new Inngest({ id: 'control-delivery-test' }), 'workflow-id');
+      const received: any[] = [];
+
+      await pubsub.subscribe('agent.control.run-1', event => received.push(event));
+
+      const { onMessage } = subscribeMock.mock.calls[0][0];
+      onMessage({ data: { type: 'abort-request', runId: 'run-1', data: {} } });
+
+      expect(received).toHaveLength(1);
+      expect(received[0]).toMatchObject({ type: 'abort-request', runId: 'run-1', data: {} });
+      expect(received[0].id).toEqual(expect.any(String));
+      expect(received[0].createdAt).toEqual(expect.any(Date));
+    });
+
+    it('publishes agent.control events with the full envelope on the agent-control topic', async () => {
+      const { InngestPubSub } = await import('./pubsub');
+      const realtimePublish = vi.fn(async () => undefined);
+      const inngest = { realtime: { publish: realtimePublish } } as unknown as Inngest;
+      const pubsub = new InngestPubSub(inngest, 'workflow-id');
+      const event = { type: 'abort-request', runId: 'run-1', data: {} };
+
+      await pubsub.publish('agent.control.run-1', event);
+
+      expect(realtimePublish).toHaveBeenCalledTimes(1);
+      expect(realtimePublish).toHaveBeenCalledWith(
+        expect.objectContaining({ channel: 'agent:run-1', topic: 'agent-control' }),
+        event,
+      );
+    });
+
+    it('keeps agent.stream events on the agent-stream topic, isolated from agent-control', async () => {
+      const { InngestPubSub } = await import('./pubsub');
+      const realtimePublish = vi.fn(async () => undefined);
+      const inngest = { realtime: { publish: realtimePublish } } as unknown as Inngest;
+      const pubsub = new InngestPubSub(inngest, 'workflow-id');
+      const event = { type: 'chunk', runId: 'run-1', data: { text: 'hello' } };
+
+      await pubsub.publish('agent.stream.run-1', event);
+
+      expect(realtimePublish).toHaveBeenCalledTimes(1);
+      expect(realtimePublish).toHaveBeenCalledWith(
+        expect.objectContaining({ channel: 'agent:run-1', topic: 'agent-stream' }),
+        event,
+      );
+    });
+
+    it('surfaces agent.control publish failures to the caller', async () => {
+      const { InngestPubSub } = await import('./pubsub');
+      const failure = new Error('realtime publish failed');
+      const inngest = {
+        realtime: {
+          publish: vi.fn(async () => {
+            throw failure;
+          }),
+        },
+      } as unknown as Inngest;
+      const pubsub = new InngestPubSub(inngest, 'workflow-id');
+
+      await expect(
+        pubsub.publish('agent.control.run-1', { type: 'abort-request', runId: 'run-1', data: {} }),
+      ).rejects.toBe(failure);
+    });
+  });
+
   it('closes a pending run-output subscription after polling wins', async () => {
     const { init } = await import('./index');
     let resolveSubscription!: (subscription: { close: () => void }) => void;

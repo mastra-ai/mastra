@@ -1,9 +1,7 @@
-import type {
-  AdapterTestContext,
-  AdapterSetupOptions,
-  HttpRequest,
-  HttpResponse,
-} from '@internal/server-adapter-test-utils';
+import { Mastra } from '@mastra/core';
+import { registerApiRoute } from '@mastra/core/server';
+import { createRoute } from '@mastra/server/server-adapter';
+import type { ServerRoute } from '@mastra/server/server-adapter';
 import {
   createRouteAdapterTestSuite,
   createDefaultTestContext,
@@ -13,11 +11,13 @@ import {
   consumeSSEStream,
   createMultipartTestSuite,
   createBodyLimitTestSuite,
-} from '@internal/server-adapter-test-utils';
-import { Mastra } from '@mastra/core';
-import { registerApiRoute } from '@mastra/core/server';
-import { createRoute } from '@mastra/server/server-adapter';
-import type { ServerRoute } from '@mastra/server/server-adapter';
+} from '@mastra/server-adapters-test-suite';
+import type {
+  AdapterTestContext,
+  AdapterSetupOptions,
+  HttpRequest,
+  HttpResponse,
+} from '@mastra/server-adapters-test-suite';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -42,6 +42,7 @@ async function waitFor(assertion: () => boolean, timeout = 500): Promise<void> {
 describe('Fastify Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'Fastify Adapter Integration Tests',
+    supportsPostQueryRequestContext: true,
 
     setupAdapter: async (context: AdapterTestContext, options?: AdapterSetupOptions) => {
       // Create Fastify app
@@ -87,13 +88,13 @@ describe('Fastify Server Adapter', () => {
         const fetchOptions: RequestInit = {
           method: httpRequest.method,
           headers: {
-            'Content-Type': 'application/json',
+            ...(httpRequest.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
             ...(httpRequest.headers || {}),
           },
         };
 
         // Add body for POST/PUT/PATCH/DELETE
-        if (httpRequest.body && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(httpRequest.method)) {
+        if (httpRequest.body !== undefined && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(httpRequest.method)) {
           fetchOptions.body = JSON.stringify(httpRequest.body);
         }
 

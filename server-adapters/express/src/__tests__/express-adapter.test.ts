@@ -1,10 +1,8 @@
 import { request as createHttpRequest, type Server } from 'node:http';
-import type {
-  AdapterTestContext,
-  AdapterSetupOptions,
-  HttpRequest,
-  HttpResponse,
-} from '@internal/server-adapter-test-utils';
+import { Mastra } from '@mastra/core';
+import { registerApiRoute } from '@mastra/core/server';
+import { createRoute } from '@mastra/server/server-adapter';
+import type { ServerRoute } from '@mastra/server/server-adapter';
 import {
   createRouteAdapterTestSuite,
   createDefaultTestContext,
@@ -14,11 +12,13 @@ import {
   consumeSSEStream,
   createMultipartTestSuite,
   createBodyLimitTestSuite,
-} from '@internal/server-adapter-test-utils';
-import { Mastra } from '@mastra/core';
-import { registerApiRoute } from '@mastra/core/server';
-import { createRoute } from '@mastra/server/server-adapter';
-import type { ServerRoute } from '@mastra/server/server-adapter';
+} from '@mastra/server-adapters-test-suite';
+import type {
+  AdapterTestContext,
+  AdapterSetupOptions,
+  HttpRequest,
+  HttpResponse,
+} from '@mastra/server-adapters-test-suite';
 import express from 'express';
 import type { Application } from 'express';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -43,11 +43,13 @@ async function waitFor(assertion: () => boolean, timeout = 500): Promise<void> {
 describe('Express Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'Express Adapter Integration Tests',
+    emptyBodyNormalization: { withoutContentType: 'undefined', withJsonContentType: 'empty-object' },
+    supportsPostQueryRequestContext: true,
 
     setupAdapter: async (context: AdapterTestContext, options?: AdapterSetupOptions) => {
       // Create Express app
       const app = express();
-      app.use(express.json());
+      app.use(express.json({ strict: false }));
 
       // Create adapter
       const adapter = new MastraServer({
@@ -98,13 +100,13 @@ describe('Express Server Adapter', () => {
         const fetchOptions: RequestInit = {
           method: httpRequest.method,
           headers: {
-            'Content-Type': 'application/json',
+            ...(httpRequest.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
             ...(httpRequest.headers || {}),
           },
         };
 
         // Add body for POST/PUT/PATCH/DELETE
-        if (httpRequest.body && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(httpRequest.method)) {
+        if (httpRequest.body !== undefined && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(httpRequest.method)) {
           fetchOptions.body = JSON.stringify(httpRequest.body);
         }
 

@@ -1,6 +1,6 @@
+import { providerMapToIcon } from '@mastra/playground-ui/domains/llm';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useState } from 'react';
-import { providerMapToIcon } from '../provider-map-icon';
 import { cleanProviderId as cleanProviderIdUtil } from './utils';
 
 interface ProviderLogoProps {
@@ -50,7 +50,7 @@ export const ProviderLogo = ({ providerId, className = '', size = 20 }: Provider
     if (providerMapToIcon[fallbackIcon as keyof typeof providerMapToIcon]) {
       return <Icon>{providerMapToIcon[fallbackIcon as keyof typeof providerMapToIcon]}</Icon>;
     }
-    return <div className={`bg-surface4 rounded ${className}`} style={{ width: size, height: size }} />;
+    return <div className={`rounded bg-muted ${className}`} style={{ width: size, height: size }} />;
   }
 
   return (

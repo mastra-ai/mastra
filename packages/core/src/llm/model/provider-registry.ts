@@ -483,7 +483,8 @@ const PROVIDER_ALIASES: Record<string, string> = {
 const BEDROCK_REGION_PREFIX = /^(global|us-gov|us|eu|apac|jp|au)\./;
 
 /** Underlying vendor segment carried by fully-qualified Bedrock model ids. */
-const BEDROCK_VENDOR_SEGMENT = /^(anthropic|xai|meta|amazon|cohere|mistral|ai21|deepseek)\.(.+)$/;
+const BEDROCK_VENDOR_SEGMENT =
+  /^(?!openai\.gpt-oss-)(anthropic|xai|meta|amazon|cohere|mistral|ai21|deepseek|openai)\.(.+)$/;
 
 /** Fallback vendor lookup for short Bedrock ids (`claude-sonnet-5`) that omit the vendor. */
 const BEDROCK_VENDOR_BY_PREFIX: Array<[RegExp, string]> = [
@@ -609,6 +610,15 @@ function getProviderCapabilitySupport(
   return models.includes(modelId);
 }
 
+/**
+ * Whether the provider's model list enumerates this model. Capability arrays only
+ * hold models with the capability set, so a model that supports nothing would be
+ * absent from all of them — the registry's model list is the real membership signal.
+ */
+function providerListsModel(provider: string, modelId: string): boolean {
+  return GatewayRegistry.getInstance().getModels()[provider]?.includes(modelId) ?? false;
+}
+
 function modelSupportsCapability(modelRouterId: string, dimension: CapabilityDimension): boolean | undefined {
   const parsed = parseModelString(modelRouterId);
   const provider = parsed.provider ? (PROVIDER_ALIASES[parsed.provider] ?? parsed.provider) : parsed.provider;
@@ -638,12 +648,19 @@ function modelSupportsCapability(modelRouterId: string, dimension: CapabilityDim
   // Positive direct match wins immediately.
   if (directSupport === true) return true;
 
-  // For nested model IDs (e.g. `openrouter/anthropic/claude-sonnet-4-6`), the
-  // outer gateway's capability list may not enumerate every nested model. Fall
-  // back to the underlying provider's authoritative capability file before
-  // trusting a `false` from the gateway.
+  // The provider actually serving the request is authoritative. If it publishes
+  // capability data for this dimension and lists the model, its `false` stands —
+  // a gateway can lack capabilities the upstream provider offers directly
+  // (OpenRouter has no image-capable endpoint for `deepseek/deepseek-v4-flash`
+  // even though DeepSeek's own API does).
+  //
+  // Fall back to the underlying provider's capability file when the gateway
+  // never answered: either it has no data for this dimension at all (Netlify and
+  // custom gateways only implement `fetchProviders()`), or it doesn't enumerate
+  // the nested model (e.g. `openrouter/anthropic/claude-sonnet-4-6`).
+  const gatewayAnswered = directSupport !== undefined && providerListsModel(provider, modelId);
   const nestedProviderDelimiter = modelId.indexOf('/');
-  if (nestedProviderDelimiter !== -1) {
+  if (nestedProviderDelimiter !== -1 && !gatewayAnswered) {
     const nestedProvider = modelId.substring(0, nestedProviderDelimiter);
     const nestedModelId = modelId.substring(nestedProviderDelimiter + 1);
     if (nestedProvider && nestedModelId) {

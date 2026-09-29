@@ -9,12 +9,13 @@ const LEGACY_ANALYTICS_OBSERVABILITY_TYPES = new Set([
   'ObservabilityStoragePostgresVNext',
 ]);
 
+/** Resolves metrics support, preserving lookup failures and the hosted-platform override. */
 export const useObservabilityStorageCapabilities = () => {
   // On the Mastra platform, observability reads (/api/observability/*) are
   // proxied by the edge router to the hosted ClickHouse-backed query service,
   // so the project's own storage capabilities are irrelevant.
   const { isMastraPlatform } = useMastraPlatform();
-  const { data, isLoading } = useMastraPackages();
+  const { data, isLoading, error } = useMastraPackages();
   const observabilityType = data?.observabilityStorageType;
   const advertisedCapabilities = data?.observabilityStorageCapabilities;
   const storageSupportsMetrics =
@@ -25,5 +26,6 @@ export const useObservabilityStorageCapabilities = () => {
     supportsMetrics: isMastraPlatform || storageSupportsMetrics,
     isInMemory: !isMastraPlatform && observabilityType === 'ObservabilityInMemory',
     isLoading: !isMastraPlatform && isLoading,
+    error: isMastraPlatform ? undefined : error,
   };
 };

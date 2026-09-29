@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Agent } from '../agent';
+import { MockMemory } from '../memory/mock';
 import { RequestContext } from '../request-context';
 import { SignalProvider } from '../signals/signal-provider';
 
@@ -29,8 +30,9 @@ describe('AgentController fork clone metadata wiring', () => {
     capturedOpts.length = 0;
   });
 
-  it('passes forkedSubagent + parentThreadId metadata through to memory.cloneThread', async () => {
-    const cloneThread = vi.fn().mockResolvedValue({
+  it('passes forkedSubagent + parentThreadId metadata through to memory.copyThread', async () => {
+    const cloneThread = vi.fn();
+    const copyThread = vi.fn().mockResolvedValue({
       thread: {
         id: 'forked-thread-id',
         resourceId: 'parent-resource',
@@ -39,11 +41,10 @@ describe('AgentController fork clone metadata wiring', () => {
         updatedAt: new Date(),
         metadata: {},
       },
-      clonedMessages: [],
       messageIdMap: {},
     });
 
-    const memoryFactory = vi.fn().mockResolvedValue({ cloneThread });
+    const memoryFactory = vi.fn().mockResolvedValue(Object.assign(new MockMemory(), { cloneThread, copyThread }));
 
     const subagents: AgentControllerSubagent[] = [
       {
@@ -90,8 +91,10 @@ describe('AgentController fork clone metadata wiring', () => {
 
     await cloneCb({ sourceThreadId: 'parent-thread-xyz', title: 'Fork: Explore subagent' });
 
-    expect(cloneThread).toHaveBeenCalledTimes(1);
-    expect(cloneThread).toHaveBeenCalledWith({
+    // The fork path must never hydrate message payloads.
+    expect(cloneThread).not.toHaveBeenCalled();
+    expect(copyThread).toHaveBeenCalledTimes(1);
+    expect(copyThread).toHaveBeenCalledWith({
       sourceThreadId: 'parent-thread-xyz',
       resourceId: 'parent-resource',
       title: 'Fork: Explore subagent',
@@ -99,7 +102,6 @@ describe('AgentController fork clone metadata wiring', () => {
         forkedSubagent: true,
         parentThreadId: 'parent-thread-xyz',
       },
-      options: { hydrateMessages: false },
     });
   });
 
@@ -163,7 +165,7 @@ describe('AgentController fork clone metadata wiring', () => {
   });
 
   it('wires getParentToolsets so forks can inherit parent toolsets', async () => {
-    const memoryFactory = vi.fn().mockResolvedValue({ cloneThread: vi.fn() });
+    const memoryFactory = vi.fn().mockResolvedValue(Object.assign(new MockMemory(), { cloneThread: vi.fn() }));
 
     const subagents: AgentControllerSubagent[] = [
       {
@@ -215,7 +217,7 @@ describe('AgentController fork clone metadata wiring', () => {
   });
 
   it('shared config.agent is reused across modes without forking', async () => {
-    const memoryFactory = vi.fn().mockResolvedValue({});
+    const memoryFactory = vi.fn().mockResolvedValue(Object.assign(new MockMemory(), {}));
 
     const baseAgent = new Agent({
       name: 'shared',
@@ -262,7 +264,7 @@ describe('AgentController fork clone metadata wiring', () => {
   });
 
   it('agent own instructions are never mutated by controller mode switches', async () => {
-    const memoryFactory = vi.fn().mockResolvedValue({});
+    const memoryFactory = vi.fn().mockResolvedValue(Object.assign(new MockMemory(), {}));
     const originalInstructions = 'I am the original agent instructions';
 
     const baseAgent = new Agent({
@@ -311,7 +313,7 @@ describe('AgentController fork clone metadata wiring', () => {
   });
 
   it('mode instructions are resolved at call time via resolveCurrentModeInstructions', async () => {
-    const memoryFactory = vi.fn().mockResolvedValue({});
+    const memoryFactory = vi.fn().mockResolvedValue(Object.assign(new MockMemory(), {}));
 
     const baseAgent = new Agent({
       name: 'shared',
@@ -359,7 +361,7 @@ describe('AgentController fork clone metadata wiring', () => {
   });
 
   it('mode tools are included in toolsets when using shared config.agent', async () => {
-    const memoryFactory = vi.fn().mockResolvedValue({});
+    const memoryFactory = vi.fn().mockResolvedValue(Object.assign(new MockMemory(), {}));
     const modeTool = { description: 'a mode tool', parameters: {} as never, execute: async () => null } as never;
 
     const baseAgent = new Agent({
@@ -419,7 +421,7 @@ describe('AgentController fork clone metadata wiring', () => {
     }
 
     const signalProvider = new TestSignalProvider();
-    const memoryFactory = vi.fn().mockResolvedValue({});
+    const memoryFactory = vi.fn().mockResolvedValue(Object.assign(new MockMemory(), {}));
 
     const baseAgent = new Agent({
       name: 'base',
@@ -468,7 +470,7 @@ describe('AgentController fork clone metadata wiring', () => {
   });
 
   it('deprecated mode.agent path still works independently per mode', async () => {
-    const memoryFactory = vi.fn().mockResolvedValue({});
+    const memoryFactory = vi.fn().mockResolvedValue(Object.assign(new MockMemory(), {}));
 
     const buildAgent = new Agent({
       name: 'build-agent',
@@ -526,7 +528,7 @@ describe('AgentController fork clone metadata wiring', () => {
     }
 
     const signalProvider = new TestSignalProvider();
-    const memoryFactory = vi.fn().mockResolvedValue({});
+    const memoryFactory = vi.fn().mockResolvedValue(Object.assign(new MockMemory(), {}));
 
     const baseAgent = new Agent({
       name: 'base',

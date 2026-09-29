@@ -3,6 +3,7 @@ import { test, expect } from '@playwright/test';
 import { resetStorage } from '../../__utils__/reset-storage';
 import { expectExactEdgeStatuses } from '../../__utils__/workflow-edges';
 import type { EdgeExpectation } from '../../__utils__/workflow-edges';
+import { OUTSIDE_NESTED_GRAPHS, topLevelWorkflowNodes } from '../../__utils__/workflow-nodes';
 
 /**
  * FEATURE: Workflow debug mode "Run next step" — deterministic edge activation.
@@ -37,7 +38,7 @@ function runNextStepButton(page: Page) {
 }
 
 function nodes(page: Page) {
-  return page.locator('[data-workflow-node]');
+  return topLevelWorkflowNodes(page);
 }
 
 function stepNode(page: Page, stepKey: string) {
@@ -148,8 +149,8 @@ test.describe('Workflow debug edge coloring', () => {
 
       // ARRANGE: input "A" keeps text short, so the conditional takes short-text.
       await page.getByRole('textbox', { name: 'Text' }).fill('A');
-      await page.getByRole('switch', { name: 'Debug' }).click();
-      await expect(page.getByRole('switch', { name: 'Debug' })).toBeChecked();
+      await page.getByRole('switch', { name: 'Step by step' }).click();
+      await expect(page.getByRole('switch', { name: 'Step by step' })).toBeChecked();
 
       // ACT: start per-step, then drive every step to completion.
       await runButton(page).click();
@@ -157,7 +158,10 @@ test.describe('Workflow debug edge coloring', () => {
       await driveFullRun(page, 'short-text');
 
       // ASSERT: the COMPLETE edge map for the short-text path.
-      await expect(page.locator('[data-edge-to="add-letter"]')).toHaveAttribute('data-edge-status', 'success');
+      await expect(page.locator(`[data-edge-to="add-letter"]${OUTSIDE_NESTED_GRAPHS}`)).toHaveAttribute(
+        'data-edge-status',
+        'success',
+      );
       const { mapParallel, mapBranch } = await resolveMappingIds(page);
       await expectExactEdgeStatuses(page, expectedEdges(mapParallel, mapBranch, 'short-text', 'long-text'));
     });
@@ -169,15 +173,18 @@ test.describe('Workflow debug edge coloring', () => {
 
       // ARRANGE: input "HELLO" grows past 10 chars by the conditional -> long-text arm.
       await page.getByRole('textbox', { name: 'Text' }).fill('HELLO');
-      await page.getByRole('switch', { name: 'Debug' }).click();
-      await expect(page.getByRole('switch', { name: 'Debug' })).toBeChecked();
+      await page.getByRole('switch', { name: 'Step by step' }).click();
+      await expect(page.getByRole('switch', { name: 'Step by step' })).toBeChecked();
 
       await runButton(page).click();
       await expect(page.locator(DEBUG_CONTROLS)).toBeVisible({ timeout: 20000 });
       await driveFullRun(page, 'long-text');
 
       // ASSERT: the COMPLETE edge map for the long-text path (mirror of short-text).
-      await expect(page.locator('[data-edge-to="add-letter"]')).toHaveAttribute('data-edge-status', 'success');
+      await expect(page.locator(`[data-edge-to="add-letter"]${OUTSIDE_NESTED_GRAPHS}`)).toHaveAttribute(
+        'data-edge-status',
+        'success',
+      );
       const { mapParallel, mapBranch } = await resolveMappingIds(page);
       await expectExactEdgeStatuses(page, expectedEdges(mapParallel, mapBranch, 'long-text', 'short-text'));
     });

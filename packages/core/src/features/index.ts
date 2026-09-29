@@ -24,6 +24,7 @@ export const coreFeatures = new Set<string>([
   'dataset-item-purge',
   'observability:v1.13.2',
   'observability-delta-polling',
+  'observability-trace-query-tenant-scope',
   'channels',
   'deploy-diagnosis',
   'model-inference-span',

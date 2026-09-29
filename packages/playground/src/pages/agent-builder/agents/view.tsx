@@ -1,4 +1,5 @@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { BrowserToolCallsProvider } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { memo, useMemo, useState } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { Navigate, useParams } from 'react-router';
@@ -15,7 +16,6 @@ import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas
 import { storedAgentToFormValues } from '@/domains/agent-builder/services/stored-agent-to-form-values';
 import { BrowserViewPanel } from '@/domains/agents/components/browser-view';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
-import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
 import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';

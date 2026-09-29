@@ -20,6 +20,7 @@ import type { AgentSignalType } from '../agent/signals';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { ModelConfigModelSettings } from '../llm/model/model-settings';
 import type { MastraLanguageModel, SharedProviderOptions } from '../llm/model/shared.types';
+import type { IMastraLogger } from '../logger';
 import type { ScorerResult } from '../loop';
 import type { ClientObservabilityCarrier, ObservabilityContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
@@ -202,6 +203,7 @@ export interface ToolCallPayload<TArgs = unknown, TOutput = unknown> {
   providerMetadata?: ProviderMetadata;
   output?: TOutput;
   dynamic?: boolean;
+  title?: string;
   /**
    * W3C trace context carrier for client-side tool execution.
    *
@@ -234,6 +236,7 @@ interface ToolCallInputStreamingStartPayload {
   providerExecuted?: boolean;
   providerMetadata?: ProviderMetadata;
   dynamic?: boolean;
+  title?: string;
   observability?: ClientObservabilityCarrier;
 }
 
@@ -286,6 +289,13 @@ interface ErrorPayload {
 
 interface RawPayload {
   [key: string]: unknown;
+}
+
+export interface ThreadHistoryPayload {
+  /** Stored thread messages, oldest first. */
+  messages: MastraDBMessage[];
+  /** Whether older messages exist beyond this page. */
+  hasMore: boolean;
 }
 
 interface StartPayload {
@@ -811,6 +821,8 @@ interface ToolCallApprovalPayload {
   toolName: string;
   args: Record<string, any>;
   resumeSchema: string;
+  /** Epoch ms when approval was requested; matches the tool part's `updatedAt`. */
+  updatedAt?: number;
 }
 
 interface ToolCallSuspendedPayload {
@@ -859,6 +871,9 @@ export type NetworkChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'network-object-result'; payload: { object: OUTPUT } });
 
 // Strongly typed chunk type (currently only OUTPUT is strongly typed, tools use dynamic types)
+/** Emitted only by `subscribeToThread({ withInitialHistory })`, before any other chunk. */
+export type ThreadHistoryChunk = BaseChunkType & { type: 'thread-history'; payload: ThreadHistoryPayload };
+
 export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'response-metadata'; payload: ResponseMetadataPayload })
   | (BaseChunkType & { type: 'text-start'; payload: TextStartPayload })
@@ -1131,14 +1146,38 @@ export type MastraOnStepFinishCallback<OUTPUT = undefined> = (
 export type MastraOnFinishCallbackArgs<OUTPUT = undefined> = LLMStepResult<OUTPUT> & {
   error?: Error | string | { message: string; stack: string };
   object?: OUTPUT;
+  /**
+   * True when `object` is the configured `fallbackValue`, substituted because the model
+   * output failed schema validation (or the separate structuring model failed) under
+   * `errorStrategy: 'fallback'`.
+   */
+  usedFallbackValue?: boolean;
   steps: LLMStepResult<OUTPUT>[];
   totalUsage: LanguageModelUsage;
   model?: partialModel;
   runId?: string;
 };
 
+/**
+ * Writer for emitting custom chunks from `onFinish` callbacks while the `finish`
+ * chunk is being assembled. Chunks written through this writer are delivered to
+ * stream consumers before the `finish` chunk.
+ */
+export type CustomChunkWriter = {
+  custom: (
+    data: { type: `data-${string}`; data: unknown; transient?: boolean },
+    writerOptions?: { messageId?: string },
+  ) => Promise<void> | void;
+};
+
+/** Context passed as the second argument to `MastraOnFinishCallback`. */
+export type MastraOnFinishCallbackContext = {
+  writer?: CustomChunkWriter;
+};
+
 export type MastraOnFinishCallback<OUTPUT = undefined> = (
   event: MastraOnFinishCallbackArgs<OUTPUT>,
+  context?: MastraOnFinishCallbackContext,
 ) => Promise<void> | void;
 
 /**
@@ -1155,6 +1194,7 @@ export type MastraStreamTransformOptions<OUTPUT = undefined> =
 
 export type MastraModelOutputOptions<OUTPUT = undefined> = {
   runId: string;
+  logger?: IMastraLogger;
   toolCallStreaming?: boolean;
   onFinish?: MastraOnFinishCallback<OUTPUT>;
   onStepFinish?: MastraOnStepFinishCallback<OUTPUT>;

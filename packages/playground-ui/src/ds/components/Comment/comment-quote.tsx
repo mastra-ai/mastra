@@ -16,17 +16,20 @@ export function CommentQuote({ authorName, quote, onDismiss, className }: Commen
   return (
     <blockquote
       data-slot="comment-quote"
-      className={cn('m-0 flex min-w-0 gap-2 border-l-2 border-border2 pl-2 text-ui-xs text-neutral3', className)}
+      className={cn(
+        'm-0 flex min-w-0 gap-2 border-l-2 border-border-strong pl-2 text-caption text-muted-foreground',
+        className,
+      )}
     >
       <span className="min-w-0 flex-1">
-        {authorName ? <span className="text-neutral4 font-medium">{authorName} </span> : null}
+        {authorName ? <span className="text-column">{authorName} </span> : null}
         <span className="line-clamp-2 wrap-anywhere whitespace-pre-line">{quote}</span>
       </span>
       {onDismiss ? (
         <Button
           type="button"
           variant="ghost"
-          size="icon-xs"
+          size="icon-sm"
           aria-label="Remove quote"
           onClick={onDismiss}
           className="shrink-0"

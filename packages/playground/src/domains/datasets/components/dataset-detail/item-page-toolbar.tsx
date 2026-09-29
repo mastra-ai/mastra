@@ -18,8 +18,8 @@ export function ItemPageToolbar({ onBack, onEdit, onDelete, isEditing = false }:
     <div className="flex items-center justify-between">
       {/* Left side: Back button */}
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="md" onClick={onBack} aria-label="Back to dataset">
-          <ArrowLeft /> Back
+        <Button size="md" onClick={onBack} aria-label="Back to dataset" icon={<ArrowLeft />}>
+          Back
         </Button>
       </div>
 
@@ -27,31 +27,29 @@ export function ItemPageToolbar({ onBack, onEdit, onDelete, isEditing = false }:
       <div className="flex items-center gap-2">
         {!isEditing && (
           <div className="flex items-center gap-[2px]">
-            <Button variant="outline" size="md" onClick={onEdit}>
-              <Pencil />
+            <Button size="md" onClick={onEdit} icon={<Pencil />}>
               Edit
             </Button>
 
             <Popover open={open} onOpenChange={setOpen}>
               <PopoverTrigger asChild>
-                <Button variant="outline" size="md" aria-label="Actions menu">
+                <Button size="md" aria-label="Actions menu">
                   <ChevronDownIcon />
                 </Button>
               </PopoverTrigger>
 
-              <PopoverContent align="end" className="bg-surface4 w-48 p-1">
+              <PopoverContent align="end" className="w-48 bg-muted p-1">
                 <div className="flex flex-col gap-2">
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="w-full justify-start gap-2 text-red-500 hover:text-red-400"
+                    className="w-full justify-start text-red-500 hover:text-red-400"
                     onClick={onDelete}
+                    icon={<Trash2 />}
                   >
-                    <Trash2 />
                     Delete Item
                   </Button>
-                  <Button variant="ghost" size="sm" className="w-full justify-start gap-2" disabled>
-                    <Copy />
+                  <Button variant="ghost" size="sm" className="w-full justify-start" disabled icon={<Copy />}>
                     Duplicate Item (Coming Soon)
                   </Button>
                 </div>

@@ -3,6 +3,10 @@ import type { ComponentPropsWithoutRef, HTMLAttributes, ReactNode } from 'react'
 import { CommandDialog, CommandInput, CommandItem, CommandList, CommandShortcut } from '@/ds/components/Command';
 import { Kbd } from '@/ds/components/Kbd';
 import { ScrollArea } from '@/ds/components/ScrollArea';
+import { inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
+import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
 import './command-palette.css';
@@ -20,19 +24,18 @@ function CommandPaletteDialog({
   return (
     <CommandDialog
       showOverlay={showOverlay}
-      overlayClassName={cn('bg-surface1/40 backdrop-blur-none', overlayClassName)}
+      overlayClassName={cn('bg-sidebar/40 backdrop-blur-none', overlayClassName)}
       contentClassName={cn(
         'command-palette-popup max-w-[min(56rem,calc(100vw-2rem))] overflow-visible border-none bg-transparent p-0 shadow-none backdrop-blur-none sm:max-w-[min(56rem,calc(100vw-2rem))]',
         contentClassName,
       )}
       commandClassName={cn(
         // Height lives in `.command-palette-shell` — see command-palette.css.
-        'command-palette-shell gap-2 overflow-visible rounded-none bg-transparent text-neutral4 shadow-none backdrop-blur-none',
-        '[&_[data-slot=command-input-wrapper]]:h-14 [&_[data-slot=command-input-wrapper]]:shrink-0 [&_[data-slot=command-input-wrapper]]:rounded-xl [&_[data-slot=command-input-wrapper]]:border [&_[data-slot=command-input-wrapper]]:border-border1 [&_[data-slot=command-input-wrapper]]:bg-surface3 [&_[data-slot=command-input-wrapper]]:px-4 [&_[data-slot=command-input-wrapper]]:shadow-[0_6px_18px_-16px_rgb(0_0_0_/_0.55)]',
-        '[&_[data-slot=command-input-wrapper]]:pr-11 [&_[data-slot=command-input-wrapper]]:transition-[border-color,box-shadow] [&_[data-slot=command-input-wrapper]]:duration-150 [&_[data-slot=command-input-wrapper]]:ease-out [&_[data-slot=command-input-wrapper]_svg]:text-neutral4 [&_[data-slot=command-input-wrapper]:focus-within]:border-border1 [&_[data-slot=command-input-wrapper]:focus-within]:bg-surface3 [&_[data-slot=command-input-wrapper]:focus-within]:shadow-[0_8px_22px_-18px_rgb(0_0_0_/_0.6)]',
-        '**:[[cmdk-input]]:h-full **:[[cmdk-input]]:text-ui-md',
-        '**:[[cmdk-group-heading]]:px-3 **:[[cmdk-group-heading]]:pt-3 **:[[cmdk-group-heading]]:pb-2 **:[[cmdk-group]]:p-0',
-        '**:[[cmdk-item]]:px-3 **:[[cmdk-item]]:py-2.5',
+        'command-palette-shell gap-2 overflow-visible rounded-none bg-transparent text-muted-foreground shadow-none backdrop-blur-none',
+        '[&_[data-slot=command-input-wrapper]_svg]:text-muted-foreground',
+        '**:[[cmdk-input]]:h-full **:[[cmdk-input]]:text-body',
+        '**:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:pt-2 **:[[cmdk-group-heading]]:pb-1 **:[[cmdk-group]]:p-0',
+        '**:[[cmdk-item]]:px-2 **:[[cmdk-item]]:py-1.5',
         commandClassName,
       )}
       {...props}
@@ -47,7 +50,14 @@ type CommandPaletteInputProps = ComponentPropsWithoutRef<typeof CommandInput>;
 function CommandPaletteInput({ wrapperClassName, ...props }: CommandPaletteInputProps) {
   return (
     <CommandInput
-      wrapperClassName={cn('command-palette-surface command-palette-surface-input', wrapperClassName)}
+      wrapperClassName={cn(
+        'command-palette-surface command-palette-surface-input',
+        inputSurfaceAndFocusWithinStyle,
+        // `border-0` because `CommandInput`'s own `border-b` is the separator of a single-panel
+        // Command; here the input is a detached pill and the material already carries its rim.
+        'h-11 shrink-0 rounded-xl border-0 px-3 pr-11',
+        wrapperClassName,
+      )}
       {...props}
     />
   );
@@ -55,7 +65,7 @@ function CommandPaletteInput({ wrapperClassName, ...props }: CommandPaletteInput
 
 function CommandPaletteBody({ children, className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className="min-h-0 flex-1 rounded-2xl">
+    <div className="min-h-0 flex-1">
       <div
         className={cn(
           'grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2 md:grid-cols-[13rem_minmax(0,1fr)] md:grid-rows-none',
@@ -77,7 +87,8 @@ function CommandPaletteRail({ children, className, ...props }: CommandPaletteRai
   return (
     <aside
       className={cn(
-        'command-palette-surface command-palette-surface-rail flex max-h-[min(14rem,32dvh)] min-h-0 flex-col overflow-hidden rounded-2xl border border-border1 bg-surface2 p-3 shadow-[0_8px_24px_-20px_rgb(0_0_0_/_0.55)] md:h-full md:max-h-none',
+        'command-palette-surface command-palette-surface-rail flex max-h-[min(14rem,32dvh)] min-h-0 flex-col overflow-hidden rounded-xl p-2 md:h-full md:max-h-none',
+        overlaySurfaceStyle,
         className,
       )}
       {...props}
@@ -105,15 +116,19 @@ function CommandPaletteScope({
   return (
     <button
       type="button"
-      // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- v4 emits nothing for `scale-0.99`
-      className="text-ui-smd leading-ui-sm text-neutral3 hover:border-border1 hover:bg-surface4 hover:text-neutral6 data-[active=true]:border-border1 data-[active=true]:bg-surface4 data-[active=true]:text-neutral6 flex h-9 w-full cursor-pointer items-center gap-2 rounded-lg border border-transparent px-2.5 text-left transition-[background-color,border-color,color,transform] duration-150 ease-out active:scale-[0.99]"
+      className={cn(
+        quietTextHover,
+        'flex h-9 w-full cursor-pointer items-center gap-2 rounded-lg border border-transparent px-2.5 text-left text-body-sm hover:border-border hover:bg-fill-subtle data-[active=true]:border-border data-[active=true]:bg-fill-hover data-[active=true]:text-foreground',
+        // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- v4 emits nothing for `scale-0.99`
+        'transition-[color,transform] duration-fast ease-out-custom active:scale-[0.99] motion-reduce:transition-none',
+      )}
       data-active={active}
       aria-pressed={active}
       onClick={onSelect}
     >
       <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">{icon}</span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      <span className="border-border1 bg-surface4/70 text-neutral3 rounded-md border px-1.5 py-0.5 text-[10px] leading-none">
+      <span className="rounded-md border border-border bg-muted/70 px-1.5 py-0.5 text-meta leading-none text-muted-foreground">
         {count}
       </span>
     </button>
@@ -130,7 +145,10 @@ function CommandPaletteResults({ children, footer, ...props }: CommandPaletteRes
   return (
     <div
       role="region"
-      className="command-palette-surface command-palette-surface-results command-palette-results-panel border-border1 bg-surface2 relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border shadow-[0_10px_28px_-22px_rgb(0_0_0_/_0.6)]"
+      className={cn(
+        'command-palette-surface command-palette-surface-results command-palette-results-panel relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl',
+        overlaySurfaceStyle,
+      )}
       {...props}
     >
       <CommandList
@@ -138,6 +156,7 @@ function CommandPaletteResults({ children, footer, ...props }: CommandPaletteRes
         scrollAreaClassName="min-h-0 flex-1 rounded-none"
         scrollAreaViewportClassName="command-palette-scroll-viewport"
         className="command-palette-list max-h-none rounded-none border-none bg-transparent shadow-none"
+        highlightClassName="rounded-lg"
       >
         {children}
       </CommandList>
@@ -168,29 +187,33 @@ function CommandPaletteItem({
   return (
     <CommandItem
       className={cn(
-        'group h-auto items-start gap-3 rounded-xl border border-transparent px-3 py-2.5 data-[selected=true]:border-border1 data-[selected=true]:bg-surface4/80',
-        'transition-[background-color,border-color] duration-150 ease-out',
+        'group h-auto items-start gap-3 rounded-lg border border-transparent px-3 py-2.5 data-[selected=true]:border-border',
         className,
       )}
       {...props}
     >
-      <span className="text-neutral3 group-data-[selected=true]:text-neutral6 mt-0.5 flex size-4 max-w-4 min-w-4 shrink-0 basis-4 items-center justify-center transition-colors duration-150 ease-out [&>svg]:!size-4 [&>svg]:shrink-0">
+      <span
+        className={cn(
+          'mt-0.5 flex size-4 max-w-4 min-w-4 shrink-0 basis-4 items-center justify-center text-muted-foreground group-data-[selected=true]:text-foreground [&>svg]:!size-4 [&>svg]:shrink-0',
+          controlStateColorTransition,
+        )}
+      >
         {icon}
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex min-w-0 items-center gap-2">
-          <span className="text-ui-smd leading-ui-sm text-neutral6 truncate font-medium">{title}</span>
+          <span className="truncate text-label text-foreground">{title}</span>
           {badge && (
-            <span className="border-border1 bg-surface4/60 text-neutral3 shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] leading-none font-medium uppercase">
+            <span className="shrink-0 rounded-md border border-border bg-muted/60 px-1.5 py-0.5 text-meta leading-none text-muted-foreground uppercase">
               {badge}
             </span>
           )}
         </span>
         {(subtitle || path) && (
-          <span className="text-ui-xs leading-ui-xs text-neutral3 flex min-w-0 items-center gap-2">
+          <span className="flex min-w-0 items-center gap-2 text-meta text-muted-foreground">
             {subtitle && <span className="truncate">{subtitle}</span>}
             {path && (
-              <span className="border-border1 bg-surface4/70 text-neutral3 max-w-52 truncate rounded-md border px-1.5 py-0.5 font-mono text-[10px] leading-none">
+              <span className="max-w-52 truncate rounded-md border border-border bg-muted/70 px-1.5 py-0.5 font-mono text-meta leading-none text-muted-foreground">
                 {path}
               </span>
             )}
@@ -204,7 +227,7 @@ function CommandPaletteItem({
 
 function CommandPaletteFooter({ label }: { label: string }) {
   return (
-    <div className="command-palette-footer text-ui-xs text-neutral3 pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-end justify-between gap-3 px-4 pt-5 pb-2">
+    <div className="command-palette-footer pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-end justify-between gap-3 px-3 pt-3 pb-2 text-meta text-muted-foreground">
       <span className="truncate">{label}</span>
       <span className="flex shrink-0 items-center gap-1.5">
         <Kbd size="sm">↑</Kbd>

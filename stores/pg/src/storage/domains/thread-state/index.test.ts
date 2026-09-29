@@ -51,6 +51,16 @@ describe('ThreadStatePG', () => {
     expect(await threadState.getState({ threadId: 'thread-1', type: 'task' })).toEqual(tasks());
   });
 
+  it('repairs invalid characters while preserving literal escape text', async () => {
+    const value = { path: 'C:\\path\\\uD800-end', literal: String.raw`literal\uD800`, nul: 'a\0b' };
+    await threadState.setState({ threadId: 'thread-1', type: 'task', value });
+    expect(await threadState.getState({ threadId: 'thread-1', type: 'task' })).toEqual({
+      path: 'C:\\path\\�-end',
+      literal: value.literal,
+      nul: 'ab',
+    });
+  });
+
   it('replaces the value on a subsequent set (upsert)', async () => {
     await threadState.setState({ threadId: 'thread-1', type: 'task', value: tasks() });
     const next: Task[] = [{ id: 't3', content: 'Third', status: 'completed', activeForm: 'Done third' }];

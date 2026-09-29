@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 
 import type { BoardCardStatus } from '../boardCardStatus';
 import type { CardAction } from '../cardPrimaryAction';
-import { metadataLabels, pullRequestStatusForItem, workItemMeta } from '../boardItems';
+import { metadataLabelColors, metadataLabels, pullRequestStatusForItem, workItemMeta } from '../boardItems';
 import { itemStageLabel } from '../boardStages';
 import type { AuditActorProfile } from '../services/audit';
 import type { WorkItem } from '../services/workItems';
@@ -48,19 +48,21 @@ export function WorkItemCardRows({
   open: boolean;
 }) {
   const labels = metadataLabels(item.metadata);
+  const labelColors = metadataLabelColors(item.metadata);
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const external = knownExternalAuthor(item);
+  const verdict = columnStage === 'review' ? reviewVerdict(item.metadata) : undefined;
 
   return (
     <>
       <div className="absolute top-2 right-2 z-20 flex items-center gap-1.5">{controls}</div>
       <div className="flex min-w-0 flex-col gap-1.5">
         <div className={cn('flex min-w-0 items-center gap-1.5', open ? 'pr-44' : 'pr-16')}>
-          <span className="text-ui-xs text-icon2 min-w-0 truncate">{workItemMeta(item)}</span>
+          <span className="text-meta text-placeholder min-w-0 truncate">{workItemMeta(item)}</span>
           {relatedLinks}
           {item.commentCount > 0 && (
             <span
-              className="text-ui-xs text-icon2 flex shrink-0 items-center gap-1"
+              className="text-meta text-placeholder flex shrink-0 items-center gap-1"
               aria-label={`${item.commentCount} ${item.commentCount === 1 ? 'comment' : 'comments'}`}
             >
               <MessageSquare size={11} aria-hidden />
@@ -74,24 +76,29 @@ export function WorkItemCardRows({
           ) : (
             <SourceIcon source={item.source} />
           )}
-          <span className="text-ui-smd text-icon6 min-w-0 flex-1 truncate font-[550]">
+          <span className="text-label text-foreground min-w-0 flex-1 truncate font-[550]">
             <SourceTitle source={item.source} title={item.title} id={titleId} />
           </span>
         </div>
       </div>
-      <CardLabels labels={labels} />
+      <CardLabels labels={labels} colors={labelColors} />
       {otherStages.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           {otherStages.map(stage => (
-            <span key={stage} className="border-border1 text-ui-xs text-icon4 rounded-full border px-2 py-0.5">
+            <span key={stage} className="border-border text-meta text-muted-foreground rounded-full border px-2 py-0.5">
               {itemStageLabel(item, stage)}
             </span>
           ))}
         </div>
       )}
-      {(status.kind !== 'idle' || external) && (
+      {(status.kind !== 'idle' || external || verdict) && (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
           <CardStatus status={status} />
+          {verdict && (
+            <Badge size="xs" variant={verdict.approved ? 'green' : 'orange'}>
+              {verdict.label}
+            </Badge>
+          )}
           {external && (
             <Tooltip>
               <TooltipTrigger
@@ -115,4 +122,14 @@ export function WorkItemCardRows({
       />
     </>
   );
+}
+
+/** The last verdict a review pass recorded; the card rests in Reviewing until the PR merges. */
+export function reviewVerdict(metadata: Record<string, unknown>): { approved: boolean; label: string } | undefined {
+  const verdict = metadata.reviewVerdict;
+  if (verdict !== 'approve' && verdict !== 'request changes') return undefined;
+  const sha = typeof metadata.reviewedHeadSha === 'string' ? ` · ${metadata.reviewedHeadSha.slice(0, 7)}` : '';
+  return verdict === 'approve'
+    ? { approved: true, label: `Approved${sha}` }
+    : { approved: false, label: `Changes requested${sha}` };
 }

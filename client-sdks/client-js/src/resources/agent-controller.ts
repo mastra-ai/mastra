@@ -6,8 +6,9 @@ import type {
 } from '@mastra/core/agent-controller';
 export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { StorageListMessagesInput, StorageListMessagesOutput } from '@mastra/core/storage';
+import type { StorageListMessagesOutput } from '@mastra/core/storage';
 
+import type { QueryParams, RouteResponse } from '../route-types.generated.js';
 import type {
   AgentControllerActiveRun,
   AgentControllerAvailableModel,
@@ -49,7 +50,10 @@ type WireEventOf<T extends AgentControllerWireEvent['type']> = Extract<AgentCont
 /** A `MastraDBMessage` before {@link hydrateMessage} turns its `createdAt` back into a `Date`. */
 type SerializedMastraDBMessage = WireEventOf<'message_start'>['message'];
 
-type AgentControllerModernListMessagesOptions = Omit<StorageListMessagesInput, 'threadId' | 'resourceId'> & {
+type AgentControllerModernListMessagesOptions = Omit<
+  QueryParams<'GET /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/messages'>,
+  'sessionScope' | 'limit'
+> & {
   limit?: never;
 };
 
@@ -71,7 +75,10 @@ export type AgentControllerListMessagesOptions =
 /** A page of hydrated Agent Controller thread messages. */
 export type AgentControllerListMessagesResult = StorageListMessagesOutput;
 
-type SerializedAgentControllerListMessagesResult = Omit<StorageListMessagesOutput, 'messages'> & {
+type SerializedAgentControllerListMessagesResult = Omit<
+  RouteResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/messages'>,
+  'messages'
+> & {
   messages: SerializedMastraDBMessage[];
 };
 
@@ -106,7 +113,7 @@ type NotificationEvent =
 /** The timestamps the SDK gives back as `Date`s. {@link hydrateKnownEvent} is typed against this, so the two cannot drift. */
 type Hydrated<T> = T extends { type: 'thread_created' }
   ? Omit<T, 'thread'> & { thread: AgentControllerThread }
-  : T extends { type: 'message_start' | 'message_update' | 'message_end' }
+  : T extends { type: 'message_start' }
     ? Omit<T, 'message'> & { message: MastraDBMessage }
     : T;
 
@@ -218,8 +225,6 @@ function isKnownParsedEvent(event: ParsedEvent): event is AgentControllerWireEve
 function hydrateKnownEvent(event: AgentControllerWireEvent | NotificationEvent): KnownAgentControllerEvent {
   switch (event.type) {
     case 'message_start':
-    case 'message_update':
-    case 'message_end':
       return { ...event, message: hydrateMessage(event.message) };
     case 'thread_created':
       return { ...event, thread: hydrateThread(event.thread) };
@@ -683,7 +688,7 @@ export class AgentControllerSession extends BaseResource {
     if (opts.limit != null) params.set('limit', String(opts.limit));
     if (opts.tags && Object.keys(opts.tags).length > 0) params.set('tags', JSON.stringify(opts.tags));
     const query = params.toString() ? `?${params.toString()}` : '';
-    const body = await this.request<{ threads: AgentControllerThreadInfo[] }>(
+    const body = await this.request<RouteResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/threads'>>(
       this.url(`${this.base()}/threads${query}`),
     );
     return body.threads;
@@ -784,8 +789,10 @@ export class AgentControllerSession extends BaseResource {
   }
 
   /** Get the observational memory record for this session's thread. */
-  async getOMRecord(): Promise<unknown> {
-    const body = await this.request<{ record: unknown }>(this.url(`${this.base()}/om`));
+  async getOMRecord(): Promise<RouteResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/om'>['record']> {
+    const body = await this.request<RouteResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/om'>>(
+      this.url(`${this.base()}/om`),
+    );
     return body.record;
   }
 
@@ -798,14 +805,20 @@ export class AgentControllerSession extends BaseResource {
   }
 
   /** Get known resource IDs for this session. */
-  async getResourceIds(): Promise<string[]> {
-    const body = await this.request<{ resourceIds: string[] }>(this.url(`${this.base()}/resources`));
+  async getResourceIds(): Promise<
+    RouteResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/resources'>['resourceIds']
+  > {
+    const body = await this.request<
+      RouteResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/resources'>
+    >(this.url(`${this.base()}/resources`));
     return body.resourceIds;
   }
 
   /** Get the current goal for this session's thread. */
   async getGoal(): Promise<AgentControllerGoalRecord | undefined> {
-    const body = await this.request<{ goal?: AgentControllerGoalRecord }>(this.url(`${this.base()}/goal`));
+    const body = await this.request<RouteResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/goal'>>(
+      this.url(`${this.base()}/goal`),
+    );
     return body.goal;
   }
 
@@ -814,10 +827,13 @@ export class AgentControllerSession extends BaseResource {
     objective: string,
     options?: { judgeModelId?: string; maxRuns?: number },
   ): Promise<AgentControllerGoalRecord | undefined> {
-    const body = await this.request<{ goal?: AgentControllerGoalRecord }>(this.url(`${this.base()}/goal`), {
-      method: 'POST',
-      body: { objective, ...options },
-    });
+    const body = await this.request<RouteResponse<'POST /agent-controller/:controllerId/sessions/:resourceId/goal'>>(
+      this.url(`${this.base()}/goal`),
+      {
+        method: 'POST',
+        body: { objective, ...options },
+      },
+    );
     return body.goal;
   }
 
@@ -827,10 +843,13 @@ export class AgentControllerSession extends BaseResource {
     maxRuns?: number;
     status?: 'active' | 'paused' | 'done';
   }): Promise<AgentControllerGoalRecord | undefined> {
-    const body = await this.request<{ goal?: AgentControllerGoalRecord }>(this.url(`${this.base()}/goal`), {
-      method: 'PUT',
-      body: options,
-    });
+    const body = await this.request<RouteResponse<'PUT /agent-controller/:controllerId/sessions/:resourceId/goal'>>(
+      this.url(`${this.base()}/goal`),
+      {
+        method: 'PUT',
+        body: options,
+      },
+    );
     return body.goal;
   }
 
@@ -892,19 +911,25 @@ export class AgentController extends BaseResource {
 
   /** List the modes configured on this agent controller (e.g. build, plan). */
   async listModes(): Promise<AgentControllerModeInfo[]> {
-    const body = await this.request<{ modes: AgentControllerModeInfo[] }>(`${this.basePath()}/modes`);
+    const body = await this.request<RouteResponse<'GET /agent-controller/:controllerId/modes'>>(
+      `${this.basePath()}/modes`,
+    );
     return body.modes;
   }
 
   /** List available models on this agent controller (with auth status and use counts). */
   async listModels(): Promise<AgentControllerAvailableModel[]> {
-    const body = await this.request<{ models: AgentControllerAvailableModel[] }>(`${this.basePath()}/models`);
+    const body = await this.request<RouteResponse<'GET /agent-controller/:controllerId/models'>>(
+      `${this.basePath()}/models`,
+    );
     return body.models;
   }
 
   /** List the runs in flight on this controller, across all resources. */
   async listActiveRuns(): Promise<AgentControllerActiveRun[]> {
-    const body = await this.request<{ runs: AgentControllerActiveRun[] }>(`${this.basePath()}/active-runs`);
+    const body = await this.request<RouteResponse<'GET /agent-controller/:controllerId/active-runs'>>(
+      `${this.basePath()}/active-runs`,
+    );
     return body.runs;
   }
 

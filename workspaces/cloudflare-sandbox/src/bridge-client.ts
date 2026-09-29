@@ -18,6 +18,50 @@ export interface CloudflareExecRequest {
   cwd?: string;
 }
 
+export interface CloudflarePersistWorkspaceOptions {
+  /** Relative paths (under /workspace) to exclude from the archive. */
+  excludes?: string[];
+}
+
+export interface CloudflareMountBucketCredentials {
+  accessKeyId: string;
+  secretAccessKey: string;
+}
+
+export interface CloudflareMountBucketOptions {
+  /** S3-compatible endpoint, e.g. `https://<account>.r2.cloudflarestorage.com`. */
+  endpoint?: string;
+  /** Mount the bucket read-only. */
+  readOnly?: boolean;
+  /** Only expose objects under this bucket prefix at the mount point. */
+  prefix?: string;
+  /** Storage provider hint, e.g. `r2`. */
+  provider?: string;
+  /** Explicit credentials; omitted when the Worker resolves them from secrets. */
+  credentials?: CloudflareMountBucketCredentials;
+}
+
+export interface CloudflareMountBucketRequest {
+  /** Bucket name, e.g. `my-r2-bucket`. */
+  bucket: string;
+  /** Local filesystem path to mount at, e.g. `/mnt/data`. */
+  mountPath: string;
+  options?: CloudflareMountBucketOptions;
+}
+
+export interface CloudflareCreateSessionRequest {
+  /** Working directory the session starts in. */
+  cwd?: string;
+  /** Environment variables seeded into the session. */
+  env?: Record<string, string>;
+  /** Caller-chosen session id; must match `^[a-zA-Z0-9._-]{1,128}$`. Generated when omitted. */
+  sessionId?: string;
+}
+
+export interface CloudflareSession {
+  id: string;
+}
+
 export class CloudflareSandboxBridgeError extends Error {
   readonly status: number;
   readonly body: string;
@@ -89,6 +133,78 @@ export class CloudflareSandboxBridgeClient {
         body: content as RequestInit['body'],
         headers: { 'content-type': 'application/octet-stream' },
       },
+      true,
+    );
+  }
+
+  /** `GET /v1/sandbox/:id/file/*` — reads one file, returning its raw bytes. */
+  async readFile(id: string, absolutePath: string): Promise<Uint8Array> {
+    return this.requestBytes(`/v1/sandbox/${encodeURIComponent(id)}/file/${encodeFilePath(absolutePath)}`, {});
+  }
+
+  /** `GET /v1/sandbox/:id/persist` — archives `/workspace`, returning raw tar bytes. */
+  async persistWorkspace(id: string, options: CloudflarePersistWorkspaceOptions = {}): Promise<Uint8Array> {
+    const query = options.excludes?.length ? `?excludes=${encodeURIComponent(options.excludes.join(','))}` : '';
+    return this.requestBytes(`/v1/sandbox/${encodeURIComponent(id)}/persist${query}`, {});
+  }
+
+  /** `POST /v1/sandbox/:id/hydrate` — restores `/workspace` from a raw tar payload. */
+  async hydrateWorkspace(id: string, tar: Uint8Array): Promise<void> {
+    await this.request(
+      `/v1/sandbox/${encodeURIComponent(id)}/hydrate`,
+      {
+        method: 'POST',
+        body: tar as RequestInit['body'],
+        headers: { 'content-type': 'application/octet-stream' },
+      },
+      true,
+    );
+  }
+
+  /** `POST /v1/sandbox/:id/mount` — mounts an S3-compatible bucket as a local directory. */
+  async mountBucket(id: string, request: CloudflareMountBucketRequest): Promise<void> {
+    await this.request(
+      `/v1/sandbox/${encodeURIComponent(id)}/mount`,
+      {
+        method: 'POST',
+        body: JSON.stringify(request),
+        headers: { 'content-type': 'application/json' },
+      },
+      true,
+    );
+  }
+
+  /** `POST /v1/sandbox/:id/unmount` — unmounts a previously mounted bucket. */
+  async unmountBucket(id: string, mountPath: string): Promise<void> {
+    await this.request(
+      `/v1/sandbox/${encodeURIComponent(id)}/unmount`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ mountPath }),
+        headers: { 'content-type': 'application/json' },
+      },
+      true,
+    );
+  }
+
+  /** `POST /v1/sandbox/:id/session` — creates an execution session, returning its id. */
+  async createSession(id: string, request: CloudflareCreateSessionRequest = {}): Promise<CloudflareSession> {
+    const body: Record<string, unknown> = {};
+    if (request.cwd !== undefined) body.cwd = request.cwd;
+    if (request.env !== undefined) body.env = request.env;
+    if (request.sessionId !== undefined) body.id = request.sessionId;
+    return this.request<CloudflareSession>(`/v1/sandbox/${encodeURIComponent(id)}/session`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+
+  /** `DELETE /v1/sandbox/:id/session/:sessionId` — tears down an execution session. */
+  async deleteSession(id: string, sessionId: string): Promise<void> {
+    await this.request(
+      `/v1/sandbox/${encodeURIComponent(id)}/session/${encodeURIComponent(sessionId)}`,
+      { method: 'DELETE' },
       true,
     );
   }
@@ -186,6 +302,17 @@ export class CloudflareSandboxBridgeClient {
     }
     if (allowEmpty || response.status === 204) return undefined as T;
     return response.json() as Promise<T>;
+  }
+
+  private async requestBytes(path: string, init: RequestInit): Promise<Uint8Array> {
+    const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+      ...init,
+      headers: { ...this.headers(), ...init.headers },
+    });
+    if (!response.ok) {
+      throw new CloudflareSandboxBridgeError(response.status, await response.text());
+    }
+    return new Uint8Array(await response.arrayBuffer());
   }
 }
 

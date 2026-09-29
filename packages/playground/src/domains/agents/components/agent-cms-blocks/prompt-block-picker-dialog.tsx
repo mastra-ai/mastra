@@ -78,29 +78,29 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
         </DialogHeader>
         <DialogBody>
           <div className="flex flex-col gap-3">
-            <div className="border-border1 bg-surface2 flex items-center gap-2 rounded-md border px-3 py-2">
-              <Search className="text-neutral3 h-4 w-4" />
+            <div className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2">
+              <Search className="h-4 w-4 text-muted-foreground" />
               <input
                 type="text"
                 value={search}
                 onChange={e => handleSearchChange(e.target.value)}
                 placeholder="Search prompt blocks..."
-                className="text-ui-sm text-neutral6 placeholder:text-neutral3 flex-1 bg-transparent outline-hidden"
+                className="flex-1 bg-transparent text-caption text-foreground outline-hidden placeholder:text-muted-foreground"
               />
             </div>
 
             {isLoading ? (
-              <div className="text-neutral3 flex flex-col items-center justify-center gap-2 py-8">
-                <Spinner className="h-6 w-6" />
-                <Txt variant="ui-sm">Loading prompt blocks...</Txt>
+              <div className="flex flex-col items-center justify-center gap-2 py-5 text-muted-foreground">
+                <Spinner />
+                <Txt variant="caption">Loading prompt blocks...</Txt>
               </div>
             ) : filtered.length === 0 ? (
-              <div className="text-neutral3 flex flex-col items-center justify-center gap-2 py-8">
+              <div className="flex flex-col items-center justify-center gap-2 py-5 text-muted-foreground">
                 <FileText className="h-8 w-8" />
-                <Txt variant="ui-sm">{search ? 'No matching prompt blocks' : 'No prompt blocks available'}</Txt>
+                <Txt variant="caption">{search ? 'No matching prompt blocks' : 'No prompt blocks available'}</Txt>
               </div>
             ) : (
-              <div className="max-h-dropdown-max-height flex flex-col gap-1 overflow-y-auto">
+              <div className="flex max-h-dropdown flex-col gap-1 overflow-y-auto">
                 {filtered.map(block => (
                   <button
                     key={block.id}
@@ -108,14 +108,14 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
                     onClick={() => handleSelect(block.id)}
                     className={cn(
                       'flex flex-col gap-0.5 rounded-md px-3 py-2 text-left',
-                      'hover:bg-surface4 active:bg-surface5 transition-colors',
+                      'hover:bg-fill-subtle active:bg-fill',
                     )}
                   >
-                    <Txt variant="ui-sm" className="text-neutral6 font-medium">
+                    <Txt variant="column" tone="ink">
                       {block.name}
                     </Txt>
                     {block.description && (
-                      <Txt variant="ui-xs" className="text-neutral3 line-clamp-1">
+                      <Txt variant="meta" tone="muted" className="line-clamp-1">
                         {block.description}
                       </Txt>
                     )}

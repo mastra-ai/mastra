@@ -19,6 +19,7 @@ import { buildMessageRange } from '../observational-memory';
 import { formatMessagesForObserver } from '../observer-agent';
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
+import { resolveThreadTitleUpdate } from './thread-title';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
 
 export class SyncObservationStrategy extends ObservationStrategy {
@@ -118,6 +119,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
       resourceId: this.opts.resourceId,
       trigger: this.opts.trigger,
       mainAgent: this.opts.agent,
+      timeZone: this.opts.record.observedTimezone,
     });
     const hookedValues = await applyExtractorHooks({
       source: 'observer',
@@ -126,7 +128,10 @@ export class SyncObservationStrategy extends ObservationStrategy {
       failures: result.extractionFailures,
       previousValues: this.priorExtractedValues,
       rawObservations: result.observations,
-      recentMessages: formatMessagesForObserver(this.opts.messages, { maxPartLength: 500 }),
+      recentMessages: formatMessagesForObserver(this.opts.messages, {
+        maxPartLength: 500,
+        timeZone: this.opts.record.observedTimezone,
+      }),
       threadId: this.opts.threadId,
       resourceId: this.opts.resourceId,
       mainAgent: this.opts.agent,
@@ -199,12 +204,25 @@ export class SyncObservationStrategy extends ObservationStrategy {
     const { record, threadId, resourceId, messages } = this.opts;
 
     const thread = await this.storage.getThreadById({ threadId });
+
+    // `Memory.deleteThread` clears the observational-memory record along with the
+    // thread, so a cycle that finishes after the delete would persist into a removed
+    // row and index vectors that the already-finished cleanup will never delete.
+    // Keying off the record rather than the thread row matters: `observe()` is a
+    // public entry point that legitimately runs for a thread that was never
+    // persisted, in which case `getOrCreateRecord` has already created the record.
+    const liveRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+    if (!liveRecord) {
+      omDebug(`[OM:sync-obs] skipping persist for thread ${threadId}: observational memory record is gone`);
+      return;
+    }
+
     let threadUpdateMarker: ReturnType<typeof createThreadUpdateMarker> | undefined;
 
     if (thread) {
       const oldTitle = thread.title?.trim();
-      const newTitle = processed.threadTitle?.trim();
-      const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
+      const newTitle = resolveThreadTitleUpdate(thread, processed.threadTitle);
+      const shouldUpdateThreadTitle = newTitle !== undefined;
       const previousOmMetadata = getThreadOMMetadata(thread.metadata);
       const metadataUpdate = buildThreadMetadataFromExtractedValues(
         processed.extractors ?? this.observationConfig.extractors,
@@ -280,6 +298,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
         startedAt: this.startedAt,
         tokensAttempted: this.tokensToObserve,
         error,
+        failurePolicy: this.observationConfig.failurePolicy,
         recordId: this.opts.record.id,
         threadId: this.opts.threadId,
       });

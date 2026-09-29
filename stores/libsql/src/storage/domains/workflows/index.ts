@@ -405,7 +405,9 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     page,
     perPage,
     resourceId,
+    threadId,
     status,
+    summary,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
@@ -441,6 +443,18 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         }
       }
 
+      if (threadId) {
+        // The thread id lives inside the snapshot JSON, in one of two layouts. This mirrors
+        // the canonical extraction in `@mastra/core` (`getSnapshotMemoryInfo`) and must stay
+        // in lockstep with it — otherwise rows the caller would match get wrongly excluded:
+        // 1. agentic-loop: under a dynamic suspended-step key, hence the json_each() scan
+        // 2. durable loop: under the serialized workflow input at a fixed path
+        conditions.push(
+          `(EXISTS (SELECT 1 FROM json_each(snapshot, '$.context') AS je WHERE json_extract(je.value, '$.status') = 'suspended' AND json_extract(je.value, '$.suspendPayload.__streamState.messageList.memoryInfo.threadId') = ?) OR json_extract(snapshot, '$.context.input.messageListState.memoryInfo.threadId') = ?)`,
+        );
+        args.push(threadId, threadId);
+      }
+
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       let total = 0;
@@ -458,7 +472,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       const normalizedPerPage = usePagination ? normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
       const offset = usePagination ? page! * normalizedPerPage : 0;
       const result = await this.#client.execute({
-        sql: `SELECT workflow_name, run_id, resourceId, json(snapshot) as snapshot, createdAt, updatedAt FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause} ORDER BY createdAt DESC${usePagination ? ` LIMIT ? OFFSET ?` : ''}`,
+        sql: `SELECT workflow_name, run_id, resourceId, ${summary ? `json_object('status', json_extract(snapshot, '$.status'), 'timestamp', json_extract(snapshot, '$.timestamp'))` : 'json(snapshot)'} as snapshot, createdAt, updatedAt FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause} ORDER BY createdAt DESC${usePagination ? ` LIMIT ? OFFSET ?` : ''}`,
         args: usePagination ? [...args, normalizedPerPage, offset] : args,
       });
 

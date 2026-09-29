@@ -8,15 +8,16 @@ import { getServerProjectEnv } from '../server/platform-api.js';
 import { wrapAction } from '../utils.js';
 import { serializeEnvFile } from './env-file.js';
 import type { Environment } from './platform-api.js';
-import { fetchEnvironments } from './platform-api.js';
+import { fetchEnvironmentList } from './platform-api.js';
 import { resolveProject } from './resolve-project.js';
 
+/** Register the `mastra env vars ...` subcommands on the given `env` command. */
 export function registerEnvVarsCommands(env: Command): void {
   const vars = env.command('vars').description("Manage an environment's variables");
 
   vars
     .command('pull')
-    .description('Pull the merged env vars (environment + project scope) into a local env file')
+    .description('Pull the env vars an environment deploys with into a local env file')
     .argument('[environment]', 'Environment name, slug, or ID (optional when the project has exactly one)')
     .option('--project <project>', 'Project name, slug, or ID (default: linked project)')
     .option('-o, --output <file>', 'File to write (default: .env)')
@@ -24,10 +25,16 @@ export function registerEnvVarsCommands(env: Command): void {
     .action(wrapAction(envVarsPullAction));
 }
 
+/** True when a filesystem error means the target path already exists (`EEXIST`). */
 function isAlreadyExistsError(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'EEXIST';
 }
 
+/**
+ * Resolve the environment to pull by id, name, or slug. When no argument is
+ * given the project must have exactly one environment; otherwise the error
+ * lists the available slugs.
+ */
 function pickEnvironment(environments: Environment[], envArg: string | undefined): Environment {
   if (environments.length === 0) {
     throw new Error('No environments found for this project. Deploy first with `mastra deploy`.');
@@ -47,15 +54,23 @@ function pickEnvironment(environments: Environment[], envArg: string | undefined
 }
 
 /**
- * Pull the full set of env vars that a deploy of the target environment
- * actually runs with — the environment row's vars (e.g. added via the UI
- * editor) merged with the project-scoped vars, with project values winning on
- * conflict, matching the platform's deploy-time merge precedence. Managed
- * vars (platform-injected secrets) are listed as comments, names only.
+ * Pull the env vars a deploy of the target environment actually runs with.
  *
- * The legacy `mastra server env pull` reads only the project scope; this is
- * the unified-surface replacement that fixes UI-added vars silently missing
- * from pulled files.
+ * The platform reports which store the runtime reads from
+ * (`envVarsAuthority` on the environments list):
+ *
+ * - `environment` (every project adopted onto environments): the selected
+ *   environment row's own vars. Nothing else is merged in. The legacy
+ *   project-scope endpoint (`GET /v1/server/projects/:id/env`) is NOT
+ *   consulted here because, for env-first projects, the platform answers it
+ *   with the *production* environment's vars. Merging that in used to make
+ *   `mastra env vars pull qa` write production's values for every key the
+ *   two environments share.
+ * - `project` (legacy, not yet adopted): the runtime still boots from the
+ *   project row, so that is what gets pulled. Environment rows exist but
+ *   nothing reads their vars.
+ *
+ * Managed vars (platform-injected secrets) are listed as comments, names only.
  */
 export async function envVarsPullAction(
   envArg: string | undefined,
@@ -65,17 +80,13 @@ export async function envVarsPullAction(
   const { orgId } = await resolveCurrentOrg(token);
   const project = await resolveProject(token, orgId, options.project);
 
-  const [environments, projectVars] = await Promise.all([
-    fetchEnvironments(token, orgId, project.id),
-    getServerProjectEnv(token, orgId, project.id),
-  ]);
+  const { environments, envVarsAuthority } = await fetchEnvironmentList(token, orgId, project.id);
   const environment = pickEnvironment(environments, envArg);
 
-  // Same precedence as the platform's deploy-time merge: environment row
-  // vars first, project-scoped vars override on conflict.
-  const merged = { ...(environment.envVars ?? {}), ...projectVars };
+  const vars =
+    envVarsAuthority === 'project' ? await getServerProjectEnv(token, orgId, project.id) : (environment.envVars ?? {});
 
-  const { content, written, skipped } = serializeEnvFile(merged, {
+  const { content, written, skipped } = serializeEnvFile(vars, {
     header: `Pulled from Mastra environment ${environment.slug} — do not edit manually`,
     managedVarNames: environment.managedEnvVarNames,
   });

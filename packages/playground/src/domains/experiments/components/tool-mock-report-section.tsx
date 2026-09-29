@@ -1,6 +1,8 @@
 import type { ToolMockReport } from '@mastra/client-js';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { WrenchIcon } from 'lucide-react';
 
 export interface ToolMockReportSectionProps {
@@ -37,9 +39,7 @@ export function ToolMockReportSection({ report }: ToolMockReportSectionProps) {
 
   return (
     <div className="grid gap-2" data-testid="tool-mock-report">
-      <DataPanel.SectionHeading icon={<WrenchIcon />} className="mb-2">
-        Tool Mocks
-      </DataPanel.SectionHeading>
+      <DataPanel.SectionHeading icon={<WrenchIcon />}>Tool Mocks</DataPanel.SectionHeading>
 
       {failure && (
         <Notice variant="destructive" title="Mock mismatch">
@@ -47,27 +47,35 @@ export function ToolMockReportSection({ report }: ToolMockReportSectionProps) {
             <span className="block">
               {`Tool "${failure.toolName}" was called with arguments that did not match an available mock (${failure.code}).`}
             </span>
-            <span className="mt-1 block font-mono text-xs">Called with: {formatArgs(failure.args)}</span>
+            <span className="mt-1 block text-caption">
+              Called with: <InlineCode>{formatArgs(failure.args)}</InlineCode>
+            </span>
             {unconsumed.length > 0 && (
-              <span className="mt-1 block font-mono text-xs">
-                Unconsumed mocks: {unconsumed.map(u => formatArgs(u.args)).join(', ')}
+              <span className="mt-1 block text-caption">
+                Unconsumed mocks: <InlineCode>{unconsumed.map(u => formatArgs(u.args)).join(', ')}</InlineCode>
               </span>
             )}
           </Notice.Message>
         </Notice>
       )}
 
-      <div className="border-border1 divide-border1 divide-y rounded border text-sm">
+      <div className="divide-y divide-border rounded border border-border text-body">
         {rows.map((row, i) => (
           <div
             key={`${row.outcome}-${row.toolName}-${i}`}
             className="flex items-center justify-between gap-2 px-3 py-1.5"
           >
             <span className="min-w-0 truncate">
-              <span className="text-neutral4 font-mono">{row.toolName}</span>
-              <span className="text-neutral3 ml-2 font-mono text-xs">{formatArgs(row.args)}</span>
+              <Txt as="span" variant="body-sm" tone="muted" font="mono">
+                {row.toolName}
+              </Txt>
+              <Txt as="span" variant="caption" tone="muted" font="mono" className="ml-2">
+                {formatArgs(row.args)}
+              </Txt>
             </span>
-            <span className={`shrink-0 rounded px-2 py-0.5 text-xs ${outcomeClass(row.outcome)}`}>{row.outcome}</span>
+            <span className={`shrink-0 rounded px-2 py-0.5 text-caption ${outcomeClass(row.outcome)}`}>
+              {row.outcome}
+            </span>
           </div>
         ))}
       </div>
@@ -82,6 +90,6 @@ function outcomeClass(outcome: ReportRow['outcome']): string {
     case 'live':
       return 'bg-orange-500/10 text-orange-400';
     case 'unconsumed':
-      return 'bg-neutral3/10 text-neutral4';
+      return 'bg-muted-foreground/10 text-muted-foreground';
   }
 }

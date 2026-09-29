@@ -54,12 +54,21 @@ describe('DatasetItems empty state', () => {
     const onImportJsonClick = vi.fn();
     renderEmpty({ onAddClick, onImportClick, onImportJsonClick });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add Item' }));
+    fireEvent.click(screen.getByRole('button', { name: 'New item' }));
     fireEvent.click(screen.getByRole('button', { name: 'Import CSV' }));
     fireEvent.click(screen.getByRole('button', { name: 'Import JSON' }));
 
     expect(onAddClick).toHaveBeenCalledTimes(1);
     expect(onImportClick).toHaveBeenCalledTimes(1);
     expect(onImportJsonClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the add item action when pressing C', () => {
+    const onAddClick = vi.fn();
+    renderEmpty({ onAddClick });
+
+    fireEvent.keyDown(window, { key: 'c' });
+
+    expect(onAddClick).toHaveBeenCalledTimes(1);
   });
 });

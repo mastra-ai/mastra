@@ -9,16 +9,32 @@
 
 import { LangfuseClient } from '@langfuse/client';
 import { LangfuseSpanProcessor } from '@langfuse/otel';
-import type { TracingEvent, AnyExportedSpan, InitExporterOptions, ScoreEvent } from '@mastra/core/observability';
+import type {
+  TracingEvent,
+  AnyExportedSpan,
+  InitExporterOptions,
+  ModelGenerationAttributes,
+  ScoreEvent,
+} from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
 import { SpanConverter } from '@mastra/otel-exporter';
+import type { OtelExporterConfig } from '@mastra/otel-exporter';
 
 const LOG_PREFIX = '[LangfuseExporter]';
 const MASTRA_METADATA_PREFIX = 'mastra.metadata.';
 /** Metadata keys mapped to dedicated Langfuse fields; never forwarded as trace metadata. */
-const DEDICATED_METADATA_KEYS = new Set(['userId', 'sessionId', 'threadId', 'traceName', 'version', 'langfuse']);
+const OM_CALLER_THREAD_ID = '__mastraObservationalMemoryCallerThreadId';
+const DEDICATED_METADATA_KEYS = new Set([
+  'userId',
+  'sessionId',
+  'threadId',
+  'traceName',
+  'version',
+  'langfuse',
+  OM_CALLER_THREAD_ID,
+]);
 
 export const LANGFUSE_DEFAULT_BASE_URL = 'https://cloud.langfuse.com';
 
@@ -41,6 +57,8 @@ export interface LangfuseExporterConfig extends BaseExporterConfig {
   environment?: string;
   /** Langfuse release tag for traces */
   release?: string;
+  /** Override OpenTelemetry resource attributes, including service.version. */
+  resourceAttributes?: OtelExporterConfig['resourceAttributes'];
 }
 
 export class LangfuseExporter extends BaseExporter {
@@ -51,6 +69,7 @@ export class LangfuseExporter extends BaseExporter {
   #realtime: boolean;
   #environment: string | undefined;
   #release: string | undefined;
+  #resourceAttributes: OtelExporterConfig['resourceAttributes'];
 
   constructor(config: LangfuseExporterConfig = {}) {
     super(config);
@@ -59,6 +78,7 @@ export class LangfuseExporter extends BaseExporter {
     const secretKey = config.secretKey ?? process.env.LANGFUSE_SECRET_KEY;
     const baseUrl = stripTrailingSlashes(config.baseUrl ?? process.env.LANGFUSE_BASE_URL ?? LANGFUSE_DEFAULT_BASE_URL);
     this.#realtime = config.realtime ?? false;
+    this.#resourceAttributes = config.resourceAttributes;
 
     if (!publicKey || !secretKey) {
       const publicKeySource = config.publicKey
@@ -108,6 +128,7 @@ export class LangfuseExporter extends BaseExporter {
     this.#spanConverter = new SpanConverter({
       packageName: '@mastra/langfuse',
       serviceName: options.config?.serviceName,
+      config: { resourceAttributes: this.#resourceAttributes },
       format: 'GenAI_v1_38_0',
     });
   }
@@ -125,6 +146,7 @@ export class LangfuseExporter extends BaseExporter {
       this.#spanConverter = new SpanConverter({
         packageName: '@mastra/langfuse',
         serviceName: 'mastra-service',
+        config: { resourceAttributes: this.#resourceAttributes },
         format: 'GenAI_v1_38_0',
       });
     }
@@ -275,6 +297,11 @@ function mapMastraToLangfuseAttributes(
   environment?: string,
   release?: string,
 ): void {
+  if (attributes['gen_ai.usage.reasoning_tokens'] !== undefined) {
+    attributes['gen_ai.usage.reasoning.output_tokens'] = attributes['gen_ai.usage.reasoning_tokens'];
+    delete attributes['gen_ai.usage.reasoning_tokens'];
+  }
+
   // Environment and release: set directly since onStart() is not called
   if (environment) {
     attributes['langfuse.environment'] = environment;
@@ -334,14 +361,39 @@ function mapMastraToLangfuseAttributes(
     delete attributes['mastra.completion_start_time'];
   }
 
+  // Exact provider-reported cost takes precedence over Langfuse's model-price inference.
+  // Estimated costs remain unexported so Langfuse can apply its own pricing model.
+  const costContext =
+    span.type === SpanType.MODEL_GENERATION
+      ? (span.attributes as ModelGenerationAttributes | undefined)?.costContext
+      : undefined;
+  if (
+    costContext?.costMetadata?.source === 'provider_reported' &&
+    costContext.costUnit === 'USD' &&
+    typeof costContext.estimatedCost === 'number' &&
+    Number.isFinite(costContext.estimatedCost) &&
+    costContext.estimatedCost >= 0
+  ) {
+    attributes['langfuse.observation.cost_details'] = JSON.stringify({
+      total: costContext.estimatedCost,
+    });
+  }
+
   // User ID: mastra.metadata.userId → user.id
   if (attributes['mastra.metadata.userId']) {
     attributes['user.id'] = attributes['mastra.metadata.userId'];
     delete attributes['mastra.metadata.userId'];
   }
 
-  // Session ID: mastra.metadata.sessionId or threadId → session.id
-  const sessionId = attributes['mastra.metadata.sessionId'] ?? attributes['mastra.metadata.threadId'];
+  // OM keeps caller identity separate from its isolated execution thread. Read
+  // the raw hint: conversion serializes malformed objects/arrays into strings.
+  const omCallerThreadId = span.metadata?.[OM_CALLER_THREAD_ID];
+  const sessionId =
+    attributes['mastra.metadata.sessionId'] ??
+    (typeof omCallerThreadId === 'string' && omCallerThreadId
+      ? omCallerThreadId
+      : attributes['mastra.metadata.threadId']);
+  delete attributes[`${MASTRA_METADATA_PREFIX}${OM_CALLER_THREAD_ID}`];
   if (sessionId) {
     attributes['session.id'] = sessionId;
     delete attributes['mastra.metadata.sessionId'];
@@ -360,9 +412,9 @@ function mapMastraToLangfuseAttributes(
     delete attributes['mastra.metadata.traceName'];
   }
 
-  // Trace version: mastra.metadata.version → langfuse.trace.version
+  // Version: mastra.metadata.version → langfuse.version
   if (attributes['mastra.metadata.version']) {
-    attributes['langfuse.trace.version'] = attributes['mastra.metadata.version'];
+    attributes['langfuse.version'] = attributes['mastra.metadata.version'];
     delete attributes['mastra.metadata.version'];
   }
 
@@ -457,6 +509,7 @@ function mapMastraToLangfuseAttributes(
     for (const key of Object.keys(attributes)) {
       if (key.startsWith('mastra.') && key.endsWith('.input')) {
         attributes['langfuse.observation.input'] = attributes[key];
+        delete attributes[key];
         break;
       }
     }
@@ -465,6 +518,7 @@ function mapMastraToLangfuseAttributes(
     for (const key of Object.keys(attributes)) {
       if (key.startsWith('mastra.') && key.endsWith('.output')) {
         attributes['langfuse.observation.output'] = attributes[key];
+        delete attributes[key];
         break;
       }
     }

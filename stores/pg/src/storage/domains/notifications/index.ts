@@ -19,8 +19,10 @@ import type {
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
+import { schemaNamePrefix } from '../../../shared/schema-name';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { runPrune, resolveTargets } from '../../retention';
 import { getSchemaName, getTableName, parseJsonResilient } from '../utils';
 
@@ -155,7 +157,7 @@ export class NotificationsPG extends NotificationsStorage {
    * so its supporting index is not part of the default index set.
    */
   private async ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
-    const prefix = this.#schema && this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const prefix = this.#schema && this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     for (const [key, entry] of Object.entries(NotificationsPG.retentionTables)) {
       if (!entry.indexed || !policies[key]) continue;
       try {
@@ -203,7 +205,7 @@ export class NotificationsPG extends NotificationsStorage {
 
   static getExportDDL(schemaName?: string): string[] {
     const statements: string[] = [];
-    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const parsedSchema = schemaName ? schemaNamePrefix(schemaName) : '';
     const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
 
     statements.push(
@@ -223,7 +225,7 @@ export class NotificationsPG extends NotificationsStorage {
   }
 
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const schemaPrefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     return NotificationsPG.getDefaultIndexDefs(schemaPrefix);
   }
 
@@ -262,7 +264,7 @@ export class NotificationsPG extends NotificationsStorage {
     const setColumns = entries.map(([key], index) => `"${parseSqlIdentifier(key, 'column name')}" = $${index + 1}`);
     const values = entries.map(([key, value]) => {
       const columnSchema = TABLE_SCHEMAS[TABLE_NOTIFICATIONS][key];
-      if (columnSchema?.type === 'jsonb' && value !== null) return JSON.stringify(value);
+      if (columnSchema?.type === 'jsonb' && value !== null) return toPgJson(value);
       return value;
     });
 
@@ -444,6 +446,38 @@ export class NotificationsPG extends NotificationsStorage {
     const updated = await this.#getNotification(this.#db.client, { threadId: input.threadId, id: input.id });
     if (!updated) throw new Error(`Notification ${input.id} was not found for thread ${input.threadId}`);
     return updated;
+  }
+
+  // Inlined instead of importing `UpdateNotificationsStatusInput` so this adapter's `.d.ts` stays valid
+  // against older @mastra/core versions that predate the bulk method.
+  override async updateNotificationsStatus(input: {
+    threadId: string;
+    ids: string[];
+    status: NotificationStatus;
+  }): Promise<NotificationRecord[]> {
+    const ids = Array.from(new Set(input.ids));
+    if (ids.length === 0) return [];
+
+    const now = new Date();
+    const assignments: Record<string, unknown> = {
+      status: input.status,
+      ...statusTimestamp(input.status, now),
+      updatedAt: now,
+    };
+    const columns = Object.keys(assignments);
+    const setClause = columns
+      .map((column, index) => `"${parseSqlIdentifier(column, 'column name')}" = $${index + 1}`)
+      .join(', ');
+
+    const schemaName = getSchemaName(this.#schema);
+    const tableName = getTableName({ indexName: TABLE_NOTIFICATIONS, schemaName });
+    // Bind the id list as one array parameter so the statement's parameter count is
+    // independent of how many ids are passed.
+    const rows = await this.#db.client.manyOrNone(
+      `UPDATE ${tableName} SET ${setClause} WHERE "threadId" = $${columns.length + 1} AND "id" = ANY($${columns.length + 2}::text[]) RETURNING *`,
+      [...Object.values(assignments), input.threadId, ids],
+    );
+    return rows.map(rowToNotification);
   }
 
   private async findCoalescable(input: CreateNotificationInput): Promise<NotificationRecord | undefined> {

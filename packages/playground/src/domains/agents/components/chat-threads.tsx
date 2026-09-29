@@ -1,21 +1,24 @@
 import type { StorageThreadType } from '@mastra/core/memory';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import {
   ThreadList,
   ThreadListEmpty,
   ThreadListItem,
   ThreadListItems,
   ThreadListNewItem,
+  ThreadListSeparator,
 } from '@mastra/playground-ui/components/ThreadList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { PanelEdgeIcon } from '@mastra/playground-ui/resize/panel-edge-icon';
 import { panelIconButtonClass } from '@mastra/playground-ui/resize/panel-icon-button';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface ChatThreadsProps {
   threads: StorageThreadType[];
@@ -50,7 +53,7 @@ export const ChatThreads = ({
       <ThreadList embedded={embedded}>
         {/* pt-[3px] lines the hide button up with the collapsed panel's expand button (top-2 vs border+p-1) */}
         <div className="flex items-center gap-1 pt-[3px]">
-          <ThreadListNewItem as={Link} to={newThreadLink}>
+          <ThreadListNewItem render={<Link href={newThreadLink} />}>
             <Icon>
               <Plus />
             </Icon>
@@ -70,10 +73,17 @@ export const ChatThreads = ({
                   </Icon>
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="right">Hide threads panel</TooltipContent>
+              <TooltipContent side="right">
+                <span className="inline-flex items-center gap-1.5">
+                  Hide threads panel
+                  <Kbd size="xs">{'{'}</Kbd>
+                </span>
+              </TooltipContent>
             </Tooltip>
           )}
         </div>
+
+        <ThreadListSeparator />
 
         {threads.length === 0 ? (
           <ThreadListEmpty>Your conversations will appear here once you start chatting!</ThreadListEmpty>
@@ -151,20 +161,8 @@ function ThreadTitle({ title, id, createdAt }: { title?: string; id?: string; cr
     title && !isDefaultThreadName(title)
       ? title
       : createdAt
-        ? formatDay(createdAt)
+        ? formatDate(createdAt, 'date-time-seconds')
         : `Thread ${id ? id.substring(id.length - 5) : ''}`;
 
-  return <span className="block truncate">{titleText}</span>;
+  return <span className="block truncate text-body-sm">{titleText}</span>;
 }
-
-const formatDay = (date: Date) => {
-  const options: Intl.DateTimeFormatOptions = {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-    second: 'numeric',
-    hour12: true,
-  };
-  return new Date(date).toLocaleString('en-us', options).replace(',', ' at');
-};

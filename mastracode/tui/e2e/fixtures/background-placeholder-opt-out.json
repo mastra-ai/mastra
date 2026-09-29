@@ -1,0 +1,14 @@
+{
+  "fixtures": [
+    {
+      "match": { "sequenceIndex": 0, "endpoint": "chat", "model": "gpt-5.4-mini" },
+      "response": {
+        "toolCalls": [{ "id": "call_collision", "name": "foreground_probe", "arguments": {} }]
+      }
+    },
+    {
+      "match": { "sequenceIndex": 1, "endpoint": "chat", "model": "gpt-5.4-mini" },
+      "response": { "content": "FOREGROUND_COLLISION_COMPLETE" }
+    }
+  ]
+}

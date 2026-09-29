@@ -1,0 +1,414 @@
+{
+  "schemaVersion": "4.0.0",
+  "license": "CC0-1.0",
+  "synthetic": true,
+  "datasets": {
+    "document-extraction": [
+      "low-risk",
+      "expired-document",
+      "unreadable-document",
+      "missing-document-side",
+      "identity-mismatch",
+      "dob-mismatch"
+    ],
+    "document-quality": ["low-risk", "expired-document", "unreadable-document", "missing-document-side"],
+    "policy-cases": ["low-risk", "expired-document", "provider-unavailable", "high-risk-escalation"],
+    "screening-cases": ["sanctions-exact", "sanctions-ambiguous", "pep-candidate", "provider-unavailable"],
+    "escalation-cases": [
+      "identity-mismatch",
+      "dob-mismatch",
+      "address-mismatch",
+      "sanctions-ambiguous",
+      "pep-candidate",
+      "high-risk-escalation"
+    ],
+    "consistency-cases": ["low-risk", "sanctions-exact", "sanctions-ambiguous", "high-risk-escalation"],
+    "workflow-trajectories": [
+      "low-risk",
+      "expired-document",
+      "unreadable-document",
+      "missing-document-side",
+      "identity-mismatch",
+      "dob-mismatch",
+      "address-mismatch",
+      "sanctions-exact",
+      "sanctions-ambiguous",
+      "pep-candidate",
+      "provider-unavailable",
+      "high-risk-escalation"
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "low-risk",
+      "tags": ["low-risk", "happy-path"],
+      "input": {
+        "fixtureScenarioId": "low-risk",
+        "fixtureDigest": "4bb155d7885c07692439ac041b2768a9f029b1cb2b98c762e0600dd3049df31d",
+        "repeatCount": 2
+      },
+      "groundTruth": {
+        "requiredCriticalFields": ["fullName", "dateOfBirth", "documentNumber", "expirationDate"],
+        "normalizedFieldCount": 6,
+        "expectedNormalizedFieldDigests": {
+          "fullName": "d96319151f5347ca067f1ec7a2a91c6e4aaac54b5092ed35c04f998092c43989",
+          "dateOfBirth": "a1c38b64c2f15b04a8903d7b7696ede5e636df241b434b94676cb21016c0342b",
+          "documentNumber": "d9e5bccf695c06558f459b61f5f3739b4005d6073575e1d323403d97e3434dce",
+          "expirationDate": "69f4389bcdc6b4b6d3a56d3af7e185b297941870f4c19f487fe43215770a9338",
+          "nationality": "c84bdca66fba2127313e26bfd2fe96f48e4282d397ef70710e260760009d87f0",
+          "residentialAddress": "e1fe3e4a03dd66a2210da0abc02df9f5abdfb6589f6ce3ad714265e4ba4cce0f"
+        },
+        "hardStopRequired": false,
+        "expectedRiskRoute": "AUTO_REVIEW",
+        "policyCompliant": true,
+        "requiredEvidence": ["document", "identity", "address", "sanctions", "pep", "risk"],
+        "reviewAction": "APPROVE",
+        "requiresEscalation": false,
+        "decision": "ACTIVE",
+        "trajectory": [
+          "SUBMITTED",
+          "EXTRACTING",
+          "CHECKING",
+          "ASSESSING_RISK",
+          "COMPLIANCE_REVIEW",
+          "APPROVED",
+          "PROVISIONING",
+          "ACTIVE"
+        ]
+      }
+    },
+    {
+      "id": "expired-document",
+      "tags": ["document-quality", "expired", "extraction"],
+      "input": {
+        "fixtureScenarioId": "expired-document",
+        "fixtureDigest": "561bb9178353d8fcb0c5ab51df05dca849aaff15cf101f1cf7a171217bdcce05",
+        "repeatCount": 2
+      },
+      "groundTruth": {
+        "requiredCriticalFields": ["fullName", "dateOfBirth", "documentNumber", "expirationDate"],
+        "normalizedFieldCount": 6,
+        "expectedNormalizedFieldDigests": {
+          "fullName": "d96319151f5347ca067f1ec7a2a91c6e4aaac54b5092ed35c04f998092c43989",
+          "dateOfBirth": "a1c38b64c2f15b04a8903d7b7696ede5e636df241b434b94676cb21016c0342b",
+          "documentNumber": "d9e5bccf695c06558f459b61f5f3739b4005d6073575e1d323403d97e3434dce",
+          "expirationDate": "516253e7da1f1c2c31f3d62de6faf379b02326ade58322df221db9f442e9a13a",
+          "nationality": "c84bdca66fba2127313e26bfd2fe96f48e4282d397ef70710e260760009d87f0",
+          "residentialAddress": "e1fe3e4a03dd66a2210da0abc02df9f5abdfb6589f6ce3ad714265e4ba4cce0f"
+        },
+        "hardStopRequired": false,
+        "expectedRiskRoute": "AUTO_REVIEW",
+        "policyCompliant": true,
+        "requiredEvidence": ["document", "identity", "address", "sanctions", "pep", "risk"],
+        "reviewAction": "APPROVE",
+        "requiresEscalation": false,
+        "decision": "ACTIVE",
+        "trajectory": [
+          "SUBMITTED",
+          "EXTRACTING",
+          "CHECKING",
+          "ASSESSING_RISK",
+          "COMPLIANCE_REVIEW",
+          "APPROVED",
+          "PROVISIONING",
+          "ACTIVE"
+        ]
+      }
+    },
+    {
+      "id": "unreadable-document",
+      "tags": ["document-quality", "unreadable", "hard-stop"],
+      "input": {
+        "fixtureScenarioId": "unreadable",
+        "fixtureDigest": "a6086e485f8bf599cd60d6fa5ab49a28cb4395bf8033521845131e559877f14c",
+        "repeatCount": 2
+      },
+      "groundTruth": {
+        "requiredCriticalFields": ["fullName", "dateOfBirth", "documentNumber", "expirationDate"],
+        "normalizedFieldCount": 0,
+        "expectedNormalizedFieldDigests": {
+          "fullName": "d063b183dc8b34a62395042d28b8ebf9c90ad8b3f32516549b04d7b7bdcdfcbc",
+          "dateOfBirth": "0d3ff466293424c083210233c0aad8fc25e78668756ba1d6c0e73686deeb9e11",
+          "documentNumber": "6e59a2fa1d2bd5b02cbfe08463434aac79516718efe7fc2269962f30603a1879",
+          "expirationDate": "a6a063bd81b85eb42e684cc59ad45e4c8c59120d364ca3f40b2c450d6b33041b",
+          "nationality": "e0fa7d4c5289759f34cb5e1fb764ff758fbdb81062f3ef0fd43233f82e249e4b",
+          "residentialAddress": "183eca81cab3a9c91ba76d3bc451e926262a18dc764baead971a3dd262451526"
+        },
+        "hardStopRequired": true,
+        "expectedRiskRoute": "NOT_APPLICABLE",
+        "policyCompliant": true,
+        "requiredEvidence": ["document"],
+        "reviewAction": "NONE",
+        "requiresEscalation": false,
+        "decision": "MISSING_INFORMATION",
+        "trajectory": ["SUBMITTED", "EXTRACTING", "MISSING_INFORMATION"]
+      }
+    },
+    {
+      "id": "missing-document-side",
+      "tags": ["document-quality", "missing-side", "hard-stop"],
+      "input": {
+        "fixtureScenarioId": "missing-document-side",
+        "fixtureDigest": "25e7675153c27029eb66a8862a879d593fb971e0ed414fb065cd0af7b4bb9e60",
+        "policyProfile": "demo-strict",
+        "documentInventory": [
+          { "type": "DRIVERS_LICENSE", "side": "FRONT", "extracted": true },
+          { "type": "PROOF_OF_ADDRESS", "side": "SINGLE", "extracted": false }
+        ],
+        "repeatCount": 2
+      },
+      "groundTruth": {
+        "requiredCriticalFields": ["fullName", "dateOfBirth", "documentNumber", "expirationDate"],
+        "normalizedFieldCount": 6,
+        "expectedNormalizedFieldDigests": {
+          "fullName": "d96319151f5347ca067f1ec7a2a91c6e4aaac54b5092ed35c04f998092c43989",
+          "dateOfBirth": "a1c38b64c2f15b04a8903d7b7696ede5e636df241b434b94676cb21016c0342b",
+          "documentNumber": "d9e5bccf695c06558f459b61f5f3739b4005d6073575e1d323403d97e3434dce",
+          "expirationDate": "69f4389bcdc6b4b6d3a56d3af7e185b297941870f4c19f487fe43215770a9338",
+          "nationality": "c84bdca66fba2127313e26bfd2fe96f48e4282d397ef70710e260760009d87f0",
+          "residentialAddress": "e1fe3e4a03dd66a2210da0abc02df9f5abdfb6589f6ce3ad714265e4ba4cce0f"
+        },
+        "hardStopRequired": true,
+        "expectedRiskRoute": "NOT_APPLICABLE",
+        "policyCompliant": true,
+        "requiredEvidence": ["document"],
+        "reviewAction": "NONE",
+        "requiresEscalation": false,
+        "decision": "MISSING_INFORMATION",
+        "trajectory": ["SUBMITTED", "EXTRACTING", "MISSING_INFORMATION"]
+      }
+    },
+    {
+      "id": "identity-mismatch",
+      "tags": ["identity", "mismatch", "escalation"],
+      "input": {
+        "fixtureScenarioId": "identity-mismatch",
+        "fixtureDigest": "668f287977908b0602afd57064538f89910b3e9f4bc7b18db734e8968e3c2ed6",
+        "repeatCount": 2
+      },
+      "groundTruth": {
+        "requiredCriticalFields": ["fullName", "dateOfBirth", "documentNumber", "expirationDate"],
+        "normalizedFieldCount": 6,
+        "expectedNormalizedFieldDigests": {
+          "fullName": "d96319151f5347ca067f1ec7a2a91c6e4aaac54b5092ed35c04f998092c43989",
+          "dateOfBirth": "a1c38b64c2f15b04a8903d7b7696ede5e636df241b434b94676cb21016c0342b",
+          "documentNumber": "d9e5bccf695c06558f459b61f5f3739b4005d6073575e1d323403d97e3434dce",
+          "expirationDate": "69f4389bcdc6b4b6d3a56d3af7e185b297941870f4c19f487fe43215770a9338",
+          "nationality": "c84bdca66fba2127313e26bfd2fe96f48e4282d397ef70710e260760009d87f0",
+          "residentialAddress": "e1fe3e4a03dd66a2210da0abc02df9f5abdfb6589f6ce3ad714265e4ba4cce0f"
+        },
+        "hardStopRequired": false,
+        "expectedRiskRoute": "REJECT_RECOMMENDED",
+        "policyCompliant": true,
+        "requiredEvidence": ["document", "identity", "address", "sanctions", "pep", "risk"],
+        "reviewAction": "ESCALATE",
+        "requiresEscalation": true,
+        "decision": "ESCALATED",
+        "trajectory": ["SUBMITTED", "EXTRACTING", "CHECKING", "ASSESSING_RISK", "COMPLIANCE_REVIEW", "ESCALATED"]
+      }
+    },
+    {
+      "id": "dob-mismatch",
+      "tags": ["date-of-birth", "mismatch", "escalation"],
+      "input": {
+        "fixtureScenarioId": "dob-mismatch",
+        "fixtureDigest": "d1a433caa64f0b6b8a573433f7404b03ff42fe5cc085527edc31e349bd594889",
+        "repeatCount": 2
+      },
+      "groundTruth": {
+        "requiredCriticalFields": ["fullName", "dateOfBirth", "documentNumber", "expirationDate"],
+        "normalizedFieldCount": 6,
+        "expectedNormalizedFieldDigests": {
+          "fullName": "d96319151f5347ca067f1ec7a2a91c6e4aaac54b5092ed35c04f998092c43989",
+          "dateOfBirth": "a1c38b64c2f15b04a8903d7b7696ede5e636df241b434b94676cb21016c0342b",
+          "documentNumber": "d9e5bccf695c06558f459b61f5f3739b4005d6073575e1d323403d97e3434dce",
+          "expirationDate": "69f4389bcdc6b4b6d3a56d3af7e185b297941870f4c19f487fe43215770a9338",
+          "nationality": "c84bdca66fba2127313e26bfd2fe96f48e4282d397ef70710e260760009d87f0",
+          "residentialAddress": "e1fe3e4a03dd66a2210da0abc02df9f5abdfb6589f6ce3ad714265e4ba4cce0f"
+        },
+        "hardStopRequired": false,
+        "expectedRiskRoute": "AUTO_REVIEW",
+        "policyCompliant": true,
+        "requiredEvidence": ["document", "identity", "address", "sanctions", "pep", "risk"],
+        "reviewAction": "ESCALATE",
+        "requiresEscalation": true,
+        "decision": "ESCALATED",
+        "trajectory": ["SUBMITTED", "EXTRACTING", "CHECKING", "ASSESSING_RISK", "COMPLIANCE_REVIEW", "ESCALATED"]
+      }
+    },
+    {
+      "id": "address-mismatch",
+      "tags": ["address", "mismatch", "escalation"],
+      "input": {
+        "fixtureScenarioId": "address-mismatch",
+        "fixtureDigest": "83addc39426ac7e96cda46f97ef065da03b94877248bacf02b1f3ece7e8efc33",
+        "repeatCount": 2
+      },
+      "groundTruth": {
+        "requiredCriticalFields": ["fullName", "dateOfBirth", "documentNumber", "expirationDate"],
+        "normalizedFieldCount": 6,
+        "expectedNormalizedFieldDigests": {
+          "fullName": "d96319151f5347ca067f1ec7a2a91c6e4aaac54b5092ed35c04f998092c43989",
+          "dateOfBirth": "a1c38b64c2f15b04a8903d7b7696ede5e636df241b434b94676cb21016c0342b",
+          "documentNumber": "d9e5bccf695c06558f459b61f5f3739b4005d6073575e1d323403d97e3434dce",
+          "expirationDate": "69f4389bcdc6b4b6d3a56d3af7e185b297941870f4c19f487fe43215770a9338",
+          "nationality": "c84bdca66fba2127313e26bfd2fe96f48e4282d397ef70710e260760009d87f0",
+          "residentialAddress": "99e50ae7d9abf493e45148241e0f07d0d6e9308522464fc4cfca01475310d1a2"
+        },
+        "hardStopRequired": false,
+        "expectedRiskRoute": "AUTO_REVIEW",
+        "policyCompliant": true,
+        "requiredEvidence": ["document", "identity", "address", "sanctions", "pep", "risk"],
+        "reviewAction": "ESCALATE",
+        "requiresEscalation": true,
+        "decision": "ESCALATED",
+        "trajectory": ["SUBMITTED", "EXTRACTING", "CHECKING", "ASSESSING_RISK", "COMPLIANCE_REVIEW", "ESCALATED"]
+      }
+    },
+    {
+      "id": "sanctions-exact",
+      "tags": ["sanctions", "exact-match", "rejection"],
+      "input": {
+        "fixtureScenarioId": "sanctions-strong",
+        "fixtureDigest": "338498d87d0ac0cecffcbea8554bd3b4266352a51a3968b842effef47f7f6e23",
+        "repeatCount": 2
+      },
+      "groundTruth": {
+        "requiredCriticalFields": ["fullName", "dateOfBirth", "documentNumber", "expirationDate"],
+        "normalizedFieldCount": 6,
+        "expectedNormalizedFieldDigests": {
+          "fullName": "065a6f84bc891c8c4d0ee142ab374ea712431ef5d425d0fc15fad4c8dfdcfcb6",
+          "dateOfBirth": "a1c38b64c2f15b04a8903d7b7696ede5e636df241b434b94676cb21016c0342b",
+          "documentNumber": "d9e5bccf695c06558f459b61f5f3739b4005d6073575e1d323403d97e3434dce",
+          "expirationDate": "69f4389bcdc6b4b6d3a56d3af7e185b297941870f4c19f487fe43215770a9338",
+          "nationality": "c84bdca66fba2127313e26bfd2fe96f48e4282d397ef70710e260760009d87f0",
+          "residentialAddress": "e1fe3e4a03dd66a2210da0abc02df9f5abdfb6589f6ce3ad714265e4ba4cce0f"
+        },
+        "hardStopRequired": false,
+        "expectedRiskRoute": "ESCALATE_RECOMMENDED",
+        "policyCompliant": true,
+        "requiredEvidence": ["document", "identity", "address", "sanctions", "pep", "risk"],
+        "reviewAction": "REJECT",
+        "requiresEscalation": false,
+        "decision": "REJECTED",
+        "trajectory": ["SUBMITTED", "EXTRACTING", "CHECKING", "ASSESSING_RISK", "COMPLIANCE_REVIEW", "REJECTED"]
+      }
+    },
+    {
+      "id": "sanctions-ambiguous",
+      "tags": ["sanctions", "ambiguous-match", "escalation"],
+      "input": {
+        "fixtureScenarioId": "sanctions-ambiguous",
+        "fixtureDigest": "ea406e0fa6537337677bf0f5fb76ddfa455b9ad148457be71e05fc278760df9b",
+        "repeatCount": 2
+      },
+      "groundTruth": {
+        "requiredCriticalFields": ["fullName", "dateOfBirth", "documentNumber", "expirationDate"],
+        "normalizedFieldCount": 6,
+        "expectedNormalizedFieldDigests": {
+          "fullName": "e5dad6f0df12ba84dfc2d34585e42d50b98f2a8101c169e82c938c0d6c7dabba",
+          "dateOfBirth": "a1c38b64c2f15b04a8903d7b7696ede5e636df241b434b94676cb21016c0342b",
+          "documentNumber": "d9e5bccf695c06558f459b61f5f3739b4005d6073575e1d323403d97e3434dce",
+          "expirationDate": "69f4389bcdc6b4b6d3a56d3af7e185b297941870f4c19f487fe43215770a9338",
+          "nationality": "c84bdca66fba2127313e26bfd2fe96f48e4282d397ef70710e260760009d87f0",
+          "residentialAddress": "e1fe3e4a03dd66a2210da0abc02df9f5abdfb6589f6ce3ad714265e4ba4cce0f"
+        },
+        "hardStopRequired": false,
+        "expectedRiskRoute": "AUTO_REVIEW",
+        "policyCompliant": true,
+        "requiredEvidence": ["document", "identity", "address", "sanctions", "pep", "risk"],
+        "reviewAction": "ESCALATE",
+        "requiresEscalation": true,
+        "decision": "ESCALATED",
+        "trajectory": ["SUBMITTED", "EXTRACTING", "CHECKING", "ASSESSING_RISK", "COMPLIANCE_REVIEW", "ESCALATED"]
+      }
+    },
+    {
+      "id": "pep-candidate",
+      "tags": ["pep", "candidate", "escalation"],
+      "input": {
+        "fixtureScenarioId": "pep-candidate",
+        "fixtureDigest": "c3adafa4fe50e0fde15524830da561a2be6ab29438aa58ae6dd49e2a019e2abb",
+        "repeatCount": 2
+      },
+      "groundTruth": {
+        "requiredCriticalFields": ["fullName", "dateOfBirth", "documentNumber", "expirationDate"],
+        "normalizedFieldCount": 6,
+        "expectedNormalizedFieldDigests": {
+          "fullName": "60fa1d77b36f88df642d664c8d465a7b099f7d84d905095da7aa34abea479d1b",
+          "dateOfBirth": "a1c38b64c2f15b04a8903d7b7696ede5e636df241b434b94676cb21016c0342b",
+          "documentNumber": "d9e5bccf695c06558f459b61f5f3739b4005d6073575e1d323403d97e3434dce",
+          "expirationDate": "69f4389bcdc6b4b6d3a56d3af7e185b297941870f4c19f487fe43215770a9338",
+          "nationality": "c84bdca66fba2127313e26bfd2fe96f48e4282d397ef70710e260760009d87f0",
+          "residentialAddress": "e1fe3e4a03dd66a2210da0abc02df9f5abdfb6589f6ce3ad714265e4ba4cce0f"
+        },
+        "hardStopRequired": false,
+        "expectedRiskRoute": "AUTO_REVIEW",
+        "policyCompliant": true,
+        "requiredEvidence": ["document", "identity", "address", "sanctions", "pep", "risk"],
+        "reviewAction": "ESCALATE",
+        "requiresEscalation": true,
+        "decision": "ESCALATED",
+        "trajectory": ["SUBMITTED", "EXTRACTING", "CHECKING", "ASSESSING_RISK", "COMPLIANCE_REVIEW", "ESCALATED"]
+      }
+    },
+    {
+      "id": "provider-unavailable",
+      "tags": ["provider", "unavailable", "failure"],
+      "input": {
+        "fixtureScenarioId": "provider-unavailable",
+        "fixtureDigest": "98dc1dc3e46888ea6136619b7f7e004c2b36447ce0727768c3a5af600438c822",
+        "repeatCount": 2
+      },
+      "groundTruth": {
+        "requiredCriticalFields": ["fullName", "dateOfBirth", "documentNumber", "expirationDate"],
+        "normalizedFieldCount": 6,
+        "expectedNormalizedFieldDigests": {
+          "fullName": "b0021291ceca5891c0c8b67728ea233f17ebbd3b7c48936e1b428bcbb654c53c",
+          "dateOfBirth": "a1c38b64c2f15b04a8903d7b7696ede5e636df241b434b94676cb21016c0342b",
+          "documentNumber": "d9e5bccf695c06558f459b61f5f3739b4005d6073575e1d323403d97e3434dce",
+          "expirationDate": "69f4389bcdc6b4b6d3a56d3af7e185b297941870f4c19f487fe43215770a9338",
+          "nationality": "c84bdca66fba2127313e26bfd2fe96f48e4282d397ef70710e260760009d87f0",
+          "residentialAddress": "e1fe3e4a03dd66a2210da0abc02df9f5abdfb6589f6ce3ad714265e4ba4cce0f"
+        },
+        "hardStopRequired": false,
+        "expectedRiskRoute": "INSUFFICIENT_INFORMATION",
+        "policyCompliant": true,
+        "requiredEvidence": ["document", "provider-status", "risk"],
+        "reviewAction": "NONE",
+        "requiresEscalation": false,
+        "decision": "COMPLIANCE_REVIEW",
+        "trajectory": ["SUBMITTED", "EXTRACTING", "CHECKING", "ASSESSING_RISK", "COMPLIANCE_REVIEW"]
+      }
+    },
+    {
+      "id": "high-risk-escalation",
+      "tags": ["high-risk", "escalation", "senior-review"],
+      "input": {
+        "fixtureScenarioId": "high-risk-escalation",
+        "fixtureDigest": "636fe0b4508697cfe55f48575c2f47e199456db7898a64ff337850d0e31bbaa8",
+        "repeatCount": 2
+      },
+      "groundTruth": {
+        "requiredCriticalFields": ["fullName", "dateOfBirth", "documentNumber", "expirationDate"],
+        "normalizedFieldCount": 6,
+        "expectedNormalizedFieldDigests": {
+          "fullName": "6e0dd5f70600f96f31c808daafca3634d4c0bfc64252e2b169e481e9f3265c63",
+          "dateOfBirth": "a1c38b64c2f15b04a8903d7b7696ede5e636df241b434b94676cb21016c0342b",
+          "documentNumber": "d9e5bccf695c06558f459b61f5f3739b4005d6073575e1d323403d97e3434dce",
+          "expirationDate": "69f4389bcdc6b4b6d3a56d3af7e185b297941870f4c19f487fe43215770a9338",
+          "nationality": "c84bdca66fba2127313e26bfd2fe96f48e4282d397ef70710e260760009d87f0",
+          "residentialAddress": "e1fe3e4a03dd66a2210da0abc02df9f5abdfb6589f6ce3ad714265e4ba4cce0f"
+        },
+        "hardStopRequired": false,
+        "expectedRiskRoute": "ESCALATE_RECOMMENDED",
+        "policyCompliant": true,
+        "requiredEvidence": ["document", "identity", "address", "sanctions", "pep", "risk"],
+        "reviewAction": "ESCALATE",
+        "requiresEscalation": true,
+        "decision": "ESCALATED",
+        "trajectory": ["SUBMITTED", "EXTRACTING", "CHECKING", "ASSESSING_RISK", "COMPLIANCE_REVIEW", "ESCALATED"]
+      }
+    }
+  ]
+}

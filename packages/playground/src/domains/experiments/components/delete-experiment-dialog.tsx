@@ -2,8 +2,9 @@
 
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
+import { Trash2 } from 'lucide-react';
 
 export interface DeleteExperimentDialogProps {
   open: boolean;
@@ -50,7 +51,13 @@ export function DeleteExperimentDialog({
           {/* Deliberately a Button rather than AlertDialog.Action: Action is a
               Close, which would dismiss the dialog before the request settles
               and hide a failed deletion behind a toast. */}
-          <Button variant="primary" size="lg" onClick={handleDelete} disabled={deleteExperiment.isPending}>
+          <Button
+            icon={<Trash2 />}
+            variant="primary"
+            size="lg"
+            onClick={handleDelete}
+            disabled={deleteExperiment.isPending}
+          >
             {deleteExperiment.isPending ? 'Deleting...' : 'Delete'}
           </Button>
           <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>

@@ -889,7 +889,7 @@ const agent = new Agent({
 The retry mechanism:
 
 - Works in `processOutputStep()` and `processInputStep()` methods
-- Replays the step with the abort reason added as context for the LLM
+- Replays the step with the abort reason appended verbatim to the end of the conversation as a system reminder. The retry keeps the previous request as its prefix, which preserves provider prompt caching
 - Tracks retry count via the `retryCount` parameter
 - Requires an explicit `maxProcessorRetries` limit on the agent or call
 
@@ -985,6 +985,27 @@ export class ContextLengthHandler implements Processor {
 ```
 
 Mastra includes a built-in [`PrefillErrorHandler`](/reference/processors/prefill-error-handler) that automatically handles the Anthropic "assistant message prefill" error. This processor is auto-injected and requires no configuration.
+
+## Receive background work notifications
+
+Use `createBackgroundWorkSignalProcessor()` to retain the active caller's signal capability for eligible background tool calls:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { createBackgroundWorkSignalProcessor } from '@mastra/core/processors'
+
+const agent = new Agent({
+  id: 'background-agent',
+  name: 'Background agent',
+  instructions: 'Complete tasks using the available tools.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  inputProcessors: [createBackgroundWorkSignalProcessor()],
+})
+```
+
+Mastra's background runtime remains responsible for execution, persistence, retries, result reconciliation, and continuation. The processor only retains caller-scoped notification access. When background work starts, it emits `work-deferred` or `work-awaited` with `status: 'running'`. After the authoritative tool result is reconciled, it emits `work-completed` or `work-failed`.
+
+Notifications are process-local and best-effort. If the originating run has already ended or the signal can't be delivered (for example, because the task resumed on another process), Mastra preserves the authoritative result without recreating the run or retrying the notification. Foreground calls never emit background work notifications because there is no detached work to report.
 
 ## Related documentation
 

@@ -1,9 +1,11 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
-import { Plus, XIcon } from 'lucide-react';
+import { XIcon } from 'lucide-react';
 import { DATASET_EXPERIMENT_OPTIONS } from './datasets-list/helpers';
+import type { DatasetTargetType } from './target-type-options';
+import { TargetFilter } from '@/domains/shared/components/target-filter';
 
 export interface DatasetsToolbarTagOption {
   value: string;
@@ -18,9 +20,12 @@ export interface DatasetsToolbarProps {
   tagFilter: string;
   onTagFilterChange: (value: string) => void;
   tagOptions: DatasetsToolbarTagOption[];
+  targetType: DatasetTargetType | '';
+  onTargetTypeChange: (type: DatasetTargetType | '') => void;
+  targetId: string;
+  onTargetIdChange: (id: string) => void;
   onReset?: () => void;
   hasActiveFilters?: boolean;
-  onCreateClick?: () => void;
 }
 
 export function DatasetsToolbar({
@@ -31,21 +36,30 @@ export function DatasetsToolbar({
   tagFilter,
   onTagFilterChange,
   tagOptions,
+  targetType,
+  onTargetTypeChange,
+  targetId,
+  onTargetIdChange,
   onReset,
   hasActiveFilters,
-  onCreateClick,
 }: DatasetsToolbarProps) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="max-w-120 min-w-64 flex-1">
-        <ListSearch
-          label="Search datasets"
-          placeholder="Filter by dataset name"
-          value={search}
-          onSearch={onSearchChange}
+    <ActionRow>
+      <ActionRow.Start>
+        <div className="max-w-120 flex-1">
+          <ListSearch
+            label="Search datasets"
+            placeholder="Filter by dataset name"
+            value={search}
+            onSearch={onSearchChange}
+          />
+        </div>
+        <TargetFilter
+          targetType={targetType}
+          targetId={targetId}
+          onTargetTypeChange={onTargetTypeChange}
+          onTargetIdChange={onTargetIdChange}
         />
-      </div>
-      <ButtonsGroup>
         <SelectFieldBlock
           label="Experiments"
           labelIsHidden
@@ -67,17 +81,11 @@ export function DatasetsToolbar({
           />
         )}
         {onReset && hasActiveFilters && (
-          <Button onClick={onReset} size="sm" variant="default">
-            <XIcon className="size-3" /> Reset
+          <Button onClick={onReset} size="sm" variant="default" icon={<XIcon />}>
+            Reset
           </Button>
         )}
-      </ButtonsGroup>
-      {onCreateClick && (
-        <Button onClick={onCreateClick} variant="primary" className="ml-auto shrink-0">
-          <Plus />
-          Create Dataset
-        </Button>
-      )}
-    </div>
+      </ActionRow.Start>
+    </ActionRow>
   );
 }

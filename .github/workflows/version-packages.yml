@@ -64,7 +64,7 @@ jobs:
           git commit -m "chore: bump @mastra/mcp-docs-server prerelease version"
 
       - name: Create Release Pull Request
-        uses: changesets/action@v1
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
           # husky precommit runs linting and typechecking - those are handled by other GH actions already

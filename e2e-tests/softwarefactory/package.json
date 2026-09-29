@@ -8,7 +8,7 @@
     "tinyglobby": "^0.2.17",
     "verdaccio": "^6.7.4",
     "verdaccio-auth-memory": "^13.0.3",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "scripts": {
     "test": "vitest run"

@@ -31,6 +31,7 @@ import { useChatModels } from './useChatModels';
 import { useChatModes } from './useChatModes';
 import { useChatPermissions } from './useChatPermissions';
 import { useChatSessionContext } from './useChatSessionContext';
+import { useChatRuntime } from './useChatRuntime';
 import { useChatTranscript } from './useChatTranscript';
 
 const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
@@ -53,6 +54,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const location = useLocation();
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { transcript, busy, localUser, pushNotice } = useChatTranscript();
+  const { usage, omPhase } = useChatRuntime();
   const { activeModeId } = useChatModes();
   const { activeModelId, setModel } = useChatModels();
 
@@ -179,7 +181,6 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
       description: 'Show token usage',
       requiresSession: false,
       execute: async () => {
-        const usage = transcript.usage;
         pushNotice(
           !usage?.totalTokens
             ? 'No token usage recorded yet.'
@@ -242,7 +243,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
       name: 'om',
       description: 'Show observational-memory phase',
       requiresSession: false,
-      execute: async () => pushNotice(`Observational memory phase: ${transcript.omPhase ?? 'idle'}`),
+      execute: async () => pushNotice(`Observational memory phase: ${omPhase}`),
     },
     {
       name: 'settings',

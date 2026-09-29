@@ -7,12 +7,11 @@ import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
 import virtual from '@rollup/plugin-virtual';
-import { getPackageInfo } from 'local-pkg';
 import * as resolve from 'resolve.exports';
 import { rollup } from 'rollup';
 import type { OutputChunk, OutputAsset, Plugin } from 'rollup';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
-import { getPackageRootPath } from '../package-info';
+import { getPackageRootPath, getPackageInfo } from '../package-info';
 import { esbuild } from '../plugins/esbuild';
 import { esmShim } from '../plugins/esm-shim';
 import { aliasHono } from '../plugins/hono-alias';
@@ -140,6 +139,7 @@ async function getInputPlugins(
     transpilePackages,
     workspaceMap,
     bundlerOptions,
+    projectRoot,
     rootDir,
     externals,
     platform,
@@ -147,6 +147,7 @@ async function getInputPlugins(
     transpilePackages: Set<string>;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     bundlerOptions: { noBundling: boolean };
+    projectRoot: string;
     rootDir: string;
     externals: string[];
     platform: BundlerPlatform;
@@ -173,9 +174,9 @@ async function getInputPlugins(
         {} as Record<string, string>,
       ),
     ),
-    tsConfigPaths(),
+    tsConfigPaths({ cwd: projectRoot }),
     protocolExternalResolver(),
-    subpathExternalsResolver(externals),
+    subpathExternalsResolver(externals, workspaceMap),
     transpilePackagesMap.size
       ? esbuild({
           format: 'esm',
@@ -239,7 +240,13 @@ async function getInputPlugins(
       transformMixedEsModules: true,
       ignoreTryCatch: false,
     }),
-    bundlerOptions.noBundling ? null : nodeResolve(getNodeResolveOptions(platform)),
+    bundlerOptions.noBundling
+      ? null
+      : nodeResolve({
+          ...getNodeResolveOptions(platform),
+          rootDir: projectRoot,
+          modulePaths: [path.join(rootDir, 'node_modules')],
+        }),
     bundlerOptions.noBundling ? esmShim() : null,
     // hono is imported from deployer, so we need to resolve from here instead of the project root
     aliasHono(),
@@ -295,6 +302,7 @@ async function buildExternalDependencies(
     externals,
     packagesToTranspile,
     workspaceMap,
+    projectRoot,
     rootDir,
     outputDir,
     bundlerOptions,
@@ -303,6 +311,7 @@ async function buildExternalDependencies(
     externals: string[];
     packagesToTranspile: Set<string>;
     workspaceMap: Map<string, WorkspacePackageInfo>;
+    projectRoot: string;
     rootDir: string;
     outputDir: string;
     bundlerOptions: {
@@ -327,6 +336,7 @@ async function buildExternalDependencies(
     bundlerOptions: {
       noBundling,
     },
+    projectRoot,
     rootDir,
     externals,
     platform,
@@ -516,6 +526,7 @@ export async function bundleExternals(
     externals: mergedExternals,
     packagesToTranspile,
     workspaceMap,
+    projectRoot,
     rootDir: workspaceRoot || projectRoot,
     outputDir,
     bundlerOptions: {

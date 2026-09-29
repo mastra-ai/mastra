@@ -174,6 +174,14 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     defaultValue: '{}',
   },
   {
+    name: 'classifiers',
+    type: 'Record<string, Classifier>',
+    description:
+      'Classifiers for typed fixed-option evaluation. Registered classifiers can be retrieved by key or ID. See [Classifier](/reference/classifier/classifier)',
+    isOptional: true,
+    defaultValue: '{}',
+  },
+  {
     name: 'processors',
     type: 'Record<string, Processor>',
     description: 'Input/output processors for transforming agent inputs and outputs',
@@ -387,7 +395,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             isOptional: true,
             defaultValue: "'off'",
             description:
-              "Set to `'auto'` to automatically re-drive orphaned RUNNING durable agent runs on server boot. Recovery re-issues LLM calls and re-executes tool calls, so tools must be idempotent. See [Crash recovery](/docs/harness/durable-agents#crash-recovery).",
+              "Set to `'auto'` to automatically re-drive orphaned RUNNING durable agent runs on server boot. This also controls the default snapshot-persistence policy for durable agents: `running` checkpoints are only written when set to `'auto'` (or when an agent sets a custom `shouldPersistSnapshot` that includes `running`). Recovery re-issues LLM calls and re-executes tool calls, so tools must be idempotent. See [Crash recovery](/docs/harness/durable-agents#crash-recovery).",
           },
         ],
       },

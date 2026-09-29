@@ -1,132 +1,76 @@
-import { render, fireEvent } from '@testing-library/react';
-import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import type { ReactElement } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StudioConfigForm } from '../components/studio-config-form';
 import { StudioConfigContext } from '../context/studio-config-state';
 import type { StudioConfigContextType } from '../context/studio-config-state';
 import type { StudioConfig } from '../types';
 
-vi.mock('@/lib/toast', () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
-}));
+const customConfig: StudioConfig = {
+  baseUrl: 'http://localhost:4111',
+  headers: { Authorization: 'Bearer test' },
+  apiPrefix: '/mastra',
+};
 
-function renderWithConfig(
-  ui: React.ReactElement,
-  { setConfig = vi.fn() }: { setConfig?: StudioConfigContextType['setConfig'] } = {},
-) {
-  const contextValue: StudioConfigContextType = {
-    baseUrl: '',
-    headers: {},
-    apiPrefix: undefined,
-    isLoading: false,
-    setConfig,
-  };
-  return render(<StudioConfigContext.Provider value={contextValue}>{ui}</StudioConfigContext.Provider>);
+function renderWithConfig(ui: ReactElement, setConfig = vi.fn<StudioConfigContextType['setConfig']>()) {
+  return render(
+    <StudioConfigContext.Provider value={{ ...customConfig, isLoading: false, setConfig }}>
+      {ui}
+    </StudioConfigContext.Provider>,
+  );
 }
 
-/**
- * Tests for issue https://github.com/mastra-ai/mastra/issues/14634
- *
- * Bug: The settings page previously passed `{ baseUrl, headers }` to StudioConfigForm
- * but omitted `apiPrefix`, causing the field to display empty and revert on save.
- */
-describe('StudioConfigForm apiPrefix contract (issue #14634)', () => {
-  it('should display the custom apiPrefix in the form field', () => {
-    const initialConfig: StudioConfig = {
-      baseUrl: 'http://localhost:4111',
-      headers: {},
-      apiPrefix: '/mastra',
-    };
+afterEach(cleanup);
 
-    const { container } = renderWithConfig(<StudioConfigForm initialConfig={initialConfig} />);
+describe.each(['default', 'factory'] as const)('StudioConfigForm (%s)', variant => {
+  describe('when the connection uses a custom API prefix', () => {
+    it('displays the saved prefix', () => {
+      renderWithConfig(<StudioConfigForm variant={variant} initialConfig={customConfig} />);
 
-    const apiPrefixInput = container.querySelector('input[name="apiPrefix"]') as HTMLInputElement;
-    expect(apiPrefixInput).not.toBeNull();
-    expect(apiPrefixInput.value).toBe('/mastra');
-  });
-
-  it('should preserve apiPrefix when submitting the form', () => {
-    const mockSetConfig = vi.fn();
-    const initialConfig: StudioConfig = {
-      baseUrl: 'http://localhost:4111',
-      headers: { Authorization: 'Bearer test' },
-      apiPrefix: '/mastra',
-    };
-
-    const { container } = renderWithConfig(<StudioConfigForm initialConfig={initialConfig} />, {
-      setConfig: mockSetConfig,
+      expect(screen.getByRole('textbox', { name: 'API prefix' })).toHaveProperty('value', '/mastra');
     });
 
-    const form = container.querySelector('form')!;
-    fireEvent.submit(form);
+    it('preserves the connection URL, API prefix, and headers when saving', () => {
+      const setConfig = vi.fn<StudioConfigContextType['setConfig']>();
+      renderWithConfig(<StudioConfigForm variant={variant} initialConfig={customConfig} />, setConfig);
 
-    expect(mockSetConfig).toHaveBeenCalledWith(
-      expect.objectContaining({
-        apiPrefix: '/mastra',
-        baseUrl: 'http://localhost:4111',
-      }),
-    );
-  });
+      fireEvent.click(screen.getByRole('button', { name: 'Save Configuration' }));
 
-  it('should submit apiPrefix as undefined when field is empty', () => {
-    const mockSetConfig = vi.fn();
-    const initialConfig: StudioConfig = {
-      baseUrl: 'http://localhost:4111',
-      headers: {},
-    };
-
-    const { container } = renderWithConfig(<StudioConfigForm initialConfig={initialConfig} />, {
-      setConfig: mockSetConfig,
+      expect(setConfig).toHaveBeenCalledWith(customConfig);
     });
 
-    const form = container.querySelector('form')!;
-    fireEvent.submit(form);
+    it('calls onSave after submitting', () => {
+      const onSave = vi.fn();
+      renderWithConfig(<StudioConfigForm variant={variant} initialConfig={customConfig} onSave={onSave} />);
 
-    expect(mockSetConfig).toHaveBeenCalledWith(
-      expect.objectContaining({
-        apiPrefix: undefined,
-      }),
-    );
-  });
+      fireEvent.click(screen.getByRole('button', { name: 'Save Configuration' }));
 
-  it('should handle the default /api prefix round-trip', () => {
-    const mockSetConfig = vi.fn();
-    const initialConfig: StudioConfig = {
-      baseUrl: 'http://localhost:4111',
-      headers: {},
-      apiPrefix: '/api',
-    };
-
-    const { container } = renderWithConfig(<StudioConfigForm initialConfig={initialConfig} />, {
-      setConfig: mockSetConfig,
+      expect(onSave).toHaveBeenCalledOnce();
     });
-
-    const apiPrefixInput = container.querySelector('input[name="apiPrefix"]') as HTMLInputElement;
-    expect(apiPrefixInput.value).toBe('/api');
-
-    const form = container.querySelector('form')!;
-    fireEvent.submit(form);
-
-    expect(mockSetConfig).toHaveBeenCalledWith(
-      expect.objectContaining({
-        apiPrefix: '/api',
-      }),
-    );
   });
 
-  it('should call onSave callback after submitting', () => {
-    const mockOnSave = vi.fn();
-    const initialConfig: StudioConfig = {
-      baseUrl: 'http://localhost:4111',
-      headers: {},
-      apiPrefix: '/mastra',
-    };
+  describe('when the API prefix is cleared', () => {
+    it('saves an undefined prefix', () => {
+      const setConfig = vi.fn<StudioConfigContextType['setConfig']>();
+      renderWithConfig(<StudioConfigForm variant={variant} initialConfig={customConfig} />, setConfig);
 
-    const { container } = renderWithConfig(<StudioConfigForm initialConfig={initialConfig} onSave={mockOnSave} />);
+      fireEvent.change(screen.getByRole('textbox', { name: 'API prefix' }), { target: { value: '  ' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save Configuration' }));
 
-    const form = container.querySelector('form')!;
-    fireEvent.submit(form);
+      expect(setConfig).toHaveBeenCalledWith({ ...customConfig, apiPrefix: undefined });
+    });
+  });
 
-    expect(mockOnSave).toHaveBeenCalledOnce();
+  describe('when the connection uses the default API prefix', () => {
+    it('preserves the default prefix when saving', () => {
+      const setConfig = vi.fn<StudioConfigContextType['setConfig']>();
+      const defaultConfig = { ...customConfig, apiPrefix: '/api' };
+      renderWithConfig(<StudioConfigForm variant={variant} initialConfig={defaultConfig} />, setConfig);
+
+      expect(screen.getByRole('textbox', { name: 'API prefix' })).toHaveProperty('value', '/api');
+      fireEvent.click(screen.getByRole('button', { name: 'Save Configuration' }));
+
+      expect(setConfig).toHaveBeenCalledWith(defaultConfig);
+    });
   });
 });

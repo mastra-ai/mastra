@@ -794,7 +794,7 @@ describe('Scorer Utils', () => {
       });
     });
 
-    it('should prefer toolInvocations over content.parts when both are present', () => {
+    it('should keep calls from both toolInvocations and content.parts when both are present', () => {
       const output: ScorerRunOutputForAgent = [
         createTestMessage({
           content: 'Done.',
@@ -810,7 +810,8 @@ describe('Scorer Utils', () => {
           ],
         }),
       ];
-      // Inject an extra tool-invocation part that should be ignored
+      // A distinct call stored only in parts must stay visible. Dropping it is what
+      // hid thrown calls when a message carried both forms (issue #23460).
       (output[0]!.content as any).parts.push({
         type: 'tool-invocation',
         toolInvocation: {
@@ -824,8 +825,71 @@ describe('Scorer Utils', () => {
 
       const results = extractToolResults(output);
 
+      expect(results).toHaveLength(2);
+      // With no shared toolCallId anchoring them, legacy-only calls trail the parts
+      // they cannot be ordered against — same as core's `extractTrajectory`.
+      expect(results.map(r => r.toolName)).toEqual(['partsTool', 'legacyTool']);
+    });
+
+    it('should count a mirrored toolCallId once, taking the parts entry', () => {
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({
+          content: 'Done.',
+          role: 'assistant',
+          toolInvocations: [
+            createToolInvocation({
+              toolCallId: 'shared-call',
+              toolName: 'sharedTool',
+              args: {},
+              result: { source: 'legacy' },
+              state: 'result',
+            }),
+          ],
+        }),
+      ];
+      (output[0]!.content as any).parts.push({
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'shared-call',
+          toolName: 'sharedTool',
+          args: {},
+          result: { source: 'parts' },
+        },
+      });
+
+      const results = extractToolResults(output);
+
       expect(results).toHaveLength(1);
-      expect(results[0]?.toolName).toBe('legacyTool');
+      expect(results[0]?.result).toEqual({ source: 'parts' });
+    });
+
+    it('should not produce a result entry for a thrown call', () => {
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({
+          content: 'That failed.',
+          role: 'assistant',
+          id: 'msg-1',
+          parts: [
+            { type: 'text', text: 'That failed.' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: createToolInvocation({
+                toolCallId: 'bad',
+                toolName: 'save',
+                args: { value: 'x' },
+                state: 'output-error',
+                errorText: 'Save failed',
+              }),
+            },
+          ],
+        }),
+      ];
+
+      const results = extractToolResults(output);
+
+      // A thrown call carries errorText, not a result.
+      expect(results).toHaveLength(0);
     });
   });
 
@@ -896,6 +960,143 @@ describe('Scorer Utils', () => {
 
       expect(tools).toHaveLength(0);
       expect(toolCallInfos).toHaveLength(0);
+    });
+
+    it('should count a natively thrown call (state "output-error") as a real call', () => {
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({
+          content: 'That failed.',
+          role: 'assistant',
+          id: 'msg-1',
+          parts: [
+            { type: 'text', text: 'That failed.' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: createToolInvocation({
+                toolCallId: 'bad',
+                toolName: 'save',
+                args: { value: 'x' },
+                state: 'output-error',
+                errorText: 'Save failed',
+              }),
+            },
+          ],
+        }),
+      ];
+
+      const { tools, toolCallInfos } = extractToolCalls(output);
+
+      expect(tools).toEqual(['save']);
+      expect(toolCallInfos).toHaveLength(1);
+      expect(toolCallInfos[0]?.toolCallId).toBe('bad');
+    });
+
+    it('should see both calls when a failed call exists only in parts alongside a legacy array', () => {
+      const good = createToolInvocation({
+        toolCallId: 'good',
+        toolName: 'save',
+        args: {},
+        result: { saved: true },
+        state: 'result',
+      });
+      const bad = createToolInvocation({
+        toolCallId: 'bad',
+        toolName: 'save',
+        args: {},
+        state: 'output-error',
+        errorText: 'Save failed',
+      });
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({
+          content: 'Partly done.',
+          role: 'assistant',
+          id: 'msg-1',
+          // The legacy array mirrors only the successful call.
+          toolInvocations: [good],
+          parts: [
+            { type: 'text', text: 'Partly done.' },
+            { type: 'tool-invocation', toolInvocation: good },
+            { type: 'tool-invocation', toolInvocation: bad },
+          ],
+        }),
+      ];
+
+      const { tools, toolCallInfos } = extractToolCalls(output);
+
+      expect(tools).toEqual(['save', 'save']);
+      expect(toolCallInfos.map(i => i.toolCallId)).toEqual(['good', 'bad']);
+    });
+
+    it('should retain legacy-only calls that are absent from parts', () => {
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({
+          content: 'Done.',
+          role: 'assistant',
+          id: 'msg-1',
+          toolInvocations: [
+            createToolInvocation({
+              toolCallId: 'legacy-only',
+              toolName: 'legacyTool',
+              args: {},
+              result: { ok: true },
+              state: 'result',
+            }),
+          ],
+          parts: [{ type: 'text', text: 'Done.' }],
+        }),
+      ];
+
+      const { tools } = extractToolCalls(output);
+
+      expect(tools).toEqual(['legacyTool']);
+    });
+
+    it('should preserve compatible call order when merging legacy-only and shared calls', () => {
+      const a = createToolInvocation({ toolCallId: 'a', toolName: 'toolA', args: {}, result: {}, state: 'result' });
+      const b = createToolInvocation({ toolCallId: 'b', toolName: 'toolB', args: {}, result: {}, state: 'result' });
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({
+          content: 'Done.',
+          role: 'assistant',
+          id: 'msg-1',
+          toolInvocations: [a, b],
+          // Parts only know about `b`; `a` must stay ahead of it rather than being appended.
+          parts: [
+            { type: 'text', text: 'Done.' },
+            { type: 'tool-invocation', toolInvocation: b },
+          ],
+        }),
+      ];
+
+      const { tools } = extractToolCalls(output);
+
+      expect(tools).toEqual(['toolA', 'toolB']);
+    });
+
+    it('should still exclude partial calls', () => {
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({
+          content: 'Streaming...',
+          role: 'assistant',
+          id: 'msg-1',
+          parts: [
+            { type: 'text', text: 'Streaming...' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: createToolInvocation({
+                toolCallId: 'partial',
+                toolName: 'save',
+                args: {},
+                state: 'partial-call',
+              }),
+            },
+          ],
+        }),
+      ];
+
+      const { tools } = extractToolCalls(output);
+
+      expect(tools).toHaveLength(0);
     });
   });
 
@@ -1804,6 +2005,27 @@ describe('Scorer Utils', () => {
       expect(result.score).toBe(1);
     });
 
+    it('should detect redundant consecutive tool calls nested inside an agent_run', () => {
+      const trajectory: Trajectory = {
+        steps: [
+          { stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'test' } },
+          {
+            stepType: 'agent_run' as const,
+            name: 'subagent',
+            children: [
+              { stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'test' } },
+              { stepType: 'tool_call' as const, name: 'lookup', toolArgs: { id: 1 } },
+              { stepType: 'tool_call' as const, name: 'lookup', toolArgs: { id: 1 } },
+              { stepType: 'tool_call' as const, name: 'lookup', toolArgs: { id: 2 } },
+            ],
+          },
+        ],
+      };
+      const result = checkTrajectoryEfficiency(trajectory, { noRedundantCalls: true });
+      expect(result.redundantCalls).toEqual([{ name: 'lookup', index: 2 }]);
+      expect(result.score).toBeLessThan(1);
+    });
+
     it('should check token budget from model_generation steps', () => {
       const trajectory: Trajectory = {
         steps: [
@@ -1839,6 +2061,76 @@ describe('Scorer Utils', () => {
   });
 
   describe('checkTrajectoryBlacklist', () => {
+    it('should detect blacklisted tools nested inside agent_run and workflow_step', () => {
+      const oneLevel: Trajectory = {
+        steps: [
+          {
+            stepType: 'agent_run' as const,
+            name: 'subagent',
+            children: [{ stepType: 'tool_call' as const, name: 'deleteAll' }],
+          },
+        ],
+      };
+      const oneLevelResult = checkTrajectoryBlacklist(oneLevel, { blacklistedTools: ['deleteAll'] });
+      expect(oneLevelResult.score).toBe(0);
+      expect(oneLevelResult.violatedTools).toEqual(['deleteAll']);
+
+      const twoLevels: Trajectory = {
+        steps: [
+          {
+            stepType: 'workflow_step' as const,
+            name: 'step1',
+            children: [
+              {
+                stepType: 'agent_run' as const,
+                name: 'agent',
+                children: [
+                  {
+                    stepType: 'tool_call' as const,
+                    name: 'delegate',
+                    children: [{ stepType: 'tool_call' as const, name: 'dropTable' }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+      const twoLevelResult = checkTrajectoryBlacklist(twoLevels, { blacklistedTools: ['dropTable'] });
+      expect(twoLevelResult.score).toBe(0);
+      expect(twoLevelResult.violatedTools).toEqual(['dropTable']);
+      expect(checkTrajectoryBlacklist(twoLevels, { blacklistedTools: ['deleteAll'] }).score).toBe(1);
+    });
+
+    it('should match blacklisted sequences within a nested list but not across nesting levels', () => {
+      const nested: Trajectory = {
+        steps: [
+          {
+            stepType: 'agent_run' as const,
+            name: 'subagent',
+            children: [
+              { stepType: 'tool_call' as const, name: 'escalate' },
+              { stepType: 'tool_call' as const, name: 'deleteAll' },
+            ],
+          },
+        ],
+      };
+      expect(
+        checkTrajectoryBlacklist(nested, { blacklistedSequences: [['escalate', 'deleteAll']] }).violatedSequences,
+      ).toEqual([['escalate', 'deleteAll']]);
+
+      const split: Trajectory = {
+        steps: [
+          {
+            stepType: 'agent_run' as const,
+            name: 'escalate',
+            children: [{ stepType: 'tool_call' as const, name: 'deleteAll' }],
+          },
+        ],
+      };
+      expect(checkTrajectoryBlacklist(split, { blacklistedSequences: [['escalate', 'deleteAll']] }).score).toBe(1);
+    });
+
     it('should return score 1.0 when no violations are found', () => {
       const trajectory: Trajectory = {
         steps: [

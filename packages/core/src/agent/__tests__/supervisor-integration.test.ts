@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { openai } from '@ai-sdk/openai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -355,7 +354,7 @@ describe('Supervisor Pattern Integration Tests', () => {
       ]);
     });
 
-    it('should report an unsuccessful delegation when stream finishes with an error reason', async () => {
+    it('should fail the delegation when the sub-agent stream finishes with an error reason', async () => {
       let capturedContext: DelegationCompleteContext | undefined;
 
       const subAgent = new Agent({
@@ -442,11 +441,14 @@ describe('Supervisor Pattern Integration Tests', () => {
       });
       await stream.consumeStream();
 
+      // A sub-agent run that ends in error is a failed delegation: the tool throws
+      // (so the parent model sees an error result) and the hook gets the error.
       expect(capturedContext).toBeDefined();
+      expect(capturedContext!.success).toBe(false);
+      expect(capturedContext!.error).toBeInstanceOf(Error);
+      expect(capturedContext!.error!.message).toContain('finishReason "error"');
       expect(capturedContext!.result.text).toBe('Streamed sub-agent answer');
       expect(capturedContext!.result.finishReason).toBe('error');
-      expect(capturedContext!.success).toBe(false);
-      expect(capturedContext!.error).toBeUndefined();
     });
 
     it('should let onDelegationComplete replace the tool result the parent sees in the same run', async () => {
@@ -3932,8 +3934,8 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
       memory: new MockMemory(),
     });
 
-    const resourceId = randomUUID();
-    const threadId = randomUUID();
+    const resourceId = globalThis.crypto.randomUUID();
+    const threadId = globalThis.crypto.randomUUID();
 
     // Supervisor conversation has multiple user messages
     await supervisorAgent.generate(
@@ -4040,8 +4042,8 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
     });
 
     let supervisorCallCount = 0;
-    const resourceId = randomUUID();
-    const threadId = randomUUID();
+    const resourceId = globalThis.crypto.randomUUID();
+    const threadId = globalThis.crypto.randomUUID();
 
     const supervisorAgent = new Agent({
       id: 'supervisor-reserved-keys',

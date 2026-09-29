@@ -76,6 +76,20 @@ describe('workflow transform', () => {
     expect(result).not.toContain('.then("subWorkflow")');
   });
 
+  it('preserves child workflows passed directly to parallel', async () => {
+    const result = await transform(`
+      import { createStep, createWorkflow } from '@mastra/core/workflows';
+
+      const childStep = createStep({ id: 'child-step', execute: async () => ({}) });
+      const child = createWorkflow({ id: 'child' }).then(childStep).commit();
+      export const parent = createWorkflow({ id: 'parent' }).parallel([child]).commit();
+    `);
+
+    expect(result).toContain('type: "childWorkflow"');
+    expect(result).toContain('workflowType: "childWorkflow"');
+    expect(result).not.toContain('.parallel(["child"])');
+  });
+
   it('resolves steps returned by factory functions', async () => {
     const result = await transform(`
       import { createStep, createWorkflow } from '@mastra/core/workflows';
@@ -93,6 +107,80 @@ describe('workflow transform', () => {
     expect(result).toContain('.then("plan-activities").then("plan-activities")');
     expect(result).not.toContain('.then("planActivities")');
     expect(result).not.toContain('.then("createPlanActivities")');
+  });
+
+  it('rewrites callback mappings as generated activity steps', async () => {
+    const result = await transform(`
+      import { createWorkflow } from '@mastra/core/workflows';
+      import { z } from 'zod';
+
+      export const mappedWorkflow = createWorkflow({
+        id: 'mapped-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ doubled: z.number() }),
+      })
+        .map(({ inputData }) => ({ doubled: inputData.value * 2 }))
+        .commit();
+    `);
+
+    expect(result).toContain('.map("mapping_mapped-workflow_0")');
+  });
+
+  it('keeps mapping order and assigns stable ordinal ids', async () => {
+    const result = await transform(`
+      import { createWorkflow } from '@mastra/core/workflows';
+
+      const mapValue = ({ inputData }) => ({ value: inputData.value + 1 });
+      export const mappedWorkflow = createWorkflow({ id: 'mapped-workflow' })
+        .then('before')
+        .map(mapValue)
+        .then('between')
+        .map(async ({ inputData }) => ({ value: inputData.value * 2 }))
+        .then('after')
+        .commit();
+    `);
+
+    expect(result).toContain(
+      '.then("before").map("mapping_mapped-workflow_0").then("between").map("mapping_mapped-workflow_1").then("after").commit()',
+    );
+  });
+
+  it('rejects unsupported mapping forms with actionable errors', async () => {
+    await expect(
+      transform(`
+        import { createWorkflow } from '@mastra/core/workflows';
+        export const mappedWorkflow = createWorkflow({ id: 'mapped-workflow' })
+          .map({ value: { path: 'inputData.value' } })
+          .commit();
+      `),
+    ).rejects.toThrow('does not yet support declarative object mappings');
+
+    await expect(
+      transform(`
+        import { createWorkflow } from '@mastra/core/workflows';
+        const getMapping = () => ({ inputData }) => inputData;
+        export const mappedWorkflow = createWorkflow({ id: 'mapped-workflow' })
+          .map(getMapping())
+          .commit();
+      `),
+    ).rejects.toThrow('requires an inline function or a statically declared function identifier');
+  });
+
+  it('forwards mapping options while retaining the generated mapping activity id', async () => {
+    const result = await transform(`
+      import { createWorkflow } from '@mastra/core/workflows';
+      export const mappedWorkflow = createWorkflow({ id: 'mapped-workflow' })
+        .map(({ inputData }) => inputData, {
+          id: 'custom-mapping',
+          description: 'Custom mapping',
+          metadata: { source: 'test' },
+        })
+        .commit();
+    `);
+
+    expect(result).toContain(
+      ".map(\"mapping_mapped-workflow_0\", {\n    id: 'custom-mapping',\n    description: 'Custom mapping',\n    metadata: {\n      source: 'test'\n    }\n  })",
+    );
   });
 
   it('injects the helper runtime from the dedicated module into transformed output', async () => {

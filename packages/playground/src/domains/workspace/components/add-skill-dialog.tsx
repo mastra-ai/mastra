@@ -7,13 +7,17 @@ import {
   DialogDescription,
   DialogBody,
 } from '@mastra/playground-ui/components/Dialog';
+import { FieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Search, Download, ExternalLink, Loader2, CircleSlashIcon, Package, Check, Folder } from 'lucide-react';
+import { Search, Download, ExternalLink, Loader2, CircleSlashIcon, Package, Check, Folder, X } from 'lucide-react';
 import { useState, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { useSearchSkillsSh, usePopularSkillsSh, useSkillPreview, parseSkillSource } from '../hooks/use-skills-sh';
@@ -200,7 +204,7 @@ export function AddSkillDialog({
         <DialogBody className="flex max-h-none flex-1 flex-col gap-4 overflow-hidden">
           {/* Search Input */}
           <div className="relative">
-            <Search className="text-neutral3 absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+            <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search skills..."
               value={searchQuery}
@@ -212,11 +216,11 @@ export function AddSkillDialog({
           <div className="flex min-h-0 flex-1 gap-4">
             {/* Skills List */}
             <div className="flex min-h-0 w-1/2 flex-col">
-              <div className="text-neutral4 mb-2 text-xs font-medium tracking-wide uppercase">
+              <div className="mb-2 text-column tracking-wide text-muted-foreground uppercase">
                 {hasSearchResults ? 'Search Results' : 'Popular Skills'}
               </div>
               <ScrollArea
-                className="border-border1 flex-1 rounded-lg border"
+                className="flex-1 rounded-lg border border-border"
                 viewPortClassName={
                   !isLoadingPopular && !isSearching && displaySkills.length === 0
                     ? 'flex flex-col [&>div]:flex [&>div]:flex-1 [&>div]:flex-col'
@@ -224,13 +228,13 @@ export function AddSkillDialog({
                 }
               >
                 {isLoadingPopular || isSearching ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="text-neutral3 h-6 w-6 animate-spin" />
+                  <div className="flex items-center justify-center py-5">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>
                 ) : displaySkills.length === 0 ? (
-                  <div className="text-neutral4 flex flex-1 flex-col items-center-safe justify-center-safe py-8">
+                  <div className="flex flex-1 flex-col items-center-safe justify-center-safe py-5 text-muted-foreground">
                     <CircleSlashIcon className="mb-2 h-8 w-8" />
-                    <p className="text-sm">{hasSearchResults ? 'No skills found' : 'No skills available'}</p>
+                    <p className="text-body">{hasSearchResults ? 'No skills found' : 'No skills available'}</p>
                   </div>
                 ) : (
                   <div className="space-y-1 p-2">
@@ -247,25 +251,25 @@ export function AddSkillDialog({
                           key={skillUniqueId}
                           onClick={() => setSelectedSkill(skill)}
                           className={cn(
-                            'w-full text-left px-3 py-2 rounded-md transition-colors',
-                            'hover:bg-surface4',
-                            selectedSkillUniqueId === skillUniqueId && 'bg-surface5 border border-accent1',
+                            'w-full rounded-md px-3 py-2 text-left',
+                            'hover:bg-fill-subtle',
+                            selectedSkillUniqueId === skillUniqueId && 'border border-accent1 bg-fill-hover',
                           )}
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
-                                <span className="text-neutral6 truncate text-sm font-medium">{skill.name}</span>
+                                <span className="truncate text-subheading text-foreground">{skill.name}</span>
                                 {isInstalled && (
-                                  <span className="bg-accent1/20 text-accent1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium">
+                                  <span className="inline-flex items-center gap-1 rounded bg-accent1/20 px-1.5 py-0.5 text-meta text-accent1">
                                     <Check className="h-2.5 w-2.5" />
                                     Installed
                                   </span>
                                 )}
                               </div>
-                              <div className="text-neutral4 truncate text-xs">{skill.topSource}</div>
+                              <div className="truncate text-caption text-muted-foreground">{skill.topSource}</div>
                             </div>
-                            <div className="text-neutral3 flex shrink-0 items-center gap-1 text-xs">
+                            <div className="flex shrink-0 items-center gap-1 text-caption text-muted-foreground">
                               <Download className="h-3 w-3" />
                               <span>{skill.installs.toLocaleString()}</span>
                             </div>
@@ -280,24 +284,24 @@ export function AddSkillDialog({
 
             {/* Preview Panel */}
             <div className="flex min-h-0 w-1/2 flex-col">
-              <div className="text-neutral4 mb-2 text-xs font-medium tracking-wide uppercase">Preview</div>
-              <div className="border-border1 flex flex-1 flex-col overflow-hidden rounded-lg border">
+              <div className="mb-2 text-column tracking-wide text-muted-foreground uppercase">Preview</div>
+              <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-border">
                 {!selectedSkill ? (
-                  <div className="text-neutral4 flex h-full flex-col items-center justify-center">
+                  <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
                     <Package className="mb-2 h-8 w-8" />
-                    <p className="text-sm">Select a skill to preview</p>
+                    <p className="text-body">Select a skill to preview</p>
                   </div>
                 ) : (
                   <>
                     {/* Skill Header */}
-                    <div className="border-border1 bg-surface3 border-b p-4">
+                    <div className="border-b border-border bg-card p-4">
                       <div className="flex items-start gap-3">
-                        <div className="bg-surface5 rounded-lg p-2">
-                          <SkillIcon className="text-neutral4 h-5 w-5" />
+                        <div className="rounded-lg bg-muted p-2">
+                          <SkillIcon className="h-5 w-5 text-muted-foreground" />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <h3 className="text-neutral6 truncate font-semibold">{selectedSkill.name}</h3>
-                          <div className="text-neutral4 mt-1 flex items-center gap-3 text-xs">
+                          <h3 className="truncate text-subheading text-foreground">{selectedSkill.name}</h3>
+                          <div className="mt-1 flex items-center gap-3 text-caption text-muted-foreground">
                             <span className="flex items-center gap-1">
                               <GithubIcon className="h-3 w-3" />
                               {selectedSkill.topSource}
@@ -313,7 +317,7 @@ export function AddSkillDialog({
                             href={`https://github.com/${parsedSource.owner}/${parsedSource.repo}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-neutral4 hover:text-neutral5 transition-colors"
+                            className={cn(quietTextHover, controlStateColorTransition)}
                             title="View on GitHub"
                           >
                             <ExternalLink className="h-4 w-4" />
@@ -325,7 +329,7 @@ export function AddSkillDialog({
                     {/* Skill Content */}
                     {isLoadingPreview ? (
                       <div className="flex flex-1 items-center justify-center">
-                        <Loader2 className="text-neutral3 h-6 w-6 animate-spin" />
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                       </div>
                     ) : previewContent ? (
                       <ScrollArea className="flex-1">
@@ -334,15 +338,15 @@ export function AddSkillDialog({
                         </div>
                       </ScrollArea>
                     ) : (
-                      <div className="text-neutral4 flex flex-1 flex-col items-center justify-center">
+                      <div className="flex flex-1 flex-col items-center justify-center text-muted-foreground">
                         <Package className="mb-2 h-8 w-8" />
-                        <p className="text-sm">Preview unavailable</p>
+                        <p className="text-body">Preview unavailable</p>
                         {skillsUrl && (
                           <a
                             href={skillsUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-accent1 mt-2 flex items-center gap-1 text-xs hover:underline"
+                            className="mt-2 flex items-center gap-1 text-caption text-accent1 hover:underline"
                           >
                             View on skills.sh <ExternalLink className="h-3 w-3" />
                           </a>
@@ -357,19 +361,19 @@ export function AddSkillDialog({
 
           {/* Install Actions */}
           {selectedSkill && (
-            <div className="border-border1 flex flex-col gap-3 border-t pt-4">
+            <div className="flex flex-col gap-3 border-t border-border pt-4">
               {/* Mount picker - only shown when multiple writable mounts exist */}
               {writableMounts && writableMounts.length > 1 && (
-                <div className="bg-surface3 border-border1 flex items-center gap-3 rounded-lg border p-3">
-                  <Folder className="text-icon4 h-4 w-4 shrink-0" />
-                  <label htmlFor="mount-select" className="text-icon5 text-sm font-medium whitespace-nowrap">
+                <div className={cn(raisedSurfaceStyle, 'flex items-center gap-3 rounded-lg p-3')}>
+                  <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <FieldBlock.Label name="mount-select" htmlFor="mount-select" className="whitespace-nowrap">
                     Install to
-                  </label>
+                  </FieldBlock.Label>
                   <select
                     id="mount-select"
                     value={selectedMount ?? ''}
                     onChange={e => setSelectedMount(e.target.value)}
-                    className="border-border1 bg-surface2 text-icon6 flex-1 rounded-md border px-3 py-1.5 text-sm"
+                    className="flex-1 rounded-md border border-border bg-background px-3 py-1.5 text-body text-foreground"
                   >
                     {writableMounts.map(m => {
                       const name = m.displayName ?? m.name ?? m.provider ?? 'unknown';
@@ -391,9 +395,11 @@ export function AddSkillDialog({
                   (() => {
                     const skillPath = installedSkillPaths[selectedSkill.name]!;
                     const mount = writableMounts.find(m => skillPath.startsWith(m.path + '/') || skillPath === m.path);
-                    return mount ? <span className="text-icon4 text-xs">Installed at {mount.path}</span> : null;
+                    return mount ? (
+                      <span className="text-caption text-muted-foreground">Installed at {mount.path}</span>
+                    ) : null;
                   })()}
-                <Button variant="default" onClick={() => handleOpenChange(false)}>
+                <Button icon={<X />} variant="default" onClick={() => handleOpenChange(false)}>
                   Cancel
                 </Button>
                 <Button

@@ -1,12 +1,12 @@
 import type { ScoreRowData } from '@mastra/core/evals';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
-import { Sections } from '@mastra/playground-ui/components/Sections';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { format } from 'date-fns/format';
+import { ScoreAsItemDialog } from '@mastra/playground-ui/domains/scores';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import {
   HashIcon,
   GaugeIcon,
@@ -19,9 +19,6 @@ import {
   SaveIcon,
 } from 'lucide-react';
 import { useState } from 'react';
-import { ScoreAsItemDialog } from './score-as-item-dialog';
-
-import { useLinkComponent } from '@/lib/framework';
 
 function isCodeBasedScorer(score?: ScoreRowData): boolean {
   if (!score) return false;
@@ -101,10 +98,13 @@ export function ScoreDialog({
           </TextAndIcon>
           |
           <SideDialog.Nav onNext={onNext} onPrevious={onPrevious} />
-          <Button size="lg" className="mr-8 ml-auto" disabled={!score} onClick={() => setDatasetDialogOpen(true)}>
-            <Icon>
-              <SaveIcon />
-            </Icon>
+          <Button
+            size="lg"
+            className="mr-8 ml-auto"
+            disabled={!score}
+            onClick={() => setDatasetDialogOpen(true)}
+            icon={<SaveIcon />}
+          >
             Save as Dataset Item
           </Button>
         </SideDialog.Top>
@@ -119,7 +119,7 @@ export function ScoreDialog({
             </TextAndIcon>
           </SideDialog.Header>
 
-          <Sections>
+          <div className="grid gap-6">
             <KeyValueList
               data={[
                 ...(usageContext === 'SpanDialog'
@@ -137,7 +137,7 @@ export function ScoreDialog({
                   : []),
                 {
                   label: 'Created at',
-                  value: score?.createdAt ? format(new Date(score?.createdAt), 'MMM d, h:mm:ss aaa') : 'n/a',
+                  value: formatDate(score?.createdAt, 'date-time') ?? 'n/a',
                   key: 'date',
                 },
                 ...(usageContext !== 'SpanDialog'
@@ -227,7 +227,7 @@ export function ScoreDialog({
               }
               simplified={true}
             />
-          </Sections>
+          </div>
         </SideDialog.Content>
       </SideDialog>
 

@@ -1076,6 +1076,27 @@ const agent = new Agent({
 })
 \`\`\`
 
+### Select the OpenAI Responses API
+
+Custom \`url\` endpoints use the OpenAI Chat Completions API by default. If your endpoint exposes the OpenAI Responses API (\`/v1/responses\`) — for example to combine function tools with reasoning models on gateways that require it — set \`api: "responses"\`.
+
+\`\`\`typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: {
+    id: "custom/my-model",
+    url: "http://your-custom-openai-compatible-endpoint.com/v1",
+    api: "responses"
+  }
+})
+\`\`\`
+
+When \`api\` is omitted it defaults to \`"chat"\`, so existing configurations are unchanged. Provider options are read from the \`openai\` namespace for the Responses API, whereas the Chat Completions path reads the \`openai-compatible\` namespace.
+
 ## Use AI SDK with Mastra
 
 Mastra supports AI SDK provider modules, should you need to use them directly.

@@ -31,6 +31,7 @@ import type { SandboxLifecycle } from '../lifecycle';
 
 export type { SandboxStartOutcome, SandboxStartResult } from '../lifecycle';
 
+import { SandboxError, SandboxUnsupportedFeatureError } from './errors';
 import type { SandboxStartHook } from './mastra-sandbox';
 import type { MountManager } from './mount-manager';
 import type { SandboxProcessManager } from './process-manager';
@@ -64,6 +65,74 @@ export interface SandboxFileInput {
   path: string;
   /** File contents */
   content: string | Buffer;
+  /**
+   * Optional POSIX permission mode for the written file (e.g. `0o600`).
+   *
+   * Must be an integer in the range `0o001`–`0o777` (permission bits only; no
+   * setuid/setgid/sticky bits). A mode of `0` (no permissions) is rejected: it
+   * is not usefully provisionable and cannot be represented by every provider's
+   * upload transport. When omitted, the provider's default applies (Docker uses
+   * `0644`). Providers that cannot honor an explicit mode reject it rather than
+   * silently discarding it.
+   */
+  mode?: number;
+}
+
+/** Minimum permitted {@link SandboxFileInput.mode} value. */
+export const MIN_SANDBOX_FILE_MODE = 0o001;
+/** Maximum permitted {@link SandboxFileInput.mode} value (permission bits only). */
+export const MAX_SANDBOX_FILE_MODE = 0o777;
+
+/**
+ * Validate an explicit {@link SandboxFileInput.mode} value.
+ *
+ * @throws {SandboxError} with code `INVALID_ARGUMENT` if the mode is not an
+ *   integer in the range `0o001`–`0o777`.
+ */
+export function validateSandboxFileMode(mode: number): void {
+  if (!Number.isInteger(mode) || mode < MIN_SANDBOX_FILE_MODE || mode > MAX_SANDBOX_FILE_MODE) {
+    throw new SandboxError(
+      `Invalid file mode ${mode}: must be an integer between 0o001 (1) and 0o777 (${MAX_SANDBOX_FILE_MODE}).`,
+      'INVALID_ARGUMENT',
+      { mode },
+    );
+  }
+}
+
+/**
+ * Assert that no file in the list requests an explicit permission mode.
+ *
+ * Used by providers whose upload mechanism cannot honor a mode, so that an
+ * explicit mode is rejected rather than silently discarded.
+ *
+ * @throws {SandboxUnsupportedFeatureError} if any file specifies a `mode`.
+ */
+export function assertModesUnsupported(files: SandboxFileInput[], provider: string): void {
+  if (files.some(f => f.mode !== undefined)) {
+    throw new SandboxUnsupportedFeatureError(
+      `The ${provider} sandbox does not support per-file permission modes in writeFiles(). Omit 'mode' to use the provider default.`,
+      { provider },
+    );
+  }
+}
+
+/** Options for {@link WorkspaceSandbox.writeFiles}. */
+export interface WriteFilesOptions {
+  /**
+   * Abort signal to cancel the write.
+   *
+   * Observing the signal is provider-dependent. `DockerSandbox` terminates the
+   * in-flight upload when the signal aborts; providers that do not observe the
+   * signal run to completion. Providers that observe the signal reject an
+   * already-aborted write before archive creation or upload begins.
+   *
+   * Cancellation rejects with a {@link SandboxAbortError} (code `ABORTED`).
+   * Because upload and cancellation race, an upload that completes before the
+   * abort is observed resolves normally. Cancellation does not roll back writes:
+   * files transferred or extracted before the abort may remain in the sandbox,
+   * so callers are responsible for any cleanup or sandbox disposal.
+   */
+  abortSignal?: AbortSignal;
 }
 
 /**
@@ -422,8 +491,12 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
    * ```typescript
    * await sandbox.writeFiles?.([{ path: '/app/index.mjs', content: bundle }]);
    * ```
+   *
+   * Pass `options.abortSignal` to cancel the write. See {@link WriteFilesOptions}
+   * for the cancellation contract (provider-dependent observance, the
+   * completion-versus-cancellation race, and the partial-write boundary).
    */
-  writeFiles?(files: SandboxFileInput[]): Promise<void>;
+  writeFiles?(files: SandboxFileInput[], options?: WriteFilesOptions): Promise<void>;
 
   // ---------------------------------------------------------------------------
   // Process Management (Optional)

@@ -60,11 +60,18 @@ describe('watcher', () => {
       // Arrange
       const env = { 'process.env.NODE_ENV': JSON.stringify('test') };
       const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
+      const analyzeBundle = vi.mocked(await import('./analyze')).analyzeBundle;
 
       // Act
       await getInputOptions('test-entry.js', 'node', env);
 
       // Assert
+      expect(analyzeBundle).toHaveBeenCalledWith(
+        ['test-entry.js'],
+        'test-entry.js',
+        expect.objectContaining({ env }),
+        expect.anything(),
+      );
       expect(bundlerGetInputOptions).toHaveBeenCalledWith(
         // expect.stringMatching(/\.mastra\/\.build\/entry-0\.mjs$/),
         expect.stringMatching('test-entry.js'),

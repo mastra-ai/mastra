@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../agent/message-list';
 import { isTransientSignalMessage } from '../agent/signals';
 import type { IMastraLogger } from '../logger';
+import type { MastraDBMessage } from '../memory';
 import { ProcessorRunner } from './runner';
+import { createProcessorSendSignal } from './send-signal';
 import type { ProcessorStreamWriter } from './index';
 
 const mockLogger: IMastraLogger = {
@@ -510,5 +512,82 @@ describe('sendSignal integration through ProcessorRunner', () => {
     const unsavedSignals = messageList.drainUnsavedMessages().filter(m => m.role === 'signal');
     expect(unsavedSignals).toHaveLength(1);
     expect(isTransientSignalMessage(unsavedSignals[0]!)).toBe(true);
+  });
+});
+
+describe('sendSignal without rotation must not corrupt the in-flight response message (issue #21940)', () => {
+  it('preserves tool call/result parts when the next step streams under the same message id', async () => {
+    const threadId = 'thread-21940';
+    const assistantId = 'asst-21940';
+    const corruptableList = new MessageList({ threadId });
+    corruptableList.add([{ role: 'user', content: 'delegate the task' }], 'input');
+
+    // Step 0's assistant message with the completed tool call, as it looks after
+    // the tool result was patched in (state: 'result').
+    const step0: MastraDBMessage = {
+      id: assistantId,
+      role: 'assistant',
+      type: 'text',
+      createdAt: new Date(1),
+      threadId,
+      content: {
+        format: 2,
+        parts: [
+          { type: 'step-start' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tc-1',
+              toolName: 'delegate',
+              args: { task: 'task-1' },
+              result: 'delegated-task-1',
+            },
+          },
+        ],
+      },
+    };
+    corruptableList.add(step0, 'response');
+
+    // The processToolResult phase has no rotateResponseMessageId wired
+    // (runner.runProcessToolResult / createStepFromProcessor for phase 'toolResult'),
+    // so this sendSignal must NOT stamp a response boundary on the in-flight message.
+    const sendSignal = createProcessorSendSignal({ messageList: corruptableList });
+    await sendSignal({ type: 'system-reminder', contents: 'Subagent handled task-1.', transient: true });
+
+    const stamped = corruptableList.get.all.db().find(m => m.id === assistantId);
+    expect(
+      (stamped?.content.metadata as { mastra?: { responseBoundary?: boolean } } | undefined)?.mastra?.responseBoundary,
+    ).toBeFalsy();
+
+    // Step 1 then streams under the SAME message id (no rotation happened). Without a
+    // boundary it merges into step 0's message; pre-fix, the boundary blocked
+    // MessageMerger.shouldMerge and addOne REPLACED the message wholesale with the
+    // text-only step-1 content, destroying the tool call/result.
+    const step1: MastraDBMessage = {
+      id: assistantId,
+      role: 'assistant',
+      type: 'text',
+      createdAt: new Date(2),
+      threadId,
+      content: {
+        format: 2,
+        parts: [{ type: 'step-start' }, { type: 'text', text: 'All done.' }],
+      },
+    };
+    corruptableList.add(step1, 'response');
+
+    const assistants = corruptableList.get.all.db().filter(m => m.role === 'assistant');
+    expect(assistants).toHaveLength(1);
+    const parts = assistants[0]!.content.parts;
+    expect(
+      parts.some(
+        p =>
+          p.type === 'tool-invocation' &&
+          p.toolInvocation?.toolCallId === 'tc-1' &&
+          p.toolInvocation?.state === 'result',
+      ),
+    ).toBe(true);
+    expect(parts.some(p => p.type === 'text' && p.text === 'All done.')).toBe(true);
   });
 });

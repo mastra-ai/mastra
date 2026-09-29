@@ -303,6 +303,7 @@ describe('ProjectRoutes', () => {
     expect(resolveRepository).toHaveBeenCalledWith({
       integrationId: 'github',
       orgId: 'org-1',
+      userId: 'user-1',
       installationId: githubInstallation.id,
       externalId: 'repo-1',
       slug: 'acme/api',

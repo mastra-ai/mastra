@@ -21,5 +21,5 @@ export function FactoryReviewPullRequestLinks({
     candidate => candidate.projectRepositoryId === projectRepositoryId,
   );
 
-  return <PullRequestLinks repository={repository} reviewItem={reviewItem} threadId={threadId} size="sm" />;
+  return <PullRequestLinks repository={repository} reviewItem={reviewItem} threadId={threadId} />;
 }

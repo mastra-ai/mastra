@@ -7,30 +7,21 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useApiConfig } from '../../../../api/config';
 import { useChannelAccountsQuery } from '../../../../hooks/useChannelAccounts';
 import { connectSlackUrl } from '../services/channelAccounts';
-import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
-import { SettingsCard } from './SettingsCard';
+import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 
-/**
- * Shown when Slack isn't available on this server, instead of a Connect button
- * that would 404. Deliberately says nothing about how to enable it: naming the
- * env vars would be a half-truth, since they only turn Slack on in deployments
- * whose entry actually registers `SlackIntegration`, and the server can't see
- * whether this one does. Link a setup guide here once factory Slack docs exist
- * — the published channels page documents the raw adapter, not this.
- */
+// Env vars alone do not prove the deployment registers SlackIntegration.
 export function SlackNotConfigured() {
   return (
-    <SettingsCard>
+    <SettingsContainer>
       <SettingsRow
-        variant="factory"
         label={
           <span className="flex items-center gap-3">
             <SlackIcon className="size-7 shrink-0 opacity-50" />
             <span className="flex flex-col gap-0.5">
-              <Txt as="span" variant="ui-md">
+              <Txt as="span" variant="body">
                 Slack
               </Txt>
-              <Txt as="span" variant="ui-sm" className="text-icon3 whitespace-nowrap">
+              <Txt as="span" variant="caption" className="text-muted-foreground whitespace-nowrap">
                 Not configured
               </Txt>
             </span>
@@ -39,18 +30,17 @@ export function SlackNotConfigured() {
       >
         <Txt
           as="span"
-          variant="ui-sm"
-          className="text-icon3 flex items-start gap-1.5 pl-10 text-left lg:block lg:pl-0 lg:text-right"
+          variant="caption"
+          className="text-muted-foreground flex items-start gap-1.5 pl-10 text-left lg:block lg:pl-0 lg:text-right"
         >
           <InfoIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 lg:hidden" />
           Slack is not set up for this factory.
         </Txt>
       </SettingsRow>
-    </SettingsCard>
+    </SettingsContainer>
   );
 }
 
-/** Connected-account overview for the active factory settings surface. */
 export function ConnectedAccountsSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const { baseUrl } = useApiConfig();
@@ -68,7 +58,7 @@ export function ConnectedAccountsSection() {
 
   if (accountsQuery.error) {
     return (
-      <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
+      <Txt as="p" variant="caption" className="text-notice-destructive-fg">
         {accountsQuery.error instanceof Error ? accountsQuery.error.message : 'Failed to load connected accounts'}
       </Txt>
     );
@@ -82,10 +72,14 @@ export function ConnectedAccountsSection() {
     <span className="flex items-center gap-3">
       <SlackIcon className="size-7 shrink-0" />
       <span className="flex flex-col gap-0.5">
-        <Txt as="span" variant="ui-md">
+        <Txt as="span" variant="body">
           Slack
         </Txt>
-        <Txt as="span" variant="ui-sm" className={slackAccounts.length > 0 ? 'text-positive1' : 'text-icon3'}>
+        <Txt
+          as="span"
+          variant="caption"
+          className={slackAccounts.length > 0 ? 'text-positive1' : 'text-muted-foreground'}
+        >
           {slackAccounts.length > 1
             ? `${slackAccounts.length} connected`
             : slackAccounts.length === 1
@@ -97,14 +91,14 @@ export function ConnectedAccountsSection() {
   );
 
   return (
-    <SettingsCard>
+    <SettingsContainer>
       {slackAccounts.length > 0 && factoryId ? (
         <Link
           to={`/factories/${factoryId}/settings/connections/slack`}
-          className="group hover:bg-surface4 focus-visible:ring-accent1 block cursor-pointer rounded-xl outline-hidden transition-colors focus-visible:ring-2"
+          className="group hover:bg-fill focus-visible:ring-accent1 block cursor-pointer rounded-xl outline-hidden transition-colors focus-visible:ring-2"
         >
-          <SettingsRow variant="factory" label={slackLabel}>
-            <span className="text-ui-sm text-icon4 group-hover:text-icon5 flex items-center gap-2">
+          <SettingsRow label={slackLabel}>
+            <span className="text-caption text-muted-foreground group-hover:text-foreground flex items-center gap-2">
               Configure
               <ChevronRight aria-hidden="true" />
             </span>
@@ -115,16 +109,16 @@ export function ConnectedAccountsSection() {
           type="button"
           disabled={!canConnect}
           onClick={connectSlack}
-          className="group hover:bg-surface4 focus-visible:ring-accent1 block w-full cursor-pointer rounded-xl text-left outline-hidden transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+          className="group hover:bg-fill focus-visible:ring-accent1 block w-full cursor-pointer rounded-xl text-left outline-hidden transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <SettingsRow variant="factory" label={slackLabel}>
-            <span className="text-ui-sm text-icon4 group-hover:text-icon5 flex items-center gap-2">
+          <SettingsRow label={slackLabel}>
+            <span className="text-caption text-muted-foreground group-hover:text-foreground flex items-center gap-2">
               Connect
               <ChevronRight aria-hidden="true" />
             </span>
           </SettingsRow>
         </button>
       )}
-    </SettingsCard>
+    </SettingsContainer>
   );
 }

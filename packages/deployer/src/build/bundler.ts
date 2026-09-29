@@ -17,7 +17,7 @@ import { removeDeployer } from './plugins/remove-deployer';
 import { subpathExternalsResolver } from './plugins/subpath-externals-resolver';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
 import type { ExternalDependencyInfo } from './types';
-import { getNodeResolveOptions, slash } from './utils';
+import { getPackageName, getNodeResolveOptions, slash } from './utils';
 import type { BundlerPlatform } from './utils';
 
 export function mastraInternalAliasPlugin(entryFile: string): Plugin {
@@ -76,6 +76,7 @@ export async function getInputOptions(
     workspaceRoot = undefined,
     enableEsmShim = true,
     externalsPreset = false,
+    explicitExternals = [],
   }: {
     sourcemap?: boolean;
     minify?: boolean;
@@ -84,21 +85,26 @@ export async function getInputOptions(
     projectRoot: string;
     enableEsmShim?: boolean;
     externalsPreset?: boolean;
+    explicitExternals?: string[];
   },
 ): Promise<InputOptions> {
-  const nodeResolvePlugin = nodeResolve(getNodeResolveOptions(platform));
+  const nodeResolvePlugin = nodeResolve({
+    ...getNodeResolveOptions(platform),
+    rootDir: projectRoot,
+    modulePaths: workspaceRoot ? [join(workspaceRoot, 'node_modules')] : [],
+  });
 
   const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies.keys());
-  const externals = externalsPreset ? [] : Array.from(externalsCopy);
+  const externals = externalsPreset ? explicitExternals : Array.from(externalsCopy);
 
   return {
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     treeshake: 'smallest',
     preserveSymlinks: true,
-    external: externals,
+    external: externalsPreset ? [] : externals,
     plugins: [
       protocolExternalResolver(),
-      subpathExternalsResolver(externals),
+      subpathExternalsResolver(externals, analyzedBundleInfo.workspaceMap),
       {
         name: 'alias-optimized-deps',
         resolveId(id: string) {
@@ -125,7 +131,7 @@ export async function getInputOptions(
         },
       } satisfies Plugin,
       mastraInternalAliasPlugin(entryFile),
-      tsConfigPaths(),
+      tsConfigPaths({ cwd: projectRoot }),
       mastraToolsAliasPlugin(),
       esbuild({
         platform,
@@ -195,4 +201,30 @@ export async function createBundler(
       return bundler.close();
     },
   };
+}
+
+/**
+ * Checks whether a Rollup warning is an UNRESOLVED_IMPORT for a workspace package.
+ * Returns the original import specifier if it's a workspace package that leaked
+ * through, or undefined if it's not.
+ */
+export function getUnresolvedWorkspaceImport(
+  warning: { code: string; source?: string; id?: string },
+  workspaceMap: Map<string, WorkspacePackageInfo>,
+): string | undefined {
+  if (warning.code !== 'UNRESOLVED_IMPORT') {
+    return undefined;
+  }
+
+  const src = warning.source ?? warning.id ?? '';
+  if (!src) {
+    return undefined;
+  }
+
+  const pkgName = getPackageName(src);
+  if (pkgName && workspaceMap.has(pkgName)) {
+    return src;
+  }
+
+  return undefined;
 }

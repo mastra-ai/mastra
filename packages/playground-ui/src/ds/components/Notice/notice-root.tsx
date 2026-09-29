@@ -23,7 +23,7 @@ const variantConfig: Record<NoticeVariant, { icon: React.ReactNode; classes: str
   },
   note: {
     icon: <FileTextIcon />,
-    classes: 'bg-notice-note border-border1 text-notice-note-fg',
+    classes: 'bg-notice-note border-border text-notice-note-fg',
   },
 };
 
@@ -44,7 +44,7 @@ export function NoticeRoot({ variant, title, icon, action, children, className }
     return (
       <div
         className={cn(
-          '@container relative rounded-2xl border p-3 text-ui-md leading-ui-md',
+          '@container relative rounded-2xl border p-3 text-body',
           'animate-in duration-200 fade-in-0 slide-in-from-top-2',
           classes,
           className,
@@ -65,7 +65,7 @@ export function NoticeRoot({ variant, title, icon, action, children, className }
   return (
     <div
       className={cn(
-        '@container relative flex flex-col gap-4 rounded-2xl border p-3',
+        '@container relative flex flex-col gap-3 rounded-2xl border p-3',
         'animate-in duration-200 fade-in-0 slide-in-from-top-2',
         classes,
         className,
@@ -74,11 +74,11 @@ export function NoticeRoot({ variant, title, icon, action, children, className }
       <div className="flex h-4 min-w-0 items-center gap-2 [&>svg]:size-4">
         {resolvedIcon}
         {/* truncate, not wrap — the row is 1rem tall, a wrapped title would spill out of it */}
-        <span className="text-ui-sm truncate leading-none font-medium tracking-wide uppercase">{title}</span>
+        <span className="truncate text-column leading-none tracking-wide uppercase">{title}</span>
       </div>
       {action && <div className="absolute top-2 right-2 hidden @md:block">{action}</div>}
       {(children || action) && (
-        <div className="flex min-w-0 flex-col gap-5 wrap-anywhere">
+        <div className="flex min-w-0 flex-col gap-3 wrap-anywhere">
           {children}
           {action && <div className="self-start @md:hidden">{action}</div>}
         </div>

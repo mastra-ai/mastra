@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { RepositoryPickerDialog } from './RepositoryPickerDialog';
 import { ATTENTION_PREVIEW_LIMIT, useFactoryAttention } from '../../../../hooks/useFactoryAttention';
 import { attentionCountsIn, latestUnreadOrNewestIn } from '../services/attention';
 import type { FactoryAttentionGroup } from '../services/attention';
@@ -40,7 +41,7 @@ export function SidebarAttention() {
   // The badge and the sound stay on the always-mounted query; the tab reads its own.
   const attention = useFactoryAttention(factoryId, 'open', ATTENTION_PREVIEW_LIMIT, 'attention');
   const preview = useFactoryAttention(factoryId, 'open', ATTENTION_PREVIEW_LIMIT, group);
-  const rowProps = useAttentionItemActions(factoryId);
+  const actions = useAttentionItemActions(factoryId);
   const [open, setOpen] = useState(false);
   const items = preview.data?.items ?? [];
   const kinds = attention.data?.kinds;
@@ -106,13 +107,14 @@ export function SidebarAttention() {
         className="min-h-24 w-96 max-w-[calc(100vw-1.5rem)] overflow-hidden p-0"
       >
         <Tabs defaultTab="attention" value={group} onValueChange={setGroup}>
-          <div className="border-border1 flex items-center justify-between gap-2 border-b p-1.5">
+          <div className="border-border flex items-center justify-between gap-2 border-b p-1.5">
             <TabList variant="pill">
               {TAB_ORDER.map(tab => {
                 const unread = kinds ? attentionCountsIn(kinds, tab).unread : 0;
                 return (
-                  <Tab key={tab} value={tab} className="text-ui-xs">
-                    {TAB[tab].label} {unread > 0 ? <span className="text-icon3 tabular-nums">{unread}</span> : null}
+                  <Tab key={tab} value={tab} className="text-meta">
+                    {TAB[tab].label}{' '}
+                    {unread > 0 ? <span className="text-muted-foreground tabular-nums">{unread}</span> : null}
                   </Tab>
                 );
               })}
@@ -121,7 +123,7 @@ export function SidebarAttention() {
               to={inboxPath}
               onClick={() => setOpen(false)}
               aria-label="View all attention"
-              className={buttonVariants({ variant: 'ghost', size: 'xs', className: 'shrink-0' })}
+              className={buttonVariants({ variant: 'ghost', size: 'sm', className: 'shrink-0' })}
             >
               View all
               <ArrowRight aria-hidden />
@@ -135,7 +137,7 @@ export function SidebarAttention() {
               </div>
             ) : preview.isError ? (
               <div className="flex flex-col items-start gap-2.5 px-3.5 py-4">
-                <span className="text-ui-sm text-icon4">Unable to load attention items.</span>
+                <span className="text-caption text-muted-foreground">Unable to load attention items.</span>
                 <Button type="button" variant="ghost" size="sm" onClick={() => void preview.refetch()}>
                   <RefreshCw aria-hidden />
                   Try again
@@ -143,25 +145,36 @@ export function SidebarAttention() {
               </div>
             ) : items.length > 0 ? (
               <ScrollArea maxHeight="20rem" viewPortClassName="px-3.5 py-1.5">
-                <ul className="divide-border1/50 divide-y">
+                <ul className="divide-border/50 divide-y">
                   {items.map((item, index) => (
                     <li
                       key={item.key}
                       className="animate-in fade-in slide-in-from-bottom-1"
                       style={{ animationDelay: `${index * 40}ms`, animationFillMode: 'backwards' }}
                     >
-                      <AttentionItemRow factoryId={factoryId} {...rowProps(item)} onOpen={() => setOpen(false)} />
+                      <AttentionItemRow
+                        factoryId={factoryId}
+                        {...actions.rowProps(item)}
+                        onOpen={() => setOpen(false)}
+                      />
                     </li>
                   ))}
                 </ul>
               </ScrollArea>
             ) : (
-              <div className="text-ui-sm text-icon2 flex min-h-24 items-center justify-center px-3.5 text-center">
+              <div className="text-caption text-placeholder flex min-h-24 items-center justify-center px-3.5 text-center">
                 {groupOpenCount > 0 ? 'Open the inbox to continue through older items.' : TAB[group].empty}
               </div>
             )}
           </TabContent>
         </Tabs>
+        {actions.repositorySelection ? (
+          <RepositoryPickerDialog
+            repositories={actions.repositories}
+            onClose={actions.closeRepositorySelection}
+            onSelect={actions.selectRepository}
+          />
+        ) : null}
       </PopoverContent>
     </Popover>
   );

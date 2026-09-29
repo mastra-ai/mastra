@@ -48,6 +48,27 @@ interface PinoLoggerInternalOptions<CustomLevels extends string = never> extends
   _adapterContextRef?: { current?: LoggerAdapterContext };
 }
 
+/**
+ * Provides Pino-backed logging for Mastra applications.
+ *
+ * @example
+ * ```typescript
+ * import { Mastra } from '@mastra/core/mastra';
+ * import { PinoLogger } from '@mastra/loggers';
+ *
+ * const mastra = new Mastra({
+ *   logger: new PinoLogger({ name: 'my-app', level: 'info' }),
+ * });
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/loggers/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Pino logger documentation](https://mastra.ai/reference/logging/pino-logger)
+ * if packaged docs are unavailable.
+ */
 export class PinoLogger<CustomLevels extends string = never> extends MastraLogger {
   protected logger: pino.Logger<CustomLevels>;
   // Mutable ref shared with child loggers: the root's mixin (which children's

@@ -42,7 +42,7 @@ The **recommended** way to get started with Mastra is by running the command bel
 npm create mastra@latest
 ```
 
-Follow the [Installation guide](https://mastra.ai/guides/getting-started/quickstart) for step-by-step setup with the CLI or a manual install.
+Follow the [Installation guide](https://mastra.ai/docs) for step-by-step setup with the CLI or a manual install.
 
 If you're new to AI agents, check out our [templates](https://mastra.ai/docs/getting-started/templates), [course](https://mastra.ai/course), and [YouTube videos](https://youtube.com/@mastra-ai) to start building with Mastra today.
 

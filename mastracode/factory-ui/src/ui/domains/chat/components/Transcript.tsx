@@ -19,6 +19,7 @@ import { replySteps } from '../services/turns';
 import { ArrivalScope, useArriving } from '@mastra/playground-ui/components/Arrival';
 import { MessageBubble } from './MessageBubble';
 import { draws, messageText, renderableParts } from './transcript-parts';
+import { isRecord } from './transcript-shared';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
 import { ApprovalCard, SubagentCard, SuspensionCard } from './TranscriptPromptCards';
 import { isTimeGap } from './TranscriptSignals';
@@ -28,6 +29,7 @@ import type { MessageEntry, NoticeEntry, SuspensionPrompt, TimelineEntry } from 
 export function Transcript({ tail }: { tail?: ReactNode }) {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { transcript, resolvePrompt, busy, viewerId } = useChatTranscript();
+  const { entries } = transcript;
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -57,7 +59,7 @@ export function Transcript({ tail }: { tail?: ReactNode }) {
   return (
     <ArrivalScope>
       <TranscriptEntries
-        entries={transcript.entries}
+        entries={entries}
         restoredHistory
         isSubmitting={approving || responding}
         onApprove={onApprove}
@@ -102,7 +104,7 @@ export function TranscriptEntries({
     entries.flatMap(entry =>
       entry.kind === 'message'
         ? entry.message.content.parts.flatMap(part =>
-            part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : [],
+            isRecord(part) && part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : [],
           )
         : [],
     ),

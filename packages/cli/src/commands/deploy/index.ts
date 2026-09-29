@@ -21,8 +21,13 @@ import pc from 'picocolors';
 
 import { bucketApiHost, getAnalytics } from '../../analytics/index.js';
 import type { CLI_ORIGIN } from '../../analytics/index.js';
-import { writeBarLine } from '../../utils/clack-bar.js';
+import { createBarLogWriter } from '../../utils/clack-bar.js';
+import { checkBundleSize, uploadArtifact } from '../../utils/deploy-bundle-size.js';
+import { deployDashboardUrl, printDeployFailure } from '../../utils/deploy-failure-output.js';
+import { createLogCollector } from '../../utils/deploy-log-format.js';
+import type { DeployLogWriter, LogCollector } from '../../utils/deploy-log-format.js';
 import { detectProjectType } from '../../utils/detect-project-type.js';
+import { abortableDelay, isRetryablePollingError, withPollingRetries } from '../../utils/polling.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { fetchOrgs } from '../auth/api.js';
@@ -199,7 +204,7 @@ export async function resolveWorkersDeployMode(input: {
   if (input.workersOption === 'dedicated') {
     if (!input.redisRequirementMet) {
       throw new WorkersRedisRequirementError(
-        'A dedicated workers service requires Redis for coordination (pub/sub), but the deploy env has no usable REDIS_URL. Add REDIS_URL to your env file, or run `mastra deploy` without --workers and accept the managed Redis attach when prompted.',
+        'A dedicated workers service requires Redis for coordination (pub/sub), but the deploy env has no usable REDIS_URL. Add REDIS_URL to your env file.',
       );
     }
     return 'dedicated';
@@ -1059,7 +1064,7 @@ export async function resolveEnvironment(
 /*  Upload to environment deploy endpoint                             */
 /* ------------------------------------------------------------------ */
 
-async function uploadToEnvironment(
+export async function uploadToEnvironment(
   token: string,
   orgId: string,
   projectId: string,
@@ -1071,9 +1076,29 @@ async function uploadToEnvironment(
     envVars?: Record<string, string>;
     mastraVersion?: string;
     disablePlatformObservability?: boolean;
+    dedicatedWorkersEnabled?: boolean;
   },
 ): Promise<{ id: string; uploadUrl: string }> {
   const apiUrl = process.env.MASTRA_PLATFORM_API_URL || 'https://platform.mastra.ai';
+
+  if (opts.dedicatedWorkersEnabled) {
+    const workersResp = await fetch(`${apiUrl}/v1/projects/${projectId}/workers`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        'x-organization-id': orgId,
+      },
+      body: JSON.stringify({ workersEnabled: true }),
+    });
+
+    if (!workersResp.ok) {
+      const err = await workersResp.json().catch(() => ({}));
+      throw new Error(
+        `Failed to enable dedicated workers: ${(err as { detail?: string }).detail || workersResp.statusText}`,
+      );
+    }
+  }
 
   // Create deploy via environment endpoint.
   //
@@ -1096,6 +1121,7 @@ async function uploadToEnvironment(
   if (opts.disablePlatformObservability !== undefined) {
     createBody.disablePlatformObservability = opts.disablePlatformObservability;
   }
+  createBody.artifactBytes = zipBuffer.byteLength;
 
   const createResp = await fetch(`${apiUrl}/v1/projects/${projectId}/environments/${environmentId}/deploy`, {
     method: 'POST',
@@ -1105,23 +1131,15 @@ async function uploadToEnvironment(
 
   if (!createResp.ok) {
     const err = await createResp.json().catch(() => ({}));
-    throw new Error(`Failed to create deploy: ${(err as { detail?: string }).detail || createResp.statusText}`);
+    const detail = (err as { detail?: string }).detail;
+    // 413 = bundle over the platform limit; its detail already names the size and the fix.
+    if (createResp.status === 413 && detail) throw new Error(detail);
+    throw new Error(`Failed to create deploy: ${detail || createResp.statusText}`);
   }
 
   const { deploy } = (await createResp.json()) as { deploy: { id: string; uploadUrl: string } };
 
-  // Upload artifact
-  const uploadResp = await fetch(deploy.uploadUrl, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/zip',
-    },
-    body: zipBuffer,
-  });
-
-  if (!uploadResp.ok) {
-    throw new Error(`Failed to upload artifact: ${uploadResp.statusText}`);
-  }
+  await uploadArtifact(deploy.uploadUrl, zipBuffer);
 
   // Signal upload complete — uses net-new env-scoped endpoint so the
   // unified-runtime CLI never touches /v1/studio/*.
@@ -1151,11 +1169,26 @@ interface UnifiedDeployStatus {
   error: string | null;
 }
 
+interface PollDeployOptions {
+  /** Print every log line instead of the rolling tail shown on a TTY. */
+  showAllLogs?: boolean;
+  /** Receives every raw log entry, so a failure excerpt can be printed later. */
+  collectLogs?: LogCollector;
+}
+
 /**
  * Poll the net-new env-scoped status endpoint until the deploy reaches a
  * terminal state. Kept inside the deploy command so the unified runtime
  * never reaches into ../studio/ for transport.
  */
+/** Set once the log stream has connected; a connected stream is drained before it is stopped. */
+interface StreamState {
+  connected: boolean;
+}
+
+/** How long a connected stream may keep delivering after the deploy reached a terminal state. */
+const SSE_DRAIN_MS = 500;
+
 async function streamEnvironmentDeployLogs(
   token: string,
   orgId: string,
@@ -1163,9 +1196,11 @@ async function streamEnvironmentDeployLogs(
   environmentId: string,
   deployId: string,
   signal: AbortSignal,
+  logWriter: DeployLogWriter,
+  state: StreamState,
 ): Promise<void> {
   // Small delay to let the deploy pipeline start before requesting logs
-  await new Promise(r => setTimeout(r, 2000));
+  await abortableDelay(2000, signal);
   if (signal.aborted) return;
 
   const apiUrl = process.env.MASTRA_PLATFORM_API_URL || 'https://platform.mastra.ai';
@@ -1181,6 +1216,7 @@ async function streamEnvironmentDeployLogs(
   });
 
   if (!resp.ok || !resp.body) return;
+  state.connected = true;
 
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
@@ -1209,18 +1245,21 @@ async function streamEnvironmentDeployLogs(
         skipNextUrlMeta = false;
         if (/^(\x1b\[\d+m)*url(\x1b\[\d+m)*:/.test(data)) continue;
       }
-      await writeBarLine(data);
+      logWriter.write(data);
     }
   }
 }
 
-async function pollEnvironmentDeploy(
+class RetryableDeployPollError extends Error {}
+
+export async function pollEnvironmentDeploy(
   token: string,
   orgId: string,
   projectId: string,
   environmentId: string,
   deployId: string,
   maxWaitMs = 600_000,
+  options: PollDeployOptions = {},
 ): Promise<UnifiedDeployStatus> {
   const apiUrl = process.env.MASTRA_PLATFORM_API_URL || 'https://platform.mastra.ai';
   const url = `${apiUrl}/v1/projects/${projectId}/environments/${environmentId}/deploys/${deployId}`;
@@ -1229,42 +1268,124 @@ async function pollEnvironmentDeploy(
 
   // Stream logs in parallel with status polling
   const logAbort = new AbortController();
-  streamEnvironmentDeployLogs(currentToken, orgId, projectId, environmentId, deployId, logAbort.signal).catch(() => {});
+  const logWriter = createBarLogWriter({ showAll: options.showAllLogs, collect: options.collectLogs });
+  const streamState: StreamState = { connected: false };
+  const logsTask = streamEnvironmentDeployLogs(
+    currentToken,
+    orgId,
+    projectId,
+    environmentId,
+    deployId,
+    logAbort.signal,
+    logWriter,
+    streamState,
+  ).catch(() => {});
+
+  let lastError: string | undefined;
+  let lastRetryNoticeAt: number | undefined;
+  let recoveryNoticePending = false;
+  const pollAbort = new AbortController();
+  const timeoutError = () => new Error(`Status polling timed out${lastError ? `: ${lastError}` : ''}`);
+  const pollTimeout = setTimeout(() => pollAbort.abort(timeoutError()), Math.max(0, maxWaitMs - (Date.now() - start)));
 
   try {
-    while (Date.now() - start < maxWaitMs) {
-      const resp = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${currentToken}`,
-          'x-organization-id': orgId,
+    while (Date.now() - start < maxWaitMs && !pollAbort.signal.aborted) {
+      const result = await withPollingRetries(
+        async () => {
+          let resp: Response;
+          let body: string;
+          const requestAbort = new AbortController();
+          const requestTimeout = setTimeout(() => requestAbort.abort(), 30_000);
+          try {
+            resp = await fetch(url, {
+              headers: {
+                Authorization: `Bearer ${currentToken}`,
+                'x-organization-id': orgId,
+              },
+              signal: AbortSignal.any([pollAbort.signal, requestAbort.signal]),
+            });
+            // Fetch resolves at the headers; the body read must also be retried on connection loss.
+            body = await resp.text();
+          } catch (err) {
+            lastError = err instanceof Error ? err.message : String(err);
+            if (!requestAbort.signal.aborted && !isRetryablePollingError(err)) throw err;
+            throw new RetryableDeployPollError(lastError, { cause: err });
+          } finally {
+            clearTimeout(requestTimeout);
+          }
+
+          if (!resp.ok && resp.status !== 401) {
+            let detail: string | undefined;
+            try {
+              detail = (JSON.parse(body) as { detail?: string } | null)?.detail;
+            } catch {
+              // Gateway errors often contain HTML rather than JSON.
+            }
+            lastError = `Poll failed: ${detail || resp.statusText || resp.status}`;
+            if (resp.status < 500) throw new Error(lastError);
+            throw new RetryableDeployPollError(lastError);
+          }
+
+          // Parse inside the retry operation, but never retry malformed JSON.
+          return resp.status === 401 ? undefined : (JSON.parse(body) as { deploy: UnifiedDeployStatus });
         },
-      });
+        {
+          maxRetries: Infinity,
+          initialDelayMs: 2000,
+          maxDelayMs: 30_000,
+          shouldRetry: error => error instanceof RetryableDeployPollError,
+          onRetry: (_error, _attempt, delayMs) => {
+            const now = Date.now();
+            if (lastRetryNoticeAt !== undefined && now - lastRetryNoticeAt < 30_000) return;
+            logWriter.flush({ resetWindow: true });
+            p.log.warn(
+              `${recoveryNoticePending ? 'Still unable' : 'Unable'} to check deployment status. ` +
+                (maxWaitMs - (now - start) > delayMs
+                  ? `Retrying in ${delayMs / 1000}s; deployment may still be running.`
+                  : 'No time remains for another retry; deployment may still be running.'),
+            );
+            lastRetryNoticeAt = now;
+            recoveryNoticePending = true;
+          },
+        },
+        pollAbort.signal,
+      );
 
-      if (resp.status === 401) {
-        currentToken = await getToken();
-        // Back off before retrying so a persistently-401 token cannot spin
-        // the poll loop into a tight retry storm against the platform API.
-        await new Promise(r => setTimeout(r, 2000));
-        continue;
+      if (result === undefined) {
+        currentToken = await getToken(pollAbort.signal);
+      } else {
+        if (recoveryNoticePending) {
+          logWriter.flush({ resetWindow: true });
+          p.log.info('Deployment status checks resumed.');
+          recoveryNoticePending = false;
+        }
+        lastError = undefined;
+        const { deploy } = result;
+        if (deploy.status === 'running' || deploy.status === 'failed' || deploy.status === 'stopped') {
+          return deploy;
+        }
       }
 
-      if (!resp.ok) {
-        const err = (await resp.json().catch(() => ({}))) as { detail?: string };
-        throw new Error(`Poll failed: ${err.detail || resp.statusText}`);
-      }
-
-      const { deploy } = (await resp.json()) as { deploy: UnifiedDeployStatus };
-
-      if (deploy.status === 'running' || deploy.status === 'failed' || deploy.status === 'stopped') {
-        return deploy;
-      }
-
-      await new Promise(r => setTimeout(r, 2000));
+      await abortableDelay(2000, pollAbort.signal);
     }
 
-    throw new Error('Deploy timed out');
+    throw pollAbort.signal.reason ?? timeoutError();
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Unable to confirm deployment status; deployment may still be running. ${detail}\n` +
+        `Check deployment ${deployId}: ${deployDashboardUrl('environment', { orgId, projectId, deployId })}`,
+      { cause: err },
+    );
   } finally {
+    clearTimeout(pollTimeout);
+    // Give a connected stream a moment to deliver events already in flight,
+    // stop it, wait for the reader to settle, then draw whatever is queued so
+    // nothing is lost and nothing prints after the outcome message.
+    if (streamState.connected) await Promise.race([logsTask, abortableDelay(SSE_DRAIN_MS)]);
     logAbort.abort();
+    await logsTask;
+    logWriter.flush();
   }
 }
 
@@ -1780,40 +1901,57 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   const sizeLabel = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)}MB` : `${sizeKB.toFixed(1)}KB`;
   s.stop(`Created ${sizeLabel} archive (${elapsed(performance.now() - t)})`);
 
+  const zipBuffer = await readFile(zipPath);
+  await checkBundleSize({
+    artifactBytes: zipBuffer.byteLength,
+    outputDir: join(targetDir, '.mastra', 'output'),
+    warn: message => p.log.warn(message),
+  });
+
   t = performance.now();
   s.start('Uploading...');
-  const zipBuffer = await readFile(zipPath);
   const deployResult = await uploadToEnvironment(token, orgId, projectId, environment.id, zipBuffer, {
     gitBranch: gitBranch ?? undefined,
     projectName,
     envVars: envCount > 0 ? envVars : undefined,
     mastraVersion: mastraVersion ?? undefined,
     disablePlatformObservability: projectConfig?.disablePlatformObservability === true,
+    dedicatedWorkersEnabled: workersMode === 'dedicated' && workersEnabled,
   });
   s.stop(`Uploaded (${elapsed(performance.now() - t)})`);
 
   await rm(zipPath, { force: true });
 
   p.log.step('Waiting for deploy to finish...');
-  const finalStatus = await pollEnvironmentDeploy(token, orgId, projectId, environment.id, deployResult.id);
+  // With --debug every line is already on screen, so no excerpt is needed.
+  const collectedLogs = opts.debug ? undefined : createLogCollector();
+  const finalStatus = await pollEnvironmentDeploy(token, orgId, projectId, environment.id, deployResult.id, undefined, {
+    showAllLogs: opts.debug,
+    collectLogs: collectedLogs,
+  });
 
   if (finalStatus.status === 'running') {
     p.log.info(`  Studio: ${pc.cyan(publicUrls.studioUrl)}`);
     p.log.info(`  ${publicUrls.serverLabel}: ${pc.cyan(publicUrls.serverUrl)}`);
     p.outro(`Deploy succeeded in ${elapsed(performance.now() - tTotal)}!`);
-  } else if (finalStatus.status === 'failed') {
-    p.log.error(`Deploy failed: ${finalStatus.error}`);
+  } else {
+    printDeployFailure({
+      message:
+        finalStatus.status === 'failed'
+          ? `Deploy failed: ${finalStatus.error}`
+          : `Deploy ended with status: ${finalStatus.status}`,
+      collectedLogs: collectedLogs?.entries() ?? [],
+      dashboardUrl: deployDashboardUrl('environment', { orgId, projectId, deployId: deployResult.id }),
+      showAllLogs: opts.debug,
+    });
     // Progressive discovery: only hint at `mastra env diagnosis` when the
     // command is actually registered (same feature gate as index.ts). The
     // failed-deploy webhook has already inserted a PENDING diagnosis row,
     // so the command returns "in progress" immediately rather than 404-ing
     // while the agent runs.
-    if (coreFeatures.has('deploy-diagnosis')) {
+    if (finalStatus.status === 'failed' && coreFeatures.has('deploy-diagnosis')) {
       p.log.info(`Run \`mastra env diagnosis ${deployResult.id}\` for suggestions.`);
     }
-    process.exit(1);
-  } else {
-    p.log.warning(`Deploy ended with status: ${finalStatus.status}`);
     process.exit(1);
   }
 }

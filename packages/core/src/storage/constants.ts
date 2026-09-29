@@ -840,6 +840,8 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     startedAt: { type: 'timestamp', nullable: true },
     suspendedAt: { type: 'timestamp', nullable: true },
     completedAt: { type: 'timestamp', nullable: true },
+    ownerId: { type: 'text', nullable: true },
+    leaseExpiresAt: { type: 'timestamp', nullable: true },
   },
   [TABLE_SCHEDULES]: {
     id: { type: 'text', nullable: false, primaryKey: true },

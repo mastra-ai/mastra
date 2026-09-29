@@ -5,7 +5,7 @@ import { PullTransport } from '../transport/pull-transport';
 import type { WorkerTransport } from '../transport/transport';
 import type { StepExecutionStrategy } from '../types';
 import { MastraWorker } from '../worker';
-import type { WorkerDeps } from '../worker';
+import type { WorkerDeps, WorkerStopOptions } from '../worker';
 
 const DEFAULT_GROUP = 'mastra-orchestration';
 
@@ -87,12 +87,12 @@ export class OrchestrationWorker extends MastraWorker {
     this.#running = true;
   }
 
-  async stop(): Promise<void> {
+  async stop(options?: WorkerStopOptions): Promise<void> {
     if (!this.#running) return;
 
     try {
       if (this.#transport) {
-        await this.#transport.stop();
+        await this.#transport.stop(options);
         this.#transport = undefined;
       }
     } finally {

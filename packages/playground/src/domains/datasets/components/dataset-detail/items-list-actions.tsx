@@ -44,34 +44,28 @@ export function ActionsMenu({
           <Button
             variant="ghost"
             size="sm"
-            className="w-full justify-start gap-2"
+            className="w-full justify-start"
             onClick={() => handleAction(onExportClick)}
+            icon={<Download />}
           >
-            <Icon>
-              <Download className="h-4 w-4" />
-            </Icon>
             Export
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            className="w-full justify-start gap-2"
+            className="w-full justify-start"
             onClick={() => handleAction(onCreateDatasetClick)}
+            icon={<FolderPlus />}
           >
-            <Icon>
-              <FolderPlus className="h-4 w-4" />
-            </Icon>
             Create Dataset
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            className="w-full justify-start gap-2 text-red-500 hover:text-red-400"
+            className="w-full justify-start text-red-500 hover:text-red-400"
             onClick={() => handleAction(onDeleteClick)}
+            icon={<Trash2 />}
           >
-            <Icon>
-              <Trash2 className="h-4 w-4" />
-            </Icon>
             Delete
           </Button>
         </div>

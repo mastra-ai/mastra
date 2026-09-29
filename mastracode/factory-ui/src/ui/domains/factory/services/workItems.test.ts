@@ -76,6 +76,19 @@ describe('Factory work item service boundary', () => {
     });
   });
 
+  it('keeps a GitLab merge request as a GitLab review card', async () => {
+    const externalSource = {
+      integrationId: 'gitlab',
+      type: 'pull-request',
+      externalId: 'gitlab-pr:encoded-5',
+      url: 'https://gitlab.com/group/project/-/merge_requests/5',
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ workItems: [{ ...wireItem, externalSource }] })));
+
+    const [item] = (await listWorkItems('', 'project-1')).workItems;
+    expect(item).toMatchObject({ source: 'gitlab-pr', sourceKey: externalSource.externalId, url: externalSource.url });
+  });
+
   it('sends provider-neutral external source data when creating a board item', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ workItem: wireItem }));
     vi.stubGlobal('fetch', fetchMock);

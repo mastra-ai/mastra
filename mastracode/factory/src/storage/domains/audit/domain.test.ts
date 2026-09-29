@@ -373,6 +373,8 @@ describe('AuditDomain', () => {
         'factory.run.approved',
         'factory.run.dismissed',
         'factory.run.retry',
+        'factory.run.queued',
+        'factory.run.rejected',
         'factory.git.commit',
         'factory.git.push',
         'factory.git.pr_opened',

@@ -1,4 +1,4 @@
-import type { ListScoresResponse } from '@mastra/core/evals';
+import type { ListScoresResponse } from '@mastra/client-js';
 import { Card, CardContent } from '@mastra/playground-ui/components/Card';
 import { MetricsLineChart } from '@mastra/playground-ui/components/MetricsLineChart';
 import { useMemo } from 'react';
@@ -35,7 +35,7 @@ export function TraceScoreLineChart({
   if (data.length === 0) return null;
 
   return (
-    <Card appearance="surface" className={className}>
+    <Card className={className}>
       <CardContent>
         <MetricsLineChart
           data={data}

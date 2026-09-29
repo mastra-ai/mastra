@@ -38,6 +38,7 @@ export function getEntryRetries(entry: SingleStepEntry, fallback?: number): numb
       return entry.step.retries ?? fallback;
     case 'agent':
     case 'tool':
+    case 'classifier':
       return entry.options?.retries ?? fallback;
     case 'mapping':
       return fallback;
@@ -102,6 +103,8 @@ export function getEntrySchemas(
       };
     case 'agent':
       return { inputSchema: toStandardSchema(z.object({ prompt: z.string() })) };
+    case 'classifier':
+      return { inputSchema: toStandardSchema(z.any()) };
     case 'tool': {
       let tool: { inputSchema?: any; resumeSchema?: any; suspendSchema?: any } | undefined;
       try {

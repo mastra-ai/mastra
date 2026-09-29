@@ -2,7 +2,10 @@ import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { Mastra } from '../../mastra';
 import { Agent } from '../agent';
+import { createDurableAgent } from '../durable/create-durable-agent';
+import type { MessageList } from '../message-list/index';
 
 setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
@@ -13,19 +16,27 @@ beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());
 
 describe('OpenAI reasoning summary streaming (e2e)', { timeout: 120_000 }, () => {
-  it.skipIf(!process.env.OPENAI_API_KEY)(
-    'streams and persists reasoning summaries from gpt-5.4 with per-id chunk integrity',
-    async () => {
-      const agent = new Agent({
-        id: 'openai-reasoning-summaries-e2e-agent',
-        name: 'OpenAI Reasoning Summaries E2E Agent',
-        instructions: 'You are a concise assistant.',
-        model: openai_v5('gpt-5.4'),
-      });
+  /**
+   * Runs on the default engine and on a durable leg (same Agent wrapped in
+   * `createDurableAgent` + a Mastra host). The durable leg must replay the
+   * exact same recorded provider traffic — this pins that reasoning payloads
+   * (per-id summary chunks, encrypted content in providerMetadata) survive
+   * durable serialization at the provider boundary and in persisted parts.
+   */
+  for (const engine of ['default', 'durable'] as const) {
+    it.skipIf(!process.env.OPENAI_API_KEY)(
+      `streams and persists reasoning summaries from gpt-5.4 with per-id chunk integrity (${engine})`,
+      async () => {
+        const agent = new Agent({
+          id: 'openai-reasoning-summaries-e2e-agent',
+          name: 'OpenAI Reasoning Summaries E2E Agent',
+          instructions: 'You are a concise assistant.',
+          model: openai_v5('gpt-5.4'),
+        });
 
-      const response = await agent.stream(
-        'Solve 27 * 14 carefully. Show a concise final answer after reasoning. If you produce reasoning summaries, keep them detailed.',
-        {
+        const prompt =
+          'Solve 27 * 14 carefully. Show a concise final answer after reasoning. If you produce reasoning summaries, keep them detailed.';
+        const streamOptions = {
           providerOptions: {
             openai: {
               reasoningEffort: 'medium',
@@ -33,71 +44,86 @@ describe('OpenAI reasoning summary streaming (e2e)', { timeout: 120_000 }, () =>
               include: ['reasoning.encrypted_content'],
             } as any,
           },
-        },
-      );
+        };
 
-      const reasoningStarts: string[] = [];
-      const reasoningEnds: string[] = [];
-      const reasoningDeltas: Array<{ id: string; text: string }> = [];
+        let fullStream: AsyncIterable<any>;
+        let messageList: MessageList;
 
-      for await (const chunk of response.fullStream) {
-        if (chunk.type === 'reasoning-start') {
-          reasoningStarts.push(chunk.payload.id);
+        if (engine === 'default') {
+          const response = await agent.stream(prompt, streamOptions);
+          fullStream = response.fullStream;
+          messageList = response.messageList;
+        } else {
+          const durableAgent = createDurableAgent({ agent });
+          new Mastra({ agents: { [agent.id]: durableAgent as any }, logger: false });
+          const result = await durableAgent.stream(prompt, streamOptions);
+          fullStream = result.fullStream as unknown as AsyncIterable<any>;
+          messageList = result.output.messageList;
         }
 
-        if (chunk.type === 'reasoning-delta') {
-          reasoningDeltas.push({ id: chunk.payload.id, text: chunk.payload.text });
+        const reasoningStarts: string[] = [];
+        const reasoningEnds: string[] = [];
+        const reasoningDeltas: Array<{ id: string; text: string }> = [];
+
+        for await (const chunk of fullStream) {
+          if (chunk.type === 'reasoning-start') {
+            reasoningStarts.push(chunk.payload.id);
+          }
+
+          if (chunk.type === 'reasoning-delta') {
+            reasoningDeltas.push({ id: chunk.payload.id, text: chunk.payload.text });
+          }
+
+          if (chunk.type === 'reasoning-end') {
+            reasoningEnds.push(chunk.payload.id);
+          }
         }
 
-        if (chunk.type === 'reasoning-end') {
-          reasoningEnds.push(chunk.payload.id);
+        const deltasById = new Map<string, string[]>();
+        for (const delta of reasoningDeltas) {
+          const existing = deltasById.get(delta.id) ?? [];
+          existing.push(delta.text);
+          deltasById.set(delta.id, existing);
         }
-      }
 
-      const deltasById = new Map<string, string[]>();
-      for (const delta of reasoningDeltas) {
-        const existing = deltasById.get(delta.id) ?? [];
-        existing.push(delta.text);
-        deltasById.set(delta.id, existing);
-      }
+        const startCounts = new Map<string, number>();
+        for (const id of reasoningStarts) {
+          startCounts.set(id, (startCounts.get(id) ?? 0) + 1);
+        }
 
-      const startCounts = new Map<string, number>();
-      for (const id of reasoningStarts) {
-        startCounts.set(id, (startCounts.get(id) ?? 0) + 1);
-      }
+        const endCounts = new Map<string, number>();
+        for (const id of reasoningEnds) {
+          endCounts.set(id, (endCounts.get(id) ?? 0) + 1);
+        }
 
-      const endCounts = new Map<string, number>();
-      for (const id of reasoningEnds) {
-        endCounts.set(id, (endCounts.get(id) ?? 0) + 1);
-      }
+        const assistantMessages = messageList.get.all.db().filter(message => message.role === 'assistant');
+        const allParts = assistantMessages.flatMap(message => message.content.parts);
+        const reasoningParts = allParts.filter(part => part.type === 'reasoning');
+        const textParts = allParts.filter(part => part.type === 'text');
 
-      const assistantMessages = response.messageList.get.all.db().filter(message => message.role === 'assistant');
-      const allParts = assistantMessages.flatMap(message => message.content.parts);
-      const reasoningParts = allParts.filter(part => part.type === 'reasoning');
-      const textParts = allParts.filter(part => part.type === 'text');
+        expect(reasoningStarts.length).toBeGreaterThan(0);
+        expect(reasoningEnds.length).toBeGreaterThan(0);
+        expect(reasoningDeltas.length).toBeGreaterThan(0);
+        expect(reasoningDeltas.some(delta => delta.text.trim().length > 0)).toBe(true);
+        expect(deltasById.size).toBeGreaterThan(0);
 
-      expect(reasoningStarts.length).toBeGreaterThan(0);
-      expect(reasoningEnds.length).toBeGreaterThan(0);
-      expect(reasoningDeltas.length).toBeGreaterThan(0);
-      expect(reasoningDeltas.some(delta => delta.text.trim().length > 0)).toBe(true);
-      expect(deltasById.size).toBeGreaterThan(0);
+        expect([...startCounts.keys()].sort()).toEqual([...endCounts.keys()].sort());
 
-      expect([...startCounts.keys()].sort()).toEqual([...endCounts.keys()].sort());
+        for (const [id, count] of startCounts) {
+          expect(count).toBe(1);
+          expect(endCounts.get(id)).toBe(1);
+          expect((deltasById.get(id) ?? []).join('').trim().length).toBeGreaterThan(0);
+        }
 
-      for (const [id, count] of startCounts) {
-        expect(count).toBe(1);
-        expect(endCounts.get(id)).toBe(1);
-        expect((deltasById.get(id) ?? []).join('').trim().length).toBeGreaterThan(0);
-      }
+        expect(reasoningParts.length).toBe(deltasById.size);
+        expect(textParts.some(part => part.text.trim().length > 0)).toBe(true);
 
-      expect(reasoningParts.length).toBe(deltasById.size);
-      expect(textParts.some(part => part.text.trim().length > 0)).toBe(true);
-
-      for (const part of reasoningParts) {
-        expect(part.providerMetadata?.openai?.itemId).toBeTruthy();
-        expect(part.providerMetadata?.openai).toHaveProperty('reasoningEncryptedContent');
-        expect(part.details.some(detail => detail.type === 'text' && detail.text.trim().length > 0)).toBe(true);
-      }
-    },
-  );
+        for (const part of reasoningParts) {
+          expect(part.providerMetadata?.openai?.itemId).toBeTruthy();
+          expect(part.providerMetadata?.openai).toHaveProperty('reasoningEncryptedContent');
+          expect(part.details.some(detail => detail.type === 'text' && detail.text.trim().length > 0)).toBe(true);
+        }
+      },
+    );
+  }
 });

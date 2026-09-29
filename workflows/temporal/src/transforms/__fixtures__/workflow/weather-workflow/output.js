@@ -11,6 +11,18 @@ class TemporalExecutionEngine {
   }
   async execute(params) {
     this.initData = params.input;
+    this.executionContext = {
+      ...(params.requestContext !== undefined && {
+        requestContext: params.requestContext
+      }),
+      ...(params.runId !== undefined && {
+        runId: params.runId
+      }),
+      ...(params.resourceId !== undefined && {
+        resourceId: params.resourceId
+      }),
+      workflowId: params.workflowId
+    };
     let result = params.input;
     const stepResults = {};
     for (const entry of params.graph.steps) {
@@ -24,6 +36,13 @@ class TemporalExecutionEngine {
       steps: stepResults
     };
   }
+  activityParams(inputData, extra = {}) {
+    return {
+      inputData,
+      ...extra,
+      ...this.executionContext
+    };
+  }
   async executeEntry(entry, inputData, stepResults) {
     switch (entry.type) {
       case 'step':
@@ -31,9 +50,9 @@ class TemporalExecutionEngine {
           log.info('step', {
             stepId: entry.step.id
           });
-          const out = await this.activityHandle[entry.step.id]({
-            inputData
-          });
+          const out = await this.activityHandle[entry.step.id](this.activityParams(inputData, {
+            initData: this.initData
+          }));
           stepResults[entry.step.id] = out;
           return out;
         }
@@ -44,18 +63,28 @@ class TemporalExecutionEngine {
           });
           const childResult = await executeChild(entry.workflowType, {
             args: [{
-              inputData
+              inputData,
+              ...this.executionContext
             }]
           });
           const out = childResult?.result ?? childResult;
           stepResults[entry.workflowType] = out;
           return out;
         }
+      case 'mapping':
+        {
+          log.info('mapping', {
+            mappingId: entry.id
+          });
+          const out = await this.activityHandle[entry.id](this.activityParams(inputData, {
+            initData: this.initData
+          }));
+          stepResults[entry.id] = out;
+          return out;
+        }
       case 'sleep':
         {
-          const duration = entry.duration ?? (entry.fn ? await this.activityHandle[entry.fn]({
-            inputData
-          }) : 0);
+          const duration = entry.duration ?? (entry.fn ? await this.activityHandle[entry.fn](this.activityParams(inputData)) : 0);
           log.info('sleep', {
             id: entry.id,
             duration
@@ -65,9 +94,7 @@ class TemporalExecutionEngine {
         }
       case 'sleepUntil':
         {
-          const date = entry.date != null ? new Date(entry.date) : entry.fn ? new Date(await this.activityHandle[entry.fn]({
-            inputData
-          })) : new Date();
+          const date = entry.date != null ? new Date(entry.date) : entry.fn ? new Date(await this.activityHandle[entry.fn](this.activityParams(inputData))) : new Date();
           log.info('sleepUntil', {
             id: entry.id,
             date: date.toISOString()
@@ -78,16 +105,14 @@ class TemporalExecutionEngine {
         }
       case 'parallel':
         {
+          const entryId = parallelEntry => parallelEntry.type === 'childWorkflow' ? parallelEntry.workflowType : parallelEntry.step.id;
           log.info('parallel', {
-            steps: entry.steps.map(s => s.step.id)
+            steps: entry.steps.map(entryId)
           });
-          const results = await Promise.all(entry.steps.map(s => this.activityHandle[s.step.id]({
-            inputData
-          })));
+          const results = await Promise.all(entry.steps.map(step => this.executeEntry(step, inputData, stepResults)));
           const out = {};
-          entry.steps.forEach((s, i) => {
-            out[s.step.id] = results[i];
-            stepResults[s.step.id] = results[i];
+          entry.steps.forEach((step, i) => {
+            out[entryId(step)] = results[i];
           });
           return out;
         }
@@ -96,16 +121,14 @@ class TemporalExecutionEngine {
           log.info('conditional', {
             conditions: entry.serializedConditions.map(condition => condition.id)
           });
-          const condResults = await Promise.all(entry.serializedConditions.map(condition => this.activityHandle[condition.id]({
-            inputData
-          })));
+          const condResults = await Promise.all(entry.serializedConditions.map(condition => this.activityHandle[condition.id](this.activityParams(inputData))));
           const out = {};
           for (let i = 0; i < entry.steps.length; i++) {
             if (condResults[i]) {
               const stepId = entry.steps[i].step.id;
-              const res = await this.activityHandle[stepId]({
-                inputData
-              });
+              const res = await this.activityHandle[stepId](this.activityParams(inputData, {
+                initData: this.initData
+              }));
               out[stepId] = res;
               stepResults[stepId] = res;
             }
@@ -120,13 +143,11 @@ class TemporalExecutionEngine {
           });
           let current = inputData;
           while (true) {
-            current = await this.activityHandle[entry.step.id]({
-              inputData: current
-            });
-            stepResults[entry.step.id] = current;
-            const shouldContinue = Boolean(await this.activityHandle[entry.serializedCondition.id]({
-              inputData: current
+            current = await this.activityHandle[entry.step.id](this.activityParams(current, {
+              initData: this.initData
             }));
+            stepResults[entry.step.id] = current;
+            const shouldContinue = Boolean(await this.activityHandle[entry.serializedCondition.id](this.activityParams(current)));
             if (entry.loopType === 'dowhile' ? !shouldContinue : shouldContinue) {
               break;
             }
@@ -156,9 +177,9 @@ class TemporalExecutionEngine {
               if (i >= items.length) {
                 break;
               }
-              results[i] = await this.activityHandle[entry.step.id]({
-                inputData: items[i]
-              });
+              results[i] = await this.activityHandle[entry.step.id](this.activityParams(items[i], {
+                initData: this.initData
+              }));
             }
           });
           await Promise.all(workers);
@@ -182,6 +203,7 @@ function createWorkflow(workflowId, options) {
       workflowId,
       runId: startArgs?.runId,
       resourceId: startArgs?.resourceId,
+      requestContext: startArgs?.requestContext,
       graph: {
         id: workflowId,
         steps: stepFlow
@@ -204,6 +226,13 @@ function createWorkflow(workflowId, options) {
       stepFlow.push({
         type: 'childWorkflow',
         workflowType
+      });
+      return workflow;
+    },
+    map(mappingId) {
+      stepFlow.push({
+        type: 'mapping',
+        id: mappingId
       });
       return workflow;
     },
@@ -245,15 +274,10 @@ function createWorkflow(workflowId, options) {
       }
       return workflow;
     },
-    parallel(stepIds) {
+    parallel(entries) {
       stepFlow.push({
         type: 'parallel',
-        steps: stepIds.map(id => ({
-          type: 'step',
-          step: {
-            id
-          }
-        }))
+        steps: entries
       });
       return workflow;
     },

@@ -7,7 +7,7 @@ description: "Browse Together AI model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/togetherai.svg" alt="Together AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Together AI
 
-Access 38 Together AI models through Mastra's model router. Authentication is handled automatically using the `TOGETHER_API_KEY` environment variable.
+Access 36 Together AI models through Mastra's model router. Authentication is handled automatically using the `TOGETHER_API_KEY` environment variable.
 
 Learn more in the [Together AI documentation](https://docs.together.ai/docs/serverless-models).
 
@@ -58,7 +58,7 @@ for await (const chunk of stream) {
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
+    "contextWindow": 1048576,
     "maxOutput": 384000,
     "inputCost": 0.14,
     "outputCost": 0.28
@@ -86,6 +86,18 @@ for await (const chunk of stream) {
     "maxOutput": 384000,
     "inputCost": 1.32,
     "outputCost": 3.96
+  },
+  {
+    "model": "togetherai/deepseek-ai/DeepSeek-V4.1-Flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 384000,
+    "inputCost": 0.3,
+    "outputCost": 1.2
   },
   {
     "model": "togetherai/google/gemma-3n-E4B-it",
@@ -154,7 +166,7 @@ for await (const chunk of stream) {
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 202752,
+    "contextWindow": 196608,
     "maxOutput": 131072,
     "inputCost": 0.3,
     "outputCost": 1.2
@@ -170,30 +182,6 @@ for await (const chunk of stream) {
     "maxOutput": 250000,
     "inputCost": 0.3,
     "outputCost": 1.2
-  },
-  {
-    "model": "togetherai/moonshotai/Kimi-K2.6",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 131000,
-    "inputCost": 1.2,
-    "outputCost": 4.5
-  },
-  {
-    "model": "togetherai/moonshotai/Kimi-K2.7-Code",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 131072,
-    "inputCost": 0.95,
-    "outputCost": 4
   },
   {
     "model": "togetherai/moonshotai/Kimi-K3",
@@ -322,7 +310,7 @@ for await (const chunk of stream) {
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 512000,
+    "contextWindow": 1048575,
     "maxOutput": 164000,
     "inputCost": 1.4,
     "outputCost": 4.4

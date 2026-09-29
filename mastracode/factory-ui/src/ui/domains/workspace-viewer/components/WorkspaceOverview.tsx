@@ -56,7 +56,7 @@ export function WorkspaceOverview({
       <span className="text-notice-destructive/70">−{changes.deletions}</span>
     </span>
   ) : (
-    <span className="text-icon3">{changesLabel}</span>
+    <span className="text-muted-foreground">{changesLabel}</span>
   );
 
   return (
@@ -64,7 +64,7 @@ export function WorkspaceOverview({
       <Button className="w-full justify-start" size="sm" variant="ghost" onClick={onShowChanges}>
         <FileDiff />
         <span>Changes</span>
-        <span className="text-ui-xs ml-auto font-medium">
+        <span className="text-meta ml-auto">
           <WorkspaceOverviewStatus loading={changesLoading} error={changesError}>
             {changesStatus}
           </WorkspaceOverviewStatus>
@@ -73,9 +73,9 @@ export function WorkspaceOverview({
       <Button className="w-full justify-start" size="sm" variant="ghost" onClick={onShowFiles}>
         <NotepadText />
         <span>Files</span>
-        <span className="text-ui-xs ml-auto font-medium">
+        <span className="text-meta ml-auto">
           <WorkspaceOverviewStatus loading={filesLoading} error={filesError}>
-            <span className="text-icon3">{fileLabel}</span>
+            <span className="text-muted-foreground">{fileLabel}</span>
           </WorkspaceOverviewStatus>
         </span>
       </Button>
@@ -83,7 +83,7 @@ export function WorkspaceOverview({
         <Button className="w-full justify-start" size="sm" variant="ghost" onClick={onShowComments}>
           <MessageSquare />
           <span>Comments</span>
-          <span className="text-ui-xs text-icon3 ml-auto font-medium">
+          <span className="text-meta text-muted-foreground ml-auto">
             {commentCount === 0 ? 'None yet' : commentCount}
           </span>
         </Button>

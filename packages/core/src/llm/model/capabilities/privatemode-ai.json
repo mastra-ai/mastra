@@ -1,7 +1,17 @@
 {
-  "attachment": ["deepseek-ocr-2", "kimi-k2.6", "kimi-latest", "voxtral-mini-3b", "whisper-large-v3"],
+  "attachment": [
+    "deepseek-ocr-2",
+    "glm-5.3-flash",
+    "glm-flash-latest",
+    "kimi-k2.6",
+    "kimi-latest",
+    "voxtral-mini-3b",
+    "whisper-large-v3"
+  ],
   "temperature": [
     "glm-5.3",
+    "glm-5.3-flash",
+    "glm-flash-latest",
     "glm-latest",
     "gpt-oss-120b",
     "kimi-k2.6",
@@ -9,5 +19,13 @@
     "qwen3-embedding-4b",
     "voxtral-mini-3b"
   ],
-  "structuredOutput": ["glm-5.3", "glm-latest", "gpt-oss-120b", "kimi-k2.6", "kimi-latest"]
+  "structuredOutput": [
+    "glm-5.3",
+    "glm-5.3-flash",
+    "glm-flash-latest",
+    "glm-latest",
+    "gpt-oss-120b",
+    "kimi-k2.6",
+    "kimi-latest"
+  ]
 }

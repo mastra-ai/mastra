@@ -76,6 +76,7 @@ async function relocateSourceCards({
   factoryProjectId,
   sourceId,
   targetBoard,
+  attributionSourceIds,
 }: {
   workItems: Pick<WorkItemsStorage, 'list' | 'update' | 'supersedeDecisionsForWorkItem'>;
   integration: IntakeIntegration;
@@ -85,6 +86,7 @@ async function relocateSourceCards({
   factoryProjectId: string;
   sourceId: string;
   targetBoard: string;
+  attributionSourceIds: string[];
 }): Promise<{ moved: number; skipped: number }> {
   if (!boardRegistry.has(targetBoard)) return { moved: 0, skipped: 0 };
 
@@ -94,10 +96,18 @@ async function relocateSourceCards({
   for (let page = 0; page < REBIND_MAX_PAGES; page += 1) {
     const result = await withTimeout(
       integration.id,
-      () => integration.intake.listItems({ orgId, userId, sourceIds: [sourceId], cursor }),
+      () =>
+        integration.intake.listItems({
+          orgId,
+          userId,
+          sourceIds: [sourceId],
+          attributionSourceIds,
+          cursor,
+        }),
       deadline - Date.now(),
     );
     for (const item of result.items) {
+      if (item.sourceId !== sourceId) continue;
       for (const key of intakeItemSourceKeys(integration.id, item)) sourceKeys.add(key);
     }
     if (!result.nextCursor) break;
@@ -212,6 +222,8 @@ async function settleByIntegration<T>(
   return { pages, failures };
 }
 
+const MAX_INTAKE_SOURCE_ID_LENGTH = 1024;
+
 interface ParsedBinding {
   integrationId: string;
   sourceId: string;
@@ -225,7 +237,9 @@ export function parseIntakeBinding(body: unknown): ParsedBinding | null {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return null;
   const { integrationId, sourceId, factoryProjectId, board } = body as Record<string, unknown>;
   const isId = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 256;
-  if (!isId(integrationId) || !isId(sourceId)) return null;
+  const isSourceId = (value: unknown) =>
+    typeof value === 'string' && value.length > 0 && value.length <= MAX_INTAKE_SOURCE_ID_LENGTH;
+  if (!isId(integrationId) || !isSourceId(sourceId)) return null;
   if (factoryProjectId !== null && !isId(factoryProjectId)) return null;
   if (board !== undefined && board !== null && !isId(board)) return null;
   return {
@@ -263,8 +277,30 @@ function loose(c: unknown): Context {
 function sanitizeIdList(value: unknown): string[] | null | undefined {
   if (value === null) return null;
   if (!Array.isArray(value) || value.length > 200) return undefined;
-  const ids = value.filter((item): item is string => typeof item === 'string' && item.length > 0 && item.length <= 256);
+  const ids = value.filter(
+    (item): item is string => typeof item === 'string' && item.length > 0 && item.length <= MAX_INTAKE_SOURCE_ID_LENGTH,
+  );
   return ids.length === value.length && new Set(ids).size === ids.length ? ids : undefined;
+}
+
+function sanitizeLinearRepositoryMap(value: unknown): Record<string, string> | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const entries = Object.entries(value);
+  if (entries.length > 200) return undefined;
+  const mapping: Record<string, string> = Object.create(null);
+  for (const [projectId, slug] of entries) {
+    if (
+      !projectId ||
+      projectId.length > MAX_INTAKE_SOURCE_ID_LENGTH ||
+      typeof slug !== 'string' ||
+      !slug.trim() ||
+      slug.length > 512
+    ) {
+      return undefined;
+    }
+    mapping[projectId] = slug;
+  }
+  return mapping;
 }
 
 /** Validate a request body into an intake config, rejecting unknown shapes. */
@@ -286,11 +322,23 @@ export function parseIntakeConfig(body: unknown): IntakeConfig | null {
     ) {
       return null;
     }
-    const selection = value as { enabled?: unknown; sourceIds?: unknown };
+    const selection = value as { enabled?: unknown; sourceIds?: unknown; repositoryByLinearProject?: unknown };
     if (typeof selection.enabled !== 'boolean') return null;
     const sourceIds = sanitizeIdList(selection.sourceIds ?? null);
     if (sourceIds === undefined) return null;
-    config[integrationId] = { enabled: selection.enabled, sourceIds };
+    const repositoryByLinearProject =
+      integrationId === 'linear' ? sanitizeLinearRepositoryMap(selection.repositoryByLinearProject) : undefined;
+    if (
+      integrationId === 'linear' &&
+      selection.repositoryByLinearProject !== undefined &&
+      repositoryByLinearProject === undefined
+    )
+      return null;
+    config[integrationId] = {
+      enabled: selection.enabled,
+      sourceIds,
+      ...(repositoryByLinearProject ? { repositoryByLinearProject } : {}),
+    };
   }
   return config;
 }
@@ -340,7 +388,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
           const tenant = await this.#resolveTenant(loose(c));
           if ('response' in tenant) return tenant.response;
           await intake.ensureReady();
-          const config = await intake.getConfig({ ...tenant, integrationIds });
+          const config = await intake.getConfig({ orgId: tenant.orgId, integrationIds });
           return c.json({ config });
         },
       }),
@@ -374,7 +422,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
           }
 
           await intake.ensureReady();
-          await intake.saveConfig({ ...tenant, config: registeredConfig });
+          await intake.saveConfig({ orgId: tenant.orgId, config: registeredConfig });
           await audit.emit({
             context: loose(c),
             input: {
@@ -465,6 +513,14 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
               previousBinding.board !== nextBoard
             ) {
               try {
+                const config = await intake.getConfig({
+                  orgId: tenant.orgId,
+                  integrationIds: [binding.integrationId],
+                });
+                const configuredSourceIds = config[binding.integrationId]?.sourceIds ?? [];
+                const attributionSourceIds = configuredSourceIds.includes(binding.sourceId)
+                  ? configuredSourceIds
+                  : [...configuredSourceIds, binding.sourceId];
                 relocated = await relocateSourceCards({
                   workItems,
                   integration,
@@ -473,6 +529,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
                   userId: tenant.userId,
                   factoryProjectId: binding.factoryProjectId,
                   sourceId: binding.sourceId,
+                  attributionSourceIds,
                   targetBoard: nextBoard,
                 });
               } catch (error) {
@@ -617,7 +674,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
           if (!cursors) return c.json({ error: 'invalid_cursor' }, 400);
 
           await intake.ensureReady();
-          const config = await intake.getConfig({ ...tenant, integrationIds });
+          const config = await intake.getConfig({ orgId: tenant.orgId, integrationIds });
           const { pages, failures } = await settleByIntegration(
             integrations.flatMap(integration => {
               const selection = config[integration.id];

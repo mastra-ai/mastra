@@ -443,6 +443,29 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /web/factory/projects/:id/work-items/:workItemId/automation-runs": {
+    "contractKey": "workItemAutomationRun",
+    "method": "POST",
+    "path": "/web/factory/projects/:id/work-items/:workItemId/automation-runs",
+    "description": "Enqueue an idempotent deferred skill dispatch for a trusted external orchestrator",
+    "pathParams": [
+      "id",
+      "workItemId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "arguments",
+      "expectedRevision",
+      "requestId",
+      "role",
+      "skillName"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "record"
+    }
+  },
   "POST /web/factory/projects/:id/work-items/:workItemId/transition": {
     "contractKey": "workItemTransition",
     "method": "POST",
@@ -773,13 +796,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         "type": "object",
                         "properties": {
                           "outcome": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
+                            "type": [
+                              "string",
+                              "null"
                             ]
                           },
                           "to": {
@@ -2093,6 +2112,79 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       ]
     }
   },
+  "POST /web/factory/projects/:id/work-items/:workItemId/automation-runs": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "workItemId": {
+          "$ref": "#/$defs/__schema0"
+        }
+      },
+      "required": [
+        "id",
+        "workItemId"
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      }
+    },
+    "body": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "expectedRevision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "triage",
+            "plan",
+            "work",
+            "review"
+          ]
+        },
+        "skillName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "arguments": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        }
+      },
+      "required": [
+        "requestId",
+        "expectedRevision",
+        "role",
+        "skillName"
+      ],
+      "additionalProperties": false
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    }
+  },
   "POST /web/factory/projects/:id/work-items/:workItemId/transition": {
     "path": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2190,5 +2282,6 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "workItemStart": "POST /web/factory/projects/:id/runs/start",
   "supervisorSession": "POST /web/factory/projects/:id/supervisor/session",
   "workItemCreate": "POST /web/factory/projects/:id/work-items",
+  "workItemAutomationRun": "POST /web/factory/projects/:id/work-items/:workItemId/automation-runs",
   "workItemTransition": "POST /web/factory/projects/:id/work-items/:workItemId/transition"
 } as const;

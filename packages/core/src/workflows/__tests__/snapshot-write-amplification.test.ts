@@ -126,6 +126,10 @@ async function measureRun(toolIterations: number): Promise<WriteStats> {
     agents: { 'amplification-agent': durableAgent as any },
     logger: false,
     storage: store,
+    // `running` checkpoints are only persisted when crash recovery is enabled
+    // (issue #23915). This test measures the amplification of those recovery
+    // writes, so it must opt in.
+    recovery: { durableAgents: 'auto' },
   });
 
   const workflowsStore = (await mastra.getStorage()!.getStore('workflows'))! as any;
@@ -206,7 +210,9 @@ describe('durable snapshot write amplification (issue #20747)', () => {
 
     // Total bytes handed to storage across the whole run. Before: 11.8 MB at 4
     // steps, 33.9 MB at 8 (2.88x). After: 4.2 MB and 10.2 MB (2.45x) — roughly
-    // 3x less written, with the saving widening as runs get longer.
+    // 3x less written, with the saving widening as runs get longer. Keeping
+    // the copies a crash restart reads back (COR-1306) moved this to 4.8 MB
+    // and 12.2 MB (2.53x) without changing the duplication factor above.
     const growth = large.totalBytes / Math.max(small.totalBytes, 1);
     expect(growth).toBeLessThan(2.6);
   }, 120000);

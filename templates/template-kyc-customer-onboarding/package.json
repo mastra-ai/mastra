@@ -1,0 +1,64 @@
+{
+  "name": "mastra-kyc-customer-onboarding",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A durable Mastra KYC and customer onboarding template with policy-driven checks and human review.",
+  "type": "module",
+  "engines": {
+    "node": "^22.22.0 || >=24.12.0"
+  },
+  "workspaces": [
+    "portal"
+  ],
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env --import tsx scripts/start-development.ts",
+    "start": "mastra start",
+    "dev:api": "node --env-file-if-exists=.env --import tsx src/main.ts",
+    "dev:portal": "npm run dev --workspace portal",
+    "dev:studio": "node --env-file-if-exists=.env --import tsx scripts/start-studio.ts --port 4112 --data-root ./data/studio",
+    "build": "npm run build:mastra && npm run build:portal",
+    "build:mastra": "node --import tsx scripts/build-mastra.ts",
+    "build:types": "tsc -p tsconfig.build.json",
+    "build:portal": "npm run build --workspace portal",
+    "typecheck": "tsc --noEmit && npm run typecheck --workspace portal",
+    "test": "npm run test:template && npm run test:workflow && npm run test:api && npm run test:pii && npm run test:portal",
+    "test:template": "vitest run tests/template-compatibility.test.ts",
+    "test:workflow": "vitest run tests/workflow-smoke.test.ts",
+    "test:api": "vitest run tests/api-smoke.test.ts",
+    "test:pii": "vitest run tests/pii-smoke.test.ts",
+    "test:portal": "npm run test:browser --workspace portal",
+    "test:first-run": "node --import tsx scripts/verify-clean-default.ts",
+    "eval:extraction": "node --import tsx scripts/evaluate-extraction.ts",
+    "eval:baseline": "node --import tsx scripts/evaluate-kyc-quality.ts",
+    "eval:experiments": "node --import tsx scripts/evaluate-kyc-experiments.ts",
+    "analytics:refresh": "node --env-file-if-exists=.env --import tsx scripts/refresh-analytics.ts",
+    "observability:prune": "node --env-file-if-exists=.env --import tsx scripts/prune-observability.ts",
+    "smoke:openai": "node --env-file-if-exists=.env --import tsx scripts/live-multimodal-smoke.ts",
+    "smoke:opensanctions": "node --env-file-if-exists=.env --import tsx scripts/live-opensanctions-smoke.ts",
+    "db:migrate": "node --env-file-if-exists=.env --import tsx scripts/migrate.ts",
+    "demo:reset": "node --env-file-if-exists=.env --import tsx scripts/reset-demo.ts"
+  },
+  "dependencies": {
+    "@duckdb/node-api": "1.5.5-r.4",
+    "@hono/node-server": "1.19.17",
+    "@libsql/client": "0.17.4",
+    "@mastra/core": "latest",
+    "@mastra/hono": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/observability": "latest",
+    "hono": "4.13.8",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "mastra": "latest",
+    "@types/node": "24.13.3",
+    "@vitest/browser-playwright": "4.1.11",
+    "playwright": "1.62.1",
+    "tsx": "4.23.12",
+    "typescript": "6.0.3",
+    "vite": "7.3.6",
+    "vitest": "4.1.11"
+  },
+  "license": "Apache-2.0",
+  "homepage": "https://mastra.ai/templates/kyc-customer-onboarding"
+}

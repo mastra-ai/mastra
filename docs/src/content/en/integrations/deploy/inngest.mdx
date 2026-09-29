@@ -623,6 +623,25 @@ const workflow = createWorkflow({
 })
 ```
 
+### Retries
+
+Set `retries` to let a run survive a failed request to your app, such as a process restart, redeploy, or out-of-memory crash. Inngest calls the function again, skips the steps that already finished, and continues from the step that was interrupted:
+
+```ts
+const workflow = createWorkflow({
+  id: 'long-running-workflow',
+  inputSchema: z.object({ jobId: z.string() }),
+  outputSchema: z.object({ done: z.boolean() }),
+  steps: [longRunningStep],
+  // Re-invoke up to 3 times after a failed request
+  retries: 3,
+})
+```
+
+`retries` defaults to `0`. Errors thrown by your step code are retried per step with `retryConfig` or the step's `retries` option, not at the function level. `createInngestAgent()` accepts the same `retries` option and applies it to every Inngest function the durable agent creates. All durable agents share these functions, so the `retries` value of the first agent registered with Mastra applies to every durable agent. Set the same value on each agent to avoid confusion.
+
+A nested workflow runs as its own Inngest function and uses its own `retries` setting. It doesn't inherit the parent's value, so set `retries` on each nested workflow that should recover from a failed request.
+
 ### Combining flow control options
 
 Multiple flow control options can be combined in a single workflow:

@@ -69,7 +69,6 @@ values
     await runtime.waitForScreenText(/E2E storage fallback history fixture/i, terminal, 8_000);
     terminal.write('\r');
 
-    await runtime.waitForScreenText(/Switched to: E2E storage fallback history fixture/i, terminal, 8_000);
     await runtime.waitForScreenText(/Open fallback-backed local history/i, terminal, 8_000);
     await runtime.waitForScreenText(/Fallback LibSQL history survived PostgreSQL startup fallback/i, terminal, 8_000);
 

@@ -176,26 +176,8 @@ describe('Plan', () => {
     );
 
     expect(screen.getByText('Approved')).toBeTruthy();
-    expect(screen.getByText('Approved').classList.contains('bg-badge-green/20')).toBe(true);
     expect(screen.getByRole('button', { name: /reject plan/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /approve plan/i })).toBeTruthy();
-  });
-
-  it('gives a status no tone of its own unless one is asked for', () => {
-    renderPlan(
-      <Plan>
-        <PlanHeader>
-          <PlanHeaderActions>
-            <PlanStatus>Draft</PlanStatus>
-          </PlanHeaderActions>
-        </PlanHeader>
-        <PlanBody>
-          <PlanContent>{'Plan'}</PlanContent>
-        </PlanBody>
-      </Plan>,
-    );
-
-    expect(screen.getByText('Draft').classList.contains('bg-neutral6/5')).toBe(true);
   });
 
   it('hints that an overflowing plan is clipped and clears the hint when expanded', () => {

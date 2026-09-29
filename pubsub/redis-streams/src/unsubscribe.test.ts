@@ -23,7 +23,7 @@ type ReadReply = { name: string; messages: typeof entries }[] | null;
 describe('unsubscribe acquired batches', () => {
   let ps: RedisStreamsPubSub;
   let read: ReturnType<typeof deferred<ReadReply>>;
-  let claim: ReturnType<typeof deferred<{ messages: ((typeof entries)[number] | null)[] }>>;
+  let claim: ReturnType<typeof deferred<((typeof entries)[number] | null)[]>>;
   let writer: {
     isOpen: boolean;
     on: ReturnType<typeof vi.fn>;
@@ -31,7 +31,9 @@ describe('unsubscribe acquired batches', () => {
     quit: ReturnType<typeof vi.fn>;
     xGroupCreate: ReturnType<typeof vi.fn>;
     xGroupDestroy: ReturnType<typeof vi.fn>;
-    xAutoClaim: ReturnType<typeof vi.fn>;
+    xPendingRange: ReturnType<typeof vi.fn>;
+    xClaim: ReturnType<typeof vi.fn>;
+    duplicate: ReturnType<typeof vi.fn>;
   };
   let reader: {
     on: ReturnType<typeof vi.fn>;
@@ -42,7 +44,7 @@ describe('unsubscribe acquired batches', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     read = deferred<ReadReply>();
-    claim = deferred<{ messages: ((typeof entries)[number] | null)[] }>();
+    claim = deferred<((typeof entries)[number] | null)[]>();
     writer = {
       isOpen: true,
       on: vi.fn(),
@@ -50,15 +52,20 @@ describe('unsubscribe acquired batches', () => {
       quit: vi.fn(),
       xGroupCreate: vi.fn(),
       xGroupDestroy: vi.fn(),
-      xAutoClaim: vi.fn(() => claim.promise),
+      xPendingRange: vi.fn(async () =>
+        entries.map(e => ({ id: e.id, consumer: 'c', millisecondsSinceLastDelivery: 1, deliveriesCounter: 1 })),
+      ),
+      xClaim: vi.fn(() => claim.promise),
+      // Readers are created from the writer with duplicate().
+      duplicate: vi.fn(() => reader),
     };
     reader = { on: vi.fn(), connect: vi.fn(), quit: vi.fn(), xReadGroup: vi.fn(() => read.promise) };
-    clients.create.mockReset().mockReturnValueOnce(writer).mockReturnValueOnce(reader);
+    clients.create.mockReset().mockReturnValueOnce(writer);
     ps = new RedisStreamsPubSub({ reclaimIntervalMs: 10 });
   });
   afterEach(async () => {
     read.resolve(null);
-    claim.resolve({ messages: [] });
+    claim.resolve([]);
     await ps.close();
     vi.useRealTimers();
   });
@@ -117,7 +124,7 @@ describe('unsubscribe acquired batches', () => {
     };
     await ps.subscribe('topic', cb, { group: 'workers' });
     await vi.advanceTimersByTimeAsync(10);
-    expect(writer.xAutoClaim).toHaveBeenCalledTimes(1);
+    expect(writer.xClaim).toHaveBeenCalledTimes(1);
     if (mode === 'before-reply') {
       stop = Promise.all([ps.unsubscribe('topic', cb), ps.close()]).then(() => {});
       read.resolve(null);
@@ -129,12 +136,12 @@ describe('unsubscribe acquired batches', () => {
       expect(finished).toBe(false);
       expect(writer.quit).not.toHaveBeenCalled();
     }
-    claim.resolve({ messages: [null, ...entries] });
+    claim.resolve([null, ...entries]);
     await vi.advanceTimersByTimeAsync(0);
     await stop;
     expect(delivered).toHaveLength(10);
     await vi.advanceTimersByTimeAsync(100);
-    expect(writer.xAutoClaim).toHaveBeenCalledTimes(1);
+    expect(writer.xClaim).toHaveBeenCalledTimes(1);
     expect(writer.xGroupDestroy).not.toHaveBeenCalled();
   });
 
@@ -147,7 +154,67 @@ describe('unsubscribe acquired batches', () => {
     claim.reject(new Error('connection lost'));
     await stop;
     await vi.advanceTimersByTimeAsync(100);
-    expect(writer.xAutoClaim).toHaveBeenCalledTimes(1);
+    expect(writer.xClaim).toHaveBeenCalledTimes(1);
     expect(cb).not.toHaveBeenCalled();
+  });
+
+  it('tears down a subscription whose subscribe round trip was still in flight when unsubscribe ran', async () => {
+    const connectGate = deferred<void>();
+    reader.connect = vi.fn(() => connectGate.promise);
+    const cb = vi.fn();
+    const sub = ps.subscribe('topic', cb);
+    const stop = ps.unsubscribe('topic', cb); // subscribe has not registered yet
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reader.quit).not.toHaveBeenCalled();
+    connectGate.resolve();
+    read.resolve(null);
+    await Promise.all([sub, stop]);
+    // Without awaiting the pending subscribe, unsubscribe would no-op and leak
+    // the reader connection plus its blocked read loop.
+    expect(reader.quit).toHaveBeenCalledTimes(1);
+    expect(writer.xGroupDestroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('close() tears down a subscription registered by an in-flight subscribe', async () => {
+    const connectGate = deferred<void>();
+    reader.connect = vi.fn(() => connectGate.promise);
+    const cb = vi.fn();
+    const sub = ps.subscribe('topic', cb);
+    const close = ps.close();
+    connectGate.resolve();
+    read.resolve(null);
+    await Promise.all([sub, close]);
+    expect(reader.quit).toHaveBeenCalledTimes(1);
+    expect(writer.quit).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolves unsubscribe and close when the awaited in-flight subscribe rejects', async () => {
+    const connectGate = deferred<void>();
+    reader.connect = vi.fn(() => connectGate.promise);
+    const cb = vi.fn();
+    const sub = ps.subscribe('topic', cb);
+    const stop = ps.unsubscribe('topic', cb); // waits on the pending subscribe
+    const close = ps.close(); // so does close
+    connectGate.reject(new Error('connect refused'));
+    await expect(sub).rejects.toThrow('connect refused');
+    // A rejected subscribe never registered, so both teardowns must settle
+    // cleanly with nothing left behind — not hang on the failed promise.
+    await expect(stop).resolves.toBeUndefined();
+    await expect(close).resolves.toBeUndefined();
+    expect(reader.quit).not.toHaveBeenCalled();
+    expect(writer.quit).toHaveBeenCalledTimes(1);
+    await expect(ps.subscribe('topic', cb)).rejects.toThrow('closed');
+  });
+
+  it('deduplicates concurrent subscribes for the same topic and callback', async () => {
+    const connectGate = deferred<void>();
+    reader.connect = vi.fn(() => connectGate.promise);
+    const cb = vi.fn();
+    const first = ps.subscribe('topic', cb);
+    const second = ps.subscribe('topic', cb);
+    connectGate.resolve();
+    await Promise.all([first, second]);
+    expect(writer.xGroupCreate).toHaveBeenCalledTimes(1);
+    expect(writer.duplicate).toHaveBeenCalledTimes(1);
   });
 });

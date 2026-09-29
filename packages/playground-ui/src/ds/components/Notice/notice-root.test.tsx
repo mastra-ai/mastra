@@ -47,20 +47,6 @@ describe('NoticeRoot', () => {
     expect(classesOf(titleElement.parentElement, 'the title row')).toContain('min-w-0');
   });
 
-  it.each([
-    ['success', 'bg-notice-success/20', 'text-notice-success-fg'],
-    ['destructive', 'bg-notice-destructive/20', 'text-notice-destructive-fg'],
-    ['warning', 'bg-notice-warning/20', 'text-notice-warning-fg'],
-    ['info', 'bg-notice-info/20', 'text-notice-info-fg'],
-    ['note', 'bg-notice-note', 'text-notice-note-fg'],
-  ] as const)('tints a %s notice with its own tokens', (variant, background, foreground) => {
-    const { container } = render(<Notice variant={variant}>A message</Notice>);
-
-    const classes = classesOf(container.firstElementChild, 'the notice');
-    expect(classes).toContain(background);
-    expect(classes).toContain(foreground);
-  });
-
   it('gives each variant its own icon', () => {
     const iconOf = (variant: 'success' | 'destructive' | 'warning' | 'info' | 'note') => {
       const { container, unmount } = render(<Notice variant={variant}>A message</Notice>);

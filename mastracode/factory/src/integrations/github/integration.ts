@@ -310,6 +310,21 @@ export class GithubIntegration implements FactoryIntegration {
           }),
         ),
       ),
+    getRepositoryTarget: async ({ orgId, repositoryId }) => {
+      const repository = await this.sourceControlStorage.repositories.get({ orgId, id: repositoryId });
+      if (!repository) throw new Error('Version-control repository not found.');
+      const installation = await this.sourceControlStorage.installations.get({
+        orgId,
+        id: repository.installationId,
+      });
+      if (!installation) throw new Error('Version-control installation not found.');
+      const installationId = Number.parseInt(installation.externalId, 10);
+      if (!Number.isSafeInteger(installationId)) throw new Error('GitHub installation id is invalid.');
+      return {
+        connection: { type: 'app-installation', installationId },
+        sourceId: repository.slug,
+      };
+    },
     getRepositoryAccess: async ({ orgId, repositoryId }) => {
       const repository = await this.sourceControlStorage.repositories.get({ orgId, id: repositoryId });
       if (!repository) throw new Error('Version-control repository not found.');

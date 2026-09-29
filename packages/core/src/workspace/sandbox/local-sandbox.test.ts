@@ -111,6 +111,70 @@ describe('LocalSandbox explicit sh argv', () => {
   });
 });
 
+describe('LocalSandbox outputEncoding', () => {
+  let tempDir: string;
+  const sandboxes: LocalSandbox[] = [];
+
+  beforeEach(async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-local-sandbox-enc-'));
+  });
+
+  afterEach(async () => {
+    await Promise.all(sandboxes.splice(0).map(s => s._destroy().catch(() => {})));
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  const create = (outputEncoding?: string) => {
+    const s = new LocalSandbox({ workingDirectory: tempDir, env: process.env, outputEncoding });
+    sandboxes.push(s);
+    return s;
+  };
+
+  // GBK bytes for "中文" on stdout and "中" on stderr
+  const gbkScript =
+    'process.stdout.write(Buffer.from([0xd6,0xd0,0xce,0xc4]));process.stderr.write(Buffer.from([0xd6,0xd0]))';
+
+  it('decodes GBK output from executeCommand', async () => {
+    const result = await create('gbk').executeCommand(process.execPath, ['-e', gbkScript]);
+    expect(result.stdout).toBe('中文');
+    expect(result.stderr).toBe('中');
+  });
+
+  it('decodes GBK output from background processes', async () => {
+    const sandbox = create('gbk');
+    await sandbox._start();
+    const handle = await sandbox.processes!.spawn(`"${process.execPath}" -e "${gbkScript}"`);
+    const result = await handle.wait();
+    expect(result.stdout).toBe('中文');
+    expect(result.stderr).toBe('中');
+  });
+
+  it('decodes multi-byte characters split across chunks', async () => {
+    const script =
+      'process.stdout.write(Buffer.from([0xd6]));setTimeout(()=>process.stdout.write(Buffer.from([0xd0])),50)';
+    const result = await create('gbk').executeCommand(process.execPath, ['-e', script]);
+    expect(result.stdout).toBe('中');
+  });
+
+  it('preserves outputEncoding when cloned', async () => {
+    const clone = create('gbk').clone();
+    sandboxes.push(clone);
+    const result = await clone.executeCommand(process.execPath, ['-e', gbkScript]);
+    expect(result.stdout).toBe('中文');
+  });
+
+  it('defaults to UTF-8', async () => {
+    const result = await create().executeCommand(process.execPath, ['-e', gbkScript]);
+    expect(result.stdout).not.toBe('中文');
+    const utf8 = await create().executeCommand(process.execPath, ['-e', 'process.stdout.write("中文")']);
+    expect(utf8.stdout).toBe('中文');
+  });
+
+  it('rejects unsupported encodings at construction', () => {
+    expect(() => new LocalSandbox({ workingDirectory: tempDir, outputEncoding: 'not-an-encoding' })).toThrow();
+  });
+});
+
 describe('LocalSandbox', () => {
   let tempDir: string;
   let sandbox: LocalSandbox;
@@ -463,6 +527,36 @@ describe('LocalSandbox', () => {
       expect(result.stdout.trim()).toBe('released');
       await expect(sandbox.processes!.list()).resolves.toEqual([]);
     });
+
+    it('should not hang when the command reads stdin', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
+
+      // `cat` with no file arguments copies stdin, so it only exits once stdin
+      // reaches EOF. Commands run through executeCommand have nothing feeding
+      // their stdin, so if it were left as an open pipe this would block until
+      // the timeout instead of returning. A command that reads stdin — `rg` or
+      // `grep` with no path argument, a bare `read` — must exit, not hang.
+      const result = await sandbox.executeCommand('cat', [], { timeout: 10_000 });
+
+      expect(result.timedOut).not.toBe(true);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toBe('');
+      expect(result.executionTimeMs).toBeLessThan(5_000);
+    }, 15_000);
+
+    it('should not hang when a Node process reads stdin', async () => {
+      // Cross-platform variant: `node -e` reading stdin until EOF. Runs on
+      // Windows too since it doesn't depend on POSIX commands.
+      const result = await sandbox.executeCommand(
+        'node',
+        ['-e', 'process.stdin.resume(); process.stdin.on("end", () => process.exit(0));'],
+        { timeout: 10_000 },
+      );
+
+      expect(result.timedOut).not.toBe(true);
+      expect(result.exitCode).toBe(0);
+      expect(result.executionTimeMs).toBeLessThan(5_000);
+    }, 15_000);
 
     it('should handle command failure', async () => {
       if (os.platform() === 'win32') return; // Uses POSIX commands
@@ -827,6 +921,29 @@ describe('LocalSandbox', () => {
             isolation: unavailableBackend as 'seatbelt' | 'bwrap',
           }),
       ).toThrow(IsolationUnavailableError);
+    });
+
+    it('should throw a clear error when seatbelt is requested on Windows', () => {
+      const platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+
+      try {
+        expect(
+          () =>
+            new LocalSandbox({
+              workingDirectory: tempDir,
+              isolation: 'seatbelt',
+            }),
+        ).toThrowError(
+          expect.objectContaining({
+            name: 'IsolationUnavailableError',
+            code: 'ISOLATION_UNAVAILABLE',
+            backend: 'seatbelt',
+            reason: 'Seatbelt isolation is only supported on macOS, not Windows.',
+          }),
+        );
+      } finally {
+        platformSpy.mockRestore();
+      }
     });
 
     it('should include isolation in getInfo', async () => {

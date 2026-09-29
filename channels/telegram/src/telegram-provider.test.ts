@@ -11,6 +11,7 @@ import {
   normalizeCommands,
   resolveTelegramAdapterConfig,
 } from './index';
+import { PLATFORM } from './install-store';
 
 const API_ORIGIN = 'https://api.telegram.org';
 const BASE_URL = 'https://bot.example.com';
@@ -37,15 +38,18 @@ function makeProvider(config: Partial<ConstructorParameters<typeof TelegramProvi
 
 function stubGetMe(token: string, opts: { ok?: boolean; username?: string } = {}) {
   const { ok = true, username = 'my_test_bot' } = opts;
-  mockAgent
-    .get(API_ORIGIN)
-    .intercept({ path: `/bot${token}/getMe`, method: 'GET' })
-    .reply(
-      ok ? 200 : 401,
-      ok
-        ? { ok: true, result: { id: 42, is_bot: true, first_name: 'Test', username } }
-        : { ok: false, error_code: 401, description: 'Unauthorized' },
-    );
+  const status = ok ? 200 : 401;
+  const body = ok
+    ? { ok: true, result: { id: 42, is_bot: true, first_name: 'Test', username } }
+    : { ok: false, error_code: 401, description: 'Unauthorized' };
+  // Persist GET (Mastra control-plane) and POST (chat-sdk 4.40+ telegramFetch).
+  for (const method of ['GET', 'POST'] as const) {
+    mockAgent
+      .get(API_ORIGIN)
+      .intercept({ path: `/bot${token}/getMe`, method })
+      .reply(status, body)
+      .persist();
+  }
 }
 
 /** Stub a Bot API method that returns `{ ok: true }`, capturing the JSON body. */
@@ -144,6 +148,78 @@ describe('TelegramProvider.connect', () => {
     await expect(provider.connect('agent-1', { botToken: BOT_TOKEN })).rejects.toThrow(/already connected/i);
   });
 
+  it.each(['default', 'explicit'] as const)(
+    'rejects reuse of an active %s bot token before changing its webhook',
+    async source => {
+      const { provider, storage } = makeProvider({ botToken: BOT_TOKEN });
+      const first = stubActiveConnect(BOT_TOKEN);
+      await provider.connect('agent-1');
+      const original = await provider.getInstallation('agent-1');
+
+      // A fresh provider must also detect the persisted installation.
+      const restored = new TelegramProvider({ storage, baseUrl: BASE_URL, botToken: BOT_TOKEN });
+      const second = stubActiveConnect(BOT_TOKEN);
+      await expect(restored.connect('agent-2', source === 'explicit' ? { botToken: BOT_TOKEN } : {})).rejects.toThrow(
+        /already connected to agent "agent-1"/i,
+      );
+      expect(first.setWebhook()?.url).toBe(original?.webhookUrl);
+      expect(second.setWebhook()).toBeUndefined();
+      expect(second.setMyCommands()).toBeUndefined();
+      expect(await provider.getInstallation('agent-1')).toEqual(original);
+      expect(await restored.getInstallation('agent-2')).toBeNull();
+    },
+  );
+
+  it('rejects concurrent webhook connections using the same default bot token', async () => {
+    const { provider } = makeProvider({ botToken: BOT_TOKEN });
+    stubActiveConnect(BOT_TOKEN);
+    const second = stubActiveConnect(BOT_TOKEN);
+
+    const results = await Promise.allSettled([provider.connect('agent-1'), provider.connect('agent-2')]);
+    expect(results.map(result => result.status)).toEqual(['fulfilled', 'rejected']);
+    expect(second.setWebhook()).toBeUndefined();
+    expect(second.setMyCommands()).toBeUndefined();
+    expect(await provider.listInstallations()).toHaveLength(1);
+  });
+
+  it('allows a default bot token to be reused after disconnect', async () => {
+    const { provider } = makeProvider({ botToken: BOT_TOKEN });
+    stubActiveConnect(BOT_TOKEN);
+    await provider.connect('agent-1');
+    stubMethod(BOT_TOKEN, 'deleteWebhook');
+    await provider.disconnect('agent-1');
+
+    stubActiveConnect(BOT_TOKEN);
+    await expect(provider.connect('agent-2')).resolves.toMatchObject({ type: 'immediate' });
+    expect(await provider.listInstallations()).toMatchObject([{ agentId: 'agent-2', status: 'active' }]);
+  });
+
+  it('releases a bot token after webhook registration fails so it can be retried', async () => {
+    const { provider } = makeProvider({ botToken: BOT_TOKEN });
+    stubGetMe(BOT_TOKEN);
+    mockAgent
+      .get(API_ORIGIN)
+      .intercept({ path: `/bot${BOT_TOKEN}/setWebhook`, method: 'POST' })
+      .reply(500, {
+        ok: false,
+        description: 'Registration failed',
+      });
+    await expect(provider.connect('agent-1')).rejects.toThrow();
+
+    stubActiveConnect(BOT_TOKEN);
+    await expect(provider.connect('agent-1')).resolves.toMatchObject({ type: 'immediate' });
+  });
+
+  it('lets a second agent override the default with a distinct bot token', async () => {
+    const { provider } = makeProvider({ botToken: BOT_TOKEN });
+    const otherToken = '654321:OTHER';
+    stubActiveConnect(BOT_TOKEN);
+    stubActiveConnect(otherToken);
+
+    await Promise.all([provider.connect('agent-1'), provider.connect('agent-2', { botToken: otherToken })]);
+    expect(await provider.listInstallations()).toHaveLength(2);
+  });
+
   it('upgrades a pending install to active when a token arrives (same id, same webhookId)', async () => {
     const { provider, storage } = makeProvider();
     const pending = await provider.connect('agent-1');
@@ -206,6 +282,40 @@ describe('TelegramProvider — setMyCommands', () => {
       { command: 'ask', description: 'Run /ask' },
       { command: 'summarize', description: 'Summarize a link' },
     ]);
+  });
+
+  it('falls back to the provider-config botToken when connect() supplies none', async () => {
+    // Regression: mirrors SlackProvider / DiscordProvider — the bot token can
+    // live on `new TelegramProvider({ botToken })` (e.g. filled in by
+    // `channels()` from a Mastra Connect credential) so per-agent connect()
+    // sites don't need to repeat it.
+    const { provider } = makeProvider({ botToken: BOT_TOKEN });
+    stubGetMe(BOT_TOKEN);
+    stubMethod(BOT_TOKEN, 'setWebhook');
+    stubMethod(BOT_TOKEN, 'setMyCommands');
+
+    const result = await provider.connect('agent-1');
+
+    expect(result).toMatchObject({ type: 'immediate' });
+    const installations = await provider.listInstallations();
+    expect(installations).toHaveLength(1);
+    expect(installations[0]).toMatchObject({ agentId: 'agent-1', status: 'active' });
+  });
+
+  it('lets a per-call botToken override the provider-config default', async () => {
+    // The per-agent token wins so an operator can point one Mastra process at
+    // multiple bots when they want to; the config default is just a fallback.
+    const OTHER_TOKEN = '888:XYZ-token-override';
+    const { provider, storage } = makeProvider({ botToken: BOT_TOKEN });
+    stubGetMe(OTHER_TOKEN);
+    stubMethod(OTHER_TOKEN, 'setWebhook');
+    stubMethod(OTHER_TOKEN, 'setMyCommands');
+
+    const result = await provider.connect('agent-1', { botToken: OTHER_TOKEN });
+
+    expect(result).toMatchObject({ type: 'immediate' });
+    const records = await storage.listInstallations(PLATFORM);
+    expect(records[0]!.data.botToken).toBe(OTHER_TOKEN);
   });
 });
 
@@ -384,7 +494,7 @@ describe('TelegramProvider webhook route — happy path (update → agent → re
     const provider = new TelegramProvider({
       storage,
       baseUrl: BASE_URL,
-      // Buffer instead of stream so the reply lands in a single deterministic sendMessage.
+      // Buffer instead of stream so the reply lands in a single deterministic sendRichMessage.
       streaming: false,
       waitUntil: (p: Promise<unknown>) => {
         pending.push(Promise.resolve(p));
@@ -395,7 +505,7 @@ describe('TelegramProvider webhook route — happy path (update → agent → re
     // Control-plane (connect) + reply-path (typing + send) Bot API stubs.
     stubActiveConnect(BOT_TOKEN);
     stubSend(BOT_TOKEN, 'sendChatAction');
-    const sends = stubSend(BOT_TOKEN, 'sendMessage');
+    const sends = stubSend(BOT_TOKEN, 'sendRichMessage');
 
     await provider.connect('agent-1', { botToken: BOT_TOKEN });
     const record = await storage.getInstallationByAgent('telegram', 'agent-1');
@@ -426,9 +536,9 @@ describe('TelegramProvider webhook route — happy path (update → agent → re
     // The agent's model was actually invoked…
     expect(modelCalls.length).toBeGreaterThan(0);
     // …and a reply was posted back to the sender's chat with the agent's text.
-    expect(sends.length).toBeGreaterThan(0);
-    const replied = sends.some(b => String(b.chat_id) === '4242' && String(b.text).includes('from the mock agent'));
-    expect(replied).toBe(true);
+    expect(sends).toHaveLength(1);
+    expect(String(sends[0].chat_id)).toBe('4242');
+    expect(sends[0].rich_message).toEqual({ markdown: 'Hello from the mock agent' });
   });
 });
 

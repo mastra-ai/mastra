@@ -1,12 +1,18 @@
+import { randomUUID } from 'node:crypto';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
+import { TITLE_PINNED_THREAD_METADATA_KEY } from '@mastra/core/memory';
 import { MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
-import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
+import { createSkill } from '@mastra/core/skills';
+import { InMemoryMemory, InMemoryDB, InMemoryStore } from '@mastra/core/storage';
+import { estimateTokenCount } from 'tokenx';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 
+import { Memory } from '../../../index';
 import { injectAnchorIds, parseAnchorId, stripEphemeralAnchorIds } from '../anchor-ids';
 import { BufferingCoordinator } from '../buffering-coordinator';
 import {
@@ -14,7 +20,13 @@ import {
   createSuggestedResponseExtractor,
   createThreadTitleExtractor,
 } from '../built-in-extractors';
-import { OBSERVATIONAL_MEMORY_DEFAULTS, getRetrievalInstructions } from '../constants';
+import {
+  OBSERVATIONAL_MEMORY_DEFAULTS,
+  OBSERVATION_CONTEXT_PROMPT,
+  OBSERVATION_CONTEXT_PROMPT_THREAD,
+  getObservationContextPrompt,
+  getRetrievalInstructions,
+} from '../constants';
 import { Extractor } from '../extractor';
 import {
   filterObservedMessages,
@@ -33,12 +45,13 @@ import { getObservationsAsOf } from '../observation-utils';
 import { didProviderChange, ObservationalMemory } from '../observational-memory';
 import {
   buildObserverPrompt,
-  buildMultiThreadObserverPrompt,
+  buildMultiThreadObserverRequestMessage,
   buildObserverSystemPrompt,
   buildObserverHistoryMessage,
   buildMultiThreadObserverHistoryMessage,
   parseObserverOutput,
   formatMessagesForObserver,
+  formatMultiThreadMessagesForObserver,
   hasCurrentTaskSection,
   extractCurrentTask,
   sanitizeObservationLines,
@@ -124,7 +137,7 @@ import {
 } from '../reflector-agent';
 import { resolveRetentionFloor } from '../thresholds';
 import { TokenCounter } from '../token-counter';
-import { formatToolResultForObserver } from '../tool-result-helpers';
+import { DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS, formatToolResultForObserver } from '../tool-result-helpers';
 
 // =============================================================================
 // Test Helpers
@@ -143,6 +156,35 @@ function createTestMessage(content: string, role: 'user' | 'assistant' = 'user',
     type: 'text',
     createdAt: new Date(),
   };
+}
+
+function createToolInvocationMessage(
+  parts: Array<Record<string, unknown>>,
+  id = `tool-msg-${Math.random().toString(36).slice(2)}`,
+  threadId = 'tool-thread',
+): MastraDBMessage {
+  return {
+    id,
+    role: 'assistant',
+    threadId,
+    resourceId: 'tool-resource',
+    createdAt: new Date('2024-12-04T10:30:00Z'),
+    content: { format: 2, parts },
+  } as unknown as MastraDBMessage;
+}
+
+function observerTextContent(message: CoreMessage): string {
+  return (message.content as Array<{ type: string; text?: string }>)
+    .filter(part => part.type === 'text')
+    .map(part => part.text ?? '')
+    .join('');
+}
+
+function collectStringValues(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap(collectStringValues);
+  if (value && typeof value === 'object') return Object.values(value).flatMap(collectStringValues);
+  return [];
 }
 
 function createTestMessages(count: number, baseContent = 'Test message'): MastraDBMessage[] {
@@ -1480,6 +1522,20 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).toContain('\nUser: later');
     });
 
+    it('writes dates and times in the given time zone, whatever the process zone', () => {
+      const message = createTestMessage('late night', 'user');
+      message.createdAt = new Date('2024-03-01T02:30:00Z');
+
+      expect(formatMessagesForObserver([message], { timeZone: 'UTC' })).toMatch(/^Mar 1 2024:\nUser \(2:30 AM\)/);
+      expect(formatMessagesForObserver([message], { timeZone: 'America/Los_Angeles' })).toMatch(
+        /^Feb 29 2024:\nUser \(6:30 PM\)/,
+      );
+      // An unknown zone falls back to the process zone rather than throwing
+      expect(formatMessagesForObserver([message], { timeZone: 'Not/AZone' })).toBe(
+        formatMessagesForObserver([message]),
+      );
+    });
+
     it('should include attachment placeholders for image and file parts', () => {
       const msg = createTestMessage('ignored', 'user');
       msg.content = {
@@ -1623,6 +1679,32 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).not.toContain('x'.repeat(200));
     });
 
+    it('caps oversized tool results at the 5,000-token default', () => {
+      const toolResult = 'result line\n'.repeat(3_000);
+      const msg = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'default-result-limit',
+            toolName: 'large_result',
+            args: {},
+            result: toolResult,
+          },
+        },
+      ]);
+      const formatted = formatMessagesForObserver([msg]);
+      const resultHeader = formatted.match(/^Tool Result large_result(?: \([^)]*\))?: /m)?.[0];
+      expect(resultHeader).toBeDefined();
+      const resultBody = formatted.slice(formatted.indexOf(resultHeader!) + resultHeader!.length);
+
+      expect(estimateTokenCount(toolResult)).toBeGreaterThan(5_000);
+      expect(estimateTokenCount(toolResult)).toBeLessThan(10_000);
+      expect(DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS).toBe(5_000);
+      expect(resultBody).toContain('[truncated ~');
+      expect(estimateTokenCount(resultBody!)).toBeLessThanOrEqual(5_000);
+    });
+
     it('should replace image-data tool-result blocks with attachment placeholders', () => {
       const base64 = 'A'.repeat(2000);
       const msg = createTestMessage('ignored', 'assistant');
@@ -1752,6 +1834,596 @@ describe('Observer Agent Helpers', () => {
       expect(loneHighSurrogate.test(serialized)).toBe(false);
       expect(loneLowSurrogate.test(serialized)).toBe(false);
     });
+
+    it('renders canonical completed tool arguments and results exactly once', () => {
+      const message = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'canonical-1',
+            toolName: 'lookup',
+            args: { query: 'alpha' },
+            result: { answer: 'done' },
+          },
+        },
+      ]);
+
+      const formatted = formatMessagesForObserver([message]);
+
+      expect((formatted.match(/^Tool Call lookup(?: \([^)]*\))?: query: "alpha"$/gm) ?? []).length).toBe(1);
+      expect((formatted.match(/^Tool Result lookup(?: \([^)]*\))?: \{$/gm) ?? []).length).toBe(1);
+      expect((formatted.match(/^  "answer": "done"$/gm) ?? []).length).toBe(1);
+    });
+
+    it('renders a neutral provenance marker when legacy terminal arguments are unavailable', () => {
+      const message = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'legacy-no-args',
+            toolName: 'read_file',
+            result: 'legacy contents',
+          },
+        },
+      ]);
+
+      const formatted = formatMessagesForObserver([message]);
+
+      expect((formatted.match(/^Tool Call read_file(?: \([^)]*\))?: \[arguments unavailable\]$/gm) ?? []).length).toBe(
+        1,
+      );
+      expect((formatted.match(/^Tool Result read_file(?: \([^)]*\))?: legacy contents$/gm) ?? []).length).toBe(1);
+      expect(formatted).not.toContain('<undefined>');
+    });
+
+    it('uses precomputed tool-part occurrences when skipped marker content contains tool-shaped data', () => {
+      const marker = {
+        ...createToolInvocationMessage([], '__temporal_marker'),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'ignored-marker-call',
+                toolName: 'ignored',
+                args: { value: 'ignored' },
+              },
+            },
+          ],
+          metadata: { reminderType: 'temporal-gap', gapText: '10 minutes later' },
+        },
+      } as unknown as MastraDBMessage;
+      const completed = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'after-marker',
+            toolName: 'lookup',
+            args: { query: 'after marker' },
+            result: 'found',
+          },
+        },
+      ]);
+
+      const formatted = formatMessagesForObserver([marker, completed]);
+
+      expect(formatted).toContain('10 minutes later');
+      expect((formatted.match(/^Tool Call lookup(?: \([^)]*\))?: query: "after marker"$/gm) ?? []).length).toBe(1);
+      expect((formatted.match(/^Tool Result lookup(?: \([^)]*\))?: found$/gm) ?? []).length).toBe(1);
+      expect(formatted).not.toContain('Tool Call ignored');
+    });
+
+    it('bounds large completed tool arguments without hiding later sibling fields', () => {
+      const content = 'export const generated = true;\n'.repeat(2_000);
+      const message = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'large-args-1',
+            toolName: 'write_file',
+            args: { content, path: 'src/generated.ts', overwrite: true },
+            result: 'written',
+          },
+        },
+      ]);
+
+      const formatted = formatMessagesForObserver([message]);
+      const uncappedZero = formatMessagesForObserver([message], { maxPartLength: 0 });
+      const passivelyFormatted = formatMessagesForObserver([message], { maxPartLength: 500 });
+      const minimallyFormatted = formatMessagesForObserver([message], { maxPartLength: 1 });
+
+      for (const text of [formatted, uncappedZero, passivelyFormatted]) {
+        expect(text).toContain(`content: <string, ${content.length} characters; preview size-limited>`);
+        expect(text).toContain('path: "src/generated.ts"');
+        expect(text).toContain('overwrite: true');
+        expect(text.indexOf('path: "src/generated.ts"')).toBeLessThan(
+          text.indexOf('Large string previews (size-limited):'),
+        );
+        expect(text).not.toContain(content);
+      }
+      expect((formatted.match(/^Tool Call write_file(?: \([^)]*\))?: content: /gm) ?? []).length).toBe(1);
+      expect((uncappedZero.match(/^Tool Call write_file(?: \([^)]*\))?: content: /gm) ?? []).length).toBe(1);
+      expect((minimallyFormatted.match(/^Tool Call write_file(?: \([^)]*\))?: …$/gm) ?? []).length).toBe(1);
+      expect((formatted.match(/^Tool Result write_file(?: \([^)]*\))?: written$/gm) ?? []).length).toBe(1);
+      expect(passivelyFormatted.length).toBeLessThan(formatted.length);
+    });
+
+    it.each([
+      ['normal', false],
+      ['reversed', true],
+    ])('normalizes split call/result parts in %s order', (_label, reversed) => {
+      const call = createToolInvocationMessage(
+        [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'call',
+              toolCallId: 'split-1',
+              toolName: 'lookup',
+              args: { query: 'split' },
+            },
+          },
+        ],
+        'split-call',
+      );
+      const result = createToolInvocationMessage(
+        [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'split-1',
+              toolName: 'lookup',
+              args: { query: 'split' },
+              result: 'split-result',
+            },
+          },
+        ],
+        'split-result',
+      );
+
+      const formatted = formatMessagesForObserver(reversed ? [result, call] : [call, result]);
+      const callIndex = formatted.indexOf('Tool Call lookup');
+      const resultIndex = formatted.indexOf('Tool Result lookup');
+
+      expect(callIndex).toBeGreaterThanOrEqual(0);
+      expect(resultIndex).toBeGreaterThan(callIndex);
+      expect((formatted.match(/^Tool Call lookup(?: \([^)]*\))?: query: "split"$/gm) ?? []).length).toBe(1);
+      expect((formatted.match(/^Tool Result lookup(?: \([^)]*\))?: split-result$/gm) ?? []).length).toBe(1);
+    });
+
+    it('collapses partial and approval transitions using the terminal arguments', () => {
+      const message = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'partial-call',
+            toolCallId: 'transition-1',
+            toolName: 'search',
+            args: { query: 'partial' },
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'call',
+            toolCallId: 'transition-1',
+            toolName: 'search',
+            args: { query: 'call' },
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'approval-requested',
+            toolCallId: 'transition-1',
+            toolName: 'search',
+            args: { query: 'approval-requested' },
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'approval-responded',
+            toolCallId: 'transition-1',
+            toolName: 'search',
+            args: { query: 'approval-responded' },
+            approval: { id: 'approval-1', approved: true },
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'transition-1',
+            toolName: 'search',
+            args: { query: 'terminal' },
+            result: 'complete',
+          },
+        },
+      ]);
+
+      const formatted = formatMessagesForObserver([message]);
+
+      expect((formatted.match(/^Tool Call search(?: \([^)]*\))?: query: "terminal"$/gm) ?? []).length).toBe(1);
+      expect((formatted.match(/^Tool Result search(?: \([^)]*\))?: complete$/gm) ?? []).length).toBe(1);
+      expect(formatted).not.toContain('query: "partial"');
+      expect(formatted).not.toContain('query: "approval-responded"');
+    });
+
+    it('keeps repeated tool names distinct by tool call ID and uses the latest terminal outcome', () => {
+      const message = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'repeat-1',
+            toolName: 'lookup',
+            args: { query: 'one' },
+            result: 'stale-one',
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'repeat-1',
+            toolName: 'lookup',
+            args: { query: 'one-final' },
+            result: 'final-one',
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'repeat-2',
+            toolName: 'lookup',
+            args: { query: 'two' },
+            result: 'final-two',
+          },
+        },
+      ]);
+
+      const formatted = formatMessagesForObserver([message]);
+
+      expect((formatted.match(/^Tool Call lookup(?: \([^)]*\))?: query: "/gm) ?? []).length).toBe(2);
+      expect((formatted.match(/^Tool Result lookup(?: \([^)]*\))?: /gm) ?? []).length).toBe(2);
+      expect(formatted).not.toContain('stale-one');
+      expect(formatted).toContain('final-one');
+      expect(formatted).toContain('final-two');
+      expect(formatted).toContain('query: "one-final"');
+      expect(formatted).toContain('query: "two"');
+    });
+
+    it('renders error and denial terminal states with visible fallbacks', () => {
+      const message = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'output-error',
+            toolCallId: 'error-1',
+            toolName: 'write',
+            args: { path: '/tmp/a' },
+            errorText: 'disk full',
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'output-error',
+            toolCallId: 'error-2',
+            toolName: 'write',
+            args: { path: '/tmp/b' },
+            errorText: '',
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'output-error',
+            toolCallId: 'error-3',
+            toolName: 'write',
+            args: { path: '/tmp/missing-error' },
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'output-denied',
+            toolCallId: 'denied-1',
+            toolName: 'remove',
+            args: { path: '/tmp/c' },
+            approval: { id: 'approval-1', approved: false, reason: 'protected file' },
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'output-denied',
+            toolCallId: 'denied-2',
+            toolName: 'remove',
+            args: { path: '/tmp/d' },
+            approval: { id: 'approval-2', approved: false, reason: '' },
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'output-denied',
+            toolCallId: 'denied-3',
+            toolName: 'remove',
+            args: { path: '/tmp/missing-denial' },
+          },
+        },
+      ]);
+
+      const formatted = formatMessagesForObserver([message]);
+
+      expect((formatted.match(/^Tool Call (?:write|remove)(?: \([^)]*\))?: path: "\/tmp\//gm) ?? []).length).toBe(6);
+      expect((formatted.match(/^Tool Error write(?: \([^)]*\))?: /gm) ?? []).length).toBe(3);
+      expect((formatted.match(/^Tool Denied remove(?: \([^)]*\))?: /gm) ?? []).length).toBe(3);
+      expect(formatted).toContain('disk full');
+      expect((formatted.match(/: Tool execution failed$/gm) ?? []).length).toBe(2);
+      expect(formatted).toContain('protected file');
+      expect((formatted.match(/: Tool call was not approved by the user$/gm) ?? []).length).toBe(2);
+    });
+
+    it('renders errored results and empty successful results without dropping terminal events', () => {
+      const message = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'result-error-body',
+            toolName: 'fetch',
+            args: { url: 'body' },
+            result: 'raw provider failure',
+            isError: true,
+            errorText: 'ignored fallback',
+          },
+          providerMetadata: { mastra: { modelOutput: 'stored provider failure' } },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'result-error-text',
+            toolName: 'fetch',
+            args: { url: 'errorText' },
+            result: '',
+            isError: true,
+            errorText: 'network failure',
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'result-error-fallback',
+            toolName: 'fetch',
+            args: { url: 'fallback' },
+            isError: true,
+            errorText: '',
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'empty-string',
+            toolName: 'fetch',
+            args: { url: 'empty' },
+            result: '',
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'undefined-result',
+            toolName: 'fetch',
+            args: { url: 'undefined' },
+            result: undefined,
+          },
+        },
+      ]);
+
+      const formatted = formatMessagesForObserver([message]);
+
+      expect((formatted.match(/^Tool Error fetch(?: \([^)]*\))?: /gm) ?? []).length).toBe(3);
+      expect((formatted.match(/^Tool Result fetch(?: \([^)]*\))?: \[empty result\]$/gm) ?? []).length).toBe(2);
+      expect(formatted).toContain('stored provider failure');
+      expect(formatted).not.toContain('raw provider failure');
+      expect(formatted).not.toContain('ignored fallback');
+      expect(formatted).toContain('network failure');
+      expect(formatted).toContain('Tool execution failed');
+    });
+
+    it('scopes tool-call deduplication per thread across all observer assembly paths', () => {
+      const first = createToolInvocationMessage(
+        [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'shared-id',
+              toolName: 'skill',
+              args: { name: 'first-skill' },
+              result: 'first instructions',
+            },
+          },
+        ],
+        'thread-one-message',
+        'thread-one',
+      );
+      const second = createToolInvocationMessage(
+        [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'shared-id',
+              toolName: 'skill',
+              args: { name: 'second-skill' },
+              result: 'second instructions',
+            },
+          },
+        ],
+        'thread-two-message',
+        'thread-two',
+      );
+      const byThread = new Map([
+        ['thread-one', [first]],
+        ['thread-two', [second]],
+      ]);
+      const threadOrder = ['thread-one', 'thread-two'];
+
+      const singleText = formatMessagesForObserver([first]);
+      const singleHistory = observerTextContent(buildObserverHistoryMessage([first]));
+      const multiText = formatMultiThreadMessagesForObserver(byThread, threadOrder);
+      const multiHistory = observerTextContent(buildMultiThreadObserverHistoryMessage(byThread, threadOrder));
+
+      for (const text of [singleText, singleHistory]) {
+        expect((text.match(/^Tool Call skill(?: \([^)]*\))?: name: "first-skill"$/gm) ?? []).length).toBe(1);
+        expect((text.match(/^Tool Result skill(?: \([^)]*\))?: first instructions$/gm) ?? []).length).toBe(1);
+      }
+      for (const text of [multiText, multiHistory]) {
+        expect((text.match(/^Tool Call skill(?: \([^)]*\))?: name: "(?:first|second)-skill"$/gm) ?? []).length).toBe(2);
+        expect((text.match(/^Tool Result skill(?: \([^)]*\))?: /gm) ?? []).length).toBe(2);
+        expect((text.match(/^Tool Call skill(?: \([^)]*\))?: name: "first-skill"$/gm) ?? []).length).toBe(1);
+        expect((text.match(/^Tool Call skill(?: \([^)]*\))?: name: "second-skill"$/gm) ?? []).length).toBe(1);
+      }
+    });
+  });
+
+  it('preserves skill activation arguments in observer history', async () => {
+    await Promise.allSettled([...BufferingCoordinator.asyncBufferingOps.values()]);
+    BufferingCoordinator.asyncBufferingOps.clear();
+    BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.lastBufferedAtTime.clear();
+    BufferingCoordinator.reflectionBufferCycleIds.clear();
+
+    const skillName = 'observer-provenance-skill';
+    const skillInstructions = '# Observer Provenance Skill\n\nAlways preserve the activated skill identity.';
+    const threadId = `observer-skill-thread-${randomUUID()}`;
+    const resourceId = `observer-skill-resource-${randomUUID()}`;
+    const observerPrompts: unknown[] = [];
+    const actorToolSets: unknown[] = [];
+    let actorCallCount = 0;
+
+    const observerModel = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        observerPrompts.push(prompt);
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'observation' },
+            {
+              type: 'text-delta',
+              id: 'observation',
+              delta: '<observations>\n- The requested skill was activated.\n</observations>',
+            },
+            { type: 'text-end', id: 'observation' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            },
+          ]),
+        };
+      },
+    });
+    const actorModel = new MockLanguageModelV2({
+      doGenerate: async ({ prompt, tools }) => {
+        actorToolSets.push(tools);
+        actorCallCount += 1;
+        return {
+          content:
+            actorCallCount === 1
+              ? [
+                  {
+                    type: 'tool-call' as const,
+                    toolCallId: 'activate-observer-provenance-skill',
+                    toolName: 'skill',
+                    input: JSON.stringify({ name: skillName }),
+                  },
+                ]
+              : [{ type: 'text' as const, text: 'Skill activated.' }],
+          finishReason: actorCallCount === 1 ? ('tool-calls' as const) : ('stop' as const),
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          rawCall: { rawPrompt: prompt, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+    const memory = new Memory({
+      storage: new InMemoryStore(),
+      options: {
+        lastMessages: 20,
+        semanticRecall: false,
+        observationalMemory: {
+          enabled: true,
+          scope: 'thread',
+          observation: { model: observerModel, messageTokens: 1, bufferTokens: false },
+        },
+      },
+    });
+    const agent = new Agent({
+      id: 'observer-skill-agent',
+      instructions: 'Activate the requested skill.',
+      model: actorModel,
+      memory,
+      skills: [
+        createSkill({
+          name: skillName,
+          description: 'Proves skill activation provenance reaches the Observer.',
+          instructions: skillInstructions,
+        }),
+      ],
+    });
+
+    try {
+      const response = await agent.generate('Activate the observer provenance skill.', {
+        memory: { thread: threadId, resource: resourceId },
+        maxSteps: 2,
+      });
+      await memory.settled();
+
+      const registeredToolNames = actorToolSets.flatMap(tools => {
+        if (Array.isArray(tools)) {
+          return tools
+            .map(tool => (tool && typeof tool === 'object' && 'name' in tool ? String(tool.name) : ''))
+            .filter(Boolean);
+        }
+        return tools && typeof tools === 'object' ? Object.keys(tools) : [];
+      });
+      const skillResult = response.toolResults.find(result => result.payload.toolName === 'skill')?.payload.result;
+      const observerPrompt = collectStringValues(observerPrompts).join('\n');
+
+      expect(actorCallCount).toBe(2);
+      expect(registeredToolNames).toContain('skill');
+      expect(skillResult).toBe(skillInstructions);
+      expect(
+        (observerPrompt.match(new RegExp(`^Tool Call skill(?: \\([^)]*\\))?: name: "${skillName}"$`, 'gm')) ?? [])
+          .length,
+      ).toBe(1);
+      expect(
+        (observerPrompt.match(/^Tool Result skill(?: \([^)]*\))?: # Observer Provenance Skill$/gm) ?? []).length,
+      ).toBe(1);
+      expect(observerPrompt.split(skillInstructions).length - 1).toBe(1);
+    } finally {
+      BufferingCoordinator.asyncBufferingOps.clear();
+      BufferingCoordinator.lastBufferedBoundary.clear();
+      BufferingCoordinator.lastBufferedAtTime.clear();
+      BufferingCoordinator.reflectionBufferCycleIds.clear();
+    }
   });
 
   describe('buildObserverHistoryMessage', () => {
@@ -1839,6 +2511,74 @@ describe('Observer Agent Helpers', () => {
       expect(joinedText).toContain('Tool Result screenshot');
       expect(joinedText).toContain('[Image #1: image/png]');
       expect(joinedText).not.toContain(base64);
+    });
+
+    it('preserves attachments from every terminal record in traversal order while rendering only the latest outcome', () => {
+      const firstBase64 = 'C'.repeat(1500);
+      const secondBase64 = 'D'.repeat(1500);
+      const message = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'repeated-terminal',
+            toolName: 'screenshot',
+            args: { url: 'https://example.com/old' },
+            result: {},
+          },
+          providerMetadata: {
+            mastra: {
+              modelOutput: {
+                type: 'content',
+                value: [
+                  { type: 'text', text: 'superseded outcome' },
+                  { type: 'image-data', data: firstBase64, mediaType: 'image/png' },
+                ],
+              },
+            },
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'repeated-terminal',
+            toolName: 'screenshot',
+            args: { url: 'https://example.com/final' },
+            result: {},
+          },
+          providerMetadata: {
+            mastra: {
+              modelOutput: {
+                type: 'content',
+                value: [
+                  { type: 'text', text: 'latest outcome' },
+                  { type: 'image-data', data: secondBase64, mediaType: 'image/jpeg' },
+                ],
+              },
+            },
+          },
+        },
+      ]);
+
+      const historyMessage = buildObserverHistoryMessage([message]);
+      const content = historyMessage.content as Array<{ type: string; text?: string; image?: string }>;
+      const joinedText = content
+        .filter(part => part.type === 'text')
+        .map(part => part.text ?? '')
+        .join('\n');
+
+      const imageParts = content.filter(part => part.type === 'image');
+      expect(imageParts).toHaveLength(2);
+      expect(imageParts.map(part => part.image)).toEqual([
+        `data:image/png;base64,${firstBase64}`,
+        `data:image/jpeg;base64,${secondBase64}`,
+      ]);
+      expect(joinedText).not.toContain('superseded outcome');
+      expect(joinedText).toContain('latest outcome');
+      expect(joinedText).toContain('url: "https://example.com/final"');
+      expect((joinedText.match(/^Tool Call screenshot(?: \([^)]*\))?: url: /gm) ?? []).length).toBe(1);
+      expect((joinedText.match(/^Tool Result screenshot(?: \([^)]*\))?: /gm) ?? []).length).toBe(1);
     });
 
     it('should hoist URL and media tool-result blocks into observer input attachments', () => {
@@ -2091,7 +2831,7 @@ describe('Observer Agent Helpers', () => {
 
       expect(textParts[0].text).toContain('## New Message History to Observe');
       expect(textParts[1].text).toBe(
-        `Dec 4 2024:\nAssistant (10:30 AM): I found two candidate vendors.\nReasoning: Comparing price and delivery windows.\nTool Call web_search (10:31 AM): {\n  "query": "best local print vendors"\n}\nTool Result web_search: {\n  "topVendor": "Acme Print",\n  "etaDays": 3\n}\nDec 5 2024:\nFile (9:00 AM): [File #1: quote.pdf]`,
+        `Dec 4 2024:\nAssistant (10:30 AM): I found two candidate vendors.\nReasoning: Comparing price and delivery windows.\nTool Call web_search (10:31 AM): query: "best local print vendors"\nTool Result web_search: {\n  "topVendor": "Acme Print",\n  "etaDays": 3\n}\nDec 5 2024:\nFile (9:00 AM): [File #1: quote.pdf]`,
       );
       expect(historyMessage.content).toContainEqual(
         expect.objectContaining({
@@ -2451,7 +3191,7 @@ describe('Observer Agent Helpers', () => {
     });
   });
 
-  describe('buildMultiThreadObserverPrompt', () => {
+  describe('buildMultiThreadObserverRequestMessage', () => {
     it('should include per-thread prior metadata when provided', () => {
       const messagesByThread = new Map<string, MastraDBMessage[]>([
         ['thread-1', [createTestMessage('Thread 1 message', 'user')]],
@@ -2462,11 +3202,8 @@ describe('Observer Agent Helpers', () => {
         ['thread-1', { currentTask: 'Handle billing issue', suggestedResponse: 'Ask for invoice id.' }],
       ]);
 
-      const prompt = buildMultiThreadObserverPrompt(
-        undefined,
-        messagesByThread,
-        ['thread-1', 'thread-2'],
-        priorMetadata,
+      const prompt = observerTextContent(
+        buildMultiThreadObserverRequestMessage(undefined, messagesByThread, ['thread-1', 'thread-2'], priorMetadata),
       );
 
       expect(prompt).toContain('Prior Thread Metadata');
@@ -2474,6 +3211,8 @@ describe('Observer Agent Helpers', () => {
       expect(prompt).toContain('prior current-task: Handle billing issue');
       expect(prompt).toContain('prior suggested-response: Ask for invoice id.');
       expect(prompt).not.toContain('thread thread-2\n  - prior current-task');
+      expect(prompt.indexOf('Prior Thread Metadata')).toBeLessThan(prompt.indexOf('<thread id="thread-1">'));
+      expect(prompt.indexOf('<thread id="thread-2">')).toBeLessThan(prompt.indexOf('## Your Task'));
     });
   });
 
@@ -2528,21 +3267,20 @@ describe('Observer Agent Helpers', () => {
       await om.observer.call(undefined, [message]);
 
       expect(Array.isArray(capturedPrompt)).toBe(true);
-      expect(capturedPrompt).toHaveLength(2);
+      expect(capturedPrompt).toHaveLength(1);
       expect(capturedPrompt[0]).toMatchObject({ role: 'user' });
-      expect(capturedPrompt[1]).toMatchObject({ role: 'user' });
-      expect(capturedPrompt[1].content[1].text).toContain('[Image #1: reference-board.png]');
-      expect(capturedPrompt[1].content[1].text).toContain('[Image #2: annotated-photo.jpg]');
-      expect(capturedPrompt[1].content[1].text).toContain('[File #1: floorplan.pdf]');
-      expect(capturedPrompt[1].content[2]).toMatchObject({
+      expect(capturedPrompt[0].content[1].text).toContain('[Image #1: reference-board.png]');
+      expect(capturedPrompt[0].content[1].text).toContain('[Image #2: annotated-photo.jpg]');
+      expect(capturedPrompt[0].content[1].text).toContain('[File #1: floorplan.pdf]');
+      expect(capturedPrompt[0].content[2]).toMatchObject({
         type: 'image',
         image: 'https://example.com/reference-board.png',
       });
-      expect(capturedPrompt[1].content[3]).toMatchObject({
+      expect(capturedPrompt[0].content[3]).toMatchObject({
         type: 'image',
         image: 'https://example.com/annotated-photo.jpg',
       });
-      expect(capturedPrompt[1].content).toContainEqual(
+      expect(capturedPrompt[0].content).toContainEqual(
         expect.objectContaining({
           type: 'file',
           data: 'https://example.com/floorplan.pdf',
@@ -2609,7 +3347,7 @@ describe('Observer Agent Helpers', () => {
         // The function model should be resolved with requestContext, looked up,
         // found to not support attachments, and attachments should be dropped
         expect(spy).toHaveBeenCalledWith('deepseek/deepseek-v4-flash');
-        const content = capturedPrompt[1].content as any[];
+        const content = capturedPrompt[0].content as any[];
         expect(content.some((part: any) => part.type === 'image')).toBe(false);
         const joined = content
           .filter((part: any) => part.type === 'text')
@@ -2668,7 +3406,7 @@ describe('Observer Agent Helpers', () => {
         await observer.call(undefined, [message]);
 
         expect(spy).toHaveBeenCalledWith('openrouter/deepseek/deepseek-v4-flash');
-        const content = capturedPrompt[1].content as any[];
+        const content = capturedPrompt[0].content as any[];
         expect(content.some((part: any) => part.type === 'image')).toBe(false);
         const joined = content
           .filter((part: any) => part.type === 'text')
@@ -2733,7 +3471,7 @@ describe('Observer Agent Helpers', () => {
         });
 
         expect(spy.mock.calls[0][0]).toBe('openai/gpt-4o');
-        const content = capturedPrompt[1].content as any[];
+        const content = capturedPrompt[0].content as any[];
         expect(content.some((part: any) => part.type === 'image')).toBe(true);
       } finally {
         spy.mockRestore();
@@ -2782,8 +3520,12 @@ describe('Observer Agent Helpers', () => {
       });
 
       expect(Array.isArray(capturedPrompt)).toBe(true);
-      expect(capturedPrompt).toHaveLength(2);
+      expect(capturedPrompt).toHaveLength(1);
       expect(capturedPrompt[0]).toMatchObject({ role: 'user' });
+      const promptText = (capturedPrompt[0].content as any[])
+        .filter((part: any) => part.type === 'text')
+        .map((part: any) => part.text)
+        .join('');
       const systemPrompt = buildObserverSystemPrompt(false, undefined, true, [
         createCurrentTaskExtractor(),
         createSuggestedResponseExtractor(),
@@ -2791,19 +3533,17 @@ describe('Observer Agent Helpers', () => {
         new Extractor({ name: 'User info', instructions: 'Extract user information.' }),
       ]);
 
-      expect(capturedPrompt[0].content).not.toContain('Also output a <thread-title>');
-      expect(capturedPrompt[0].content).toContain('- prior thread-title: Old thread title');
+      expect(promptText).not.toContain('Also output a <thread-title>');
+      expect(promptText).toContain('- prior thread-title: Old thread title');
       expect(systemPrompt).toContain('<current-task>');
       expect(systemPrompt).toContain('<suggested-response>');
       expect(systemPrompt).toContain('<thread-title>');
       expect(systemPrompt).toContain('<user-info>');
-      expect(capturedPrompt[0].content).toContain('Output <observations> every time.');
-      expect(capturedPrompt[0].content).not.toContain(
-        'If the observations include information relevant to <thread-title>',
-      );
-      expect(capturedPrompt[0].content).not.toContain('Only output <observations> and <thread-title>');
-      expect(capturedPrompt[0].content).not.toContain('Do NOT include <current-task> or <suggested-response>');
-      expect(capturedPrompt[0].content).toContain(
+      expect(promptText).toContain('Output <observations> every time.');
+      expect(promptText).not.toContain('If the observations include information relevant to <thread-title>');
+      expect(promptText).not.toContain('Only output <observations> and <thread-title>');
+      expect(promptText).not.toContain('Do NOT include <current-task> or <suggested-response>');
+      expect(promptText).toContain(
         'Use the prior current-task, suggested-response, and thread-title as continuity hints',
       );
     });
@@ -3788,6 +4528,7 @@ _range: \`ignored-by-reconciler\`_
 
       const result = parseReflectorOutput(output, sourceObservations);
 
+      const sourceRange = parseObservationGroups(sourceObservations)[0]!.range;
       expect(result.observations)
         .toBe(`<observation-group id="message-saving-debug" range="7250b0a4-9d0a-4504-99ff-35762ec557a5:a172fe73-2e02-4d19-9b68-8025a50f1b95" kind="reflection">
 Date: Mar 25, 2026
@@ -3807,6 +4548,11 @@ Date: Mar 25, 2026
 * 🟡 Investigation centered on savePerStep and finish-time assembly.`,
         },
       ]);
+
+      // The bloated legacy range must come back as one compact segment, not the 64-segment list.
+      const compactedRange = parseObservationGroups(result.observations)[0]!.range;
+      expect(compactedRange).not.toContain(',');
+      expect(compactedRange.length).toBeLessThan(sourceRange.length / 10);
     });
 
     it('should extract continuation hint from XML suggested-response tag', () => {
@@ -4194,11 +4940,47 @@ describe('ObservationalMemory Integration', () => {
         observation: {
           messageTokens: 500,
           previousObserverTokens: 2000,
+          maxRetries: 8,
+          failurePolicy: 'abort',
         },
         reflection: {
           observationTokens: 1000,
+          maxRetries: 8,
+          failurePolicy: 'abort',
         },
       });
+    });
+
+    it('should describe thread-scoped observations as the current conversation', () => {
+      const threadOm = new ObservationalMemory({
+        storage,
+        scope: 'thread',
+        observation: { messageTokens: 500, model: 'test-model' },
+        reflection: { observationTokens: 1000, model: 'test-model' },
+      });
+
+      const [preamble] = (threadOm as any).formatObservationsForContext('- 🔴 Artifact ID art-123 created');
+      expect(preamble).toContain(OBSERVATION_CONTEXT_PROMPT_THREAD);
+      expect(preamble).not.toContain('past conversations with this user');
+    });
+
+    it('should describe resource-scoped observations as past conversations with this user', () => {
+      const resourceOm = new ObservationalMemory({
+        storage,
+        scope: 'resource',
+        observation: { messageTokens: 500, model: 'test-model' },
+        reflection: { observationTokens: 1000, model: 'test-model' },
+      });
+
+      const [preamble] = (resourceOm as any).formatObservationsForContext('- 🔴 Artifact ID art-123 created');
+      expect(preamble).toContain(OBSERVATION_CONTEXT_PROMPT);
+      expect(preamble).not.toContain(OBSERVATION_CONTEXT_PROMPT_THREAD);
+    });
+
+    it('getObservationContextPrompt picks wording by scope', () => {
+      expect(getObservationContextPrompt('thread')).toBe(OBSERVATION_CONTEXT_PROMPT_THREAD);
+      expect(getObservationContextPrompt('resource')).toBe(OBSERVATION_CONTEXT_PROMPT);
+      expect(getObservationContextPrompt()).toBe(OBSERVATION_CONTEXT_PROMPT_THREAD);
     });
 
     it('should preserve observation group ranges in actor context when retrieval mode is enabled', () => {
@@ -4221,13 +5003,13 @@ describe('ObservationalMemory Integration', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
         true,
       );
       const formattedText = formatted.join('\n\n');
 
-      expect(formattedText).toContain('<observation-group id="group-1" range="msg-1:msg-2">');
+      expect(formattedText).toContain('## Group `group-1`\n_range: `msg-1:msg-2`_');
       expect(formattedText).toContain('- 🔴 User prefers direct answers');
-      expect(formattedText).toContain('</observation-group>');
     });
 
     it('should default retrieval mode to false', () => {
@@ -5846,6 +6628,61 @@ describe('Scenario: Cross-session memory (resource scope)', () => {
     expect(resourceRecord?.activeObservations).toContain('Alice');
     expect(resourceRecord?.activeObservations).toContain('TechCorp');
     expect(resourceRecord?.scope).toBe('resource');
+  });
+
+  it('retains resource-scoped input after a continued observation failure and processes it on recovery', async () => {
+    const storage = createInMemoryStorage();
+    const resourceId = 'resource-recovery';
+    let observerCalls = 0;
+    const model = createStreamCapableMockModel({
+      doGenerate: async () => {
+        observerCalls++;
+        if (observerCalls === 1) {
+          throw new TypeError('terminated');
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+          content: [{ type: 'text' as const, text: '<observations>\n- Resource input recovered\n</observations>' }],
+          warnings: [],
+        };
+      },
+    });
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'resource',
+      observation: {
+        model,
+        messageTokens: 1,
+        maxRetries: 0,
+        failurePolicy: 'continue',
+      },
+      reflection: { observationTokens: 100_000 },
+    });
+    const messages = [
+      createTestMessage('Retain this resource-scoped input', 'user', 'resource-msg-1'),
+      createTestMessage('Acknowledged', 'assistant', 'resource-msg-2'),
+    ];
+
+    const failed = await om.observe({ threadId: 'thread-a', resourceId, messages });
+    const failedRecord = await storage.getObservationalMemory(null, resourceId);
+
+    expect(failed.observed).toBe(false);
+    expect(failedRecord?.threadId).toBeNull();
+    expect(failedRecord?.lastObservedAt).toBeUndefined();
+    expect(failedRecord?.observedMessageIds ?? []).toEqual([]);
+    expect((om as any).getUnobservedMessages(messages, failedRecord)).toHaveLength(2);
+
+    const recovered = await om.observe({ threadId: 'thread-a', resourceId, messages });
+    const recoveredRecord = await storage.getObservationalMemory(null, resourceId);
+
+    expect(observerCalls).toBe(2);
+    expect(recovered.observed).toBe(true);
+    expect(recoveredRecord?.lastObservedAt).toBeDefined();
+    expect(recoveredRecord?.observedMessageIds).toEqual(['resource-msg-1', 'resource-msg-2']);
+    expect((om as any).getUnobservedMessages(messages, recoveredRecord)).toHaveLength(0);
+    expect(recoveredRecord?.activeObservations).toContain('<thread id="thread-a">');
   });
 });
 
@@ -9002,7 +9839,7 @@ describe('Model Requirement', () => {
 });
 
 describe('Model Settings Defaults', () => {
-  it('should default maxOutputTokens when using model: "default"', () => {
+  it('should default model settings when using model: "default"', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
@@ -9011,11 +9848,17 @@ describe('Model Settings Defaults', () => {
       reflection: { observationTokens: 20000 },
     });
 
-    expect((om as any).observationConfig.modelSettings.maxOutputTokens).toBe(100_000);
-    expect((om as any).reflectionConfig.modelSettings.maxOutputTokens).toBe(100_000);
+    expect((om as any).observationConfig.modelSettings).toEqual({
+      temperature: 0.3,
+      maxOutputTokens: 100_000,
+    });
+    expect((om as any).reflectionConfig.modelSettings).toEqual({
+      temperature: 0,
+      maxOutputTokens: 100_000,
+    });
   });
 
-  it('should not default maxOutputTokens for non-default models', () => {
+  it('should not default model settings for non-default models', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
@@ -9024,8 +9867,64 @@ describe('Model Settings Defaults', () => {
       reflection: { observationTokens: 20000 },
     });
 
-    expect((om as any).observationConfig.modelSettings.maxOutputTokens).toBeUndefined();
-    expect((om as any).reflectionConfig.modelSettings.maxOutputTokens).toBeUndefined();
+    expect((om as any).observationConfig.modelSettings).toEqual({});
+    expect((om as any).reflectionConfig.modelSettings).toEqual({});
+  });
+
+  it('should omit temperature while preserving the output budget for ModelByInputTokens', () => {
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: new ModelByInputTokens({ upTo: { 1000: 'custom/provider-model' } }),
+      observation: { messageTokens: 50000 },
+      reflection: { observationTokens: 20000 },
+    });
+
+    expect((om as any).observationConfig.modelSettings).toEqual({ maxOutputTokens: 100_000 });
+    expect((om as any).reflectionConfig.modelSettings).toEqual({ maxOutputTokens: 100_000 });
+  });
+
+  it('should default temperature for a model instance known to support it', () => {
+    const model = createStreamCapableMockModel({
+      provider: 'google.generative-ai',
+      modelId: 'gemini-2.5-flash',
+    });
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model,
+      observation: { messageTokens: 50000 },
+      reflection: { observationTokens: 20000 },
+    });
+
+    expect((om as any).observationConfig.modelSettings).toEqual({ temperature: 0.3 });
+    expect((om as any).reflectionConfig.modelSettings).toEqual({ temperature: 0 });
+  });
+
+  it('should preserve explicit model settings for ModelByInputTokens', () => {
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: new ModelByInputTokens({ upTo: { 1000: 'custom/provider-model' } }),
+      observation: { messageTokens: 50000, modelSettings: { temperature: 0.2, maxOutputTokens: 5000 } },
+      reflection: { observationTokens: 20000, modelSettings: { temperature: 0.1, maxOutputTokens: 6000 } },
+    });
+
+    expect((om as any).observationConfig.modelSettings).toEqual({ temperature: 0.2, maxOutputTokens: 5000 });
+    expect((om as any).reflectionConfig.modelSettings).toEqual({ temperature: 0.1, maxOutputTokens: 6000 });
+  });
+
+  it('should preserve explicit model settings for non-default models', () => {
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: 'openai/gpt-5.1-codex-mini',
+      observation: { messageTokens: 50000, modelSettings: { temperature: 0.2, maxOutputTokens: 5000 } },
+      reflection: { observationTokens: 20000, modelSettings: { temperature: 0.1, maxOutputTokens: 6000 } },
+    });
+
+    expect((om as any).observationConfig.modelSettings).toEqual({ temperature: 0.2, maxOutputTokens: 5000 });
+    expect((om as any).reflectionConfig.modelSettings).toEqual({ temperature: 0.1, maxOutputTokens: 6000 });
   });
 });
 
@@ -10321,6 +11220,10 @@ describe('Full Async Buffering Flow', () => {
     messageCount?: number;
     /** Optional fixed observer responses in call order */
     observerResponses?: string[];
+    /** Number of observer calls that fail before succeeding */
+    observerFailures?: number;
+    failurePolicy?: 'abort' | 'continue';
+    maxRetries?: number;
   }) {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
@@ -10366,7 +11269,10 @@ describe('Full Async Buffering Flow', () => {
         }
 
         // Observer call
-        observerCalls.push({ input: promptText.slice(0, 200) });
+        observerCalls.push({ input: promptText });
+        if (observerCalls.length <= (opts.observerFailures ?? 0)) {
+          throw Object.assign(new Error('observer failed'), { statusCode: 503 });
+        }
         const observerResponse =
           opts.observerResponses?.[observerCalls.length - 1] ??
           `<observations>\nDate: Jan 1, 2025\n* 🔴 Observed at call ${observerCalls.length}\n* User discussed topic ${observerCalls.length}\n</observations>`;
@@ -10395,6 +11301,8 @@ describe('Full Async Buffering Flow', () => {
         bufferTokens: opts.bufferTokens,
         bufferActivation: opts.bufferActivation,
         blockAfter: opts.blockAfter,
+        failurePolicy: opts.failurePolicy,
+        maxRetries: opts.maxRetries,
       },
       reflection: {
         observationTokens: opts.reflectionObservationTokens,
@@ -10529,6 +11437,96 @@ describe('Full Async Buffering Flow', () => {
 
     // Observer should have been called for buffering
     expect(observerCalls.length).toBeGreaterThan(0);
+  });
+
+  it('retries messages from a failed continue-mode async observation', async () => {
+    const { storage, om, threadId, resourceId, step, waitForAsyncOps, observerCalls } =
+      await setupAsyncBufferingScenario({
+        messageTokens: 10000,
+        bufferTokens: 1000,
+        bufferActivation: 0.7,
+        reflectionObservationTokens: 50000,
+        messageCount: 20,
+        observerFailures: 1,
+        maxRetries: 0,
+        failurePolicy: 'continue',
+      });
+
+    await step(0);
+    await waitForAsyncOps();
+
+    const bufferKey = om.buffering.getObservationBufferKey(om.buffering.getLockKey(threadId, resourceId));
+    expect(observerCalls).toHaveLength(1);
+    expect(BufferingCoordinator.lastBufferedAtTime.has(bufferKey)).toBe(false);
+
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    await storage.saveMessages({
+      messages: Array.from({ length: 10 }, (_, index) => ({
+        id: `retry-msg-${index}`,
+        role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
+        content: {
+          format: 2 as const,
+          parts: [{ type: 'text' as const, text: `Retry message ${index}: ${filler}` }],
+        },
+        type: 'text',
+        createdAt: new Date(Date.UTC(2025, 0, 1, 10, index)),
+        threadId,
+        resourceId,
+      })),
+    });
+
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    expect(observerCalls).toHaveLength(2);
+    expect(observerCalls[1]?.input).toContain('The quick brown fox jumps over the lazy dog.');
+    expect(BufferingCoordinator.lastBufferedAtTime.has(bufferKey)).toBe(true);
+  });
+
+  // Default (abort) policy: a failed async-buffer cycle must not advance the buffer
+  // cursor either, so the unobserved messages stay eligible for a later cycle
+  // instead of being silently skipped.
+  it('retains messages from a failed async observation under the default failure policy', async () => {
+    const { storage, om, threadId, resourceId, step, waitForAsyncOps, observerCalls } =
+      await setupAsyncBufferingScenario({
+        messageTokens: 10000,
+        bufferTokens: 1000,
+        bufferActivation: 0.7,
+        reflectionObservationTokens: 50000,
+        messageCount: 20,
+        observerFailures: 1,
+        maxRetries: 0,
+      });
+
+    await step(0);
+    await waitForAsyncOps();
+
+    const bufferKey = om.buffering.getObservationBufferKey(om.buffering.getLockKey(threadId, resourceId));
+    expect(observerCalls).toHaveLength(1);
+    expect(BufferingCoordinator.lastBufferedAtTime.has(bufferKey)).toBe(false);
+
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    await storage.saveMessages({
+      messages: Array.from({ length: 10 }, (_, index) => ({
+        id: `abort-retry-msg-${index}`,
+        role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
+        content: {
+          format: 2 as const,
+          parts: [{ type: 'text' as const, text: `Retry message ${index}: ${filler}` }],
+        },
+        type: 'text',
+        createdAt: new Date(Date.UTC(2025, 0, 1, 10, index)),
+        threadId,
+        resourceId,
+      })),
+    });
+
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    expect(observerCalls).toHaveLength(2);
+    expect(observerCalls[1]?.input).toContain('The quick brown fox jumps over the lazy dog.');
+    expect(BufferingCoordinator.lastBufferedAtTime.has(bufferKey)).toBe(true);
   });
 
   it('should persist buffering markers on observed assistant messages instead of data-only DB messages', async () => {
@@ -11394,7 +12392,7 @@ describe('Full Async Buffering Flow', () => {
     expect(record?.activeObservations).toBeTruthy();
   });
 
-  it('should defer async buffering when messages contain pending tool calls (state: call)', async () => {
+  it('should exclude pending tail tool calls from async buffering while still buffering the completed prefix', async () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
 
@@ -11515,8 +12513,8 @@ describe('Full Async Buffering Flow', () => {
     const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
 
     // Step 0: Load messages with pending tool call.
-    // Even though total tokens (~2200) exceed threshold (2000),
-    // OM should NOT trigger async buffering because a message has state: 'call'.
+    // The pending call must never be observed; the completed messages before it
+    // may still buffer as a safe chronological prefix.
     const messageList = new MessageList({ threadId, resourceId });
     const sharedState: Record<string, unknown> = {};
     const requestContext = new RequestContext();
@@ -11539,8 +12537,16 @@ describe('Full Async Buffering Flow', () => {
     });
     await waitForAsyncOps();
 
-    // Observer should NOT have been called because there's a pending tool call
-    expect(observerCalls.length).toBe(0);
+    // The pending tool call itself must never be observed. Completed messages
+    // before it may buffer as a safe chronological prefix (#22573 policy).
+    const recordAfterStep0 = await storage.getObservationalMemory(threadId, resourceId);
+    const bufferedIdsAfterStep0 = (recordAfterStep0?.bufferedObservationChunks ?? []).flatMap(
+      chunk => chunk.messageIds,
+    );
+    expect(bufferedIdsAfterStep0).not.toContain('pending-msg-tool-call');
+    for (const call of observerCalls) {
+      expect(call.input).not.toContain('call_pending_123');
+    }
 
     // ─── Simulate tool completion: update the message in the messageList ───
     // In real usage, llm-execution-step mutates the state:'call' part to state:'result'
@@ -17024,6 +18030,66 @@ describe('Observer output threadTitle propagation', () => {
     expect(omMetadata.currentTask).toBe('Building the dashboard');
     expect(omMetadata.suggestedResponse).toBe('Let me help with that.');
   });
+
+  it('should not overwrite a user-pinned title when activating buffered chunks', async () => {
+    const storage = createInMemoryStorage();
+    const threadId = 'buf-pinned-title-thread';
+    const resourceId = 'buf-pinned-title-resource';
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'My custom name',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: { [TITLE_PINNED_THREAD_METADATA_KEY]: true },
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
+      observation: {
+        messageTokens: 50000,
+        bufferTokens: 10000,
+        bufferActivation: 1,
+        threadTitle: true,
+      },
+      reflection: { observationTokens: 100000 },
+    });
+
+    const record = await storage.initializeObservationalMemory({
+      threadId,
+      resourceId,
+      scope: 'thread',
+      config: {},
+    });
+
+    await storage.updateBufferedObservations({
+      id: record.id,
+      chunk: {
+        observations: '- User building a React dashboard',
+        tokenCount: 100,
+        messageIds: ['msg-1', 'msg-2'],
+        messageTokens: 45000,
+        lastObservedAt: new Date('2025-01-01T10:00:00Z'),
+        cycleId: 'cycle-pinned-title-1',
+        threadTitle: 'React Dashboard Project',
+        currentTask: 'Building the dashboard',
+        suggestedContinuation: 'Let me help with that.',
+      },
+    });
+
+    const result = await om.activate({ threadId, resourceId });
+    expect(result.activated).toBe(true);
+
+    // The pinned title survives, but OM metadata still advances.
+    const thread = await storage.getThreadById({ threadId });
+    expect(thread?.title).toBe('My custom name');
+    expect(((thread?.metadata as any)?.mastra?.om ?? {}).threadTitle).toBe('React Dashboard Project');
+  });
 });
 
 // =============================================================================
@@ -18297,5 +19363,111 @@ describe('filterObservedMessages — tool-call/result pair preservation', () => 
     const remainingIds = remaining.map((m: any) => m.id);
 
     expect(remainingIds).not.toContain('tool-call-msg-alone');
+  });
+});
+
+describe('observed time zone wiring', () => {
+  /** Run `fn` with the process time zone pinned, so the record's zone is the only thing that can decide the output. */
+  async function withProcessZone<T>(zone: string, fn: () => Promise<T>): Promise<T> {
+    const previousZone = process.env.TZ;
+    process.env.TZ = zone;
+    try {
+      return await fn();
+    } finally {
+      if (previousZone === undefined) delete process.env.TZ;
+      else process.env.TZ = previousZone;
+    }
+  }
+
+  it('writes Observer dates in the record time zone during observation', async () => {
+    await withProcessZone('UTC', async () => {
+      const storage = createInMemoryStorage();
+      const threadId = 'tz-observer-write-thread';
+      const resourceId = 'tz-observer-write-resource';
+
+      let capturedPrompt: any = null;
+      const mockModel = createStreamCapableMockModel({
+        doGenerate: async options => {
+          capturedPrompt = options.prompt;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+            content: [{ type: 'text' as const, text: '<observations>\n- User was up late\n</observations>' }],
+            warnings: [],
+          };
+        },
+      });
+
+      const om = new ObservationalMemory({
+        storage,
+        observation: { messageTokens: 10, model: mockModel as any },
+        reflection: { observationTokens: 100000 },
+        scope: 'thread',
+      });
+
+      await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+        observedTimezone: 'America/Los_Angeles',
+      });
+
+      const early = createTestMessage('was up late working on the schema migration', 'user', 'tz-msg-1');
+      early.createdAt = new Date('2024-03-01T02:30:00Z');
+      const reply = createTestMessage('noted, we can pick it up tomorrow morning', 'assistant', 'tz-msg-2');
+      reply.createdAt = new Date('2024-03-01T02:31:00Z');
+      await om.observe({ threadId, resourceId, messages: [early, reply] });
+
+      expect(capturedPrompt).not.toBeNull();
+      const promptText = (capturedPrompt as any[])
+        .map(message => (typeof message.content === 'string' ? message.content : JSON.stringify(message.content)))
+        .join('\n');
+      // 2024-03-01T02:30Z is still the evening of Feb 29 in Los Angeles, but already Mar 1 in the pinned process zone
+      expect(promptText).toContain('Feb 29 2024');
+      expect(promptText).toContain('6:30 PM');
+      expect(promptText).not.toContain('Mar 1 2024');
+    });
+  });
+
+  it('annotates relative dates in the record time zone when rendering context', async () => {
+    await withProcessZone('UTC', async () => {
+      const storage = createInMemoryStorage();
+      const threadId = 'tz-render-thread';
+      const resourceId = 'tz-render-resource';
+
+      const om = new ObservationalMemory({
+        storage,
+        observation: { model: createStreamCapableMockModel({}) as any },
+        reflection: { observationTokens: 100000 },
+        scope: 'thread',
+      });
+
+      const record = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+        observedTimezone: 'America/Los_Angeles',
+      });
+      await storage.updateActiveObservations({
+        id: record.id,
+        observations: 'Date: Jun 22, 2024\n- User booked the exam',
+        tokenCount: 50,
+        lastObservedAt: new Date(),
+      });
+
+      const blocks = await om.buildContextSystemMessages({
+        threadId,
+        resourceId,
+        currentDate: new Date('2024-06-23T00:00:00Z'),
+      });
+
+      const text = (blocks ?? []).join('\n\n');
+      // Midnight UTC on Jun 23 is still the evening of Jun 22 in Los Angeles
+      expect(text).toContain('Date: Jun 22, 2024 (today)');
+      expect(text).not.toContain('(yesterday)');
+    });
   });
 });

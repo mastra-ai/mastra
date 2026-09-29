@@ -1,10 +1,15 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ExternalLink, GitFork } from 'lucide-react';
 import { useCallback } from 'react';
 import { AgentObservationalMemory } from './agent-observational-memory';
 import { AgentWorkingMemory } from './agent-working-memory';
+import { getRecentMessagesSettings } from './lib/recent-messages';
 import { useThreadInput } from '@/domains/conversation';
 import {
   useMemoryConfig,
@@ -14,21 +19,11 @@ import {
   useThread,
 } from '@/domains/memory/hooks';
 import { MemorySearch } from '@/lib/ai-ui/memory-search';
-import { useLinkComponent } from '@/lib/framework';
 
 interface AgentMemoryProps {
   agentId: string;
   threadId: string;
   memoryType?: 'local' | 'gateway';
-}
-
-function getRecentMessagesDescription(lastMessages: number | false | undefined): string {
-  if (typeof lastMessages !== 'number') {
-    return 'Recent message history is not included in context.';
-  }
-
-  const messageLabel = lastMessages === 1 ? 'message' : 'messages';
-  return `Includes the last ${lastMessages} ${messageLabel} in context.`;
 }
 
 export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps) {
@@ -38,11 +33,11 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
   const { paths, navigate } = useLinkComponent();
 
   // Resolve the thread's actual resourceId (may differ from agentId for externally-created threads)
-  const { data: thread } = useThread({ threadId, agentId });
+  const { data: thread } = useThread({ threadId, agentId }, useEntityRequestContext('agent', agentId)[0]);
   const effectiveResourceId = thread?.resourceId ?? agentId;
 
   // Get memory config to check if semantic recall is enabled
-  const { data, isLoading: isConfigLoading } = useMemoryConfig(agentId);
+  const { data, isLoading: isConfigLoading } = useMemoryConfig(agentId, useEntityRequestContext('agent', agentId)[0]);
 
   // Check if semantic recall is enabled
   const config = data?.config;
@@ -57,11 +52,14 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
   const isOMEnabled = omStatus?.observationalMemory?.enabled ?? false;
 
   // Get memory search hook
-  const { mutateAsync: searchMemory, data: searchMemoryData } = useMemorySearch({
-    agentId: agentId || '',
-    resourceId: effectiveResourceId || '',
-    threadId,
-  });
+  const { mutateAsync: searchMemory, data: searchMemoryData } = useMemorySearch(
+    {
+      agentId: agentId || '',
+      resourceId: effectiveResourceId || '',
+      threadId,
+    },
+    useEntityRequestContext('agent', agentId)[0],
+  );
 
   // Get clone thread hook
   const { mutateAsync: cloneThread, isPending: isCloning } = useCloneThread();
@@ -89,9 +87,9 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
         if (messageElement) {
           messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
           // Optionally highlight the message
-          messageElement.classList.add('bg-surface4');
+          messageElement.classList.add('bg-muted');
           setTimeout(() => {
-            messageElement.classList.remove('bg-surface4');
+            messageElement.classList.remove('bg-muted');
           }, 2000);
         }
       }
@@ -115,42 +113,43 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
     <div className="flex min-w-0 flex-col">
       {/* Clone Thread Section */}
       {threadId && (
-        <div className="border-border1 border-b p-4">
+        <div className="border-b border-border p-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-neutral5 text-sm font-medium">Clone Thread</h3>
-              <p className="text-neutral3 mt-1 text-xs">Create a copy of this conversation</p>
+              <h3 className="text-subheading text-foreground">Clone Thread</h3>
+              <p className="mt-1 text-caption text-muted-foreground">Create a copy of this conversation</p>
             </div>
-            <Button onClick={handleCloneThread} disabled={isCloning}>
-              <GitFork className="mr-2 h-4 w-4" />
+            <Button onClick={handleCloneThread} disabled={isCloning} icon={<GitFork />}>
               {isCloning ? 'Cloning...' : 'Clone'}
             </Button>
           </div>
         </div>
       )}
 
-      <div className="border-border1 border-b p-4">
-        <h3 className="text-neutral5 text-sm font-medium">Recent Messages</h3>
-        <p className="text-neutral3 mt-1 text-xs">{getRecentMessagesDescription(config?.lastMessages)}</p>
+      <div className="border-b border-border p-4">
+        <h3 className="text-subheading text-foreground">Recent Messages</h3>
+        <p className="mt-1 text-caption text-muted-foreground">
+          {getRecentMessagesSettings(config?.lastMessages, config?.messageHistory).description}
+        </p>
       </div>
 
       {/* Observational Memory Section - moved above Semantic Recall */}
       {isOMEnabled && (
-        <div className="border-border1 min-w-0 overflow-hidden border-b">
+        <div className="min-w-0 overflow-hidden border-b border-border">
           <AgentObservationalMemory agentId={agentId} resourceId={effectiveResourceId} threadId={threadId} />
         </div>
       )}
 
       {/* Memory Search Section - hidden for gateway memory */}
       {!isGatewayMemory && (
-        <div className="border-border1 border-b p-4">
+        <div className="border-b border-border p-4">
           <div className="mb-2">
             <div className="mb-2 flex items-center gap-2">
-              <h3 className="text-neutral5 text-sm font-medium">Semantic Recall</h3>
+              <h3 className="text-subheading text-foreground">Semantic Recall</h3>
               {searchMemoryData?.searchScope && (
                 <span
                   className={cn(
-                    'text-xs font-medium px-2 py-0.5 rounded',
+                    'rounded px-2 py-0.5 text-column',
                     searchScope === 'resource' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400',
                   )}
                   title={
@@ -171,15 +170,18 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
               chatInputValue={chatInputValue}
             />
           ) : (
-            <div className="bg-surface3 border-border1 rounded-lg border p-4">
-              <p className="text-neutral3 mb-3 text-sm">
+            <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
+              <p className="mb-3 text-body text-muted-foreground">
                 Semantic recall is not enabled for this agent. Enable it to search through conversation history.
               </p>
               <a
                 href="https://mastra.ai/en/docs/memory/semantic-recall"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-sm text-blue-400 transition-colors hover:text-blue-300"
+                className={cn(
+                  'inline-flex items-center gap-2 text-body text-blue-400 hover:text-blue-300',
+                  controlStateColorTransition,
+                )}
               >
                 Learn about semantic recall
                 <ExternalLink className="h-3 w-3" />
@@ -198,13 +200,13 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
 
       {/* Gateway Memory indicator */}
       {isGatewayMemory && (
-        <div className="border-border1 border-b p-4">
-          <div className="bg-surface3 border-border1 rounded-lg border p-4">
+        <div className="border-b border-border p-4">
+          <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
             <div className="mb-1 flex items-center gap-2">
-              <span className="rounded bg-green-500/20 px-2 py-0.5 text-xs font-medium text-green-400">Remote</span>
-              <h3 className="text-neutral5 text-sm font-medium">Gateway</h3>
+              <span className="rounded bg-green-500/20 px-2 py-0.5 text-column text-green-400">Remote</span>
+              <h3 className="text-subheading text-foreground">Gateway</h3>
             </div>
-            <p className="text-neutral3 text-xs">
+            <p className="text-caption text-muted-foreground">
               Memory is managed by the Gateway. Threads and observations are stored remotely.
             </p>
           </div>

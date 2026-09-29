@@ -2,6 +2,7 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { MockMemory } from '../../../memory/mock';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
@@ -200,11 +201,15 @@ describe('DurableAgent Model Fallback', () => {
     it('should fall back to second model when primary fails', async () => {
       const failingModel = createFailingModel();
       const successModel = createSuccessModel('Fallback response');
+      const mockMemory = new MockMemory();
+      const threadId = 'thread-model-fallback';
+      const resourceId = 'resource-model-fallback';
 
       const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
+        memory: mockMemory,
         model: [
           { id: 'primary', model: failingModel as LanguageModelV2, maxRetries: 0 },
           { id: 'fallback', model: successModel as LanguageModelV2, maxRetries: 0 },
@@ -214,6 +219,7 @@ describe('DurableAgent Model Fallback', () => {
 
       let text = '';
       const { cleanup } = await durableAgent.stream('Hello', {
+        memory: { thread: threadId, resource: resourceId },
         onChunk: chunk => {
           if (chunk.type === 'text-delta') {
             text += (chunk.payload as any).text;
@@ -223,6 +229,14 @@ describe('DurableAgent Model Fallback', () => {
 
       // Wait for streaming to complete (need more time for fallback)
       await new Promise(resolve => setTimeout(resolve, 2000));
+      await expect(mockMemory.recall({ threadId, resourceId })).resolves.toMatchObject({
+        messages: [
+          { role: 'user' },
+          { role: 'assistant', content: { parts: [{ type: 'text', text: 'Fallback response' }] } },
+        ],
+      });
+      const { messages } = await mockMemory.recall({ threadId, resourceId });
+      expect(messages.flatMap(message => message.content.parts ?? []).some(part => part.type === 'error')).toBe(false);
       cleanup();
 
       expect(text).toBe('Fallback response');

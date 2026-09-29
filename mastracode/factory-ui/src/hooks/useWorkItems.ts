@@ -24,6 +24,7 @@ import type {
   FactoryBoard,
   UpdateWorkItemInput,
   WorkItem,
+  WorkItemStageEntry,
 } from '../ui/domains/factory/services/workItems';
 
 function requireFactoryProjectId(factoryProjectId: string | undefined): string {
@@ -147,7 +148,30 @@ type TransitionWorkItemVariables = {
   reenter?: boolean;
 };
 
-export function useTransitionWorkItemMutation(factoryProjectId: string | undefined) {
+function optimisticStageHistory(
+  item: WorkItem,
+  stage: string,
+  enteredAt: string,
+  by: string,
+  reenter: boolean,
+): WorkItemStageEntry[] {
+  if (reenter) return item.stageHistory;
+  const next = item.stageHistory.map(entry => ({ ...entry }));
+  for (const oldStage of item.stages) {
+    if (oldStage === stage) continue;
+    for (let index = next.length - 1; index >= 0; index -= 1) {
+      const entry = next[index];
+      if (entry?.stage === oldStage && entry.exitedAt === undefined) {
+        next[index] = { ...entry, exitedAt: enteredAt, exitedBy: by };
+        break;
+      }
+    }
+  }
+  if (!item.stages.includes(stage)) next.push({ stage, enteredAt, by });
+  return next;
+}
+
+export function useTransitionWorkItemMutation(factoryProjectId: string | undefined, currentUserId?: string) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   const listKey = queryKeys.workItems(factoryProjectId);
@@ -163,15 +187,25 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
         cause,
         ...(reenter ? { reenter } : {}),
       }),
-    onMutate: async ({ item, stage }) => {
+    onMutate: async ({ item, stage, reenter = false }) => {
       await queryClient.cancelQueries({ queryKey: listKey });
       const previousItem = queryClient
         .getQueryData<BoardSnapshot>(listKey)
         ?.workItems.find(candidate => candidate.id === item.id);
+      const enteredAt = new Date().toISOString();
+      const actor = currentUserId ?? 'factory:optimistic';
       patchCards(queryClient, listKey, cards =>
-        cards.map(candidate => (candidate.id === item.id ? { ...candidate, stages: [stage] } : candidate)),
+        cards.map(candidate =>
+          candidate.id === item.id
+            ? {
+                ...candidate,
+                stages: [stage],
+                stageHistory: optimisticStageHistory(candidate, stage, enteredAt, actor, reenter),
+              }
+            : candidate,
+        ),
       );
-      return { previousItem };
+      return { previousItem, enteredAt, actor };
     },
     onError: (_error, variables, context) => {
       const previousItem = context?.previousItem;
@@ -189,7 +223,19 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
           if (item.id !== variables.item.id || item.revision !== variables.item.revision) return item;
           if (result.status === 'rejected') return context?.previousItem ?? item;
           if (result.revision <= item.revision) return item;
-          return { ...item, stages: [result.stage], revision: result.revision };
+          const previousItem = context?.previousItem ?? variables.item;
+          return {
+            ...item,
+            stages: [result.stage],
+            stageHistory: optimisticStageHistory(
+              previousItem,
+              result.stage,
+              context?.enteredAt ?? new Date().toISOString(),
+              context?.actor ?? currentUserId ?? 'factory:optimistic',
+              variables.reenter ?? false,
+            ),
+            revision: result.revision,
+          };
         }),
       );
       void queryClient.invalidateQueries({ queryKey: listKey });

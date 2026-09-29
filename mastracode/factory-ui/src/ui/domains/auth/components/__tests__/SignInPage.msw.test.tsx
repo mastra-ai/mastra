@@ -55,7 +55,7 @@ describe('SignInPage', () => {
   });
 
   describe('given Studio auth', () => {
-    it('renders the Mastra Platform sign-in action', async () => {
+    it('renders the Mastra Platform sign-in action on a supported host', async () => {
       stubAuthMe({ provider: 'mastra-studio' });
       renderSignIn('/signin?returnTo=%2Ffactory%2Fboard');
 
@@ -66,6 +66,29 @@ describe('SignInPage', () => {
       expect(button).toBeDisabled();
       expect(button).toHaveTextContent('Opening Mastra Platform…');
       expect(redirectToLogin).toHaveBeenCalledWith(TEST_BASE_URL, '/factory/board');
+    });
+
+    it('shows custom-domain guidance when the server reports platform auth is unsupported', async () => {
+      stubAuthMe({ provider: 'mastra-studio', customDomainUnsupported: true });
+      renderSignIn();
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent("Mastra Platform sign-in isn't available on custom domains");
+      expect(alert).toHaveTextContent('WORKOS_API_KEY + WORKOS_CLIENT_ID');
+      expect(screen.getByRole('link', { name: 'Auth overview' })).toHaveAttribute(
+        'href',
+        'https://mastra.ai/docs/auth/overview',
+      );
+      expect(screen.queryByRole('button', { name: 'Sign in with Mastra Platform' })).not.toBeInTheDocument();
+    });
+
+    it('shows custom-domain guidance after the blocked login redirect', async () => {
+      stubAuthMe({ provider: 'mastra-studio' });
+      renderSignIn('/signin?error=custom_domain_unsupported');
+
+      await screen.findByRole('heading', { name: "Mastra Platform sign-in isn't available on custom domains" });
+      expect(screen.getByRole('alert')).toHaveTextContent("Mastra Platform sign-in isn't available on custom domains");
+      expect(screen.queryByRole('button', { name: 'Sign in with Mastra Platform' })).not.toBeInTheDocument();
     });
   });
 

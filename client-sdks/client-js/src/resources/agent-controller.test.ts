@@ -339,6 +339,53 @@ describe('AgentController Resource', () => {
     );
   });
 
+  it('hydrates message-start timestamps while preserving compact SSE lifecycle payloads', async () => {
+    const createdAt = '2026-01-01T00:00:00.000Z';
+    const message = {
+      id: 'm1',
+      role: 'assistant',
+      content: { format: 2, parts: [{ type: 'text', text: '' }] },
+      createdAt,
+    };
+    const events = [
+      { type: 'agent_start' },
+      { type: 'message_start', message },
+      { type: 'message_update', id: message.id, event: { type: 'text-delta', delta: 'hi' } },
+      { type: 'message_end', id: message.id },
+    ];
+    mockSse([
+      `data: ${JSON.stringify(events[0])}\n\n`,
+      `: heartbeat\n\n`,
+      ...events.slice(1).map(event => `data: ${JSON.stringify(event)}\n\n`),
+    ]);
+
+    const received: KnownAgentControllerEvent[] = [];
+    const sub = await client
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({
+        onEvent: e => {
+          if (isKnownAgentControllerEvent(e)) received.push(e);
+        },
+      });
+
+    // Allow the async pump to drain the (already-closed) stream.
+    await new Promise(r => setTimeout(r, 10));
+    sub.unsubscribe();
+
+    const [url] = lastCall();
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/stream');
+    expect(received.map(e => e.type)).toEqual(['agent_start', 'message_start', 'message_update', 'message_end']);
+    const [, messageStart, messageUpdate, messageEnd] = received;
+    expect(messageStart).toMatchObject({ type: 'message_start', message: { id: 'm1' } });
+    if (messageStart?.type !== 'message_start') throw new Error('missing message_start');
+    expect(messageStart.message.createdAt).toBeInstanceOf(Date);
+    expect(messageStart.message.createdAt.toISOString()).toBe(createdAt);
+    expect(agentControllerMessageText(messageStart.message)).toBe('');
+    expect(messageUpdate).toEqual({ type: 'message_update', id: 'm1', event: { type: 'text-delta', delta: 'hi' } });
+    expect(messageEnd).toEqual({ type: 'message_end', id: 'm1' });
+  });
+
   it('hydrates thread timestamps from SSE events', async () => {
     const createdAt = '2026-01-01T00:00:00.000Z';
     const updatedAt = '2026-01-02T03:04:05.000Z';

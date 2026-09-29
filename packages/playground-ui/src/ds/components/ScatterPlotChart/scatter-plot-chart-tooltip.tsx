@@ -1,4 +1,5 @@
 import type { ScatterPlotChartFormatter } from './scatter-plot-chart';
+import { ChartTooltip } from '@/ds/components/ChartTooltip';
 
 type ScatterTooltipPayload = Array<{
   color?: string;
@@ -32,18 +33,18 @@ export function ScatterPlotChartTooltip({
   const yValue = point[yKey];
 
   return (
-    <div className="border-border1 bg-surface2 rounded-md border px-3 py-2 text-xs shadow-lg">
-      {label !== undefined && <p className="text-icon6 mb-1 font-medium">{String(label)}</p>}
-      <div className="text-icon2 grid gap-1">
+    <ChartTooltip>
+      {label !== undefined && <p className="mb-1 text-column text-foreground">{String(label)}</p>}
+      <div className="grid gap-1 text-placeholder">
         <p>
-          <span className="text-neutral3">X:</span>{' '}
+          <span className="text-muted-foreground">X:</span>{' '}
           <span className="font-mono">{formatX ? formatX(xValue, point) : String(xValue)}</span>
         </p>
         <p>
-          <span className="text-neutral3">Y:</span>{' '}
+          <span className="text-muted-foreground">Y:</span>{' '}
           <span className="font-mono">{formatY ? formatY(yValue, point) : String(yValue)}</span>
         </p>
       </div>
-    </div>
+    </ChartTooltip>
   );
 }

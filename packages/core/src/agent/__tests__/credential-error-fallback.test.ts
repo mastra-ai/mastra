@@ -1,6 +1,8 @@
 import { APICallError } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
+import type { MastraDBMessage } from '../../memory';
+import { MockMemory } from '../../memory/mock';
 import { Agent } from '../agent';
 
 /**
@@ -427,6 +429,93 @@ describe('Credential/Auth Error Fallback', () => {
         // With maxRetries: 2, exactly 3 calls (1 initial + 2 retries)
         expect(primary.getCallCount()).toBe(3);
       });
+    });
+  });
+
+  /**
+   * A failure that a fallback model recovers from is not terminal, so it must
+   * never leave a persisted `error` part behind in thread history.
+   */
+  describe('persisted history for recovered failures', () => {
+    function errorPartsIn(messages: MastraDBMessage[]) {
+      return messages.flatMap(message => (message.content?.parts ?? []).filter(part => part.type === 'error'));
+    }
+
+    it('persists only the successful response when stream() falls back after 401', async () => {
+      const primaryModel = createAPICallErrorModel(401, 'Invalid API key', false);
+      const secondaryModel = createSuccessModel('Secondary model response');
+      const mockMemory = new MockMemory();
+
+      const agent = new Agent({
+        id: 'test-401-fallback-stream-memory',
+        name: 'Test 401 Fallback (stream, memory)',
+        instructions: 'You are a test agent',
+        memory: mockMemory,
+        model: [
+          { model: primaryModel, maxRetries: 0 },
+          { model: secondaryModel, maxRetries: 0 },
+        ],
+      });
+
+      const result = await agent.stream('Hello', {
+        memory: { thread: 'fallback-stream-thread', resource: 'fallback-resource' },
+      });
+      await result.consumeStream();
+
+      const recalled = await mockMemory.recall({
+        threadId: 'fallback-stream-thread',
+        resourceId: 'fallback-resource',
+      });
+      const messages = recalled?.messages ?? [];
+
+      expect(messages.map(message => message.role)).toEqual(['user', 'assistant']);
+      expect(messages[1]?.content.parts.map(part => part.type)).toEqual(['text']);
+      expect(
+        messages[1]?.content.parts
+          .filter(part => part.type === 'text')
+          .map(part => ({ type: part.type, text: part.text })),
+      ).toEqual([{ type: 'text', text: 'Secondary model response' }]);
+      // The recovered 401 attempt must not be recorded as an error part.
+      expect(errorPartsIn(messages)).toEqual([]);
+    });
+
+    it('persists only the successful response when generate() falls back after retryable 429', async () => {
+      const primary = createCountingErrorModel(429, 'Rate limit exceeded', true);
+      const secondaryModel = createSuccessModel('Fallback success');
+      const mockMemory = new MockMemory();
+
+      const agent = new Agent({
+        id: 'test-429-fallback-generate-memory',
+        name: 'Test 429 Fallback (generate, memory)',
+        instructions: 'You are a test agent',
+        memory: mockMemory,
+        model: [
+          { model: primary.model, maxRetries: 1 },
+          { model: secondaryModel, maxRetries: 0 },
+        ],
+      });
+
+      const result = await agent.generate('Hello', {
+        memory: { thread: 'fallback-generate-thread', resource: 'fallback-resource' },
+      });
+
+      expect(result.text).toBe('Fallback success');
+      expect(primary.getCallCount()).toBe(2);
+
+      const recalled = await mockMemory.recall({
+        threadId: 'fallback-generate-thread',
+        resourceId: 'fallback-resource',
+      });
+      const messages = recalled?.messages ?? [];
+
+      expect(messages.map(message => message.role)).toEqual(['user', 'assistant']);
+      expect(messages[1]?.content.parts.map(part => part.type)).toEqual(['text']);
+      expect(
+        messages[1]?.content.parts
+          .filter(part => part.type === 'text')
+          .map(part => ({ type: part.type, text: part.text })),
+      ).toEqual([{ type: 'text', text: 'Fallback success' }]);
+      expect(errorPartsIn(messages)).toEqual([]);
     });
   });
 });

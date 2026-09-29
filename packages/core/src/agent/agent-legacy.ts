@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { WritableStream } from 'node:stream/web';
 import type { CoreMessage, UIMessage, Tool } from '@internal/ai-sdk-v4';
 import deepEqual from 'fast-deep-equal';
@@ -656,15 +655,16 @@ export class AgentLegacyHandler {
                 promises.push(
                   this.capabilities
                     .genTitle(userMessage, requestContext, observabilityContext, titleModel, titleInstructions)
-                    .then(title => {
-                      if (title) {
-                        return memory.createThread({
-                          threadId: thread.id,
-                          resourceId,
-                          memoryConfig,
-                          title,
-                          metadata: thread.metadata,
-                        });
+                    .then(async title => {
+                      if (!title) return;
+                      // Update-only: the thread may have been deleted while the title was generating (#25203).
+                      if (!(await memory.getThreadById({ threadId: thread.id }))) return;
+                      try {
+                        await memory.updateThread({ id: thread.id, title, memoryConfig });
+                      } catch (error) {
+                        // A delete can still land between the check and the update; only swallow that case.
+                        if (!(await memory.getThreadById({ threadId: thread.id }))) return;
+                        throw error;
                       }
                     }),
                 );
@@ -848,7 +848,7 @@ export class AgentLegacyHandler {
         threadId: threadFromArgs?.id,
         resourceId,
       }) ||
-      randomUUID();
+      globalThis.crypto.randomUUID();
     const instructions = args.instructions || (await this.capabilities.getInstructions({ requestContext }));
     const llm = await this.capabilities.getLLM({
       requestContext,
@@ -1046,7 +1046,7 @@ export class AgentLegacyHandler {
         usage: { totalTokens: 0, promptTokens: 0, completionTokens: 0 },
         finishReason: 'other',
         response: {
-          id: randomUUID(),
+          id: globalThis.crypto.randomUUID(),
           timestamp: new Date(),
           modelId: 'tripwire',
           messages: [],
@@ -1121,7 +1121,7 @@ export class AgentLegacyHandler {
           usage: { totalTokens: 0, promptTokens: 0, completionTokens: 0 },
           finishReason: 'other',
           response: {
-            id: randomUUID(),
+            id: globalThis.crypto.randomUUID(),
             timestamp: new Date(),
             modelId: 'tripwire',
             messages: [],
@@ -1251,7 +1251,7 @@ export class AgentLegacyHandler {
         usage: { totalTokens: 0, promptTokens: 0, completionTokens: 0 },
         finishReason: 'other',
         response: {
-          id: randomUUID(),
+          id: globalThis.crypto.randomUUID(),
           timestamp: new Date(),
           modelId: 'tripwire',
           messages: [],
@@ -1397,7 +1397,7 @@ export class AgentLegacyHandler {
         finishReason: Promise.resolve('other'),
         tripwire: beforeResult.tripwire,
         response: {
-          id: randomUUID(),
+          id: globalThis.crypto.randomUUID(),
           timestamp: new Date(),
           modelId: 'tripwire',
           messages: [],

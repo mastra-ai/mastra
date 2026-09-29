@@ -1,6 +1,6 @@
 import { createScorer } from '@mastra/core/evals';
 import stringSimilarity from 'string-similarity';
-import { extractToolCalls, getTextContentFromMastraDBMessage } from '../../utils';
+import { extractToolCalls, getTextContentFromMastraDBMessage, mergeToolInvocations } from '../../utils';
 
 // ─── Output Text Checks ───────────────────────────────────────────────────────
 
@@ -337,8 +337,11 @@ export function usedNoTools() {
 }
 
 /**
- * Scores 1 if none of the tool invocations resulted in an error state.
- * Checks for tool invocations with state other than 'result' (i.e., missing results).
+ * Scores 1 if none of the tool invocations resulted in an error.
+ *
+ * Treats every failure representation a native run can persist as an error: a
+ * thrown call (`state: 'output-error'`), an incomplete call (`state: 'call'`), a
+ * result the executor flagged with `isError`, and a result carrying an `error` field.
  *
  * @example
  * ```ts
@@ -355,7 +358,7 @@ export function noToolErrors() {
   })
     .preprocess(async ({ run }) => {
       const invocations = extractRawInvocations(run.output);
-      const errorCount = invocations.filter(inv => inv.state === 'call' || (inv.result && inv.result.error)).length;
+      const errorCount = invocations.filter(isErrorInvocation).length;
       return { errorCount, totalCalls: invocations.length, passed: errorCount === 0 };
     })
     .generateScore(({ results }) => {
@@ -365,16 +368,25 @@ export function noToolErrors() {
 
 // ─── Internal helpers ──────────────────────────────────────────────────────────
 
+/**
+ * True when an invocation represents a tool failure rather than a success.
+ *
+ * A natively thrown tool call is persisted as `state: 'output-error'` with
+ * `errorText`, so keying only on `state: 'call'` or `result.error` lets it pass.
+ * `isError` is set alongside `state: 'result'` when the executor reported a failure
+ * even though the result carries no `error` field; core's `extractTrajectory`
+ * likewise defines success as `state === 'result' && isError !== true`.
+ */
+function isErrorInvocation(inv: any): boolean {
+  return inv.state === 'call' || inv.state === 'output-error' || inv.isError === true || Boolean(inv.result?.error);
+}
+
 function extractRawInvocations(output: Parameters<typeof extractToolCalls>[0]) {
   const invocations: any[] = [];
   for (const message of output) {
-    const legacy = message?.content?.toolInvocations;
-    const fromParts = legacy
-      ? undefined
-      : (message?.content as any)?.parts
-          ?.filter((p: any) => p.type === 'tool-invocation')
-          .map((p: any) => p.toolInvocation);
-    for (const inv of legacy ?? fromParts ?? []) {
+    // Merge both storage forms so a call present only in `content.parts` — which is
+    // where thrown calls live — is never hidden by a legacy `toolInvocations` array.
+    for (const inv of mergeToolInvocations(message)) {
       if (inv) invocations.push(inv);
     }
   }

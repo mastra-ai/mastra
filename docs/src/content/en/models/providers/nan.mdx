@@ -7,7 +7,7 @@ description: "Browse NaN model IDs, capabilities, and context windows. Learn how
 
 # <img src="https://models.dev/logos/nan.svg" alt="NaN logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />NaN
 
-Access 7 NaN models through Mastra's model router. Authentication is handled automatically using the `NAN_API_KEY` environment variable.
+Access 8 NaN models through Mastra's model router. Authentication is handled automatically using the `NAN_API_KEY` environment variable.
 
 Learn more in the [NaN documentation](https://nan.builders/docs/models).
 
@@ -47,7 +47,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   models={[
   {
     "model": "nan/deepseek-v4-flash",
-    "imageInput": false,
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
@@ -70,13 +70,13 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "nan/glm5.2",
+    "model": "nan/glm5.3",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 500000,
+    "contextWindow": 1000000,
     "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null
@@ -94,7 +94,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "nan/mimo-v2.5",
+    "model": "nan/mimo-v2.6-flash",
     "imageInput": true,
     "audioInput": true,
     "videoInput": false,
@@ -102,6 +102,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "nan/qwen-image-2.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": null,
     "inputCost": null,
     "outputCost": null
   },

@@ -1,90 +1,75 @@
-import { useEffect, useEffectEvent, useRef, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 
-export type UseKeydownArgs = {
-  [keySet: string]: () => void;
-};
+import {
+  createKeyboardDispatcher,
+  isKeyboardConsumer,
+  matchesCombo,
+  parseKeyCombo,
+  type KeyboardLayer,
+  type ParsedKeyCombo,
+  type UseKeydownArgs,
+} from './keyboard-dispatcher';
+import { useKeyboardScopeDepth, useKeyboardShortcutsContext } from './keyboard-shortcuts-context';
 
-type ParsedKeyCombo = {
-  meta: boolean;
-  ctrl: boolean;
-  shift: boolean;
-  alt: boolean;
-  key: string;
-};
-
-const isMacPlatform = () =>
-  typeof navigator !== 'undefined' && /mac/i.test(navigator.platform || navigator.userAgent || '');
-
-export const parseKeyCombo = (combo: string): ParsedKeyCombo => {
-  const parsed: ParsedKeyCombo = { meta: false, ctrl: false, shift: false, alt: false, key: '' };
-
-  for (const token of combo.split('+')) {
-    switch (token.toLowerCase()) {
-      case 'cmd':
-      case 'meta':
-        parsed.meta = true;
-        break;
-      case 'ctrl':
-      case 'control':
-        parsed.ctrl = true;
-        break;
-      case 'shift':
-        parsed.shift = true;
-        break;
-      case 'alt':
-      case 'option':
-        parsed.alt = true;
-        break;
-      case 'mod':
-        if (isMacPlatform()) parsed.meta = true;
-        else parsed.ctrl = true;
-        break;
-      default:
-        parsed.key = token.toLowerCase();
-    }
-  }
-
-  return parsed;
-};
-
-export const matchesCombo = (event: KeyboardEvent, combo: ParsedKeyCombo): boolean =>
-  event.metaKey === combo.meta &&
-  event.ctrlKey === combo.ctrl &&
-  event.shiftKey === combo.shift &&
-  event.altKey === combo.alt &&
-  event.key.toLowerCase() === combo.key;
+export { parseKeyCombo, parseKeyBinding, matchesCombo } from './keyboard-dispatcher';
+export type { UseKeydownArgs, KeyStep, ParsedKeyBinding } from './keyboard-dispatcher';
 
 export type UseKeydownOptions = {
   /** Attach the listener to this element instead of `window`. */
   target?: RefObject<HTMLElement | null>;
+  /** When `false`, no listener is attached. Defaults to `true`. */
+  enabled?: boolean;
+  /**
+   * Called before any combo is matched. Return `false` to leave the event
+   * untouched (no `preventDefault`, no handler). Runs on top of the built-in
+   * rule that leaves unmodified keys to editable fields and keyboard widgets,
+   * unless the listener targets that field directly.
+   */
+  shouldHandle?: (event: KeyboardEvent) => boolean;
 };
 
+/**
+ * Binds keyboard shortcuts (see `UseKeydownArgs` for the syntax).
+ *
+ * Inside a `KeyboardShortcutsProvider`, bindings join a shared registry: the
+ * nearest `KeyboardScope` decides which declaration wins when several bind the
+ * same keys, and bindings are dropped as soon as the component unmounts.
+ * Without a provider, or with a `target`, the hook listens on its own and no
+ * shadowing takes place.
+ */
 export const useKeydown = (opts: UseKeydownArgs, options: UseKeydownOptions = {}) => {
-  const handlers = useEffectEvent((event: KeyboardEvent) => {
-    for (const [combo, handler] of Object.entries(opts)) {
-      if (matchesCombo(event, parseKeyCombo(combo))) {
-        event.preventDefault();
-        handler();
-        return;
-      }
-    }
-  });
+  const { enabled = true, target } = options;
+  const shortcuts = useKeyboardShortcutsContext();
+  const depth = useKeyboardScopeDepth();
 
-  const targetRef = useRef(options.target);
-  targetRef.current = options.target;
+  // Kept fresh on every render so the dispatcher always calls the latest handlers.
+  const layerRef = useRef<KeyboardLayer>({ depth, bindings: opts, shouldHandle: options.shouldHandle });
+  layerRef.current.bindings = opts;
+  layerRef.current.shouldHandle = options.shouldHandle;
+  layerRef.current.depth = depth;
+
+  const shared = !target && shortcuts.status === 'ready' ? shortcuts.dispatcher : undefined;
 
   useEffect(() => {
-    const target = targetRef.current;
+    if (!enabled) return;
+    if (shared) return shared.register(layerRef.current);
+
     const element: HTMLElement | Window | null = target ? (target.current ?? null) : window;
     if (!element) return;
 
+    const dispatcher = createKeyboardDispatcher();
+    const unregister = dispatcher.register(layerRef.current);
     const handleKeyDown = (event: Event) => {
-      handlers(event as KeyboardEvent);
+      if (event instanceof KeyboardEvent) dispatcher.handleKeydown(event);
     };
 
     element.addEventListener('keydown', handleKeyDown);
-    return () => element.removeEventListener('keydown', handleKeyDown);
-  }, []);
+    return () => {
+      element.removeEventListener('keydown', handleKeyDown);
+      unregister();
+      dispatcher.reset();
+    };
+  }, [enabled, target, shared]);
 };
 
 export type UseTableKeydownArgs = {
@@ -100,6 +85,13 @@ export type UseTableKeydownArgs = {
   onActivate?: (index: number) => void;
   /** Called with the next index before focus moves (e.g. virtualizer.scrollToIndex). */
   onNavigate?: (index: number) => void;
+  /**
+   * Also listen for ArrowUp/ArrowDown/PageUp/PageDown on `document`, so the
+   * list can be navigated before any row has focus. Keys are ignored when the
+   * event originates from an editable field, a keyboard widget (combobox, menu,
+   * listbox…) or an open dialog/popover. Enable on at most one list per page.
+   */
+  global?: boolean;
 };
 
 export const useTableKeydown = ({
@@ -109,6 +101,7 @@ export const useTableKeydown = ({
   initialIndex = 0,
   onActivate,
   onNavigate,
+  global = false,
 }: UseTableKeydownArgs) => {
   const [activeIndex, setActiveIndex] = useState(initialIndex);
 
@@ -148,6 +141,24 @@ export const useTableKeydown = ({
       }
     }
   };
+
+  // When focus is outside the list, the first ArrowUp/ArrowDown press lands on
+  // the current row instead of skipping past it.
+  const focusIsInList = () => containerRef.current?.contains(document.activeElement) ?? false;
+  const step = (delta: number) => navigateTo(focusIsInList() ? activeIndex + delta : activeIndex);
+
+  useKeydown(
+    {
+      ArrowUp: () => step(-1),
+      ArrowDown: () => step(1),
+      PageUp: () => navigateTo(activeIndex - pageSize),
+      PageDown: () => navigateTo(activeIndex + pageSize),
+    },
+    {
+      enabled: global,
+      shouldHandle: event => !event.defaultPrevented && count > 0 && !isKeyboardConsumer(event.target),
+    },
+  );
 
   useEffect(() => {
     if (activeIndex >= count) {

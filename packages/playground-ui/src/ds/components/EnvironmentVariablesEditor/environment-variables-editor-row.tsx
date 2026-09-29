@@ -3,7 +3,7 @@ import { EyeIcon, EyeOffIcon, TrashIcon } from 'lucide-react';
 import { useEnvironmentVariablesEditorContext } from './environment-variables-editor-context';
 import type { EnvironmentVariablesEditorRowProps } from './environment-variables-editor.types';
 import { Button } from '@/ds/components/Button';
-import { FieldBlock } from '@/ds/components/FormFieldBlocks';
+import { FieldBlock, fieldErrorId } from '@/ds/components/FormFieldBlocks';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
 import { DUPLICATE_ENVIRONMENT_VARIABLE_MESSAGE } from '@/lib/env-file';
 import { cn } from '@/lib/utils';
@@ -55,6 +55,7 @@ export function EnvironmentVariablesEditorRow({
                 value={row.key}
                 disabled={isDisabled}
                 error={Boolean(keyError)}
+                aria-describedby={keyError ? fieldErrorId(keyFieldName) : undefined}
                 onChange={event => editor.updateRow(index, { key: event.target.value })}
                 onPaste={event => {
                   if (handlePaste(event.clipboardData.getData('text'))) {
@@ -63,7 +64,7 @@ export function EnvironmentVariablesEditorRow({
                 }}
               />
             </InputGroup>
-            {keyError && <FieldBlock.ErrorMsg>{keyError}</FieldBlock.ErrorMsg>}
+            {keyError && <FieldBlock.ErrorMsg name={keyFieldName}>{keyError}</FieldBlock.ErrorMsg>}
           </FieldBlock.Column>
         </FieldBlock.Layout>
       </div>
@@ -81,6 +82,7 @@ export function EnvironmentVariablesEditorRow({
                 value={row.value}
                 disabled={isDisabled}
                 error={Boolean(valueError)}
+                aria-describedby={valueError ? fieldErrorId(valueFieldName) : undefined}
                 onChange={event => editor.updateRow(index, { value: event.target.value })}
                 onPaste={event => {
                   if (handlePaste(event.clipboardData.getData('text'))) {
@@ -102,7 +104,7 @@ export function EnvironmentVariablesEditorRow({
                 </InputGroupButton>
               </InputGroupAddon>
             </InputGroup>
-            {valueError && <FieldBlock.ErrorMsg>{valueError}</FieldBlock.ErrorMsg>}
+            {valueError && <FieldBlock.ErrorMsg name={valueFieldName}>{valueError}</FieldBlock.ErrorMsg>}
           </FieldBlock.Column>
         </FieldBlock.Layout>
       </div>

@@ -1,10 +1,14 @@
 export { DataPanel } from './data-panel';
 export type { DataPanelProps } from './data-panel-root';
 export type { DataPanelHeaderProps } from './data-panel-header';
+export type { DataPanelHeaderContentProps } from './data-panel-header-content';
+export type { DataPanelHeaderActionsProps } from './data-panel-header-actions';
 export type { DataPanelHeadingProps } from './data-panel-heading';
+export type { DataPanelMetadataProps, DataPanelMetaProps } from './data-panel-metadata';
 export type { DataPanelCloseButtonProps } from './data-panel-close-button';
 export type { DataPanelNextPrevNavProps } from './data-panel-next-prev-nav';
 export type { DataPanelLoadingDataProps } from './data-panel-loading-data';
 export type { DataPanelNoDataProps } from './data-panel-no-data';
 export type { DataPanelContentProps } from './data-panel-content';
 export type { DataPanelSectionHeadingProps } from './data-panel-section-heading';
+export type { DataPanelCopyIdProps } from './data-panel-copy-id';

@@ -33,13 +33,13 @@ export function SectionCard({
       className={cn(
         'overflow-hidden rounded-2xl border',
         fillHeight && 'flex h-full flex-col',
-        danger ? 'border-accent2/25' : 'border-border1',
+        danger ? 'border-accent2/25' : 'border-border',
         className,
       )}
     >
       <div
         className={cn(
-          'flex flex-col gap-3 px-7 pt-7 pb-6 sm:flex-row sm:items-start sm:justify-between sm:gap-6',
+          'flex flex-col gap-3 px-4 pt-4 pb-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4',
           danger ? 'bg-accent2/8' : 'bg-surface-overlay-soft',
         )}
       >
@@ -50,7 +50,7 @@ export function SectionCard({
       </div>
       <div
         className={cn(
-          'min-w-0 px-7 pt-6 pb-7',
+          'min-w-0 px-4 pt-3 pb-4',
           fillHeight && 'flex-1',
           danger ? 'bg-accent2/4' : null,
           contentClassName,

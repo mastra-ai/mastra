@@ -1,26 +1,57 @@
+import type { DatasetExperiment } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import type { ReviewItem } from '../components/review-item-card';
-import { useExperimentsForDatasetFilter } from '@/domains/experiments/hooks/use-experiments-for-dataset-filter';
+import {
+  useExperimentsForDatasetFilter,
+  type ExperimentTargetFilter,
+} from '@/domains/experiments/hooks/use-experiments-for-dataset-filter';
 
 type ReviewStatus = 'needs-review' | 'complete';
 
-export interface ReviewItemsOptions {
+export interface ReviewItemsOptions extends ExperimentTargetFilter {
   /** When set, only this experiment's results are loaded; otherwise every experiment in the project. */
   experimentId?: string;
+  /** Explicit source owned by the caller; an empty list disables discovery too. */
+  experiments?: DatasetExperiment[];
+  isLoadingExperiments?: boolean;
 }
 
 /**
- * Loads experiment results with the given review status, across the project or scoped to one experiment.
+ * Loads experiment results with the given review status, across the project, scoped to a target,
+ * or scoped to one experiment.
  */
-const useReviewItemsByStatus = (status: ReviewStatus, experimentId: string | undefined) => {
+const useReviewItemsByStatus = (
+  status: ReviewStatus,
+  {
+    experimentId,
+    targetType,
+    targetId,
+    experiments: suppliedExperiments,
+    isLoadingExperiments = false,
+  }: ReviewItemsOptions,
+) => {
   const client = useMastraClient();
-  const { data: experimentsData, isLoading: isLoadingExperiments } = useExperimentsForDatasetFilter(undefined);
-  const experiments = experimentsData?.experiments;
+  const hasSuppliedExperiments = suppliedExperiments !== undefined;
+  const { data: experimentsData, isLoading: isDiscoveringExperiments } = useExperimentsForDatasetFilter(
+    undefined,
+    { targetType, targetId },
+    { enabled: !hasSuppliedExperiments },
+  );
+  const experiments = hasSuppliedExperiments ? suppliedExperiments : experimentsData?.experiments;
+  const isLoadingSource = hasSuppliedExperiments ? isLoadingExperiments : isDiscoveringExperiments;
   const scopedExperiments = experimentId ? experiments?.filter(exp => exp.id === experimentId) : experiments;
 
   const query = useQuery({
-    queryKey: ['review-items', status, experimentId ?? 'all', scopedExperiments?.map(e => e.id)],
+    queryKey: [
+      'review-items',
+      status,
+      experimentId ?? 'all',
+      hasSuppliedExperiments ? 'supplied' : 'discovered',
+      hasSuppliedExperiments ? undefined : targetType || 'all',
+      hasSuppliedExperiments ? undefined : targetId || 'all',
+      scopedExperiments?.map(e => [e.datasetId, e.id]),
+    ],
     queryFn: async () => {
       if (!scopedExperiments || scopedExperiments.length === 0) return [] as ReviewItem[];
 
@@ -61,13 +92,11 @@ const useReviewItemsByStatus = (status: ReviewStatus, experimentId: string | und
 
   // The results query is disabled until experiments arrive, so its own `isLoading`
   // is false during that window; surface the upstream load to avoid an empty flash.
-  return { ...query, isLoading: query.isLoading || isLoadingExperiments };
+  return { ...query, isLoading: query.isLoading || isLoadingSource };
 };
 
-/** Loads persisted review items (status='needs-review'), project-wide or for one experiment. */
-export const useReviewItems = ({ experimentId }: ReviewItemsOptions = {}) =>
-  useReviewItemsByStatus('needs-review', experimentId);
+/** Loads persisted review items (status='needs-review'), project-wide, per target or for one experiment. */
+export const useReviewItems = (options: ReviewItemsOptions = {}) => useReviewItemsByStatus('needs-review', options);
 
-/** Loads completed review items (status='complete'), project-wide or for one experiment. */
-export const useCompletedItems = ({ experimentId }: ReviewItemsOptions = {}) =>
-  useReviewItemsByStatus('complete', experimentId);
+/** Loads completed review items (status='complete'), project-wide, per target or for one experiment. */
+export const useCompletedItems = (options: ReviewItemsOptions = {}) => useReviewItemsByStatus('complete', options);

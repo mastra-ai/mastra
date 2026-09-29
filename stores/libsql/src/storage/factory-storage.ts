@@ -380,8 +380,13 @@ class LibSQLFactoryStorageOps implements FactoryStorageOps {
     const filter = this.#buildWhere(schema, where);
     const sql = `UPDATE "${schema.name}" SET ${columns.map(c => `"${c}" = ?`).join(', ')} WHERE ${filter.sql}`;
     const args = [...columns.map(column => this.#serialize(this.#column(schema, column), set[column])), ...filter.args];
-    const result = await this.#client.execute({ sql, args });
-    return result.rowsAffected;
+    try {
+      const result = await this.#client.execute({ sql, args });
+      return result.rowsAffected;
+    } catch (error) {
+      if (isUniqueViolation(error)) throw new UniqueViolationError(collection, { cause: error });
+      throw error;
+    }
   }
 
   async updateMany(collection: string, where: CollectionWhere, set: Record<string, unknown>): Promise<number> {

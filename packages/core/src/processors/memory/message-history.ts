@@ -1,8 +1,14 @@
 import type { OutputResult, Processor, ProcessorSpanPhase } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
 import { isTransientSignalMessage } from '../../agent/signals';
-import { parseMemoryRequestContext } from '../../memory';
-import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
+import { noteThreadMessagesSaved } from '../../agent/thread-saves';
+import { loadMessageHistory, parseMemoryRequestContext } from '../../memory';
+import { getMemoryTokenBoundary, isAfterMemoryTokenBoundary } from '../../memory/message-history-config';
+import {
+  removeWorkingMemoryTags,
+  removeWorkingMemoryToolInvocationParts,
+  removeWorkingMemoryToolInvocations,
+} from '../../memory/working-memory-utils';
 import { SpanType } from '../../observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '../../observability';
 import type { RequestContext } from '../../request-context';
@@ -13,7 +19,9 @@ import type { MemoryStorage } from '../../storage';
  */
 export interface MessageHistoryOptions {
   storage: MemoryStorage;
-  lastMessages?: number;
+  lastMessages?: number | false;
+  tokenLimit?: { maxTokens: number; atMaxRemoveTokens: number };
+  tokenCounter?: { countMessage(message: MastraDBMessage): number | Promise<number> };
 }
 
 /**
@@ -55,11 +63,15 @@ export class MessageHistory implements Processor {
     operationType: MEMORY_PHASE_OPERATION[phase] ?? 'recall',
   });
   private storage: MemoryStorage;
-  private lastMessages?: number;
+  private lastMessages?: number | false;
+  private tokenLimit?: MessageHistoryOptions['tokenLimit'];
+  private tokenCounter?: MessageHistoryOptions['tokenCounter'];
 
   constructor(options: MessageHistoryOptions) {
     this.storage = options.storage;
     this.lastMessages = options.lastMessages;
+    this.tokenLimit = options.tokenLimit;
+    this.tokenCounter = options.tokenCounter;
   }
 
   /**
@@ -125,8 +137,30 @@ export class MessageHistory implements Processor {
 
     try {
       // 1. Fetch historical messages from storage (as DB format)
-      const cacheKey = `history:${threadId}:${resourceId ?? ''}:${this.lastMessages ?? 'all'}`;
+      const storedBoundary = getMemoryTokenBoundary(parseMemoryRequestContext(requestContext)?.thread);
+      const boundary =
+        this.tokenLimit &&
+        storedBoundary?.maxTokens === this.tokenLimit.maxTokens &&
+        storedBoundary.atMaxRemoveTokens === this.tokenLimit.atMaxRemoveTokens
+          ? storedBoundary
+          : undefined;
+      const cacheKey = `history:${threadId}:${resourceId ?? ''}:${this.lastMessages ?? 'all'}:${JSON.stringify(boundary)}`;
       const loadMessages = async () => {
+        if (this.tokenLimit) {
+          const result = await loadMessageHistory({
+            storage: this.storage,
+            threadId,
+            resourceId,
+            boundary,
+            maxMessages: typeof this.lastMessages === 'number' ? this.lastMessages : undefined,
+            maxTokens: this.tokenLimit.maxTokens,
+            atMaxRemoveTokens: this.tokenLimit.atMaxRemoveTokens,
+            tokenCounter: this.tokenCounter,
+            includeOverflow: true,
+          });
+          return [...result.overflow, ...result.messages].reverse();
+        }
+
         const result = await this.storage.listMessages({
           threadId,
           resourceId,
@@ -142,30 +176,15 @@ export class MessageHistory implements Processor {
 
       // 2. Filter out system messages (they should never be stored in DB)
       const filteredMessages = messages.filter((msg: MastraDBMessage) => {
-        return msg.role !== 'system';
+        return msg.role !== 'system' && (!boundary || isAfterMemoryTokenBoundary(msg, boundary));
       });
 
-      // 3. Merge with incoming messages and messages already in MessageList (avoiding duplicates by ID)
-      // This includes messages added by previous processors like SemanticRecall
-      const existingMessages = messageList.get.all.db();
-      const messageIds = new Set(existingMessages.map((m: MastraDBMessage) => m.id).filter(Boolean));
-      const uniqueHistoricalMessages = filteredMessages.filter((m: MastraDBMessage) => !m.id || !messageIds.has(m.id));
+      // 3. Add stored history in chronological order. MessageList layers any matching
+      // input copy onto the stored message so memory remains the authoritative base.
+      const chronologicalMessages = filteredMessages.reverse();
 
-      // Reverse to chronological order (oldest first) since we fetched DESC
-      const chronologicalMessages = uniqueHistoricalMessages.reverse();
-
-      if (chronologicalMessages.length === 0) {
-        span?.update({ attributes: { messageCount: 0 } });
-        return messageList;
-      }
-
-      // Add historical messages with source: 'memory'
       for (const msg of chronologicalMessages) {
-        if (msg.role === 'system') {
-          continue; // memory should not store system messages
-        } else {
-          messageList.add(msg, 'memory');
-        }
+        messageList.add(msg, 'memory');
       }
 
       span?.update({ attributes: { messageCount: chronologicalMessages.length } });
@@ -207,14 +226,14 @@ export class MessageHistory implements Processor {
         }
 
         if (Array.isArray(newMessage.content?.parts)) {
-          newMessage.content.parts = newMessage.content.parts
+          if (Array.isArray(newMessage.content.toolInvocations)) {
+            newMessage.content.toolInvocations = removeWorkingMemoryToolInvocations(newMessage.content.toolInvocations);
+          }
+          // Filter out updateWorkingMemory tool invocations (hide args from message history)
+          newMessage.content.parts = removeWorkingMemoryToolInvocationParts(newMessage.content.parts)
             .map(p => {
               // Filter out streaming tool calls (partial-call is an intermediate state during streaming)
               if (p.type === `tool-invocation` && p.toolInvocation.state === `partial-call`) {
-                return null;
-              }
-              // Filter out updateWorkingMemory tool invocations (hide args from message history)
-              if (p.type === `tool-invocation` && p.toolInvocation.toolName === `updateWorkingMemory`) {
                 return null;
               }
               // Strip working memory tags from text parts
@@ -267,7 +286,13 @@ export class MessageHistory implements Processor {
 
     const newInput = messageList.get.input.db();
     const newOutput = messageList.get.response.db();
-    const messagesToSave = [...newInput, ...newOutput];
+    // Apply transcript redaction before persisting: this path bypasses
+    // drainUnsavedMessages(), and a background tool result may sit in the
+    // list as a raw payload whose transcript transform lives only in
+    // providerMetadata. Persisting it untransformed would leak the raw
+    // payload to storage whenever this save lands after the redacting
+    // save-queue flush (last-writer-wins on the message id).
+    const messagesToSave = messageList.transformMessagesForTranscript([...newInput, ...newOutput]);
 
     if (messagesToSave.length === 0) {
       return messageList;
@@ -314,6 +339,8 @@ export class MessageHistory implements Processor {
       return;
     }
 
+    const savedAt = Date.now();
+
     // Ensure thread exists (create if needed) before saving messages.
     // Nothing to write when it already exists: re-writing the row we just read
     // would clobber a title generated concurrently with this save.
@@ -334,5 +361,6 @@ export class MessageHistory implements Processor {
 
     // Persist messages after thread is guaranteed to exist
     await this.storage.saveMessages({ messages: filtered });
+    noteThreadMessagesSaved({ threadId, resourceId, savedAt });
   }
 }

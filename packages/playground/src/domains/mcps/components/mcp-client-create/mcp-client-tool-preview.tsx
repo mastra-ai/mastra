@@ -5,6 +5,7 @@ import {
   EntityIcon,
   EntityName,
 } from '@mastra/playground-ui/components/Entity';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -34,9 +35,7 @@ export function MCPClientToolPreview({
   if (serverType === 'stdio') {
     return (
       <EmptyState>
-        <Txt className="text-neutral3">
-          Tool preview is available for HTTP servers. Stdio servers cannot be previewed.
-        </Txt>
+        <Txt tone="muted">Tool preview is available for HTTP servers. Stdio servers cannot be previewed.</Txt>
       </EmptyState>
     );
   }
@@ -44,9 +43,7 @@ export function MCPClientToolPreview({
   if (!url.trim()) {
     return (
       <EmptyState>
-        <Txt className="text-neutral3">
-          Enter a URL and click &quot;Try to connect&quot; to preview available tools.
-        </Txt>
+        <Txt tone="muted">Enter a URL and click &quot;Try to connect&quot; to preview available tools.</Txt>
       </EmptyState>
     );
   }
@@ -54,7 +51,7 @@ export function MCPClientToolPreview({
   if (tryConnect.isIdle) {
     return (
       <EmptyState>
-        <Txt className="text-neutral3">Click &quot;Try to connect&quot; to preview available tools.</Txt>
+        <Txt tone="muted">Click &quot;Try to connect&quot; to preview available tools.</Txt>
       </EmptyState>
     );
   }
@@ -64,18 +61,20 @@ export function MCPClientToolPreview({
       {tryConnect.isPending && (
         <div className="flex items-center gap-2">
           <Spinner className="h-3 w-3" />
-          <Txt className="text-neutral3">Connecting...</Txt>
+          <Txt tone="muted">Connecting...</Txt>
         </div>
       )}
 
       {tryConnect.isError && (
-        <Txt variant="ui-sm" className="text-accent2">
-          {tryConnect.error instanceof Error ? tryConnect.error.message : 'Connection failed'}
-        </Txt>
+        <div role="alert">
+          <Notice variant="destructive">
+            {tryConnect.error instanceof Error ? tryConnect.error.message : 'Connection failed'}
+          </Notice>
+        </div>
       )}
 
       {tryConnect.isSuccess && tryConnect.data.tools.length === 0 && (
-        <Txt className="text-neutral3">Connected successfully but no tools were found.</Txt>
+        <Txt tone="muted">Connected successfully but no tools were found.</Txt>
       )}
 
       {tryConnect.isSuccess && tryConnect.data.tools.length > 0 && (
@@ -91,7 +90,7 @@ export function MCPClientToolPreview({
 }
 
 function EmptyState({ children }: { children: React.ReactNode }) {
-  return <div className="flex h-full items-center justify-center p-8 text-center">{children}</div>;
+  return <div className="flex h-full items-center justify-center p-5 text-center">{children}</div>;
 }
 
 function ToolList({
@@ -109,16 +108,16 @@ function ToolList({
 
   return (
     <div className="overflow-y-auto p-5">
-      <div className="text-neutral6 flex items-center gap-2">
-        <Icon size="lg" className="bg-surface4 rounded-md p-1">
+      <div className="flex items-center gap-2 text-foreground">
+        <Icon size="lg" className="rounded-md bg-muted p-1">
           <McpServerIcon />
         </Icon>
-        <Txt variant="header-md" as="h2" className="font-medium">
+        <Txt variant="heading" as="h2">
           Available Tools ({selectedCount}/{tools.length} selected)
         </Txt>
       </div>
 
-      <div className="flex flex-col gap-2 pt-6">
+      <div className="flex flex-col gap-2 pt-4">
         {tools.map(tool => {
           const isSelected = tool.name in selectedTools;
           const isDisabled = !onDescriptionChange || !isSelected;
@@ -135,8 +134,8 @@ function ToolList({
                     type="text"
                     disabled={isDisabled}
                     className={cn(
-                      'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
-                      !isDisabled && 'border-border1 border-dashed',
+                      'block w-full appearance-none border border-transparent bg-transparent text-muted-foreground',
+                      !isDisabled && 'border-dashed border-border',
                     )}
                     value={
                       isSelected

@@ -8,6 +8,7 @@ import type {
   WorkflowDefinition,
 } from '@mastra/core/storage';
 
+import { schemaNamePrefix } from '../../../shared/schema-name';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
 import { getSchemaName, getTableName, parseJsonResilient } from '../utils';
@@ -75,7 +76,7 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
   }
 
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const schemaPrefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     return [
       {
         name: `${schemaPrefix}idx_workflow_definitions_status`,

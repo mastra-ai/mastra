@@ -89,7 +89,7 @@ jobs:
 
       - name: Cache turbo build setup
         if: ${{ env.TURBO_TOKEN == '' }}
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ github.sha }}
@@ -229,6 +229,10 @@ jobs:
             file.startsWith('packages/playground-ui/') ||
             file.startsWith('server-adapters/hono/') ||
             file.startsWith('packages/server/') ||
+            // e2e-mcp-compat: the core MCP/tool contract must keep published @mastra/mcp 1.x working.
+            file.startsWith('packages/core/src/mcp/') ||
+            file.startsWith('packages/core/src/tools/') ||
+            file.startsWith('packages/mcp/integration-tests/') ||
             file === '.github/workflows/e2e-tests.yml' ||
             file === 'pnpm-lock.yaml'
           );
@@ -451,7 +455,7 @@ jobs:
 
       - name: Cache turbo build setup
         if: ${{ env.TURBO_TOKEN == '' }}
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ github.sha }}

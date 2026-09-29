@@ -3,6 +3,8 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { SearchIcon } from 'lucide-react';
 import { memo, useMemo, useState } from 'react';
@@ -47,7 +49,7 @@ const ToolkitFilterRow = memo(
           data-testid={`${TEST_ID_PREFIX}-filter-item-${item.id}`}
           data-checked={checked ? 'true' : 'false'}
           className={cn(
-            'flex min-w-0 flex-1 cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-ui-sm text-neutral6 transition-colors hover:bg-surface4',
+            'flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-caption text-foreground select-none hover:bg-fill-subtle',
             disabled && 'cursor-not-allowed opacity-60',
           )}
         >
@@ -144,9 +146,10 @@ const ProviderToolkitSection = ({
   return (
     <div className="flex flex-col gap-0.5">
       <Txt
-        variant="ui-xs"
+        variant="meta"
+        tone="muted"
         data-testid={`tools-provider-section-${provider.providerId}`}
-        className="text-neutral3 px-2 pt-1 tracking-wide uppercase"
+        className="px-2 pt-1 tracking-wide uppercase"
       >
         {provider.providerName}
       </Txt>
@@ -209,34 +212,32 @@ export const ToolkitFilterPane = ({
 
   return (
     <div
-      className="border-border1 flex h-full min-h-0 flex-col gap-3 border-r px-6 py-6"
+      className="flex h-full min-h-0 flex-col gap-3 border-r border-border px-4 py-4"
       data-testid={`${TEST_ID_PREFIX}-filter`}
     >
-      <div className="bg-surface3 shrink-0 rounded-full" data-testid={`${TEST_ID_PREFIX}-filter-search`}>
-        <InputGroup variant="outline" size="lg">
-          <InputGroupAddon align="inline-start">
-            <SearchIcon />
-          </InputGroupAddon>
-          <InputGroupInput
-            type="search"
-            aria-label="Filter toolkits"
-            placeholder="Filter toolkits..."
-            onChange={event => setSearch(event.target.value)}
-          />
-        </InputGroup>
-      </div>
+      <InputGroup size="md" className="flex-none" data-testid={`${TEST_ID_PREFIX}-filter-search`}>
+        <InputGroupAddon align="inline-start">
+          <SearchIcon />
+        </InputGroupAddon>
+        <InputGroupInput
+          type="search"
+          aria-label="Filter toolkits"
+          placeholder="Filter toolkits..."
+          onChange={event => setSearch(event.target.value)}
+        />
+      </InputGroup>
 
-      <div className="text-ui-xs flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2 text-meta">
         <button
           type="button"
           onClick={onSelectAll}
           disabled={disabled}
           data-testid={`${TEST_ID_PREFIX}-filter-select-all`}
-          className="text-neutral3 hover:text-neutral6 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+          className={cn(quietTextHover, controlStateColorTransition, 'disabled:cursor-not-allowed disabled:opacity-60')}
         >
           Select all
         </button>
-        <span className="text-neutral2" aria-hidden>
+        <span className="text-placeholder" aria-hidden>
           ·
         </span>
         <button
@@ -244,7 +245,7 @@ export const ToolkitFilterPane = ({
           onClick={onClearAll}
           disabled={disabled}
           data-testid={`${TEST_ID_PREFIX}-filter-clear-all`}
-          className="text-neutral3 hover:text-neutral6 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+          className={cn(quietTextHover, controlStateColorTransition, 'disabled:cursor-not-allowed disabled:opacity-60')}
         >
           Clear all
         </button>

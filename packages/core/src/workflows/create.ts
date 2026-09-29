@@ -20,8 +20,29 @@ import type { CreateWorkflowParams, DefaultEngineType, InferSchemaOutput } from 
 import { Workflow } from './workflow';
 
 /**
- * Create a workflow, auto-promoting to the evented engine when a `schedule`
- * is declared.
+ * Creates a workflow for composing typed steps. Declaring a `schedule`
+ * automatically selects the evented engine.
+ *
+ * @example
+ * `yourStep` is a configured step with string input and output.
+ * ```typescript
+ * import { createWorkflow } from '@mastra/core/workflows';
+ * import { z } from 'zod';
+ *
+ * const workflow = createWorkflow({
+ *   id: 'greeting',
+ *   inputSchema: z.string(),
+ *   outputSchema: z.string(),
+ * }).then(yourStep).commit();
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/core/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Workflow documentation](https://mastra.ai/docs/workflows/overview)
+ * if packaged docs are unavailable.
  */
 export function createWorkflow<
   TWorkflowId extends string = string,

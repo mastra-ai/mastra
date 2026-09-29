@@ -13,7 +13,7 @@ export function getAllDatasetTags(datasets: DatasetRecord[]): string[] {
   for (const dataset of datasets) {
     if (!Array.isArray(dataset.tags)) continue;
 
-    for (const tag of dataset.tags as string[]) {
+    for (const tag of dataset.tags) {
       tagSet.add(tag);
     }
   }

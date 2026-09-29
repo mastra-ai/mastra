@@ -24,7 +24,7 @@ import {
 } from './extract-tasks';
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
 import { convertSignalDataToBase64String } from './signal-data';
-import type { ClientToolsInput, ModelSettings } from './types';
+import type { ClientToolsInput, ClientToolsResolver, ModelSettings } from './types';
 
 const extractPendingToolApprovalIdsFromMessages = (messages: MastraDBMessage[], runId?: string) => {
   const pendingToolApprovalIds = new Set<string>();
@@ -199,6 +199,14 @@ export interface MastraChatProps {
    * Defaults to `false`; set to `true` to opt into thread signals.
    */
   enableThreadSignals?: boolean;
+  /** Override the legacy stream route for editor-owned hidden agents. */
+  streamPath?: string;
+  /**
+   * Load stored thread messages through the thread subscription instead of
+   * `initialMessages`. The subscription sends them as one `thread-history`
+   * chunk and skips run parts already covered by it. Requires thread signals.
+   */
+  withInitialHistory?: boolean | { perPage?: number };
 }
 
 interface SharedArgs {
@@ -221,11 +229,13 @@ export type SendMessageArgs = { message: string; coreUserMessages?: CoreUserMess
 export type GenerateArgs = SharedArgs & {
   onFinish?: (messages: MastraDBMessage[]) => Promise<void>;
   clientTools?: ClientToolsInput;
+  clientToolsResolver?: ClientToolsResolver;
 };
 
 export type StreamArgs = SharedArgs & {
   onChunk?: (chunk: ChunkType) => Promise<void>;
   clientTools?: ClientToolsInput;
+  clientToolsResolver?: ClientToolsResolver;
   signalId?: string;
   /**
    * Client-generated correlation id stamped on the optimistic pending bubble
@@ -299,6 +309,8 @@ export const useChat = ({
   onSignalEcho,
   onThreadSignalsUnsupported,
   enableThreadSignals = false,
+  streamPath,
+  withInitialHistory,
 }: MastraChatProps) => {
   const threadSignalsDisabled = enableThreadSignals === false;
   const _currentRunId = useRef<string | undefined>(undefined);
@@ -336,6 +348,12 @@ export const useChat = ({
 
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);
+  const [subscriptionHistory, setSubscriptionHistory] = useState<
+    { key: string; messages: MastraDBMessage[] } | undefined
+  >(undefined);
+  const historyKey = `${agentId}:${resourceId ?? ''}:${threadId ?? ''}`;
+  const hydratedMessages =
+    withInitialHistory && subscriptionHistory?.key === historyKey ? subscriptionHistory.messages : initialMessages;
 
   const lastHydration = useRef<
     | {
@@ -352,9 +370,9 @@ export const useChat = ({
     const previous = lastHydration.current;
     const sameThread =
       previous?.agentId === agentId && previous.resourceId === resourceId && previous.threadId === threadId;
-    if (sameThread && previous.initialMessages === initialMessages) return;
-    const formattedMessages = resolveInitialMessages(initialMessages ?? []);
-    lastHydration.current = { agentId, resourceId, threadId, initialMessages, formattedMessages };
+    if (sameThread && previous.initialMessages === hydratedMessages) return;
+    const formattedMessages = resolveInitialMessages(hydratedMessages ?? []);
+    lastHydration.current = { agentId, resourceId, threadId, initialMessages: hydratedMessages, formattedMessages };
 
     if (sameThread) {
       // Accumulation replaces changed messages immutably. Keep those local edits
@@ -392,7 +410,7 @@ export const useChat = ({
     pendingToolApprovalIdsRef.current = pendingApprovals;
     setIsAwaitingToolApproval(pendingApprovals.size > 0);
     _currentRunId.current = liveRunId.current ?? extractRunIdFromMessages(formattedMessages);
-  }, [agentId, resourceId, threadId, initialMessages, isRunning, isAwaitingToolApproval]);
+  }, [agentId, resourceId, threadId, hydratedMessages, isRunning, isAwaitingToolApproval]);
 
   useEffect(() => {
     _activeContinuation.current = {
@@ -487,7 +505,21 @@ export const useChat = ({
       // A delayed terminal event must not finish another run's message, clear
       // its approvals, or trigger its completion callback.
       if (isTerminal && liveRunId.current && chunk.runId !== liveRunId.current) return;
-      setMessages(prev => accumulateChunk({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
+      const runId = 'runId' in chunk && typeof chunk.runId === 'string' ? chunk.runId : undefined;
+      setMessages(prev => {
+        const metadata = { mode: 'stream' as const, runId };
+        const next = accumulateChunk({ chunk, conversation: prev, metadata });
+        // A resumed response can already exist in history; explicit framing
+        // establishes ownership even when the accumulator deduplicates it.
+        if ((chunk.type === 'start' || chunk.type === 'step-start') && chunk.payload?.messageId && runId) {
+          return next.map(message =>
+            message.id === chunk.payload.messageId && message.role === 'assistant'
+              ? { ...message, content: { ...message.content, metadata: { ...message.content.metadata, ...metadata } } }
+              : message,
+          );
+        }
+        return next;
+      });
 
       const streamedTasks = extractTasksFromToolResultChunk(chunk) ?? extractTasksFromSignalChunk(chunk);
       if (streamedTasks !== undefined) {
@@ -521,6 +553,17 @@ export const useChat = ({
           pendingToolApprovalIdsRef.current.add(toolCallId);
           setIsAwaitingToolApproval(true);
         }
+        // Some runs (e.g. Inngest durable agents) emit no `start` chunk, so the
+        // approval chunk is the only place the run ID reaches the client.
+        if (runId) {
+          if (!liveRunId.current || liveRunFinished.current) {
+            liveRunId.current = runId;
+            liveRunFinished.current = false;
+          }
+          if (liveRunId.current === runId) {
+            _currentRunId.current = runId;
+          }
+        }
         setIsRunning(false);
       }
 
@@ -539,7 +582,7 @@ export const useChat = ({
 
   const ensureThreadSubscription = useCallback(
     async ({ threadId, resourceId }: { threadId: string; resourceId?: string }) => {
-      const subscriptionKey = `${agentId}:${resourceId ?? ''}:${threadId}`;
+      const subscriptionKey = `${agentId}:${resourceId ?? ''}:${threadId}:${streamPath ?? ''}`;
       if (_threadSubscriptionKeyRef.current === subscriptionKey && _threadSubscriptionPromiseRef.current) {
         await _threadSubscriptionPromiseRef.current;
         return;
@@ -564,10 +607,10 @@ export const useChat = ({
         ...baseClient!.options,
         abortSignal: subscriptionAbort.signal,
       });
-      const subscriptionAgent = clientWithAbort.getAgent(agentId);
+      const subscriptionAgent = clientWithAbort.getAgent(agentId, undefined, { stream: streamPath });
 
       _threadSubscriptionPromiseRef.current = subscriptionAgent
-        .subscribeToThread({ resourceId, threadId })
+        .subscribeToThread({ resourceId, threadId, ...(withInitialHistory ? { withInitialHistory } : {}) })
         .then(response => {
           const subscription = response;
           if (_threadSubscriptionAbortRef.current !== subscriptionAbort) {
@@ -578,7 +621,31 @@ export const useChat = ({
           _threadSubscriptionRef.current = subscription;
           void subscription
             .processDataStream({
-              onChunk: chunk => processStreamChunk(chunk),
+              onChunk: chunk => {
+                if (chunk.type === 'thread-history') {
+                  // Merge history into `messages` now, as a queued update, so the
+                  // live chunks right behind it accumulate onto the stored parts.
+                  const history = resolveInitialMessages(chunk.payload.messages);
+                  const previousById = new Map(
+                    (lastHydration.current?.formattedMessages ?? []).map(message => [message.id, message]),
+                  );
+                  setMessages(current => {
+                    const live = current.filter(message => previousById.get(message.id) !== message);
+                    const liveById = new Map(live.map(message => [message.id, message]));
+                    const historyIds = new Set(history.map(message => message.id));
+                    return [
+                      ...history.map(message => liveById.get(message.id) ?? message),
+                      ...live.filter(message => !historyIds.has(message.id)),
+                    ];
+                  });
+                  setSubscriptionHistory({
+                    key: `${agentId}:${resourceId ?? ''}:${threadId}`,
+                    messages: chunk.payload.messages,
+                  });
+                  return;
+                }
+                return processStreamChunk(chunk);
+              },
             })
             .catch(error => {
               if (!isAbortError(error)) {
@@ -613,7 +680,15 @@ export const useChat = ({
 
       await _threadSubscriptionPromiseRef.current;
     },
-    [agentId, baseClient, closeThreadSubscription, markThreadSignalsUnsupported, processStreamChunk],
+    [
+      agentId,
+      baseClient,
+      closeThreadSubscription,
+      markThreadSignalsUnsupported,
+      processStreamChunk,
+      streamPath,
+      withInitialHistory,
+    ],
   );
 
   useEffect(() => {
@@ -644,6 +719,7 @@ export const useChat = ({
     onFinish,
     tracingOptions,
     clientTools,
+    clientToolsResolver,
   }: GenerateArgs) => {
     const {
       frequencyPenalty,
@@ -672,7 +748,7 @@ export const useChat = ({
       abortSignal: signal,
     });
 
-    const agent = clientWithAbort.getAgent(agentId);
+    const agent = clientWithAbort.getAgent(agentId, undefined, { stream: streamPath });
 
     const runId = uuid();
     _currentRunId.current = runId;
@@ -698,6 +774,7 @@ export const useChat = ({
       tracingOptions,
       requireToolApproval,
       clientTools: resolvedClientTools,
+      clientToolsResolver,
     });
 
     // Check if suspended for tool approval
@@ -741,6 +818,7 @@ export const useChat = ({
     signal,
     tracingOptions,
     clientTools,
+    clientToolsResolver,
     signalId,
     clientMessageId,
   }: StreamArgs) => {
@@ -799,7 +877,7 @@ export const useChat = ({
       abortSignal: internalAbort.signal,
     });
 
-    const agent = clientWithAbort.getAgent(agentId);
+    const agent = clientWithAbort.getAgent(agentId, undefined, { stream: streamPath });
 
     const streamWithLegacyRoute = async () => {
       const runId = uuid();
@@ -825,6 +903,7 @@ export const useChat = ({
         requireToolApproval,
         tracingOptions,
         clientTools: resolvedClientTools,
+        clientToolsResolver,
       });
 
       _onChunk.current = onChunk;
@@ -877,6 +956,8 @@ export const useChat = ({
       providerOptions: providerOptions as any,
       requireToolApproval,
       tracingOptions,
+      clientTools: resolvedClientTools,
+      clientToolsResolver,
     };
 
     try {
@@ -891,6 +972,7 @@ export const useChat = ({
             ...signalContinuationOptions,
             requestContext: requestContextRecord,
             clientTools: resolvedClientTools,
+            clientToolsResolver,
           },
         },
       });
@@ -964,9 +1046,10 @@ export const useChat = ({
       abortSignal: signal,
     });
 
-    const agent = clientWithAbort.getAgent(agentId);
+    const agent = clientWithAbort.getAgent(agentId, undefined, { stream: streamPath });
 
     const runId = uuid();
+    _currentRunId.current = runId;
 
     const response = await agent.network(coreUserMessages, {
       model,
@@ -994,7 +1077,9 @@ export const useChat = ({
     // consumer for side-effects (OM, working memory, thread list, errors).
     await response.processDataStream({
       onChunk: async (chunk: NetworkChunkType) => {
-        setMessages(prev => accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network' } }));
+        setMessages(prev =>
+          accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network', runId } }),
+        );
         void onNetworkChunk?.(chunk);
       },
     });
@@ -1034,7 +1119,7 @@ export const useChat = ({
     setIsRunning(true);
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'approved' } }));
 
-    const agent = baseClient.getAgent(agentId);
+    const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
     if (_threadSubscriptionKeyRef.current && threadId) {
       try {
         await agent.sendToolApproval({
@@ -1104,7 +1189,7 @@ export const useChat = ({
 
     setIsRunning(true);
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'declined' } }));
-    const agent = baseClient.getAgent(agentId);
+    const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
     if (_threadSubscriptionKeyRef.current && threadId) {
       try {
         await agent.sendToolApproval({
@@ -1158,7 +1243,7 @@ export const useChat = ({
     setIsRunning(true);
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'approved' } }));
 
-    const agent = baseClient.getAgent(agentId);
+    const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
     const response = await agent.approveToolCallGenerate({
       runId: currentRunId,
       toolCallId,
@@ -1185,7 +1270,7 @@ export const useChat = ({
     setIsRunning(true);
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'declined' } }));
 
-    const agent = baseClient.getAgent(agentId);
+    const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
     const response = await agent.declineToolCallGenerate({
       runId: currentRunId,
       toolCallId,
@@ -1210,13 +1295,14 @@ export const useChat = ({
         '[approveNetworkToolCall] approveNetworkToolCall can only be called after a network stream has started',
       );
 
+    _currentRunId.current = networkRunId;
     setIsRunning(true);
     setNetworkToolCallApprovals(prev => ({
       ...prev,
       [runId ? `${runId}-${toolName}` : toolName]: { status: 'approved' },
     }));
 
-    const agent = baseClient.getAgent(agentId);
+    const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
     const response = await agent.approveNetworkToolCall({
       runId: networkRunId,
       ...continuation,
@@ -1224,7 +1310,9 @@ export const useChat = ({
 
     await response.processDataStream({
       onChunk: async (chunk: NetworkChunkType) => {
-        setMessages(prev => accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network' } }));
+        setMessages(prev =>
+          accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network', runId: networkRunId } }),
+        );
         void onNetworkChunk?.(chunk);
       },
     });
@@ -1243,13 +1331,14 @@ export const useChat = ({
         '[declineNetworkToolCall] declineNetworkToolCall can only be called after a network stream has started',
       );
 
+    _currentRunId.current = networkRunId;
     setIsRunning(true);
     setNetworkToolCallApprovals(prev => ({
       ...prev,
       [runId ? `${runId}-${toolName}` : toolName]: { status: 'declined' },
     }));
 
-    const agent = baseClient.getAgent(agentId);
+    const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
     const response = await agent.declineNetworkToolCall({
       runId: networkRunId,
       ...continuation,
@@ -1257,7 +1346,9 @@ export const useChat = ({
 
     await response.processDataStream({
       onChunk: async (chunk: NetworkChunkType) => {
-        setMessages(prev => accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network' } }));
+        setMessages(prev =>
+          accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network', runId: networkRunId } }),
+        );
         void onNetworkChunk?.(chunk);
       },
     });
@@ -1267,6 +1358,7 @@ export const useChat = ({
   };
 
   const sendMessage = async ({ mode = 'stream', ...args }: SendMessageArgs) => {
+    if (!isRunning && !isAwaitingToolApproval) _currentRunId.current = undefined;
     const nextMessage: Omit<CoreUserMessage, 'id'> = { role: 'user', content: [{ type: 'text', text: args.message }] };
     const coreUserMessages = [nextMessage];
 
@@ -1321,6 +1413,7 @@ export const useChat = ({
     setMessages,
     sendMessage,
     isRunning,
+    activeRunId: isRunning || isAwaitingToolApproval ? _currentRunId.current : undefined,
     isAwaitingToolApproval,
     messages,
     tasks,

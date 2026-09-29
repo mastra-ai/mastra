@@ -139,15 +139,18 @@ export const groupBy = <T, K extends keyof T>(
   key: K | ((item: T) => string),
   reducer?: (group: T[]) => any,
 ): Record<string, any> => {
-  const grouped = array.reduce(
-    (acc, item) => {
-      const value = typeof key === 'function' ? key(item) : item[key];
-      if (!acc[value as any]) acc[value as any] = [];
-      acc[value as any]?.push(item);
-      return acc;
-    },
-    {} as Record<string, T[]>,
-  );
+  const groups = new Map<string | symbol, T[]>();
+  for (const item of array) {
+    const value = typeof key === 'function' ? key(item) : item[key];
+    const groupKey = typeof value === 'symbol' ? value : String(value);
+    const group = groups.get(groupKey);
+    if (group) {
+      group.push(item);
+    } else {
+      groups.set(groupKey, [item]);
+    }
+  }
+  const grouped = Object.fromEntries(groups);
 
   if (reducer) {
     return Object.fromEntries(Object.entries(grouped).map(([key, group]) => [key, reducer(group)]));

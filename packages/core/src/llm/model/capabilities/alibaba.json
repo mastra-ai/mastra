@@ -1,14 +1,19 @@
 {
   "attachment": [
+    "kimi-k3",
     "qwen3.5-122b-a10b",
     "qwen3.5-27b",
     "qwen3.5-35b-a3b",
     "qwen3.5-397b-a17b",
+    "qwen3.5-flash",
     "qwen3.6-27b",
     "qwen3.6-35b-a3b",
     "qwen3.6-flash",
+    "qwen3.7-flash",
+    "qwen3.7-plus",
     "qwen3.8-flash",
-    "qwen3.8-max"
+    "qwen3.8-max",
+    "qwen3.8-omni-flash"
   ],
   "temperature": [
     "deepseek-v4-flash-0731",
@@ -54,12 +59,14 @@
     "qwen3.5-27b",
     "qwen3.5-35b-a3b",
     "qwen3.5-397b-a17b",
+    "qwen3.5-flash",
     "qwen3.5-plus",
     "qwen3.6-27b",
     "qwen3.6-35b-a3b",
     "qwen3.6-flash",
     "qwen3.6-max-preview",
     "qwen3.6-plus",
+    "qwen3.7-flash",
     "qwen3.7-max",
     "qwen3.7-plus",
     "qwen3.8-max",
@@ -68,14 +75,19 @@
   "structuredOutput": [
     "deepseek-v4-flash-0731",
     "glm-5.2",
+    "kimi-k3",
     "qwen3.5-122b-a10b",
     "qwen3.5-27b",
     "qwen3.5-35b-a3b",
     "qwen3.5-397b-a17b",
+    "qwen3.5-flash",
     "qwen3.6-27b",
     "qwen3.6-35b-a3b",
     "qwen3.6-flash",
+    "qwen3.7-flash",
+    "qwen3.7-plus",
     "qwen3.8-flash",
-    "qwen3.8-max"
+    "qwen3.8-max",
+    "qwen3.8-omni-flash"
   ]
 }

@@ -1,11 +1,14 @@
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
 import { useState } from 'react';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { TabsContext } from './tabs-context';
 import './tabs.css';
 import { cn } from '@/lib/utils';
 
-export type TabsRootProps<T extends string> = {
+export type TabsRootProps<T extends string> = Omit<
+  ComponentProps<'div'>,
+  'children' | 'defaultValue' | 'value' | 'onChange'
+> & {
   children: ReactNode;
   defaultTab: T;
   value?: T;
@@ -23,6 +26,7 @@ export const Tabs = <T extends string>({
   appearance = 'default',
   frame = 'stroke',
   className,
+  ...props
 }: TabsRootProps<T>) => {
   const [uncontrolledValue, setUncontrolledValue] = useState(defaultTab);
   const selectedValue = value ?? uncontrolledValue;
@@ -40,6 +44,7 @@ export const Tabs = <T extends string>({
         data-appearance={appearance}
         data-frame={frame}
         className={cn('group/tabs', appearance === 'default' ? 'overflow-y-auto' : 'w-full min-w-0', className)}
+        {...props}
       >
         {children}
       </BaseTabs.Root>

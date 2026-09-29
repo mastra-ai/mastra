@@ -266,8 +266,10 @@ describe('A2A Handler', () => {
         }),
       } as any);
 
-      expect(response.url).toBe('http://localhost:4111/api/a2a/test-agent');
-      expect(response.capabilities.pushNotifications).toBe(true);
+      expect(response.headers.get('Vary')).toBe('A2A-Version');
+      const card = await response.json();
+      expect(card.url).toBe('http://localhost:4111/api/a2a/test-agent');
+      expect(card.capabilities.pushNotifications).toBe(true);
     });
 
     it('should sign the agent card when A2A signing is configured', async () => {
@@ -2883,6 +2885,131 @@ describe('A2A Handler', () => {
       expect(task?.history).toHaveLength(1);
       expect(['race-message-1', 'race-message-2']).toContain(task?.history?.[0]?.messageId);
     });
+
+    it('should resume only once when concurrent message/stream follow-ups arrive for the same input-required task', async () => {
+      await mockTaskStore.save({
+        agentId,
+        data: createSuspendedTask({
+          taskId: 'task-hitl-stream-race',
+          contextId: 'ctx-hitl-stream-race',
+          suspendedRunId: 'task-hitl-stream-race',
+        }),
+      });
+
+      const resumeStream = vi.fn().mockResolvedValue(createStreamResult({ chunks: ['Done'] }));
+      const stream = vi.fn().mockResolvedValue(createStreamResult({ chunks: ['Fresh run'] }));
+      const mockAgent = { stream, resumeStream } as unknown as Agent;
+
+      const streamFollowUp = async (messageId: string) => {
+        const events: any[] = [];
+        for await (const event of handleMessageStream({
+          requestId: messageId,
+          params: {
+            message: {
+              messageId,
+              kind: 'message',
+              role: 'user',
+              taskId: 'task-hitl-stream-race',
+              parts: [{ kind: 'text', text: '{"approved":true}' }],
+            },
+          },
+          taskStore: mockTaskStore,
+          agent: mockAgent,
+          agentId,
+          requestContext: new RequestContext(),
+        })) {
+          events.push(event);
+        }
+        return events;
+      };
+
+      const results = await Promise.all([
+        streamFollowUp('stream-race-message-1'),
+        streamFollowUp('stream-race-message-2'),
+      ]);
+
+      expect(resumeStream).toHaveBeenCalledTimes(1);
+      expect(stream).not.toHaveBeenCalled();
+      for (const events of results) {
+        const last = events.at(-1)?.result;
+        expect(last?.status?.state).toBe('completed');
+      }
+
+      const task = await mockTaskStore.load({ agentId, taskId: 'task-hitl-stream-race' });
+      expect(task?.status.state).toBe('completed');
+      expect(task?.history).toHaveLength(1);
+      expect(['stream-race-message-1', 'stream-race-message-2']).toContain(task?.history?.[0]?.messageId);
+    });
+
+    it('should make a message/stream follow-up wait for an already-claimed resume instead of starting a run', async () => {
+      const taskId = 'task-hitl-stream-claimed';
+      await mockTaskStore.save({
+        agentId,
+        data: createSuspendedTask({ taskId, contextId: 'ctx-hitl-stream-claimed', suspendedRunId: taskId }),
+      });
+
+      let releaseResume!: () => void;
+      const resumeGate = new Promise<void>(resolve => {
+        releaseResume = resolve;
+      });
+      const resumeStream = vi.fn(async () => {
+        await resumeGate;
+        return createStreamResult({ chunks: ['Done'] });
+      });
+      const stream = vi.fn().mockResolvedValue(createStreamResult({ chunks: ['Fresh run'] }));
+      const mockAgent = { stream, resumeStream } as unknown as Agent;
+
+      const streamFollowUp = async (messageId: string, abortSignal?: AbortSignal) => {
+        const events: any[] = [];
+        for await (const event of handleMessageStream({
+          requestId: messageId,
+          params: {
+            message: {
+              messageId,
+              kind: 'message',
+              role: 'user',
+              taskId,
+              parts: [{ kind: 'text', text: '{"approved":true}' }],
+            },
+          },
+          taskStore: mockTaskStore,
+          agent: mockAgent,
+          agentId,
+          requestContext: new RequestContext(),
+          abortSignal,
+        })) {
+          events.push(event);
+        }
+        return events;
+      };
+
+      const winner = streamFollowUp('claimed-winner');
+      await vi.waitFor(() => expect(resumeStream).toHaveBeenCalledTimes(1));
+      expect((await mockTaskStore.load({ agentId, taskId }))?.status.state).toBe('working');
+
+      const abortController = new AbortController();
+      const abortedFollower = streamFollowUp('claimed-aborted', abortController.signal);
+      abortController.abort();
+      await expect(abortedFollower).rejects.toThrow();
+
+      let followerSettled = false;
+      const follower = streamFollowUp('claimed-follower').finally(() => {
+        followerSettled = true;
+      });
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(followerSettled).toBe(false);
+
+      releaseResume();
+      const [, followerEvents] = await Promise.all([winner, follower]);
+
+      expect(resumeStream).toHaveBeenCalledTimes(1);
+      expect(stream).not.toHaveBeenCalled();
+      expect(followerEvents).toHaveLength(1);
+      const task = await mockTaskStore.load({ agentId, taskId });
+      expect(followerEvents[0].result).toEqual(task);
+      expect(task?.status.state).toBe('completed');
+      expect(task?.history?.map(message => message.messageId)).toEqual(['claimed-winner']);
+    });
   });
 
   describe('handleTaskResubscribe with interrupted tasks', () => {
@@ -3322,6 +3449,114 @@ describe('A2A Handler', () => {
         jsonrpc: '2.0',
         result: [],
       });
+    });
+
+    it('translates native v1 push notification configs and paginates list responses', async () => {
+      const pushNotificationStore = new InMemoryPushNotificationStore();
+
+      await mockTaskStore.save({
+        agentId: 'test-agent',
+        data: {
+          id: 'task-1',
+          contextId: 'context-1',
+          status: { state: 'working', timestamp: '2025-05-08T11:47:38.458Z' },
+          artifacts: [],
+          kind: 'task',
+        },
+      });
+
+      for (const id of ['push-1', 'push-2', 'push-3']) {
+        const result = await getAgentExecutionHandler({
+          requestId: `create-${id}`,
+          mastra: mockMastra,
+          agentId: 'test-agent',
+          requestContext: new RequestContext(),
+          method: 'tasks/pushNotificationConfig/set',
+          params: { taskId: 'task-1', id, url: `https://example.com/${id}` },
+          taskStore: mockTaskStore,
+          pushNotificationStore,
+          protocolVersion: '1.0',
+        });
+
+        expect(result).toEqual({
+          id: `create-${id}`,
+          jsonrpc: '2.0',
+          result: { taskId: 'task-1', id, url: `https://example.com/${id}` },
+        });
+      }
+
+      const getResult = await getAgentExecutionHandler({
+        requestId: 'get-push-2',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/pushNotificationConfig/get',
+        params: { taskId: 'task-1', id: 'push-2' },
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+        protocolVersion: '1.0',
+      });
+      expect(getResult).toEqual({
+        id: 'get-push-2',
+        jsonrpc: '2.0',
+        result: { taskId: 'task-1', id: 'push-2', url: 'https://example.com/push-2' },
+      });
+
+      const firstPage = await getAgentExecutionHandler({
+        requestId: 'list-page-1',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/pushNotificationConfig/list',
+        params: { taskId: 'task-1', pageSize: 2 },
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+        protocolVersion: '1.0',
+      });
+      expect(firstPage).toEqual({
+        id: 'list-page-1',
+        jsonrpc: '2.0',
+        result: {
+          configs: [
+            { taskId: 'task-1', id: 'push-1', url: 'https://example.com/push-1' },
+            { taskId: 'task-1', id: 'push-2', url: 'https://example.com/push-2' },
+          ],
+          nextPageToken: '2',
+        },
+      });
+
+      const secondPage = await getAgentExecutionHandler({
+        requestId: 'list-page-2',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/pushNotificationConfig/list',
+        params: { taskId: 'task-1', pageSize: 2, pageToken: '2' },
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+        protocolVersion: '1.0',
+      });
+      expect(secondPage).toEqual({
+        id: 'list-page-2',
+        jsonrpc: '2.0',
+        result: {
+          configs: [{ taskId: 'task-1', id: 'push-3', url: 'https://example.com/push-3' }],
+          nextPageToken: '',
+        },
+      });
+
+      const deleteResult = await getAgentExecutionHandler({
+        requestId: 'delete-push-2',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/pushNotificationConfig/delete',
+        params: { taskId: 'task-1', id: 'push-2' },
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+        protocolVersion: '1.0',
+      });
+      expect(deleteResult).toEqual({ id: 'delete-push-2', jsonrpc: '2.0', result: null });
     });
 
     it('returns task not found when configuring push notifications for an unknown task', async () => {
@@ -3876,6 +4111,49 @@ describe('A2A Handler', () => {
       });
 
       expect(() => resolveA2AProtocolVersion(request)).toThrow('Version not supported: 2.0');
+    });
+  });
+
+  describe('protocol discovery', () => {
+    let agent: MockAgent;
+    let mastra: Mastra;
+
+    beforeEach(() => {
+      agent = new MockAgent({
+        id: 'canonical-agent',
+        name: 'Discovery agent',
+        instructions: 'Test discovery',
+        model: openai('gpt-4o'),
+      });
+      mastra = createMockMastra({ registeredAgent: agent });
+    });
+
+    it('selects distinct legacy and v1 cards without changing metadata version', async () => {
+      const options = {
+        mastra,
+        agentId: agent.id,
+        requestContext: new RequestContext(),
+        executionUrl: 'https://example.com/api/a2a/canonical-agent',
+        version: 'release-2',
+      };
+      const legacy = await getAgentCardByIdHandler({ ...options, protocolVersion: '0.3' });
+      const v1 = await getAgentCardByIdHandler({ ...options, protocolVersion: '1.0' });
+      expect(legacy).toMatchObject({ protocolVersion: '0.3.0', url: options.executionUrl, version: 'release-2' });
+      expect(legacy).not.toHaveProperty('supportedInterfaces');
+      expect(v1.version).toBe('release-2');
+      expect(v1.supportedInterfaces).toEqual([
+        { url: options.executionUrl, protocolBinding: 'JSONRPC', protocolVersion: '0.3' },
+        { url: options.executionUrl, protocolBinding: 'JSONRPC', protocolVersion: '1.0' },
+      ]);
+      for (const field of [
+        'url',
+        'protocolVersion',
+        'additionalInterfaces',
+        'security',
+        'supportsAuthenticatedExtendedCard',
+      ]) {
+        expect(v1).not.toHaveProperty(field);
+      }
     });
   });
 

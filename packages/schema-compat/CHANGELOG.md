@@ -1,5 +1,71 @@
 # @mastra/schema-compat
 
+## 1.3.12-alpha.1
+
+### Patch Changes
+
+- Fixed structured output validation failing when optional fields inside `.nullable()` or `.nullish()` objects or arrays were returned as `null`. They are now dropped, matching the behavior for non-nullable parents. ([#25276](https://github.com/mastra-ai/mastra/pull/25276))
+
+## 1.3.12-alpha.0
+
+### Patch Changes
+
+- Fixed `zodToJsonSchema` so nullable Zod v4 enums and literals still accept `null`. A field like `z.enum(['red', 'blue']).nullable()` was exported as `{ type: ['string', 'null'], enum: ['red', 'blue'] }`, which rejects `null`. The exported schema now lists `null` among the allowed values, so tool parameters, OpenAPI schemas and dataset schemas match the Zod schema again. Fixes [#24516](https://github.com/mastra-ai/mastra/issues/24516). ([#25086](https://github.com/mastra-ai/mastra/pull/25086))
+
+- Fixed OpenAI tools failing silently when they have optional number parameters with a `format`, such as `pageSize: { type: "integer", format: "int32" }`. These tools now return responses as expected. ([#25067](https://github.com/mastra-ai/mastra/pull/25067))
+
+## 1.3.11
+
+### Patch Changes
+
+- Fixed JSON Schema adapter declarations to use bundled Ajv types, so consumers do not need a separate Ajv installation. Ajv remains bundled as a development dependency. ([#23998](https://github.com/mastra-ai/mastra/pull/23998))
+
+- Fixed `@mastra/schema-compat/json-to-zod` failing with "jsonSchemaToZod is not a function" when loaded from CommonJS, and generated schemas now use `z.record(z.string(), value)` so JSON Schemas with `additionalProperties` or `patternProperties` validate correctly on Zod v4 before 4.4.0 (including zod@3.25's `zod/v4`). Fixes dataset `addItem` and tool schema conversion crashing on record-shaped schemas. See https://github.com/mastra-ai/mastra/issues/23993 ([#24049](https://github.com/mastra-ai/mastra/pull/24049))
+
+- Fixed tool schema handling for Claude models hosted on Google Vertex (`@ai-sdk/google-vertex/anthropic`). ([#24108](https://github.com/mastra-ai/mastra/pull/24108))
+
+  The Google compatibility layer matched on the `googleVertex` provider prefix and rewrote nullable fields into OpenAPI `nullable: true`, which Claude ignores. Claude on Vertex now uses the Anthropic compatibility layer, so `string | null` parameters keep JSON Schema `type: ['string', 'null']`. Gemini on Vertex is unchanged.
+
+## 1.3.11-alpha.1
+
+### Patch Changes
+
+- Fixed JSON Schema adapter declarations to use bundled Ajv types, so consumers do not need a separate Ajv installation. Ajv remains bundled as a development dependency. ([#23998](https://github.com/mastra-ai/mastra/pull/23998))
+
+- Fixed tool schema handling for Claude models hosted on Google Vertex (`@ai-sdk/google-vertex/anthropic`). ([#24108](https://github.com/mastra-ai/mastra/pull/24108))
+
+  The Google compatibility layer matched on the `googleVertex` provider prefix and rewrote nullable fields into OpenAPI `nullable: true`, which Claude ignores. Claude on Vertex now uses the Anthropic compatibility layer, so `string | null` parameters keep JSON Schema `type: ['string', 'null']`. Gemini on Vertex is unchanged.
+
+## 1.3.11-alpha.0
+
+### Patch Changes
+
+- Fixed `@mastra/schema-compat/json-to-zod` failing with "jsonSchemaToZod is not a function" when loaded from CommonJS, and generated schemas now use `z.record(z.string(), value)` so JSON Schemas with `additionalProperties` or `patternProperties` validate correctly on Zod v4 before 4.4.0 (including zod@3.25's `zod/v4`). Fixes dataset `addItem` and tool schema conversion crashing on record-shaped schemas. See https://github.com/mastra-ai/mastra/issues/23993 ([#24049](https://github.com/mastra-ai/mastra/pull/24049))
+
+## 1.3.10
+
+### Patch Changes
+
+- Reduced TypeScript memory usage for applications that define many tools with Zod schemas. ([#23677](https://github.com/mastra-ai/mastra/pull/23677))
+
+- Fixed structured output 400s on OpenAI strict endpoints by stripping JSON Schema validation keywords that strict mode rejects. `prepareJsonSchemaForOpenAIStrictMode` now recursively removes these keywords — including inside `$defs`/`definitions` referenced schemas — and folds their intent into each node's `description`, matching how the tool path already degrades constraints. ([#23547](https://github.com/mastra-ai/mastra/pull/23547))
+
+  **Keywords removed**
+
+  - Array: `uniqueItems`, `minItems`, `maxItems`
+  - String: `minLength`, `maxLength`, `pattern`, `format`
+  - Number: `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`
+  - Structural (dropped, no useful mapping): `contains`, `minContains`, `maxContains`, `minProperties`, `maxProperties`, `patternProperties`, `unevaluatedItems`, `unevaluatedProperties`
+  - Composition/conditional: `allOf` is flattened into the containing node, `oneOf` is converted to the supported `anyOf`, and `not`/`if`/`then`/`else`/`dependentRequired`/`dependentSchemas` are dropped
+
+  Referenced schemas hoisted into `$defs`/`definitions` receive the same required-property, `additionalProperties: false`, and keyword handling as inline schemas.
+
+## 1.3.10-alpha.1
+
+### Patch Changes
+
+- Reduced TypeScript memory usage for applications that define many tools with Zod schemas. ([#23677](https://github.com/mastra-ai/mastra/pull/23677))
+
 ## 1.3.10-alpha.0
 
 ### Patch Changes

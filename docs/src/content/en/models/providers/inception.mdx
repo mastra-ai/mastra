@@ -9,7 +9,7 @@ description: "Browse Inception model IDs, capabilities, context windows, and pri
 
 Access 3 Inception models through Mastra's model router. Authentication is handled automatically using the `INCEPTION_API_KEY` environment variable.
 
-Learn more in the [Inception documentation](https://platform.inceptionlabs.ai/docs).
+Learn more in the [Inception documentation](https://docs.inceptionlabs.ai/get-started/models).
 
 ```bash title=".env"
 INCEPTION_API_KEY=your-api-key
@@ -37,7 +37,7 @@ for await (const chunk of stream) {
 
 :::note
 
-Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Inception documentation](https://platform.inceptionlabs.ai/docs) for details.
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Inception documentation](https://docs.inceptionlabs.ai/get-started/models) for details.
 
 :::
 
@@ -75,8 +75,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
-    "reasoning": true,
-    "contextWindow": 128000,
+    "reasoning": false,
+    "contextWindow": 32000,
     "maxOutput": 8192,
     "inputCost": 0.25,
     "outputCost": 0.75
