@@ -10,7 +10,7 @@ import {
   ThreadListItems,
 } from '@mastra/playground-ui/components/ThreadList';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { format } from 'date-fns';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { GitCompareIcon, ArrowRightIcon, ChevronDown, X } from 'lucide-react';
 import { useState } from 'react';
 import { useDatasetVersions } from '../../hooks/use-dataset-versions';
@@ -135,15 +135,15 @@ export function DatasetVersionsPanel({
                           aria-hidden="true"
                         />
                       )}
-                      <span className="flex min-w-0 flex-1 items-center gap-2 text-caption">
+                      <Txt as="span" variant="caption" className="flex min-w-0 flex-1 items-center gap-2">
                         <span className="shrink-0 font-medium text-foreground">v.{item.version}</span>
                         {createdAtDate && (
                           <span className="min-w-0 flex-1 truncate text-muted-foreground">
-                            {format(createdAtDate, 'MMM d, yyyy HH:mm')}
+                            {formatDate(createdAtDate, 'date-time')}
                           </span>
                         )}
                         {item.isCurrent && <span className="shrink-0 text-muted-foreground">latest</span>}
-                      </span>
+                      </Txt>
                     </span>
                   </ThreadListItem>
                 );

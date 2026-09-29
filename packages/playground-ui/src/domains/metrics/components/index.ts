@@ -1,5 +1,5 @@
 export { DateRangeSelector } from './date-range-selector';
-export { formatCompact, formatCost, CHART_COLORS } from './metrics-utils';
+export { CHART_COLORS } from './metrics-utils';
 export { BarListContent, StackedRunsBars } from './bar-list';
 export { OpenErrorsInLogsButton, OpenInTracesButton } from './card-action-buttons';
 export { KpiCardView, type KpiCardViewProps } from './kpi-card-view';

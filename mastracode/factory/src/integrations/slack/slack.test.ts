@@ -1,3 +1,4 @@
+import { ChannelSessionRejectedError, AgentChannels } from '@mastra/core/channels';
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -21,10 +22,12 @@ function handlerCtx(mastra?: unknown) {
   return { mastra: mastra as any, requestContext: new RequestContext() };
 }
 
-function makeThread() {
+function makeThread({ isDM = false } = {}) {
   return {
     adapter: { name: 'slack' },
     channelId: 'C-1',
+    isDM,
+    post: vi.fn().mockResolvedValue({ id: 'msg-1' }),
     postEphemeral: vi.fn().mockResolvedValue({ id: 'eph-1' }),
   } as any;
 }
@@ -89,9 +92,20 @@ describe('resolveLinkedSender', () => {
     // The link carries NO identity: Slack proves the account during OIDC, so
     // a forwarded card can't bind the original sender to whoever clicks it.
     const card = thread.postEphemeral.mock.calls[0][1];
+    expect(JSON.stringify(card)).toContain('then mention me again.');
     const actions = card.children.find((c: any) => c.type === 'actions');
     const linkButton = actions.children.find((c: any) => c.type === 'link-button');
     expect(linkButton.url).toBe('https://mc.example.com/connect/slack');
+  });
+
+  it('tells an unlinked sender in a DM to message the bot again', async () => {
+    process.env.MASTRACODE_CHANNELS_PUBLIC_URL = 'https://mc.example.com';
+    const thread = makeThread({ isDM: true });
+
+    await resolveLinkedSender({ thread, message: makeMessage('T-1'), accountLinks: makeStore(null) });
+
+    const card = thread.postEphemeral.mock.calls[0][1];
+    expect(JSON.stringify(card)).toContain('then message me again.');
   });
 
   it('treats a missing team id as unlinked and blocks the run, still offering the card', async () => {
@@ -140,7 +154,6 @@ describe('resolveFactoryForLink', () => {
     const thread = makeThread();
     const result = await resolveFactoryForLink({
       thread,
-      message: makeMessage('T-1'),
       link: { orgId: 'org-1', userId: 'user-1', linkedAt: new Date() },
       key: linkKey,
       accountLinks: makeLinkStore(),
@@ -156,7 +169,6 @@ describe('resolveFactoryForLink', () => {
 
     const result = await resolveFactoryForLink({
       thread,
-      message: makeMessage('T-1'),
       link: { orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-2', linkedAt: new Date() },
       key: linkKey,
       accountLinks,
@@ -177,7 +189,6 @@ describe('resolveFactoryForLink', () => {
 
     const result = await resolveFactoryForLink({
       thread,
-      message: makeMessage('T-1'),
       link: { orgId: 'org-1', userId: 'user-1', linkedAt: new Date() },
       key: linkKey,
       accountLinks,
@@ -201,7 +212,6 @@ describe('resolveFactoryForLink', () => {
 
     const result = await resolveFactoryForLink({
       thread,
-      message: makeMessage('T-1'),
       link: { orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-gone', linkedAt: new Date() },
       key: linkKey,
       accountLinks,
@@ -209,8 +219,10 @@ describe('resolveFactoryForLink', () => {
     });
 
     expect(result).toEqual({ status: 'blocked' });
-    // Ephemeral prompt deep-links to Connected Accounts settings.
-    const card = thread.postEphemeral.mock.calls[0][1];
+    // Public thread prompt deep-links to Connected Accounts settings.
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    expect(thread.postEphemeral).not.toHaveBeenCalled();
+    const card = thread.post.mock.calls[0][0];
     const actions = card.children.find((c: any) => c.type === 'actions');
     const linkButton = actions.children.find((c: any) => c.type === 'link-button');
     expect(linkButton.url).toBe('https://mc.example.com/settings/connections');
@@ -224,7 +236,6 @@ describe('resolveFactoryForLink', () => {
 
     const result = await resolveFactoryForLink({
       thread,
-      message: makeMessage('T-1'),
       link: { orgId: 'org-1', userId: 'user-1', linkedAt: new Date() },
       key: linkKey,
       accountLinks: makeLinkStore(),
@@ -232,8 +243,24 @@ describe('resolveFactoryForLink', () => {
     });
 
     expect(result).toEqual({ status: 'blocked' });
-    expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
-    expect(thread.postEphemeral.mock.calls[0][2]).toEqual({ fallbackToDM: true });
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    expect(thread.postEphemeral).not.toHaveBeenCalled();
+    expect(JSON.stringify(thread.post.mock.calls[0][0])).toContain('then mention me again.');
+  });
+
+  it('tells a sender in a DM to message the bot again after picking a factory', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const thread = makeThread({ isDM: true });
+
+    await resolveFactoryForLink({
+      thread,
+      link: { orgId: 'org-1', userId: 'user-1', linkedAt: new Date() },
+      key: linkKey,
+      accountLinks: makeLinkStore(),
+      projects: makeProjects([{ id: 'fp-1' }, { id: 'fp-2' }]),
+    });
+
+    expect(JSON.stringify(thread.post.mock.calls[0][0])).toContain('then message me again.');
   });
 
   it('a personal account (no org) has no factories and is prompted', async () => {
@@ -243,7 +270,6 @@ describe('resolveFactoryForLink', () => {
 
     const result = await resolveFactoryForLink({
       thread,
-      message: makeMessage('T-1'),
       link: { userId: 'user-1', linkedAt: new Date() },
       key: linkKey,
       accountLinks: makeLinkStore(),
@@ -253,7 +279,8 @@ describe('resolveFactoryForLink', () => {
     expect(result).toEqual({ status: 'blocked' });
     // Org-less: never lists factories (they're org-scoped).
     expect(projects.list).not.toHaveBeenCalled();
-    expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    expect(thread.postEphemeral).not.toHaveBeenCalled();
   });
 
   it('blocks without a card when no public URL is configured', async () => {
@@ -264,7 +291,6 @@ describe('resolveFactoryForLink', () => {
 
     const result = await resolveFactoryForLink({
       thread,
-      message: makeMessage('T-1'),
       link: { orgId: 'org-1', userId: 'user-1', linkedAt: new Date() },
       key: linkKey,
       accountLinks: makeLinkStore(),
@@ -272,6 +298,7 @@ describe('resolveFactoryForLink', () => {
     });
 
     expect(result).toEqual({ status: 'blocked' });
+    expect(thread.post).not.toHaveBeenCalled();
     expect(thread.postEphemeral).not.toHaveBeenCalled();
   });
 });
@@ -352,7 +379,8 @@ describe('handler dispatch gating', () => {
     await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx());
 
     expect(defaultHandler).not.toHaveBeenCalled();
-    expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    expect(thread.postEphemeral).not.toHaveBeenCalled();
   });
 
   it('mention handler blocks the same way before any session is created', async () => {
@@ -367,7 +395,8 @@ describe('handler dispatch gating', () => {
     await handlers.onMention!(thread, makeMessage('T-1'), defaultHandler, handlerCtx());
 
     expect(defaultHandler).not.toHaveBeenCalled();
-    expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    expect(thread.postEphemeral).not.toHaveBeenCalled();
   });
 
   it('keeps pre-routing behavior when only account linking is configured (no projects)', async () => {
@@ -379,6 +408,236 @@ describe('handler dispatch gating', () => {
     await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx());
 
     expect(defaultHandler).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('pre-dispatch error feedback', () => {
+  const reply = 'Couldn’t start processing your message. Please try again.\n`messageId: 1700.42`';
+  const slots = ['onMention', 'onDirectMessage', 'onSubscribedMessage'] as const;
+
+  function fixture(slot: (typeof slots)[number] = 'onMention') {
+    const thread = makeThread({ isDM: slot === 'onDirectMessage' });
+    thread.id = 'slack:C-1:1700.42';
+    thread.isSubscribed = vi.fn().mockResolvedValue(true);
+    const message = { ...makeMessage('T-1'), id: '1700.42' };
+    const accountLinks = {
+      getAccountLink: vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' }),
+      setDefaultFactory: vi.fn().mockResolvedValue(true),
+    };
+    const projects = makeProjects([{ id: 'fp-1' }]);
+    const defaultHandler = vi.fn().mockResolvedValue(undefined);
+    const output = vi.fn();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const mastra = { getLogger: () => ({ error: output }) };
+    const handlers = createHandlers({ accountLinks: accountLinks as any, projects });
+    const run = (overrides?: Record<string, unknown>) =>
+      handlers[slot]!(thread, message, defaultHandler, handlerCtx({ ...mastra, ...overrides }));
+    const record = (index = 0) => {
+      const [line, ...extra] = output.mock.calls[index]!;
+      expect(extra).toEqual([]);
+      expect(line).not.toContain('\n');
+      return JSON.parse(line.slice(line.indexOf('{')));
+    };
+    return { thread, message, accountLinks, projects, defaultHandler, output, consoleError, handlers, run, record };
+  }
+
+  describe.each(slots)('%s', slot => {
+    it.each(['account', 'project'])('reports a rejected %s lookup without dispatching', async source => {
+      const f = fixture(slot);
+      const error = new Error('lookup unavailable', { cause: new Error('database unavailable') });
+      if (source === 'account') f.accountLinks.getAccountLink.mockRejectedValue(error);
+      else f.projects.get.mockRejectedValue(error);
+
+      await expect(f.run()).resolves.toBeUndefined();
+      expect(f.defaultHandler).not.toHaveBeenCalled();
+      expect(f.thread.post).toHaveBeenCalledExactlyOnceWith(reply);
+      expect(f.output).toHaveBeenCalledTimes(1);
+      expect(f.consoleError).not.toHaveBeenCalled();
+      expect(f.record()).toEqual({
+        platform: 'slack',
+        threadId: f.thread.id,
+        messageId: f.message.id,
+        authorId: 'U-sender',
+        error: { message: 'lookup unavailable', cause: { message: 'database unavailable' } },
+      });
+    });
+
+    it.each(['connect', 'project'])('reports a failed %s card with one generic reply attempt', async card => {
+      process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+      const f = fixture(slot);
+      if (card === 'connect') {
+        f.accountLinks.getAccountLink.mockResolvedValue(null as any);
+        f.thread.postEphemeral.mockRejectedValue(new Error('card failed'));
+      } else {
+        f.projects.get.mockResolvedValue(null);
+        f.projects.list.mockResolvedValue([]);
+        f.thread.post.mockRejectedValueOnce(new Error('card failed'));
+      }
+      await expect(f.run()).resolves.toBeUndefined();
+      expect(f.defaultHandler).not.toHaveBeenCalled();
+      expect(f.thread.post.mock.calls.filter(([text]: [unknown]) => text === reply)).toHaveLength(1);
+      expect(f.record().error.message).toBe('card failed');
+    });
+
+    it('logs failed generic delivery without retrying or rejecting', async () => {
+      const f = fixture(slot);
+      f.accountLinks.getAccountLink.mockRejectedValue(new Error('lookup failed'));
+      f.thread.post.mockRejectedValue(new Error('delivery failed'));
+      await expect(f.run()).resolves.toBeUndefined();
+      expect(f.thread.post).toHaveBeenCalledExactlyOnceWith(reply);
+      expect(f.defaultHandler).not.toHaveBeenCalled();
+      expect(f.output).toHaveBeenCalledTimes(2);
+      expect(f.output.mock.calls[1]![0]).toContain('Failed to deliver pre-dispatch error reply');
+      expect(f.record(1)).toEqual({ ...f.record(), error: { message: 'delivery failed' } });
+    });
+
+    it('keeps deliberate refusals silent', async () => {
+      const f = fixture(slot);
+      f.accountLinks.getAccountLink.mockRejectedValue(new ChannelSessionRejectedError('not authorized'));
+      await f.run();
+      expect(f.defaultHandler).not.toHaveBeenCalled();
+      expect(f.thread.post).not.toHaveBeenCalled();
+      expect(f.output).not.toHaveBeenCalled();
+    });
+
+    it('preserves a blocked gate without a public URL', async () => {
+      delete process.env.MASTRACODE_PUBLIC_URL;
+      delete process.env.MASTRACODE_CHANNELS_PUBLIC_URL;
+      const f = fixture(slot);
+      f.accountLinks.getAccountLink.mockResolvedValue(null as any);
+      await f.run();
+      expect(f.defaultHandler).not.toHaveBeenCalled();
+      expect(f.thread.post).not.toHaveBeenCalled();
+      expect(f.thread.postEphemeral).not.toHaveBeenCalled();
+      expect(f.output).not.toHaveBeenCalled();
+    });
+
+    it('dispatches normally exactly once', async () => {
+      const f = fixture(slot);
+      await f.run();
+      expect(f.defaultHandler).toHaveBeenCalledExactlyOnceWith(f.thread, f.message);
+      expect(f.thread.post).not.toHaveBeenCalled();
+      expect(f.output).not.toHaveBeenCalled();
+    });
+
+    it('does not duplicate feedback already handled by defaultHandler', async () => {
+      const f = fixture(slot);
+      f.defaultHandler.mockImplementation(async () => {
+        await f.thread.post('existing core feedback');
+      });
+      await f.run();
+      expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('existing core feedback');
+      expect(f.output).not.toHaveBeenCalled();
+    });
+
+    it('leaves a rejecting defaultHandler outside the new catch', async () => {
+      const f = fixture(slot);
+      const error = new Error('default handler failed');
+      f.defaultHandler.mockRejectedValue(error);
+      await expect(f.run()).rejects.toBe(error);
+      expect(f.thread.post).not.toHaveBeenCalled();
+      expect(f.output).not.toHaveBeenCalled();
+    });
+  });
+
+  it.each(['onMention', 'onDirectMessage'] as const)('reports subscription lookup failure in %s', async slot => {
+    const f = fixture(slot);
+    f.thread.isSubscribed.mockRejectedValue(new Error('subscription unavailable'));
+    await f.run();
+    expect(f.defaultHandler).not.toHaveBeenCalled();
+    expect(f.thread.post).toHaveBeenCalledExactlyOnceWith(reply);
+    expect(f.record().error.message).toBe('subscription unavailable');
+  });
+
+  it.each([
+    ['plain failure', 'plain failure'],
+    ['', 'Unknown error'],
+    [null, 'Unknown error'],
+    [undefined, 'Unknown error'],
+    [{ message: '' }, 'Unknown error'],
+    [{ secret: 'SENTINEL' }, 'Unknown error'],
+  ])('uses only nonempty message text (%#)', async (error, expected) => {
+    const f = fixture();
+    f.accountLinks.getAccountLink.mockRejectedValue(error);
+    await f.run();
+    expect(f.record().error).toEqual({ message: expected });
+    expect(f.thread.post).toHaveBeenCalledExactlyOnceWith(reply);
+  });
+
+  it.each(['cause text', ''])('selects only nonempty immediate string causes (%#)', async cause => {
+    const f = fixture();
+    f.accountLinks.getAccountLink.mockRejectedValue({ message: 'failure', cause });
+    await f.run();
+    expect(f.record().error).toEqual({ message: 'failure', ...(cause ? { cause: { message: cause } } : {}) });
+  });
+
+  it('omits payloads, stacks and deeper causes without invoking serializers', async () => {
+    const f = fixture();
+    const toJSON = vi.fn(() => ({ secret: 'SENTINEL_SERIALIZER' }));
+    const stack = vi.fn(() => {
+      throw new Error('SENTINEL_STACK');
+    });
+    const cause = { message: 'cause\ntext', cause: { message: 'SENTINEL_DEEP_CAUSE' }, toJSON };
+    const error = { message: 'failure\ntext', cause, details: { token: 'SENTINEL_DETAILS' }, toJSON };
+    Object.defineProperty(error, 'stack', { get: stack });
+    f.accountLinks.getAccountLink.mockRejectedValue(error);
+    await f.run();
+    expect(f.record().error).toEqual({ message: 'failure\ntext', cause: { message: 'cause\ntext' } });
+    expect(f.output.mock.calls[0]![0]).not.toContain('SENTINEL');
+    expect(toJSON).not.toHaveBeenCalled();
+    expect(stack).not.toHaveBeenCalled();
+    expect(f.thread.post).toHaveBeenCalledExactlyOnceWith(reply);
+  });
+
+  it.each(['message', 'cause'])('uses a static diagnostic if reading %s throws', async property => {
+    const f = fixture();
+    const error = Object.defineProperty({}, property, {
+      get() {
+        throw new Error('SENTINEL_GETTER');
+      },
+    });
+    f.accountLinks.getAccountLink.mockRejectedValue(error);
+    await f.run();
+    expect(f.record().error).toEqual({ message: 'Error details unavailable' });
+    expect(f.thread.post).toHaveBeenCalledExactlyOnceWith(reply);
+  });
+
+  it('preserves the subscribed aside early return', async () => {
+    const f = fixture('onSubscribedMessage');
+    f.message.text = 'aside: leave this alone';
+    f.accountLinks.getAccountLink.mockRejectedValue(new Error('should not be reached'));
+    await f.run();
+    expect(f.accountLinks.getAccountLink).not.toHaveBeenCalled();
+    expect(f.defaultHandler).not.toHaveBeenCalled();
+    expect(f.thread.post).not.toHaveBeenCalled();
+    expect(f.output).not.toHaveBeenCalled();
+  });
+
+  it.each(['lookup', 'card'])('does not turn a post-dispatch %s failure into pre-dispatch feedback', async source => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const f = fixture();
+    const error = new Error('post-dispatch failed');
+    f.thread.isSubscribed.mockResolvedValue(false);
+    const listThreads = vi.fn().mockResolvedValue({ threads: [{ id: 'thread-1', resourceId: 'session-1' }] });
+    if (source === 'lookup') listThreads.mockRejectedValue(error);
+    else f.thread.post.mockRejectedValue(error);
+    const getStorage = () => ({ getStore: async () => ({ listThreads }) });
+    await expect(f.run({ getStorage })).rejects.toBe(error);
+    expect(f.defaultHandler).toHaveBeenCalledTimes(1);
+    expect(f.thread.post.mock.calls.filter(([text]: [unknown]) => text === reply)).toHaveLength(0);
+    expect(f.output).not.toHaveBeenCalled();
+  });
+
+  it('falls back to console.error when the handler context has no Mastra instance', async () => {
+    const f = fixture();
+    f.accountLinks.getAccountLink.mockRejectedValue(new Error('lookup unavailable'));
+    await f.handlers.onMention!(f.thread, f.message, f.defaultHandler, handlerCtx());
+    expect(f.output).not.toHaveBeenCalled();
+    expect(f.consoleError).toHaveBeenCalledTimes(1);
+    const [line, ...extra] = f.consoleError.mock.calls[0]!;
+    expect(extra).toEqual([]);
+    expect(JSON.parse(line.slice(line.indexOf('{')))).toMatchObject({ error: { message: 'lookup unavailable' } });
+    expect(f.thread.post).toHaveBeenCalledExactlyOnceWith(reply);
   });
 });
 
@@ -470,9 +729,7 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
 
     await expect(resolve(resolveArgs({ id: 'slack:D-1:1700.42', isDM: true } as any))).resolves.toBe('us-new');
 
-    expect(deps.sourceControl.sessions.create).toHaveBeenCalledWith(
-      expect.objectContaining({ visibility: 'private' }),
-    );
+    expect(deps.sourceControl.sessions.create).toHaveBeenCalledWith(expect.objectContaining({ visibility: 'private' }));
   });
 
   // Top-level DM and channel conversations use the empty-threadTs thread form
@@ -481,14 +738,17 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
   it.each([
     { id: 'slack:D-1:', branch: 'slack/D-1' },
     { id: 'slack:C-1:', branch: 'slack/C-1' },
-  ])('a top-level conversation thread (empty threadTs) derives its branch from the channel id ($id)', async ({ id, branch }) => {
-    const deps = makeResolverDeps();
-    const resolve = createChannelResourceIdResolver(deps as any);
+  ])(
+    'a top-level conversation thread (empty threadTs) derives its branch from the channel id ($id)',
+    async ({ id, branch }) => {
+      const deps = makeResolverDeps();
+      const resolve = createChannelResourceIdResolver(deps as any);
 
-    await expect(resolve(resolveArgs({ id }))).resolves.toBe('us-new');
+      await expect(resolve(resolveArgs({ id }))).resolves.toBe('us-new');
 
-    expect(deps.sourceControl.sessions.create).toHaveBeenCalledWith(expect.objectContaining({ branch }));
-  });
+      expect(deps.sourceControl.sessions.create).toHaveBeenCalledWith(expect.objectContaining({ branch }));
+    },
+  );
 
   it('a repeat message on the same thread reuses the existing session, no second row', async () => {
     const sourceControl = makeSourceControl({ existingSession: { sessionId: 'us-existing' } });
@@ -512,34 +772,145 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     await expect(resolve(resolveArgs())).resolves.toBe('channel:slack:C-1:1700.42');
   });
 
-  it('a factory without a repository falls back to a chat-only session', async () => {
-    const sourceControl = makeSourceControl({ hasRepo: false });
-    const deps = makeResolverDeps({ sourceControl });
-    const resolve = createChannelResourceIdResolver(deps as any);
-
-    await expect(resolve(resolveArgs())).resolves.toBe('channel:slack:C-1:1700.42');
-    expect(sourceControl.sessions.create).not.toHaveBeenCalled();
-  });
-
-  it('an unlinked sender stays chat-only and creates no session row', async () => {
+  it('an unlinked sender is refused rather than given a chat-only thread', async () => {
     const sourceControl = makeSourceControl();
     const deps = makeResolverDeps({ link: null, sourceControl });
     const resolve = createChannelResourceIdResolver(deps as any);
 
-    await expect(resolve(resolveArgs())).resolves.toBe('channel:slack:C-1:1700.42');
+    await expect(resolve(resolveArgs())).rejects.toThrow(ChannelSessionRejectedError);
+    await expect(resolve(resolveArgs())).rejects.toThrow(/not linked to a Factory account/);
     expect(sourceControl.connections.list).not.toHaveBeenCalled();
     expect(sourceControl.sessions.create).not.toHaveBeenCalled();
   });
 
-  it('a source-control failure falls back to chat-only instead of dropping the message', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('a linked sender with no project to route to is refused', async () => {
     const sourceControl = makeSourceControl();
-    sourceControl.sessions.create.mockRejectedValue(new Error('db down'));
+    const deps = makeResolverDeps({ sourceControl });
+    deps.projects = makeProjects([{ id: 'fp-1' }, { id: 'fp-2' }]);
+    deps.accountLinks.getAccountLink = vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'user-1' });
+    const resolve = createChannelResourceIdResolver(deps as any);
+
+    await expect(resolve(resolveArgs())).rejects.toThrow(/has no Factory project/);
+    expect(sourceControl.sessions.create).not.toHaveBeenCalled();
+  });
+
+  it('a message with no sender id falls back to the chat-only resourceId', async () => {
+    const sourceControl = makeSourceControl();
     const deps = makeResolverDeps({ sourceControl });
     const resolve = createChannelResourceIdResolver(deps as any);
 
-    await expect(resolve(resolveArgs())).resolves.toBe('channel:slack:C-1:1700.42');
-    expect(warn).toHaveBeenCalled();
+    const args = resolveArgs();
+    args.message.author.userId = '';
+    await expect(resolve(args)).resolves.toBe('channel:slack:C-1:1700.42');
+    expect(sourceControl.sessions.create).not.toHaveBeenCalled();
+  });
+
+  it('a message from no identifiable Slack workspace is refused', async () => {
+    const sourceControl = makeSourceControl();
+    const deps = makeResolverDeps({ sourceControl });
+    const resolve = createChannelResourceIdResolver(deps as any);
+
+    const args = resolveArgs();
+    args.message.raw = {};
+    await expect(resolve(args)).rejects.toThrow(ChannelSessionRejectedError);
+    expect(sourceControl.sessions.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { failure: 'missing connection', expected: /connect source control/i },
+    { failure: 'missing repository', expected: /link a repository/i },
+    { failure: 'multiple providers', expected: /repositories from more than one source-control provider/i },
+    { failure: 'account-link reread', expected: /try again later/i },
+    { failure: 'project reread', expected: /try again later/i },
+    { failure: 'source-control selection', expected: /try again later/i },
+    { failure: 'repository resolution', expected: /try again later/i },
+    { failure: 'project repository read', expected: /try again later/i },
+    { failure: 'repository read', expected: /try again later/i },
+    { failure: 'session lookup', expected: /try again later/i },
+    { failure: 'session creation', expected: /try again later/i },
+  ])('posts one safe explanation for $failure without creating a thread or card', async ({ failure, expected }) => {
+    const sourceControl = makeSourceControl({
+      hasRepo: !['missing connection', 'missing repository'].includes(failure),
+    });
+    if (failure === 'missing connection') sourceControl.connections.list.mockResolvedValue([]);
+    const outage = new Error('db down: postgres://private');
+    if (failure === 'source-control selection') sourceControl.connections.list.mockRejectedValue(outage);
+    if (failure === 'repository resolution') {
+      sourceControl.connections.list
+        .mockResolvedValueOnce([{ id: 'conn-github', integrationId: 'github', createdByUserId: 'owner-1' }])
+        .mockRejectedValueOnce(outage);
+    }
+    if (failure === 'project repository read') {
+      sourceControl.projectRepositories.list
+        .mockResolvedValueOnce([{ id: 'pr-1', repositoryId: 'repo-1', branch: null }])
+        .mockRejectedValueOnce(outage);
+    }
+    if (failure === 'repository read') sourceControl.repositories.get.mockRejectedValue(outage);
+    if (failure === 'session lookup') sourceControl.sessions.getForBranch.mockRejectedValue(outage);
+    if (failure === 'session creation') sourceControl.sessions.create.mockRejectedValue(outage);
+    const deps = makeResolverDeps({ sourceControl });
+    deps.projects = makeProjects([{ id: 'fp-1', slackWorkItemsEnabled: true }]);
+    if (failure === 'account-link reread') {
+      deps.accountLinks.getAccountLink
+        .mockResolvedValueOnce({
+          orgId: 'org-1',
+          userId: 'user-1',
+          defaultFactoryProjectId: 'fp-1',
+        })
+        .mockRejectedValueOnce(outage);
+    }
+    if (failure === 'project reread')
+      deps.projects.get
+        .mockResolvedValueOnce({ id: 'fp-1', slackWorkItemsEnabled: true })
+        .mockRejectedValueOnce(outage);
+    const resolverDeps =
+      failure === 'multiple providers'
+        ? { ...deps, sourceControls: [sourceControl, makeSourceControl({ integrationId: 'gitlab' })] }
+        : deps;
+    const workItems = { upsert: vi.fn() };
+    const store = { listThreads: vi.fn().mockResolvedValue({ threads: [] }), saveThread: vi.fn() };
+    const mastra = { getStorage: () => ({ getStore: async () => store }) };
+    const thread = {
+      ...makeThread(),
+      id: 'slack:C-1:1700.42',
+      isSubscribed: vi.fn().mockResolvedValue(false),
+      post: vi.fn().mockResolvedValue({ id: 'posted-1' }),
+    };
+    const message = { ...makeMessage('T-1'), id: 'msg-1', attachments: [] };
+    const channels = new AgentChannels({
+      adapters: { slack: { name: 'slack' } as any },
+      resolveResourceId: createChannelResourceIdResolver(resolverDeps as any),
+    });
+    const handlers = createHandlers({ ...resolverDeps, workItems } as any);
+    const ctx = handlerCtx(mastra);
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await handlers.onDirectMessage!(
+      thread,
+      message,
+      (t: any, m: any) => (channels as any).handleChatMessage(t, m, mastra, ctx.requestContext, {}),
+      ctx,
+    );
+
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    expect(thread.post.mock.calls[0]![0]).toMatch(expected);
+    expect(thread.post.mock.calls[0]![0]).not.toContain('db down');
+    expect(thread.post.mock.calls[0]![0]).not.toContain('postgres://');
+    if (['missing connection', 'missing repository', 'multiple providers'].includes(failure)) {
+      expect(errorLog).not.toHaveBeenCalled();
+    } else {
+      expect(errorLog).toHaveBeenCalledWith(
+        '[slack] failed to start repo-backed session for thread',
+        'slack:C-1:1700.42',
+        outage,
+      );
+    }
+    expect(thread.postEphemeral).not.toHaveBeenCalled();
+    expect(store.saveThread).not.toHaveBeenCalled();
+    expect(workItems.upsert).not.toHaveBeenCalled();
+    if (failure === 'session creation') expect(sourceControl.sessions.create).toHaveBeenCalledTimes(1);
+    else expect(sourceControl.sessions.create).not.toHaveBeenCalled();
   });
 });
 
@@ -899,20 +1270,52 @@ describe('Slack thread work-item creation', () => {
  * message with a missing-credentials error.
  */
 describe('session start (onSessionStart)', () => {
-  function makeSession({ persistedModeModel = null as string | null, mode = 'build' } = {}) {
-    const settings = new Map<string, unknown>();
+  function makeSession({
+    persistedModeModel = null as string | null,
+    mode = 'build',
+    currentModel = 'openai/gpt-5.5',
+    // Thread settings outlive the session object that wrote them; pass the same
+    // map to a second session to stand in for a restarted process.
+    settings = new Map<string, unknown>(),
+  } = {}) {
     if (persistedModeModel) settings.set(`modeModelId_${mode}`, persistedModeModel);
     return {
       mode: { get: () => mode },
       thread: {
         getSetting: vi.fn(async ({ key }: { key: string }) => settings.get(key) ?? null),
+        setSetting: vi.fn(async ({ key, value }: { key: string; value: unknown }) => {
+          settings.set(key, value);
+        }),
       },
-      model: { switch: vi.fn(async () => {}) },
+      model: {
+        get: vi.fn(() => currentModel),
+        // Real `switch` is what makes a model choice durable: it applies the
+        // model and writes it to the thread's per-mode setting.
+        switch: vi.fn(async ({ modelId }: { modelId: string }) => {
+          settings.set(`modeModelId_${mode}`, modelId);
+        }),
+        saveForMode: vi.fn(async ({ modeId, modelId }: { modeId: string; modelId: string }) => {
+          settings.set(`modeModelId_${modeId}`, modelId);
+        }),
+      },
       om: {
-        observer: { modelId: vi.fn(() => 'initial/model'), switchModel: vi.fn(async () => {}) },
-        reflector: { modelId: vi.fn(() => 'initial/model'), switchModel: vi.fn(async () => {}) },
+        observer: makeOmRole('initial/model'),
+        reflector: makeOmRole('initial/model'),
       },
       state: { get: vi.fn(() => ({})), set: vi.fn(async () => {}) },
+      /** The model a restarted process would restore from the thread. */
+      restoredModel: () => settings.get(`modeModelId_${mode}`) ?? null,
+    };
+  }
+
+  /** Mirrors the real roles: `modelId()` reports what the last switch selected. */
+  function makeOmRole(initial: string) {
+    let current = initial;
+    return {
+      modelId: vi.fn(() => current),
+      switchModel: vi.fn(async ({ modelId }: { modelId: string }) => {
+        current = modelId;
+      }),
     };
   }
 
@@ -920,6 +1323,10 @@ describe('session start (onSessionStart)', () => {
     defaultModelId = 'anthropic/claude-opus-5' as string | null,
     session = { orgId: 'org-1', userId: 'user-1', projectRepositoryId: 'pr-1' } as Record<string, string> | null,
     memoryRecord = null as Record<string, unknown> | null,
+    personalMemoryRecord = null as Record<string, unknown> | null,
+    personalMemoryLookupError = null as Error | null,
+    activePack = null as { build?: string; plan?: string; fast?: string } | null,
+    packLookupError = null as Error | null,
   } = {}) {
     return {
       projects: { getById: vi.fn(async () => ({ id: 'fp-1', defaultModelId })) } as any,
@@ -928,7 +1335,22 @@ describe('session start (onSessionStart)', () => {
         projectRepositories: { get: vi.fn(async () => ({ id: 'pr-1', connectionId: 'conn-gh' })) },
         connections: { get: vi.fn(async () => ({ id: 'conn-gh', factoryProjectId: 'fp-1' })) },
       } as any,
-      memorySettings: { get: vi.fn(async () => memoryRecord) } as any,
+      memorySettings: {
+        // Two rows share this table: the project's (a `factory-project:` sentinel
+        // key) and the sender's own (their user id).
+        get: vi.fn(async ({ userId }: { userId: string }) => {
+          if (userId.startsWith('factory-project:')) return memoryRecord;
+          if (personalMemoryLookupError) throw personalMemoryLookupError;
+          return personalMemoryRecord;
+        }),
+      } as any,
+      modelPacks: {
+        getActive: vi.fn(async () => {
+          if (packLookupError) throw packLookupError;
+          if (!activePack) return null;
+          return { models: { build: '', plan: '', fast: '', ...activePack } };
+        }),
+      } as any,
     };
   }
 
@@ -949,6 +1371,123 @@ describe('session start (onSessionStart)', () => {
     // works on a thread created before this process started.
     expect(deps.sourceControl.sessions.getBySessionId).toHaveBeenCalledWith('us-1');
     expect(deps.projects.getById).toHaveBeenCalledWith({ id: 'fp-1' });
+    // No pack bought a say here, so the factory default is this thread's model
+    // from now on: the choice is on the thread, not re-derived per message.
+    expect(deps.modelPacks.getActive).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    expect(session.model.switch).toHaveBeenCalledTimes(1);
+    expect(session.restoredModel()).toBe('anthropic/claude-opus-5');
+  });
+
+  // The sender's own choice outranks the factory's shared default, which is the
+  // whole point of a model pack: it is the model that user picked for themselves.
+  it("starts on the linked sender's active model pack rather than the factory default", async () => {
+    const deps = makeStartDeps({ activePack: { build: 'openai/gpt-5.6' } });
+    const session = makeSession();
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    // Keyed by the org/user pair the source-control row resolved, not by
+    // anything the Slack payload claimed.
+    expect(deps.modelPacks.getActive).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    expect(session.model.switch).toHaveBeenLastCalledWith({ modelId: 'openai/gpt-5.6' });
+    expect(session.restoredModel()).toBe('openai/gpt-5.6');
+  });
+
+  it("derives observational memory from the sender's provider credentials", async () => {
+    const deps = makeStartDeps({
+      defaultModelId: 'openai/gpt-5.6',
+      activePack: { build: 'deepseek/deepseek-chat' },
+    });
+    const session = makeSession();
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
+    expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
+    expect(session.om.observer.switchModel).not.toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
+    expect(session.model.switch).toHaveBeenLastCalledWith({ modelId: 'deepseek/deepseek-chat' });
+  });
+
+  it('realigns observational memory when the sender model cannot be applied', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const deps = makeStartDeps({
+      defaultModelId: 'anthropic/claude-opus-5',
+      activePack: { build: 'deepseek/deepseek-chat' },
+    });
+    const session = makeSession({ currentModel: 'anthropic/claude-opus-5' });
+    session.model.switch.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('missing credentials'));
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    expect(session.om.observer.switchModel).toHaveBeenLastCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
+    expect(session.om.reflector.switchModel).toHaveBeenLastCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
+    expect(session.om.observer.switchModel).not.toHaveBeenLastCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
+    expect(warn).toHaveBeenCalledWith("[slack] Failed to apply the sender's model pack model", {
+      modelId: 'deepseek/deepseek-chat',
+      error: 'missing credentials',
+    });
+    warn.mockRestore();
+  });
+
+  // The point of persisting the choice: the thread keeps the model it started
+  // on. A later process — where the sender's pack and the factory default have
+  // both moved on — must not retarget a conversation already under way.
+  it('keeps the first model when a later start runs with a changed pack and factory default', async () => {
+    const threadSettings = new Map<string, unknown>();
+    const deps = makeStartDeps({ activePack: { build: 'openai/gpt-5.6' } });
+
+    await createChannelSessionStartHook(deps as any)(startArgs(makeSession({ settings: threadSettings })) as any);
+
+    deps.modelPacks.getActive.mockClear();
+    deps.projects.getById.mockClear();
+    deps.modelPacks.getActive.mockResolvedValue({ models: { build: 'openai/gpt-6', plan: '', fast: '' } });
+    deps.projects.getById.mockResolvedValue({ id: 'fp-1', defaultModelId: 'anthropic/claude-opus-6' });
+    const session = makeSession({ settings: threadSettings });
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    expect(session.model.switch).not.toHaveBeenCalled();
+    expect(deps.modelPacks.getActive).not.toHaveBeenCalled();
+    expect(session.restoredModel()).toBe('openai/gpt-5.6');
+  });
+
+  it("starts on the sender's pack even when the factory has no default model", async () => {
+    const deps = makeStartDeps({ defaultModelId: null, activePack: { build: 'openai/gpt-5.6' } });
+    const session = makeSession();
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    expect(session.model.switch).toHaveBeenCalledTimes(1);
+    expect(session.model.switch).toHaveBeenCalledWith({ modelId: 'openai/gpt-5.6' });
+    expect(session.restoredModel()).toBe('openai/gpt-5.6');
+  });
+
+  // A pack saved without a build model says nothing about the build phase, so
+  // the factory rung is the next answer rather than an empty model id.
+  it('falls through to the factory default when the active pack names no build model', async () => {
+    const deps = makeStartDeps({ activePack: { plan: 'openai/gpt-5.6' } });
+    const session = makeSession();
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    expect(session.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
+    expect(session.restoredModel()).toBe('anthropic/claude-opus-5');
+  });
+
+  // Reaching a storage domain can fail on its own (uninitialized table, a
+  // transient read error). A personal preference that cannot be read is not
+  // worth dropping the sender's message over.
+  it('falls back to the factory default when the model-pack lookup fails', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const deps = makeStartDeps({ packLookupError: new Error('model packs unavailable') });
+    const session = makeSession();
+
+    await expect(createChannelSessionStartHook(deps as any)(startArgs(session) as any)).resolves.toBeUndefined();
+
+    expect(session.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
+    expect(session.restoredModel()).toBe('anthropic/claude-opus-5');
+    expect(warn).toHaveBeenCalled();
   });
 
   it('applies the owner observational-memory settings, matching the web kickoff', async () => {
@@ -960,18 +1499,100 @@ describe('session start (onSessionStart)', () => {
     expect(deps.memorySettings.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'factory-project:fp-1' });
     expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
     expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ observationThreshold: 111 }));
+    // The sender's own row is read too, and an absent one simply leaves the
+    // project's configuration in place.
+    expect(deps.memorySettings.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+  });
+
+  // Observational memory is the sender's to configure: a thread they are talking
+  // to should observe the way their own settings say, not the way the project's
+  // shared row does.
+  it("applies the linked sender's own memory settings over the project's", async () => {
+    const deps = makeStartDeps({
+      memoryRecord: { observerModelId: 'anthropic/claude-haiku-4-5', observationThreshold: 111 },
+      personalMemoryRecord: { observerModelId: 'openai/gpt-5.4-mini', observationThreshold: 222 },
+    });
+    const session = makeSession();
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    // Applied last, so the sender's row is what the session ends up running.
+    expect(session.om.observer.switchModel).toHaveBeenLastCalledWith({ modelId: 'openai/gpt-5.4-mini' });
+    expect(session.om.observer.modelId()).toBe('openai/gpt-5.4-mini');
+    expect(session.state.set).toHaveBeenLastCalledWith(expect.objectContaining({ observationThreshold: 222 }));
+  });
+
+  // The row is authoritative only for what the sender saved. A knob they never
+  // touched must keep the project's value rather than snapping back to the
+  // built-in default — the factory's provider may be the only credentialed one.
+  it("keeps the project's memory settings for the knobs the sender never saved", async () => {
+    const deps = makeStartDeps({
+      memoryRecord: { observerModelId: 'anthropic/claude-haiku-4-5', observationThreshold: 111 },
+      personalMemoryRecord: { observerModelId: null, observationThreshold: 222 },
+    });
+    const session = makeSession();
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    expect(session.om.observer.modelId()).toBe('anthropic/claude-haiku-4-5');
+    expect(session.state.set).toHaveBeenLastCalledWith(expect.objectContaining({ observationThreshold: 222 }));
+  });
+
+  // A restarted process restores the generation model from the thread, then
+  // uses that provider while reapplying the project and sender memory settings.
+  it('re-applies memory settings on a restarted session using the persisted model provider', async () => {
+    const deps = makeStartDeps({
+      personalMemoryRecord: { reflectionThreshold: 333 },
+    });
+    const session = makeSession({ persistedModeModel: 'deepseek/deepseek-chat' });
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
+    expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
+    expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ reflectionThreshold: 333 }));
+    // Still no model re-resolution: the persisted thread choice remains authoritative.
+    expect(deps.modelPacks.getActive).not.toHaveBeenCalled();
+    expect(deps.projects.getById).not.toHaveBeenCalled();
+    expect(session.model.switch).not.toHaveBeenCalled();
+    expect(session.restoredModel()).toBe('deepseek/deepseek-chat');
+  });
+
+  // Reaching a storage domain can fail on its own (uninitialized table, a
+  // transient read error). The sender's settings are a preference, not a
+  // prerequisite for answering their message.
+  it("falls back to the project's memory settings when the sender's row cannot be read", async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const deps = makeStartDeps({
+      memoryRecord: { observerModelId: 'anthropic/claude-haiku-4-5', observationThreshold: 111 },
+      personalMemoryLookupError: new Error('memory settings unavailable'),
+    });
+    const session = makeSession();
+
+    await expect(createChannelSessionStartHook(deps as any)(startArgs(session) as any)).resolves.toBeUndefined();
+
+    expect(warn).toHaveBeenCalled();
+    expect(session.om.observer.modelId()).toBe('anthropic/claude-haiku-4-5');
+    expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ observationThreshold: 111 }));
+    expect(session.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
   });
 
   // The durable record of a deliberate choice: either an earlier start or the
-  // user's own switch. Re-applying the factory default over it would undo the
-  // user's selection every time the process restarts.
+  // user's own switch. Re-applying a preference over it would undo the user's
+  // selection every time the process restarts or another message arrives.
   it('leaves the model alone when its mode already has a model persisted on the thread', async () => {
-    const deps = makeStartDeps();
+    const deps = makeStartDeps({ activePack: { build: 'openai/gpt-5.6' } });
     const session = makeSession({ persistedModeModel: 'anthropic/claude-fable-5' });
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
     expect(session.model.switch).not.toHaveBeenCalled();
+    expect(session.model.saveForMode).not.toHaveBeenCalled();
+    // Nothing is re-resolved: the thread's model was decided when it started,
+    // and a pack the user has since changed must not retarget it.
+    expect(deps.modelPacks.getActive).not.toHaveBeenCalled();
+    expect(deps.projects.getById).not.toHaveBeenCalled();
+    expect(session.restoredModel()).toBe('anthropic/claude-fable-5');
     // The factory stamp still lands: org-first credential resolution keys off
     // controller state even when the model choice is already persisted.
     expect(session.state.set).toHaveBeenCalledWith({ factoryProjectId: 'fp-1' });
@@ -1060,6 +1681,8 @@ describe('session start (onSessionStart)', () => {
 
     expect(session.model.switch).not.toHaveBeenCalled();
     expect(deps.sourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
+    // Chat-only threads have no linked sender to read a pack for either.
+    expect(deps.modelPacks.getActive).not.toHaveBeenCalled();
   });
 
   it('configures nothing when the session row is gone', async () => {
@@ -1069,15 +1692,31 @@ describe('session start (onSessionStart)', () => {
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
     expect(session.model.switch).not.toHaveBeenCalled();
+    expect(deps.modelPacks.getActive).not.toHaveBeenCalled();
   });
 
-  it('leaves the session on its default when the factory has no default model', async () => {
+  // Nothing chose a model here, so the SDK's built-in mode default is the
+  // thread's answer — recorded as such, because a future SDK that moves that
+  // default must not silently retarget a conversation already under way.
+  it('records the SDK mode default when neither a pack nor a factory default exists', async () => {
     const deps = makeStartDeps({ defaultModelId: null });
-    const session = makeSession();
+    const session = makeSession({ currentModel: 'openai/gpt-5.5' });
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
     expect(session.model.switch).not.toHaveBeenCalled();
+    expect(session.model.saveForMode).toHaveBeenCalledWith({ modeId: 'build', modelId: 'openai/gpt-5.5' });
+    expect(session.restoredModel()).toBe('openai/gpt-5.5');
+  });
+
+  it('records nothing when the session has no model to record', async () => {
+    const deps = makeStartDeps({ defaultModelId: null });
+    const session = makeSession({ currentModel: '' });
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    expect(session.model.saveForMode).not.toHaveBeenCalled();
+    expect(session.restoredModel()).toBe(null);
   });
 });
 
@@ -1092,7 +1731,9 @@ describe('Slack aside ingest', () => {
     } as any;
   }
 
-  function makeAsideDeps({ link = { orgId: 'org-1', userId: 'user-1' } as { orgId?: string; userId: string } | null } = {}) {
+  function makeAsideDeps({
+    link = { orgId: 'org-1', userId: 'user-1' } as { orgId?: string; userId: string } | null,
+  } = {}) {
     const thread = makeThread();
     thread.id = 'slack:C-1:1700.42';
     thread.post = vi.fn();

@@ -1,5 +1,7 @@
 import type { Preview } from '@storybook/react-vite';
+import { createElement } from 'react';
 import { themes } from 'storybook/theming';
+import { ThemeContext } from '../src/ds/components/ThemeProvider/theme-context';
 import './tailwind.css';
 
 // A redeploy deletes the hashed chunks an open tab still points at.
@@ -48,7 +50,11 @@ const preview: Preview = {
       const theme = context.globals?.theme === 'light' ? 'light' : 'dark';
       document.documentElement.classList.remove('light', 'dark');
       document.documentElement.classList.add(theme);
-      return Story();
+      return createElement(
+        ThemeContext.Provider,
+        { value: { theme, resolvedTheme: theme, systemTheme: theme, setTheme: () => {} } },
+        createElement(Story),
+      );
     },
   ],
   parameters: {
@@ -62,6 +68,9 @@ const preview: Preview = {
       },
     },
     backgrounds: { options: surfaces },
+    options: {
+      storySort: { order: ['*', 'Hooks', 'Helpers'] },
+    },
   },
   initialGlobals: {
     theme: 'dark',

@@ -6,6 +6,7 @@ import type { MastraTUIOptions } from '../../src/tui/index.js';
 export type ScenarioName =
   | 'startup'
   | 'abort-followup'
+  | 'startup-interrupted'
   | 'account-rotation'
   | 'account-routing-targeted'
   | 'branch-context-long-name'
@@ -37,6 +38,8 @@ export type ScenarioName =
   | 'browser-profile-provider-mismatch'
   | 'browser-settings-persistence'
   | 'browser-startup-restore'
+  | 'browser-status-model'
+  | 'browser-status-chat-model'
   | 'browser-tool-unavailable'
   | 'browserbase-startup-restore'
   | 'browser-toggle-attach'

@@ -6,8 +6,8 @@ export type InngestCreateFunctionConfig = Parameters<Inngest['createFunction']>[
 
 // Extract specific flow control properties (excluding batching).
 // `retries` is function-level: Inngest re-invokes the function when an SDK request fails
-// (process restart, OOM, 5xx/timeout). Step-code errors are retried separately by
-// executeStepWithRetry and never rethrown to Inngest.
+// (process restart, OOM, 5xx/timeout). Step-code errors are retried by executeStepWithRetry
+// and thrown from step.run() as NonRetriableError, so Inngest does not retry them again.
 export type InngestFlowControlConfig = Pick<
   InngestCreateFunctionConfig,
   'concurrency' | 'rateLimit' | 'throttle' | 'debounce' | 'priority' | 'retries'

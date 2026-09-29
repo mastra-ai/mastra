@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { Agent } from '../agent/agent';
 import type { MastraProviderMetadata } from '../agent/message-list/state/types';
 import type { AgentSignalContents } from '../agent/signals';
+import { MastraError } from '../error';
 import type { IMastraLogger } from '../logger/logger';
 import type { Mastra } from '../mastra';
 import type { StorageThreadType } from '../memory/types';
@@ -36,6 +37,7 @@ import { ChatChannelOutputProcessor, CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './o
 import type { ChatChannelRenderContext } from './output-processor';
 import { ChatChannelProcessor } from './processor';
 import { MastraStateAdapter } from './state-adapter';
+import { extractErrorMessage } from './stream-helpers';
 import type { PendingApprovalRecord } from './stream-helpers';
 import type {
   ChannelAdapterConfig,
@@ -54,6 +56,9 @@ import type {
 import { defaultTypingStatus } from './typing-status';
 import type { TypingStatusContext, TypingStatusFn } from './typing-status';
 import { resolveWaitUntil } from './wait-until';
+
+/** Platforms whose chat-SDK adapters render interactive approval buttons. */
+const APPROVAL_BUTTON_PLATFORMS = new Set(['slack', 'discord', 'teams', 'gchat', 'google-chat', 'telegram']);
 
 /**
  * Manages a single Chat SDK instance for an agent, wiring all adapters
@@ -292,7 +297,7 @@ export class AgentChannels {
             memory,
             // Without approval-button rendering, auto-approve tools to
             // avoid getting stuck waiting for input we can't ask for.
-            autoResumeSuspendedTools,
+            ...(autoResumeSuspendedTools ? { autoResumeSuspendedTools } : {}),
           },
         },
       },
@@ -320,6 +325,12 @@ export class AgentChannels {
         // The run already started; the output processor reports its failure.
         this.log('debug', 'accepted consume failed', err);
       }
+    } else {
+      this.log(
+        accepted.action === 'deliver' ? 'debug' : 'warn',
+        `[dispatchInboundMessage] inbound message did not start a run (action: ${accepted.action}); the thread may be suspended awaiting tool approval`,
+        { threadId: memory.thread, resourceId: memory.resource },
+      );
     }
   }
 
@@ -437,21 +448,23 @@ export class AgentChannels {
       // MUST be built per message, never once at initialize() time: a custom
       // handler may write the sender's tenant onto the request context, and a
       // shared instance would leak that tenant into the next message's run.
-      const beginMessage = () => {
+      // `skipped` holds earlier messages the Chat SDK batched into this dispatch
+      // under a `burst`/`debounce`/`queue` concurrency strategy (oldest first).
+      const beginMessage = (skipped: readonly Message[] = []) => {
         const requestContext = new RequestContext();
         const signalMetadata: Record<string, unknown> = {};
         const defaultHandler = (chatThread: Thread, message: Message) =>
-          this.handleChatMessage(chatThread, message, mastra, requestContext, signalMetadata);
+          this.handleChatMessage(chatThread, message, mastra, requestContext, signalMetadata, skipped);
         // Context handed to custom handlers so they can reach the resolved Mastra
         // instance without being injected with an external accessor, and
         // contribute to the request context the run will dispatch with.
-        const handlerContext: ChannelHandlerContext = { mastra, requestContext, signalMetadata };
+        const handlerContext: ChannelHandlerContext = { mastra, requestContext, signalMetadata, skipped };
         return { defaultHandler, handlerContext };
       };
 
       if (onDirectMessage !== false) {
-        chat.onDirectMessage((thread, message) => {
-          const { defaultHandler, handlerContext } = beginMessage();
+        chat.onDirectMessage((thread, message, _channel, context) => {
+          const { defaultHandler, handlerContext } = beginMessage(context?.skipped);
           if (typeof onDirectMessage === 'function') {
             return onDirectMessage(thread, message, defaultHandler, handlerContext);
           }
@@ -460,8 +473,8 @@ export class AgentChannels {
       }
 
       if (onMention !== false) {
-        chat.onNewMention((thread, message) => {
-          const { defaultHandler, handlerContext } = beginMessage();
+        chat.onNewMention((thread, message, context) => {
+          const { defaultHandler, handlerContext } = beginMessage(context?.skipped);
           if (typeof onMention === 'function') {
             return onMention(thread, message, defaultHandler, handlerContext);
           }
@@ -470,8 +483,8 @@ export class AgentChannels {
       }
 
       if (onSubscribedMessage !== false) {
-        chat.onSubscribedMessage((thread, message) => {
-          const { defaultHandler, handlerContext } = beginMessage();
+        chat.onSubscribedMessage((thread, message, context) => {
+          const { defaultHandler, handlerContext } = beginMessage(context?.skipped);
           if (typeof onSubscribedMessage === 'function') {
             return onSubscribedMessage(thread, message, defaultHandler, handlerContext);
           }
@@ -570,6 +583,7 @@ export class AgentChannels {
               let toolArgs: Record<string, unknown> | undefined;
 
               const stashed = this.pendingApprovalCards.get(toolCallId);
+              let requesterId = stashed?.requesterId;
               if (stashed?.runId) {
                 runId = stashed.runId;
                 toolName = stashed.toolName;
@@ -587,7 +601,7 @@ export class AgentChannels {
                   orderBy: { field: 'createdAt', direction: 'DESC' },
                 });
 
-                for (const msg of messages) {
+                for (const [index, msg] of messages.entries()) {
                   const pending = msg.content?.metadata?.pendingToolApprovals as
                     | Record<
                         string,
@@ -606,6 +620,33 @@ export class AgentChannels {
                         runId = toolData.parentRunId ?? toolData.runId;
                         toolName = toolData.toolName;
                         toolArgs = toolData.args;
+                        // Recover the card's owner from the user turn that led to it
+                        // (messages are newest-first). If that turn has messages from
+                        // more than one author we can't tell who triggered the tool,
+                        // so no one may answer the card.
+                        const earlier = messages.slice(index + 1);
+                        const turnStart = earlier.findIndex(m => m.role === 'user');
+                        const turnEnd = earlier.findIndex((m, i) => i > turnStart && m.role !== 'user');
+                        const authors = new Set(
+                          (turnStart === -1 ? [] : earlier.slice(turnStart, turnEnd === -1 ? undefined : turnEnd))
+                            .map(
+                              m =>
+                                (
+                                  m.content?.providerMetadata?.mastra as
+                                    | { channels?: Record<string, { author?: { userId?: string } }> }
+                                    | undefined
+                                )?.channels?.[platform]?.author?.userId,
+                            )
+                            .filter((id): id is string => !!id),
+                        );
+                        if (!requesterId && authors.size > 1) {
+                          this.log(
+                            'info',
+                            `Ignoring tool approval action: requester for toolCallId=${toolCallId} is ambiguous`,
+                          );
+                          return;
+                        }
+                        requesterId ??= [...authors][0];
                         break;
                       }
                     }
@@ -616,6 +657,17 @@ export class AgentChannels {
 
               if (!runId) {
                 this.log('info', `No pending approval found for toolCallId=${toolCallId}`);
+                return;
+              }
+
+              // Only the user whose message triggered the tool call may answer
+              // its approval card. Skip the check when either identity is unknown.
+              const actorId = event.user?.userId;
+              if (requesterId && actorId && requesterId !== actorId) {
+                this.log(
+                  'info',
+                  `Ignoring tool approval action from ${actorId}: only ${requesterId} may answer toolCallId=${toolCallId}`,
+                );
                 return;
               }
 
@@ -660,7 +712,7 @@ export class AgentChannels {
                 const { requestContext } = handlerContext;
                 requestContext.set('channel', channelContext);
 
-                const renderContext = this._buildRenderContext(chatThread, platform);
+                const renderContext = this._buildRenderContext(chatThread, platform, { requesterId });
                 requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, renderContext);
 
                 try {
@@ -712,7 +764,10 @@ export class AgentChannels {
               const { requestContext } = handlerContext;
               requestContext.set('channel', channelContext);
 
-              const renderContext = this._buildRenderContext(chatThread, platform, { toolCallId, messageId });
+              const renderContext = this._buildRenderContext(chatThread, platform, {
+                approvalContext: { toolCallId, messageId },
+                requesterId,
+              });
               requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, renderContext);
 
               await this.dispatchApproval({
@@ -1081,37 +1136,88 @@ export class AgentChannels {
     mastra: Mastra,
     requestContext: RequestContext,
     signalMetadata: Record<string, unknown>,
+    skipped: readonly Message[] = [],
   ): Promise<void> {
-    try {
-      await this.processChatMessage(chatThread, message, mastra, requestContext, signalMetadata);
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      // A refused request is not a malfunction: the host decided this sender
-      // gets nothing. Log it and stop — posting would echo the host's
-      // authorization message into the chat thread and confirm the bot is
-      // present to a sender who was just turned away.
-      if (err instanceof ChannelSessionRejectedError) {
-        this.log('info', `[${chatThread.adapter.name}] Session resolver refused the message`, {
-          messageId: message.id,
-          authorId: message.author?.userId,
-          reason: error.message,
-        });
-        return;
+    // The SDK batches by conversation, not sender. Split the batch into runs of
+    // consecutive messages from one sender so each run is dispatched under its
+    // own author's identity, in the order they were sent. A message without a
+    // userId is never grouped with another.
+    const all = [...skipped, message];
+    const batchIds = new Set(all.map(m => m.id));
+    const runs: Message[][] = [];
+    for (const m of all) {
+      const last = runs[runs.length - 1];
+      const userId = m.author?.userId;
+      if (last && userId !== undefined && last[0]!.author?.userId === userId) last.push(m);
+      else runs.push([m]);
+    }
+    for (const [i, run] of runs.entries()) {
+      const runMessage = run[run.length - 1]!;
+      // The final run holds the triggering message, so it uses the context the
+      // handler saw. Earlier runs belong to other senders (or earlier turns) and
+      // get a fresh context so per-sender data never leaks between runs.
+      const isLast = i === runs.length - 1;
+      try {
+        await this.processChatMessage(
+          chatThread,
+          runMessage,
+          mastra,
+          isLast ? requestContext : new RequestContext(),
+          isLast ? signalMetadata : {},
+          run.slice(0, -1),
+          batchIds,
+        );
+      } catch (err) {
+        // One failed or refused run must not stop later senders' runs.
+        await this.handleRunError(chatThread, runMessage, err);
       }
-      this.log('error', `[${chatThread.adapter.name}] Error handling message`, {
+    }
+  }
+
+  private async handleRunError(chatThread: Thread, message: Message, err: unknown): Promise<void> {
+    const error = err instanceof Error ? err : new Error(String(err));
+    // A refused request is not a malfunction: the host decided this sender
+    // gets nothing. Log it and stop — posting would echo the host's
+    // authorization message into the chat thread and confirm the bot is
+    // present to a sender who was just turned away.
+    if (err instanceof ChannelSessionRejectedError) {
+      this.log('info', `[${chatThread.adapter.name}] Session resolver refused the message`, {
         messageId: message.id,
         authorId: message.author?.userId,
-        error: String(err),
+        reason: error.message,
       });
-      try {
-        const adapterConfig = this.adapterConfigs[chatThread.adapter.name];
-        const errorMessage = adapterConfig?.formatError
-          ? adapterConfig.formatError(error)
-          : `❌ Error: ${error.message}`;
-        await chatThread.post(errorMessage);
-      } catch (postErr) {
-        this.log('debug', 'Failed to post error message to thread', postErr);
-      }
+      return;
+    }
+    let loggedError;
+    try {
+      const message = extractErrorMessage(err);
+      const cause =
+        typeof err === 'object' && err !== null && 'cause' in err ? extractErrorMessage(err.cause) : undefined;
+      const { id, domain, category } = err instanceof MastraError ? err : {};
+      loggedError = {
+        message: typeof message === 'string' && message.length > 0 ? message : 'Unknown error',
+        ...(typeof id === 'string' ? { code: id } : {}),
+        ...(typeof domain === 'string' ? { domain } : {}),
+        ...(typeof category === 'string' ? { category } : {}),
+        ...(typeof cause === 'string' && cause.length > 0 ? { cause: { message: cause } } : {}),
+      };
+    } catch {
+      loggedError = { message: 'Error details unavailable' };
+    }
+    const diagnostic = {
+      platform: chatThread.adapter.name,
+      threadId: chatThread.id,
+      messageId: message.id,
+      authorId: message.author?.userId,
+      error: loggedError,
+    };
+    this.log('error', `[${chatThread.adapter.name}] Error handling message ${JSON.stringify(diagnostic)}`, diagnostic);
+    try {
+      const adapterConfig = this.adapterConfigs[chatThread.adapter.name];
+      const errorMessage = adapterConfig?.formatError ? adapterConfig.formatError(error) : `❌ Error: ${error.message}`;
+      await chatThread.post(errorMessage);
+    } catch (postErr) {
+      this.log('debug', 'Failed to post error message to thread', postErr);
     }
   }
 
@@ -1121,8 +1227,12 @@ export class AgentChannels {
     mastra: Mastra,
     requestContext: RequestContext,
     signalMetadata: Record<string, unknown> = {},
+    skipped: readonly Message[] = [],
+    historyExcludeIds: ReadonlySet<string> = new Set([...skipped, message].map(m => m.id)),
   ): Promise<void> {
     const platform = chatThread.adapter.name;
+    // Messages batched by a concurrency strategy, oldest first, then the current one.
+    const batch = [...skipped, message].filter(m => !this.isContentlessMessage(m));
 
     // Some adapters lift platform side-channel events (read receipts, delivery
     // acks) into inbound messages carrying no text and no attachments. Running
@@ -1131,7 +1241,7 @@ export class AgentChannels {
     // nothing to answer here, so drop it before any thread, memory, or run
     // work happens. Custom handlers run ahead of this and still see the
     // message if they want it.
-    if (this.isContentlessMessage(message)) {
+    if (batch.length === 0) {
       this.log('debug', `[${platform}] Skipping message with no text and no attachments`, {
         messageId: message.id,
       });
@@ -1176,7 +1286,7 @@ export class AgentChannels {
       const alreadySubscribed = await chatThread.isSubscribed();
       if (!alreadySubscribed) {
         this.logger?.debug?.(`Fetching thread history (max ${maxMessages}) for first mention in ${chatThread.id}`);
-        const history = await this.fetchThreadHistory(chatThread, message.id, maxMessages);
+        const history = await this.fetchThreadHistory(chatThread, historyExcludeIds, maxMessages);
         this.logger?.debug?.(`Fetched ${history.length} messages from thread history`);
         if (history.length > 0) {
           const lines = ['[Thread context — messages in this thread before you joined]'];
@@ -1193,10 +1303,13 @@ export class AgentChannels {
       }
     }
 
-    const richText = message.formatted ? chatModule().stringifyMarkdown(message.formatted).trim() : undefined;
-    const text = [historyBlock, richText || message.text].filter(Boolean).join('\n\n');
+    const messageTexts = batch.map(m => {
+      const richText = m.formatted ? chatModule().stringifyMarkdown(m.formatted).trim() : undefined;
+      return richText || m.text;
+    });
+    const text = [historyBlock, ...messageTexts].filter(Boolean).join('\n\n');
     const parts: Exclude<AgentSignalContents, string> = [{ type: 'text', text }];
-    const attachments = message.attachments.filter(a => a.url || a.fetchData);
+    const attachments = batch.flatMap(m => m.attachments ?? []).filter(a => a.url || a.fetchData);
 
     // Route attachments based on `inlineMedia` config (see DEFAULT_INLINE_MEDIA_TYPES).
     // Inline types are sent as file parts (the LLM adapter converts image/* to
@@ -1304,7 +1417,10 @@ export class AgentChannels {
       toolDisplay === 'cards' ||
       toolDisplay === 'timeline' ||
       toolDisplay === 'grouped' ||
-      toolDisplay === 'hidden';
+      // `'hidden'` still posts approval cards, but only adapters with
+      // interactive buttons can act on them. Button-less surfaces (SMS,
+      // iMessage, custom gateways) must auto-resume or the thread gets stuck.
+      (toolDisplay === 'hidden' && (adapterConfig?.approvalButtons ?? APPROVAL_BUTTON_PLATFORMS.has(platform)));
 
     this.log('info', '[processChatMessage] tool approval config', {
       platform,
@@ -1335,7 +1451,7 @@ export class AgentChannels {
     // subscription consumer: rendering now happens inline with the run that
     // produces the chunks, so only the Lambda that won the wake race
     // (signals reservation) renders the reply.
-    const renderContext = this._buildRenderContext(chatThread, platform);
+    const renderContext = this._buildRenderContext(chatThread, platform, { requesterId: message.author?.userId });
     requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, renderContext);
 
     void chatThread.subscribe().catch(err => {
@@ -1376,7 +1492,7 @@ export class AgentChannels {
    */
   private async fetchThreadHistory(
     chatThread: Thread,
-    currentMessageId: string,
+    excludeIds: ReadonlySet<string>,
     maxMessages: number,
   ): Promise<ThreadHistoryMessage[]> {
     const messages: ThreadHistoryMessage[] = [];
@@ -1384,8 +1500,8 @@ export class AgentChannels {
     try {
       // chatThread.messages is an async iterator that yields newest-first
       for await (const msg of chatThread.messages) {
-        // Skip the current message that triggered this request
-        if (msg.id === currentMessageId) continue;
+        // Skip the messages that triggered this request
+        if (excludeIds.has(msg.id)) continue;
 
         const historyText = msg.formatted ? chatModule().stringifyMarkdown(msg.formatted).trim() : undefined;
         messages.push({
@@ -1420,7 +1536,10 @@ export class AgentChannels {
   _buildRenderContext(
     chatThread: Thread,
     platform: string,
-    approvalContext?: { toolCallId: string; messageId: string },
+    {
+      approvalContext,
+      requesterId,
+    }: { approvalContext?: { toolCallId: string; messageId: string }; requesterId?: string } = {},
   ): ChatChannelRenderContext {
     const adapter = this.adapters[platform]!;
     const adapterConfig = this.adapterConfigs[platform];
@@ -1436,7 +1555,7 @@ export class AgentChannels {
     const typingGate = { active: false };
 
     const onApprovalPosted = (toolCallId: string, record: PendingApprovalRecord) => {
-      this.pendingApprovalCards.set(toolCallId, record);
+      this.pendingApprovalCards.set(toolCallId, { ...record, requesterId: record.requesterId ?? requesterId });
     };
     const getPendingApproval = (id: string) => this.pendingApprovalCards.get(id);
     const takePendingApproval = (id: string) => {
@@ -1464,6 +1583,19 @@ export class AgentChannels {
       onAbort: adapterConfig?.onAbort,
       approvalContext,
     };
+  }
+
+  /**
+   * Whether a `tool-call-approval` chunk for `toolName` should render
+   * Approve/Deny controls in the chat. The base class always renders them;
+   * subclasses that resolve approval policy themselves (e.g. an agent
+   * controller auto-approving `allow` tools) return `false` when no human
+   * decision is actually pending.
+   *
+   * @internal
+   */
+  async shouldRenderToolApproval(_requestContext: RequestContext | undefined, _toolName: string): Promise<boolean> {
+    return true;
   }
 
   /**

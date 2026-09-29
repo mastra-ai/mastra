@@ -1,5 +1,6 @@
 import type { StorageThreadType } from '@mastra/core/memory';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import {
   ThreadList,
@@ -10,14 +11,21 @@ import {
   ThreadListSeparator,
 } from '@mastra/playground-ui/components/ThreadList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { PanelEdgeIcon } from '@mastra/playground-ui/resize/panel-edge-icon';
 import { panelIconButtonClass } from '@mastra/playground-ui/resize/panel-icon-button';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Plus } from 'lucide-react';
-import { useState } from 'react';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import { ChevronRight, Plus } from 'lucide-react';
+import { useId, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useCollapsedThreadSections } from '../hooks/use-collapsed-thread-sections';
+import { usePinnedThreads } from '../hooks/use-pinned-threads';
+import { RenameThreadDialog } from './rename-thread-dialog';
+import { ThreadActionsMenu } from './thread-actions-menu';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface ChatThreadsProps {
   threads: StorageThreadType[];
@@ -26,7 +34,7 @@ export interface ChatThreadsProps {
   resourceId: string;
   resourceType: 'agent' | 'network';
   embedded?: boolean;
-  /** When provided, renders a "Hide threads panel" control next to "New Chat". */
+  /** When provided, renders a "Hide threads panel" control next to "New Thread". */
   onHidePanel?: () => void;
 }
 
@@ -40,12 +48,47 @@ export const ChatThreads = ({
   onHidePanel,
 }: ChatThreadsProps) => {
   const { Link, paths } = useLinkComponent();
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-  const { canDelete } = usePermissions();
+  const [dialog, setDialog] = useState<{ type: 'rename' | 'delete'; thread: StorageThreadType } | null>(null);
+  const { canDelete, canEdit } = usePermissions();
+  const { pinnedIds, pin, unpin } = usePinnedThreads(resourceType, resourceId);
+  const pinnedLabelId = useId();
+  const recentLabelId = useId();
+  const { isCollapsed, toggle } = useCollapsedThreadSections();
+
+  const threadsById = new Map(threads.map(thread => [thread.id, thread]));
+  const pinnedThreads = pinnedIds.flatMap(id => threadsById.get(id) ?? []);
+  const pinnedIdSet = new Set(pinnedThreads.map(thread => thread.id));
+  const otherThreads = threads.filter(thread => !pinnedIdSet.has(thread.id));
 
   const canDeleteThread = canDelete('memory');
+  const canRenameThread = resourceType === 'agent' && canEdit('memory');
+  const closeDialog = () => setDialog(null);
+  const threadLink = (id: string) =>
+    resourceType === 'agent' ? paths.agentThreadLink(resourceId, id) : paths.networkThreadLink(resourceId, id);
   const newThreadLink =
     resourceType === 'agent' ? paths.agentNewThreadLink(resourceId) : paths.networkNewThreadLink(resourceId);
+
+  const recentList = (
+    <ThreadListItems>
+      {otherThreads.map(thread => (
+        <ThreadListItem
+          key={thread.id}
+          as={Link}
+          to={threadLink(thread.id)}
+          isActive={thread.id === threadId}
+          actions={
+            <ThreadActionsMenu
+              onPin={() => pin(thread.id)}
+              onRename={canRenameThread ? () => setDialog({ type: 'rename', thread }) : undefined}
+              onDelete={canDeleteThread ? () => setDialog({ type: 'delete', thread }) : undefined}
+            />
+          }
+        >
+          <ThreadTitle title={thread.title} id={thread.id} createdAt={thread.createdAt} />
+        </ThreadListItem>
+      ))}
+    </ThreadListItems>
+  );
 
   return (
     <>
@@ -56,7 +99,7 @@ export const ChatThreads = ({
             <Icon>
               <Plus />
             </Icon>
-            New Chat
+            New Thread
           </ThreadListNewItem>
           {onHidePanel && (
             <Tooltip>
@@ -84,44 +127,75 @@ export const ChatThreads = ({
 
         <ThreadListSeparator />
 
-        {threads.length === 0 ? (
-          <ThreadListEmpty>Your conversations will appear here once you start chatting!</ThreadListEmpty>
-        ) : (
-          <ThreadListItems>
-            {threads.map(thread => {
-              const isActive = thread.id === threadId;
+        <div className="pt-1">
+          {pinnedThreads.length > 0 && (
+            <CollapsibleSection
+              labelId={pinnedLabelId}
+              label="Pinned"
+              collapsed={isCollapsed('pinned')}
+              onToggle={() => toggle('pinned')}
+            >
+              <ThreadListItems>
+                {pinnedThreads.map(thread => (
+                  <ThreadListItem
+                    key={thread.id}
+                    as={Link}
+                    to={threadLink(thread.id)}
+                    isActive={thread.id === threadId}
+                    actions={
+                      <ThreadActionsMenu
+                        onUnpin={() => unpin(thread.id)}
+                        onRename={canRenameThread ? () => setDialog({ type: 'rename', thread }) : undefined}
+                        onDelete={canDeleteThread ? () => setDialog({ type: 'delete', thread }) : undefined}
+                      />
+                    }
+                  >
+                    <ThreadTitle title={thread.title} id={thread.id} createdAt={thread.createdAt} />
+                  </ThreadListItem>
+                ))}
+              </ThreadListItems>
+            </CollapsibleSection>
+          )}
 
-              const threadLink =
-                resourceType === 'agent'
-                  ? paths.agentThreadLink(resourceId, thread.id)
-                  : paths.networkThreadLink(resourceId, thread.id);
-
-              return (
-                <ThreadListItem
-                  key={thread.id}
-                  as={Link}
-                  to={threadLink}
-                  isActive={isActive}
-                  onDelete={canDeleteThread ? () => setDeleteId(thread.id) : undefined}
-                  deleteLabel="delete thread"
-                >
-                  <ThreadTitle title={thread.title} id={thread.id} createdAt={thread.createdAt} />
-                </ThreadListItem>
-              );
-            })}
-          </ThreadListItems>
-        )}
+          {threads.length === 0 ? (
+            <ThreadListEmpty>Your conversations will appear here once you start chatting!</ThreadListEmpty>
+          ) : (
+            otherThreads.length > 0 &&
+            (pinnedThreads.length > 0 ? (
+              <CollapsibleSection
+                labelId={recentLabelId}
+                label="Recent"
+                collapsed={isCollapsed('recent')}
+                onToggle={() => toggle('recent')}
+              >
+                {recentList}
+              </CollapsibleSection>
+            ) : (
+              recentList
+            ))
+          )}
+        </div>
       </ThreadList>
 
       <DeleteThreadDialog
-        open={!!deleteId}
-        onOpenChange={() => setDeleteId(null)}
+        open={dialog?.type === 'delete'}
+        onOpenChange={closeDialog}
         onDelete={() => {
-          if (deleteId) {
-            onDelete(deleteId);
+          if (dialog?.type === 'delete') {
+            unpin(dialog.thread.id);
+            onDelete(dialog.thread.id);
           }
         }}
       />
+
+      {dialog?.type === 'rename' && (
+        <RenameThreadDialog
+          agentId={resourceId}
+          threadId={dialog.thread.id}
+          initialTitle={dialog.thread.title ?? ''}
+          onOpenChange={open => !open && closeDialog()}
+        />
+      )}
     </>
   );
 };
@@ -160,20 +234,38 @@ function ThreadTitle({ title, id, createdAt }: { title?: string; id?: string; cr
     title && !isDefaultThreadName(title)
       ? title
       : createdAt
-        ? formatDay(createdAt)
+        ? formatDate(createdAt, 'date-time-seconds')
         : `Thread ${id ? id.substring(id.length - 5) : ''}`;
 
-  return <span className="block truncate text-body-sm">{titleText}</span>;
+  return (
+    <Txt as="span" variant="body-sm" className="block truncate">
+      {titleText}
+    </Txt>
+  );
 }
 
-const formatDay = (date: Date) => {
-  const options: Intl.DateTimeFormatOptions = {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-    second: 'numeric',
-    hour12: true,
-  };
-  return new Date(date).toLocaleString('en-us', options).replace(',', ' at');
-};
+interface CollapsibleSectionProps {
+  labelId: string;
+  label: string;
+  collapsed: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}
+
+function CollapsibleSection({ labelId, label, collapsed, onToggle, children }: CollapsibleSectionProps) {
+  return (
+    <Collapsible
+      render={<section aria-labelledby={labelId} className="group/section" />}
+      open={!collapsed}
+      onOpenChange={onToggle}
+    >
+      <Txt as="h2" variant="meta" tone="faint" className="px-3 pt-3 pb-1 group-first-of-type/section:pt-0">
+        <CollapsibleTrigger id={labelId} className="inline-flex items-center gap-1 rounded-sm">
+          {label}
+          <ChevronRight aria-hidden className="size-3" />
+        </CollapsibleTrigger>
+      </Txt>
+      <CollapsibleContent>{children}</CollapsibleContent>
+    </Collapsible>
+  );
+}

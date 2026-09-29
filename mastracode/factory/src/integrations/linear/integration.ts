@@ -582,6 +582,7 @@ export class LinearIntegration implements FactoryIntegration {
               updatedAt: issue.updatedAt,
               metadata: {
                 identifier: issue.identifier,
+                ...(issue.projectId ? { linearProjectId: issue.projectId } : {}),
                 stateType: issue.stateType,
                 priority: issue.priority,
                 team: issue.source,
@@ -1336,6 +1337,7 @@ function linearIssueToIntakeIssue(issue: Omit<LinearIssue, 'projectId'> & { proj
   return {
     id: issue.id,
     sourceId: issue.projectId ?? null,
+    projectId: issue.projectId ?? null,
     identifier: issue.identifier,
     title: issue.title,
     url: issue.url,

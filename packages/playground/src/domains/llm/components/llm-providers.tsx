@@ -1,6 +1,7 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption, ComboboxProps } from '@mastra/playground-ui/components/Combobox';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { ProviderLogo, cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Info } from 'lucide-react';
@@ -8,8 +9,7 @@ import type { MouseEvent } from 'react';
 import { useMemo } from 'react';
 import { useFilteredProviders } from '../hooks/use-filtered-providers';
 import { useLLMProviders } from '../hooks/use-llm-providers';
-import { cleanProviderId, findProviderById } from '../utils';
-import { ProviderLogo } from './provider-logo';
+import { findProviderById } from '../utils';
 import { useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/agent-builder';
 
 export interface LLMProvidersProps {
@@ -62,7 +62,7 @@ export const LLMProviders = ({
           <ProviderLogo providerId={provider.id} size={16} />
           <div
             className={`absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full ${
-              provider.connected ? 'bg-accent1' : 'bg-accent2'
+              provider.connected ? 'bg-success-indicator' : 'bg-destructive-indicator'
             }`}
             title={provider.connected ? 'Connected' : 'Not connected'}
           />

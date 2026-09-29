@@ -40,6 +40,15 @@ function threadPlan(input: Record<string, unknown> = {}): TrustedThreadQueryPlan
 }
 
 describe('ClickHouse advanced trace query', () => {
+  it('compiles root duration predicates from root timestamps', () => {
+    const compiled = compileClickHouseTraceQuery(
+      plan({ where: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } } }),
+    );
+
+    expect(compiled.query).toMatch(/dateDiff\('millisecond', r\.startedAt, r\.endedAt\) > \{trace_query_\d+:Float64\}/);
+    expect(Object.values(compiled.query_params)).toContain(5000);
+  });
+
   it('bootstraps delta polling and hands numbered pages a query-bound cursor', async () => {
     coreFeatures.add('observability-delta-polling');
     try {
@@ -403,6 +412,13 @@ describe('ClickHouse advanced trace query', () => {
     expect(rootStart).toBeGreaterThan(-1);
     expect(scoresStart).toBeGreaterThan(rootStart);
     const rootScope = compiled.query.slice(rootStart, scoresStart);
+    // The range prefilter is a root scan too, so it carries the tenant conditions.
+    const prefilterStart = compiled.query.indexOf('WHERE traceId IN (');
+    expect(prefilterStart).toBeGreaterThan(-1);
+    expect(prefilterStart).toBeLessThan(rootStart);
+    const prefilter = compiled.query.slice(prefilterStart, rootStart);
+    expect(prefilter).toMatch(/AND organizationId = \{trace_query_\d+:String\}/);
+    expect(prefilter).toMatch(/AND resourceId = \{trace_query_\d+:String\}/);
     const scores = compiled.query.slice(scoresStart);
     for (const cte of [rootScope, scores]) {
       expect(cte).toMatch(/AND organizationId = \{trace_query_\d+:String\}/);
@@ -437,6 +453,10 @@ describe('ClickHouse advanced trace query', () => {
     expect(compiled.query).toContain('ORDER BY traceId, dedupeKey');
     expect(compiled.query).toContain('LIMIT 1 BY dedupeKey');
     expect(compiled.query).toContain('LIMIT 1 BY traceId');
+    // The time range narrows the dedupe input instead of filtering the whole deduped table.
+    expect(compiled.query).toMatch(
+      /FROM mastra_trace_roots\s+WHERE traceId IN \(\s+SELECT traceId\s+FROM mastra_trace_roots\s+WHERE startedAt >= \{trace_query_1:DateTime64\(3, 'UTC'\)\}/,
+    );
     expect(compiled.query).not.toMatch(/\bingestionVersion\b|\bisPending\b|\bFINAL\b|\bOPTIMIZE\b/);
   });
 
@@ -455,7 +475,8 @@ describe('ClickHouse advanced trace query', () => {
     ).query;
 
     for (const query of [traceOnly, spanOnly, scoreOnly, repeated]) {
-      expect(query.match(/FROM mastra_trace_roots/g)).toHaveLength(1);
+      // One deduped reconstruction plus its time-range prefilter.
+      expect(query.match(/FROM mastra_trace_roots/g)).toHaveLength(2);
     }
     expect(traceOnly).not.toContain('mastra_span_events');
     expect(traceOnly).not.toContain('mastra_score_events');
@@ -684,7 +705,7 @@ describe('ClickHouse advanced trace query', () => {
     expect(compiled.query.match(/current_spans AS/g)).toHaveLength(1);
     expect(compiled.query.match(/current_scores AS/g)).toHaveLength(1);
     expect(compiled.query.match(/current_feedback AS/g)).toHaveLength(1);
-    expect(compiled.query.match(/FROM mastra_trace_roots/g)).toHaveLength(1);
+    expect(compiled.query.match(/FROM mastra_trace_roots/g)).toHaveLength(2);
     expect(compiled.query).toContain('FROM mastra_feedback_events FINAL');
     expect(compiled.query).toContain('eligible_roots AS');
     expect(compiled.query).toContain('SELECT *\n    FROM root_scope r');

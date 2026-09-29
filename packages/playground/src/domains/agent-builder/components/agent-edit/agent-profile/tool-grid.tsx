@@ -34,9 +34,9 @@ export const ToolGrid = ({
   const agentColor = useAgentColor();
   const filterCheckboxStyle: CSSProperties | undefined = onlySelected
     ? {
-        backgroundColor: agentColor.background,
-        borderColor: agentColor.background,
-        color: agentColor.foreground,
+        backgroundColor: agentColor.tint,
+        borderColor: agentColor.tint,
+        color: 'var(--background)',
       }
     : undefined;
 

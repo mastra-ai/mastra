@@ -23,8 +23,8 @@ export const experimentColumnLabels = {
 // A completed run is neutral, not a success: it says the run finished, not that the scores are good.
 export const STATUS_VARIANT: Record<string, BadgeVariant> = {
   completed: 'neutral',
-  running: 'yellow',
-  failed: 'red',
+  running: 'warning',
+  failed: 'destructive',
   pending: 'neutral',
 };
 
@@ -35,9 +35,3 @@ export const STATUS_LABEL: Record<string, string> = {
   failed: 'Run failed',
   pending: 'Run queued',
 };
-
-export function formatExperimentDate(dateStr: string | Date | undefined | null): string {
-  if (!dateStr) return '—';
-  const d = typeof dateStr === 'string' ? new Date(dateStr) : dateStr;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}

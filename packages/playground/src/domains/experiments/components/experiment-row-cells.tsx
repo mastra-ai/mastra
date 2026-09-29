@@ -1,7 +1,8 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataList as EntityList } from '@mastra/playground-ui/components/DataList';
-import { formatExperimentDate, STATUS_LABEL, STATUS_VARIANT } from './experiment-columns';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import { STATUS_LABEL, STATUS_VARIANT } from './experiment-columns';
 import { ExperimentDescriptionLabel, ExperimentNameLabel } from './experiment-name-label';
 import { useTargetRegistries } from '@/domains/experiments/hooks/use-target-registries';
 import { resolveTargetName, TARGET_ICON, TARGET_LABEL } from '@/domains/experiments/utils/target-name';
@@ -44,12 +45,12 @@ export function ExperimentRowCells({ experiment: exp, datasetName, review }: Exp
       <EntityList.TextCell className="text-center">{total}</EntityList.TextCell>
       <EntityList.TextCell className="text-center">{succeeded}</EntityList.TextCell>
       <EntityList.TextCell className="text-center">
-        <span className={failed > 0 ? 'text-accent2' : ''}>{failed}</span>
+        <span className={failed > 0 ? 'text-destructive-indicator' : ''}>{failed}</span>
       </EntityList.TextCell>
       <EntityList.Cell className="text-center">
         <ExperimentReviewCell review={review} />
       </EntityList.Cell>
-      <EntityList.TextCell>{formatExperimentDate(exp.createdAt)}</EntityList.TextCell>
+      <EntityList.TextCell>{formatDate(exp.createdAt, 'date') ?? '—'}</EntityList.TextCell>
     </>
   );
 }
@@ -78,13 +79,13 @@ function ExperimentReviewCell({ review }: { review?: ExperimentReviewSummary }) 
   if (inPipeline === 0) return <span className="text-placeholder">—</span>;
   if (review.needsReview > 0) {
     return (
-      <Badge size="xs" variant="yellow">
+      <Badge size="xs" variant="warning">
         {review.needsReview} pending
       </Badge>
     );
   }
   return (
-    <Badge size="xs" variant="green">
+    <Badge size="xs" variant="success">
       {review.complete}/{inPipeline} reviewed
     </Badge>
   );

@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { frameSurfaceStyle, raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
@@ -12,11 +12,6 @@ export type MetricsCardGroupProps = {
    * cards are flat wells cut into it, so the frame reads as a thick border.
    */
   variant?: MetricsCardGroupVariant;
-  /**
-   * Base width each card grows from; a card wraps once the row can't fit it.
-   * Raise it for chart cards, which need more room than a KPI.
-   */
-  minItemWidth?: string;
   className?: string;
 };
 
@@ -35,27 +30,15 @@ const variantClasses: Record<MetricsCardGroupVariant, string> = {
 
 /**
  * A frame that holds a row of metrics cards (KPI, chart, …) as one unit.
- * Cards flex to fill each row and wrap responsively; the group owns their width,
- * so each card's own `min-w-*` is neutralised.
+ * One column below `md`, two below `lg`, then every card on a single row with
+ * equal widths. The group owns their width, so each card's own `min-w-*` is neutralised.
  */
-export function MetricsCardGroup({
-  children,
-  variant = 'default',
-  minItemWidth = '16rem',
-  className,
-}: MetricsCardGroupProps) {
-  const style: CSSProperties & Record<'--metrics-card-group-basis', string> = {
-    '--metrics-card-group-basis': `min(100%, ${minItemWidth})`,
-  };
-
+export function MetricsCardGroup({ children, variant = 'default', className }: MetricsCardGroupProps) {
   return (
     <div
-      style={style}
-      // Cards grow from a shared basis and wrap, so a short last row stretches to
-      // fill instead of leaving empty columns.
       // Outer radius = card radius (8px) + 4px inset so the corners stay concentric.
       className={cn(
-        'flex flex-wrap gap-1 rounded-xl p-1 *:min-w-0! *:flex-1 *:basis-(--metrics-card-group-basis)',
+        'grid grid-cols-1 gap-1 rounded-xl p-1 *:min-w-0! md:grid-cols-2 lg:flex lg:*:flex-1',
         variantClasses[variant],
         className,
       )}

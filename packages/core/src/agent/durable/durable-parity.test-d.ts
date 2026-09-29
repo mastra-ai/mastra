@@ -69,6 +69,8 @@ type ConsumedDuringPreparation =
   | 'experimentalTransform'
   // Applied to caller-local stream output, never serialized or used to filter generation.
   | 'hideSignals'
+  // Caller-local stream lifecycle; read by DurableAgent.stream()/resume(), never serialized.
+  | 'closeOnSuspend'
   // AbortSignal is managed via the registry's abortController/abortSignal
   | 'abortSignal'
   // Toolsets and clientTools are resolved into the `tools` record during
@@ -88,6 +90,8 @@ type ConsumedDuringPreparation =
   // Serverless waitUntil is call-site only for non-durable generate/stream.
   // Durable execution manages its own finish lifecycle, so this is intentionally unused.
   | 'serverless'
+  // Explicitly rejected during durable preparation before any side effects.
+  | 'eagerToolExecution'
   // Observability context keys from Partial<ObservabilityContext>
   | 'tracing'
   | 'loggerVNext'
@@ -130,6 +134,8 @@ type PhantomSerializedKeys = Exclude<
   // base option key but are derived from one:
   | 'hasErrorProcessors' // derived from errorProcessors.length
   | 'skipBgTaskWait' // derived from _skipBgTaskWait
+  | 'agentMaxRetries' // derived from the agent's maxRetries config
+  | 'agentMaxRetriesConfigured' // preserves omitted vs explicitly configured maxRetries
   | 'instructionsOverride' // derived from instructions
   | 'systemMessage' // derived from system
   | 'transform' // shadow of transform policy (targets only)

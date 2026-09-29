@@ -1,7 +1,7 @@
 // AUTO-GENERATED from NangoHQ/integration-templates @ c3091db1e8a6 — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
-import { applyAllowTools } from '../../toolset.js';
+import { applyToolFilter } from '../../toolset.js';
 import { addAttendeeTool } from './tools/add-attendee.js';
 import { clearCalendarTool } from './tools/clear-calendar.js';
 import { createAclRuleTool } from './tools/create-acl-rule.js';
@@ -93,5 +93,5 @@ export function createGoogleCalendarTools(options?: ProviderToolsOptions) {
     google_calendar_watch_settings: watchSettingsTool(platformProxy),
     google_calendar_whoami: whoamiTool(platformProxy),
   };
-  return applyAllowTools(tools, options?.allowTools);
+  return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
 }

@@ -185,7 +185,10 @@ export class GithubReconcileWorker extends MastraWorker {
           const { errors, ...counts } = await this.#reconcile(targets);
           const context = { ...counts, candidateRepositories: targets.length, durationMs: Date.now() - startedAt };
           if (counts.failed > 0) {
-            this.deps?.logger.warn('GitHub pull request reconcile sweep completed with failures', { ...context, errors });
+            this.deps?.logger.warn('GitHub pull request reconcile sweep completed with failures', {
+              ...context,
+              errors,
+            });
           } else if (counts.merged > 0 || counts.closed > 0) {
             this.deps?.logger.info('GitHub pull request reconcile replayed missed merges/closes', context);
           } else {
@@ -222,7 +225,6 @@ export class GithubReconcileWorker extends MastraWorker {
       } else if (reconcileIssues && this.#reconcileIssues && !hasLease) {
         this.deps?.logger.debug('GitHub issue reconcile skipped: lease lost during pull-request sweep');
       }
-
     } finally {
       clearInterval(renewalTimer);
       if (hasLease) {

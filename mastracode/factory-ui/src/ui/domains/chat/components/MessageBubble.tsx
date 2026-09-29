@@ -32,6 +32,7 @@ import {
   TimeGap,
 } from './TranscriptSignals';
 import type { MastraErrorPart } from '@mastra/core/agent/message-list';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 function steeringLabel(entry: MessageEntry): string | undefined {
   if (!entry.steer) return undefined;
@@ -90,12 +91,15 @@ export function MessageBubble({
         footer={
           <>
             {steeringStatus && (
-              <span
-                className={cn('text-meta text-muted-foreground', steeringFailed && 'text-notice-destructive-fg')}
+              <Txt
+                as="span"
+                variant="meta"
+                tone="muted"
+                className={cn(steeringFailed && 'text-destructive-indicator')}
                 aria-live="polite"
               >
                 {steeringStatus}
-              </span>
+              </Txt>
             )}
             {origin && <ChannelOriginBadge origin={origin} />}
             {messageActions}
@@ -134,7 +138,10 @@ export function MessageBubble({
       );
     },
     Reasoning: (part: ReasoningPart) => (
-      <ReasoningPartRenderer part={{ ...part, state: part.state ?? (entry.streaming ? 'streaming' : 'done') }} />
+      <ReasoningPartRenderer
+        part={{ ...part, state: part.state ?? (entry.streaming ? 'streaming' : 'done') }}
+        defaultOpen={false}
+      />
     ),
     ToolInvocation: (part: ToolInvocationPart) => {
       const toolCallId = part.toolInvocation.toolCallId;
@@ -214,9 +221,7 @@ export function MessageBubble({
   if (signalRow) {
     if (signalRow.kind === 'state') {
       if (SUPPRESSED_STATE_SIGNAL_IDS.has(signalRow.stateId)) return null;
-      return (
-        <SignalRow kind="state" label={`State ${signalRow.mode}: ${signalRow.stateId}`} message={signalRow.text} />
-      );
+      return <SignalRow kind="state" label={signalRow.stateId} mode={signalRow.mode} message={signalRow.text} />;
     }
     if (signalRow.kind === 'gap') return <TimeGap text={signalRow.text} />;
     if (signalRow.kind === 'reminder') {

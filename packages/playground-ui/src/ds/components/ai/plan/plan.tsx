@@ -269,7 +269,7 @@ export function PlanFile({ children, className, ...props }: PlanFileProps) {
       <Txt as="p" variant="meta" tone="muted" className="mb-2">
         Plan file
       </Txt>
-      <Txt as="p" variant="caption" tone="ink" className="font-mono break-all">
+      <Txt as="p" variant="caption" tone="ink" font="mono" className="break-all">
         {children}
       </Txt>
     </div>
@@ -308,10 +308,10 @@ export function PlanActionGroup({ children, className, ...props }: PlanActionGro
 
 export type PlanExpandButtonProps = Omit<
   ComponentProps<typeof Button>,
-  'aria-label' | 'children' | 'onClick' | 'size' | 'type' | 'variant'
+  'aria-label' | 'children' | 'onClick' | 'size' | 'type'
 >;
 
-export function PlanExpandButton({ className, ...props }: PlanExpandButtonProps) {
+export function PlanExpandButton({ className, variant = 'default', ...props }: PlanExpandButtonProps) {
   const { isExpanded, isClipped, toggleExpanded } = usePlanContext();
 
   // Nothing to expand: the collapsed card already shows the whole plan.
@@ -322,7 +322,7 @@ export function PlanExpandButton({ className, ...props }: PlanExpandButtonProps)
       {...props}
       className={cn('shrink-0 whitespace-nowrap', className)}
       type="button"
-      variant="default"
+      variant={variant}
       size="sm"
       aria-label={isExpanded ? 'Collapse plan' : 'Expand plan'}
       onClick={toggleExpanded}

@@ -145,7 +145,7 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
           // Read as "active" while the menu is open, per variant (see map above).
           controlTriggerOpenState[visualVariant],
           'data-[placeholder]:text-muted-foreground',
-          'aria-invalid:border-destructive aria-invalid:focus-visible:border-destructive',
+          'aria-invalid:border-destructive-indicator aria-invalid:focus-visible:border-destructive-indicator',
           '[&>span]:truncate',
           className,
         )}

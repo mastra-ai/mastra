@@ -48,7 +48,7 @@ describe('Workflow card UI components', () => {
       expect(progress.value).toBe(2);
       expect(progress.max).toBe(4);
       expect(screen.getByText('Configured delay')).not.toBeNull();
-      expect(screen.getByText('1.25')).not.toBeNull();
+      expect(screen.getByText('1.25s')).not.toBeNull();
     });
   });
 

@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { CanActivate, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 
 import { IS_PUBLIC_KEY } from '../constants';
 import { AuthService } from '../services/auth.service';
@@ -12,15 +12,9 @@ import { AuthService } from '../services/auth.service';
  *
  * **IMPORTANT: This guard is for custom user routes, NOT for Mastra API routes.**
  *
- * Mastra routes (agents, workflows, etc.) use AuthService internally which has
- * access to route-specific auth configuration (customRouteAuthConfig, isProtectedPath,
- * canAccessPublicly). This guard is a simplified version for when you want to
- * protect your own NestJS routes with Mastra's auth config.
- *
- * Differences from AuthService (used internally for Mastra routes):
- * - Does NOT check `customRouteAuthConfig`
- * - Does NOT check `isProtectedPath` / `canAccessPublicly` from @mastra/server/auth
- * - Has simpler dev playground detection (just checks header + config)
+ * Mastra routes (agents, workflows, etc.) and `server.apiRoutes` are protected by
+ * MastraRouteGuard. Use this guard to protect your own NestJS routes with the
+ * same Mastra auth pipeline (`server.auth`).
  *
  * @example
  * ```typescript
@@ -59,7 +53,9 @@ export class MastraAuthGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<Request>();
     try {
-      await this.authService.authenticate(request);
+      await this.authService.authenticate(request, {
+        response: context.switchToHttp().getResponse<Response>(),
+      });
       return true;
     } catch (error) {
       this.logger.error(`Authentication error: ${error instanceof Error ? error.message : String(error)}`);

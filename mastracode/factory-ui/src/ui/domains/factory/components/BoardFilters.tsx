@@ -87,11 +87,11 @@ export function BoardFilters({
       fields={fields}
       operators={OPERATORS}
       value={boardFilterItems(filters, kind)}
-      onValueChange={(items: readonly FilterBarItem[]) => onFiltersChange(boardFilterStateFromItems(items, kind))}
+      onValueChange={(items: FilterBarItem[]) => onFiltersChange(boardFilterStateFromItems(items, kind))}
       // Items are rebuilt from the URL with `id: fieldId`, so the draft chip is the committed chip.
       createItemId={fieldId => fieldId}
       aria-label="Board filters"
-      className="w-auto max-w-full flex-1 basis-80"
+      className="w-full max-w-full sm:w-auto"
     >
       <FilterBar.Chips />
       <FilterBar.Input placeholder="Filter cards…" />

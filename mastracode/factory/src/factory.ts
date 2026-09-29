@@ -60,6 +60,7 @@ import { PlatformGitLabIntegration } from './integrations/platform/gitlab/integr
 import { PlatformIncidentioIntegration } from './integrations/platform/incidentio/integration.js';
 import { PlatformJiraIntegration } from './integrations/platform/jira/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
+import { prepareSessionRunContext } from './integrations/subscription-session.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
 import { ProjectRoutes } from './routes/projects.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
@@ -74,6 +75,7 @@ import { resolveFactorySessionAddress } from './rules/binding-context.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import type { FactoryRuleActor } from './rules/index.js';
 import { FactoryPhaseStateProcessor } from './rules/processor.js';
+import { createReviewSourceTool, resolveReviewSourceUiOrigin } from './rules/review-source-tool.js';
 import { createTerminalStageCleanup } from './rules/terminal-cleanup.js';
 import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
@@ -923,6 +925,13 @@ export class MastraFactory {
           workspaceRegistry,
         }),
         disableGithubSignals: true,
+        // A wake (notification or peer signal) has no signed-in request, so
+        // tenant credential resolution would fail closed. Run it as the Factory
+        // session's owner in its org; Factory sessions are keyed by resourceId.
+        prepareWakeRequestContext: async ({ requestContext, resourceId }) => {
+          if (!storage.isDomainReady('source-control')) return;
+          await prepareSessionRunContext(requestContext, resourceId, { sessions: sourceControlSessions });
+        },
         // Memory settings live in the factory's `memory-settings` app table (per
         // org/user), so the host machine's TUI settings.json must not seed them.
         disableSettingsOmSeed: true,
@@ -1032,6 +1041,35 @@ export class MastraFactory {
                       // Only offered while the source-control domain is ready — a
                       // throwing lookup would abort recovery's catch block and also
                       // skip the metadata baseRef fallback.
+                      ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
+                    }),
+                  );
+                  // Review-role sessions get `factory_review_source` so the
+                  // published review can carry the session URL that produced it
+                  // — the affordance that lets a suspicious review (e.g. one
+                  // that lands on the wrong PR) be traced back to its run.
+                  //
+                  // The session URL is browser-facing (a human opens it from a
+                  // GitHub/GitLab review comment), so it needs the UI host —
+                  // the same origin Slack session deep-links resolve against
+                  // (`integrations/slack/slack.ts:168-171`, `:809-812`). In a
+                  // separate-SPA deployment `publicUrl` (i.e. `publicOrigin`)
+                  // is the API host, so we read `MASTRACODE_PUBLIC_URL` and
+                  // mirror Slack's behavior: when it is unset, pass `null` so
+                  // the tool is omitted from the toolset rather than fall back
+                  // to the API/localhost origin and publish that URL into a
+                  // public review body. The skill's tool-not-available branch
+                  // handles the absence as stop-don't-publish. Blank counts as
+                  // unset: `.env.schema` ships `MASTRACODE_PUBLIC_URL=`, so an
+                  // empty/whitespace value must not register the tool with a
+                  // hostless `sessionUrl`.
+                  const reviewSourceUiOrigin = resolveReviewSourceUiOrigin(process.env.MASTRACODE_PUBLIC_URL);
+                  mergeTools(
+                    'factory-review-source',
+                    await createReviewSourceTool({
+                      requestContext,
+                      storage: workItemsStorage,
+                      uiOrigin: reviewSourceUiOrigin,
                       ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
                     }),
                   );

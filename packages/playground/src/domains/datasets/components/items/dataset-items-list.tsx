@@ -2,8 +2,9 @@ import type { DatasetItem } from '@mastra/client-js';
 import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
 import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
-import { format, isThisYear, isToday } from 'date-fns';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { ExternalLinkIcon, FileJson, Upload } from 'lucide-react';
 import { z } from 'zod';
 
@@ -59,13 +60,6 @@ const expectedTrajectorySchema = z.object({ steps: z.array(z.unknown()) });
 function formatExpectedTrajectory(value: DatasetItem['expectedTrajectory']): string {
   const result = expectedTrajectorySchema.safeParse(value);
   return result.success ? `${result.data.steps.length} steps` : 'Yes';
-}
-
-function formatDate(date: Date): string {
-  const dayMonth = isToday(date) ? 'Today' : format(date, 'MMM dd');
-  const year = !isThisYear(date) ? format(date, 'yyyy') : '';
-  const time = format(date, "'at' h:mm aaa");
-  return `${dayMonth} ${year} ${time}`.replace(/\s+/g, ' ').trim();
 }
 
 export function DatasetItemsList({
@@ -183,15 +177,17 @@ export function DatasetItemsList({
                 </DataList.TextCell>
                 <DataList.Cell className="min-w-0">
                   {item.expectedTrajectory ? (
-                    <span className="text-body-sm text-muted-foreground">
+                    <Txt as="span" variant="body-sm" tone="muted">
                       {formatExpectedTrajectory(item.expectedTrajectory)}
-                    </span>
+                    </Txt>
                   ) : (
                     <span className="text-muted-foreground">—</span>
                   )}
                 </DataList.Cell>
                 <DataList.Cell className="min-w-0">
-                  <span className="block truncate text-body-sm text-placeholder">{formatDate(createdAtDate)}</span>
+                  <Txt as="span" variant="body-sm" tone="faint" className="block truncate">
+                    {formatDate(createdAtDate, 'date-time')}
+                  </Txt>
                 </DataList.Cell>
               </>
             );

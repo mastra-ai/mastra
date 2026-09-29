@@ -41,12 +41,21 @@ type TraceSelection = {
 
 const TRACE_STATUS_SQL = `CASE WHEN r."error" IS NOT NULL THEN 'error' ELSE 'success' END`;
 
+function durationMsSql(startedAt: string, endedAt: string): string {
+  return `EXTRACT(EPOCH FROM (${endedAt} - ${startedAt}))::numeric * 1000`;
+}
+
 const TRACE_FIELDS = {
   traceId: 'r."traceId"',
   threadId: 'r."threadId"',
   resourceId: 'r."resourceId"',
+  runId: 'r."runId"',
+  sessionId: 'r."sessionId"',
+  userId: 'r."userId"',
+  organizationId: 'r."organizationId"',
   startedAt: 'r."startedAt"',
   endedAt: 'r."endedAt"',
+  durationMs: durationMsSql('r."startedAt"', 'r."endedAt"'),
   entityName: 'r."entityName"',
   entityType: 'r."entityType"',
   environment: 'r."environment"',
@@ -70,6 +79,10 @@ const SPAN_FIELDS = {
   entityVersionId: 's."entityVersionId"',
   parentEntityVersionId: 's."parentEntityVersionId"',
   rootEntityVersionId: 's."rootEntityVersionId"',
+  runId: 's."runId"',
+  sessionId: 's."sessionId"',
+  userId: 's."userId"',
+  organizationId: 's."organizationId"',
 } satisfies FieldRegistry<TraceQuerySpanField>;
 
 const SCORE_FIELDS = {
@@ -436,7 +449,7 @@ function compilePostgresTraceScope(
       CASE WHEN s."isPending" THEN NULL ELSE s."endedAt" END AS "endedAt",
       CASE
         WHEN s."isPending" THEN NULL
-        ELSE EXTRACT(EPOCH FROM (s."endedAt" - s."startedAt")) * 1000
+        ELSE ${durationMsSql('s."startedAt"', 's."endedAt"')}
       END AS "durationMs",
       CASE WHEN s."error" IS NOT NULL THEN 'error' ELSE 'success' END AS "status",
       s."error",
@@ -445,7 +458,11 @@ function compilePostgresTraceScope(
       s."entityName",
       s."entityVersionId",
       s."parentEntityVersionId",
-      s."rootEntityVersionId"
+      s."rootEntityVersionId",
+      s."runId",
+      s."sessionId",
+      s."userId",
+      s."organizationId"
     FROM ${spanTable} s
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)

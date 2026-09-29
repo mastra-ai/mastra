@@ -26,6 +26,7 @@ import { useChatConnection } from '../../context/useChatConnection';
 import { useChatModels } from '../../context/useChatModels';
 import { useChatModes } from '../../context/useChatModes';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 function titleCase(value: string): string {
   return value ? `${value[0]?.toUpperCase()}${value.slice(1).toLowerCase()}` : value;
@@ -114,7 +115,7 @@ export function ModelPicker() {
   }
   if (!selectedModelId && error) {
     return (
-      <span className="text-accent2" aria-label="Model unavailable" title={error.message}>
+      <span className="text-destructive-indicator" aria-label="Model unavailable" title={error.message}>
         Model unavailable
       </span>
     );
@@ -140,7 +141,7 @@ export function ModelPicker() {
   if (!switchable || (!showPacks && !modelsQuery.data?.length)) {
     return (
       <span
-        className={notConfigured ? 'text-accent2' : 'text-muted-foreground'}
+        className={notConfigured ? 'text-destructive-indicator' : 'text-muted-foreground'}
         aria-label={notConfigured ? `${label} is not configured` : undefined}
         title={selectedModelId}
       >
@@ -182,7 +183,7 @@ export function ModelPicker() {
         aria-busy={busy}
         className={cn(
           buttonVariants({ variant: 'ghost', size: 'sm' }),
-          notConfigured ? 'text-accent2' : 'text-muted-foreground',
+          notConfigured ? 'text-destructive-indicator' : 'text-muted-foreground',
         )}
         title={[selectedModelId, selectedPack?.name].filter(Boolean).join(' · ') || undefined}
       >
@@ -217,7 +218,9 @@ export function ModelPicker() {
                           </Badge>
                         ) : null}
                       </span>
-                      <span className="text-meta text-muted-foreground truncate">{packSummary(pack)}</span>
+                      <Txt as="span" variant="meta" tone="muted" className="truncate">
+                        {packSummary(pack)}
+                      </Txt>
                     </div>
                     {pack.id === selectedPackId && !packModelDeviates ? (
                       <Check aria-hidden className="ml-auto shrink-0" />
@@ -278,10 +281,10 @@ export function ModelPicker() {
             ) : null}
           </CommandList>
           {modeKey ? (
-            <p className="text-meta text-muted-foreground border-border border-t px-3 py-2">
+            <Txt variant="meta" tone="muted" className="border-border border-t px-3 py-2">
               Model choices apply to {titleCase(modeKey)} mode only.
               {showPacks ? ' Packs set all three modes.' : ''}
-            </p>
+            </Txt>
           ) : null}
         </Command>
       </PopoverContent>

@@ -3,7 +3,7 @@ import { SpanPayloadAttachment } from './span-payload-attachment';
 import { SpanPayloadJson } from './span-payload-json';
 import { SpanPayloadMarkdown, SpanPayloadLabel } from './span-payload-primitives';
 import { SpanPayloadTool } from './span-payload-tool';
-import { Reasoning } from '@/domains/chat/messages/reasoning';
+import { ReasoningActivity } from '@/ds/components/ai/activity';
 import { Message } from '@/ds/components/Message';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -31,7 +31,7 @@ function MessagePart({ part, plain = false }: { part: unknown; plain?: boolean }
         <SpanPayloadJson value={part} />
       );
     case 'reasoning':
-      return typeof part.text === 'string' ? <Reasoning text={part.text} /> : <SpanPayloadJson value={part} />;
+      return typeof part.text === 'string' ? <ReasoningActivity text={part.text} /> : <SpanPayloadJson value={part} />;
     case 'tool-call':
     case 'tool-invocation':
     case 'dynamic-tool':

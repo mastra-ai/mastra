@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { StatusDot } from './status-dot';
-import type { StatusPresentation } from './status-dot-styles';
+import { deployStates, statusDotClass, type StatusPresentation } from './status-dot-styles';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 
 const RUNNING: StatusPresentation = {
@@ -31,5 +31,13 @@ describe('StatusDot', () => {
 
     expect(html).toContain('aria-hidden="true"');
     expect(html).not.toContain('<button');
+  });
+
+  it('draws every deploy state as a circle, with rings only for idle and queued', () => {
+    for (const [state, presentation] of Object.entries(deployStates)) {
+      const classes = statusDotClass(presentation);
+      expect(classes).toContain('rounded-full');
+      expect(classes.includes('bg-transparent')).toBe(state === 'idle' || state === 'queued');
+    }
   });
 });

@@ -3,6 +3,8 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/pla
 import { FieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JSONSchema7 } from 'json-schema';
@@ -12,7 +14,6 @@ import { useAgentSchema } from '../hooks/use-agent-schema';
 import { useScorerSchema } from '../hooks/use-scorer-schema';
 import { useWorkflowSchema } from '../hooks/use-workflow-schema';
 import { SchemaField } from './schema-settings/schema-field';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
 type SourceType = 'custom' | 'agent' | 'workflow' | 'scorer';
 type ScorerTargetType = 'agent' | 'custom';
@@ -48,7 +49,7 @@ export function SchemaConfigSection({
   const [scorerTargetType, setScorerTargetType] = useState<ScorerTargetType>('agent');
 
   // Fetch workflows for workflow source selection
-  const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
+  const { data: workflows, isLoading: workflowsLoading } = useWorkflows({});
   const workflowOptions = workflows ? Object.entries(workflows) : [];
 
   // Fetch workflow schema when workflow selected
@@ -188,7 +189,7 @@ export function SchemaConfigSection({
               href="https://json-schema.org/"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-accent5Lighter underline"
+              className="underline hover:text-info-indicator"
             >
               JSON Schema
             </a>{' '}
@@ -242,7 +243,9 @@ export function SchemaConfigSection({
 
             {/* Loading indicator for workflow schema */}
             {sourceType === 'workflow' && selectedWorkflow && workflowSchemaLoading && (
-              <span className="text-caption text-muted-foreground">Loading schema...</span>
+              <Txt as="span" variant="caption" tone="muted">
+                Loading schema...
+              </Txt>
             )}
 
             {/* Scorer target type picker */}
@@ -265,11 +268,11 @@ export function SchemaConfigSection({
 
           {/* Helper text for scorer */}
           {sourceType === 'scorer' && (
-            <p className="text-caption text-muted-foreground">
+            <Txt variant="caption" tone="muted">
               {scorerTargetType === 'agent'
                 ? 'For calibrating agent-type scorers'
                 : 'For calibrating custom scorers (input/output as any)'}
-            </p>
+            </Txt>
           )}
         </div>
 

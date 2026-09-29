@@ -11,6 +11,13 @@ export type ChatSpacingKind =
   | 'system'
   | 'other';
 
+/**
+ * Group key of a quiet shell call whose directory isn't known yet (its arguments are still
+ * streaming). It joins the shell box above it rather than opening a box that disappears again
+ * once the directory arrives.
+ */
+export const PENDING_SHELL_GROUP_KEY = '$ \u0000pending';
+
 export interface ChatSpacingParticipant {
   getChatSpacingKind(): ChatSpacingKind | undefined;
 }
@@ -34,6 +41,8 @@ export function getSpacingBetweenComponents(
   const prevKind = getChatSpacingKind(prev);
   const nextKind = getChatSpacingKind(next);
 
+  // Shell boxes have their own borders, so back-to-back ones need no blank line between them.
+  if (isQuietShellBox(prev, prevKind) && isQuietShellBox(next, nextKind)) return 0;
   if (prevKind === 'quiet-compact-tool' && nextKind === 'quiet-compact-tool') {
     const prevKey = getCompactToolGroupKey(prev);
     const nextKey = getCompactToolGroupKey(next);
@@ -46,6 +55,11 @@ export function getSpacingBetweenComponents(
 
 function getCompactToolGroupKey(component: Component | undefined): string | undefined {
   return (component as CompactToolSpacingParticipant | undefined)?.getCompactToolGroupKey?.();
+}
+
+function isQuietShellBox(component: Component | undefined, kind: ChatSpacingKind | undefined): boolean {
+  if (kind === 'quiet-shell-tool') return true;
+  return kind === 'quiet-compact-tool' && !!getCompactToolGroupKey(component)?.startsWith('$ ');
 }
 
 function hasQuietStreamingPreview(component: Component | undefined): boolean {

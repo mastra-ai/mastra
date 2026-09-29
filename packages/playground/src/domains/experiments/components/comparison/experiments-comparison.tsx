@@ -1,5 +1,7 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMemo } from 'react';
 import { buildComparisonRows } from './build-comparison-rows';
@@ -13,7 +15,6 @@ import {
   useDatasetExperimentResults,
   useScoresByExperimentId,
 } from '@/domains/datasets/hooks/use-dataset-experiments';
-import { useLinkComponent } from '@/lib/framework';
 
 interface ExperimentsComparisonProps {
   datasetId: string;
@@ -123,7 +124,7 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
         {/* Header row: Items / Baseline / Contender */}
         <div
           role="row"
-          className="grid border-y border-border xl:grid-cols-[minmax(20rem,24rem)_1fr_1fr] xl:divide-x xl:divide-[var(--border)]"
+          className="grid border-y border-border xl:grid-cols-[minmax(20rem,24rem)_1fr_1fr] xl:divide-x xl:divide-border"
         >
           <div
             role="columnheader"
@@ -161,18 +162,20 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
               key={row.itemId}
               role="row"
               aria-label={row.itemId}
-              className="grid border-b border-border xl:grid-cols-[minmax(20rem,24rem)_1fr_1fr] xl:divide-x xl:divide-[var(--border)]"
+              className="grid border-b border-border xl:grid-cols-[minmax(20rem,24rem)_1fr_1fr] xl:divide-x xl:divide-border"
             >
               <div role="cell" className={`${cell} grid content-start gap-1`}>
                 <Link
                   href={paths.datasetItemLink(datasetId, row.itemId)}
                   aria-label={`Open item ${row.itemId}`}
                   className={cn(
-                    'flex items-start gap-1.5 font-mono text-caption break-all hover:underline [&>svg]:mt-0.5 [&>svg]:size-3.5 [&>svg]:shrink-0',
+                    'flex items-start gap-1.5 text-caption break-all hover:underline [&>svg]:mt-0.5 [&>svg]:size-3.5 [&>svg]:shrink-0',
                     row.baseline.present && row.contender.present ? 'text-muted-foreground' : 'text-placeholder',
                   )}
                 >
-                  <span className="min-w-0">{row.itemId}</span>
+                  <Txt as="span" variant="caption" font="mono" className="min-w-0">
+                    {row.itemId}
+                  </Txt>
                 </Link>
                 {deltas.length > 0 && (
                   <span className="flex flex-wrap items-center gap-2">

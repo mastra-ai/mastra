@@ -55,6 +55,18 @@ describe('Postgres advanced trace query', () => {
     ).toThrow('traceQueryTimeoutMs must be an integer between');
   });
 
+  it('compiles root duration predicates from root timestamps', () => {
+    const compiled = compilePostgresTraceQuery(
+      'custom',
+      plan({ where: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } } }),
+    );
+
+    expect(compiled.text).toContain(
+      `EXTRACT(EPOCH FROM (r."endedAt" - r."startedAt"))::numeric * 1000 IS NOT NULL AND EXTRACT(EPOCH FROM (r."endedAt" - r."startedAt"))::numeric * 1000 > $3`,
+    );
+    expect(compiled.values).toContain(5000);
+  });
+
   it('parameterizes literals and compiles one correlated existence check per collection clause', () => {
     const compiled = compilePostgresTraceQuery(
       'custom',
@@ -144,7 +156,7 @@ describe('Postgres advanced trace query', () => {
     expect(compiled.text.match(/FROM current_spans s/g)).toHaveLength(1);
     expect(compiled.text).toContain(`jsonb_typeof(s."attributes" -> 'model') = 'string'`);
     expect(compiled.text).toContain(`jsonb_typeof(s."attributes" -> 'provider') = 'string'`);
-    expect(compiled.text).toContain(`EXTRACT(EPOCH FROM (s."endedAt" - s."startedAt")) * 1000`);
+    expect(compiled.text).toContain(`EXTRACT(EPOCH FROM (s."endedAt" - s."startedAt"))::numeric * 1000`);
     expect(compiled.text).toContain(`CASE WHEN s."error" IS NOT NULL THEN 'error' ELSE 'success' END AS "status"`);
     expect(compiled.text).toContain('s."name" IS NOT DISTINCT FROM');
     expect(compiled.text).toContain('s."model" IS NOT DISTINCT FROM');

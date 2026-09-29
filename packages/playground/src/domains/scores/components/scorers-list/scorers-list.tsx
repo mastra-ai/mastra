@@ -7,11 +7,11 @@ import {
 } from '@mastra/playground-ui/components/DataList';
 import type { DataListSort } from '@mastra/playground-ui/components/DataList';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { sortBy } from '@mastra/playground-ui/sort/sort-by';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { WorkflowIcon } from 'lucide-react';
 import { useMemo } from 'react';
-import { useLinkComponent } from '@/lib/framework';
 
 export type ScorersListItem = GetScorerResponse & { id: string };
 

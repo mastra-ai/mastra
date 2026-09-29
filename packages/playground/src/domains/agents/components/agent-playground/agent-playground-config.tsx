@@ -47,10 +47,14 @@ function VariableProperty({ name, prop, depth }: { name: string; prop: JsonSchem
   return (
     <div style={depth > 0 ? { paddingLeft: depth * 12 } : undefined}>
       <div className="flex items-center gap-2 py-1">
-        <code className="text-caption text-accent1">{name}</code>
-        <span className="text-caption text-muted-foreground">{typeLabel}</span>
+        <code className="text-caption text-foreground">{name}</code>
+        <Txt as="span" variant="caption" tone="muted">
+          {typeLabel}
+        </Txt>
         {prop.description && (
-          <span className="truncate text-caption text-muted-foreground italic">— {prop.description}</span>
+          <Txt as="span" variant="caption" tone="muted" className="truncate italic">
+            — {prop.description}
+          </Txt>
         )}
       </div>
       {hasChildren && (
@@ -166,7 +170,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
               <BlockCopyButton block={block} />
             </div>
           )}
-          <Txt variant="caption" tone="muted" className="font-mono whitespace-pre-wrap">
+          <Txt variant="caption" tone="muted" font="mono" className="whitespace-pre-wrap">
             {oldStr || '(empty)'}
           </Txt>
         </div>
@@ -175,7 +179,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
     const diffLines = computeLineDiff(oldStr, newStr);
     return (
-      <div className="relative overflow-hidden rounded-md border border-border font-mono text-body">
+      <div className="relative overflow-hidden rounded-md border border-border text-body">
         {block && (
           <div className="absolute top-2 right-2 z-10">
             <BlockCopyButton block={block} />
@@ -186,8 +190,8 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
             key={idx}
             className={cn(
               'px-3 py-0.5 wrap-break-word whitespace-pre-wrap',
-              line.type === 'removed' && 'bg-red-950/20 text-red-300',
-              line.type === 'added' && 'bg-green-950/20 text-green-300',
+              line.type === 'removed' && 'bg-destructive-subtle text-destructive-subtle-foreground',
+              line.type === 'added' && 'bg-success-subtle text-success-subtle-foreground',
               line.type === 'equal' && 'text-muted-foreground',
             )}
           >
@@ -213,11 +217,11 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
         if (!prevBlock && currBlock) {
           return (
-            <div key={idx} className="rounded-md border border-green-900/30 bg-green-950/10 p-3 font-mono text-body">
-              <Txt variant="meta" className="mb-1 text-green-400">
+            <div key={idx} className="rounded-md border border-success-edge bg-success-subtle p-3 text-body">
+              <Txt variant="meta" className="mb-1 text-success-subtle-foreground">
                 + Added block
               </Txt>
-              <Txt variant="caption" className="whitespace-pre-wrap text-green-300">
+              <Txt variant="caption" className="whitespace-pre-wrap text-success-subtle-foreground">
                 {newStr}
               </Txt>
             </div>
@@ -228,15 +232,15 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
           return (
             <div
               key={idx}
-              className="relative rounded-md border border-red-900/30 bg-red-950/10 p-3 font-mono text-body"
+              className="relative rounded-md border border-destructive-edge bg-destructive-subtle p-3 text-body"
             >
               <div className="absolute top-2 right-2">
                 <BlockCopyButton block={prevBlock} />
               </div>
-              <Txt variant="meta" className="mb-1 text-red-400">
+              <Txt variant="meta" className="mb-1 text-destructive-subtle-foreground">
                 − Removed in latest
               </Txt>
-              <Txt variant="caption" className="whitespace-pre-wrap text-red-300">
+              <Txt variant="caption" className="whitespace-pre-wrap text-destructive-subtle-foreground">
                 {oldStr}
               </Txt>
             </div>
@@ -251,7 +255,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
                   <BlockCopyButton block={prevBlock} />
                 </div>
               )}
-              <Txt variant="caption" tone="muted" className="font-mono whitespace-pre-wrap">
+              <Txt variant="caption" tone="muted" font="mono" className="whitespace-pre-wrap">
                 {oldStr || '(empty)'}
               </Txt>
             </div>
@@ -260,7 +264,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
         const diffLines = computeLineDiff(oldStr, newStr);
         return (
-          <div key={idx} className="relative overflow-hidden rounded-md border border-border font-mono text-body">
+          <div key={idx} className="relative overflow-hidden rounded-md border border-border text-body">
             {prevBlock && (
               <div className="absolute top-2 right-2 z-10">
                 <BlockCopyButton block={prevBlock} />
@@ -271,8 +275,8 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
                 key={lidx}
                 className={cn(
                   'px-3 py-0.5 wrap-break-word whitespace-pre-wrap',
-                  line.type === 'removed' && 'bg-red-950/20 text-red-300',
-                  line.type === 'added' && 'bg-green-950/20 text-green-300',
+                  line.type === 'removed' && 'bg-destructive-subtle text-destructive-subtle-foreground',
+                  line.type === 'added' && 'bg-success-subtle text-success-subtle-foreground',
                   line.type === 'equal' && 'text-muted-foreground',
                 )}
               >
@@ -313,7 +317,7 @@ function RefBlockPreview({ promptBlockId }: { promptBlockId: string }) {
           {promptBlock.name}
         </Txt>
       )}
-      <Txt variant="caption" tone="muted" className="font-mono whitespace-pre-wrap">
+      <Txt variant="caption" tone="muted" font="mono" className="whitespace-pre-wrap">
         {content || '(empty)'}
       </Txt>
     </div>
@@ -347,7 +351,7 @@ function ReadOnlyInstructions({ blocks }: { blocks: unknown }) {
                 <CopyButton content={content} tooltip="Copy prompt text" size="sm" />
               </div>
             )}
-            <Txt variant="caption" tone="muted" className="font-mono whitespace-pre-wrap">
+            <Txt variant="caption" tone="muted" font="mono" className="whitespace-pre-wrap">
               {content || '(empty)'}
             </Txt>
           </div>
@@ -385,28 +389,28 @@ function ToolsDiffView({
             key={tool}
             className={cn(
               'flex items-center gap-2 rounded-md border px-3 py-1.5',
-              status === 'removed' && 'border-red-900/30 bg-red-950/10',
-              status === 'added' && 'border-green-900/30 bg-green-950/10',
+              status === 'removed' && 'border-destructive-edge bg-destructive-subtle',
+              status === 'added' && 'border-success-edge bg-success-subtle',
               status === 'same' && 'border-border bg-background',
             )}
           >
             <Txt
               variant="caption"
+              font="mono"
               className={cn(
-                'font-mono',
-                status === 'removed' && 'text-red-300 line-through',
-                status === 'added' && 'text-green-300',
+                status === 'removed' && 'text-destructive-subtle-foreground line-through',
+                status === 'added' && 'text-success-subtle-foreground',
               )}
             >
               {tool}
             </Txt>
             {status === 'removed' && (
-              <Badge variant="red" className="ml-auto">
+              <Badge variant="destructive" className="ml-auto">
                 removed in latest
               </Badge>
             )}
             {status === 'added' && (
-              <Badge variant="green" className="ml-auto">
+              <Badge variant="success" className="ml-auto">
                 added in latest
               </Badge>
             )}
@@ -432,7 +436,7 @@ function ReadOnlyTools({ tools }: { tools: Record<string, unknown> | undefined }
     <div className="flex flex-col gap-1.5">
       {entries.map(([id, config]) => (
         <div key={id} className="rounded-md border border-border bg-background px-3 py-1.5">
-          <Txt variant="caption" tone="ink" className="font-mono">
+          <Txt variant="caption" tone="ink" font="mono">
             {id}
           </Txt>
           {(config as Record<string, unknown>)?.description ? (
@@ -484,28 +488,28 @@ function VariablesDiffView({
             key={name}
             className={cn(
               'flex items-center gap-2 rounded-md border px-3 py-1.5',
-              status === 'removed' && 'border-red-900/30 bg-red-950/10',
-              status === 'added' && 'border-green-900/30 bg-green-950/10',
+              status === 'removed' && 'border-destructive-edge bg-destructive-subtle',
+              status === 'added' && 'border-success-edge bg-success-subtle',
               status === 'same' && 'border-border bg-background',
             )}
           >
             <Txt
               variant="caption"
+              font="mono"
               className={cn(
-                'font-mono',
-                status === 'removed' && 'text-red-300 line-through',
-                status === 'added' && 'text-green-300',
+                status === 'removed' && 'text-destructive-subtle-foreground line-through',
+                status === 'added' && 'text-success-subtle-foreground',
               )}
             >
               {`{{${name}}}`}
             </Txt>
             {status === 'removed' && (
-              <Badge variant="red" className="ml-auto">
+              <Badge variant="destructive" className="ml-auto">
                 removed in latest
               </Badge>
             )}
             {status === 'added' && (
-              <Badge variant="green" className="ml-auto">
+              <Badge variant="success" className="ml-auto">
                 added in latest
               </Badge>
             )}
@@ -532,7 +536,7 @@ function ReadOnlyVariables({ variables }: { variables: Record<string, unknown> |
     <div className="flex flex-col gap-1.5">
       {entries.map(([name, schema]) => (
         <div key={name} className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5">
-          <Txt variant="caption" tone="ink" className="font-mono">
+          <Txt variant="caption" tone="ink" font="mono">
             {`{{${name}}}`}
           </Txt>
           {(schema as Record<string, unknown>)?.type ? (
@@ -584,19 +588,19 @@ function ReadOnlyConfigWithDiff({
   const variablesDiff = diffMap.get('requestContextSchema');
 
   const instructionsBadge = instructionsDiff ? (
-    <Badge variant="yellow" size="sm">
+    <Badge variant="warning" size="sm">
       modified
     </Badge>
   ) : null;
   const toolsBadge = toolsDiff ? (
-    <Badge variant="yellow" size="sm">
+    <Badge variant="warning" size="sm">
       modified
     </Badge>
   ) : toolCount > 0 ? (
     <Badge size="sm">{`${toolCount}`}</Badge>
   ) : null;
   const variablesBadge = variablesDiff ? (
-    <Badge variant="yellow" size="sm">
+    <Badge variant="warning" size="sm">
       modified
     </Badge>
   ) : null;
@@ -743,7 +747,7 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
                     </TooltipTrigger>
                     <TooltipContent side="bottom" align="start" className="max-w-72">
                       <span>
-                        Use <code className="font-medium text-accent1">{'{{variableName}}'}</code> syntax to insert
+                        Use <code className="font-medium text-foreground">{'{{variableName}}'}</code> syntax to insert
                         dynamic values into your instruction blocks.
                       </span>
                     </TooltipContent>

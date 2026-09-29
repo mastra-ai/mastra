@@ -40,6 +40,7 @@ describe('DateTimeRangePicker (custom range popover)', () => {
     fireEvent.click(screen.getByRole('button', { name: /apply/i }));
 
     const error = screen.getByRole('alert');
-    expect(error.querySelector('svg')).toBeNull();
+    // The shared FieldBlock.ErrorMsg renders a decorative alert icon before the text.
+    expect(error.querySelector('[data-slot="icon"] svg')).not.toBeNull();
   });
 });

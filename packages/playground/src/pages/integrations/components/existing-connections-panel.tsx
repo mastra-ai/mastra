@@ -1,3 +1,4 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ConnectionItem, GroupedConnections } from '../types';
 
 function ConnectionRow({
@@ -14,7 +15,9 @@ function ConnectionRow({
   return (
     <li className="flex items-center justify-between border-b py-2">
       <div>
-        <div className="font-mono text-caption">{connection.connectionId}</div>
+        <Txt as="div" variant="caption" font="mono">
+          {connection.connectionId}
+        </Txt>
         <div className="text-caption text-muted-foreground">
           {connection.label ?? '(no label)'} · {connection.status}
           {connection.scope ? ` · ${connection.scope}` : ''}
@@ -23,7 +26,7 @@ function ConnectionRow({
       </div>
       <button
         type="button"
-        className="text-destructive underline disabled:opacity-50"
+        className="text-destructive-indicator underline disabled:opacity-50"
         onClick={onDisconnect}
         disabled={disconnectPending}
       >
@@ -74,9 +77,9 @@ function ConnectionGroups({
     <div className="space-y-4">
       {groups.map(([authorKey, rows]) => (
         <div key={authorKey}>
-          <h3 className="text-subheading text-foreground" data-testid={`integration-author-group-${authorKey}`}>
+          <Txt as="h3" variant="subheading" tone="ink" data-testid={`integration-author-group-${authorKey}`}>
             {authorKey === 'shared' ? 'Shared' : `Owned by ${authorKey}`}
-          </h3>
+          </Txt>
           <ConnectionList
             connections={rows}
             isAdmin={isAdmin}
@@ -116,13 +119,15 @@ export function ExistingConnectionsPanel({
 }: ExistingConnectionsPanelProps) {
   return (
     <div className="space-y-2 rounded border p-4">
-      <h2 className="text-heading">Existing connections</h2>
+      <Txt as="h2" variant="heading">
+        Existing connections
+      </Txt>
       {!providerId || !toolkit ? (
         <p className="text-muted-foreground">Pick a provider and toolkit to list connections.</p>
       ) : isLoading ? (
         <p className="text-muted-foreground">Loading…</p>
       ) : error ? (
-        <p className="text-destructive">{String(error)}</p>
+        <p className="text-destructive-indicator">{String(error)}</p>
       ) : connections.length === 0 ? (
         <p className="text-muted-foreground">No connections.</p>
       ) : groupedByAuthor ? (
@@ -140,7 +145,7 @@ export function ExistingConnectionsPanel({
           onDisconnect={onDisconnect}
         />
       )}
-      {disconnectError ? <p className="text-destructive">{String(disconnectError)}</p> : null}
+      {disconnectError ? <p className="text-destructive-indicator">{String(disconnectError)}</p> : null}
     </div>
   );
 }

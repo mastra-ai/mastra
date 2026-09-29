@@ -116,7 +116,13 @@ describe('PlatformFilesystem', () => {
   });
 
   it('maps 404 to FileNotFoundError on readFile and stat', async () => {
-    const fetchMock = vi.fn().mockImplementation(async () => response('not found', { status: 404 }));
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async (url: string | URL) =>
+        String(url).includes('delimiter=')
+          ? response(JSON.stringify({ contents: [], commonPrefixes: [] }), { status: 200 })
+          : response('not found', { status: 404 }),
+      );
     const fs = new PlatformFilesystem({
       accessToken: 'sk_test',
       projectId: 'proj_123',
@@ -145,5 +151,62 @@ describe('PlatformFilesystem', () => {
     await expect(fs.moveFile('/a.txt', '/b.txt', { overwrite: false })).rejects.toThrow(/overwrite: false/);
     // No request should have gone to the proxy when we rejected up front.
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('reports prefix-only paths as directories so nested folders can be opened', async () => {
+    // Emulates the workspace proxy's GET dispatch (servers/workspace-proxy
+    // fs-routes): a GET only reaches the list handler when the URL path key is
+    // empty or ends with `/`. Any other key is a GetObject and 404s unless
+    // that exact object exists — folders exist only as key prefixes.
+    const objects: Record<string, string> = { 'foo/': '', 'foo/bar.md': 'abc' };
+    const list = (prefix: string) => {
+      const contents: Array<{ key: string; size: number }> = [];
+      const commonPrefixes = new Set<string>();
+      for (const [key, body] of Object.entries(objects)) {
+        if (!key.startsWith(prefix)) continue;
+        const rest = key.slice(prefix.length);
+        const slash = rest.indexOf('/');
+        if (slash === -1) contents.push({ key, size: body.length });
+        else commonPrefixes.add(`${prefix}${rest.slice(0, slash + 1)}`);
+      }
+      return response(JSON.stringify({ contents, commonPrefixes: [...commonPrefixes] }), { status: 200 });
+    };
+    const fetchMock = vi.fn().mockImplementation(async (url: string | URL, init?: RequestInit) => {
+      const u = new URL(String(url));
+      const key = decodeURIComponent(u.pathname.split('/fs/dev-bucket/')[1] ?? '');
+      if (init?.method === 'HEAD') {
+        return key in objects
+          ? response(null, { status: 200, headers: { 'content-length': String(objects[key]!.length) } })
+          : response('not found', { status: 404 });
+      }
+      if (!key || key.endsWith('/')) return list(u.searchParams.get('prefix') ?? key);
+      return key in objects ? response(objects[key], { status: 200 }) : response('not found', { status: 404 });
+    });
+    const fs = new PlatformFilesystem({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      bucketName: 'dev-bucket',
+      fetch: fetchMock,
+    });
+    await fs._init();
+
+    await expect(fs.stat('/foo')).resolves.toMatchObject({ name: 'foo', path: '/foo', type: 'directory' });
+    await expect(fs.exists('foo')).resolves.toBe(true);
+    await expect(fs.readdir('/foo')).resolves.toEqual([{ name: 'bar.md', type: 'file', size: 3 }]);
+    await expect(fs.readdir('/')).resolves.toEqual([{ name: 'foo', type: 'directory' }]);
+  });
+
+  it('does not list when HEAD finds a file', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response(null, { status: 200, headers: { 'content-length': '4' } }));
+    const fs = new PlatformFilesystem({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      bucketName: 'dev-bucket',
+      fetch: fetchMock,
+    });
+    await fs._init();
+
+    await expect(fs.stat('/a.txt')).resolves.toMatchObject({ type: 'file', size: 4 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

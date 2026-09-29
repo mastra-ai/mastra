@@ -12,7 +12,15 @@ export interface IterationStateUpdateInput {
 }
 
 /**
- * Step record for tracking iteration history
+ * Step record for tracking iteration history.
+ *
+ * Deliberate shape divergence from the main loop: main accumulates full
+ * `DefaultStepResult` objects (with `content`, `response`, etc.); durable
+ * serializes this reduced record across step boundaries instead. Processor
+ * hooks receive these records via the `(inputData as any).accumulatedSteps`
+ * casts in llm-execution.ts, so a processor reading `steps[i].content` gets
+ * `undefined` on durable. Converging the shapes would require reworking
+ * durable's serialized iteration state, so the divergence is kept for now.
  */
 export interface StepRecord {
   text?: string;
@@ -27,13 +35,29 @@ export interface StepRecord {
  */
 export function calculateAccumulatedUsage(
   currentUsage: AccumulatedUsage,
-  executionUsage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number },
+  executionUsage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+    cachedInputTokens?: number;
+    cacheCreationInputTokens?: number;
+    reasoningTokens?: number;
+  },
 ): AccumulatedUsage {
-  return {
+  const usage: AccumulatedUsage = {
     inputTokens: currentUsage.inputTokens + (executionUsage?.inputTokens || 0),
     outputTokens: currentUsage.outputTokens + (executionUsage?.outputTokens || 0),
     totalTokens: currentUsage.totalTokens + (executionUsage?.totalTokens || 0),
   };
+  // Only emit detail fields once some step reported them, so providers without caching don't show a misleading 0
+  for (const key of ['cachedInputTokens', 'cacheCreationInputTokens', 'reasoningTokens'] as const) {
+    const current = currentUsage[key];
+    const step = executionUsage?.[key];
+    if (current !== undefined || step !== undefined) {
+      usage[key] = (current ?? 0) + (step ?? 0);
+    }
+  }
+  return usage;
 }
 
 /**
@@ -79,6 +103,8 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
 
   const newUsage = calculateAccumulatedUsage(currentState.accumulatedUsage, executionOutput.output.usage);
   const stepRecord = buildStepRecord(executionOutput);
+  const lastStepResult = { ...executionOutput.stepResult };
+  delete lastStepResult.request;
 
   return {
     runId: currentState.runId,
@@ -96,7 +122,7 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     iterationCount: currentState.iterationCount + 1,
     accumulatedSteps: [...currentState.accumulatedSteps, stepRecord],
     accumulatedUsage: newUsage,
-    lastStepResult: executionOutput.stepResult,
+    lastStepResult,
     backgroundTaskPending: executionOutput.backgroundTaskPending,
     delegationBailed: executionOutput.delegationBailed,
     // Preserve the two-phase stop flag set by the dowhile predicate's

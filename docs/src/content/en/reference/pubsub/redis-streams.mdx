@@ -8,11 +8,11 @@ packages:
 
 # RedisStreamsPubSub
 
-`RedisStreamsPubSub` is a [`PubSub`](/reference/pubsub/base) implementation backed by [Redis Streams](https://redis.io/docs/latest/develop/data-types/streams/). It delivers events across processes and hosts, with persistence, consumer groups, and redelivery on failure. It also implements [`LeaseProvider`](/reference/pubsub/lease-provider), so the signals layer can elect a single owner per resource across instances, which is what lets signals coordinate runs in distributed and serverless deployments.
+`RedisStreamsPubSub` is a [`PubSub`](/reference/pubsub/base) implementation backed by [Redis Streams](https://redis.io/docs/latest/develop/data-types/streams/). It delivers events across processes and hosts, with persistence, consumer groups, and redelivery on failure. It also implements [`LeaseProvider`](/reference/pubsub/lease-provider). The signals layer can elect a single owner per resource across instances, which is what lets signals coordinate runs in distributed and serverless deployments.
 
 Use it for distributed deployments where several services share an event stream. For single-process delivery, use [`EventEmitterPubSub`](/reference/pubsub/event-emitter). For Google Cloud, use [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub).
 
-Each topic maps to a Redis stream key. Subscriptions with a group use a Redis consumer group, so members share work round-robin. Subscriptions without a group create a private consumer group, so every subscriber receives every event.
+Each topic maps to a Redis stream key. Subscriptions with a group use a Redis consumer group. Members share work round-robin. Subscriptions without a group create a private consumer group. Every subscriber receives every event.
 
 `RedisStreamsPubSub` is a pull transport: consumers read events with `XREADGROUP`, so Mastra runs an orchestration worker to read on its behalf.
 
@@ -58,7 +58,7 @@ export const mastra = new Mastra({
 
 ### Bring your own client
 
-To control client construction yourself (TLS, credential providers, and so on), pass an unconnected `redis` client as `client`. The pubsub uses it as its writer and calls `client.duplicate()` for each subscription's blocking reader, so every connection stays distinct. The pubsub owns the client's lifecycle (it connects on first use and quits it on `close()`), so don't share it with the rest of your app.
+To control client construction yourself (TLS, credential providers, and so on), pass an unconnected `redis` client as `client`. The pubsub uses it as its writer and calls `client.duplicate()` for each subscription's blocking reader. Every connection stays distinct. The pubsub owns the client's lifecycle (it connects on first use and quits it on `close()`), so don't share it with the rest of your app.
 
 ```typescript title="src/mastra/index.ts"
 import { RedisStreamsPubSub } from '@mastra/redis-streams'
@@ -226,6 +226,14 @@ Not every topic reaches a `clearTopic` call. Topics without a defined end of lif
 
 ```typescript
 await pubsub.clearTopic('workflow.events.run-123')
+```
+
+### `trimTopic(topic, { runId, producedBefore? })`
+
+Pages through the stream with `XRANGE` and runs `XDEL` for every entry published with `runId`. With `producedBefore`, only entries produced at or before that time are deleted, skipping approval and suspension prompts. Mastra uses this to trim a long run each time its messages are saved. Mastra calls this once a thread run's messages are persisted, so an idle thread's stream empties instead of growing to `maxLen`. Because entries are matched by `runId`, a run resumed after a restart also removes the entries it published before the restart. Entries from other runs, including those from other processes, are never touched. Best-effort. Failures are logged at warn level.
+
+```typescript
+await pubsub.trimTopic('agent.thread.thread-abc', { runId: 'run-123' })
 ```
 
 ### `close()`

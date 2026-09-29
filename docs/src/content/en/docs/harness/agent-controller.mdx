@@ -278,7 +278,7 @@ session.subscribe(event => {
 })
 ```
 
-The `always_allow_category` decision grants the tool category for the rest of the live Session. Session grants aren't durable process-level permissions.
+The `always_allow_category` decision grants the tool category for the gate's thread. Grants aren't durable process-level permissions.
 
 Interactive tools such as [`ask_user`](/reference/tools/ask-user-tool) and [`submit_plan`](/reference/tools/submit-plan-tool) use resumable tool suspensions instead. Resume them with [`session.respondToToolSuspension()`](/reference/agent-controller/session#respondtotoolsuspension-resumedata-toolcallid-requestcontext-):
 
@@ -409,7 +409,7 @@ Create the session under `thread.resourceId`. Because a session can bind only th
 
 Failures that aren't refusals (a storage outage, a bug in your resolver's dependencies) still post an error to the thread, so a broken bot doesn't look like a silent one. If you need to tell them apart in your own code, a refusal is a `ChannelSessionRejectedError` with the original error as its `cause`.
 
-`resolveSession` also runs when a user answers an approval card, with that action's request context, so a shared install revalidates the person approving rather than trusting the person who sent the original message.
+`resolveSession` also runs when a user answers an approval card, with that action's request context. A shared install revalidates the person approving rather than trusting the person who sent the original message.
 
 ### Handle stale approvals
 
@@ -478,7 +478,7 @@ const subscription = await session.subscribe({
 subscription.unsubscribe()
 ```
 
-`subscribe()` takes an options object and is async, unlike the in-process listener. Its promise resolves once the stream is established and rejects when it can't connect, so a rejected call leaves nothing running in the background. `reconnect: true` re-establishes a stream that drops after it was established, with exponential backoff.
+`subscribe()` takes an options object and is async, unlike the in-process listener. Its promise resolves once the stream is established and rejects when it can't connect. A rejected call leaves nothing running in the background. `reconnect: true` re-establishes a stream that drops after it was established, with exponential backoff.
 
 The server doesn't replay events missed while the stream was down, so read `session.state()` from `onReconnect` for the current mode, model, and thread. The client surface has no `session.displayState.get()`.
 
@@ -492,3 +492,5 @@ Send work with `session.sendMessage(content)`, or `session.sendMessage({ content
 - [Workspace](/docs/sandbox/overview)
 - [Observational memory](/docs/memory/observational-memory)
 - [Channels](/docs/channels)
+- [Mastra Code](https://code.mastra.ai)
+- [Mastra Factory](https://factory.mastra.ai)

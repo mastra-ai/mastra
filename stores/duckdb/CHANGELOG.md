@@ -1,5 +1,196 @@
 # @mastra/duckdb
 
+## 1.12.0-alpha.2
+
+### Minor Changes
+
+- Added `runId`, `sessionId`, `userId`, and `organizationId` filters to advanced trace queries at trace scope and inside `spans.some` / `spans.none`. No migration is needed. ([#24935](https://github.com/mastra-ai/mastra/pull/24935))
+
+### Patch Changes
+
+- Updated dependencies [[`93fe2d6`](https://github.com/mastra-ai/mastra/commit/93fe2d6a9e47861d90cc0fd0080aefdb8cabb612), [`561e2a6`](https://github.com/mastra-ai/mastra/commit/561e2a6c8a44dbfd91eae390e14671462497cf85), [`8156816`](https://github.com/mastra-ai/mastra/commit/815681621dd88997608c5b7e8f0f87fe03cd1d18), [`94ba70e`](https://github.com/mastra-ai/mastra/commit/94ba70ea6ba8a53f5e4010392bf3bbaecde7966d), [`a7895fc`](https://github.com/mastra-ai/mastra/commit/a7895fce693e499c08c4784c57d4c4f46c0e1ccb), [`5197f81`](https://github.com/mastra-ai/mastra/commit/5197f81d6a5641f80f0ee6596ac085653b38cca3), [`0c2fe6c`](https://github.com/mastra-ai/mastra/commit/0c2fe6c00909795234270c8ea2c2c53882d63798), [`dd01709`](https://github.com/mastra-ai/mastra/commit/dd01709f780562f9ff8c72d977f3da5ae265970e)]:
+  - @mastra/core@1.72.0-alpha.9
+
+## 1.11.2-alpha.1
+
+### Patch Changes
+
+- Reduced storage use for ended spans in `@mastra/duckdb`. Span data returned by queries is unchanged. Fixes #25240. ([#25268](https://github.com/mastra-ai/mastra/pull/25268))
+
+- Updated dependencies:
+  - @mastra/core@1.72.0-alpha.6
+
+## 1.11.2-alpha.0
+
+### Patch Changes
+
+- Fixed `listTraces`, `listTracesLight`, and `listBranches` scanning the entire `span_events` table when a query matched nothing or requested a page past the end. These calls now return an empty page immediately, so empty filters and out-of-range pages stay fast and use little memory on large stores. ([#25271](https://github.com/mastra-ai/mastra/pull/25271))
+
+- Updated dependencies [[`43fbe75`](https://github.com/mastra-ai/mastra/commit/43fbe75535650345cf61dee00cf3e7b3f5efaf7f), [`ebd03fd`](https://github.com/mastra-ai/mastra/commit/ebd03fd3bc93fe3930747956724252f7c8834826), [`2c57ba8`](https://github.com/mastra-ai/mastra/commit/2c57ba896b04215fface2a8216b88fe59cfdd041), [`f6effda`](https://github.com/mastra-ai/mastra/commit/f6effdabafa9fc6388478b3e281ad4c457d4200b), [`7f4ce21`](https://github.com/mastra-ai/mastra/commit/7f4ce2190029710851d95f7b75a2fb724782483c), [`1ba1588`](https://github.com/mastra-ai/mastra/commit/1ba158873dadf3d290b111981c3bc7ef95ab1d1c), [`b537ab1`](https://github.com/mastra-ai/mastra/commit/b537ab14714870e058775530bc55b37c9115613f), [`d4e350a`](https://github.com/mastra-ai/mastra/commit/d4e350a5c1e29a7da5a22da52ed1f33431403012)]:
+  - @mastra/core@1.72.0-alpha.5
+
+## 1.11.1
+
+### Patch Changes
+
+- Fixed completed event spans appearing to still be running, including event spans stored before this fix. Event spans now report an end time equal to their start time, matching the ClickHouse and PostgreSQL stores. ([#24970](https://github.com/mastra-ai/mastra/pull/24970))
+
+- Declared feedback support in the observability store so servers report the `feedback` capability as available to clients. ([#25020](https://github.com/mastra-ai/mastra/pull/25020))
+
+  ```ts
+  // With one of these stores configured as the observability storage:
+  const { capabilities } = await client.getObservabilityCapabilities();
+
+  console.log(capabilities.feedback); // true
+  ```
+
+- Fixed `listTraces`, `listTracesLight` and `listBranches` on `@mastra/duckdb` so each trace and branch is counted once. Every ended span is stored with two start rows, and the fast path and delta polling counted both. `pagination.total` was double the real number, each page returned about half of `perPage`, a trace could show on two pages, and delta polls returned every trace twice. Fixes https://github.com/mastra-ai/mastra/issues/24919 ([#24932](https://github.com/mastra-ai/mastra/pull/24932))
+
+- The observability stores used by `PostgresStoreVNext`, `ClickhouseStoreVNext` and `DuckDBStore` now declare their filter discovery support, so Studio can show discovery-backed filters based on what the store reports. ([#25008](https://github.com/mastra-ai/mastra/pull/25008))
+
+  ```ts
+  const { capabilities } = await client.getObservabilityCapabilities();
+  capabilities.discovery; // { entityTypes: true, entityNames: true, serviceNames: true, environments: true, tags: true, metrics: true }
+  ```
+
+- Updated dependencies [[`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`b757896`](https://github.com/mastra-ai/mastra/commit/b757896872edd74f71ec104be92273c5406265da), [`7f64865`](https://github.com/mastra-ai/mastra/commit/7f648656d2b24b214a899e8835b8286333c80a19), [`f751e65`](https://github.com/mastra-ai/mastra/commit/f751e659f496e5e53ed38632c59c296fec2ccbe5)]:
+  - @mastra/core@1.71.0
+
+## 1.11.1-alpha.1
+
+### Patch Changes
+
+- Fixed completed event spans appearing to still be running, including event spans stored before this fix. Event spans now report an end time equal to their start time, matching the ClickHouse and PostgreSQL stores. ([#24970](https://github.com/mastra-ai/mastra/pull/24970))
+
+- Declared feedback support in the observability store so servers report the `feedback` capability as available to clients. ([#25020](https://github.com/mastra-ai/mastra/pull/25020))
+
+  ```ts
+  // With one of these stores configured as the observability storage:
+  const { capabilities } = await client.getObservabilityCapabilities();
+
+  console.log(capabilities.feedback); // true
+  ```
+
+- The observability stores used by `PostgresStoreVNext`, `ClickhouseStoreVNext` and `DuckDBStore` now declare their filter discovery support, so Studio can show discovery-backed filters based on what the store reports. ([#25008](https://github.com/mastra-ai/mastra/pull/25008))
+
+  ```ts
+  const { capabilities } = await client.getObservabilityCapabilities();
+  capabilities.discovery; // { entityTypes: true, entityNames: true, serviceNames: true, environments: true, tags: true, metrics: true }
+  ```
+
+- Updated dependencies [[`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1)]:
+  - @mastra/core@1.71.0-alpha.1
+
+## 1.11.1-alpha.0
+
+### Patch Changes
+
+- Fixed `listTraces`, `listTracesLight` and `listBranches` on `@mastra/duckdb` so each trace and branch is counted once. Every ended span is stored with two start rows, and the fast path and delta polling counted both. `pagination.total` was double the real number, each page returned about half of `perPage`, a trace could show on two pages, and delta polls returned every trace twice. Fixes https://github.com/mastra-ai/mastra/issues/24919 ([#24932](https://github.com/mastra-ai/mastra/pull/24932))
+
+- Updated dependencies [[`b757896`](https://github.com/mastra-ai/mastra/commit/b757896872edd74f71ec104be92273c5406265da), [`f751e65`](https://github.com/mastra-ai/mastra/commit/f751e659f496e5e53ed38632c59c296fec2ccbe5)]:
+  - @mastra/core@1.71.0-alpha.0
+
+## 1.11.0
+
+### Minor Changes
+
+- Added DuckDB support for filtering completed root traces by elapsed duration. ([#24635](https://github.com/mastra-ai/mastra/pull/24635))
+
+  Previously, duration filtering required a span relation, which can match a child span:
+
+  ```typescript
+  where: {
+    spans: {
+      some: { op: "gt", left: { path: "durationMs" }, right: { literal: 5000 } }
+    }
+  }
+  ```
+
+  Use the top-level field to evaluate only the selected completed root:
+
+  ```typescript
+  where: { op: "gt", left: { path: "durationMs" }, right: { literal: 5000 } }
+  ```
+
+- Added trace-query tag predicates for DuckDB. Trace queries can use `includes`, `notIncludes`, `exists`, and `notExists` on `tags`, and value discovery returns each observed tag with the number of traces that carry it. Missing and empty tag lists behave the same. Span tags are now trimmed, deduplicated, and stripped of blank entries on write, matching the PostgreSQL and ClickHouse stores. ([#24554](https://github.com/mastra-ai/mastra/pull/24554))
+
+  **Example**
+
+  ```ts
+  const observability = await duckdbStore.getStore('observability');
+  const result = await observability.queryTraces(
+    planTraceQuery(
+      parseTraceQueryRequest({
+        timeRange: { from: '2026-09-01T00:00:00.000Z', to: '2026-09-21T00:00:00.000Z' },
+        where: { op: 'exists', path: 'tags' },
+      }),
+    ),
+  );
+  ```
+
+- Applied the trusted tenant scope of advanced trace queries to root spans, related spans, scores, feedback, and discovery scans. The store advertises the `trace-query-tenant-scope` feature so the server can reject scoped requests against older stores. ([#24566](https://github.com/mastra-ai/mastra/pull/24566))
+
+### Patch Changes
+
+- Trimmed, deduplicated, and dropped blank tags when writing spans, matching the PostgreSQL and ClickHouse stores so tag predicates and tag value discovery see the same values. ([#24554](https://github.com/mastra-ai/mastra/pull/24554))
+
+- Updated dependencies [[`bfde500`](https://github.com/mastra-ai/mastra/commit/bfde5009d1d9bdbce241132b3df9e638ad805fab), [`04233fd`](https://github.com/mastra-ai/mastra/commit/04233fdc197e1d9a4b13e9d182447df283ea1850), [`574a55c`](https://github.com/mastra-ai/mastra/commit/574a55cd26cc2171f61906e0f090c817032c9603), [`e33a488`](https://github.com/mastra-ai/mastra/commit/e33a488ec308b7742e2bf66528873767f802c957), [`fc0ee2b`](https://github.com/mastra-ai/mastra/commit/fc0ee2b7d6d33bd5dd80f7338a5a90ec615b1235), [`9544a15`](https://github.com/mastra-ai/mastra/commit/9544a158e9bf110b3873b74b2c368616015244ee), [`22ed0d9`](https://github.com/mastra-ai/mastra/commit/22ed0d9f0f399ca29cf66e847795784018e6b79c), [`68fece5`](https://github.com/mastra-ai/mastra/commit/68fece5b724be17ab9bbfaa132468c5afa866b39), [`e7d378f`](https://github.com/mastra-ai/mastra/commit/e7d378f16e68b9ec1268a71960ecf102f86cd437), [`8adceb5`](https://github.com/mastra-ai/mastra/commit/8adceb53a48bb1b628ba839665e736b062b0d58f), [`e675e83`](https://github.com/mastra-ai/mastra/commit/e675e83c29d1c69ee334985725c5ce78ac5dcd6f), [`f9ffd28`](https://github.com/mastra-ai/mastra/commit/f9ffd2825c3cb21145b361f06c96f3c35c07bce2), [`5e4edbe`](https://github.com/mastra-ai/mastra/commit/5e4edbe212a714cc659203964f60e44988c7171f), [`7465c16`](https://github.com/mastra-ai/mastra/commit/7465c166894c5a0628634f564c62a26322654f9e), [`9f349e3`](https://github.com/mastra-ai/mastra/commit/9f349e34a1bc6e1011c471ad305068d95966ae35), [`c593409`](https://github.com/mastra-ai/mastra/commit/c59340998206b7273747d5b5281a09ab26535f81), [`4cb2f12`](https://github.com/mastra-ai/mastra/commit/4cb2f12d05b0de71a22127a76a16c1732bb674ec), [`3601e57`](https://github.com/mastra-ai/mastra/commit/3601e57cd8a4d2ca6f68d460c527c472a19f612d), [`ac426a0`](https://github.com/mastra-ai/mastra/commit/ac426a0f015e0d234f1394505c0b0795dc03ebed), [`cf98812`](https://github.com/mastra-ai/mastra/commit/cf98812b7e9b511bc45a8641047ad7b91fee6abf), [`68695fd`](https://github.com/mastra-ai/mastra/commit/68695fdc4b92cdf67c7fcf36603fa3c59e1bc10e), [`c35feed`](https://github.com/mastra-ai/mastra/commit/c35feedf99a55ad404657a1cebf0c298f36ab82e), [`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208), [`9a2db9a`](https://github.com/mastra-ai/mastra/commit/9a2db9ac12c7b5e24a44841d47a7f7ff17d3f504), [`ff6487e`](https://github.com/mastra-ai/mastra/commit/ff6487e163c4e4fcde950352e6598961b037dd1a)]:
+  - @mastra/core@1.70.0
+
+## 1.11.0-alpha.2
+
+### Minor Changes
+
+- Added DuckDB support for filtering completed root traces by elapsed duration. ([#24635](https://github.com/mastra-ai/mastra/pull/24635))
+
+  Previously, duration filtering required a span relation, which can match a child span:
+
+  ```typescript
+  where: {
+    spans: {
+      some: { op: "gt", left: { path: "durationMs" }, right: { literal: 5000 } }
+    }
+  }
+  ```
+
+  Use the top-level field to evaluate only the selected completed root:
+
+  ```typescript
+  where: { op: "gt", left: { path: "durationMs" }, right: { literal: 5000 } }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`fc0ee2b`](https://github.com/mastra-ai/mastra/commit/fc0ee2b7d6d33bd5dd80f7338a5a90ec615b1235), [`9f349e3`](https://github.com/mastra-ai/mastra/commit/9f349e34a1bc6e1011c471ad305068d95966ae35), [`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208)]:
+  - @mastra/core@1.70.0-alpha.2
+
+## 1.11.0-alpha.1
+
+### Minor Changes
+
+- Added trace-query tag predicates for DuckDB. Trace queries can use `includes`, `notIncludes`, `exists`, and `notExists` on `tags`, and value discovery returns each observed tag with the number of traces that carry it. Missing and empty tag lists behave the same. Span tags are now trimmed, deduplicated, and stripped of blank entries on write, matching the PostgreSQL and ClickHouse stores. ([#24554](https://github.com/mastra-ai/mastra/pull/24554))
+
+  **Example**
+
+  ```ts
+  const observability = await duckdbStore.getStore('observability');
+  const result = await observability.queryTraces(
+    planTraceQuery(
+      parseTraceQueryRequest({
+        timeRange: { from: '2026-09-01T00:00:00.000Z', to: '2026-09-21T00:00:00.000Z' },
+        where: { op: 'exists', path: 'tags' },
+      }),
+    ),
+  );
+  ```
+
+### Patch Changes
+
+- Trimmed, deduplicated, and dropped blank tags when writing spans, matching the PostgreSQL and ClickHouse stores so tag predicates and tag value discovery see the same values. ([#24554](https://github.com/mastra-ai/mastra/pull/24554))
+
+- Updated dependencies [[`574a55c`](https://github.com/mastra-ai/mastra/commit/574a55cd26cc2171f61906e0f090c817032c9603), [`22ed0d9`](https://github.com/mastra-ai/mastra/commit/22ed0d9f0f399ca29cf66e847795784018e6b79c), [`e7d378f`](https://github.com/mastra-ai/mastra/commit/e7d378f16e68b9ec1268a71960ecf102f86cd437), [`e675e83`](https://github.com/mastra-ai/mastra/commit/e675e83c29d1c69ee334985725c5ce78ac5dcd6f), [`5e4edbe`](https://github.com/mastra-ai/mastra/commit/5e4edbe212a714cc659203964f60e44988c7171f), [`3601e57`](https://github.com/mastra-ai/mastra/commit/3601e57cd8a4d2ca6f68d460c527c472a19f612d), [`ac426a0`](https://github.com/mastra-ai/mastra/commit/ac426a0f015e0d234f1394505c0b0795dc03ebed), [`c35feed`](https://github.com/mastra-ai/mastra/commit/c35feedf99a55ad404657a1cebf0c298f36ab82e), [`9a2db9a`](https://github.com/mastra-ai/mastra/commit/9a2db9ac12c7b5e24a44841d47a7f7ff17d3f504), [`ff6487e`](https://github.com/mastra-ai/mastra/commit/ff6487e163c4e4fcde950352e6598961b037dd1a)]:
+  - @mastra/core@1.70.0-alpha.1
+
 ## 1.11.0-alpha.0
 
 ### Minor Changes
