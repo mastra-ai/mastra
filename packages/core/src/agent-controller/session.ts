@@ -2614,11 +2614,8 @@ export class SessionDisplayState {
         // still render the prompts (e.g. `ask_user`, which pauses via the native
         // tool-suspension primitive). When the run ends for any other reason the
         // parked suspensions are abandoned, so clear them all.
-        // Delegated subagents are kept too, so a resumed delegation reuses its
-        // entry instead of emitting a duplicate `subagent_start`.
         if (event.reason !== 'suspended') {
           ds.pendingSuspensions.clear();
-          ds.activeSubagents = new Map();
         }
         // Mark any still-running tools as errored (handles abort mid-run)
         for (const [, tool] of ds.activeTools) {
@@ -2626,6 +2623,7 @@ export class SessionDisplayState {
             tool.status = 'error';
           }
         }
+        ds.activeSubagents = new Map();
         break;
 
       // ── Message streaming ──────────────────────────────────────────────

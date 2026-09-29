@@ -190,11 +190,12 @@ describe('SessionRunEngine — subagents delegated through Agent.agents', () => 
     ];
     for (const item of afterResume) await engine.processStreamChunk(resumedRun, item, context);
 
-    // A suspended agent_end keeps activeSubagents, so the resumed run reuses the existing entry.
+    // agent_end clears activeSubagents, so the resumed run opens a fresh entry for the same call.
     expect(subagentEvents(events).map(event => event.type)).toEqual([
       'subagent_start',
       'subagent_tool_start',
       'subagent_tool_end',
+      'subagent_start',
       'subagent_tool_start',
       'subagent_tool_end',
       'subagent_text_delta',
@@ -202,11 +203,7 @@ describe('SessionRunEngine — subagents delegated through Agent.agents', () => 
     ]);
     expect(session.displayState.get().activeSubagents.get(toolCallId)).toMatchObject({
       agentType: 'helper',
-      task: 'Research streams',
-      toolCalls: [
-        { name: 'searchDocs', isError: false },
-        { name: 'deleteDocs', isError: false },
-      ],
+      toolCalls: [{ name: 'deleteDocs', isError: false }],
       textDelta: 'Done.',
       status: 'completed',
       result: 'Done.',
@@ -227,6 +224,32 @@ describe('SessionRunEngine — subagents delegated through Agent.agents', () => 
     for (const item of chunks) await engine.processStreamChunk(state, item, context);
 
     expect(subagentEvents(events).find(event => event.type === 'subagent_end')).toMatchObject({ result: '' });
+  });
+
+  it('opens and closes the subagent when the delegation settles without streaming any output', async () => {
+    const { engine, events, session } = createHarness();
+    const state = engine.createStreamState();
+    const context = new RequestContext();
+
+    const toolCallId = 'delegate-silent';
+    const chunks: StreamChunk[] = [
+      { type: 'tool-call', payload: { toolCallId, toolName: 'agent-helper', args: { prompt: 'Research streams' } } },
+      {
+        type: 'tool-error',
+        payload: { toolCallId, toolName: 'agent-helper', error: new Error('helper crashed') },
+      },
+    ];
+    for (const item of chunks) await engine.processStreamChunk(state, item, context);
+
+    expect(subagentEvents(events)).toMatchObject([
+      { type: 'subagent_start', agentType: 'helper', task: 'Research streams' },
+      { type: 'subagent_end', agentType: 'helper', isError: true },
+    ]);
+    expect(session.displayState.get().activeSubagents.get(toolCallId)).toMatchObject({
+      agentType: 'helper',
+      task: 'Research streams',
+      status: 'error',
+    });
   });
 
   it('ignores tool-output that is not from an agent-<key> delegation', async () => {

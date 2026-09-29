@@ -440,6 +440,17 @@ export class SessionRunEngine {
     }
     this.emitMessagePart(state, partIndex);
     // The built-in subagent tool emits its own `subagent_end`; only close `agent-<key>` delegations here.
+    // A delegation that settles before streaming any output has no entry yet, so open one first.
+    if (toolName.startsWith('agent-') && !this.#session.displayState.get().activeSubagents.has(toolCallId)) {
+      const args = existing?.type === 'tool-invocation' ? existing.toolInvocation.args : undefined;
+      this.#session.emit({
+        type: 'subagent_start',
+        toolCallId,
+        agentType: toolName.slice('agent-'.length),
+        task: getString(getRecord(args)?.prompt) ?? '',
+        modelId: '',
+      });
+    }
     const delegatedSubagent = toolName.startsWith('agent-')
       ? this.#session.displayState.get().activeSubagents.get(toolCallId)
       : undefined;
