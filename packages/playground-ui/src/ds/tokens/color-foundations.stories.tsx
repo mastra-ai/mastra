@@ -252,13 +252,13 @@ export const SemanticColors: Story = {
       >
         <div className="flex flex-wrap items-center gap-4">
           <div className="w-40">
-            <Specimen name="--destructive" note="Destructive action fill">
-              <Swatch value={Colors.destructive} />
+            <Specimen name="--fill-destructive" note="Destructive action fill">
+              <Swatch value={Colors['fill-destructive']} />
             </Specimen>
           </div>
           <div className="w-40">
-            <Specimen name="--destructive-foreground" note="Only on a destructive fill">
-              <Swatch value={Colors['destructive-foreground']} />
+            <Specimen name="--fill-destructive-foreground" note="Only on a destructive fill">
+              <Swatch value={Colors['fill-destructive-foreground']} />
             </Specimen>
           </div>
         </div>

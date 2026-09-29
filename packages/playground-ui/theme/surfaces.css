@@ -53,10 +53,11 @@
   --fill-inverse-active: color-mix(in srgb, var(--foreground) 60%, var(--background));
   --fill-inverse-disabled: color-mix(in srgb, var(--foreground) 45%, var(--background));
 
-  --fill-destructive: var(--destructive);
+  --fill-destructive: var(--red-600);
   --fill-destructive-hover: var(--red-700);
   --fill-destructive-active: var(--red-800);
   --fill-destructive-disabled: var(--red-900);
+  --fill-destructive-foreground: var(--red-50);
 
   /*
    * Boundary ladder — the four states of a control's 1px edge, as alphas of
@@ -208,6 +209,7 @@ html.light {
   --color-fill-destructive-hover: var(--fill-destructive-hover);
   --color-fill-destructive-active: var(--fill-destructive-active);
   --color-fill-destructive-disabled: var(--fill-destructive-disabled);
+  --color-fill-destructive-foreground: var(--fill-destructive-foreground);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
   --color-border-hover: var(--border-hover);

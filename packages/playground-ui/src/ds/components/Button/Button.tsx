@@ -66,8 +66,8 @@ export const buttonVariants = cva(
           'disabled:bg-fill-inverse-disabled disabled:text-background/75 aria-disabled:bg-fill-inverse-disabled aria-disabled:text-background/75',
         ),
         destructive: cn(
-          'border border-transparent bg-fill-destructive text-destructive-foreground not-disabled:hover:bg-fill-destructive-hover not-disabled:active:bg-fill-destructive-active',
-          'disabled:bg-fill-destructive-disabled disabled:text-destructive-foreground aria-disabled:bg-fill-destructive-disabled aria-disabled:text-destructive-foreground',
+          'border border-transparent bg-fill-destructive text-fill-destructive-foreground not-disabled:hover:bg-fill-destructive-hover not-disabled:active:bg-fill-destructive-active',
+          'disabled:bg-fill-destructive-disabled disabled:text-fill-destructive-foreground aria-disabled:bg-fill-destructive-disabled aria-disabled:text-fill-destructive-foreground',
         ),
         'destructive-ghost': cn(
           'border border-transparent bg-transparent text-destructive-indicator not-disabled:hover:bg-destructive-subtle not-disabled:hover:text-destructive-indicator not-disabled:active:bg-destructive-subtle-active',

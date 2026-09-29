@@ -50,7 +50,7 @@ Text fields, textareas, input groups, and the default Select, Combobox, and Date
 | `--field-rim`        | none                | Resting outline. Stronger inside white surfaces in light mode                            |
 | `--field-rim-focus`  | none                | Focus outline                                                                            |
 
-A field in an error state sets `--field-rim` and `--field-rim-focus` to `--destructive`, so the red outline shows on every surface and stays red while focused.
+A field in an error state sets `--field-rim` and `--field-rim-focus` to `--destructive-indicator`, so the red outline shows on every surface and stays red while focused.
 
 If your app generates additional semantic utilities, import `@mastra/playground-ui/theme.css` into its Tailwind stylesheet so Tailwind can read the `@theme inline` mappings.
 
@@ -74,9 +74,9 @@ Eight shared ramps (`red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `purple`
 }
 ```
 
-The same four suffixes apply to `destructive`, `warning`, and `info`. Backgrounds are opaque. Use `-fg` only for text on a `-subtle` surface. Standalone status text, invalid-field borders, icons, dots, and bars use `-indicator`. `destructive` is only the filled-button color, paired with `destructive-foreground`.
+The same four suffixes apply to `destructive`, `warning`, and `info`. Backgrounds are opaque. Use `-subtle-foreground` only for text on a `-subtle` surface. Standalone status text, invalid-field borders, icons, dots, and bars use `-indicator`. The filled destructive button uses `--fill-destructive` and its hover, active, and disabled steps, with `--fill-destructive-foreground` for its text.
 
-Product roles use `--product-{name}` and `--product-{name}-fg`. Names are `studio`, `server`, `observability`, `factory`, `workers`, and `persistent-server`. Use `ProductAvatar` for the round icon and `ProductBadge` for the icon with its label. Both take a `product` prop and use the matching semantic colors.
+Product roles use `--product-{name}` and `--product-{name}-foreground`. Names are `studio`, `server`, `observability`, `factory`, `workers`, and `persistent-server`. Use `ProductAvatar` for the round icon and `ProductBadge` for the icon with its label. Both take a `product` prop and use the matching semantic colors.
 
 ```tsx
 import { ProductAvatar } from '@mastra/playground-ui/components/ProductAvatar';
@@ -90,7 +90,7 @@ Charts use hue-named roles for categories (`--chart-blue`, `--chart-blue-deep`, 
 
 Numbered `accent*` tokens, `positive1`, `negative1`, `warning1`, `notice-success/destructive/warning/info`, and `--brand-green-*` are removed. Status consumers use the existing `success`, `destructive`, `warning`, or `info` roles. Focus styling uses `border-focus`; categorical charts and span icons use their own roles. CodeMirror uses five local `--syntax-*` properties scoped to `.cm-editor`, not a global palette.
 
-`badge-green-strong/red/yellow/blue` are now categorical badge tones built from the ramps, with a fill (`--badge-purple-strong`), `-muted`, `-edge`, `-fg`, and `-indicator` like `badge-purple-strong`. Badge backgrounds are solid: in dark mode the low-chroma `--{hue}-soft-900` (strong) / `--{hue}-soft-950` (subtle), in light mode `--{hue}-100` / `--{hue}-50`. The soft steps keep the lightness and hue of `900`/`950` at 75% chroma, and are available as utilities such as `bg-green-soft-900`. `--badge-{hue}-indicator` colors dots, icons, and labels for a category: `--{hue}-soft-300` in dark mode and `--{hue}-soft-600` in light mode, which hold every hue at the same 0.1 chroma so no hue shouts. Use the status role with `-subtle`, `-edge`, `-fg`, or `-indicator` for its intended job. Notice variants are unchanged. Badge status variants are `success`, `destructive`, `warning`, and `info`, for states. `green`, `red`, `yellow`, and `blue` are categorical tones like `purple` and `orange`, for labels that are not states. `Badge` takes `emphasis="strong"` (the default) or `emphasis="subtle"` (a quieter tinted fill). Use `--green-*` for the shared chromatic ramp.
+Every badge hue (`green`, `red`, `yellow`, `blue`, `purple`, `orange`, `cyan`, `pink`) is a categorical tone built from the ramps, with `--badge-{hue}-strong`, `-subtle`, `-edge`, `-foreground`, and `-indicator`. `-strong` and `-subtle` are the fills behind `emphasis="strong"` and `emphasis="subtle"`. Badge backgrounds are solid: in dark mode the low-chroma `--{hue}-soft-900` (strong) / `--{hue}-soft-950` (subtle), in light mode `--{hue}-100` / `--{hue}-50`. The soft steps keep the lightness and hue of `900`/`950` at 75% chroma, and are available as utilities such as `bg-green-soft-900`. `--badge-{hue}-indicator` colors dots, icons, and labels for a category: `--{hue}-soft-300` in dark mode and `--{hue}-soft-600` in light mode, which hold every hue at the same 0.1 chroma so no hue shouts. Use the status role with `-subtle`, `-edge`, `-subtle-foreground`, or `-indicator` for its intended job. Notice variants are unchanged. Badge status variants are `success`, `destructive`, `warning`, and `info`, for states. `green`, `red`, `yellow`, and `blue` are categorical tones like `purple` and `orange`, for labels that are not states. `Badge` takes `emphasis="strong"` (the default) or `emphasis="subtle"` (a quieter tinted fill). Use `--green-*` for the shared chromatic ramp.
 
 #### Opacity and literal colors
 
@@ -107,17 +107,20 @@ Product code does not add opacity modifiers (`bg-green-500/20`) or `color-mix()`
 
 To migrate removed tokens:
 
-| Removed token          | Replacement                  |
-| ---------------------- | ---------------------------- |
-| `--chart-soft-N`       | `--chart-sequential-N`       |
-| `--span-type-NAME`     | `--span-NAME`                |
-| `accent1`, `positive1` | `success-*`                  |
-| `accent2`, `negative1` | `destructive-*`              |
-| `accent6`, `warning1`  | `warning-*`                  |
-| `accent3`, `accent5`   | `info-*`                     |
-| `error`                | `destructive-indicator`      |
-| `notice-STATUS`        | `STATUS-subtle`, `STATUS-fg` |
-| `--brand-green-N`      | `--green-N`                  |
+| Removed token                           | Replacement                                       |
+| --------------------------------------- | ------------------------------------------------- |
+| `--chart-soft-N`                        | `--chart-sequential-N`                            |
+| `--span-type-NAME`                      | `--span-NAME`                                     |
+| `accent1`, `positive1`                  | `success-*`                                       |
+| `accent2`, `negative1`                  | `destructive-*`                                   |
+| `accent6`, `warning1`                   | `warning-*`                                       |
+| `accent3`, `accent5`                    | `info-*`                                          |
+| `error`                                 | `destructive-indicator`                           |
+| `notice-STATUS`                         | `STATUS-subtle`, `STATUS-subtle-foreground`       |
+| `--brand-green-N`                       | `--green-N`                                       |
+| `destructive`, `destructive-foreground` | `fill-destructive`, `fill-destructive-foreground` |
+| `badge-HUE`, `badge-HUE-fg`             | `badge-HUE-strong`, `badge-HUE-foreground`        |
+| `notice-note`, `notice-note-fg`         | `muted`, `foreground`                             |
 
 `SankeyChart` accepts `getNodeColor` and `getLinkColor` callbacks returning CSS colors. Explicit link colors keep the default link transparency and hover emphasis:
 

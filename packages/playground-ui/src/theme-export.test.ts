@@ -44,9 +44,6 @@ const semanticTokens = [
   'placeholder',
   'border',
   'ring',
-  // The only chromatic pair in the contract. Everything else here is neutral.
-  'destructive',
-  'destructive-foreground',
 ] as const;
 
 const deferredSemanticTokens = [

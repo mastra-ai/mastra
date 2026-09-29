@@ -197,16 +197,14 @@ export const Colors = {
   'fill-destructive-hover': 'var(--fill-destructive-hover)',
   'fill-destructive-active': 'var(--fill-destructive-active)',
   'fill-destructive-disabled': 'var(--fill-destructive-disabled)',
+  'fill-destructive-foreground': 'var(--fill-destructive-foreground)',
   muted: 'var(--muted)',
   foreground: 'var(--foreground)',
   'muted-foreground': 'var(--muted-foreground)',
   placeholder: 'var(--placeholder)',
   ring: 'var(--ring)',
-  destructive: 'var(--destructive)',
-  'destructive-foreground': 'var(--destructive-foreground)',
 
   scrim: 'var(--scrim)',
-
 
   'badge-green-strong': 'var(--badge-green-strong)',
   'badge-green-subtle': 'var(--badge-green-subtle)',

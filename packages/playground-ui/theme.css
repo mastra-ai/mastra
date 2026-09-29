@@ -45,9 +45,6 @@
      text read as a second ink instead of stepping back. */
   --muted-foreground: var(--gray-8);
   --placeholder: var(--gray-7);
-
-  --destructive: var(--red-600);
-  --destructive-foreground: var(--red-50);
 }
 
 /* Semantic aliases stay inline so utilities resolve var(--token) on the styled
@@ -64,6 +61,4 @@
   --color-foreground: var(--foreground);
   --color-muted-foreground: var(--muted-foreground);
   --color-placeholder: var(--placeholder);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
 }
