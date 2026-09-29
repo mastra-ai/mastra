@@ -67,6 +67,8 @@ export interface ThreadListItemProps {
   onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   onDelete?: () => void;
   deleteLabel?: string;
+  /** Trailing controls (e.g. a menu trigger) shown on hover/focus, and kept visible while a popup they own is open. */
+  actions?: ReactNode;
   className?: string;
   children: ReactNode;
 }
@@ -79,6 +81,7 @@ export const ThreadListItem = ({
   onClick,
   onDelete,
   deleteLabel = 'delete',
+  actions,
   className,
   children,
 }: ThreadListItemProps) => {
@@ -90,7 +93,7 @@ export const ThreadListItem = ({
         variant="ghost"
         className={cn(
           'w-full min-w-0 justify-start rounded-xl px-3 text-left',
-          onDelete && 'pr-9',
+          (onDelete || actions) && 'pr-9',
           isActive && 'bg-fill-hover text-foreground',
           className,
         )}
@@ -108,6 +111,12 @@ export const ThreadListItem = ({
         >
           <X />
         </Button>
+      )}
+
+      {actions && (
+        <div className="absolute top-1/2 right-px flex -translate-y-1/2 items-center opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 has-data-popup-open:opacity-100">
+          {actions}
+        </div>
       )}
     </li>
   );
