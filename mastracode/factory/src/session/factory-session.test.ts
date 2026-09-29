@@ -56,6 +56,7 @@ function createSessionDouble() {
     },
     state: { get: () => ({}), set: vi.fn(async () => void calls.push('state')) },
     model: { switch: vi.fn(async () => void calls.push('model')) },
+    subagents: { model: { set: vi.fn(async () => void calls.push('subagent')) } },
   };
   return { session: session as unknown as FactorySessionHandle, double: session, calls };
 }
@@ -262,6 +263,9 @@ describe('hydrateFactorySession', () => {
       observeAttachments: true,
     });
     expect(double.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
+    for (const agentType of ['explore', 'plan', 'execute']) {
+      expect(double.subagents.model.set).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5', agentType });
+    }
   });
 
   it('leaves the session on its default model when the project has none', async () => {
@@ -270,6 +274,7 @@ describe('hydrateFactorySession', () => {
     await hydrateFactorySession(session, { orgId: 'org-1', factoryProjectId: 'proj-1' });
 
     expect(double.model.switch).not.toHaveBeenCalled();
+    expect(double.subagents.model.set).not.toHaveBeenCalled();
     // The org seed is the one state write that always happens: knowledge
     // capture scopes on it, and it must land even when nothing else does.
     expect(double.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });

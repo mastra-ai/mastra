@@ -1347,6 +1347,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     stateSchema: typedStateSchema,
     agent: codeAgent,
     subagents,
+    // Subagents resolve like the main agent: tenant credentials and
+    // request-scoped custom providers come from the calling run's context.
+    resolveSubagentModel: (modelId, { requestContext }) => resolveModel(modelId, { requestContext }),
     gateways: [amazonBedrockGateway, mastraCodeGateway],
     workspace: config?.workspace ?? (args => getDynamicWorkspace({ ...args, backgroundToolsEnabled })),
     browser: config?.browser,

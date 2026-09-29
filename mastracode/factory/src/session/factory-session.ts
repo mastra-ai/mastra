@@ -375,6 +375,11 @@ export async function hydrateFactorySession(session: FactorySession, args: Hydra
   if (args.defaultModelId) {
     try {
       await session.model.switch({ modelId: args.defaultModelId });
+      // Subagents otherwise keep the server-wide settings (or the SDK's built-in
+      // default), which may name a provider this factory has no credentials for.
+      for (const agentType of ['explore', 'plan', 'execute']) {
+        await session.subagents.model.set({ modelId: args.defaultModelId, agentType });
+      }
     } catch (error) {
       console.warn('[Factory Start] Failed to apply factory default model', {
         modelId: args.defaultModelId,

@@ -157,6 +157,19 @@ describe('createSubagentTool requestContext forwarding', () => {
     expect(result.content).not.toContain('<subagent-meta');
   });
 
+  it('resolves the subagent model with the calling run request context', async () => {
+    mockStream.mockResolvedValue(createMockStreamResponse('result text'));
+    const tool = createSubagentTool({ subagents, resolveModel, fallbackModelId: 'test-model' });
+    const requestContext = new RequestContext();
+
+    await (tool as any).execute(
+      { agentType: 'explore', task: 'task' },
+      { requestContext, agent: { toolCallId: 'tc-model' } },
+    );
+
+    expect(resolveModel).toHaveBeenCalledWith('test-model', { requestContext });
+  });
+
   it('forwards a copy of requestContext with threadId/resourceId stripped', async () => {
     mockStream.mockResolvedValue(createMockStreamResponse('result text'));
 
