@@ -1887,11 +1887,17 @@ export class AgentThreadStreamRuntime {
     while (true) {
       const remainingMs = deadline - Date.now();
       if (remainingMs <= 0) return undefined;
+      const attemptMs = Math.min(attemptTimeoutMs, remainingMs);
+      const attemptStartedAt = Date.now();
       const sourceId = await this.#findClaimedThreadOwner(pubsub, key, {
         includeLocal: false,
-        timeoutMs: Math.min(attemptTimeoutMs, remainingMs),
+        timeoutMs: attemptMs,
       });
       if (sourceId) return sourceId;
+      // A PubSub subscribe/publish failure settles the attempt immediately;
+      // wait out the rest of its window so retries stay paced.
+      const unusedMs = attemptMs - (Date.now() - attemptStartedAt);
+      if (unusedMs > 0) await new Promise(resolve => setTimeout(resolve, unusedMs));
       attemptTimeoutMs *= 2;
     }
   }

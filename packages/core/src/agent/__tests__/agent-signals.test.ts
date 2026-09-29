@@ -3401,6 +3401,45 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('paces claimed-owner discovery retries when pubsub publish fails immediately', async () => {
+    let discoveryRequests = 0;
+    class FailingDiscoveryPubSub extends EventEmitterPubSub {
+      override async publish(...args: Parameters<EventEmitterPubSub['publish']>): Promise<void> {
+        const [topic, event] = args;
+        if (
+          topic === 'agent.thread-owner-discovery' &&
+          (event.data as { type?: string } | undefined)?.type === 'thread-owner-request'
+        ) {
+          discoveryRequests++;
+          throw new Error('pubsub unavailable');
+        }
+        return super.publish(...args);
+      }
+    }
+    const pubsub = new FailingDiscoveryPubSub();
+    const senderAgent = new Agent({
+      id: 'failing-discovery-sender-agent',
+      name: 'Failing Discovery Sender Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+
+    const signalResult = new AgentThreadStreamRuntime().sendSignal(
+      senderAgent,
+      { type: 'user-message', contents: 'wake nobody' },
+      {
+        resourceId: 'failing-discovery-user',
+        threadId: 'failing-discovery-thread',
+        ifIdle: { behavior: 'wake', requireClaimedOwner: true },
+      },
+      pubsub,
+    );
+    await expect(signalResult.accepted).rejects.toThrow('No claimed thread owner responded');
+    // 100 + 200 + 400 + remaining 300ms fits in the 1s budget.
+    expect(discoveryRequests).toBeLessThanOrEqual(4);
+  });
+
   it('clears the owner-discovery reply topic when discovery times out without an owner', async () => {
     const cleared: string[] = [];
     class RecordingPubSub extends EventEmitterPubSub {
