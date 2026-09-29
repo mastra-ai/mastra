@@ -2,6 +2,9 @@ import { estimateTokenCount } from 'tokenx';
 import { sliceByTokensSafe } from '../../utils/slice-by-tokens';
 import type { ProcessToolResultArgs, Processor } from '../index';
 
+/** Smallest accepted limit, so a useful slice fits beside the truncation marker. */
+const MIN_LIMIT = 64;
+
 export interface ToolResultTokenLimiterOptions {
   /** Maximum number of tokens a single tool result may use, including the truncation marker */
   limit: number;
@@ -19,8 +22,8 @@ export class ToolResultTokenLimiter implements Processor<'tool-result-token-limi
 
   constructor(options: ToolResultTokenLimiterOptions | number) {
     const limit = typeof options === 'number' ? options : options.limit;
-    if (!Number.isInteger(limit) || limit <= 0) {
-      throw new Error(`ToolResultTokenLimiter: limit must be a positive integer, received ${limit}`);
+    if (!Number.isInteger(limit) || limit < MIN_LIMIT) {
+      throw new Error(`ToolResultTokenLimiter: limit must be an integer of at least ${MIN_LIMIT}, received ${limit}`);
     }
     this.limit = limit;
   }
@@ -34,10 +37,7 @@ export class ToolResultTokenLimiter implements Processor<'tool-result-token-limi
     const tokens = estimateTokenCount(text);
     if (tokens <= this.limit) return;
 
-    const fullMarker = `\n[truncated: ~${tokens} tokens]`;
-    const markerTokens = estimateTokenCount(fullMarker);
-    const marker = markerTokens < this.limit ? fullMarker : '';
-    const kept = this.limit - (marker ? markerTokens : 0);
+    const truncated = truncate(text, tokens, this.limit);
     const updated = messageList.updateToolInvocation({
       type: 'tool-invocation',
       toolInvocation: {
@@ -45,11 +45,28 @@ export class ToolResultTokenLimiter implements Processor<'tool-result-token-limi
         toolCallId,
         toolName,
         args,
-        result: `${sliceByTokensSafe(text, 0, kept)}${marker}`,
+        result: truncated,
       },
     });
     return updated ? messageList : undefined;
   }
+}
+
+function marker(kept: number, total: number): string {
+  return `\n[truncated: showing ${kept.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} tokens]`;
+}
+
+// Token estimates aren't additive, so re-measure slice + marker and shrink until it fits.
+// If even the marker alone doesn't fit, return it anyway so truncation is never silent.
+function truncate(text: string, total: number, limit: number): string {
+  let budget = limit - estimateTokenCount(marker(0, total));
+  while (budget > 0) {
+    const slice = sliceByTokensSafe(text, 0, budget);
+    const candidate = `${slice}${marker(estimateTokenCount(slice), total)}`;
+    if (estimateTokenCount(candidate) <= limit) return candidate;
+    budget--;
+  }
+  return marker(0, total).trimStart();
 }
 
 function toText(value: unknown): string | undefined {
