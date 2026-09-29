@@ -208,6 +208,37 @@ Every hook context includes `agentId` (the agent the schedule fired for) alongsi
 
 Hook exceptions are caught and logged. They never re-route the worker or trigger another hook.
 
+## Recurring prompts in Mastra Code
+
+Mastra Code offers the `/schedules` command, which attaches a recurring prompt to the current conversation thread. Unlike `mastra.schedules`, these schedules live only in the Mastra Code process that created them: nothing is written to storage, and each fire is sent to the thread with `agent.sendSignal()` directly.
+
+```text
+/schedules create 5m Check whether the build is green
+/schedules create 2h ./scripts/check-ci.sh Summarize any failures
+/schedules create 1d ./notes/standup.md
+/schedules
+/schedules pause 81923e92
+/schedules resume 81923e92
+/schedules run 81923e92
+/schedules delete 81923e92
+```
+
+`create` takes an interval and then either a prompt or a file path, optionally followed by extra prompt text:
+
+- Intervals accept `Nm`, `Nh`, or `1d` (also spelled out, for example `5 minutes`). Minutes must divide 60 and hours must divide 24; other values are rejected with the nearest valid suggestion. The minimum cadence is one minute.
+- A path that resolves to an existing file is read at fire time. Files with an executable bit or a `.sh`, `.js`, `.mjs`, `.cjs`, `.ts`, or `.py` extension run as a script from the project root with a 60-second timeout, and their stdout, stderr, and exit code become the prompt. Any other file is sent as prompt text. The extra prompt is appended in both cases and is never passed to the script.
+- A path-looking token that doesn't exist is used as prompt text with a warning.
+
+Each fire arrives on the thread as a `user`-type signal labelled `schedule` in the transcript. If the thread is busy the prompt is queued as the next turn rather than interrupting the current one; if it's idle the thread wakes and runs. Schedules fire on any thread in the process, not only the one focused in the terminal.
+
+Bare `/schedules` lists the current thread's schedules with an 8-character id, cadence, and next fire time. `delete`, `pause`, `resume`, and `run` accept an id prefix and default to the only schedule on the thread when there's one. `run` fires the schedule once, off-cadence. A thread holds at most 10 schedules.
+
+Things to know:
+
+- **Session scoped.** Schedules exist only in the Mastra Code process that created them and stop when it exits. Other Mastra Code processes sharing the same database never see or fire them.
+- **Clock boundaries.** `5m` fires at :00, :05, :10 and so on, not five minutes after creation, and `1d` fires at local midnight. A fire missed while the machine slept doesn't replay; the schedule resumes at the next boundary.
+- **No overlap.** If a script is still running when the next boundary arrives, that fire is skipped.
+
 ## Related
 
 - [`mastra.schedules`](/reference/schedules/overview): API reference for creating and managing schedules.

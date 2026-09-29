@@ -67,6 +67,7 @@ export type ScenarioName =
   | 'file-autocomplete'
   | 'first-run-onboarding'
   | 'github-signals-command'
+  | 'schedules-command'
   | 'github-signals-multi-subscribe'
   | 'github-signals-legacy-upgrade'
   | 'github-signals-tool-multi-subscribe'

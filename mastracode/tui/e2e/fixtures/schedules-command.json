@@ -1,0 +1,24 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Create a schedules e2e thread."
+      },
+      "response": {
+        "content": "Schedules thread ready."
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "SCHEDULE-CHECK-OK"
+      },
+      "response": {
+        "content": "Schedule tick handled."
+      }
+    }
+  ]
+}

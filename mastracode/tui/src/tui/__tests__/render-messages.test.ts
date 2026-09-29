@@ -1029,6 +1029,26 @@ describe('addUserMessage', () => {
     expect(rendered).toContain('╭ steer ');
   });
 
+  it('renders schedule-sourced user messages with the schedule label, even when delivered while active', () => {
+    const state = createState();
+
+    addUserMessage(
+      state,
+      createUserMessage('Output of ./check.sh (exit 0):\nOK', 'signal-1', {
+        source: 'schedule',
+        scheduleId: 'agent_abc',
+        delivery: 'while-active',
+      }),
+    );
+
+    const rendered = (state.chatContainer.children[0] as UserMessageComponent)
+      .render(80)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('╭ schedule ');
+    expect(rendered).not.toContain('╭ steer ');
+  });
+
   it('confirms pending active signals with the steer label', () => {
     const state = createState();
 

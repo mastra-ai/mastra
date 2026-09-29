@@ -65,6 +65,7 @@ import { BOX_INDENT, getMarkdownTheme, theme } from './theme.js';
 export { formatToolResult };
 
 const WHILE_ACTIVE_USER_MESSAGE_LABEL = 'steer';
+const SCHEDULE_USER_MESSAGE_LABEL = 'schedule';
 // These are internal control-plane signals handled by GithubSignals. The user-visible
 // result is rendered by github-sync-status, so showing these would duplicate the UI.
 const HIDDEN_REACTIVE_SIGNAL_TAGS = new Set(['github-subscribe-pr', 'github-unsubscribe-pr']);
@@ -77,6 +78,7 @@ function shouldRenderReactiveSignal(tagName: string): boolean {
 function getUserMessageLabel(message: MastraDBMessage, fallbackLabel?: string): string | undefined {
   const signalAttributes = (message.content?.metadata?.signal as { attributes?: Record<string, unknown> } | undefined)
     ?.attributes;
+  if (signalAttributes?.source === 'schedule') return SCHEDULE_USER_MESSAGE_LABEL;
   if (signalAttributes?.delivery === 'while-active') return WHILE_ACTIVE_USER_MESSAGE_LABEL;
   return fallbackLabel;
 }

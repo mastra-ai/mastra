@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { hostname } from 'node:os';
 import path from 'node:path';
 
@@ -110,6 +111,13 @@ import { setAuthStorage as setKimiCodingAuthStorage } from './providers/kimi-cod
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 import { setAuthStorage as setXAIAuthStorage } from './providers/xai.js';
 
+import {
+  assembleSchedulePrompt,
+  runScript,
+  SCHEDULE_SIGNAL_SOURCE,
+  shortScheduleId,
+  ThreadScheduler,
+} from './schedules/index.js';
 import { stateSchema } from './schema.js';
 import type { MastraCodeState } from './schema.js';
 
@@ -887,6 +895,42 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     };
   };
 
+  // `/schedules` lives in this process only: timers fire it and it dies with
+  // the process, so other Mastra Code processes sharing the database never
+  // see or fire it. File-backed schedules are assembled at fire time so script
+  // output and file edits are current; scripts run via execFile on the literal
+  // path with the workspace as cwd — the extra prompt never reaches a command
+  // line. Idle wakes use the shared wake stream options so a model is
+  // selected for the woken run (see getWakeStreamOptions).
+  const threadScheduler = new ThreadScheduler({
+    assemblePrompt: schedule =>
+      assembleSchedulePrompt(schedule, {
+        cwd: project.rootPath,
+        runScript,
+        readFile: absPath => readFile(absPath, 'utf8'),
+      }),
+    deliver: async (schedule, prompt) => {
+      const target = { resourceId: schedule.resourceId, threadId: schedule.threadId };
+      const streamOptions = await getWakeStreamOptions(target);
+      await codeAgent.sendSignal(
+        {
+          type: 'user',
+          tagName: 'user',
+          contents: prompt,
+          attributes: { source: SCHEDULE_SIGNAL_SOURCE, scheduleId: schedule.id },
+        },
+        {
+          ...target,
+          ifActive: { behavior: 'persist' },
+          ifIdle: { behavior: 'wake', ...(streamOptions ? { streamOptions } : {}) },
+        },
+      ).accepted;
+    },
+    onError: (error, schedule) => {
+      console.warn(`Schedule ${shortScheduleId(schedule.id)} failed to fire:`, error);
+    },
+  });
+
   const githubSignals: GithubSignals | undefined =
     globalSettings.signals?.experimentalGithubSignals && !config?.disableGithubSignals
       ? new GithubSignals({
@@ -1521,6 +1565,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       unsubscribePluginReload = undefined;
       pluginSignalLane?.stopAll();
     },
+    /** Process-local `/schedules` scheduler. Call `stop()` on shutdown. */
+    threadScheduler,
     /**
      * Hands Mastra to the statically configured input processors.
      *

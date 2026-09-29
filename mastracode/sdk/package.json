@@ -18,6 +18,12 @@
         "default": "./dist/index.js"
       }
     },
+    "./schedules": {
+      "import": {
+        "types": "./dist/schedules/index.d.ts",
+        "default": "./dist/schedules/index.js"
+      }
+    },
     "./*": {
       "import": {
         "types": "./dist/*.d.ts",
