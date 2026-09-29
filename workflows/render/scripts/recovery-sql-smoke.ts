@@ -68,6 +68,11 @@ try {
       'INSERT INTO mastra_render_admissions(namespace,run_id,owner,input_hash) VALUES($1,$2,$3,$4),($5,$2,$3,$4)',
       [namespace, test.name, 'owner', 'input-hash', 'other-namespace'],
     );
+    const unrelatedRunId = `${test.name}-other`;
+    await connection.query(
+      'INSERT INTO mastra_render_admissions(namespace,run_id,owner,input_hash) VALUES($1,$2,$3,$4)',
+      [namespace, unrelatedRunId, 'owner', 'input-hash'],
+    );
     if (test.record)
       await connection.query('INSERT INTO mastra_render_runs VALUES($1,$2,$3,$4)', [
         workflowId,
@@ -102,6 +107,12 @@ try {
       assert.equal(row.input_hash, 'input-hash');
       assert.equal(row.settled_at !== null, row.namespace === namespace && test.expected === 1);
     }
+    const unrelated = await connection.query(
+      'SELECT settled_at FROM mastra_render_admissions WHERE namespace=$1 AND run_id=$2',
+      [namespace, unrelatedRunId],
+    );
+    assert.equal(unrelated.rowCount, 1);
+    assert.equal(unrelated.rows[0].settled_at, null, 'Another run in the same namespace must remain reserved');
     console.log(`PASS: recovery SQL ${test.name}`);
   }
 } finally {
