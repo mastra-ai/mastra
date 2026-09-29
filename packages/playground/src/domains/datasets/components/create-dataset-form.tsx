@@ -105,11 +105,7 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
       {targetType && !showCustomSchema ? (
         <button
           type="button"
-          className={cn(
-            'self-start text-caption',
-            quietTextHover,
-            controlStateColorTransition,
-          )}
+          className={cn('self-start text-caption', quietTextHover, controlStateColorTransition)}
           onClick={() => setShowCustomSchema(true)}
         >
           + Custom schema
