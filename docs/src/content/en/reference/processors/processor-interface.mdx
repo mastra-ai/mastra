@@ -220,7 +220,7 @@ Use `messages` when you only need to read, map over, or lightly edit fields on t
 
 When memory is enabled, only what ends up in `messageList` after all processors finish is persisted to storage. Both return styles are equivalent for persistence:
 
-- When you mutate `messageList` directly (or return the same `MessageList` instance), recorded mutations are applied in place, so the saved conversation reflects your changes.
+- When you mutate `messageList` directly (or return the same `MessageList` instance), recorded mutations are applied in place. The saved conversation reflects your changes.
 - When you return a `MastraDBMessage[]` or `{ messages, systemMessages }`, Mastra reconciles the returned array against `messageList` for the current stage, removing missing messages and replacing system messages.
 
 Returning a different `MessageList` instance is an error. Always mutate the one passed to your processor.
