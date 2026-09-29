@@ -29,7 +29,7 @@ import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHead
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { InlineWorkItemComposer } from '../domains/factory/components/InlineWorkItemComposer';
 import { IntakeColumnExtras } from '../domains/factory/components/IntakeColumnExtras';
-import { IntakeFeedNotice } from '../domains/factory/components/IntakeFeedNotice';
+import { IntakeFeedNotice, PlatformKeyRejectedNotice } from '../domains/factory/components/IntakeFeedNotice';
 import { WorkItemCard } from '../domains/factory/components/WorkItemCard';
 import { useBoardComposer } from '../domains/factory/hooks/useBoardComposer';
 import { useBoardDeepLink } from '../domains/factory/hooks/useBoardDeepLink';
@@ -56,6 +56,7 @@ import { orderWorkItemsForStage } from '../domains/factory/boardOrder';
 import type { BoardSort } from '../domains/factory/boardOrder';
 import { boardSortFromParams, boardSortParams } from '../domains/factory/boardSort';
 import { relatedWorkItemIndex } from '../domains/factory/services/relationships';
+import { isPlatformKeyRejected } from '../domains/factory/services/request';
 import { workItemHumanActorIds } from '../domains/factory/workItemActivity';
 import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspaces/services/github';
 import { SkeletonRows } from '../ui/SkeletonRows';
@@ -375,6 +376,7 @@ function BoardContent({
         taskCount === 0,
     };
   });
+  const platformKeyRejected = stageViews.some(({ columnFeed }) => isPlatformKeyRejected(columnFeed?.error));
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -401,6 +403,11 @@ function BoardContent({
           <Notice variant="destructive">
             {mutationError instanceof Error ? mutationError.message : 'Board action failed'}
           </Notice>
+        </div>
+      )}
+      {platformKeyRejected && (
+        <div className="shrink-0 p-4 pb-0">
+          <PlatformKeyRejectedNotice />
         </div>
       )}
       <div className="[container-type:inline-size] m-px min-h-0 flex-1 overflow-auto overscroll-x-contain rounded-[calc(var(--studio-frame-radius,1.5rem)-1px)] [scrollbar-gutter:stable] lg:overscroll-x-auto">

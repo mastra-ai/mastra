@@ -22,6 +22,7 @@ import { isTerminalFactoryRuleStage } from '../../rules/types.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import type { WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import { isPlatformKeyRejected, PLATFORM_KEY_REJECTED } from '../platform/api-client.js';
 import { linearClaimKey } from './claim.js';
 import type { LinearIntegration } from './integration.js';
 import { LinearReauthRequiredError } from './integration.js';
@@ -194,6 +195,7 @@ async function findHeldCard(
 
 /** Map a Linear read failure to the API response for the SPA. */
 function linearFetchError(c: RouteContext, err: unknown) {
+  if (isPlatformKeyRejected(err)) return c.json({ error: PLATFORM_KEY_REJECTED, message: err.message }, 502);
   if ((err as { code?: unknown }).code === 'invalid_cursor') {
     return c.json({ error: 'invalid_cursor' }, 400);
   }

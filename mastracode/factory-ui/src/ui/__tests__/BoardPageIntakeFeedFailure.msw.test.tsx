@@ -149,4 +149,22 @@ describe('Intake column when the candidate feed fails', () => {
     expect(within(intake).getByText('Fix signup')).toBeInTheDocument();
     expect(within(intake).getByText('Fix login')).toBeInTheDocument();
   });
+
+  it('explains a rejected Platform key once for the board instead of a Retry per column', async () => {
+    stubBoardEndpoints(() =>
+      HttpResponse.json({ error: 'platform_key_rejected', message: 'Invalid API key' }, { status: 502 }),
+    );
+    renderWorkBoard();
+
+    expect(await screen.findByText('Mastra Platform key rejected')).toBeInTheDocument();
+    const intake = screen.getByTestId('board-column-intake');
+    const triage = screen.getByTestId('board-column-triage');
+    await waitFor(() => expect(screen.getAllByText('Mastra Platform key rejected')).toHaveLength(1));
+    for (const column of [intake, triage]) {
+      expect(within(column).queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+      expect(within(column).queryByText('Invalid API key')).not.toBeInTheDocument();
+    }
+    expect(within(intake).queryByText('Intake is clear')).not.toBeInTheDocument();
+    expect(within(triage).queryByText('Nothing to triage')).not.toBeInTheDocument();
+  });
 });

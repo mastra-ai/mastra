@@ -39,6 +39,7 @@ import type {
   SourceControlInstallation,
   SourceControlRepository,
 } from '../../storage/domains/source-control/base.js';
+import { isPlatformKeyRejected, PLATFORM_KEY_REJECTED } from '../platform/api-client.js';
 import { listRepositoryCommits } from './commits.js';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.js';
 import type { GithubIntegration } from './integration.js';
@@ -94,6 +95,11 @@ type RouteContext = Context;
 /** Erase a route handler's path-parameterized context to a plain `Context`. */
 function loose(c: unknown): RouteContext {
   return c as RouteContext;
+}
+
+function githubFetchError(c: RouteContext, err: unknown) {
+  if (isPlatformKeyRejected(err)) return c.json({ error: PLATFORM_KEY_REJECTED, message: err.message }, 502);
+  return c.json({ error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) }, 502);
 }
 
 export interface MountGithubRoutesOptions {
@@ -718,10 +724,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             nextPage: nextCursor === null ? null : Number(nextCursor),
           });
         } catch (err) {
-          return c.json(
-            { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },
-            502,
-          );
+          return githubFetchError(loose(c), err);
         }
       },
     }),
@@ -759,10 +762,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             description: detail.description,
           });
         } catch (err) {
-          return c.json(
-            { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },
-            502,
-          );
+          return githubFetchError(loose(c), err);
         }
       },
     }),
@@ -810,10 +810,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             nextPage: nextCursor === null ? null : Number(nextCursor),
           });
         } catch (err) {
-          return c.json(
-            { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },
-            502,
-          );
+          return githubFetchError(loose(c), err);
         }
       },
     }),
@@ -852,10 +849,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             description: pr.body,
           });
         } catch (err) {
-          return c.json(
-            { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },
-            502,
-          );
+          return githubFetchError(loose(c), err);
         }
       },
     }),

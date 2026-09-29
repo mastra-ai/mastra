@@ -7,6 +7,8 @@
  * by filtering for the `jira` provider configuration key.
  */
 
+import { RequestError, requestError } from './request';
+
 export type JiraStatusReason = 'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready';
 
 export interface JiraStatus {
@@ -101,21 +103,7 @@ async function getJiraResource<T>(baseUrl: string, path: string): Promise<T> {
     headers: { Accept: 'application/json' },
     credentials: 'include',
   });
-  if (!res.ok) {
-    let message = `Request failed (${res.status})`;
-    let code: string | undefined;
-    try {
-      const body = (await res.json()) as { error?: string; message?: string };
-      code = body.error;
-      if (body.message) message = body.message;
-      else if (body.error) message = body.error;
-    } catch {
-      /* ignore non-JSON */
-    }
-    const err = new Error(message);
-    (err as { code?: string }).code = code;
-    throw err;
-  }
+  if (!res.ok) throw await requestError(res);
   return (await res.json()) as T;
 }
 
@@ -124,7 +112,7 @@ async function getJiraResource<T>(baseUrl: string, path: string): Promise<T> {
  * can reconnect that account in Mastra Platform.
  */
 export function isJiraAuthError(err: unknown): boolean {
-  return (err as { code?: string } | null)?.code === 'jira_auth_failed';
+  return err instanceof RequestError && err.code === 'jira_auth_failed';
 }
 
 /**

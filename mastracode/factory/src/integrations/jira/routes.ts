@@ -19,6 +19,7 @@ import type { Context } from 'hono';
 
 import type { RouteAuth } from '../../routes/route.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
+import { isPlatformKeyRejected, PLATFORM_KEY_REJECTED } from '../platform/api-client.js';
 import { JiraApiError } from './api.js';
 import { DEPLOYMENT_CONNECTION } from './integration.js';
 import type { JiraIntegration } from './integration.js';
@@ -137,6 +138,7 @@ function parseAfterCursor(raw: string | undefined): string | undefined | null {
 
 /** Map a Jira read failure to the API response for the SPA. */
 function jiraFetchError(c: RouteContext, err: unknown) {
+  if (isPlatformKeyRejected(err)) return c.json({ error: PLATFORM_KEY_REJECTED, message: err.message }, 502);
   if (err instanceof JiraApiError && err.code === 'jira_auth_failed') {
     return c.json(
       {

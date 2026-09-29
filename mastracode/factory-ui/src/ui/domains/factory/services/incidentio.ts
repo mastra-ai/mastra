@@ -6,6 +6,8 @@
  * the caller's organization.
  */
 
+import { requestError } from './request';
+
 export interface IncidentioSource {
   id: string;
   name: string;
@@ -60,17 +62,7 @@ interface IntakeSourceResponse {
 
 async function requestJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { headers: { Accept: 'application/json' }, credentials: 'include' });
-  if (!response.ok) {
-    let message = `Request failed (${response.status})`;
-    try {
-      const body = (await response.json()) as { error?: string; message?: string };
-      if (body.message) message = body.message;
-      else if (body.error) message = body.error;
-    } catch {
-      /* ignore non-JSON */
-    }
-    throw new Error(message);
-  }
+  if (!response.ok) throw await requestError(response);
   return response.json() as Promise<T>;
 }
 

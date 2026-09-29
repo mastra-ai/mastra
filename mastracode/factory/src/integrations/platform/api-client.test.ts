@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } from './api-client.js';
+import {
+  isPlatformKeyRejected,
+  PlatformApiClient,
+  PlatformApiError,
+  platformApiClientConfigFromEnv,
+} from './api-client.js';
 
 const accessToken = 'platform-secret-token';
 
@@ -157,6 +162,31 @@ describe('PlatformApiClient', () => {
     expect(logged).toContain('"status":429');
     expect(logged).toContain('"retryAfterSeconds":17');
     expect(logged).toContain('"message":"Rate limited"');
+  });
+
+  it("tells this server's rejected Platform key apart from other 401s", async () => {
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const failWith = (problem: Record<string, unknown>) =>
+      client(
+        vi
+          .fn<typeof fetch>()
+          .mockResolvedValue(
+            new Response(JSON.stringify(problem), {
+              status: 401,
+              headers: { 'content-type': 'application/problem+json' },
+            }),
+          ),
+      )
+        .request('GET', '/v2/connections')
+        .catch(caught => caught);
+
+    const keyRejected = await failWith({ type: 'authentication_error', status: 401, detail: 'Invalid API key' });
+    expect(keyRejected).toMatchObject({ message: 'Invalid API key', status: 401 });
+    expect(isPlatformKeyRejected(keyRejected)).toBe(true);
+    expect(isPlatformKeyRejected(await failWith({ type: 'connection_error', status: 401, detail: 'Reconnect' }))).toBe(
+      false,
+    );
+    expect(isPlatformKeyRejected(await failWith({ detail: 'Unauthorized' }))).toBe(false);
   });
 
   it('redacts the access token from HTTP, transport errors, and logs', async () => {

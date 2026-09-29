@@ -7,6 +7,8 @@
  * reach the browser — the server talks to GitHub with its installation token.
  */
 
+import { requestError } from './request';
+
 export interface GithubIssue {
   number: number;
   title: string;
@@ -70,17 +72,7 @@ async function getRepositoryResource<T>(
     headers: { Accept: 'application/json' },
     credentials: 'include',
   });
-  if (!res.ok) {
-    let message = `Request failed (${res.status})`;
-    try {
-      const body = (await res.json()) as { error?: string; message?: string };
-      if (body.message) message = body.message;
-      else if (body.error) message = body.error;
-    } catch {
-      /* ignore non-JSON */
-    }
-    throw new Error(message);
-  }
+  if (!res.ok) throw await requestError(res);
   return (await res.json()) as T;
 }
 

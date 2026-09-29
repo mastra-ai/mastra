@@ -7,7 +7,7 @@
  * talks to Linear's GraphQL API on the org's behalf.
  */
 
-import { RequestError } from './request';
+import { RequestError, requestError } from './request';
 
 export type LinearStatusReason =
   | 'missing_config'
@@ -107,21 +107,7 @@ async function getLinearResource<T>(baseUrl: string, path: string): Promise<T> {
     headers: { Accept: 'application/json' },
     credentials: 'include',
   });
-  if (!res.ok) {
-    let message = `Request failed (${res.status})`;
-    let code: string | undefined;
-    try {
-      const body = (await res.json()) as { error?: string; message?: string };
-      code = body.error;
-      if (body.message) message = body.message;
-      else if (body.error) message = body.error;
-    } catch {
-      /* ignore non-JSON */
-    }
-    const err = new RequestError(message, res.status);
-    (err as RequestError & { code?: string }).code = code;
-    throw err;
-  }
+  if (!res.ok) throw await requestError(res);
   return (await res.json()) as T;
 }
 
@@ -130,7 +116,7 @@ async function getLinearResource<T>(baseUrl: string, path: string): Promise<T> {
  * longer valid (expired/revoked token) and OAuth must be redone.
  */
 export function isLinearReauthError(err: unknown): boolean {
-  return (err as { code?: string } | null)?.code === 'linear_reauth_required';
+  return err instanceof RequestError && err.code === 'linear_reauth_required';
 }
 
 /** List one cursor page of the workspace's active issues. */

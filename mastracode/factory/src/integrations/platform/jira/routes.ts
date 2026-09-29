@@ -20,6 +20,7 @@ import type { RouteAuth } from '../../../routes/route.js';
 import type { IntakeStorage } from '../../../storage/domains/intake/base.js';
 import { JiraApiError } from '../../jira/api.js';
 import type { JiraRulesIngress } from '../../jira/rules.js';
+import { isPlatformKeyRejected, PLATFORM_KEY_REJECTED } from '../api-client.js';
 import type { PlatformJiraIntegration } from './integration.js';
 
 type RouteContext = Context;
@@ -136,6 +137,7 @@ function parseAfterCursor(raw: string | undefined): string | undefined | null {
 
 /** Map a Jira read failure to the API response for the SPA. */
 function jiraFetchError(c: RouteContext, err: unknown) {
+  if (isPlatformKeyRejected(err)) return c.json({ error: PLATFORM_KEY_REJECTED, message: err.message }, 502);
   if (err instanceof JiraApiError && err.code === 'jira_auth_failed') {
     return c.json(
       {

@@ -20,6 +20,7 @@ import type { Context } from 'hono';
 import type { Intake } from '../../capabilities/intake.js';
 import type { RouteAuth } from '../../routes/route.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
+import { isPlatformKeyRejected, PLATFORM_KEY_REJECTED } from '../platform/api-client.js';
 import { IncidentioApiError } from './api.js';
 import type { IncidentioRulesIngress } from './rules.js';
 
@@ -136,6 +137,7 @@ function parseAfterCursor(raw: string | undefined): string | undefined | null {
 
 /** Map an incident.io read failure to the API response for the SPA. */
 function incidentioFetchError(c: RouteContext, err: unknown) {
+  if (isPlatformKeyRejected(err)) return c.json({ error: PLATFORM_KEY_REJECTED, message: err.message }, 502);
   if (err instanceof IncidentioApiError && (err.status === 401 || err.status === 403)) {
     return c.json(
       {

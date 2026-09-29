@@ -52,14 +52,29 @@ function normalizeIntegrationsApiUrl(integrationsApiUrl: string): string {
 
 export class PlatformApiError extends Error {
   readonly status: number;
+  readonly problemType: string | null;
   readonly retryAfterSeconds: number | null;
 
-  constructor(message: string, status: number, retryAfterSeconds: number | null = null) {
+  constructor(
+    message: string,
+    status: number,
+    {
+      problemType = null,
+      retryAfterSeconds = null,
+    }: { problemType?: string | null; retryAfterSeconds?: number | null } = {},
+  ) {
     super(message);
     this.name = 'PlatformApiError';
     this.status = status;
+    this.problemType = problemType;
     this.retryAfterSeconds = retryAfterSeconds;
   }
+}
+
+export const PLATFORM_KEY_REJECTED = 'platform_key_rejected';
+
+export function isPlatformKeyRejected(error: unknown): error is PlatformApiError {
+  return error instanceof PlatformApiError && error.problemType === 'authentication_error';
 }
 
 export class PlatformApiClient {
@@ -84,18 +99,7 @@ export class PlatformApiClient {
     options?: { signal?: AbortSignal; actingUserId?: string },
   ): Promise<T> {
     const response = await this.#send(method, path, body, options);
-    if (!response.ok) {
-      const message = redact(await extractError(response), this.#accessToken);
-      const retryAfterSeconds = parseRetryAfter(response.headers.get('retry-after'));
-      logPlatformError('Platform API request failed', {
-        method,
-        path,
-        status: response.status,
-        retryAfterSeconds,
-        message,
-      });
-      throw new PlatformApiError(message, response.status, retryAfterSeconds);
-    }
+    if (!response.ok) throw await this.#failure('Platform API request failed', method, path, response);
     if (response.status === 204) return undefined as T;
     return (await response.json()) as T;
   }
@@ -106,20 +110,24 @@ export class PlatformApiClient {
       const location = response.headers.get('location');
       if (location) return location;
     }
-    if (!response.ok) {
-      const message = redact(await extractError(response), this.#accessToken);
-      const retryAfterSeconds = parseRetryAfter(response.headers.get('retry-after'));
-      logPlatformError('Platform API redirect request failed', {
-        method,
-        path,
-        status: response.status,
-        retryAfterSeconds,
-        message,
-      });
-      throw new PlatformApiError(message, response.status, retryAfterSeconds);
-    }
+    if (!response.ok) throw await this.#failure('Platform API redirect request failed', method, path, response);
     logPlatformError('Platform API request did not return a redirect', { method, path, status: response.status });
     throw new PlatformApiError('Platform API request did not return a redirect.', response.status);
+  }
+
+  async #failure(logMessage: string, method: string, path: string, response: Response): Promise<PlatformApiError> {
+    const problem = await readProblem(response);
+    const message = redact(problem.message, this.#accessToken);
+    const retryAfterSeconds = parseRetryAfter(response.headers.get('retry-after'));
+    logPlatformError(logMessage, {
+      method,
+      path,
+      status: response.status,
+      problemType: problem.problemType,
+      retryAfterSeconds,
+      message,
+    });
+    return new PlatformApiError(message, response.status, { problemType: problem.problemType, retryAfterSeconds });
   }
 
   async #send(
@@ -176,16 +184,20 @@ export class PlatformApiClient {
   }
 }
 
-async function extractError(response: Response): Promise<string> {
+async function readProblem(response: Response): Promise<{ message: string; problemType: string | null }> {
+  const fallback = `Platform API request failed (${response.status})`;
   try {
     const data = (await response.clone().json()) as Record<string, unknown>;
-    for (const field of ['detail', 'error', 'title']) {
-      if (typeof data[field] === 'string' && data[field]) return data[field];
-    }
+    const message = ['detail', 'error', 'title']
+      .map(field => data[field])
+      .find(value => typeof value === 'string' && value);
+    return {
+      message: typeof message === 'string' ? message : fallback,
+      problemType: typeof data.type === 'string' ? data.type : null,
+    };
   } catch {
-    // Fall through to the status-based message.
+    return { message: fallback, problemType: null };
   }
-  return `Platform API request failed (${response.status})`;
 }
 
 function redact(message: string, accessToken: string): string {

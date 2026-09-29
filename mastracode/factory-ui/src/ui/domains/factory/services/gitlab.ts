@@ -1,5 +1,7 @@
 /** Browser-side helpers for the GitLab intake source. */
 
+import { RequestError, requestError } from './request';
+
 export const MASTRA_PROJECTS_URL = 'https://projects.mastra.ai';
 
 export interface GitLabConnection {
@@ -151,21 +153,7 @@ async function getGitLabResource<T>(baseUrl: string, path: string, init?: Reques
     },
     credentials: 'include',
   });
-  if (!res.ok) {
-    let message = `Request failed (${res.status})`;
-    let code: string | undefined;
-    try {
-      const body = (await res.json()) as { error?: string; message?: string };
-      code = body.error;
-      if (body.message) message = body.message;
-      else if (body.error) message = body.error;
-    } catch {
-      /* ignore non-JSON */
-    }
-    const error = new Error(message);
-    (error as { code?: string }).code = code;
-    throw error;
-  }
+  if (!res.ok) throw await requestError(res);
   return (await res.json()) as T;
 }
 
@@ -194,7 +182,7 @@ export function getGitLabMergeRequest(
 }
 
 export function isGitLabAuthError(error: unknown): boolean {
-  return (error as { code?: string } | null)?.code === 'gitlab_auth_failed';
+  return error instanceof RequestError && error.code === 'gitlab_auth_failed';
 }
 
 export function isGitLabReauthRequired(status: GitLabStatus | undefined): boolean {

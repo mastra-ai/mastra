@@ -6,6 +6,7 @@ import type { TestAuthUser } from '../../routes/test-utils.js';
 import type { StateSigner } from '../../state-signing.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../../storage/test-utils.js';
+import { PlatformApiError } from '../platform/api-client.js';
 import { LinearIntegration } from './integration.js';
 import { buildLinearRoutes } from './routes.js';
 
@@ -626,6 +627,16 @@ describe('issues route', () => {
     const res = await buildApp(org1()).request('/web/linear/issues');
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: 'linear_reauth_required' });
+  });
+
+  it("reports this server's rejected Platform key instead of asking to reconnect Linear", async () => {
+    await connect();
+    listActiveLinearIssues.mockRejectedValueOnce(
+      new PlatformApiError('Invalid API key', 401, { problemType: 'authentication_error' }),
+    );
+    const res = await buildApp(org1()).request('/web/linear/issues');
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: 'platform_key_rejected', message: 'Invalid API key' });
   });
 
   it('502s when the Linear API fails', async () => {

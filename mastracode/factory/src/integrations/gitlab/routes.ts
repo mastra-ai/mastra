@@ -6,6 +6,7 @@ import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.j
 import { sanitizeSegment } from '../../sandbox/workdir.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
+import { isPlatformKeyRejected, PLATFORM_KEY_REJECTED } from '../platform/api-client.js';
 import { GitLabApiError } from './api.js';
 import {
   decodeIssueReference,
@@ -59,6 +60,7 @@ async function resolveOrgTenant(
 }
 
 function gitlabFetchError(c: RouteContext, error: unknown) {
+  if (isPlatformKeyRejected(error)) return c.json({ error: PLATFORM_KEY_REJECTED, message: error.message }, 502);
   if (error instanceof GitLabApiError && error.code === 'gitlab_auth_failed') {
     return c.json({ error: 'gitlab_auth_failed', message: error.message }, 409);
   }
