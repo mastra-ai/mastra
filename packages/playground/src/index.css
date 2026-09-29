@@ -88,9 +88,9 @@ th:has(header) {
     position: absolute;
     inset: -20%;
     background:
-      radial-gradient(ellipse 55% 45% at 25% 30%, rgba(212, 212, 216, 0.09), transparent 65%),
-      radial-gradient(ellipse 50% 40% at 75% 70%, rgba(161, 161, 170, 0.07), transparent 65%),
-      radial-gradient(ellipse 40% 35% at 50% 95%, rgba(244, 244, 245, 0.05), transparent 70%);
+      radial-gradient(ellipse 55% 45% at 25% 30%, var(--gray-alpha-2), transparent 65%),
+      radial-gradient(ellipse 50% 40% at 75% 70%, var(--gray-alpha-1), transparent 65%),
+      radial-gradient(ellipse 40% 35% at 50% 95%, var(--gray-alpha-1), transparent 70%);
     filter: blur(40px);
     animation: starter-drift 28s cubic-bezier(0.45, 0, 0.55, 1) infinite;
     pointer-events: none;
@@ -153,12 +153,7 @@ th:has(header) {
   .starter-shimmer {
     --shimmer-base: var(--color-muted-foreground);
     color: transparent;
-    background-image: linear-gradient(
-      115deg,
-      var(--shimmer-base) 42%,
-      color-mix(in oklab, var(--shimmer-base) 25%, white) 50%,
-      var(--shimmer-base) 58%
-    );
+    background-image: linear-gradient(115deg, var(--shimmer-base) 42%, var(--foreground) 50%, var(--shimmer-base) 58%);
     background-size: 300% 100%;
     background-position: 100% 0;
     background-repeat: no-repeat;
@@ -188,8 +183,8 @@ th:has(header) {
     position: absolute;
     inset: -25%;
     background:
-      radial-gradient(ellipse 50% 45% at 30% 28%, var(--ready-aurora-1, rgba(212, 212, 216, 0.14)), transparent 62%),
-      radial-gradient(ellipse 48% 42% at 72% 74%, var(--ready-aurora-2, rgba(161, 161, 170, 0.1)), transparent 64%);
+      radial-gradient(ellipse 50% 45% at 30% 28%, var(--ready-aurora-1, var(--gray-alpha-4)), transparent 62%),
+      radial-gradient(ellipse 48% 42% at 72% 74%, var(--ready-aurora-2, var(--gray-alpha-3)), transparent 64%);
     filter: blur(48px);
     animation: ready-aurora-drift 22s cubic-bezier(0.45, 0, 0.55, 1) infinite;
     pointer-events: none;
@@ -209,9 +204,9 @@ th:has(header) {
     background: linear-gradient(
       105deg,
       transparent 30%,
-      var(--ready-sweep-soft, rgba(255, 255, 255, 0.06)) 44%,
-      var(--ready-sweep-hot, rgba(255, 255, 255, 0.22)) 50%,
-      var(--ready-sweep-soft, rgba(255, 255, 255, 0.06)) 56%,
+      var(--ready-sweep-soft, var(--gray-alpha-2)) 44%,
+      var(--ready-sweep-hot, var(--gray-alpha-5)) 50%,
+      var(--ready-sweep-soft, var(--gray-alpha-2)) 56%,
       transparent 70%
     );
     background-size: 250% 100%;

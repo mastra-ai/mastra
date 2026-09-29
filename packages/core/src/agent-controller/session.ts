@@ -601,7 +601,7 @@ export class SessionThread {
     const subscription = await session.machinery.subscribeToThread({ agent, resourceId, threadId });
     session.stream.attach({ subscription, agent, key });
     session.ensureFollowUpBinding(agent, resourceId, threadId);
-    void session.processSubscribedThreadStream(subscription);
+    session.stream.trackConsumer(subscription, session.processSubscribedThreadStream(subscription));
   }
 
   /** Ensure a subscription for the session's active thread (no-op when unbound). */
@@ -1046,11 +1046,47 @@ export class SessionStream {
   /** Dedup key (`agentId:resourceId:threadId`) for the open subscription, or null. */
   #key: string | null = null;
   readonly #teardownWaiters = new Set<() => void>();
+  readonly #consumerFailureWaiters = new Set<(error: unknown) => void>();
+  /** Set once the live subscription's run loop has failed; cleared on attach. */
+  #consumerFailure: { error: unknown } | null = null;
 
   #notifyTeardown(): void {
     const waiters = [...this.#teardownWaiters];
     this.#teardownWaiters.clear();
     for (const waiter of waiters) waiter();
+  }
+
+  /**
+   * Track the run loop consuming `subscription`. If it rejects while no other
+   * subscription has replaced it, consumer-failure waiters receive the error, so
+   * callers awaiting a run on this stream don't wait on a loop that is gone.
+   */
+  trackConsumer(subscription: AgentThreadSubscription<any, true>, consumer: Promise<void>): void {
+    consumer.catch((error: unknown) => {
+      if (this.#subscription !== null && this.#subscription !== subscription) return;
+      this.#consumerFailure = { error };
+      const waiters = [...this.#consumerFailureWaiters];
+      this.#consumerFailureWaiters.clear();
+      for (const waiter of waiters) waiter(error);
+    });
+  }
+
+  /** Rejects with the live run loop's error if it fails; resolves when `signal` cancels the wait. */
+  waitForConsumerFailure(signal: AbortSignal): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const done = (error: unknown) => {
+        signal.removeEventListener('abort', abort);
+        reject(error);
+      };
+      const abort = () => {
+        this.#consumerFailureWaiters.delete(done);
+        resolve();
+      };
+      if (signal.aborted) return resolve();
+      if (this.#consumerFailure) return reject(this.#consumerFailure.error);
+      this.#consumerFailureWaiters.add(done);
+      signal.addEventListener('abort', abort, { once: true });
+    });
   }
 
   waitForTeardown(signal: AbortSignal): Promise<void> {
@@ -1076,7 +1112,8 @@ export class SessionStream {
 
   /** Whether the open subscription already targets `key` (so it can be reused). */
   matches({ key }: { key: string }): boolean {
-    return this.#key === key && this.#subscription !== null;
+    // A subscription whose run loop failed can't process further runs; re-attach.
+    return this.#key === key && this.#subscription !== null && this.#consumerFailure === null;
   }
 
   /** Adopt `subscription` as the live one, recording its owning agent and dedup `key`. */
@@ -1092,6 +1129,7 @@ export class SessionStream {
     this.#subscription = subscription;
     this.#agent = agent ?? null;
     this.#key = key;
+    this.#consumerFailure = null;
   }
 
   /** Agent that owns `subscription`, when it is the live subscription. */
@@ -1542,6 +1580,8 @@ export class SessionRun {
   #abortController: AbortController | null = null;
   /** Whether an abort has been requested for the current run. */
   #abortRequested = false;
+  /** Incremented on every abort request, so waiters can ignore earlier ones. */
+  #abortGeneration = 0;
   readonly #teardownWaiters = new Set<() => void>();
   readonly #abortRequestWaiters = new Set<() => void>();
 
@@ -1573,11 +1613,18 @@ export class SessionRun {
     for (const waiter of waiters) waiter();
   }
 
+  /** Generation of the latest abort request; pass to {@link waitForAbortRequest} as `after`. */
+  getAbortGeneration(): number {
+    return this.#abortGeneration;
+  }
+
   /**
    * Resolves once an abort is requested for the current run (immediately if
-   * one already was), or when `signal` cancels the wait.
+   * one already was), or when `signal` cancels the wait. With `after`, only an
+   * abort requested after that generation counts.
    */
-  waitForAbortRequest(signal: AbortSignal): Promise<void> {
+  waitForAbortRequest(signal: AbortSignal, { after }: { after?: number } = {}): Promise<void> {
+    const requested = () => (after === undefined ? this.#abortRequested : this.#abortGeneration > after);
     return new Promise(resolve => {
       const done = () => {
         signal.removeEventListener('abort', abort);
@@ -1587,7 +1634,7 @@ export class SessionRun {
         this.#abortRequestWaiters.delete(done);
         resolve();
       };
-      if (this.#abortRequested || signal.aborted) return resolve();
+      if (requested() || signal.aborted) return resolve();
       this.#abortRequestWaiters.add(done);
       signal.addEventListener('abort', abort, { once: true });
     });
@@ -1700,6 +1747,7 @@ export class SessionRun {
    */
   requestAbort({ deferSignal }: { deferSignal?: boolean } = {}): void {
     this.#abortRequested = true;
+    this.#abortGeneration++;
     if (deferSignal) {
       this.#notifyAbortRequested();
       return;
@@ -2755,6 +2803,7 @@ export class SessionDisplayState {
           toolCalls: [],
           textDelta: '',
           status: 'running',
+          startedAt: Date.now(),
         });
         break;
       }
@@ -3306,14 +3355,43 @@ export class Session<TState = unknown> {
       completedRunIds.add(endingRunId);
       if (endingRunId === runId) resolveCompletion();
     });
+    // `agent_end` must not be the only way out: stop waiting when the run loop
+    // fails, the subscription is torn down, or the run is aborted, otherwise a
+    // missed event (e.g. concurrent runs on one thread) hangs the caller forever.
+    const waitersController = new AbortController();
+    // Register before awaiting acceptance so a teardown while it is pending is not missed.
+    const threadId = this.thread.getId();
+    let tornDown = false;
+    const teardown = this.stream.waitForTeardown(waitersController.signal).then(() => {
+      tornDown = true;
+    });
+    // Likewise for aborts: one already requested is left over from an earlier
+    // run and must not release this caller; any requested from here on counts.
+    let aborted = false;
+    const abortRequest = this.run
+      .waitForAbortRequest(waitersController.signal, { after: this.run.getAbortGeneration() })
+      .then(() => {
+        aborted = true;
+      });
 
     try {
       const result = await accepted;
+      if (aborted) return;
       if (result.action !== 'wake' && !waitForDelivery) return;
       runId = 'runId' in result ? result.runId : undefined;
       if (!runId || completedRunIds.has(runId)) return;
-      await completion;
+      // A teardown during acceptance ends the wait unless the same thread was
+      // re-attached (sending may rebind the subscription on its own).
+      if (tornDown && (!this.stream.isOpen() || this.thread.getId() !== threadId)) return;
+      const waits: Promise<unknown>[] = [
+        completion,
+        this.stream.waitForConsumerFailure(waitersController.signal),
+        tornDown ? this.stream.waitForTeardown(waitersController.signal) : teardown,
+        abortRequest,
+      ];
+      await Promise.race(waits);
     } finally {
+      waitersController.abort();
       unsubscribe();
     }
   }

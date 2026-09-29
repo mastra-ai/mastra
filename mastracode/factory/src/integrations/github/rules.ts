@@ -684,12 +684,12 @@ export class GithubRules {
     // key and reusing the delivery's own would drop it as a duplicate.
     const pullRequestOpened = event === 'pullRequestOpened';
     const primary = await evaluate(relatedItem, deliveryIdentity, pullRequestOpened);
-    // A merged pull request is the one *other* event both linked cards need:
+    // A closed pull request is the one *other* event both linked cards need:
     // the Review card has to close, and the Work item that wrote the code has
-    // to assess whether it is finished. Resolution binds the delivery to
+    // to finish (on merge) or at least stop recording it as open. Resolution binds the delivery to
     // whichever card it matched first, so evaluate the other one too.
     const linked =
-      event === 'pullRequestMerged' && relatedItem && pullRequestNumber
+      (event === 'pullRequestMerged' || event === 'pullRequestClosed') && relatedItem && pullRequestNumber
         ? await this.#linkedClosureItem(
             project.orgId,
             project.factoryProjectId,
@@ -702,10 +702,67 @@ export class GithubRules {
     // Moving the card to Done does not touch its pull request fields, so without
     // this the card reads "open" until the next sweep and still offers Re-review.
     // Stamped after the evaluations, which commit at the revision they read.
-    const stampClosed = async () => {
-      if ((event !== 'pullRequestMerged' && event !== 'pullRequestClosed') || !pullRequestNumber) return;
+    const stampClosed = async (companionStatus?: string) => {
+      if (!pullRequestNumber) return;
+      // The authoring Work item records which pull request it has out, so an
+      // agent cannot close the work while that pull request is still open.
+      if (pullRequestOpened) {
+        // Mirrors the out-for-review rule's trust gate. A replayed opened
+        // delivery only restores the mark (after a failed write) while the
+        // pull request's Review card still records it open, so a redelivery
+        // after the close cannot block the Work item again.
+        const trusted = (actor.type === 'github' && actor.trusted) || pullRequestFactoryAuthored;
+        const reviewCard =
+          authoringItem && trusted
+            ? await this.#linkedClosureItem(
+                project.orgId,
+                project.factoryProjectId,
+                repositoryId,
+                repositoryName,
+                pullRequestNumber,
+                authoringItem,
+              )
+            : undefined;
+        const stillOpen =
+          companionStatus === 'replayed'
+            ? reviewCard !== undefined && reviewCard.metadata?.state !== 'closed'
+            : reviewCard?.metadata?.state !== 'closed';
+        if (authoringItem && trusted && stillOpen) {
+          await this.options.storage.update({
+            orgId: authoringItem.orgId,
+            id: authoringItem.id,
+            userId: 'factory-rule-dispatcher',
+            patch: { metadata: { openPullRequestNumber: pullRequestNumber } },
+          });
+        }
+        return;
+      }
+      if (event !== 'pullRequestMerged' && event !== 'pullRequestClosed') return;
       for (const card of [relatedItem, linked]) {
-        if (card?.externalSource?.type !== 'pull-request') continue;
+        if (!card) continue;
+        if (card.externalSource?.type !== 'pull-request') {
+          // A merge settles the review, so the authoring Work item's mirrored
+          // "request changes" no longer stops it from being closed.
+          // Only the pull request the card has out settles it; an older one
+          // merging must not clear a verdict that belongs to its successor.
+          const recorded = card.metadata?.openPullRequestNumber;
+          const ownsCard = typeof recorded !== 'number' || recorded === pullRequestNumber;
+          const settled = {
+            ...(ownsCard && event === 'pullRequestMerged' && typeof card.metadata?.reviewVerdict === 'string'
+              ? { reviewVerdict: null }
+              : {}),
+            ...(recorded === pullRequestNumber ? { openPullRequestNumber: null } : {}),
+          };
+          if (Object.keys(settled).length > 0) {
+            await this.options.storage.update({
+              orgId: card.orgId,
+              id: card.id,
+              userId: 'factory-rule-dispatcher',
+              patch: { metadata: settled },
+            });
+          }
+          continue;
+        }
         await this.options.storage.update({
           orgId: card.orgId,
           id: card.id,
@@ -727,7 +784,7 @@ export class GithubRules {
     }
     const companion = linked ?? authoringItem;
     const secondary = await evaluate(companion, `${deliveryIdentity}:${companion?.id ?? 'pull-request'}`);
-    await stampClosed();
+    await stampClosed(secondary.status);
     for (const status of ['committed', 'replayed'] as const) {
       if (primary.status === status || secondary.status === status) return { status };
     }

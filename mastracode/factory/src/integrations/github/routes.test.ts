@@ -514,10 +514,12 @@ vi.mock('../../session/filesystem-capture.js', async importOriginal => {
   const actual = await importOriginal<typeof import('../../session/filesystem-capture.js')>();
   return {
     ...actual,
-    waitForPendingFilesystemCapture: vi.fn(async (...args: Parameters<typeof actual.waitForPendingFilesystemCapture>) => {
-      if (filesystemCaptureMock.waitError) throw filesystemCaptureMock.waitError;
-      return actual.waitForPendingFilesystemCapture(...args);
-    }),
+    waitForPendingFilesystemCapture: vi.fn(
+      async (...args: Parameters<typeof actual.waitForPendingFilesystemCapture>) => {
+        if (filesystemCaptureMock.waitError) throw filesystemCaptureMock.waitError;
+        return actual.waitForPendingFilesystemCapture(...args);
+      },
+    ),
   };
 });
 

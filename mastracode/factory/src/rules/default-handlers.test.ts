@@ -890,6 +890,17 @@ describe('built-in board and integration handlers', () => {
       });
     });
 
+    it('re-enters Reviewing when review is re-requested on a card resting with a recorded verdict', async () => {
+      const rule = defaultGithubRules.pullRequestReviewRequested;
+      const resting = { ...prItem, stages: ['review'], metadata: { ...prItem.metadata, reviewVerdict: 'approve' } };
+      expect(await rule?.(reReviewContext({ item: resting }))).toMatchObject({
+        type: 'transition',
+        idempotencyKey: 'delivery-1:re-review-requested',
+        stage: 'review',
+        reenter: true,
+      });
+    });
+
     it('ignores re-requests that do not target Factory or come from untrusted senders', async () => {
       const rule = defaultGithubRules.pullRequestReviewRequested;
       for (const context of [
@@ -1067,10 +1078,10 @@ describe('built-in board and integration handlers', () => {
     });
   });
 
-  it('files the pull request card only on the arrival, not on the item that authored it', async () => {
+  it('files the pull request card on the arrival and moves the authoring item out for review', async () => {
     // Opening a pull request is evaluated once per card it concerns. Only the
     // arrival — flagged `pullRequestIntake` — files the card; the authoring
-    // item's own evaluation must leave the card alone.
+    // item's own evaluation moves it from Building to Review.
     const authored = {
       ...githubContext('pullRequestOpened'),
       item: {
@@ -1088,7 +1099,15 @@ describe('built-in board and integration handlers', () => {
       itemRevision: 1,
     };
 
-    expect(await defaultGithubRules.pullRequestOpened?.(authored)).toBeUndefined();
+    expect(await defaultGithubRules.pullRequestOpened?.(authored)).toMatchObject({
+      type: 'transition',
+      board: 'work',
+      stage: 'review',
+    });
+    // Only Building moves: a card already past it (or a draft-closed PR) is left alone.
+    expect(
+      await defaultGithubRules.pullRequestOpened?.({ ...authored, item: { ...authored.item, stages: ['review'] } }),
+    ).toBeUndefined();
     expect(await defaultGithubRules.pullRequestOpened?.({ ...authored, pullRequestIntake: true })).toMatchObject({
       type: 'upsertLinkedWorkItem',
       source: 'github-pr',
@@ -1147,14 +1166,31 @@ describe('built-in board and integration handlers', () => {
     });
   });
 
-  it('reminds the provenance-linked Work agent after merge without transitioning the Work item', async () => {
+  it('moves the provenance-linked Work item to Done when its pull request merges', async () => {
     const context = githubContext('pullRequestMerged');
     context.item = item;
     context.board = 'work';
     context.pullRequest = { ...context.pullRequest!, state: 'closed', merged: true };
     const decision = await defaultGithubRules.pullRequestMerged?.(context);
-    expect(decision).toMatchObject({ type: 'sendMessage', role: 'work' });
-    expect(decision).not.toMatchObject({ type: 'transition', stage: 'done' });
+    expect(decision).toMatchObject({ type: 'transition', board: 'work', stage: 'done' });
+  });
+
+  it('keeps the Work item in Review when an older pull request merges while a newer one is open', async () => {
+    const context = githubContext('pullRequestMerged');
+    context.item = { ...item, metadata: { openPullRequestNumber: 18 } };
+    context.board = 'work';
+    context.pullRequest = { ...context.pullRequest!, number: 17, state: 'closed', merged: true };
+    const decision = await defaultGithubRules.pullRequestMerged?.(context);
+    expect(decision).toMatchObject({ type: 'sendMessage', role: 'work', message: expect.stringContaining('#18') });
+  });
+
+  it('does not move a Work item out for review for an untrusted pull request', async () => {
+    const context = githubContext('pullRequestOpened');
+    context.item = { ...item, stages: ['execute'] };
+    context.board = 'work';
+    context.actor = { type: 'github', login: 'forker', trusted: false, factoryAuthored: false };
+    context.pullRequest = { ...context.pullRequest!, state: 'open', factoryAuthored: false };
+    expect(await defaultGithubRules.pullRequestOpened?.(context)).toBeUndefined();
   });
 
   it('cancels the Review card when the PR is closed without merging', async () => {

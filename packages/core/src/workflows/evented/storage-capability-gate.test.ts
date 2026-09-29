@@ -12,8 +12,10 @@ import { createWorkflow } from './workflow';
  * D1/KV/DO, Elasticsearch) would silently lose step results, so `createRun()`
  * refuses to start.
  *
- * The error has to name the missing capability and the store it came from, since the
- * only remaining way to reach it is opting into the engine via `schedule`. Durable
+ * The error has to name the missing capability and the store it came from, since
+ * users reach this engine by importing `createWorkflow` from
+ * `@mastra/core/workflows/evented`, or by declaring `schedule` while
+ * `MASTRA_WORKERS` is set. Durable
  * agents resolve to the in-process engine before they get here — see
  * `DurableAgent.resolveWorkflowEngine`, covered by durable-agent-engine-fallback.test.ts.
  */

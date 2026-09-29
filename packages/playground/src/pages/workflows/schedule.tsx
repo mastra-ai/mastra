@@ -123,11 +123,11 @@ export default function SchedulePage() {
           <div className="flex h-fit flex-col gap-4 rounded-md border border-border p-4">
             <MetaItem label={agentId ? 'Agent' : 'Workflow'}>
               {workflowId ? (
-                <Link to={paths.workflowLink(workflowId)} className="text-accent1 hover:underline">
+                <Link to={paths.workflowLink(workflowId)} className="text-foreground hover:underline">
                   {workflowId}
                 </Link>
               ) : agentId ? (
-                <Link to={paths.agentLink(agentId)} className="text-accent1 hover:underline">
+                <Link to={paths.agentLink(agentId)} className="text-foreground hover:underline">
                   {agentId}
                 </Link>
               ) : (
@@ -139,7 +139,9 @@ export default function SchedulePage() {
                 {schedule.cron}
               </Txt>
               {schedule.timezone ? (
-                <span className="ml-2 text-caption text-muted-foreground">{schedule.timezone}</span>
+                <Txt as="span" variant="caption" tone="muted" className="ml-2">
+                  {schedule.timezone}
+                </Txt>
               ) : null}
             </MetaItem>
             <MetaItem label="Status">

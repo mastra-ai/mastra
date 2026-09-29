@@ -167,7 +167,13 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                     {hasError && (
                       <Tooltip>
                         <TooltipTrigger
-                          render={<AlertCircleIcon role="img" aria-label="Error" className="size-3.5 text-error" />}
+                          render={
+                            <AlertCircleIcon
+                              role="img"
+                              aria-label="Error"
+                              className="size-3.5 text-destructive-indicator"
+                            />
+                          }
                         />
                         <TooltipContent>{errorMessage(result.error)}</TooltipContent>
                       </Tooltip>

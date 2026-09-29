@@ -1,5 +1,6 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 
 import type { ChannelOrigin, MessageAuthor } from '../services/message-author';
@@ -29,7 +30,7 @@ export function SenderAvatar({ author }: { author: MessageAuthor }) {
         render={
           <span
             aria-label={`Sent by ${author.name}`}
-            className="focus-visible:ring-accent1 mt-1 shrink-0 rounded-full outline-hidden focus-visible:ring-2"
+            className={`mt-1 shrink-0 rounded-full ${focusRing}`}
             tabIndex={0}
           >
             <Avatar name={author.name} src={author.avatarUrl} size="sm" />

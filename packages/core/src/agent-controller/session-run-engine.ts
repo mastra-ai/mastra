@@ -21,7 +21,7 @@ import {
   getDisplayTransform,
   getUsageNumber,
 } from './stream-content';
-import type { TokenUsage } from './types';
+import type { ActiveSubagentState, TokenUsage } from './types';
 
 /**
  * The transient state of a single in-flight agent stream: the assistant message
@@ -439,6 +439,13 @@ export class SessionRunEngine {
       state.toolPartById.set(toolCallId, partIndex);
     }
     this.emitMessagePart(state, partIndex);
+    // The built-in subagent tool emits its own `subagent_end`; only close `agent-<key>` delegations here.
+    if (toolName.startsWith('agent-')) {
+      const subagent = this.#session.displayState.get().activeSubagents.get(toolCallId);
+      if (subagent) {
+        this.endDelegatedSubagent(toolCallId, subagent, result, isError);
+      }
+    }
     this.#session.emit({
       type: 'tool_end',
       threadId: state.threadId,
@@ -446,6 +453,38 @@ export class SessionRunEngine {
       result,
       isError,
       ...(providerMetadata ? { providerMetadata } : {}),
+    });
+  }
+
+  /** Open an `agent-<key>` delegation in `activeSubagents`, taking its task from the tool call's prompt. */
+  private startDelegatedSubagent(state: StreamState, toolCallId: string, toolName: string): void {
+    const toolIndex = state.toolPartById.get(toolCallId);
+    const toolPart = toolIndex !== undefined ? state.currentMessage.content.parts[toolIndex] : undefined;
+    const args = toolPart?.type === 'tool-invocation' ? toolPart.toolInvocation.args : undefined;
+    this.#session.emit({
+      type: 'subagent_start',
+      toolCallId,
+      agentType: toolName.slice('agent-'.length),
+      task: getString(getRecord(args)?.prompt) ?? '',
+      modelId: '',
+    });
+  }
+
+  /** Close an `agent-<key>` delegation once its tool call settles. */
+  private endDelegatedSubagent(
+    toolCallId: string,
+    subagent: ActiveSubagentState,
+    result: unknown,
+    isError: boolean,
+  ): void {
+    this.#session.emit({
+      type: 'subagent_end',
+      toolCallId,
+      agentType: subagent.agentType,
+      result:
+        getString(getRecord(result)?.text) ?? (typeof result === 'string' ? result : (JSON.stringify(result) ?? '')),
+      isError,
+      durationMs: subagent.startedAt !== undefined ? Date.now() - subagent.startedAt : 0,
     });
   }
 
@@ -731,6 +770,54 @@ export class SessionRunEngine {
           isError: true,
           providerMetadata: isProviderMetadata(toolError.providerMetadata) ? toolError.providerMetadata : undefined,
         });
+        break;
+      }
+
+      case 'tool-output': {
+        // Chunks streamed by a subagent delegated through `Agent.agents` (the `agent-<key>` tools).
+        // Mirror the built-in subagent tool so the delegation shows up in `activeSubagents`.
+        const toolOutput = getPayload(chunk);
+        const toolCallId = getString(toolOutput.toolCallId) ?? '';
+        const toolName = getString(toolOutput.toolName) ?? '';
+        const output = getRecord(toolOutput.output);
+        if (output?.from !== 'AGENT' || !toolName.startsWith('agent-')) break;
+
+        const agentType = toolName.slice('agent-'.length);
+        if (!this.#session.displayState.get().activeSubagents.has(toolCallId)) {
+          this.startDelegatedSubagent(state, toolCallId, toolName);
+        }
+
+        const nested = getRecord(output.payload) ?? {};
+        switch (output.type) {
+          case 'text-delta':
+            this.#session.emit({
+              type: 'subagent_text_delta',
+              toolCallId,
+              agentType,
+              textDelta: getString(nested.text) ?? '',
+            });
+            break;
+          case 'tool-call':
+            this.#session.emit({
+              type: 'subagent_tool_start',
+              toolCallId,
+              agentType,
+              subToolName: getString(nested.toolName) ?? '',
+              subToolArgs: nested.args,
+            });
+            break;
+          case 'tool-result':
+          case 'tool-error':
+            this.#session.emit({
+              type: 'subagent_tool_end',
+              toolCallId,
+              agentType,
+              subToolName: getString(nested.toolName) ?? '',
+              subToolResult: output.type === 'tool-error' ? nested.error : nested.result,
+              isError: output.type === 'tool-error' || getBoolean(nested.isError, false),
+            });
+            break;
+        }
         break;
       }
 
