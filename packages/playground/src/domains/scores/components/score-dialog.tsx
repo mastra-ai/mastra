@@ -55,10 +55,9 @@ export function ScoreDialog({
   const [datasetDialogOpen, setDatasetDialogOpen] = useState(false);
   const { Link, paths } = useLinkComponent();
   const isCodeBased = isCodeBasedScorer(score);
-  const scorerHref = score?.scorerId ? paths.scorerLink(score.scorerId) : '';
   const scorerDetailHref =
-    scorerHref && score?.entityId
-      ? `${scorerHref}?entity=${encodeURIComponent(score.entityId)}&scoreId=${encodeURIComponent(score.id)}`
+    score?.scorerId && score?.entityId
+      ? paths.scorerLink(score.scorerId, { entity: score.entityId, scoreId: score.id })
       : undefined;
 
   return (

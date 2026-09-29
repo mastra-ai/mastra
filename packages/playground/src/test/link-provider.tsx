@@ -42,7 +42,13 @@ const paths: Record<string, (...args: string[]) => string> = {
   networkLink: id => `/networks/${id}`,
   networkNewThreadLink: id => `/networks/${id}/chat/new`,
   networkThreadLink: (networkId, threadId) => `/networks/${networkId}/chat/${threadId}`,
-  scorerLink: id => `/scorers/${id}`,
+  scorerLink: (id, params) => {
+    const query = new URLSearchParams();
+    if (params?.entity) query.set('entity', params.entity);
+    if (params?.scoreId) query.set('scoreId', params.scoreId);
+    const search = query.toString();
+    return search ? `/scorers/${id}?${search}` : `/scorers/${id}`;
+  },
   cmsScorersCreateLink: () => '/cms/scorers/create',
   cmsScorerEditLink: id => `/cms/scorers/${id}`,
   cmsAgentCreateLink: () => '/cms/agents/create',
