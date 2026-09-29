@@ -1,5 +1,12 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { ReasoningActivity } from '@mastra/playground-ui/components/ai/activity';
+import { ActivityItem, ReasoningActivity } from '@mastra/playground-ui/components/ai/activity';
+import {
+  hasToolArguments,
+  presentTool,
+  stringifyToolValue,
+  ToolCallArguments,
+  ToolCallOutput,
+} from '@mastra/playground-ui/components/ai/tool-call';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Card } from '@mastra/playground-ui/components/Card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
@@ -32,7 +39,6 @@ import {
   AlertTriangle,
   AlignLeft,
   Check,
-  ChevronRight,
   FileText,
   Globe,
   Loader2,
@@ -387,66 +393,26 @@ export const MessagesSkeleton = ({ testId }: { testId?: string }) => {
   );
 };
 
-const safeStringify = (value: unknown): string => {
-  if (value === undefined) return '';
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-};
-
 const GenericTool = ({ toolName, input, output }: { toolName: string; input?: unknown; output?: unknown }) => {
-  const inputJson = safeStringify(input);
-  const outputJson = safeStringify(output);
-  const hasOutput = outputJson.length > 0;
+  const { icon: ToolIcon, label, detail } = presentTool(toolName, input);
+  const outputText = output === undefined ? undefined : stringifyToolValue(output);
+  const hasBody = hasToolArguments({ toolName, args: input }) || Boolean(outputText);
 
   return (
-    <ToolCard testId="agent-builder-chat-generic-tool">
-      <Collapsible>
-        <CollapsibleTrigger
-          className="group flex w-full items-center gap-2 text-left"
-          data-testid="agent-builder-chat-generic-tool-trigger"
-        >
-          <span className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-sidebar px-2 py-0.5">
-            <Wrench className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-            <Txt variant="caption" tone="ink" as="span">
-              Executing <InlineCode>{toolName}</InlineCode>
-            </Txt>
-          </span>
-          <ChevronRight
-            className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90"
-            aria-hidden
-          />
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="mt-3 flex flex-col gap-2" data-testid="agent-builder-chat-generic-tool-content">
-            <div className="overflow-hidden rounded-md border border-border/60 bg-sidebar">
-              <div className="border-b border-border/60 px-2 py-1">
-                <Txt variant="caption" tone="muted" as="div">
-                  Input
-                </Txt>
-              </div>
-              <pre className="m-0 max-h-[320px] overflow-auto p-3 text-caption break-words whitespace-pre-wrap text-foreground">
-                {inputJson || '{}'}
-              </pre>
-            </div>
-            {hasOutput ? (
-              <div className="overflow-hidden rounded-md border border-border/60 bg-sidebar">
-                <div className="border-b border-border/60 px-2 py-1">
-                  <Txt variant="caption" tone="muted" as="div">
-                    Output
-                  </Txt>
-                </div>
-                <pre className="m-0 max-h-[320px] overflow-auto p-3 text-caption break-words whitespace-pre-wrap text-foreground">
-                  {outputJson}
-                </pre>
-              </div>
-            ) : null}
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
-    </ToolCard>
+    <ActivityItem
+      data-testid="agent-builder-chat-generic-tool"
+      icon={<ToolIcon aria-hidden />}
+      label={label}
+      detail={detail}
+      aria-label={label}
+    >
+      {hasBody && (
+        <>
+          <ToolCallArguments toolName={toolName} args={input} />
+          {outputText && <ToolCallOutput text={outputText} />}
+        </>
+      )}
+    </ActivityItem>
   );
 };
 
