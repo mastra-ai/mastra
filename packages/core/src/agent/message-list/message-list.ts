@@ -535,13 +535,15 @@ export class MessageList {
   }
 
   public serialize(): SerializedMessageListState {
-    return this.stateManager.serializeAll({
+    const state = this.stateManager.serializeAll({
       messages: this.messages,
       systemMessages: this.systemMessages,
       taggedSystemMessages: this.taggedSystemMessages,
       memoryInfo: this.memoryInfo,
       agentNetworkAppend: this._agentNetworkAppend,
     });
+    const lastStepBoundary = this.#locateLastStepBoundary();
+    return lastStepBoundary ? { ...state, lastStepBoundary } : state;
   }
 
   /**
@@ -583,6 +585,16 @@ export class MessageList {
     this._agentNetworkAppend = data.agentNetworkAppend;
     for (const message of this.messages) {
       this.updateLastCreatedAt(message);
+    }
+    this.#lastStepBoundary = undefined;
+    if (state.lastStepBoundary) {
+      const { messageId, partIndex } = state.lastStepBoundary;
+      const parts = this.messages.find(m => m.id === messageId)?.content.parts;
+      const part = parts?.[partIndex];
+      if (parts && part?.type === 'step-start') {
+        this.#rememberBoundaryFingerprint(messageId, parts, part);
+        this.#lastStepBoundary = part;
+      }
     }
     return this;
   }
@@ -1892,6 +1904,17 @@ export class MessageList {
     if (!boundary) return parts;
     const index = findBoundaryIndex(parts, boundary, message.id, this.#boundaryFingerprints.get(boundary));
     return index === -1 ? parts : parts.slice(index + 1);
+  }
+
+  #locateLastStepBoundary(): { messageId: string; partIndex: number } | undefined {
+    const boundary = this.#lastStepBoundary;
+    if (!boundary) return undefined;
+    const checkpoint = this.#boundaryFingerprints.get(boundary);
+    for (const message of this.messages) {
+      const partIndex = findBoundaryIndex(message.content.parts ?? [], boundary, message.id, checkpoint);
+      if (partIndex !== -1) return { messageId: message.id, partIndex };
+    }
+    return undefined;
   }
 
   #rememberBoundaryFingerprint(messageId: string, parts: MastraMessagePart[], boundary: MastraStepStartPart) {
