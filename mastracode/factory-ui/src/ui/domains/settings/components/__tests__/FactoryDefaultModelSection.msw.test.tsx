@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { AvailableModelOption } from '../../../../../hooks/useAvailableModels';
+import type { ApplyFactoryDefaultModelResult } from '../../../workspaces/services/github';
 import { FactoryDefaultModelSection } from '../FactoryDefaultModelSection';
 
 const models: AvailableModelOption[] = [
@@ -26,10 +27,10 @@ function renderSection() {
 
 function stubProject(
   defaultModelId: string | null,
-  applyResult = {
+  applyResult: ApplyFactoryDefaultModelResult = {
     modelId: 'openai/gpt-5',
     applied: ['thread-1', 'thread-2'],
-    skipped: [{ threadId: 'thread-3', reason: 'not-running' }],
+    skipped: [{ threadId: 'thread-3', reason: 'apply-failed' }],
   },
 ) {
   const patchedBodies: unknown[] = [];
@@ -115,7 +116,7 @@ describe('FactoryDefaultModelSection', () => {
         return HttpResponse.json({
           modelId: 'openai/gpt-5',
           applied: ['thread-1', 'thread-2'],
-          skipped: [{ threadId: 'thread-3', reason: 'not-running' }],
+          skipped: [{ threadId: 'thread-3', reason: 'apply-failed' }],
         });
       }),
     );
@@ -135,7 +136,7 @@ describe('FactoryDefaultModelSection', () => {
     await waitForMutationsIdle(client);
 
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
-    expect(screen.getByText(/Switched 2 sessions/)).toHaveTextContent('1 skipped: not running (1)');
+    expect(screen.getByText(/Switched 2 sessions/)).toHaveTextContent('1 skipped: apply failed (1)');
   });
 
   it('does not save or open the dialog when the selected model is already the default', async () => {

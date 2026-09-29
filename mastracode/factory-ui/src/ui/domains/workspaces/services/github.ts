@@ -366,7 +366,7 @@ export interface ApplyFactoryDefaultModelResult {
   applied: string[];
   skipped: Array<{
     threadId: string;
-    reason: 'not-running' | 'work-item-missing' | 'stage-inactive' | 'thread-missing' | 'mode-unknown';
+    reason: 'not-running' | 'work-item-missing' | 'stage-inactive' | 'thread-missing' | 'mode-unknown' | 'apply-failed';
   }>;
 }
 
