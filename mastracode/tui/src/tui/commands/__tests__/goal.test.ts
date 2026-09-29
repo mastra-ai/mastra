@@ -998,7 +998,8 @@ describe('handleGoalCommand', () => {
       extra: { goalManager, pendingInlineQuestions: [], pendingAskUserComponents: new Map() },
     }) as any;
     await goalManager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
-    state.planStartedGoalId = goalManager.getGoal()?.id;
+    const goalId = goalManager.getGoal()?.id;
+    state.planStartedGoalId = goalId;
     storageDown = true;
     const showInfo = vi.fn();
     const showError = vi.fn();
@@ -1009,7 +1010,8 @@ describe('handleGoalCommand', () => {
     expect(showError).toHaveBeenCalledWith(expect.stringContaining('may still be active'));
     expect(showInfo).not.toHaveBeenCalledWith('Goal cleared.');
     expect(abort).not.toHaveBeenCalled();
-    expect(state.planStartedGoalId).toBeDefined();
+    expect(goalId).toBeDefined();
+    expect(state.planStartedGoalId).toBe(goalId);
   });
 
   it('reports /goal clear as done when the retry on reload succeeds', async () => {
