@@ -34,7 +34,7 @@ The flow is:
 1. Mastra returns the buffered output or emits streaming chunks, or alternatively handles permission input.
 1. The ACP connection stops the process after the prompt when `persistSession` is `false`. `AcpAgent` can keep a reusable process alive across calls by default.
 
-During execution, the ACP client also handles permission requests and file operations. File reads and writes go through Mastra's `Workspace`. The ACP agent operates inside the workspace you provide.
+During execution, the ACP client also handles permission requests and file operations. File reads and writes that the agent requests through the protocol go through Mastra's `Workspace`. The workspace covers only those requests: the agent process runs with the configured `cwd` and isn't sandboxed or isolated, and it can still reach files through its own tools and shell commands.
 
 ## Compatible agents
 
@@ -140,7 +140,7 @@ See the [createACPTool() permission handling](/reference/acp/create-acp-tool#per
 
 ## Workspace integration
 
-ACP file operations go through Mastra's workspace abstraction. `AcpAgent` can use a `workspace` option, and `createACPTool()` uses the current Mastra workspace from the tool execution context when one is available. Without a workspace, `@mastra/acp` falls back to a `Workspace` backed by `LocalFilesystem` at `cwd` or `process.cwd()`.
+ACP file requests go through Mastra's workspace abstraction. `AcpAgent` can use a `workspace` option, and `createACPTool()` uses the current Mastra workspace from the tool execution context when one is available. Without a workspace, `@mastra/acp` falls back to a `Workspace` backed by `LocalFilesystem` at `cwd` or `process.cwd()`.
 
 See the [AcpAgent workspace integration](/reference/acp/acp-agent#workspace-integration) section for custom workspace examples.
 
