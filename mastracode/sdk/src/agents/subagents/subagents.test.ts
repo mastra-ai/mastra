@@ -169,6 +169,19 @@ describe('native subagents', () => {
         disableGithubSignals: true,
       });
       await controller.init();
+      // A disabled gateway is skipped by the router, so its claim must not win.
+      controller.getMastra()!.addGateway({
+        id: 'disabled-claimer',
+        name: 'Disabled claimer',
+        shouldEnable: () => false,
+        handlesModel: () => true,
+        fetchProviders: async () => ({}),
+        buildUrl: () => undefined,
+        getApiKey: async () => 'unused',
+        resolveLanguageModel: () => {
+          throw new Error('disabled gateway resolved a model');
+        },
+      });
       const session = await controller.createSession({ id: 'tenant', ownerId: 'test' });
       const requestContext = new RequestContext();
       requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
