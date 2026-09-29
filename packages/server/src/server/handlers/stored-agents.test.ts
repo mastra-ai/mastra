@@ -1000,6 +1000,27 @@ describe('Stored Agents Handlers', () => {
       });
     });
 
+    it('should persist durable config on the initial version', async () => {
+      const storage = new InMemoryStore();
+      const mastra = createMockMastra({ storage: storage as unknown as MockStorage });
+      const durable = { maxSteps: 25, cleanupTimeoutMs: 0 };
+
+      const result = await CREATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mastra),
+        id: 'durable-create-agent',
+        name: 'Durable Create Agent',
+        instructions: 'Be durable',
+        model: { name: 'gpt-4', provider: 'openai' },
+        durable,
+      });
+
+      const agentsStore = await storage.getStore('agents');
+      const version = await agentsStore.getLatestVersion('durable-create-agent');
+
+      expect(result.durable).toEqual(durable);
+      expect(version?.durable).toEqual(durable);
+    });
+
     it('should reject empty instructions when creating an override for a code agent that owns instructions', async () => {
       const mastra = createMockMastra({
         storage: mockStorage,
@@ -1648,6 +1669,22 @@ describe('Stored Agents Handlers', () => {
         });
 
         expect(publishedAfterActivation.instructions).toBe('Draft instructions');
+      });
+
+      it('creates a new version when durable changes', async () => {
+        const agentId = 'durable-version-test';
+        const { agentsStore, lifecycleMastra, publishedVersion } = await setupPublishedAgent(agentId);
+        await useRealAutoVersioningOnce();
+        const updated = await UPDATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(lifecycleMastra),
+          storedAgentId: agentId,
+          durable: true,
+        });
+        const durableVersion = await agentsStore.getLatestVersion(agentId);
+
+        expect(updated.durable).toBe(true);
+        expect(durableVersion?.id).not.toBe(publishedVersion.id);
+        expect(durableVersion?.durable).toBe(true);
       });
 
       it('auto-publishes a PATCH-created version when requested', async () => {

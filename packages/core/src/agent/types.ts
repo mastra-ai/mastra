@@ -1356,6 +1356,13 @@ export interface DurableAgentLike {
   readonly id: string;
   /** Agent name */
   readonly name: string;
+  /**
+   * Storage workflow name of this agent's outer agentic-loop snapshot.
+   * Defaults to `DurableStepIds.AGENTIC_LOOP` when omitted; engines that
+   * namespace their workflow ids (e.g. Inngest) must set it so server
+   * handlers and suspended-run discovery can find their runs.
+   */
+  readonly durableLoopWorkflowName?: string;
   /** The underlying Mastra Agent */
   readonly agent: Agent<any, any, any>;
   /**

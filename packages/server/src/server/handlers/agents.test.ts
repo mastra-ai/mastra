@@ -34,6 +34,7 @@ import {
   LIST_AGENTS_ROUTE,
   STREAM_GENERATE_ROUTE,
   RESUME_STREAM_ROUTE,
+  RESUME_STREAM_UNTIL_IDLE_ROUTE,
   APPROVE_TOOL_CALL_ROUTE,
   DECLINE_TOOL_CALL_ROUTE,
   APPROVE_TOOL_CALL_GENERATE_ROUTE,
@@ -260,6 +261,87 @@ describe('getProvidersHandler', () => {
 
     // Cleanup
     delete process.env.CUSTOM_LLM_API_KEY;
+  });
+
+  it('should show a provider as connected when a registered gateway claims its models without an env var', async () => {
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+
+    const oauthGateway = {
+      id: 'oauth-gateway',
+      name: 'OAuth Gateway',
+      fetchProviders: vi.fn().mockResolvedValue({}),
+      handlesModel: (modelId: string) => modelId.startsWith('openai/'),
+      buildUrl: vi.fn(),
+      getApiKey: vi.fn(),
+      resolveLanguageModel: vi.fn(),
+    };
+    const mastra = new Mastra({ gateways: { 'oauth-gateway': oauthGateway } });
+
+    const result = await GET_PROVIDERS_ROUTE.handler({
+      mastra,
+      requestContext: new RequestContext(),
+      abortSignal: new AbortController().signal,
+    });
+
+    expect(result.providers.find(p => p.id === 'openai')?.connected).toBe(true);
+    expect(result.providers.find(p => p.id === 'anthropic')?.connected).toBe(false);
+  });
+
+  it('should ignore a disabled gateway that claims a provider', async () => {
+    delete process.env.OPENAI_API_KEY;
+
+    const disabledGateway = {
+      id: 'disabled-gateway',
+      name: 'Disabled Gateway',
+      shouldEnable: () => false,
+      fetchProviders: vi.fn().mockResolvedValue({}),
+      handlesModel: (modelId: string) => modelId.startsWith('openai/'),
+      buildUrl: vi.fn(),
+      getApiKey: vi.fn(),
+      resolveLanguageModel: vi.fn(),
+    };
+    const mastra = new Mastra({ gateways: { 'disabled-gateway': disabledGateway } });
+
+    const result = await GET_PROVIDERS_ROUTE.handler({
+      mastra,
+      requestContext: new RequestContext(),
+      abortSignal: new AbortController().signal,
+    });
+
+    expect(result.providers.find(p => p.id === 'openai')?.connected).toBe(false);
+  });
+
+  it('should pass through a gateway provider label and description, falling back to name and empty', async () => {
+    const describedGateway = {
+      id: 'described-gateway',
+      name: 'Described Gateway',
+      fetchProviders: vi.fn().mockResolvedValue({
+        described: {
+          name: 'Described',
+          label: 'Described LLM',
+          description: 'A provider that describes itself',
+          models: ['model-1'],
+          apiKeyEnvVar: 'DESCRIBED_API_KEY',
+          gateway: 'described-gateway',
+        },
+      }),
+      buildUrl: vi.fn(),
+      getApiKey: vi.fn(),
+      resolveLanguageModel: vi.fn(),
+    };
+    const mastra = new Mastra({ gateways: { 'described-gateway': describedGateway } });
+
+    const result = await GET_PROVIDERS_ROUTE.handler({
+      mastra,
+      requestContext: new RequestContext(),
+      abortSignal: new AbortController().signal,
+    });
+
+    const described = result.providers.find(p => p.id === 'described-gateway/described');
+    expect(described).toMatchObject({ label: 'Described LLM', description: 'A provider that describes itself' });
+    const openai = result.providers.find(p => p.id === 'openai');
+    expect(openai).toMatchObject({ label: openai?.name, description: '' });
   });
 
   it('should hide registry and default-gateway providers when AUTO_BLOCK_EXTERNAL_PROVIDERS is set, keeping only custom gateways', async () => {
@@ -1579,13 +1661,17 @@ describe('Agent Routes Authorization', () => {
     async function persistSuspendedDurableRun({
       resourceId,
       toolCallId = 'tool-call-1',
+      threadId,
+      workflowName = 'durable-agentic-loop',
     }: {
       resourceId: string;
       toolCallId?: string;
+      threadId?: string;
+      workflowName?: string;
     }) {
       const workflowsStore = await storage.getStore('workflows');
       await workflowsStore?.persistWorkflowSnapshot({
-        workflowName: 'durable-agentic-loop',
+        workflowName,
         runId: 'durable-run-1',
         snapshot: {
           runId: 'durable-run-1',
@@ -1594,7 +1680,7 @@ describe('Agent Routes Authorization', () => {
           context: {
             input: {
               agentId: 'test-agent',
-              state: { resourceId },
+              state: { resourceId, ...(threadId ? { threadId } : {}) },
               requestContextEntries: { [MASTRA_RESOURCE_ID_KEY]: resourceId },
             },
             'tool-step': {
@@ -1653,6 +1739,70 @@ describe('Agent Routes Authorization', () => {
         new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' }),
       );
       expect(execution).not.toHaveBeenCalled();
+    });
+    const resumeRoutes = [
+      { name: 'resume-stream', route: RESUME_STREAM_ROUTE, method: 'resumeStream' },
+      { name: 'resume-stream-until-idle', route: RESUME_STREAM_UNTIL_IDLE_ROUTE, method: 'resumeStreamUntilIdle' },
+    ] as const;
+
+    function callResume(route: any, { resourceId, toolCallId = 'tool-call-1', thread }: any) {
+      return route.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId }),
+        abortSignal: new AbortController().signal,
+        runId: 'durable-run-1',
+        toolCallId,
+        resumeData: {},
+        ...(thread ? { memory: { thread, resource: resourceId } } : {}),
+      });
+    }
+
+    it.each(resumeRoutes)('$name rejects a durable run owned by another resource', async ({ route, method }) => {
+      await persistSuspendedDurableRun({ resourceId: 'user-b' });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+      await expect(callResume(route, { resourceId: 'user-a' })).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
+      );
+      expect(execution).not.toHaveBeenCalled();
+    });
+
+    it.each(resumeRoutes)('$name rejects a missing durable run', async ({ route, method }) => {
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+      await expect(callResume(route, { resourceId: 'user-a' })).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
+      );
+      expect(execution).not.toHaveBeenCalled();
+    });
+
+    it.each(resumeRoutes)('$name rejects a durable run bound to a different thread', async ({ route, method }) => {
+      await persistSuspendedDurableRun({ resourceId: 'user-a', threadId: 'thread-a' });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+      await expect(callResume(route, { resourceId: 'user-a', thread: 'thread-b' })).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' }),
+      );
+      expect(execution).not.toHaveBeenCalled();
+    });
+
+    it.each(resumeRoutes)('$name rejects a thread when the durable run has none', async ({ route, method }) => {
+      await persistSuspendedDurableRun({ resourceId: 'user-a' });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+      await expect(callResume(route, { resourceId: 'user-a', thread: 'thread-b' })).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' }),
+      );
+      expect(execution).not.toHaveBeenCalled();
+    });
+
+    it.each(resumeRoutes)('$name resumes a durable run owned by the caller', async ({ route, method }) => {
+      await persistSuspendedDurableRun({ resourceId: 'user-a' });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+      await callResume(route, { resourceId: 'user-a' });
+      expect(execution).toHaveBeenCalled();
     });
   });
 

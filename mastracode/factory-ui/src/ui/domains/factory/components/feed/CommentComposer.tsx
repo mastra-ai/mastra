@@ -17,6 +17,7 @@ import { mentionLabel } from './mentions';
 import type { CommentQuoteDraft } from './quoteDraft';
 import { useMentionResolver } from './useMentionResolver';
 import { useMentionAutocomplete } from './useMentionAutocomplete';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 export function CommentComposer({
   workItemId,
@@ -130,9 +131,9 @@ export function CommentComposer({
           onKeyDown={onKeyDown}
         />
         {sendError ? (
-          <p role="alert" className="text-meta text-error m-0 px-3 pb-1">
+          <Txt variant="meta" role="alert" className="text-destructive-indicator m-0 px-3 pb-1">
             {sendError}
-          </p>
+          </Txt>
         ) : null}
         <ComposerActions className="justify-end">
           <Button

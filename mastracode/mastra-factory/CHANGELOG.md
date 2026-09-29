@@ -1,5 +1,82 @@
 # create-factory
 
+## 0.2.4-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`9880663`](https://github.com/mastra-ai/mastra/commit/988066319614cdc7d3a5ff399412371fd34d08de), [`921c86c`](https://github.com/mastra-ai/mastra/commit/921c86c3af8fc21313dad4cce3d545eed99648bc)]:
+  - mastra@1.31.4-alpha.10
+
+## 0.2.4-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`f646a33`](https://github.com/mastra-ai/mastra/commit/f646a338800ce25075e543b038c3f7d7ab13086d)]:
+  - mastra@1.31.4-alpha.9
+
+## 0.2.4-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`7c77674`](https://github.com/mastra-ai/mastra/commit/7c77674c8ac232e4d32123c1aa45f4c9759e3c03)]:
+  - mastra@1.31.4-alpha.8
+
+## 0.2.4-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`d175f53`](https://github.com/mastra-ai/mastra/commit/d175f53a92c253365b56fab9ab631ec8ea30f080)]:
+  - mastra@1.31.4-alpha.7
+
+## 0.2.4-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`022fcc2`](https://github.com/mastra-ai/mastra/commit/022fcc265b3ab3f3d89a60200e99a5b48f1bcc20)]:
+  - mastra@1.31.4-alpha.6
+
+## 0.2.4-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`97febfc`](https://github.com/mastra-ai/mastra/commit/97febfc9019861a2783018b243b7c2a867438f61)]:
+  - mastra@1.31.4-alpha.5
+
+## 0.2.4-alpha.4
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.31.4-alpha.4
+
+## 0.2.4-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`9623397`](https://github.com/mastra-ai/mastra/commit/96233975b75135852c9b1616b91fd8cb54c77a53)]:
+  - mastra@1.31.4-alpha.3
+
+## 0.2.4-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`c3da4d1`](https://github.com/mastra-ai/mastra/commit/c3da4d18a6c7748b04c82354d55e45e5bed6775a), [`f2e3af0`](https://github.com/mastra-ai/mastra/commit/f2e3af0609d67b4b300168650b4916e1d048bbc5)]:
+  - mastra@1.31.4-alpha.2
+
+## 0.2.4-alpha.1
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.31.4-alpha.1
+
+## 0.2.4-alpha.0
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.31.4-alpha.0
+
 ## 0.2.3
 
 ### Patch Changes

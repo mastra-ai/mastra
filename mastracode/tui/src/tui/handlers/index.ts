@@ -26,6 +26,7 @@ export {
   handleToolApprovalRequired,
   handleToolStart,
   handleToolUpdate,
+  handleCommandExit,
   handleShellOutput,
   handleToolInputStart,
   handleToolInputDelta,

@@ -41,6 +41,7 @@ export interface LinearIssueIngress {
   updatedAt: string;
   /** Linear source the issue was read from (project or team); resolves the bound board via `intakeBoards`. */
   sourceId?: string | null;
+  projectId?: string | null;
 }
 
 export interface LinearRulesOptions {

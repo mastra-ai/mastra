@@ -171,8 +171,15 @@ export class SlackProvider implements ChannelProvider {
     this.#channelConfig = config;
     this.#baseUrl = config.baseUrl;
 
-    // If refresh token is provided at construction, initialize the manifest client immediately
-    if (config.refreshToken) {
+    if (config.tokenResolver) {
+      // Delegated mode: an external credential manager owns the refresh
+      // cycle. The manifest client asks the resolver for a fresh access
+      // token before each call and never rotates tokens itself.
+      this.#manifestClient = new SlackManifestClient({
+        tokenResolver: config.tokenResolver,
+      });
+    } else if (config.refreshToken) {
+      // If refresh token is provided at construction, initialize the manifest client immediately
       this.#initManifestClient(config.token ?? '', config.refreshToken);
     }
   }
@@ -195,6 +202,11 @@ export class SlackProvider implements ChannelProvider {
    * ```
    */
   async configure(credentials: { refreshToken: string; token?: string } | null): Promise<void> {
+    if (this.#channelConfig.tokenResolver) {
+      throw new Error(
+        'SlackProvider was constructed with a tokenResolver — credentials are managed externally and cannot be configured manually.',
+      );
+    }
     if (credentials === null) {
       this.#manifestClient = undefined;
       return this.#deleteConfigTokens();
@@ -664,8 +676,10 @@ export class SlackProvider implements ChannelProvider {
   }
 
   async #doInitialize(): Promise<void> {
-    // Load stored tokens if available (these are fresher than constructor tokens)
-    const storedTokensEncrypted = await this.#getConfigTokens();
+    // Load stored tokens if available (these are fresher than constructor
+    // tokens). Skipped in delegated mode — the tokenResolver is the single
+    // source of truth and stored tokens must not override it.
+    const storedTokensEncrypted = this.#channelConfig.tokenResolver ? null : await this.#getConfigTokens();
     if (storedTokensEncrypted) {
       const storedTokens = this.#decryptConfigTokens(storedTokensEncrypted);
       console.log(`[Slack] Using stored config tokens (updated ${storedTokens.updatedAt.toISOString()})`);

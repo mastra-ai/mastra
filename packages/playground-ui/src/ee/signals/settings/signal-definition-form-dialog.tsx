@@ -3,13 +3,13 @@ import type {
   TraceSignalDefinition,
   UpdateTraceSignalDefinitionInput,
 } from '@mastra/client-js';
-import { X } from 'lucide-react';
 import { useId, useState } from 'react';
 
-import { Button } from '@/ds/components/Button';
 import {
   Dialog,
+  DialogAction,
   DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -18,8 +18,8 @@ import {
 } from '@/ds/components/Dialog';
 import { FieldBlock, TextFieldBlock, fieldErrorId } from '@/ds/components/FormFieldBlocks';
 import { Notice } from '@/ds/components/Notice';
-import { Spinner } from '@/ds/components/Spinner';
 import { Textarea } from '@/ds/components/Textarea';
+import { Txt } from '@/ds/components/Txt';
 
 const reservedNames = new Set([
   'goal',
@@ -94,8 +94,8 @@ export function SignalDefinitionFormDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+    <Dialog open={open} onOpenChange={onOpenChange} pending={pending}>
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>{editing ? 'Edit custom signal' : 'Create custom signal'}</DialogTitle>
           <DialogDescription>
@@ -175,9 +175,9 @@ export function SignalDefinitionFormDialog({
               </FieldBlock.Column>
             </FieldBlock.Layout>
             {editing ? (
-              <p className="text-meta text-muted-foreground">
+              <Txt variant="meta" tone="muted">
                 Instruction changes create a new version and apply only to new traces. Existing analysis is unchanged.
-              </p>
+              </Txt>
             ) : null}
             {error ? (
               <div role="alert">
@@ -187,18 +187,10 @@ export function SignalDefinitionFormDialog({
           </form>
         </DialogBody>
         <DialogFooter>
-          <Button icon={<X />} type="button" variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            form={formId}
-            variant="primary"
-            disabled={pending}
-            icon={pending ? <Spinner /> : undefined}
-          >
+          <DialogCancel>Cancel</DialogCancel>
+          <DialogAction type="submit" form={formId}>
             {editing ? 'Save signal' : 'Create signal'}
-          </Button>
+          </DialogAction>
         </DialogFooter>
       </DialogContent>
     </Dialog>

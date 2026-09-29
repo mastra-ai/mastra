@@ -21,6 +21,7 @@ import { TranscriptEntries } from '../domains/chat/components/Transcript';
 import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 const draftStartClass = 'flex w-full max-w-xl flex-col items-stretch gap-6';
 
@@ -145,9 +146,9 @@ function DraftStart({
     <section className={draftStartClass} aria-labelledby="draft-start-heading">
       <div className="flex flex-col items-center gap-3 text-center">
         <BrandLockup />
-        <h1 id="draft-start-heading" className="text-title text-foreground m-0">
+        <Txt as="h1" variant="title" tone="ink" id="draft-start-heading" className="m-0">
           What do you want to work on?
-        </h1>
+        </Txt>
         <FactoryContext activeFactory={activeFactory} />
       </div>
       {configurationError && (
@@ -199,7 +200,9 @@ function BrandLockup() {
   return (
     <div className="text-muted-foreground inline-flex items-center gap-2">
       <LogoWithoutText aria-hidden className="h-4 w-auto" />
-      <span className="text-column tracking-widest uppercase">Mastra Code</span>
+      <Txt as="span" variant="column" className="tracking-widest uppercase">
+        Mastra Code
+      </Txt>
     </div>
   );
 }

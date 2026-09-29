@@ -7,6 +7,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeftIcon, CalendarClockIcon, PauseIcon, PlayIcon } from 'lucide-react';
 import { Link, useParams } from 'react-router';
@@ -18,7 +19,6 @@ import { useSchedule } from '@/domains/schedules/hooks/use-schedule';
 import { useScheduleTriggers } from '@/domains/schedules/hooks/use-schedule-triggers';
 import { useToggleSchedule } from '@/domains/schedules/hooks/use-toggle-schedule';
 import { schedulesCrumb } from '@/domains/workflows/schedules-crumb';
-import { useLinkComponent } from '@/lib/framework';
 
 function MetaItem({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -123,11 +123,11 @@ export default function SchedulePage() {
           <div className="flex h-fit flex-col gap-4 rounded-md border border-border p-4">
             <MetaItem label={agentId ? 'Agent' : 'Workflow'}>
               {workflowId ? (
-                <Link to={paths.workflowLink(workflowId)} className="text-accent1 hover:underline">
+                <Link to={paths.workflowLink(workflowId)} className="text-foreground hover:underline">
                   {workflowId}
                 </Link>
               ) : agentId ? (
-                <Link to={paths.agentLink(agentId)} className="text-accent1 hover:underline">
+                <Link to={paths.agentLink(agentId)} className="text-foreground hover:underline">
                   {agentId}
                 </Link>
               ) : (
@@ -139,7 +139,9 @@ export default function SchedulePage() {
                 {schedule.cron}
               </Txt>
               {schedule.timezone ? (
-                <span className="ml-2 text-caption text-muted-foreground">{schedule.timezone}</span>
+                <Txt as="span" variant="caption" tone="muted" className="ml-2">
+                  {schedule.timezone}
+                </Txt>
               ) : null}
             </MetaItem>
             <MetaItem label="Status">

@@ -1,5 +1,6 @@
 import { coreFeatures } from '@mastra/core/features';
 import { KeyboardShortcutsProvider } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
 import { useMemo } from 'react';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
@@ -70,7 +71,6 @@ import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
 import Metrics from './pages/metrics';
 import PromptBlocks from './pages/prompt-blocks';
-import RequestContext from './pages/request-context';
 import Resources from './pages/resources';
 import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
@@ -101,7 +101,6 @@ import { PlaygroundConfigGuard } from '@/domains/configuration/components/playgr
 import { StudioConfigProvider } from '@/domains/configuration/context/studio-config-context';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
 import { GlobalShortcuts } from '@/domains/navigation/components/global-shortcuts';
-import { LinkComponentProvider } from '@/lib/framework';
 import { PlaygroundQueryClient } from '@/lib/tanstack-query';
 import { Processors } from '@/pages/processors';
 import { Processor } from '@/pages/processors/processor';
@@ -510,7 +509,6 @@ export const routes: RouteObject[] = [
         index: true,
         element: <StudioIndexRedirect />,
       },
-      { path: '/request-context', element: <RequestContext /> },
     ],
   },
 ];

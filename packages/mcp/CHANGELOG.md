@@ -1,5 +1,14 @@
 # @mastra/mcp
 
+## 2.1.1-alpha.0
+
+### Patch Changes
+
+- Fixed MCP tool calls failing with a schema validation error when tools are defined with zod v3 schemas. `MCPClient` also now accepts tools from other MCP servers that describe their inputs with JSON Schema draft 2019-09. ([#25290](https://github.com/mastra-ai/mastra/pull/25290))
+
+- Updated dependencies [[`9ce3444`](https://github.com/mastra-ai/mastra/commit/9ce3444d1a6b17e72b0a20c74603abaf252a843e), [`3b77788`](https://github.com/mastra-ai/mastra/commit/3b77788a08df1e754282d39c42823e6e1c5f2742), [`987257a`](https://github.com/mastra-ai/mastra/commit/987257a34cda8a153fe592c31d75fbb1dee55202), [`65a93a2`](https://github.com/mastra-ai/mastra/commit/65a93a2a3b1434d605a6a417cb83d2d58e16bfc0), [`fd92729`](https://github.com/mastra-ai/mastra/commit/fd92729380a29f2a0ec822e39f3c09eb9aaa5ac5), [`79c3b1f`](https://github.com/mastra-ai/mastra/commit/79c3b1fa4d470585a00558b317ed47db9b1decd4), [`4092ef2`](https://github.com/mastra-ai/mastra/commit/4092ef29aad09f2ba5f90c92a4d4d3bd444eae67), [`5026973`](https://github.com/mastra-ai/mastra/commit/50269736f432cee1170627b2b6f88ba1431e837f)]:
+  - @mastra/core@1.72.0-alpha.7
+
 ## 2.1.0
 
 ### Minor Changes

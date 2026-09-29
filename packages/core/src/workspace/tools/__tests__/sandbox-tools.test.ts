@@ -1,9 +1,17 @@
 import { describe, it, expect, vi } from 'vitest';
 
+import { z } from 'zod/v4';
 import { WORKSPACE_TOOLS } from '../../constants';
 import type { CommandResult } from '../../sandbox';
 import { Workspace } from '../../workspace';
-import { executeCommandInputSchema, executeCommandTool, executeCommandWithBackgroundTool } from '../execute-command';
+import {
+  executeCommandInputSchema,
+  executeCommandTool,
+  executeCommandWithBackgroundSchema,
+  executeCommandWithBackgroundTool,
+  executeCommandWithDescriptionAndBackgroundSchema,
+  executeCommandWithDescriptionSchema,
+} from '../execute-command';
 import { getProcessOutputTool } from '../get-process-output';
 import { killProcessTool } from '../kill-process';
 import {
@@ -642,6 +650,34 @@ describe('get_process_output tool', () => {
       expect(executeCommandInputSchema.safeParse({ command: 'ls', tail: '2' }).success).toBe(true);
       expect(executeCommandInputSchema.safeParse({ command: 'ls', tail: 0 }).success).toBe(true);
       expect(executeCommandInputSchema.safeParse({ command: 'ls', tail: -5 }).success).toBe(true);
+    });
+
+    it('execute_command has no description arg by default', () => {
+      expect(Object.keys(z.toJSONSchema(executeCommandInputSchema).properties ?? {})).not.toContain('description');
+      expect(Object.keys(z.toJSONSchema(executeCommandWithBackgroundSchema).properties ?? {})).not.toContain(
+        'description',
+      );
+    });
+
+    it('execute_command description variants require a leading description', () => {
+      for (const schema of [executeCommandWithDescriptionSchema, executeCommandWithDescriptionAndBackgroundSchema]) {
+        const json = z.toJSONSchema(schema);
+        expect(Object.keys(json.properties ?? {})[0]).toBe('description');
+        expect(json.required).toContain('description');
+        expect(schema.safeParse({ command: 'ls' }).success).toBe(false);
+        expect(schema.safeParse({ command: 'ls', description: '' }).success).toBe(false);
+        expect(schema.safeParse({ command: 'ls', description: null }).success).toBe(false);
+        expect(schema.parse({ command: 'ls', description: 'Listing the project root' }).description).toBe(
+          'Listing the project root',
+        );
+      }
+      expect(
+        executeCommandWithDescriptionAndBackgroundSchema.parse({
+          command: 'npm run dev',
+          description: 'Starting the dev server',
+          background: true,
+        }).background,
+      ).toBe(true);
     });
 
     it('get_process_output rejects a fractional tail', () => {

@@ -3,12 +3,12 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { getShortId, TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { CalendarIcon, HashIcon, LayersIcon, TargetIcon } from 'lucide-react';
 import { ComparisonScoreRow } from './comparison-score-row';
 import { ComparisonSection } from './comparison-section';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface ScorerSummary {
   scorerId: string;
@@ -85,12 +85,10 @@ export function ComparisonSideHeader({
               <TargetIcon /> {experiment.targetId}
             </TextAndIcon>
           )}
-          <span className={cn(versionMismatch && 'text-accent6')}>
-            <TextAndIcon>
-              <LayersIcon /> v{experiment.datasetVersion ?? '—'}
-              {versionMismatch && ' · different dataset version'}
-            </TextAndIcon>
-          </span>
+          <TextAndIcon className={cn(versionMismatch && 'text-warning-indicator')}>
+            <LayersIcon /> v{experiment.datasetVersion ?? '—'}
+            {versionMismatch && ' · different dataset version'}
+          </TextAndIcon>
           {createdAt && (
             <TextAndIcon>
               <CalendarIcon /> {formatDate(createdAt, 'date-time')}

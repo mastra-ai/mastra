@@ -6,6 +6,7 @@ import type { MastraTUIOptions } from '../../src/tui/index.js';
 export type ScenarioName =
   | 'startup'
   | 'abort-followup'
+  | 'startup-interrupted'
   | 'account-rotation'
   | 'account-routing-targeted'
   | 'branch-context-long-name'
@@ -66,6 +67,7 @@ export type ScenarioName =
   | 'file-autocomplete'
   | 'first-run-onboarding'
   | 'github-signals-command'
+  | 'schedules-command'
   | 'github-signals-multi-subscribe'
   | 'github-signals-legacy-upgrade'
   | 'github-signals-tool-multi-subscribe'

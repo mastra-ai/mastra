@@ -17,6 +17,7 @@ import {
   preserveResponseItemIdsOnMerge,
 } from '../utils/response-item-metadata';
 import { sanitizeToolName } from '../utils/tool-name';
+import { unwrapLegacyToolOutput } from '../utils/unwrap-legacy-tool-output';
 import { AIV5Adapter } from './AIV5Adapter';
 
 type AIV6AdapterContext = {
@@ -50,10 +51,6 @@ function getToolNameFromType(type: string): string {
 
 function normalizeToolArgs(input: unknown): Record<string, unknown> {
   return typeof input === 'object' && input !== null && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
-}
-
-function normalizeToolResult(output: unknown): unknown {
-  return typeof output === 'object' && output && 'value' in output ? (output as { value: unknown }).value : output;
 }
 
 function isV6OnlyToolState(
@@ -148,7 +145,7 @@ function createToolInvocationPartFromUIPart(part: AIV6Type.ToolUIPart | AIV6Type
       return createToolInvocationPart({
         ...base,
         state: 'result',
-        result: normalizeToolResult(part.output),
+        result: unwrapLegacyToolOutput(part.output),
       });
 
     case 'output-error':
@@ -178,6 +175,13 @@ function normalizeV6PartForV5Bridge(part: AIV6Type.UIMessage['parts'][number]): 
   }
 
   return part as unknown as AIV5Type.UIMessage['parts'][number];
+}
+
+function getSuspendedToolCallId(part: { type: string }): string | undefined {
+  if (part.type !== 'data-tool-call-suspended' || !('data' in part)) return undefined;
+  const data = part.data;
+  if (!data || typeof data !== 'object' || !('toolCallId' in data)) return undefined;
+  return typeof data.toolCallId === 'string' ? data.toolCallId : undefined;
 }
 
 function createToolInvocationPart({
@@ -435,6 +439,7 @@ export class AIV6Adapter {
       }
     }
 
+    AIV6Adapter.rehydrateSuspendedToolParts(parts, v5Message.parts);
     rehydratePendingToolApprovals(parts, metadata);
 
     return {
@@ -771,6 +776,29 @@ export class AIV6Adapter {
     // details, which streaming emits before the first reasoning delta arrives).
     // Signal "no part" instead of dereferencing undefined.
     return v5Part ? AIV6Adapter.toUIPartFromV5(v5Part) : undefined;
+  }
+
+  // AIV5Adapter synthesizes data-tool-call-suspended parts from metadata.suspendedTools;
+  // carry them into the v6 message so suspension state survives history reloads.
+  private static rehydrateSuspendedToolParts(
+    parts: AIV6Type.UIMessage['parts'],
+    v5Parts: AIV5Type.UIMessage['parts'],
+  ): void {
+    const existingIds = new Set(parts.map(getSuspendedToolCallId).filter(id => id !== undefined));
+
+    for (const v5Part of v5Parts) {
+      const toolCallId = getSuspendedToolCallId(v5Part);
+      if (!toolCallId || existingIds.has(toolCallId)) continue;
+
+      const toolPartIndex = parts.findIndex(part => AIV6.isToolUIPart(part) && part.toolCallId === toolCallId);
+      const dataPart = AIV6Adapter.toUIPartFromV5(v5Part);
+      if (toolPartIndex === -1) {
+        parts.push(dataPart);
+      } else {
+        parts.splice(toolPartIndex + 1, 0, dataPart);
+      }
+      existingIds.add(toolCallId);
+    }
   }
 
   private static toUIPartFromV5(part: AIV5Type.UIMessage['parts'][number]): AIV6Type.UIMessage['parts'][number] {

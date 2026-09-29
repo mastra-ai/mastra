@@ -13,6 +13,7 @@ const mockSandbox = {
   exec: vi.fn(),
   terminate: vi.fn().mockResolvedValue(undefined),
   snapshotFilesystem: vi.fn().mockResolvedValue({ imageId: 'snap-123' }),
+  reloadVolumes: vi.fn().mockResolvedValue(undefined),
 };
 
 const mockSandboxes = {
@@ -52,6 +53,8 @@ vi.mock('modal', async () => {
 // Import after mock registration
 // eslint-disable-next-line import/order
 import { ClientClosedError, NotFoundError } from 'modal';
+// eslint-disable-next-line import/order
+import { SandboxNotReadyError } from '@mastra/core/workspace';
 import { ModalSandbox } from './index';
 
 // ---------------------------------------------------------------------------
@@ -241,6 +244,81 @@ describe('ModalSandbox lifecycle', () => {
 // ---------------------------------------------------------------------------
 // Stop-and-resume
 // ---------------------------------------------------------------------------
+
+describe('ModalSandbox volumes', () => {
+  const volume = { volumeId: 'vo-123' };
+
+  it('passes volumes to sandboxes.create()', async () => {
+    const sandbox = new ModalSandbox({ id: 'test-sb', volumes: { '/mnt/data': volume as never } });
+    await sandbox._start();
+
+    expect(mockSandboxes.create).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ volumes: { '/mnt/data': volume } }),
+    );
+  });
+
+  it('passes volumes when rebooting from a snapshot', async () => {
+    const sandbox = new ModalSandbox({ id: 'test-sb', volumes: { '/mnt/data': volume as never } });
+    await sandbox._start();
+    await sandbox._stop();
+    mockSandboxes.create.mockClear();
+    await sandbox._start();
+
+    expect(mockSandboxes.create).toHaveBeenCalledWith(
+      expect.anything(),
+      { imageId: 'snap-123' },
+      expect.objectContaining({ volumes: { '/mnt/data': volume } }),
+    );
+  });
+
+  it('omits volumes when none are configured', async () => {
+    const sandbox = new ModalSandbox({ id: 'test-sb', volumes: {} });
+    await sandbox._start();
+
+    expect(mockSandboxes.create.mock.calls[0]![2].volumes).toBeUndefined();
+  });
+
+  it('carries volumes over to clones', async () => {
+    const sandbox = new ModalSandbox({ id: 'test-sb', volumes: { '/mnt/data': volume as never } });
+    await sandbox.clone({ id: 'clone-sb' })._start();
+
+    expect(mockSandboxes.create).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ name: 'clone-sb', volumes: { '/mnt/data': volume } }),
+    );
+  });
+
+  it.each(['/mnt/data', '/mnt/data/', '/mnt/data/project'])(
+    'rejects workingDirectory %s inside a volume mount',
+    workingDirectory => {
+      expect(() => new ModalSandbox({ workingDirectory, volumes: { '/mnt/data': volume as never } })).toThrow(
+        /must be outside Volume mount/,
+      );
+    },
+  );
+
+  it('allows workingDirectory that only shares a prefix with a mount', () => {
+    expect(
+      () => new ModalSandbox({ workingDirectory: '/mnt/database', volumes: { '/mnt/data': volume as never } }),
+    ).not.toThrow();
+  });
+
+  it('reloadVolumes() delegates to the Modal sandbox', async () => {
+    const sandbox = new ModalSandbox({ id: 'test-sb', volumes: { '/mnt/data': volume as never } });
+    await sandbox._start();
+    await sandbox.reloadVolumes({ timeoutMs: 1000 });
+
+    expect(mockSandbox.reloadVolumes).toHaveBeenCalledWith({ timeoutMs: 1000 });
+  });
+
+  it('reloadVolumes() throws before the sandbox starts', async () => {
+    const sandbox = new ModalSandbox({ id: 'test-sb' });
+    await expect(sandbox.reloadVolumes()).rejects.toThrow(SandboxNotReadyError);
+  });
+});
 
 describe('ModalSandbox stop-and-resume', () => {
   it('stop() snapshots then terminates, allowing same instance to resume from snapshot', async () => {

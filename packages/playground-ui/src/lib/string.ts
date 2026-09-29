@@ -10,3 +10,10 @@ export const lodashTitleCase = (str: string): string => {
     .replace(/^./, str => str.toUpperCase())
     .trim();
 };
+
+const pluralRules = new Intl.PluralRules('en-US');
+const count = new Intl.NumberFormat('en-US');
+
+export function pluralize(amount: number, singular: string, plural = `${singular}s`): string {
+  return `${count.format(amount)} ${pluralRules.select(amount) === 'one' ? singular : plural}`;
+}

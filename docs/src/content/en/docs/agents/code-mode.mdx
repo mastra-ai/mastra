@@ -113,7 +113,7 @@ Visit the [`createCodeMode()` reference](/reference/tools/create-code-mode) for 
 
 ## Scoping tools across multiple code tools
 
-`createCodeMode()` captures its own allow-list. Call it more than once to give an agent several code tools, each scoped to a different subset of tools. It can only call the `external_*` functions for the tools passed to its own `createCodeMode()` call, so the subsets stay isolated.
+`createCodeMode()` captures its own allow-list. Call it more than once to give an agent several code tools, each scoped to a different subset of tools. Each instance can only call the `external_*` functions for the tools passed to its own `createCodeMode()` call. The subsets stay isolated.
 
 Give each tool a distinct `id` so their ids don't collide, and add each tool's instructions to the agent:
 
