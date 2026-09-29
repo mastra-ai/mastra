@@ -1,45 +1,33 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
 
 import { useVisibleTraceRows } from '../../hooks/use-visible-trace-rows';
 import { ThreadTraceContext } from './thread-trace-context';
-import type {
-  ThreadTraceContextValue,
-  ThreadTraceHighlight,
-  ThreadTraceLayout,
-  ThreadTraceSelectedSpan,
-} from './thread-trace-context';
+import type { ThreadTraceContextValue, ThreadTraceHighlight, ThreadTraceSelectedSpan } from './thread-trace-context';
 import { cn } from '@/lib/utils';
 
 export interface ThreadTraceRootProps extends ComponentProps<'div'> {
   /** Trace ids in reading order (oldest first); must match the order of the rendered rows. */
   traceIds: string[];
   /**
-   * The row to start from: it is scrolled into view once. Only read at mount,
+   * The row to start from: it mounts expanded and is scrolled into view once. Only read at mount,
    * so a row that arrives on a later page is left alone.
    */
   anchorTraceId?: string | null;
-  /** Fires when the trace or span column opens or closes. */
-  onLayoutChange?: (layout: ThreadTraceLayout) => void;
+  /** Fires when a span detail opens or closes (`null`). */
+  onSelectedSpanChange?: (selected: ThreadTraceSelectedSpan | null) => void;
 }
 
-const LAYOUT_COLUMNS: Record<ThreadTraceLayout, string> = {
-  conversation: 'grid-cols-[minmax(0,1fr)_0fr_0fr]',
-  trace: 'grid-cols-[minmax(0,1fr)_1fr_0fr]',
-  // Below xl three equal columns get too narrow: give the conversation less room while a span is open.
-  span: 'grid-cols-[minmax(0,0.6fr)_minmax(0,1fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_1fr_1fr]',
-};
-
 /**
- * Owns the interaction state of a thread rendered as its traces: the open trace, the selected
- * span, the highlighted spans, and which rows are on screen. Layout parts read it through
- * `useThreadTrace()` / `useThreadTraceRow()`; the root itself is the outer grid —
- * `[conversation] [trace] [span]` — whose trace and span cells collapse to zero while closed.
+ * Owns the interaction state of a thread rendered as its traces: the selected span, the
+ * highlighted spans, which rows are expanded, and which rows are on screen. Layout parts read it
+ * through `useThreadTrace()` / `useThreadTraceRow()`; the root itself is the outer grid that gains a
+ * side column while a span is selected.
  */
 export function ThreadTraceRoot({
   traceIds,
   anchorTraceId,
-  onLayoutChange,
+  onSelectedSpanChange,
   className,
   children,
   ...props
@@ -47,49 +35,47 @@ export function ThreadTraceRoot({
   const listRef = useRef<HTMLDivElement>(null);
   const { visibleTraceIds, currentTraceId } = useVisibleTraceRows(listRef, traceIds);
 
-  const [anchor] = useState(() => anchorTraceId ?? null);
-  const [openTraceId, setOpenTraceId] = useState<string | null>(null);
   const [selected, setSelected] = useState<ThreadTraceSelectedSpan | null>(null);
   const [highlight, setHighlight] = useState<ThreadTraceHighlight | null>(null);
+  const [anchor] = useState(() => anchorTraceId ?? null);
+  // Selecting a span expands its row and it stays expanded until the reader collapses it with "Show less".
+  const [expandedTraceIds, setExpandedTraceIds] = useState<ReadonlySet<string>>(() => new Set(anchor ? [anchor] : []));
 
-  // Showing another turn's trace drops the span and highlight that belonged to the previous one.
-  const openTrace = useCallback((traceId: string | null) => {
-    setOpenTraceId(traceId);
-    setSelected(current => (current && current.traceId === traceId ? current : null));
-    setHighlight(current => (current && current.traceId === traceId ? current : null));
+  const setTraceExpanded = useCallback((traceId: string, expanded: boolean) => {
+    setExpandedTraceIds(current => {
+      if (current.has(traceId) === expanded) return current;
+      const next = new Set(current);
+      if (expanded) next.add(traceId);
+      else next.delete(traceId);
+      return next;
+    });
   }, []);
-
-  const toggleTrace = useCallback(
-    (traceId: string) => openTrace(openTraceId === traceId ? null : traceId),
-    [openTrace, openTraceId],
-  );
 
   const selectSpan = useCallback(
     (traceId: string, spanId: string | undefined) => {
-      if (!spanId) {
-        setSelected(null);
-        // Closing the span also ends the highlight, like clearing the URL param on the traces page.
-        setHighlight(null);
-        return;
-      }
-      openTrace(traceId);
-      setSelected({ traceId, spanId });
+      const next = spanId ? { traceId, spanId } : null;
+      setSelected(next);
+      onSelectedSpanChange?.(next);
+      if (spanId) setTraceExpanded(traceId, true);
+      // Closing the panel also ends the highlight, like clearing the URL param on the traces page.
+      if (!spanId) setHighlight(null);
     },
-    [openTrace],
+    [setTraceExpanded, onSelectedSpanChange],
   );
 
-  // Fades the other spans and brings the last (most specific, deepest) span into view. Opening a
-  // span's detail stays a separate, deliberate click so highlighting does not hijack that column.
+  // Fades the other spans and brings the last (most specific, deepest) span into view, since it is
+  // the one most likely to sit below the fold. Opening a span's detail panel stays a separate,
+  // deliberate click so highlighting does not hijack the side panel.
   const highlightSpans = useCallback(
     (traceId: string, spanIds: string[]) => {
       if (spanIds.length === 0) {
         setHighlight(null);
         return;
       }
-      openTrace(traceId);
       setHighlight({ traceId, spanIds });
+      setTraceExpanded(traceId, true);
     },
-    [openTrace],
+    [setTraceExpanded],
   );
 
   const scrollToTrace = useCallback((traceId: string) => {
@@ -102,26 +88,16 @@ export function ThreadTraceRoot({
     }
   }, []);
 
-  const layout: ThreadTraceLayout = selected ? 'span' : openTraceId ? 'trace' : 'conversation';
-
-  const onLayoutChangeRef = useRef(onLayoutChange);
-  onLayoutChangeRef.current = onLayoutChange;
-  useEffect(() => {
-    onLayoutChangeRef.current?.(layout);
-  }, [layout]);
-
   const contextValue = useMemo<ThreadTraceContextValue>(
     () => ({
       traceIds,
       anchorTraceId: anchor,
-      openTraceId,
-      openTrace,
-      toggleTrace,
       selected,
       selectSpan,
       highlight,
       highlightSpans,
-      layout,
+      expandedTraceIds,
+      setTraceExpanded,
       visibleTraceIds,
       currentTraceId,
       scrollToTrace,
@@ -130,14 +106,12 @@ export function ThreadTraceRoot({
     [
       traceIds,
       anchor,
-      openTraceId,
-      openTrace,
-      toggleTrace,
       selected,
       selectSpan,
       highlight,
       highlightSpans,
-      layout,
+      expandedTraceIds,
+      setTraceExpanded,
       visibleTraceIds,
       currentTraceId,
       scrollToTrace,
@@ -148,12 +122,11 @@ export function ThreadTraceRoot({
     <ThreadTraceContext.Provider value={contextValue}>
       <div
         data-slot="thread-trace"
-        data-layout={layout}
         className={cn(
-          // The trace and span cells always exist and collapse to zero so opening/closing them
-          // animates via `grid-template-columns`, like the trace panel's columns.
+          // The span cell always exists and collapses to zero so opening/closing it animates
+          // via `grid-template-columns`, like the trace panel's columns.
           'grid h-full min-h-0 transition-[grid-template-columns] duration-300 ease-in-out',
-          LAYOUT_COLUMNS[layout],
+          selected ? 'grid-cols-[minmax(0,1fr)_40%]' : 'grid-cols-[minmax(0,1fr)_0%]',
           className,
         )}
         {...props}

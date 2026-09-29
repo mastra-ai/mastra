@@ -45,6 +45,14 @@ const installHandlers = () => {
   );
 };
 
+// jsdom has no layout: mock heights per `data-testid` so the anchored row can decide to expand.
+const mockHeights = (heights: Record<string, number>) => {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    const height = heights[this.closest<HTMLElement>('[data-testid]')?.dataset.testid ?? ''] ?? 0;
+    return { height, width: 100, top: 0, left: 0, right: 100, bottom: height, x: 0, y: 0, toJSON: () => ({}) };
+  });
+};
+
 const renderPanel = (props: Partial<TraceThreadPanelProps> = {}) =>
   renderWithProviders(
     <TestLinkProvider>
@@ -63,34 +71,33 @@ const renderPanel = (props: Partial<TraceThreadPanelProps> = {}) =>
 
 describe('TraceThreadPanel', () => {
   describe('given a thread with two traces and the current trace in the URL', () => {
-    it('shows every turn as conversation only, scrolled to the current trace, in a wide drawer', async () => {
+    it('shows every turn of the thread with the current trace expanded', async () => {
+      mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 900 });
       installHandlers();
       const { queryClient } = renderPanel();
-      const dialog = () => screen.getByRole('dialog', { name: `Thread ${THREAD_ID}` });
 
-      expect(await screen.findByRole('button', { name: 'Show trace for turn 1' })).not.toBeNull();
-      expect(await screen.findByRole('button', { name: 'Show trace for turn 2' })).not.toBeNull();
+      expect(await screen.findByText('Chef agent run')).not.toBeNull();
+      expect(await screen.findByText('Chef agent follow-up')).not.toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
       expect(screen.getByRole('heading', { name: /Thread/ }).textContent).toContain(THREAD_ID);
-      expect(screen.queryByText('Chef agent run')).toBeNull();
       const row = screen.getByTestId('thread-view-by-trace').querySelector('[data-trace-id="trace-a"]');
       await waitFor(() => expect(scrollIntoView.mock.instances).toContain(row));
-      expect(dialog().className).toContain('w-4/5');
+      expect(screen.getAllByRole('button', { name: 'Show less' })).toHaveLength(1);
     });
 
-    it('when a trace is shown then hidden, then the drawer goes full-width and back to wide', async () => {
+    it('when rendered, then the panel opens wide and only takes the full frame once a span is selected', async () => {
       installHandlers();
       const { queryClient } = renderPanel();
       const dialog = () => screen.getByRole('dialog', { name: `Thread ${THREAD_ID}` });
 
-      fireEvent.click(await screen.findByRole('button', { name: 'Show trace for turn 1' }));
-      expect(await within(screen.getByTestId('thread-trace-trace-panel')).findByText('Chef agent run')).not.toBeNull();
-      await waitFor(() => expect(dialog().className).toContain('w-full'));
-
-      fireEvent.click(screen.getByRole('button', { name: 'Hide trace for turn 1' }));
-      await waitFor(() => expect(dialog().className).toContain('w-4/5'));
+      expect(await screen.findByText('Chef agent follow-up')).not.toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(dialog().className).toContain('w-4/5');
+
+      fireEvent.click(await screen.findByText('Chef agent run'));
+
+      await waitFor(() => expect(dialog().className).toContain('w-full'));
     });
 
     it('when "Back to trace" is clicked, then onBack is called', async () => {
