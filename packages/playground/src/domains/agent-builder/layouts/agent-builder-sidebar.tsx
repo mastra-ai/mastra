@@ -88,7 +88,7 @@ export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSideb
                   <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
                 </Link>
                 {!isMobile && (
-                  <div className="absolute inset-0 opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
+                  <div className="absolute inset-0 grid place-items-center opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
                     <MainSidebar.Trigger />
                   </div>
                 )}

@@ -257,6 +257,14 @@
   animation: fade-row-highlight 2000ms ease-out forwards;
 }
 
+/* Holds opacity while the sidebar collapses, so leftover hover doesn't flash the toggle. */
+@keyframes sidebar-hold {
+  from,
+  to {
+    opacity: var(--sidebar-hold-opacity);
+  }
+}
+
 /* Sort arrows are "drawn" in their pointing direction: asc reveals from the
    bottom up, desc from the top down. */
 @keyframes sort-arrow-reveal-up {
