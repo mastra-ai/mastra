@@ -9,6 +9,7 @@ import { editorialReview, inputSchema, reviewMode } from './workflow.js';
 import './mastra.js';
 import { AdmissionError, type Admission } from './admission.js';
 
+/** Serve authenticated owner-scoped review jobs, enforcing admission before native submission. */
 export function createExampleServer(tokens: Record<string, string>, admission: Admission) {
   const principals = Object.entries(tokens);
   if (!principals.length || principals.some(([user, token]) => !user || token.length < 16))
@@ -133,11 +134,15 @@ export function createExampleServer(tokens: Record<string, string>, admission: A
         }
         if (request.method === 'GET' && !match[2]) {
           const record = await provider.getRun(editorialReview.id, runId);
+          if (!record) {
+            send(404, { error: 'Job not found.' });
+            return;
+          }
           send(200, {
             runId,
-            status: record!.status,
-            result: record!.status === 'success' ? record!.result : undefined,
-            error: record!.error?.message,
+            status: record.status,
+            result: record.status === 'success' ? record.result : undefined,
+            error: record.error?.message,
           });
           return;
         }

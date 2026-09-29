@@ -2,8 +2,14 @@ import type { AddressInfo } from 'node:net';
 import { afterEach, expect, it, vi } from 'vitest';
 import { AdmissionError } from '../examples/editorial-review/admission.js';
 
-const calls = vi.hoisted(() => ({ starts: 0 }));
-vi.mock('../examples/editorial-review/provider.js', () => ({ provider: { store: { get: async () => null } } }));
+const calls = vi.hoisted(() => ({
+  starts: 0,
+  stored: null as null | { resourceId: string },
+  getRun: vi.fn(async () => null),
+}));
+vi.mock('../examples/editorial-review/provider.js', () => ({
+  provider: { store: { get: async () => calls.stored }, getRun: calls.getRun },
+}));
 vi.mock('../examples/editorial-review/mastra.js', () => ({}));
 vi.mock('../examples/editorial-review/workflow.js', async () => {
   const { z } = await import('zod');
@@ -25,6 +31,26 @@ import { createExampleServer } from '../examples/editorial-review/http.js';
 
 afterEach(() => {
   calls.starts = 0;
+  calls.stored = null;
+  calls.getRun.mockClear();
+});
+it('returns 404 when an owned run disappears during reconciliation', async () => {
+  calls.stored = { resourceId: 'alice' };
+  const server = createExampleServer(
+    { alice: 'a-valid-local-test-token' },
+    { reserve: async () => true, close: async () => {} },
+  );
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const response = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/api/jobs/gone`, {
+      headers: { authorization: 'Bearer a-valid-local-test-token' },
+    });
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: 'Job not found.' });
+    expect(calls.getRun).toHaveBeenCalledTimes(1);
+  } finally {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
 });
 it('rejects admission before any workflow submission and returns retry guidance', async () => {
   // Cast keeps this regression executable against the old one-argument server.
