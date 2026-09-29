@@ -395,9 +395,9 @@ Switch to an owned stored thread and hydrate its mode, model, and observational 
 await session.thread.switch({ threadId: 'thread-8' })
 ```
 
-### `session.thread.delete({ threadId })`
+### `session.thread.delete({ threadId, requestContext? })`
 
-Delete an owned thread. Deleting the active thread also clears the current binding.
+Delete an owned thread. Deleting the active thread also clears the current binding. Pass `requestContext` when memory is a function that reads the signed-in user.
 
 ```typescript
 await session.thread.delete({ threadId: 'thread-8' })
