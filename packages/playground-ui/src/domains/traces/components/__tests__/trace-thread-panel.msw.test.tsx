@@ -63,28 +63,32 @@ const renderPanel = (props: Partial<TraceThreadPanelProps> = {}) =>
 
 describe('TraceThreadPanel', () => {
   describe('given a thread with two traces and the current trace in the URL', () => {
-    it('shows every turn and opens the current trace beside the conversation in a full-width drawer', async () => {
+    it('shows every turn as conversation only, scrolled to the current trace, in a wide drawer', async () => {
       installHandlers();
       const { queryClient } = renderPanel();
       const dialog = () => screen.getByRole('dialog', { name: `Thread ${THREAD_ID}` });
 
-      expect(await screen.findByRole('button', { name: /trace for turn 1/ })).not.toBeNull();
-      expect(await screen.findByRole('button', { name: /trace for turn 2/ })).not.toBeNull();
-      expect(await within(screen.getByTestId('thread-trace-trace-panel')).findByText('Chef agent run')).not.toBeNull();
+      expect(await screen.findByRole('button', { name: 'Show trace for turn 1' })).not.toBeNull();
+      expect(await screen.findByRole('button', { name: 'Show trace for turn 2' })).not.toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
       expect(screen.getByRole('heading', { name: /Thread/ }).textContent).toContain(THREAD_ID);
+      expect(screen.queryByText('Chef agent run')).toBeNull();
       const row = screen.getByTestId('thread-view-by-trace').querySelector('[data-trace-id="trace-a"]');
       await waitFor(() => expect(scrollIntoView.mock.instances).toContain(row));
-      await waitFor(() => expect(dialog().className).toContain('w-full'));
+      expect(dialog().className).toContain('w-4/5');
     });
 
-    it('when the trace is hidden, then the drawer shrinks back to wide', async () => {
+    it('when a trace is shown then hidden, then the drawer goes full-width and back to wide', async () => {
       installHandlers();
       const { queryClient } = renderPanel();
       const dialog = () => screen.getByRole('dialog', { name: `Thread ${THREAD_ID}` });
 
-      fireEvent.click(await screen.findByRole('button', { name: 'Hide trace for turn 1' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Show trace for turn 1' }));
+      expect(await within(screen.getByTestId('thread-trace-trace-panel')).findByText('Chef agent run')).not.toBeNull();
+      await waitFor(() => expect(dialog().className).toContain('w-full'));
+
+      fireEvent.click(screen.getByRole('button', { name: 'Hide trace for turn 1' }));
       await waitFor(() => expect(dialog().className).toContain('w-4/5'));
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });

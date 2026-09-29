@@ -8,7 +8,7 @@ export interface TraceThreadPanelProps {
   threadId: string;
   withQueryTrace: boolean;
   withFeedback: boolean;
-  /** Trace to open and scroll to when the thread opens. */
+  /** Trace to scroll to when the thread opens. */
   anchorTraceId?: string;
   onOpenScore: (traceId: string, scoreId: string) => void;
   /** Return to the trace panel this thread view replaced. */

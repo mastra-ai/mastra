@@ -180,13 +180,14 @@ describe('ThreadTrace', () => {
       expect(screen.queryByText('Chef agent run')).toBeNull();
     });
 
-    it('scrolls the anchor row into view once and opens its trace', async () => {
+    it('scrolls the anchor row into view once without opening its trace', async () => {
       renderView({ anchorTraceId: 'trace-b' });
-      await screen.findByText('Chef agent follow-up');
+      await screen.findByText('Messages for trace-b');
 
       expect(scrollIntoView.mock.instances[0]).toBe(getRow('trace-b'));
       expect(scrollIntoView).toHaveBeenCalledTimes(1);
-      expect(getRow('trace-b').dataset.active).toBe('true');
+      expect(getRow('trace-b').dataset.active).toBeUndefined();
+      expect(screen.queryByText('Chef agent follow-up')).toBeNull();
     });
   });
 

@@ -294,17 +294,18 @@ describe('ThreadViewByTrace', () => {
   });
 
   describe('arriving from a trace with ?traceId', () => {
-    it('scrolls to that row and opens its trace', async () => {
+    it('scrolls to that row without opening its trace', async () => {
       installHandlers();
       const { queryClient } = renderView({ search: '?traceId=trace-b' });
 
-      await within(await screen.findByTestId('thread-trace-trace-panel')).findByText('Chef agent follow-up');
+      await screen.findByRole('button', { name: 'Show trace for turn 2' });
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
       const row = rowOf('trace-b');
       await waitFor(() => expect(scrollIntoView.mock.instances).toContain(row));
       expect(scrollIntoView.mock.instances.filter(el => el === row)).toHaveLength(1);
-      expect(row.getAttribute('data-active')).toBe('true');
+      expect(row.getAttribute('data-active')).toBeNull();
+      expect(screen.queryByText('Chef agent follow-up')).toBeNull();
     });
 
     it('opens nothing when the trace is not in the loaded page', async () => {

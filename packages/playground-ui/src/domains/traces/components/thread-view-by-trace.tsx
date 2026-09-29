@@ -26,7 +26,7 @@ export interface ThreadViewByTraceProps {
   withFeedback: boolean;
   /** Fires when the trace or span column opens or closes. */
   onLayoutChange?: (layout: ThreadTraceLayout) => void;
-  /** Trace to open and scroll to on mount (first page only). */
+  /** Trace to scroll to on mount (first page only). */
   anchorTraceId?: string;
   /** Opens a score from a trace's Scores tab; the app owns routing. */
   onOpenScore: (traceId: string, scoreId: string) => void;

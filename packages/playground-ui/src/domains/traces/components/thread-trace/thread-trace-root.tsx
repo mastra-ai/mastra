@@ -15,7 +15,7 @@ export interface ThreadTraceRootProps extends ComponentProps<'div'> {
   /** Trace ids in reading order (oldest first); must match the order of the rendered rows. */
   traceIds: string[];
   /**
-   * The row to start from: its trace opens and it is scrolled into view once. Only read at mount,
+   * The row to start from: it is scrolled into view once. Only read at mount,
    * so a row that arrives on a later page is left alone.
    */
   anchorTraceId?: string | null;
@@ -48,7 +48,7 @@ export function ThreadTraceRoot({
   const { visibleTraceIds, currentTraceId } = useVisibleTraceRows(listRef, traceIds);
 
   const [anchor] = useState(() => anchorTraceId ?? null);
-  const [openTraceId, setOpenTraceId] = useState<string | null>(anchor);
+  const [openTraceId, setOpenTraceId] = useState<string | null>(null);
   const [selected, setSelected] = useState<ThreadTraceSelectedSpan | null>(null);
   const [highlight, setHighlight] = useState<ThreadTraceHighlight | null>(null);
 
