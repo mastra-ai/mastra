@@ -13,6 +13,9 @@ import { server } from './src/test/msw-server';
 // children, ScrollAreaViewport). Tests still see their content; the overlay-scrollbar
 // internals are simply not exercised.
 vi.mock('@mastra/playground-ui/components/ScrollArea', () => {
+  const ViewportRefContext = React.createContext<React.Ref<HTMLDivElement> | undefined>(undefined);
+  const ScrollAreaViewport = ({ children, className }: { children?: React.ReactNode; className?: string }) =>
+    React.createElement('div', { ref: React.useContext(ViewportRefContext), className }, children);
   const ScrollArea = React.forwardRef<
     HTMLDivElement,
     {
@@ -44,16 +47,21 @@ vi.mock('@mastra/playground-ui/components/ScrollArea', () => {
       },
       ref,
     ) => {
+      const callerRendersViewport = React.Children.toArray(children).some(
+        child => React.isValidElement(child) && child.type === ScrollAreaViewport,
+      );
       return React.createElement(
         'div',
         { ref, className, 'data-testid': 'scroll-area', ...props },
-        React.createElement('div', { ref: viewportRef }, children),
+        React.createElement(
+          ViewportRefContext.Provider,
+          { value: viewportRef },
+          callerRendersViewport ? children : React.createElement(ScrollAreaViewport, null, children),
+        ),
       );
     },
   );
   ScrollArea.displayName = 'ScrollArea';
-  const ScrollAreaViewport = ({ children, className }: { children?: React.ReactNode; className?: string }) =>
-    React.createElement('div', { className }, children);
   return { ScrollArea, ScrollAreaViewport };
 });
 
