@@ -14,6 +14,7 @@ import {
   DataListSkeleton as EntityListSkeleton,
   useDataListKeyboard,
 } from '@/ds/components/DataList';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/utils/cn';
@@ -310,12 +311,20 @@ export function WorkflowsList({
                   <span className="flex items-center gap-1.5">
                     <TreeConnector guides={row.guides} isLastChild={row.isLastChild} />
                     <span className="truncate">{truncateString(row.stepId, 50)}</span>
-                    <span
-                      title="Add it to the workflows of your Mastra instance to open it on its own page"
-                      className="shrink-0 text-body-sm text-muted-foreground"
-                    >
-                      not registered
-                    </span>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={<span />}
+                        role="note"
+                        tabIndex={0}
+                        className="shrink-0 rounded-sm text-body-sm text-muted-foreground focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-border-focus focus-visible:outline-solid"
+                      >
+                        not registered
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-72">
+                        Runs as a step of its parent workflow. Add it to the workflows of your Mastra instance to open,
+                        run, and inspect it on its own page.
+                      </TooltipContent>
+                    </Tooltip>
                   </span>
                 </EntityList.NameCell>
                 <EntityList.DescriptionCell>{truncateString(row.description ?? '', 200)}</EntityList.DescriptionCell>
