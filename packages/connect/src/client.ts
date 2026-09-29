@@ -208,9 +208,12 @@ const integrationCatalogResponseSchema = z.object({
 });
 
 /**
- * Non-secret secondary access token minted by the vendor alongside the
- * primary oauth2 credential (e.g. `devPortalAccessToken` on Microsoft Teams
- * connections). Keyed by the vendor's connection-config field name.
+ * Secondary access token minted by the vendor alongside the primary oauth2
+ * credential (e.g. `devPortalAccessToken` on Microsoft Teams connections).
+ * Keyed by the vendor's connection-config field name. Treat this like any
+ * other bearer credential — it authenticates second-audience API calls
+ * (Teams Dev Portal, etc.) and must not be logged or forwarded to code that
+ * shouldn't hold connection secrets.
  */
 export const secondaryAccessTokenSchema = z.object({
   accessToken: z.string(),

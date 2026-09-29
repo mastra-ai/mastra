@@ -4,9 +4,9 @@
 
 Added Microsoft Teams to `channels()` and re-keyed the Slack channel from `slack` to `slack-channels`.
 
-**Microsoft Teams**: projects with an active `microsoft-teams` platform connection now resolve a `TeamsProvider` automatically — no bot credentials in your code. The provider runs in delegated mode: connecting an agent provisions a dedicated Teams bot for it through the platform connection, and per-scope tokens (Microsoft Graph and Teams Dev Portal) are resolved fresh from the platform on every call.
+**Microsoft Teams**: projects with an active `microsoft-teams` platform connection now resolve a `TeamsProvider` automatically — no bot credentials in your code. Connecting an agent provisions a dedicated Teams bot for it through the platform connection.
 
-**Breaking: Slack channel integration id renamed**. The Slack channel is now matched by the platform's `slack-channels` integration (the catalog rename over Nango's upstream `slack-app-configuration` TWO_STEP provider), which serves a Slack App Configuration token capable of minting per-agent apps via the manifest API. The plain `slack` OAuth integration continues to back the generated Slack **tools** — its bot token is scoped to a single installed workspace and cannot mint per-agent apps.
+**Breaking: Slack channel integration id renamed**. Use the `slack-channels` connection to hook the Slack channel up to agents; the existing `slack` connection continues to back the generated Slack **tools**. Two separate connections, one purpose each.
 
 If you pass per-integration overrides to `channels()`, migrate the key:
 

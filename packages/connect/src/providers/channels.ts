@@ -35,7 +35,9 @@ function credentialToken(credential: ConnectionCredential): string {
  *   is a foot-gun (mismatched OAuth redirect URIs, dropped webhook deliveries).
  *   `encryptionKey` is a process-wide at-rest secret sourced from
  *   `MASTRA_ENCRYPTION_KEY`; letting `providerOptions` override it per
- *   integration would fragment the encryption boundary.
+ *   integration would fragment the encryption boundary. Teams enforces the
+ *   env var at wrapper time so its persistent install store can never
+ *   silently fall back to plaintext.
  *
  * Anything on this list is stripped with a warning; the rest of
  * `providerOptions` (handlers, streaming, commands, handlers, threadContext,
@@ -295,6 +297,21 @@ const teamsChannel: ChannelProviderRegistration = {
       TeamsProvider: new (config: Record<string, unknown>) => ChannelProvider;
       TEAMS_DEV_PORTAL_SCOPE: string;
     };
+    // Defense-in-depth around Teams' persistent install store: it holds the
+    // per-agent bot `appPassword` at rest, so a missing encryption key would
+    // silently downgrade delegated provisioning to plaintext persistence.
+    // `encryptionKey` is stripped from `providerOptions` (reserved) so the
+    // key can only come from `MASTRA_ENCRYPTION_KEY`. Fail fast at wrapper
+    // time if it is not set — clearer than watching a provisioning call
+    // throw deep inside `@mastra/teams`.
+    if (!process.env.MASTRA_ENCRYPTION_KEY) {
+      throw new MastraConnectError(
+        'invalid_options',
+        'Microsoft Teams channel: MASTRA_ENCRYPTION_KEY is not set. ' +
+          'The Teams install store persists per-agent bot secrets and requires an at-rest ' +
+          'encryption key (a 32-byte value, base64-encoded).',
+      );
+    }
     const safeOptions = stripReservedOptions('microsoft-teams', options);
     // Mirrors the Slack/Telegram pattern: fetch the current credential on
     // every call, let the platform's vendor own rotation, extract the token
