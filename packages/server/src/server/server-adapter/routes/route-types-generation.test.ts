@@ -67,6 +67,26 @@ describe('renderRouteTypesFileContent', () => {
     expect(rendered).not.toContain('preprocessed?: unknown');
   });
 
+  it('renders records keyed by literal unions as mapped types instead of invalid index signatures', () => {
+    const rendered = renderFixtureRoutes([
+      {
+        method: 'GET',
+        path: '/records',
+        responseType: 'json',
+        responseSchema: z.object({
+          open: z.record(z.union([z.enum(['a', 'b']), z.templateLiteral(['x.', z.string()])]), z.number()),
+          exhaustive: z.record(z.enum(['a', 'b']), z.number()),
+          plain: z.record(z.string(), z.number()),
+        }),
+        handler: async () => ({}),
+      },
+    ]);
+
+    expect(rendered).toMatch(/open: \{\s*\[K in \("a" \| "b"\) \| `x\.\$\{string\}`\]\?: number;\s*\}/);
+    expect(rendered).toMatch(/exhaustive: \{\s*\[K in "a" \| "b"\]: number;\s*\}/);
+    expect(rendered).toMatch(/plain: \{\s*\[key: string\]: number;\s*\}/);
+  });
+
   it('promotes repeated nested schemas during the rendering pass', () => {
     const nestedSchema = z.object({
       first: z.string(),
