@@ -12,4 +12,4 @@ for await (const chunk of stream.fullStream) {
 }
 ```
 
-Run lifecycle chunks such as `start`, `finish` and `abort` don't carry a `messageId`.
+Signal chunks (`data-signal`, `data-user-message`) carry the id of their own saved signal message. Run lifecycle chunks such as `start`, `finish` and `abort` don't carry a `messageId`.

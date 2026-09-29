@@ -57,7 +57,7 @@ export async function drainSignalsToTranscript(deps: {
     const nextMessageId = deps.rotateResponseMessageId(deps.sealMessageId);
     for (const pendingSignal of pendingSignals) {
       const signalForTranscript = deps.addSignal(pendingSignal);
-      // Signals belong to the freshly rotated response message, not the sealed one.
+      // The signal is saved as its own message; `withChunkMessageId` stamps its signal id.
       await deps.emitChunk(withChunkMessageId(signalForTranscript.toDataPart(), nextMessageId));
     }
     return { drained: true, nextMessageId };

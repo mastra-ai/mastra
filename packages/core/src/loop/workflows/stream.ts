@@ -10,7 +10,7 @@ import { ProcessorRunner } from '../../processors/runner';
 import type { ProcessorState } from '../../processors/runner';
 import { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue } from '../../stream/base';
-import { createChunkMessageIdStamper } from '../../stream/base/message-id';
+import { createChunkMessageIdStamper, withChunkMessageId } from '../../stream/base/message-id';
 import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
@@ -39,7 +39,9 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
 }: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType<OUTPUT>>({
     start: async streamController => {
-      const stampMessageId = createChunkMessageIdStamper(messageId);
+      // On resume, `messageId` is freshly generated; the resumed step's content (e.g. `tool-result`,
+      // emitted before any `step-start`) belongs to the message that was active when it suspended.
+      const stampMessageId = createChunkMessageIdStamper(getSuspendedMessageId(resumeContext?.snapshot) ?? messageId);
       // Stamp chunks when the loop produces them; consumers may read them much later.
       const controller: ReadableStreamDefaultController<ChunkType<OUTPUT>> = {
         enqueue: chunk => {
@@ -192,6 +194,9 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
                 error: persistError,
               });
             }
+            // Announce the id the part was saved under; it may differ from the stamper's current id
+            // after a processor rotation. Transient parts are not saved and keep the stamper's id.
+            processedChunk = withChunkMessageId(processedChunk, responseMessageId);
           }
 
           safeEnqueue(controller, processedChunk);
@@ -498,4 +503,13 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
       }
     },
   });
+}
+
+function getSuspendedMessageId(snapshot: unknown): string | undefined {
+  const context = (snapshot as { context?: Record<string, unknown> } | undefined)?.context;
+  for (const step of Object.values(context ?? {})) {
+    const s = step as { status?: unknown; payload?: { messageId?: unknown } } | undefined;
+    if (s?.status === 'suspended' && typeof s.payload?.messageId === 'string') return s.payload.messageId;
+  }
+  return undefined;
 }
