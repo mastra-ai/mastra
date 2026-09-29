@@ -247,7 +247,7 @@ Requests are stateless, so there is nothing to resume or identify. `startHTTP` h
 
 ### `roots` and `sampling`
 
-Clients no longer advertise `roots`. `setRoots()` and `sendRootsListChanged()` are gone. Servers neither request sampling nor advertise it. A server that embeds a `roots/list` or `sampling/createMessage` request in `input_required` isn't answered: the client has no handler for those methods, so the call fails instead of fabricating a response.
+Clients no longer advertise `roots`. `setRoots()` and `sendRootsListChanged()` are gone. Servers neither request sampling nor advertise it. A server that embeds a `roots/list` or `sampling/createMessage` request in `input_required` isn't answered: the client has no handler for those methods. The call fails instead of fabricating a response.
 
 ### `logging/setLevel` and `sendLoggingMessage`
 

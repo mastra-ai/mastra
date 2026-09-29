@@ -159,7 +159,7 @@ In a split deployment:
 - **Workers connect outbound only**: They pull events from the distributed PubSub backend and read/write to the shared storage database. They don't accept inbound traffic from clients.
 - **The orchestration worker calls the API internally**: It sends step execution requests to the API over the container network using `MASTRA_STEP_EXECUTION_URL`. This is internal service-to-service communication, not a public endpoint.
 
-All three worker types (orchestration, scheduler, background task) sit behind the API on a private network. They share access to the PubSub backend and storage database but never receive traffic directly from clients. HTTP routes for worker-related features run on the API server rather than the worker process. One example is token minting for a voice integration.
+All three worker types (orchestration, scheduler, background task) sit behind the API on a private network. They share access to the PubSub backend and storage database but never receive traffic directly from clients. HTTP routes for worker-related features run on the API server rather than the worker process. One example is creating a token for a voice integration.
 
 ## Deploy split workers
 

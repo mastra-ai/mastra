@@ -320,7 +320,7 @@ Before enabling routing, run a sample of your traffic with and without the proce
 
 - The classifier runs **once per request**, in `processInput`, not once per step. The decision is stashed in per-request state and read on each step.
 - Only the **latest user message** is classified. The system prompt, retrieved context, and earlier turns aren't sent to the classifier, which keeps the routing call flat as context grows. A terse follow-up such as `"now apply that to the rest"` is therefore routed on that sentence alone. If your follow-ups often re-open hard reasoning rather than applying an earlier result, keep them on the capable model by leaving it as the default.
-- Only downgrade. Keep the capable model as the agent's configured default and use the processor to move down, so an incorrect decision costs quality on that request. With the default `scope: 'run'`, a bad downgrade applies to every step of the run, so a run that turns out harder than its first message stays on the cheaper model.
+- Only downgrade. Keep the capable model as the agent's configured default and use the processor to move down. An incorrect decision then costs quality on that request. With the default `scope: 'run'`, a bad downgrade applies to every step of the run. A run that turns out harder than its first message stays on the cheaper model.
 - The processor adds a classifier round-trip to the critical path of every request, including those it ends up abstaining on.
 - With `choices`, each criterion is named after its model, so `onDecision` reports the chosen model as the `choice`.
 

@@ -494,7 +494,7 @@ const { experimentId, totalItems, datasetVersion } = await dataset.createExperim
 })
 ```
 
-Then run each item from your orchestrator. Mastra resolves the item at the pinned dataset version and executes the target with the resolved scorers. The result upserts keyed by `(experimentId, itemId, attempt)`, so a retried activity converges on a single row:
+Then run each item from your orchestrator. Mastra resolves the item at the pinned dataset version and executes the target with the resolved scorers. The result upserts are keyed by `(experimentId, itemId, attempt)`. A retried activity converges on a single row:
 
 ```typescript
 const { result, scores } = await dataset.runExperimentItem({
@@ -516,7 +516,7 @@ const { experimentId } = await dataset.createExperiment({
 })
 ```
 
-Submit one result per item with [`submitExperimentResult()`](/reference/datasets/submitExperimentResult). Submissions are upserts keyed by `(experimentId, itemId, attempt)`, so a retried worker converges on a single row instead of duplicating results:
+Submit one result per item with [`submitExperimentResult()`](/reference/datasets/submitExperimentResult). Submissions are upserts keyed by `(experimentId, itemId, attempt)`. A retried worker converges on a single row instead of duplicating results:
 
 ```typescript
 await dataset.submitExperimentResult({

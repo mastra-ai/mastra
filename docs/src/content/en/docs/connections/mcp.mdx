@@ -197,7 +197,7 @@ Protect HTTP MCP servers with OAuth middleware. Visit [OAuth protection](/refere
 
 :::
 
-Registered servers are served at `/api/mcp/:serverId/mcp` over Streamable HTTP. Every request is self-contained, so the same server runs unchanged on long-lived hosts and serverless platforms.
+Registered servers are served at `/api/mcp/:serverId/mcp` over Streamable HTTP. Every request is self-contained. The same server runs unchanged on long-lived hosts and serverless platforms.
 
 A tool that needs something from the user before it can finish calls `context.suspend()` with a payload and declares a `resumeSchema`. The server turns that into an `input_required` round and runs the tool again with the answer in `context.resumeData`. Clients answer those rounds with the `inputRequests` handler on their server definition. Visit [Asking the caller for input](/reference/tools/mcp-server#asking-the-caller-for-input) and [Answering input requests](/reference/tools/mcp-client#answering-input-requests).
 

@@ -95,7 +95,7 @@ Each entry creates an independent schedule row and fires on its own cron, plus s
 
 Studio surfaces schedules as a top-level area, not as a tab inside a workflow:
 
-- **All schedules**: open `/workflows/schedules` for a cross-workflow list. Each row shows the workflow id, cron, next fire, and the most recent run's status, so the list answers "is anything broken?" at a glance.
+- **All schedules**: open `/workflows/schedules` for a cross-workflow list. Each row shows the workflow id, cron, next fire, and the most recent run's status. The list answers "is anything broken?" at a glance.
 - **Filtered by workflow**: append `?workflowId=<id>` to scope the list to a single workflow, for example `/workflows/schedules?workflowId=daily-report`.
 - **Schedule detail**: Select any row to open `/workflows/schedules/:scheduleId`. The page shows schedule metadata and **Pause** / **Resume** controls, followed by the full trigger history.
 
@@ -136,7 +136,7 @@ await client.resumeSchedule('wf_daily-report')
 
 In Studio, open the schedule detail page and select **Pause** or **Resume** in the header.
 
-A few rules worth knowing:
+A few rules to know:
 
 - Pause is durable. The status is written to the schedules table and survives process restarts and redeploys. The declarative-config upsert never overwrites a user-set status, even when you change `cron`, `timezone`, or other fields.
 - Resume recomputes `nextFireAt` from now. A schedule paused for a week doesn't fire seven backlogged runs the moment you resume it. It fires on the next regular cron tick.
