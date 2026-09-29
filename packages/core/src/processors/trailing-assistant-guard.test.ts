@@ -188,10 +188,12 @@ describe('TrailingAssistantGuard', () => {
     expect(result).toBeUndefined();
   });
 
-  it('appends a generic continuation for Claude 4.6+ without structured output', () => {
+  it('appends a generic continuation for a string-form Claude 4.6+ model without structured output', () => {
     const guard = new TrailingAssistantGuard();
 
-    const result = guard.processInputStep(makeArgs({ structuredOutput: undefined }));
+    const result = guard.processInputStep(
+      makeArgs({ structuredOutput: undefined, model: 'anthropic/claude-opus-4-6' }),
+    );
 
     expect(result?.messages?.at(-1)).toMatchObject({
       role: 'user',
