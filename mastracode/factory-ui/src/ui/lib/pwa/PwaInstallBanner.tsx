@@ -50,7 +50,7 @@ export function PwaInstallBanner() {
             <button
               type="button"
               onClick={onInstall}
-              className="bg-ds-green text-column focus-visible:ring-border-focus shrink-0 rounded-md px-3 py-1.5 text-black focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+              className="bg-brand-green text-column focus-visible:ring-border-focus shrink-0 rounded-md px-3 py-1.5 text-black focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
             >
               Install
             </button>

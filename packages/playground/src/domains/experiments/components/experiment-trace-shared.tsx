@@ -27,7 +27,7 @@ export function getExperimentSpanTypeUi(type: string): ExperimentUISpanStyle | n
     icon,
     color,
     label,
-    bgColor: `var(--badge-${spanBadgeHues[typePrefix]}-muted)`,
+    bgColor: `var(--badge-${spanBadgeHues[typePrefix]}-subtle)`,
     typePrefix,
   };
 }

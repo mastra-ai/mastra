@@ -48,27 +48,27 @@ function priorityClasses(priority: ParsedItem['priority'], nested: boolean) {
   switch (priority) {
     case 'high':
       return {
-        card: 'border-badge-purple-edge bg-badge-purple-muted',
+        card: 'border-badge-purple-edge bg-badge-purple-subtle',
         text: 'text-foreground',
-        time: 'text-badge-purple-fg',
+        time: 'text-badge-purple-foreground',
       };
     case 'medium':
       return {
-        card: 'border-badge-blue-edge bg-badge-blue-muted',
+        card: 'border-badge-blue-edge bg-badge-blue-subtle',
         text: 'text-foreground',
-        time: 'text-badge-blue-fg',
+        time: 'text-badge-blue-foreground',
       };
     case 'low':
       return {
-        card: 'border-badge-green-edge bg-badge-green-muted',
+        card: 'border-badge-green-edge bg-badge-green-subtle',
         text: 'text-foreground',
-        time: 'text-badge-green-fg',
+        time: 'text-badge-green-foreground',
       };
     case 'complete':
       return {
-        card: 'border-badge-green-edge bg-badge-green-muted',
+        card: 'border-badge-green-edge bg-badge-green-subtle',
         text: 'text-foreground',
-        time: 'text-badge-green-fg',
+        time: 'text-badge-green-foreground',
       };
     default:
       return {

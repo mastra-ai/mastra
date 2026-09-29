@@ -153,8 +153,6 @@ html.light {
   /* Shade instead of light, at the same alphas: the whole fill and boundary
    * ladder re-resolves from here. */
   --fill-tint: 20.5%;
-  --fill-destructive-hover: var(--red-500);
-  --fill-destructive-active: var(--red-400);
   --fill-destructive-disabled: var(--red-300);
   /* Shade carries less weight than light at equal alpha, so focus needs a
    * higher one here to hold its 3:1 floor against the fill it sits on. */

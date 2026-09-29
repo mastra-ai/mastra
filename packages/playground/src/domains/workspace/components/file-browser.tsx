@@ -380,7 +380,7 @@ export function FileBrowser({
                               <TooltipTrigger asChild>
                                 <span
                                   tabIndex={0}
-                                  className={`rounded px-1.5 py-0.5 text-caption ${isError ? 'bg-destructive-subtle text-destructive-fg' : 'bg-muted text-muted-foreground'}`}
+                                  className={`rounded px-1.5 py-0.5 text-caption ${isError ? 'bg-destructive-subtle text-destructive-subtle-foreground' : 'bg-muted text-muted-foreground'}`}
                                 >
                                   {mountLabel}
                                 </span>
@@ -389,7 +389,7 @@ export function FileBrowser({
                             </Tooltip>
                           ) : (
                             <span
-                              className={`rounded px-1.5 py-0.5 text-caption ${isError ? 'bg-destructive-subtle text-destructive-fg' : 'bg-muted text-muted-foreground'}`}
+                              className={`rounded px-1.5 py-0.5 text-caption ${isError ? 'bg-destructive-subtle text-destructive-subtle-foreground' : 'bg-muted text-muted-foreground'}`}
                             >
                               {mountLabel}
                             </span>

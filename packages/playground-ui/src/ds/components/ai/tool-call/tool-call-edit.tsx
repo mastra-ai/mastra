@@ -9,8 +9,8 @@ const DIFF_MAX_LINES = 200;
 const WRITTEN_FILE_MAX_CHARS = 2000;
 
 const DIFF_SIDES = {
-  removed: { sign: '-', row: 'bg-destructive-subtle', gutter: 'text-destructive-fg' },
-  added: { sign: '+', row: 'bg-success-subtle', gutter: 'text-success-fg' },
+  removed: { sign: '-', row: 'bg-destructive-subtle', gutter: 'text-destructive-subtle-foreground' },
+  added: { sign: '+', row: 'bg-success-subtle', gutter: 'text-success-subtle-foreground' },
 } as const;
 
 function boundedLines(text: string): { lines: string[]; hidden: number } {

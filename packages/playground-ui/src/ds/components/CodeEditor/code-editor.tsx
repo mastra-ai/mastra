@@ -212,7 +212,7 @@ function buildLightTheme(): Extension {
     { tag: t.monospace, color: 'var(--foreground)' },
     { tag: t.strikethrough, textDecoration: 'line-through' },
     { tag: [t.deleted], color: 'var(--syntax-keyword)' },
-    { tag: t.invalid, color: 'var(--destructive-fg)' },
+    { tag: t.invalid, color: 'var(--destructive-subtle-foreground)' },
     { tag: [t.standard(t.tagName)], color: 'var(--syntax-string)' },
   ]);
 

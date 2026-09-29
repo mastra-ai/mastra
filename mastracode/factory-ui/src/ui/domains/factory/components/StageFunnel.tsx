@@ -276,7 +276,7 @@ export function StageFunnel({
               <stop offset="100%" stopColor={AGENT_COLOR} />
             </linearGradient>
             <pattern id={hatchId} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <rect width="6" height="6" fill="var(--badge-purple-muted)" />
+              <rect width="6" height="6" fill="var(--badge-purple-subtle)" />
               <line x1="0" y1="0" x2="0" y2="6" stroke="var(--chart-sequential-3)" strokeWidth="2.25" />
             </pattern>
             {funnel.map((step, index) => (

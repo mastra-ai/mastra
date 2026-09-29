@@ -100,7 +100,7 @@ function PipelineStep({
           aria-hidden="true"
           className={cn(
             'flex size-6 shrink-0 items-center justify-center rounded-full border text-meta',
-            done ? 'border-success-edge bg-success-subtle text-success-fg' : 'border-border text-muted-foreground',
+            done ? 'border-success-edge bg-success-subtle text-success-subtle-foreground' : 'border-border text-muted-foreground',
           )}
         >
           {index}

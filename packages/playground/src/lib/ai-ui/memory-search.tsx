@@ -289,8 +289,8 @@ export const MemorySearch = ({
                             className={cn(
                               'rounded px-2 py-0.5 text-column',
                               result.role === 'user'
-                                ? 'bg-badge-blue text-badge-blue-fg'
-                                : 'bg-badge-green text-badge-green-fg',
+                                ? 'bg-badge-blue-strong text-badge-blue-foreground'
+                                : 'bg-badge-green-strong text-badge-green-foreground',
                             )}
                           >
                             {result.role}

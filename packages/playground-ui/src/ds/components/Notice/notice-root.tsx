@@ -7,23 +7,23 @@ export type NoticeVariant = 'warning' | 'destructive' | 'success' | 'info' | 'no
 const variantConfig: Record<NoticeVariant, { icon: React.ReactNode; classes: string }> = {
   success: {
     icon: <LightbulbIcon />,
-    classes: 'bg-success-subtle border-success-edge text-success-fg',
+    classes: 'bg-success-subtle border-success-edge text-success-subtle-foreground',
   },
   destructive: {
     icon: <OctagonAlertIcon />,
-    classes: 'bg-destructive-subtle border-destructive-edge text-destructive-fg',
+    classes: 'bg-destructive-subtle border-destructive-edge text-destructive-subtle-foreground',
   },
   warning: {
     icon: <TriangleAlertIcon />,
-    classes: 'bg-warning-subtle border-warning-edge text-warning-fg',
+    classes: 'bg-warning-subtle border-warning-edge text-warning-subtle-foreground',
   },
   info: {
     icon: <InfoIcon />,
-    classes: 'bg-info-subtle border-info-edge text-info-fg',
+    classes: 'bg-info-subtle border-info-edge text-info-subtle-foreground',
   },
   note: {
     icon: <FileTextIcon />,
-    classes: 'bg-notice-note border-border text-notice-note-fg',
+    classes: 'bg-muted border-border text-foreground',
   },
 };
 

@@ -186,8 +186,8 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
             key={idx}
             className={cn(
               'px-3 py-0.5 wrap-break-word whitespace-pre-wrap',
-              line.type === 'removed' && 'bg-destructive-subtle text-destructive-fg',
-              line.type === 'added' && 'bg-success-subtle text-success-fg',
+              line.type === 'removed' && 'bg-destructive-subtle text-destructive-subtle-foreground',
+              line.type === 'added' && 'bg-success-subtle text-success-subtle-foreground',
               line.type === 'equal' && 'text-muted-foreground',
             )}
           >
@@ -214,10 +214,10 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
         if (!prevBlock && currBlock) {
           return (
             <div key={idx} className="rounded-md border border-success-edge bg-success-subtle p-3 text-body">
-              <Txt variant="meta" className="mb-1 text-success-fg">
+              <Txt variant="meta" className="mb-1 text-success-subtle-foreground">
                 + Added block
               </Txt>
-              <Txt variant="caption" className="whitespace-pre-wrap text-success-fg">
+              <Txt variant="caption" className="whitespace-pre-wrap text-success-subtle-foreground">
                 {newStr}
               </Txt>
             </div>
@@ -233,10 +233,10 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
               <div className="absolute top-2 right-2">
                 <BlockCopyButton block={prevBlock} />
               </div>
-              <Txt variant="meta" className="mb-1 text-destructive-fg">
+              <Txt variant="meta" className="mb-1 text-destructive-subtle-foreground">
                 − Removed in latest
               </Txt>
-              <Txt variant="caption" className="whitespace-pre-wrap text-destructive-fg">
+              <Txt variant="caption" className="whitespace-pre-wrap text-destructive-subtle-foreground">
                 {oldStr}
               </Txt>
             </div>
@@ -271,8 +271,8 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
                 key={lidx}
                 className={cn(
                   'px-3 py-0.5 wrap-break-word whitespace-pre-wrap',
-                  line.type === 'removed' && 'bg-destructive-subtle text-destructive-fg',
-                  line.type === 'added' && 'bg-success-subtle text-success-fg',
+                  line.type === 'removed' && 'bg-destructive-subtle text-destructive-subtle-foreground',
+                  line.type === 'added' && 'bg-success-subtle text-success-subtle-foreground',
                   line.type === 'equal' && 'text-muted-foreground',
                 )}
               >
@@ -394,8 +394,8 @@ function ToolsDiffView({
               variant="caption"
               font="mono"
               className={cn(
-                status === 'removed' && 'text-destructive-fg line-through',
-                status === 'added' && 'text-success-fg',
+                status === 'removed' && 'text-destructive-subtle-foreground line-through',
+                status === 'added' && 'text-success-subtle-foreground',
               )}
             >
               {tool}
@@ -493,8 +493,8 @@ function VariablesDiffView({
               variant="caption"
               font="mono"
               className={cn(
-                status === 'removed' && 'text-destructive-fg line-through',
-                status === 'added' && 'text-success-fg',
+                status === 'removed' && 'text-destructive-subtle-foreground line-through',
+                status === 'added' && 'text-success-subtle-foreground',
               )}
             >
               {`{{${name}}}`}

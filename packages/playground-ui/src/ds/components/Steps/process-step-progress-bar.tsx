@@ -29,8 +29,8 @@ export function ProcessStepProgressBar({ steps }: ProcessStepProgressBarProps) {
                   transitions.transform,
                   {
                     'border border-dashed border-placeholder': step.status === 'pending',
-                    'scale-110 bg-success-subtle text-success-fg': step.status === 'success',
-                    'scale-110 bg-destructive-subtle text-destructive-fg': step.status === 'failed',
+                    'scale-110 bg-success-subtle text-success-subtle-foreground': step.status === 'success',
+                    'scale-110 bg-destructive-subtle text-destructive-subtle-foreground': step.status === 'failed',
                   },
                 )}
               >

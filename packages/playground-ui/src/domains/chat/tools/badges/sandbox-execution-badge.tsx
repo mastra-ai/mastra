@@ -270,9 +270,9 @@ export const SandboxExecutionBadge = ({
                 (exitSuccess ? (
                   <CheckIcon className="text-success-indicator" size={14} />
                 ) : wasKilled ? (
-                  <span className="rounded bg-badge-orange px-1.5 py-0.5 text-meta text-badge-orange-fg">killed</span>
+                  <span className="rounded bg-badge-orange-strong px-1.5 py-0.5 text-meta text-badge-orange-foreground">killed</span>
                 ) : (
-                  <span className="rounded bg-destructive-subtle px-1.5 py-0.5 text-meta text-destructive-fg">
+                  <span className="rounded bg-destructive-subtle px-1.5 py-0.5 text-meta text-destructive-subtle-foreground">
                     exit {exitCode}
                   </span>
                 ))}

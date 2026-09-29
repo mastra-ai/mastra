@@ -81,7 +81,7 @@ function ObservationItem({ observation }: { observation: string }) {
         <p className="font-mono text-meta tracking-wider text-muted-foreground uppercase">
           {severity === 'problem' && (
             <>
-              <span className="text-destructive-fg">problem</span>
+              <span className="text-destructive-subtle-foreground">problem</span>
               <span aria-hidden="true"> · </span>
             </>
           )}

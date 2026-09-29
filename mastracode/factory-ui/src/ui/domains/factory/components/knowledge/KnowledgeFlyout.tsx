@@ -34,7 +34,7 @@ function SectionHeader({ title, count }: { title: string; count?: number }) {
 
 function RungBadge({ rung }: { rung: KnowledgeRung }) {
   return (
-    <span className="bg-badge-purple text-badge-purple-fg rounded px-1.5 py-0.5 text-[10px] font-medium">
+    <span className="bg-badge-purple-strong text-badge-purple-foreground rounded px-1.5 py-0.5 text-[10px] font-medium">
       {RUNG_LABELS[rung].toLowerCase()}
     </span>
   );
@@ -48,7 +48,7 @@ function RecordText({ text, onNodeRef }: { text: string; onNodeRef?: (name: stri
           <button
             key={index}
             type="button"
-            className="bg-badge-purple-muted text-badge-purple-fg hover:bg-badge-purple rounded px-1 font-medium"
+            className="bg-badge-purple-subtle text-badge-purple-foreground hover:bg-badge-purple-strong rounded px-1 font-medium"
             onClick={event => {
               event.stopPropagation();
               onNodeRef?.(segment.value);
@@ -112,7 +112,7 @@ function RecordCard({
         'rounded-lg border transition-colors',
         // A10: pinned knowledge records stand out — the same amber accent the graph
         // uses, with a faint amber wash behind the card.
-        record.pinned ? 'bg-badge-yellow-muted' : 'bg-card',
+        record.pinned ? 'bg-badge-yellow-subtle' : 'bg-card',
         expanded
           ? record.pinned
             ? 'border-yellow-600 dark:border-yellow-400'
@@ -184,9 +184,9 @@ function RecordCard({
           {reason ? (
             <div
               data-testid="knowledge-record-reason"
-              className="border-badge-yellow-edge bg-badge-yellow-muted mt-2 rounded-md border p-2"
+              className="border-badge-yellow-edge bg-badge-yellow-subtle mt-2 rounded-md border p-2"
             >
-              <div className="text-badge-yellow-fg mb-1 flex items-center gap-1 text-[10px] font-semibold tracking-wide uppercase">
+              <div className="text-badge-yellow-foreground mb-1 flex items-center gap-1 text-[10px] font-semibold tracking-wide uppercase">
                 <Sparkles size={10} /> Reasoning
               </div>
               <p className="text-foreground text-[11px] leading-relaxed italic">{reason}</p>

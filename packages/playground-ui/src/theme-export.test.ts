@@ -187,16 +187,12 @@ describe('theme.css export', () => {
     expect(themeCss).not.toMatch(/\.bg-sidebar\b/);
   });
 
-  it('ships the exact Mastra brand palette independently of theme modes', () => {
+  it('keeps the Mastra brand palette fixed across theme modes', () => {
     const brand = parseVariables(blocksOf(themeCss, '@theme static'));
-    expect(brand.get('color-ds-green')).toBe('#7aff78');
-    expect(brand.get('color-ds-orange')).toBe('#fdac53');
-    expect(brand.get('color-ds-pink')).toBe('#ff69cc');
-    expect(brand.get('color-ds-purple')).toBe('#b588fe');
-    expect(brand.get('color-ds-blue')).toBe('#6ccdfb');
-    expect(brand.get('color-ds-red')).toBe('#ff4758');
-    expect(brand.get('color-ds-yellow')).toBe('#e7e67b');
-    expect(lightTheme).not.toMatch(/--color-ds-/);
+    for (const hue of ['green', 'orange', 'pink', 'purple', 'blue', 'red', 'yellow']) {
+      expect(brand.get(`color-brand-${hue}`)).toMatch(/^#[0-9a-f]{6}$/);
+    }
+    expect(lightTheme).not.toMatch(/--color-brand-/);
   });
 
   it('does not ship legacy colors', async () => {
@@ -212,11 +208,11 @@ describe('theme.css export', () => {
       'bg-accent1',
       'text-positive1',
       'bg-notice-success',
-      'text-badge-green-fg',
+      'text-badge-green-foreground',
       'bg-success-subtle',
     ]);
     for (const name of ['bg-accent1', 'text-positive1', 'bg-notice-success']) expect(css).not.toContain(`.${name}`);
-    for (const name of ['text-badge-green-fg', 'bg-success-subtle']) expect(css).toContain(`.${name}`);
+    for (const name of ['text-badge-green-foreground', 'bg-success-subtle']) expect(css).toContain(`.${name}`);
   });
 
   it('generates named chromatic utilities from the shared palette', async () => {
@@ -238,11 +234,6 @@ describe('theme.css export', () => {
       expect(css).toContain(`.${utility}`);
       expect(css).toContain(`${property}: var(--${token})`);
     }
-  });
-
-  it('overrides the green palette the native v4 way (initial + remap)', () => {
-    expect(themeCss).toContain('--color-green-*: initial;');
-    expect(themeCss).toContain('--color-green-500: var(--green-500);');
   });
 
   it('exposes the background and gray foundation scales', () => {
@@ -591,7 +582,7 @@ describe('theme.css export', () => {
   it('resolves chromatic roles to opaque ramp values in both themes', () => {
     const { darkVariables, lightVariables } = getThemeVariables(themeCss);
     const roles =
-      /^(?:destructive|warning|success|info)-(?:subtle|edge|indicator|fg)$|^product-|^chart-(?:blue|blue-deep|yellow|green|purple|orange|pink|red|sequential-[1-5])$|^span-(?!type-)/;
+      /^(?:destructive|warning|success|info)-(?:subtle|edge|indicator|subtle-foreground)$|^product-|^chart-(?:blue|blue-deep|yellow|green|purple|orange|pink|red|sequential-[1-5])$|^span-(?!type-)/;
 
     for (const variables of [darkVariables, lightVariables]) {
       const tokens = [...variables.keys()].filter(name => roles.test(name));

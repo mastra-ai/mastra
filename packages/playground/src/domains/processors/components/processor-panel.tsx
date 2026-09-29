@@ -213,7 +213,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
               </div>
               {result.tripwire?.triggered && result.tripwire.reason && (
                 <div className="mt-2 rounded-md border border-warning-edge bg-warning-subtle p-3">
-                  <Txt variant="column" className="text-warning-fg">
+                  <Txt variant="column" className="text-warning-subtle-foreground">
                     Tripwire Reason
                   </Txt>
                   <Txt variant="caption" tone="muted" className="mt-1">

@@ -19,8 +19,8 @@ describe('ComputedTag', () => {
       render(<ComputedTag value="alpha" />);
 
       const hue = hueForName('alpha');
-      expect(screen.getByTestId('computed-tag').className).toContain(`bg-badge-${hue}`);
-      expect(screen.getByTestId('computed-tag').className).toContain(`text-badge-${hue}-fg`);
+      expect(screen.getByTestId('computed-tag').className).toContain(`bg-badge-${hue}-strong`);
+      expect(screen.getByTestId('computed-tag').className).toContain(`text-badge-${hue}-foreground`);
     });
   });
 
@@ -60,7 +60,7 @@ describe('ComputedTag', () => {
       );
 
       expect(screen.getByRole('button', { name: 'x' })).toBeTruthy();
-      expect(screen.getByTestId('computed-tag').className).toContain(`bg-badge-${hueForName('alpha')}`);
+      expect(screen.getByTestId('computed-tag').className).toContain(`bg-badge-${hueForName('alpha')}-strong`);
     });
   });
 });

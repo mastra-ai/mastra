@@ -53,7 +53,7 @@ const idleSurface = cn('rounded-lg text-muted-foreground hover:text-foreground',
 
 const activeSurface = 'bg-fill text-foreground';
 
-const featuredSurface = cn('my-2 border border-transparent bg-ds-green text-black hover:brightness-95');
+const featuredSurface = cn('my-2 border border-transparent bg-brand-green text-black hover:brightness-95');
 
 export const navRowSurfaceClasses = ({ isActive, isFeatured }: NavRowSurfaceOptions) =>
   cn(idleSurface, isActive && activeSurface, isFeatured && featuredSurface);

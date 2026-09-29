@@ -17,9 +17,9 @@ const PRIORITY_COLORS = {
 
 // Dark backgrounds for all priorities
 const PRIORITY_BG = {
-  '🔴': 'bg-badge-purple-muted',
-  '🟡': 'bg-badge-blue-muted',
-  '🟢': 'bg-badge-green-muted',
+  '🔴': 'bg-badge-purple-subtle',
+  '🟡': 'bg-badge-blue-subtle',
+  '🟢': 'bg-badge-green-subtle',
 } as const;
 
 // Full color left border accent

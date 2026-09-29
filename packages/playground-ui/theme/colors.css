@@ -1,5 +1,5 @@
 /*
- * Raw colour ramps — where every literal colour value is authored.
+ * Raw colour ramps and the fixed Mastra brand palette.
  *
  * The achromatic foundations (`--background-*`, `--gray-*`, `--gray-alpha-*`)
  * are deliberately not exported as Tailwind colours: a component reaches for a
@@ -160,8 +160,6 @@
   --pink-soft-600: oklch(0.52 0.1 350);
   --pink-soft-900: oklch(0.31 0.075 350);
   --pink-soft-950: oklch(0.23 0.045 350);
-
-  /* Brand green (dark). Remaps Tailwind green-* via @theme below. */
 }
 
 html.light {
@@ -188,13 +186,19 @@ html.light {
   --gray-alpha-8: rgb(0 0 0 / 60%);
   --gray-alpha-9: rgb(0 0 0 / 75%);
   --gray-alpha-10: rgb(0 0 0 / 90%);
-
-  /* Brand green (light). badge + chart inherit :root. */
 }
 
-@theme {
-  /* Replace Tailwind green with brand green. initial clears defaults (native v4), then remap. */
-  --color-green-*: initial;
+@theme static {
+  --color-brand-green: #7aff78;
+  --color-brand-orange: #fdac53;
+  --color-brand-pink: #ff69cc;
+  --color-brand-purple: #b588fe;
+  --color-brand-blue: #6ccdfb;
+  --color-brand-red: #ff4758;
+  --color-brand-yellow: #e7e67b;
+}
+
+@theme inline {
   --color-green-50: var(--green-50);
   --color-green-100: var(--green-100);
   --color-green-200: var(--green-200);
@@ -210,19 +214,6 @@ html.light {
   --color-green-soft-600: var(--green-soft-600);
   --color-green-soft-900: var(--green-soft-900);
   --color-green-soft-950: var(--green-soft-950);
-}
-
-@theme static {
-  --color-ds-green: #7aff78;
-  --color-ds-orange: #fdac53;
-  --color-ds-pink: #ff69cc;
-  --color-ds-purple: #b588fe;
-  --color-ds-blue: #6ccdfb;
-  --color-ds-red: #ff4758;
-  --color-ds-yellow: #e7e67b;
-}
-
-@theme inline {
   --color-red-50: var(--red-50);
   --color-red-100: var(--red-100);
   --color-red-200: var(--red-200);

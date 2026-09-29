@@ -66,7 +66,7 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
           RUNG_RING[node.rung],
           selected ? 'ring-2 ring-purple-600 dark:ring-purple-300' : '',
         ].join(' ')}
-        style={{ background: 'var(--badge-purple)' }}
+        style={{ background: 'var(--badge-purple-strong)' }}
       >
         {labeled ? (
           <span
@@ -78,7 +78,7 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
           </span>
         ) : null}
         {labeled && large ? (
-          <span className="text-badge-purple-fg mt-0.5 text-[9px] font-medium tracking-widest uppercase">
+          <span className="text-badge-purple-foreground mt-0.5 text-[9px] font-medium tracking-widest uppercase">
             {node.kind.slice(0, 12)}
           </span>
         ) : null}
@@ -261,8 +261,8 @@ function FilterChip({
         'flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors',
         active
           ? accent
-            ? 'border-badge-yellow-edge bg-badge-yellow text-badge-yellow-fg'
-            : 'border-badge-purple-edge bg-badge-purple text-badge-purple-fg'
+            ? 'border-badge-yellow-edge bg-badge-yellow-strong text-badge-yellow-foreground'
+            : 'border-badge-purple-edge bg-badge-purple-strong text-badge-purple-foreground'
           : 'border-border bg-card text-muted-foreground hover:text-foreground',
       ].join(' ')}
     >

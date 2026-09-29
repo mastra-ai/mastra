@@ -78,10 +78,10 @@ const ProgressBar = ({
 
   const containerBg = isProcessing ? 'bg-transparent' : 'bg-muted';
   const fillColor = isProcessing ? 'bg-info-subtle' : barColor;
-  const textColor = isProcessing ? 'text-info-fg' : 'text-muted-foreground';
-  const textColorFilled = isProcessing ? 'text-info-fg' : 'text-white';
+  const textColor = isProcessing ? 'text-info-subtle-foreground' : 'text-muted-foreground';
+  const textColorFilled = isProcessing ? 'text-info-subtle-foreground' : 'text-white';
   const tokenBg = isProcessing ? 'bg-info-subtle' : 'bg-fill';
-  const tokenTextColor = isProcessing ? 'text-info-fg' : 'text-muted-foreground';
+  const tokenTextColor = isProcessing ? 'text-info-subtle-foreground' : 'text-muted-foreground';
 
   return (
     <div className="min-w-0 flex-1">
