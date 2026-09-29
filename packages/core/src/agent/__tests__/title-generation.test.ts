@@ -3554,9 +3554,45 @@ describe('onTitleGenerated callback', () => {
 
     await mockMemory.deleteThread('thread-deleted-during-title');
     releaseTitle();
-    await (titlePromise ?? new Promise(resolve => setTimeout(resolve, 200)));
+    expect(titlePromise).toBeDefined();
+    await titlePromise;
 
     expect(await mockMemory.getThreadById({ threadId: 'thread-deleted-during-title' })).toBeNull();
+    expect(callbackFired).toBe(false);
+  });
+
+  it('ignores a thread deleted between the existence check and the title update (#25203)', async () => {
+    const { agentModel, titleModel } = createMockModels();
+    const { agent, mockMemory } = createAgentWithTitleGen(agentModel, titleModel);
+    const threadId = 'thread-deleted-before-update';
+    const originalUpdate = mockMemory.updateThread.bind(mockMemory);
+    vi.spyOn(mockMemory, 'updateThread').mockImplementation(async args => {
+      if (args.title === 'Generated Title') await mockMemory.deleteThread(threadId);
+      return originalUpdate(args);
+    });
+
+    let callbackFired = false;
+    let titlePromise: Promise<unknown> | undefined;
+
+    await agent.generate('Hello', {
+      memory: {
+        resource: 'user-1',
+        thread: { id: threadId, title: '' },
+        onTitleGenerated: () => {
+          callbackFired = true;
+        },
+      },
+      serverless: {
+        waitUntil: promise => {
+          titlePromise = promise;
+        },
+      },
+    } as any);
+
+    expect(titlePromise).toBeDefined();
+    await titlePromise;
+
+    expect(await mockMemory.getThreadById({ threadId })).toBeNull();
     expect(callbackFired).toBe(false);
   });
 

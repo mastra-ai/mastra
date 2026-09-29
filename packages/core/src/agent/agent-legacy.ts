@@ -659,7 +659,13 @@ export class AgentLegacyHandler {
                       if (!title) return;
                       // Update-only: the thread may have been deleted while the title was generating (#25203).
                       if (!(await memory.getThreadById({ threadId: thread.id }))) return;
-                      await memory.updateThread({ id: thread.id, title, memoryConfig });
+                      try {
+                        await memory.updateThread({ id: thread.id, title, memoryConfig });
+                      } catch (error) {
+                        // A delete can still land between the check and the update; only swallow that case.
+                        if (!(await memory.getThreadById({ threadId: thread.id }))) return;
+                        throw error;
+                      }
                     }),
                 );
               }

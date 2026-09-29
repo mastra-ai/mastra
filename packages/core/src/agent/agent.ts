@@ -8094,7 +8094,13 @@ export class Agent<
                       });
                       return undefined;
                     }
-                    await memory.updateThread({ id: thread.id, title, memoryConfig });
+                    try {
+                      await memory.updateThread({ id: thread.id, title, memoryConfig });
+                    } catch (error) {
+                      // A delete can still land between the check and the update; only swallow that case.
+                      if (!(await memory.getThreadById({ threadId: thread.id }))) return undefined;
+                      throw error;
+                    }
 
                     if (emitEvent && writer && !abortSignal?.aborted) {
                       try {
