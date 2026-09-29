@@ -154,7 +154,7 @@ export type KeyboardLayer = {
   depth: number;
   bindings: UseKeydownArgs;
   shouldHandle?: (event: KeyboardEvent) => boolean;
-  /** Also fire handlers on auto-repeated keydowns while a key is held. */
+  /** When `false`, auto-repeated keydowns from a held key don't fire handlers. */
   repeat?: boolean;
 };
 
@@ -233,8 +233,7 @@ export const createKeyboardDispatcher = (): KeyboardDispatcher => {
     const bindings = resolveBindings();
     const now = Date.now();
 
-    // A held key neither advances nor resets a sequence.
-    if (pending && !event.repeat) {
+    if (pending) {
       if (now < pending.expiresAt) {
         const stepIndex = pending.matched.length;
         const candidates = bindings.filter(binding =>
@@ -270,8 +269,7 @@ export const createKeyboardDispatcher = (): KeyboardDispatcher => {
     const first = candidates[0]?.steps[0];
     if (first) {
       event.preventDefault();
-      // A held prefix keeps the armed sequence instead of restarting it.
-      if (!event.repeat) arm([first], candidates, now);
+      arm([first], candidates, now);
       return;
     }
 
@@ -280,9 +278,8 @@ export const createKeyboardDispatcher = (): KeyboardDispatcher => {
       if (steps.length === 1 && first && matchesCombo(event, first)) {
         if (!accepts(layer, event)) return;
         event.preventDefault();
-        // Holding a key re-fires only bindings that opt in (e.g. arrow navigation),
-        // so toggles and actions run once per press.
-        if (!event.repeat || layer.repeat) handler();
+        if (event.repeat && layer.repeat === false) return;
+        handler();
         return;
       }
     }

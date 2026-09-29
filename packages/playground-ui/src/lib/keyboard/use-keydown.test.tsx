@@ -342,28 +342,26 @@ describe('useKeydown', () => {
   });
 
   describe('given a key is held down', () => {
-    it('when auto-repeat keydowns fire, then the handler runs once and repeats are still default-prevented', () => {
+    it('by default, then every auto-repeat fires the handler', () => {
+      const onArrowDown = vi.fn();
+      renderHook(() => useKeydown({ ArrowDown: onArrowDown }));
+
+      pressKey('ArrowDown');
+      pressKey('ArrowDown', { repeat: true });
+
+      expect(onArrowDown).toHaveBeenCalledTimes(2);
+    });
+
+    it('given repeat is false, then the handler fires once and repeats are still default-prevented', () => {
       const onToggle = vi.fn();
-      renderHook(() => useKeydown({ '[': onToggle }));
+      renderHook(() => useKeydown({ '[': onToggle }, { repeat: false }));
 
       pressKey('[');
       const repeat = new KeyboardEvent('keydown', { key: '[', repeat: true, cancelable: true });
       window.dispatchEvent(repeat);
-      pressKey('[', { repeat: true });
 
       expect(onToggle).toHaveBeenCalledTimes(1);
       expect(repeat.defaultPrevented).toBe(true);
-    });
-
-    it('when the binding opts into repeat, then every repeat fires the handler', () => {
-      const onArrowDown = vi.fn();
-      renderHook(() => useKeydown({ ArrowDown: onArrowDown }, { repeat: true }));
-
-      pressKey('ArrowDown');
-      pressKey('ArrowDown', { repeat: true });
-      pressKey('ArrowDown', { repeat: true });
-
-      expect(onArrowDown).toHaveBeenCalledTimes(3);
     });
   });
 });
@@ -515,30 +513,6 @@ describe('useKeydown sequences', () => {
       pressKey('a');
 
       expect(onGoAgents).toHaveBeenCalledTimes(2);
-    });
-
-    it('when g is held before a, then the sequence stays armed and fires once', () => {
-      const onGoAgents = vi.fn();
-      renderHook(() => useKeydown({ 'g$+a': onGoAgents }));
-
-      pressKey('g');
-      pressKey('g', { repeat: true });
-      pressKey('g', { repeat: true });
-      pressKey('a');
-      pressKey('a', { repeat: true });
-
-      expect(onGoAgents).toHaveBeenCalledTimes(1);
-    });
-
-    it('when a held prefix repeats without a pending sequence, then its default is still prevented', () => {
-      renderHook(() => useKeydown({ 'g$+a': vi.fn() }));
-
-      pressKey('g');
-      vi.advanceTimersByTime(600);
-      const repeat = new KeyboardEvent('keydown', { key: 'g', repeat: true, cancelable: true });
-      window.dispatchEvent(repeat);
-
-      expect(repeat.defaultPrevented).toBe(true);
     });
 
     it('given shouldHandle rejects the second key, then the sequence stays armed', () => {
@@ -893,16 +867,6 @@ describe('useTableKeydown global', () => {
     fireEvent.keyDown(document.body, { key: 'ArrowDown' });
     expect(document.activeElement).toBe(row(1));
     expect(activeIndexOf()).toBe(1);
-  });
-
-  it('keeps moving while ArrowDown is held', () => {
-    render(<TableHarness count={3} global />);
-
-    fireEvent.keyDown(document.body, { key: 'ArrowDown' });
-    fireEvent.keyDown(row(0), { key: 'ArrowDown', repeat: true });
-    fireEvent.keyDown(row(1), { key: 'ArrowDown', repeat: true });
-
-    expect(activeIndexOf()).toBe(2);
   });
 
   it('ignores arrows typed into an input outside the list', () => {

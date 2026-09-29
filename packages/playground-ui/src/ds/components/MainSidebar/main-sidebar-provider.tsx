@@ -223,8 +223,6 @@ export function MainSidebarProvider({
         if (ev.target.isContentEditable) return;
       }
       ev.preventDefault();
-      // Holding the keys toggles once, not on every auto-repeat.
-      if (ev.repeat) return;
       toggleSidebar();
     };
     window.addEventListener('keydown', onKeyDown);

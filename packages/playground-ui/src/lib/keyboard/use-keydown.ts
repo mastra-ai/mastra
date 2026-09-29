@@ -27,10 +27,9 @@ export type UseKeydownOptions = {
    */
   shouldHandle?: (event: KeyboardEvent) => boolean;
   /**
-   * When `true`, handlers also fire on auto-repeated keydowns while a key is
-   * held, e.g. for arrow-key navigation. Defaults to `false`, so toggles and
-   * actions run once per press. Repeats of a matched key are still
-   * default-prevented.
+   * When `false`, holding a key runs its handler once instead of on every
+   * auto-repeat (repeats are still default-prevented). Use it for toggles.
+   * Defaults to `true`.
    */
   repeat?: boolean;
 };
@@ -169,7 +168,6 @@ export const useTableKeydown = ({
     },
     {
       enabled: global,
-      repeat: true,
       shouldHandle: event => !event.defaultPrevented && count > 0 && !isKeyboardConsumer(event.target),
     },
   );

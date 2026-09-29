@@ -73,7 +73,7 @@ type Story = StoryObj<typeof SidebarNew>;
 
 function SidebarNewStoryShortcuts() {
   const { toggleSidebar } = useSidebarNew();
-  useKeydown({ '[': toggleSidebar });
+  useKeydown({ '[': toggleSidebar }, { repeat: false });
   return null;
 }
 

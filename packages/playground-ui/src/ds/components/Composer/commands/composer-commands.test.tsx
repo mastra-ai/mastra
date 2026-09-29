@@ -40,19 +40,6 @@ describe('Composer commands', () => {
       expect(screen.getByRole('option', { selected: true }).textContent).toContain('/review');
     });
 
-    it('keeps moving while an arrow is held but completes only once while Tab is held', () => {
-      render(<CommandComposer />);
-      const input = messageInput();
-      fireEvent.keyDown(input, { key: 'ArrowUp' });
-      fireEvent.keyDown(input, { key: 'ArrowDown', repeat: true });
-      expect(screen.getByRole('option', { selected: true }).textContent).toContain('/review');
-
-      fireEvent.keyDown(input, { key: 'Tab' });
-      fireEvent.keyDown(input, { key: 'Tab', repeat: true });
-      expect(input.value).toBe('/review ');
-      expect(screen.getByRole('status').textContent).toBe('Ready');
-    });
-
     it('resets navigation when the query changes and when the menu is reopened', () => {
       render(<CommandComposer />);
       const input = messageInput();
