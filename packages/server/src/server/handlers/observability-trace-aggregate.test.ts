@@ -253,6 +253,50 @@ describe('AGGREGATE_TRACES', () => {
     );
   });
 
+  it('returns 501 before calling an older store for context identifier predicates', async () => {
+    const wheres = [
+      { op: 'eq', left: { path: 'userId' }, right: { literal: 'user-1' } },
+      { op: 'not', arg: { spans: { some: { op: 'exists', path: 'sessionId' } } } },
+      { op: 'in', value: { path: 'organizationId' }, set: ['org-1'] },
+    ];
+    for (const where of wheres) {
+      const { mastra, observabilityStore } = createHarness(['trace-aggregate']);
+      const error = await captureHttpException(
+        AGGREGATE_TRACES.handler(params(mastra, { timeRange: TIME_RANGE, where, measures: ['count'] })),
+      );
+
+      expect(error.status).toBe(501);
+      expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+        code: 'TRACE_AGGREGATE_UNSUPPORTED',
+        message: 'Context identifier predicates are not supported by the configured observability store',
+      });
+      expect(observabilityStore.aggregateTraces).not.toHaveBeenCalled();
+    }
+  });
+
+  it('passes context identifier predicates to stores that advertise support', async () => {
+    const { mastra, observabilityStore } = createHarness(['trace-aggregate', 'trace-query-context-ids']);
+
+    await AGGREGATE_TRACES.handler(
+      params(mastra, {
+        timeRange: TIME_RANGE,
+        where: { spans: { some: { op: 'eq', left: { path: 'runId' }, right: { literal: 'run-42' } } } },
+        measures: ['count'],
+      }),
+    );
+
+    expect(observabilityStore.aggregateTraces).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          type: 'relation',
+          collection: 'spans',
+          quantifier: 'some',
+          predicate: { type: 'comparison', field: 'runId', operator: 'eq', value: 'run-42' },
+        },
+      }),
+    );
+  });
+
   it('scopes the plan to the trusted tenant and never runs a scoped request unscoped', async () => {
     const scopedParams = (mastra: Mastra) => {
       const context = params(mastra, { timeRange: TIME_RANGE, measures: ['count'] });

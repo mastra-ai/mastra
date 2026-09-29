@@ -107,6 +107,7 @@ import {
   OBSERVABILITY_LIST_ENDPOINTS,
   supportsObservabilityTraceQueryContextIds,
   supportsObservabilityTraceQueryRootDuration,
+  supportsTraceAggregateCore,
   supportsTraceQueryDiscoveryCore,
   withDiscoveryFallback,
 } from './observability-shared';
@@ -447,6 +448,12 @@ export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, 
   onValidationError: traceAggregateValidationError,
   maxBodySize: 256 * 1024,
   preserveHttpExceptions: true,
+  isCoreSupported: supportsTraceAggregateCore,
+  onUnsupportedCore: () =>
+    throwTraceQueryError(501, {
+      code: 'TRACE_AGGREGATE_UNSUPPORTED',
+      message: 'Trace aggregation requires a newer @mastra/core. Please upgrade.',
+    }),
   handler: async ({
     mastra,
     requestContext,
@@ -477,6 +484,7 @@ export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, 
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilityTraceAggregateSupported(observabilityStore);
       assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
+      assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
       if (error instanceof HTTPException && error.status === 501) {

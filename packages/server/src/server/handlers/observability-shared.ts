@@ -48,6 +48,14 @@ export function supportsTraceQueryDiscoveryCore() {
   );
 }
 
+export function supportsTraceAggregateCore() {
+  return (
+    coreStorage.traceAggregateRequestSchema !== undefined &&
+    coreStorage.traceAggregateResponseSchema !== undefined &&
+    typeof coreStorage.planTraceAggregate === 'function'
+  );
+}
+
 export const OBSERVABILITY_LIST_ENDPOINTS = {
   traces: 'traces',
   branches: 'branches',
