@@ -49,6 +49,19 @@ describe('PageHeader', () => {
     expect(markup).not.toContain('Legacy icon');
   });
 
+  it('lets a Title child replace the legacy title prop', () => {
+    const markup = renderToStaticMarkup(
+      <PageHeader title="Legacy title" description="Legacy description">
+        <PageHeader.Title>Child title</PageHeader.Title>
+      </PageHeader>,
+    );
+
+    expect(markup.match(/<h1/g)).toHaveLength(1);
+    expect(markup).toContain('Child title');
+    expect(markup).not.toContain('Legacy title');
+    expect(markup).toContain('Legacy description');
+  });
+
   it('keeps the legacy title when an eyebrow is supplied', () => {
     const markup = renderToStaticMarkup(
       <PageHeader title="Create alert">

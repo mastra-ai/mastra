@@ -17,20 +17,24 @@ export interface PageHeaderRootProps extends Omit<ComponentPropsWithoutRef<'head
   isLoading?: boolean;
 }
 
-type LegacySlotProps = Pick<PageHeaderRootProps, 'title' | 'description' | 'icon' | 'isLoading'>;
+type LegacySlotProps = Pick<PageHeaderRootProps, 'title' | 'description' | 'icon' | 'isLoading'> & {
+  hasChildTitle: boolean;
+};
 
-function legacySlots({ title, description, icon, isLoading }: LegacySlotProps): ReactNode[] {
+function legacySlots({ title, description, icon, isLoading, hasChildTitle }: LegacySlotProps): ReactNode[] {
   if (title === undefined) return [];
 
   const slots: ReactNode[] = [];
   if (icon !== undefined && !isLoading) {
     slots.push(<PageHeaderIcon key="icon">{icon}</PageHeaderIcon>);
   }
-  slots.push(
-    <PageHeaderTitle key="title" isLoading={isLoading}>
-      {title}
-    </PageHeaderTitle>,
-  );
+  if (!hasChildTitle) {
+    slots.push(
+      <PageHeaderTitle key="title" isLoading={isLoading}>
+        {title}
+      </PageHeaderTitle>,
+    );
+  }
   if (description !== undefined) {
     slots.push(
       <PageHeaderDescription key="description" isLoading={isLoading}>
@@ -69,7 +73,9 @@ export function PageHeaderRoot({
   isLoading,
   ...props
 }: PageHeaderRootProps) {
-  const items = [...legacySlots({ title, description, icon, isLoading }), ...Children.toArray(children)];
+  const childItems = Children.toArray(children);
+  const hasChildTitle = childItems.some(child => isSlot(child, PageHeaderTitle));
+  const items = [...legacySlots({ title, description, icon, isLoading, hasChildTitle }), ...childItems];
   const { eyebrows, icons, headline, below, actions } = groupSlots(items);
   const hasControls = icons.length > 0 || actions.length > 0;
 
