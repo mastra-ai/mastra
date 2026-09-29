@@ -224,8 +224,9 @@ export const TaskList = ({
       className={cn('group/task-list relative', !open && 'cursor-pointer', className)}
       {...props}
     >
-      <ScrollArea id={listId} maxHeight={`${windowHeight + 2 * LIST_INSET_Y}px`} mask={false} viewportRef={viewportRef}>
+      <ScrollArea id={listId} maxHeight={`${windowHeight + 2 * LIST_INSET_Y}px`} mask={false}>
         <ScrollAreaViewport
+          ref={viewportRef}
           className={cn(
             edgeFades,
             'transition-[max-height,mask-size]',

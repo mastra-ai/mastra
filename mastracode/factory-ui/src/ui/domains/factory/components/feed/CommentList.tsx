@@ -174,11 +174,10 @@ export function CommentList({
     <ScrollArea
       maxHeight={maxHeight}
       autoScroll={highlightCommentId === undefined}
-      viewportRef={viewportRef}
       // The viewport fills by flex: the card it sits in has no definite height to take a percentage of.
       className={cn('flex flex-col', className)}
     >
-      <ScrollAreaViewport className="flex min-h-0 grow flex-col">
+      <ScrollAreaViewport ref={viewportRef} className="flex min-h-0 grow flex-col">
         <ArrivalScope>
           {!showSkeleton && leading !== undefined && (
             <div className="stream-landing" style={landingStyle(0)}>

@@ -64,12 +64,6 @@ export type ScrollAreaProps = React.ComponentProps<typeof ScrollAreaPrimitive.Ro
    * the scrollbar only appears while actively scrolling. Defaults to `true`.
    */
   revealScrollbarOnHover?: boolean;
-  /**
-   * Ref to the scrolling viewport element. Use this as the scroll element for a
-   * virtualizer (`getScrollElement: () => viewportRef.current`) so the list can
-   * virtualize while still using the ScrollArea's overlay scrollbar + masks.
-   */
-  viewportRef?: React.Ref<HTMLDivElement>;
 };
 
 type ResolvedMask = Record<'top' | 'bottom' | 'left' | 'right', MaskFadeDepth | false>;
@@ -243,7 +237,7 @@ const ScrollButtons = ({ areaRef, scrollButtons }: ScrollButtonsProps) => {
 };
 
 type ScrollAreaViewportContextValue = {
-  ref: React.RefCallback<HTMLDivElement>;
+  areaRef: React.RefObject<HTMLDivElement | null>;
   className: string;
   style: React.CSSProperties;
   contentStyle: React.CSSProperties | undefined;
@@ -254,15 +248,32 @@ const ScrollAreaViewportContext = React.createContext<ScrollAreaViewportContextV
 export type ScrollAreaViewportProps = {
   className?: string;
   children?: React.ReactNode;
+  /** The scrolling element, e.g. a virtualizer's `getScrollElement`. */
+  ref?: React.Ref<HTMLDivElement>;
 };
 
-const ScrollAreaViewport = ({ className, children }: ScrollAreaViewportProps) => {
+function useScrollAreaViewportContext() {
   const viewport = React.useContext(ScrollAreaViewportContext);
   if (!viewport) throw new Error('ScrollAreaViewport must be a direct child of ScrollArea');
+  return viewport;
+}
+
+function ScrollAreaViewport({ className, children, ref }: ScrollAreaViewportProps) {
+  const viewport = useScrollAreaViewportContext();
+  const { areaRef } = viewport;
+
+  const setViewportNode = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      areaRef.current = node;
+      if (typeof ref === 'function') ref(node);
+      else if (ref) ref.current = node;
+    },
+    [areaRef, ref],
+  );
 
   return (
     <ScrollAreaPrimitive.Viewport
-      ref={viewport.ref}
+      ref={setViewportNode}
       className={cn(viewport.className, className)}
       style={viewport.style}
     >
@@ -271,7 +282,7 @@ const ScrollAreaViewport = ({ className, children }: ScrollAreaViewportProps) =>
       </ScrollAreaPrimitive.Content>
     </ScrollAreaPrimitive.Viewport>
   );
-};
+}
 
 function ScrollArea({
   className,
@@ -283,20 +294,10 @@ function ScrollArea({
   mask,
   showMask,
   revealScrollbarOnHover = true,
-  viewportRef,
   ...props
 }: ScrollAreaProps) {
   const areaRef = React.useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: autoScroll });
-
-  const setViewportRef = React.useCallback(
-    (node: HTMLDivElement | null) => {
-      areaRef.current = node;
-      if (typeof viewportRef === 'function') viewportRef(node);
-      else if (viewportRef) (viewportRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
-    },
-    [viewportRef],
-  );
 
   const effectiveMask: ScrollAreaMask | undefined = mask !== undefined ? mask : showMask;
   const sides = resolveMask(effectiveMask, orientation);
@@ -324,7 +325,7 @@ function ScrollArea({
     orientation === 'vertical' ? { minWidth: '0px' } : orientation === 'horizontal' ? { minHeight: '0px' } : undefined;
 
   const viewport: ScrollAreaViewportContextValue = {
-    ref: setViewportRef,
+    areaRef,
     className: cn('size-full', maskClasses(sides)),
     style: viewportStyle,
     contentStyle,

@@ -25,7 +25,7 @@ export type DataListFit = 'content' | 'container';
  */
 export type DataListVariant = 'default' | 'light';
 
-export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation' | 'mask' | 'viewportRef'> & {
+export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation' | 'mask'> & {
   children: ReactNode;
   columns: string;
   /** Grid width behavior; defaults to `content` (existing horizontal-scroll sizing). */
@@ -147,14 +147,12 @@ export function DataListRoot({
 
   // DataList uses the DS ScrollArea: an overlay scrollbar, so the sticky header
   // spans the full width. Masks default to every overflowing edge except the
-  // top — a top fade would fade the opaque sticky header. A virtualizing list
-  // passes `scrollRef`, forwarded as `viewportRef` so it scrolls this viewport.
+  // top — a top fade would fade the opaque sticky header.
   return (
     <ScrollArea
       {...props}
       orientation="both"
       mask={getDataListMask(mask)}
-      viewportRef={scrollRef}
       // Outer radius = row radius (8px) + 4px inset so the corners stay concentric.
       // Size to content but never exceed the parent. Flex (unlike grid `1fr`) lays
       // items out against the max-height-clamped container, so short lists stay
@@ -166,7 +164,9 @@ export function DataListRoot({
         className,
       )}
     >
-      <ScrollAreaViewport className="min-h-0 flex-1 basis-auto">{grid}</ScrollAreaViewport>
+      <ScrollAreaViewport ref={scrollRef} className="min-h-0 flex-1 basis-auto">
+        {grid}
+      </ScrollAreaViewport>
     </ScrollArea>
   );
 }

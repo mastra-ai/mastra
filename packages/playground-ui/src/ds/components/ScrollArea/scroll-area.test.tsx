@@ -105,42 +105,37 @@ describe('ScrollArea', () => {
     });
   });
 
-  describe('viewportRef', () => {
+  describe('ScrollAreaViewport', () => {
+    const renderWithViewport = (viewportProps: React.ComponentProps<typeof ScrollAreaViewport> = {}) =>
+      render(
+        <ScrollArea maxHeight="400px">
+          <ScrollAreaViewport {...viewportProps}>
+            <div data-testid="child">content</div>
+          </ScrollAreaViewport>
+        </ScrollArea>,
+      );
+
+    it('styles the single viewport the area scrolls instead of nesting a second one', () => {
+      renderWithViewport({ className: 'caller-viewport' });
+
+      const viewport = getViewport();
+      expect(viewport.classList.contains('caller-viewport')).toBe(true);
+      expect(viewport.style.maxHeight).toBe('400px');
+      expect(viewport.className).toContain('data-[overflow-y-end]:mask-b-from');
+    });
+
     it('hands the viewport to a callback ref', () => {
       const seen: Array<HTMLDivElement | null> = [];
-      renderArea({
-        viewportRef: node => {
-          seen.push(node);
-        },
-      });
+      renderWithViewport({ ref: node => void seen.push(node) });
 
       expect(seen[0]).toBe(getViewport());
     });
 
     it('fills an object ref with the viewport', () => {
       const ref = React.createRef<HTMLDivElement>();
-      renderArea({ viewportRef: ref });
+      renderWithViewport({ ref });
 
       expect(ref.current).toBe(getViewport());
-    });
-  });
-
-  describe('ScrollAreaViewport', () => {
-    it('styles the single viewport the area scrolls instead of nesting a second one', () => {
-      const viewportRef = React.createRef<HTMLDivElement>();
-      render(
-        <ScrollArea maxHeight="400px" viewportRef={viewportRef}>
-          <ScrollAreaViewport className="caller-viewport">
-            <div data-testid="child">content</div>
-          </ScrollAreaViewport>
-        </ScrollArea>,
-      );
-
-      const viewport = getViewport();
-      expect(viewport.classList.contains('caller-viewport')).toBe(true);
-      expect(viewportRef.current).toBe(viewport);
-      expect(viewport.style.maxHeight).toBe('400px');
-      expect(viewport.className).toContain('data-[overflow-y-end]:mask-b-from');
     });
 
     it('throws instead of nesting a second scroll container when the viewport is not a direct child', () => {
