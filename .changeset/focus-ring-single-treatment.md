@@ -2,7 +2,7 @@
 '@mastra/playground-ui': minor
 ---
 
-Keyboard focus now looks the same everywhere: a 1px neutral outline with no green halo. Any focusable element that does not style its own focus gets it by default. `focusRing` is a single class string instead of an object, with `focusRingInset` for clipped full-width rows and `focusRingOffset` for checkboxes, radios, and switches. Interactive cards and other raised surfaces show focus by brightening their own rim (`surfaceRimFocus`), so they keep their elevation. The halo and `ring` alias tokens are removed. The Trace Intelligence empty state also drops its glowing and pulsing decorations.
+Keyboard focus now looks the same everywhere: a 1px neutral outline with no green halo. Any focusable element that does not style its own focus gets it by default. `focusRing` is a single class string instead of an object, with `focusRingInset` for clipped full-width rows and `focusRingOffset` for checkboxes, radios, and switches. Interactive cards show focus by repainting their own rim to the same focus colour (`focusRingOnRaisedSurface`), so they keep their elevation. The halo and `ring` alias tokens are removed. The Trace Intelligence empty state also drops its glowing and pulsing decorations.
 
 Before:
 

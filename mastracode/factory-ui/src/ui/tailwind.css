@@ -22,11 +22,6 @@
       'Segoe UI Symbol', 'Noto Color Emoji';
     --font-body: var(--font-display);
   }
-
-  :focus-visible {
-    outline: 1px solid var(--border-focus);
-    outline-offset: 0;
-  }
 }
 
 /* The board card's corner. It is not a free number: a card is a rounded box with

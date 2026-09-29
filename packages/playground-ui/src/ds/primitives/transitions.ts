@@ -45,11 +45,12 @@ const focusLine = 'focus-visible:outline-1 focus-visible:outline-solid focus-vis
 
 export const focusRing = `${focusLine} focus-visible:outline-offset-0`;
 
-// For focusables whose outer edge is clipped by an overflow container or a neighbour, such as full-bleed rows.
 export const focusRingInset = `${focusLine} focus-visible:-outline-offset-1`;
 
-// For small solid controls (checkbox, radio, switch), where a line flush with the fill disappears into it.
 export const focusRingOffset = `${focusLine} focus-visible:outline-offset-2`;
+
+export const focusRingOnRaisedSurface =
+  'focus-visible:outline-hidden focus-visible:[--surface-rim:var(--border-focus)]';
 
 export type TransitionPreset = keyof typeof transitions;
 export type HoverEffect = keyof typeof hoverEffects;

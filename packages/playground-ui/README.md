@@ -125,7 +125,7 @@ To migrate removed tokens:
 | `--shadow-focus-ring`, `--focus-halo`   | none; focus has no halo                           |
 | `focusRing.visible` and siblings        | `focusRing`, or `focusRingInset` in clipped rows  |
 
-Keyboard focus is a 1px `--border-focus` outline on `:focus-visible`, and the base layer draws it on any focusable element that does not style its own. `focusRing` from `primitives/transitions` applies it explicitly, `focusRingInset` draws it inside a full-bleed row whose edge is clipped, and `focusRingOffset` sets it 2px out on checkboxes, radios, and switches, where a flush line vanishes into the fill. It is an outline, not a `ring-*`, because a ring rewrites `box-shadow` and would erase a raised surface's rim. Fields and raised surfaces keep their own focus edge instead: `surfaceRimFocus` repaints the rim.
+Keyboard focus is a 1px `--border-focus` outline on `:focus-visible`, and the base layer draws it on any focusable element that does not style its own. `focusRing` from `primitives/transitions` applies it explicitly, `focusRingInset` draws it inside a full-bleed row whose edge is clipped, and `focusRingOffset` sets it 2px out on checkboxes, radios, and switches, where a flush line vanishes into the fill. It is an outline, not a `ring-*`, because a ring rewrites `box-shadow` and would erase a raised surface's rim. A raised interactive surface such as a clickable `Card` takes `focusRingOnRaisedSurface` instead, which repaints its own rim to `--border-focus` and keeps its elevation. Fields and raised controls keep their own, lighter focus rim.
 
 `SankeyChart` accepts `getNodeColor` and `getLinkColor` callbacks returning CSS colors. Explicit link colors keep the default link transparency and hover emphasis:
 
