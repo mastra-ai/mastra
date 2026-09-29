@@ -88,3 +88,11 @@ describe('drainSignalsToTranscript — error policy split', () => {
     expect(emitted).toHaveLength(2);
   });
 });
+
+describe('drainSignalsToTranscript — message attribution', () => {
+  it('stamps drained signal chunks with the rotated message id, not the sealed one', async () => {
+    const { deps, emitted } = makeDeps({ sealMessageId: 'msg-sealed' });
+    await expect(drainSignalsToTranscript(deps)).resolves.toEqual({ drained: true, nextMessageId: 'msg-next' });
+    expect(emitted).toEqual([expect.objectContaining({ type: 'data-signal', messageId: 'msg-next' })]);
+  });
+});

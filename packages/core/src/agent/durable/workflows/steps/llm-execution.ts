@@ -2228,6 +2228,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 isContinued,
                 totalUsage: usage,
                 headers: rawResponse?.headers,
+                messageId: currentMessageId,
                 request,
               },
               metadata: {

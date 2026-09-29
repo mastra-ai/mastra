@@ -1,5 +1,6 @@
 import type { CreatedAgentSignal } from '../../../agent/signals';
 import type { IMastraLogger } from '../../../logger';
+import { withChunkMessageId } from '../../../stream/base/message-id';
 
 export type SignalDrainOutcome = { drained: false } | { drained: true; nextMessageId: string };
 
@@ -56,7 +57,8 @@ export async function drainSignalsToTranscript(deps: {
     const nextMessageId = deps.rotateResponseMessageId(deps.sealMessageId);
     for (const pendingSignal of pendingSignals) {
       const signalForTranscript = deps.addSignal(pendingSignal);
-      await deps.emitChunk(signalForTranscript.toDataPart());
+      // Signals belong to the freshly rotated response message, not the sealed one.
+      await deps.emitChunk(withChunkMessageId(signalForTranscript.toDataPart(), nextMessageId));
     }
     return { drained: true, nextMessageId };
   } catch (error) {
