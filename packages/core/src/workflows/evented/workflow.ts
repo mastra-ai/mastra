@@ -2435,43 +2435,6 @@ export class EventedRun<
     });
   }
 
-  async #releaseResumeClaimIfUnused(
-    workflowsStore: WorkflowsStorage,
-    snapshot: WorkflowRunState,
-    resumedStepId: string,
-  ): Promise<void> {
-    try {
-      const current = await workflowsStore.loadWorkflowSnapshot({
-        workflowName: this.workflowId,
-        runId: this.runId,
-      });
-      const claimedPaths = Object.keys(snapshot.suspendedPaths ?? {});
-      const currentPaths = Object.keys(current?.suspendedPaths ?? {});
-      const claimedStepIds = Object.keys(snapshot.context ?? {});
-      const currentStepIds = Object.keys(current?.context ?? {});
-      const resumedStepResult = current?.context?.[resumedStepId] as { status?: string } | undefined;
-      const engineNeverStarted =
-        current?.status === 'running' &&
-        currentPaths.length === claimedPaths.length &&
-        claimedPaths.every(path => currentPaths.includes(path)) &&
-        currentStepIds.length === claimedStepIds.length &&
-        claimedStepIds.every(stepId => currentStepIds.includes(stepId)) &&
-        resumedStepResult?.status === 'suspended';
-
-      if (engineNeverStarted) {
-        await workflowsStore.updateWorkflowState({
-          workflowName: this.workflowId,
-          runId: this.runId,
-          opts: { status: 'suspended', expectedStatus: 'running' },
-        });
-      }
-    } catch (releaseError) {
-      this.mastra
-        ?.getLogger()
-        ?.warn(`[Workflow ${this.workflowId}] Failed to release resume claim for run ${this.runId}`, releaseError);
-    }
-  }
-
   async resume<TResumeSchema>(params: {
     resumeData?: TResumeSchema;
     step?:
@@ -2623,9 +2586,8 @@ export class EventedRun<
       throw new Error('Mastra instance with pubsub is required for workflow execution');
     }
 
-    await this.#claimResume(workflowsStore);
-
     this.setupAbortHandler();
+    await this.#claimResume(workflowsStore);
 
     // Extract state from snapshot - could be in context.__state or in value
     const resumeState = (snapshot?.context as any)?.__state ?? snapshot?.value ?? {};
@@ -2659,10 +2621,6 @@ export class EventedRun<
         }
 
         return result;
-      })
-      .catch(async error => {
-        await this.#releaseResumeClaimIfUnused(workflowsStore, snapshot, steps[0]!);
-        throw error;
       });
 
     this.executionResults = executionResultPromise;

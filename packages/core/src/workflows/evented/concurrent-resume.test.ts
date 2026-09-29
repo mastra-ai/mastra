@@ -57,17 +57,42 @@ describe('evented concurrent resume', () => {
       const startResult = await run.start({ inputData: { item: 'widget' } });
       expect(startResult.status).toBe('suspended');
 
-      const executeSpy = vi
-        .spyOn((run as any).executionEngine, 'execute')
-        .mockRejectedValueOnce(new Error('engine boom'));
-      await expect(run.resume({ step: approval, resumeData: { approvedBy: 'failed' } })).rejects.toThrow('engine boom');
-      executeSpy.mockRestore();
+      const abortSetupSpy = vi.spyOn(run as any, 'setupAbortHandler').mockImplementationOnce(() => {
+        throw new Error('abort setup boom');
+      });
+      await expect(run.resume({ step: approval, resumeData: { approvedBy: 'failed-setup' } })).rejects.toThrow(
+        'abort setup boom',
+      );
+      abortSetupSpy.mockRestore();
+
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      const afterSetupFailure = await workflowsStore.loadWorkflowSnapshot({
+        workflowName: workflow.id,
+        runId: run.runId,
+      });
+      expect(afterSetupFailure?.status).toBe('suspended');
+
+      const updateWorkflowState = workflowsStore.updateWorkflowState.bind(workflowsStore);
+      let claimAttempts = 0;
+      let releaseClaims!: () => void;
+      const bothClaimsStarted = new Promise<void>(resolve => {
+        releaseClaims = resolve;
+      });
+      const updateSpy = vi.spyOn(workflowsStore, 'updateWorkflowState').mockImplementation(async args => {
+        if (args.opts.expectedStatus === 'suspended') {
+          claimAttempts += 1;
+          if (claimAttempts === 2) releaseClaims();
+          await bothClaimsStarted;
+        }
+        return updateWorkflowState(args);
+      });
 
       const results = await Promise.allSettled([
         run.resume({ step: approval, resumeData: { approvedBy: 'first' } }),
         run.resume({ step: approval, resumeData: { approvedBy: 'second' } }),
       ]);
 
+      updateSpy.mockRestore();
       const fulfilled = results.filter(result => result.status === 'fulfilled');
       const rejected = results.filter(result => result.status === 'rejected');
 
