@@ -854,7 +854,8 @@ async function reportPreDispatchError(
   const logError = (line: string) => (logger ? logger.error(line) : console.error(line));
   logError(`[slack] Pre-dispatch failure ${JSON.stringify({ ...correlation, error: preDispatchErrorDetails(error) })}`);
   try {
-    await thread.post('Couldn’t start processing your message. Please try again.');
+    // The message id is the lookup key for the diagnostic above.
+    await thread.post(`Couldn’t start processing your message. Please try again.\n\`messageId: ${message.id}\``);
   } catch (deliveryError) {
     logError(
       `[slack] Failed to deliver pre-dispatch error reply ${JSON.stringify({ ...correlation, error: preDispatchErrorDetails(deliveryError) })}`,

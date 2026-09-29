@@ -412,7 +412,7 @@ describe('handler dispatch gating', () => {
 });
 
 describe('pre-dispatch error feedback', () => {
-  const reply = 'Couldn’t start processing your message. Please try again.';
+  const reply = 'Couldn’t start processing your message. Please try again.\n`messageId: 1700.42`';
   const slots = ['onMention', 'onDirectMessage', 'onSubscribedMessage'] as const;
 
   function fixture(slot: (typeof slots)[number] = 'onMention') {
