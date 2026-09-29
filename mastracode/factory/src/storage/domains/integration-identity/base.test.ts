@@ -185,4 +185,40 @@ describe('IntegrationIdentityStorage', () => {
     // A second remove on a still-absent row also returns false, not an error.
     expect(await seed.integrationIdentity.remove(baseKey)).toBe(false);
   });
+
+  it('lists every claim in an org across users and integrations, and only that org', async () => {
+    const seed = await createFactoryStorageForTests();
+
+    // Two users, two integrations each, plus a decoy in another org.
+    await seed.integrationIdentity.upsert({ ...baseKey, userId: 'user-1', label: 'Alice GH' });
+    await seed.integrationIdentity.upsert({
+      ...baseKey,
+      userId: 'user-1',
+      integrationId: 'linear',
+      externalUserId: 'alice-linear',
+      label: 'Alice Linear',
+    });
+    await seed.integrationIdentity.upsert({
+      ...baseKey,
+      userId: 'user-2',
+      externalUserId: 'bob-gh',
+      label: 'Bob GH',
+    });
+    // Different org — must not appear.
+    await seed.integrationIdentity.upsert({
+      ...baseKey,
+      orgId: 'org-2',
+      userId: 'user-3',
+      externalUserId: 'other-gh',
+      label: 'Other',
+    });
+
+    const all = await seed.integrationIdentity.listByOrg({ orgId: 'org-1' });
+    expect(all).toHaveLength(3);
+    expect(all.map(claim => `${claim.userId}/${claim.integrationId}/${claim.externalUserId}`).sort()).toEqual([
+      'user-1/github/octocat',
+      'user-1/linear/alice-linear',
+      'user-2/github/bob-gh',
+    ]);
+  });
 });

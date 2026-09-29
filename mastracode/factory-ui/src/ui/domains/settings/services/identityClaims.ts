@@ -68,6 +68,38 @@ export async function claimIdentity(
   if (!res.ok) throw await parseError(res);
 }
 
+/**
+ * One user's identity roster entry: their Factory userId plus the external
+ * accounts they've claimed on each integration. Users with no claims are
+ * omitted from the roster entirely.
+ */
+export interface IdentityRosterUser {
+  userId: string;
+  claims: Array<{
+    integrationId: string;
+    externalUserIds: string[];
+  }>;
+}
+
+/** Roster response shape from `GET /web/identity/roster`. */
+export interface IdentityRoster {
+  users: IdentityRosterUser[];
+}
+
+/**
+ * Fetch the org's identity-claim roster. Powers the board's teammate filter:
+ * a Factory user with multiple external identities is one row in the picker,
+ * and picking them expands to every external identity they've claimed.
+ */
+export async function listIdentityRoster(baseUrl: string): Promise<IdentityRoster> {
+  const res = await fetch(`${baseUrl}/web/identity/roster`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as IdentityRoster;
+}
+
 /** Unclaim an identity. Idempotent (204 whether or not one existed). */
 export async function unclaimIdentity(
   baseUrl: string,

@@ -90,6 +90,19 @@ function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>, ms: number, fa
   return Promise.race([run(controller.signal), expiry]).finally(() => clearTimeout(timer));
 }
 
+function groupClaimsByIntegration(claims: readonly IntegrationIdentityClaim[]): ResolvedMe {
+  const resolved: ResolvedMe = new Map();
+  for (const claim of claims) {
+    let set = resolved.get(claim.integrationId);
+    if (!set) {
+      set = new Set();
+      resolved.set(claim.integrationId, set);
+    }
+    set.add(claim.externalUserId);
+  }
+  return resolved;
+}
+
 export class IdentityService {
   readonly #storage: IntegrationIdentityStorage;
   readonly #integrations: () => IdentityServiceIntegration[];
@@ -192,19 +205,45 @@ export class IdentityService {
    * storage read for the user and buckets by integration; no per-integration
    * round-trip is required because the source of truth is the local claim
    * table, not the provider.
+   *
+   * The name is historical: the resolution logic is user-agnostic and the
+   * board's teammate filter uses the same shape to expand any coworker's
+   * selection across every external identity they've claimed. `resolveClaims`
+   * is an alias with the more general name.
    */
   async resolveMe(orgId: string, userId: string): Promise<ResolvedMe> {
+    return this.resolveClaims(orgId, userId);
+  }
+
+  /** General form of {@link resolveMe}: works for any user in the org. */
+  async resolveClaims(orgId: string, userId: string): Promise<ResolvedMe> {
     const claims = await this.#storage.listByUser({ orgId, userId });
-    const resolved: ResolvedMe = new Map();
+    return groupClaimsByIntegration(claims);
+  }
+
+  /**
+   * Every user in the org together with their claim map, keyed by Factory
+   * userId. Powers the teammate-search expansion: with this in hand, the UI
+   * can render one row per coworker instead of one per external identity,
+   * and expand a picked teammate into the full set of external ids they've
+   * claimed. Users with no claims are omitted.
+   */
+  async resolveOrgRoster(orgId: string): Promise<Map<string, ResolvedMe>> {
+    const claims = await this.#storage.listByOrg({ orgId });
+    const byUser = new Map<string, IntegrationIdentityClaim[]>();
     for (const claim of claims) {
-      let set = resolved.get(claim.integrationId);
-      if (!set) {
-        set = new Set();
-        resolved.set(claim.integrationId, set);
+      let bucket = byUser.get(claim.userId);
+      if (!bucket) {
+        bucket = [];
+        byUser.set(claim.userId, bucket);
       }
-      set.add(claim.externalUserId);
+      bucket.push(claim);
     }
-    return resolved;
+    const roster = new Map<string, ResolvedMe>();
+    for (const [userId, userClaims] of byUser) {
+      roster.set(userId, groupClaimsByIntegration(userClaims));
+    }
+    return roster;
   }
 
   /**

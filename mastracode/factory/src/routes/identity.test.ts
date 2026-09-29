@@ -419,4 +419,77 @@ describe('IdentityRoutes', () => {
       expect(response.status).toBe(400);
     });
   });
+
+  describe('GET /web/identity/roster', () => {
+    it("returns every user in the org with their claim map, and only the caller's org", async () => {
+      const seed = await createFactoryStorageForTests();
+      // Two coworkers in org-1 with cross-integration claims, plus decoy in org-2.
+      await seed.integrationIdentity.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        integrationId: 'github',
+        externalUserId: 'alice-gh',
+        label: 'Alice GH',
+      });
+      await seed.integrationIdentity.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        integrationId: 'linear',
+        externalUserId: 'alice-linear',
+        label: 'Alice Linear',
+      });
+      await seed.integrationIdentity.upsert({
+        orgId: 'org-1',
+        userId: 'user-2',
+        integrationId: 'github',
+        externalUserId: 'bob-gh',
+        label: 'Bob GH',
+      });
+      await seed.integrationIdentity.upsert({
+        orgId: 'org-2',
+        userId: 'user-3',
+        integrationId: 'github',
+        externalUserId: 'stranger',
+        label: 'Stranger',
+      });
+      const app = await buildApp({ storage: seed.integrationIdentity, user: orgUser });
+
+      const response = await app.request('/web/identity/roster');
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as {
+        users: Array<{ userId: string; claims: Array<{ integrationId: string; externalUserIds: string[] }> }>;
+      };
+      // Order isn't part of the contract; normalize for comparison.
+      const sorted = [...body.users]
+        .map(user => ({
+          userId: user.userId,
+          claims: [...user.claims]
+            .map(claim => ({ integrationId: claim.integrationId, externalUserIds: [...claim.externalUserIds].sort() }))
+            .sort((a, b) => a.integrationId.localeCompare(b.integrationId)),
+        }))
+        .sort((a, b) => a.userId.localeCompare(b.userId));
+      expect(sorted).toEqual([
+        {
+          userId: 'user-1',
+          claims: [
+            { integrationId: 'github', externalUserIds: ['alice-gh'] },
+            { integrationId: 'linear', externalUserIds: ['alice-linear'] },
+          ],
+        },
+        {
+          userId: 'user-2',
+          claims: [{ integrationId: 'github', externalUserIds: ['bob-gh'] }],
+        },
+      ]);
+    });
+
+    it('rejects an unsigned request with 401 and a signed-in user without an org with 403', async () => {
+      const seed = await createFactoryStorageForTests();
+      const anonApp = await buildApp({ storage: seed.integrationIdentity });
+      expect((await anonApp.request('/web/identity/roster')).status).toBe(401);
+
+      const noOrgApp = await buildApp({ storage: seed.integrationIdentity, user: { workosId: 'user-1' } });
+      expect((await noOrgApp.request('/web/identity/roster')).status).toBe(403);
+    });
+  });
 });

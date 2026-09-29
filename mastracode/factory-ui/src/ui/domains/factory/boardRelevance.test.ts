@@ -19,6 +19,7 @@ import {
   candidateMatchesLabels,
   candidateMatchesMe,
   candidateMatchesRelevance,
+  participantExpansionFromRoster,
   workItemMatchesLabels,
   workItemMatchesMe,
   workItemMatchesRelevance,
@@ -350,6 +351,115 @@ describe('board relevance', () => {
       });
       const me = resolveMe({ github: ['octocat'] });
       expect(candidateMatchesMe(candidate, me, allTypes)).toBe(true);
+    });
+  });
+
+  describe('teammate multi-identity expansion', () => {
+    const allTypes = new Set(boardRelevanceOptions('review').map(option => option.id));
+
+    /**
+     * Roster with one teammate — Alice — who has claimed a GitHub login and
+     * a Linear id. The item above sets `author: 'octocat'` (GitHub) and
+     * `requestedReviewers: ['monalisa']`; we swap those onto Alice's claims
+     * so a single teammate selection spans both.
+     */
+    const roster: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>> = new Map([
+      [
+        'user-alice',
+        new Map([
+          ['github', new Set(['octocat'])],
+          ['linear', new Set(['alice-linear-uuid'])],
+        ]),
+      ],
+    ]);
+
+    it('expands a factory:<uid> selection to every claimed external identity', () => {
+      const expansion = participantExpansionFromRoster(roster);
+      expect(workItemMatchesRelevance(item, activityPage, 'factory:user-alice', allTypes, undefined, expansion)).toBe(
+        true,
+      );
+    });
+
+    it('still respects the selected relevance types after expansion', () => {
+      const expansion = participantExpansionFromRoster(roster);
+      // Author matches Alice's github claim, but the caller asked for `assigned` only.
+      expect(
+        workItemMatchesRelevance(item, activityPage, 'factory:user-alice', new Set(['assigned']), undefined, expansion),
+      ).toBe(false);
+    });
+
+    it('matches an intake candidate on a Linear identity claimed by the picked teammate', () => {
+      const candidate = linearCandidate({
+        id: 'ISSUE-1',
+        identifier: 'ENG-42',
+        title: 'Wire retention job',
+        url: 'https://linear.app/acme/issue/ENG-42',
+        state: 'Todo',
+        stateType: 'unstarted',
+        priorityLabel: 'No priority',
+        assignee: 'alice-linear-uuid',
+        creator: 'someone-else',
+        team: 'engineering',
+        sourceId: 'linear-team:eng',
+        labels: [],
+        createdAt: '2026-08-01T09:00:00.000Z',
+        updatedAt: '2026-08-01T09:00:00.000Z',
+      });
+      const expansion = participantExpansionFromRoster(roster);
+      expect(candidateMatchesRelevance(candidate, 'factory:user-alice', allTypes, expansion)).toBe(true);
+    });
+
+    it('falls through to single-id matching for external participants outside the roster', () => {
+      const expansion = participantExpansionFromRoster(roster);
+      // `github:monalisa` isn't in Alice's claims, so behaviour is the pre-expansion path.
+      expect(workItemMatchesRelevance(item, activityPage, 'github:monalisa', allTypes, undefined, expansion)).toBe(
+        true,
+      );
+      expect(
+        workItemMatchesRelevance(item, activityPage, 'github:monalisa', new Set(['assigned']), undefined, expansion),
+      ).toBe(false);
+    });
+
+    it('collapses claimed external participants into the factory user entry', () => {
+      // Item has activity from Alice (Factory) and external actors on GitHub;
+      // once the roster tags her GitHub login, the standalone github:octocat
+      // row is dropped so the picker shows one Alice.
+      const collapsed = boardParticipants({
+        items: [item],
+        candidates: [],
+        activityPage: {
+          events: [
+            {
+              id: 'event-alice',
+              actorId: 'user-alice',
+              actorType: 'human',
+              action: 'factory.work_item.stage_moved',
+              targets: [{ type: 'work_item', id: item.id }],
+              metadata: {},
+              occurredAt: '2026-08-05T09:00:00.000Z',
+            },
+          ],
+          actors: {
+            'user-alice': { id: 'user-alice', name: 'Alice Coworker' },
+          },
+        },
+        roster,
+      });
+      const ids = collapsed.map(p => p.id);
+      expect(ids).toContain('factory:user-alice');
+      expect(ids).not.toContain('github:octocat');
+    });
+
+    it('keeps external participants whose ids are not claimed by any factory user', () => {
+      const collapsed = boardParticipants({
+        items: [item],
+        candidates: [],
+        activityPage: undefined,
+        roster, // hubot + monalisa aren't in the roster, so they must survive.
+      });
+      const ids = collapsed.map(p => p.id);
+      expect(ids).toContain('github:hubot');
+      expect(ids).toContain('github:monalisa');
     });
   });
 });

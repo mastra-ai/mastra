@@ -177,6 +177,37 @@ export class IdentityRoutes extends Route<IdentityRoutesDeps> {
           return context.body(null, 204);
         },
       }),
+      /**
+       * Org roster of identity claims. Returns every user in the org that
+       * has claimed at least one external account, with each user's claim
+       * map grouped by integration. Consumed by the board's teammate filter
+       * so picking a coworker expands to every external identity they've
+       * claimed instead of matching only the picked prefix.
+       *
+       * Auth: same as the other routes here — the acting user must belong
+       * to an org, and the response is scoped to that org. Claims carry
+       * only display metadata (label, email) and no credentials, so this
+       * mirrors what a user could already stitch together from
+       * `GET /web/identity` plus provider rosters.
+       */
+      registerApiRoute('/web/identity/roster', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const tenant = await this.#resolveTenant(context);
+          if ('response' in tenant) return tenant.response;
+          const roster = await this.deps.service.resolveOrgRoster(tenant.orgId);
+          const users = [...roster.entries()].map(([userId, resolved]) => ({
+            userId,
+            claims: [...resolved.entries()].map(([integrationId, externalUserIds]) => ({
+              integrationId,
+              externalUserIds: [...externalUserIds],
+            })),
+          }));
+          return context.json({ users });
+        },
+      }),
     ];
   }
 }

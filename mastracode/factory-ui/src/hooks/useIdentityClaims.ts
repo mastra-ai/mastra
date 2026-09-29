@@ -3,8 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { claimIdentity, listIdentity, unclaimIdentity } from '../ui/domains/settings/services/identityClaims';
-import type { IdentityIndex, IdentityRow } from '../ui/domains/settings/services/identityClaims';
+import {
+  claimIdentity,
+  listIdentity,
+  listIdentityRoster,
+  unclaimIdentity,
+} from '../ui/domains/settings/services/identityClaims';
+import type { IdentityIndex, IdentityRoster, IdentityRow } from '../ui/domains/settings/services/identityClaims';
 
 /**
  * The consolidated identity index: every integration that exposes the identity
@@ -175,6 +180,40 @@ export function useResolvedMe(): {
       set.add(row.externalUserId);
     }
     return resolved;
+  }, [query.data]);
+  return { data, isLoading: query.isLoading, isError: query.isError };
+}
+
+/**
+ * Org-wide identity roster: every user with at least one claim, plus their
+ * claim map. The board's teammate picker consumes this to collapse a user
+ * with multiple external identities into a single participant and, when
+ * that participant is picked, expand the match across every external
+ * identity they've claimed.
+ *
+ * Keyed on Factory userId so lookups are O(1) at match time. Empty roster
+ * (no claims anywhere in the org) is a valid resolved state, not an error.
+ */
+export function useOrgIdentityRoster(): {
+  data: Map<string, Map<string, Set<string>>>;
+  isLoading: boolean;
+  isError: boolean;
+} {
+  const { baseUrl } = useApiConfig();
+  const query = useQuery<IdentityRoster>({
+    queryKey: queryKeys.identityRoster(baseUrl),
+    queryFn: () => listIdentityRoster(baseUrl),
+  });
+  const data = useMemo(() => {
+    const byUser = new Map<string, Map<string, Set<string>>>();
+    for (const user of query.data?.users ?? []) {
+      const resolved = new Map<string, Set<string>>();
+      for (const entry of user.claims) {
+        resolved.set(entry.integrationId, new Set(entry.externalUserIds));
+      }
+      byUser.set(user.userId, resolved);
+    }
+    return byUser;
   }, [query.data]);
   return { data, isLoading: query.isLoading, isError: query.isError };
 }

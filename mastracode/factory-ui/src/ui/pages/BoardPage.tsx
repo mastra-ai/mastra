@@ -3,13 +3,14 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { GitBranch, Plus } from 'lucide-react';
+import { useMemo } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import type { InstalledBoardInfo } from '../../api/types';
 import { useBoardCatalog } from '../../hooks/useBoardCatalog';
 
 import { useRecentAuditEvents } from '../../hooks/useAuditEvents';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
-import { useResolvedMe } from '../../hooks/useIdentityClaims';
+import { useOrgIdentityRoster, useResolvedMe } from '../../hooks/useIdentityClaims';
 import { INTAKE_SOURCES, stageContentCount } from '../domains/factory/boardCandidates';
 import type { IntakeSource } from '../domains/factory/boardCandidates';
 import { boardLoadingStages, itemAppearsInStage } from '../domains/factory/boardStages';
@@ -42,6 +43,7 @@ import {
   candidateMatchesLabels,
   candidateMatchesMe,
   candidateMatchesRelevance,
+  participantExpansionFromRoster,
   workItemMatchesLabels,
   workItemMatchesMe,
   workItemMatchesRelevance,
@@ -175,6 +177,14 @@ function BoardContent({
 
   const auth = useFactoryAuth();
   const resolvedMe = useResolvedMe();
+  const orgRoster = useOrgIdentityRoster();
+  /**
+   * Roster-driven participant expansion for teammate filtering: when a picked
+   * teammate is a Factory user with claims, the match spans every external
+   * identity they've claimed. External-only participants (e.g. a GitHub login
+   * nobody in the org has claimed) fall through to single-id matching.
+   */
+  const teammateExpansion = useMemo(() => participantExpansionFromRoster(orgRoster.data), [orgRoster.data]);
   const items = useBoardItems({ factoryProjectId, kind });
   const intake = useBoardIntake({
     factoryProjectId,
@@ -200,6 +210,7 @@ function BoardContent({
     candidates: intake.participantCandidates,
     activityPage,
     currentUser: auth.data?.user,
+    roster: orgRoster.data,
   });
   const participantCandidateBySourceKey = new Map(
     intake.participantCandidates.map(candidate => [candidate.sourceKey, candidate]),
@@ -209,7 +220,7 @@ function BoardContent({
     candidate =>
       (meSelected
         ? candidateMatchesMe(candidate, resolvedMe.data, filters.relevanceTypes)
-        : candidateMatchesRelevance(candidate, filters.participantId, filters.relevanceTypes)) &&
+        : candidateMatchesRelevance(candidate, filters.participantId, filters.relevanceTypes, teammateExpansion)) &&
       candidateMatchesLabels(candidate, filters.labels) &&
       cardMatchesSearch(candidate, filters.search),
   );
@@ -257,6 +268,7 @@ function BoardContent({
               filters.participantId,
               filters.relevanceTypes,
               liveCandidate,
+              teammateExpansion,
             )) &&
         workItemMatchesLabels(item, filters.labels, liveCandidate) &&
         cardMatchesSearch(item, filters.search)

@@ -165,6 +165,18 @@ export class IntegrationIdentityStorage extends FactoryStorageDomain {
   }
 
   /**
+   * All claims in an org, across every user and every integration. Used by
+   * the roster read that lets the board's teammate filter expand a coworker's
+   * selection across every external identity they've claimed.
+   */
+  async listByOrg({ orgId }: { orgId: string }): Promise<IntegrationIdentityClaim[]> {
+    const rows = await this.#db.findMany<IntegrationIdentityClaimDbRow>('integration_identity_claims', {
+      org_id: orgId,
+    });
+    return rows.map(toClaim);
+  }
+
+  /**
    * All tenant users in an org who have claimed a given external account on
    * an integration. Multiple users may claim the same external id (co-owners
    * of a service account, an admin claiming their own bot); the reverse
