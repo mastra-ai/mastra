@@ -3,6 +3,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { Check, Download, GitPullRequest, Save, Rocket, Eye } from 'lucide-react';
 import { useCallback, useEffect, useMemo } from 'react';
@@ -139,7 +140,10 @@ function EditLayoutWrapper() {
   const { isMastraPlatform, mastraPlatformApiEndpoint, mastraPlatformProjectId } = useMastraPlatform();
 
   // Fetch the code/merged agent (GET /agents/:id) to determine source
-  const { data: codeAgent, isLoading: isLoadingCodeAgent } = useAgent(agentId);
+  const { data: codeAgent, isLoading: isLoadingCodeAgent } = useAgent(
+    agentId,
+    useEntityRequestContext('agent', agentId!)[0],
+  );
 
   // Fetch versions first — this endpoint returns an empty array for code-only agents
   const { data: versionsData } = useAgentVersions({

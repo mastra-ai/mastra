@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { boardForWorkItem, workItemPhaseSemantics } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntegrationTools } from '../integrations/base.js';
+import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactorySessionSourceLookup } from './binding-context.js';
 import { resolveFactorySessionAddress } from './binding-context.js';
@@ -77,6 +78,7 @@ export async function createFactoryTransitionTools(options: {
   }
 
   return {
+    ...(availableBinding.role === 'review' ? createReviewVerdictTool(options, availableBinding.workItemId) : {}),
     factory_transition_work_item: createTool({
       id: 'factory_transition_work_item',
       description: isTriage
@@ -125,6 +127,91 @@ export async function createFactoryTransitionTools(options: {
         });
 
         return result;
+      },
+    }),
+  };
+}
+
+export const REVIEW_VERDICTS = ['approve', 'request changes'] as const;
+
+const reviewVerdictInputSchema = z.object({
+  verdict: z.enum(REVIEW_VERDICTS),
+  reviewedHeadSha: z
+    .string()
+    .regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i, 'Use the full commit SHA of the reviewed head.'),
+});
+
+/**
+ * A review pass ends by recording its verdict on the card, which stays in
+ * Reviewing: Done is reserved for the merge, and a verdict is not a lane. The
+ * next push re-reviews from the recorded verdict.
+ */
+function createReviewVerdictTool(
+  options: { requestContext: RequestContext; storage: WorkItemsStorage; sessions?: FactorySessionSourceLookup },
+  boundWorkItemId: string,
+): IntegrationTools {
+  return {
+    factory_record_review_verdict: createTool({
+      id: 'factory_record_review_verdict',
+      description:
+        'Record the published review verdict and the PR head SHA it covers on the Review card bound to this thread. The card stays in Reviewing; this ends the review pass.',
+      inputSchema: reviewVerdictInputSchema,
+      requireApproval: false,
+      execute: async ({ verdict, reviewedHeadSha }, execution) => {
+        const resolution = await resolveFactorySessionAddress({
+          requestContext: execution.requestContext,
+          storage: options.storage,
+          sessions: options.sessions,
+        });
+        const binding = resolution ? await options.storage.findActiveRunBinding(resolution.address) : null;
+        if (!binding || binding.workItemId !== boundWorkItemId || binding.role !== 'review') {
+          throw new Error('Factory review binding is unavailable, revoked, or no longer matches this session.');
+        }
+        const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
+        if (!item) throw new Error('Bound Factory work item not found.');
+        if (boardForWorkItem(item) !== 'review' || item.stages[0] !== 'review') {
+          throw new Error(`Only a card in Reviewing records a verdict; this one is in ${item.stages.join(', ')}.`);
+        }
+        const reviewedAt = new Date().toISOString();
+        // Revision-checked, so a merge that moves the card between the stage
+        // check and this write fails the call instead of stamping a Done card.
+        try {
+          await options.storage.update({
+            orgId: binding.orgId,
+            id: item.id,
+            userId: `agent:${binding.id}`,
+            expectedRevision: item.revision,
+            patch: {
+              metadata: {
+                ...(item.metadata ?? {}),
+                reviewVerdict: verdict,
+                reviewedHeadSha: reviewedHeadSha.toLowerCase(),
+                reviewedAt,
+              },
+            },
+          });
+        } catch (error) {
+          if (!(error instanceof WorkItemUpdateConflictError)) throw error;
+          throw new Error(
+            'The Review card changed while recording the verdict; call again to record it on the current card.',
+          );
+        }
+        // Mirror the verdict onto the Work item that authored the PR, so its
+        // builder cannot close the work while changes are still requested.
+        const parent = item.parentWorkItemId
+          ? await options.storage.get({ orgId: binding.orgId, id: item.parentWorkItemId })
+          : null;
+        if (parent && boardForWorkItem(parent) === 'work') {
+          await options.storage.update({
+            orgId: binding.orgId,
+            id: parent.id,
+            userId: `agent:${binding.id}`,
+            patch: {
+              metadata: { reviewVerdict: verdict, reviewedHeadSha: reviewedHeadSha.toLowerCase(), reviewedAt },
+            },
+          });
+        }
+        return { status: 'recorded', verdict, reviewedHeadSha, reviewedAt };
       },
     }),
   };

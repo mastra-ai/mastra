@@ -23,6 +23,8 @@ import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SaveFullConversationAction } from '@mastra/playground-ui/domains/chat';
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
+import { MessageRow } from '@mastra/playground-ui/domains/chat/messages/message-row';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { useSpeechRecognition } from '@mastra/react';
 import type { MessageFactoryPart } from '@mastra/react/ui';
@@ -35,7 +37,7 @@ import { ComposerAttachmentsProvider, useComposerAttachments } from './attachmen
 import { ComposerFileDrop } from './attachments/composer-file-drop';
 import { useReadAloud } from './chat/use-read-aloud';
 import { BracketOverlay } from './components/bracket-overlay';
-import { MessageRow } from './messages/message-row';
+import { useComposerAutofocus } from './hooks/use-composer-autofocus';
 import { SuggestedPromptList } from './suggested-prompt-list';
 import { TaskPanel } from './task-panel';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
@@ -47,7 +49,6 @@ import { useThreadInput } from '@/domains/conversation';
 import { useVoiceCall, VoiceCallButton, VoiceCallPanel } from '@/domains/voice';
 import type { VoiceCallControls } from '@/domains/voice';
 import { startViewTransition } from '@/lib/routing';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 const SKELETON_DELAY_MS = 300;
 const EMPTY_SUGGESTED_PROMPTS: string[] = [];
@@ -147,7 +148,7 @@ export const Thread = ({
 
   const messages = useChatMessages();
   const { isRunning } = useChatRunning();
-  const { requestContext } = usePlaygroundStore();
+  const [requestContext] = useEntityRequestContext('agent', agentId ?? '');
   const { isSpeaking, readAloud, stop: stopSpeaking } = useReadAloud(agentId, requestContext);
 
   const { hasSession, viewMode } = useBrowserSession();
@@ -361,6 +362,8 @@ const AgentComposer = ({
   const [sendPulseKey, setSendPulseKey] = useState(0);
   const { canExecute } = usePermissions();
   const canExecuteAgent = canExecute('agents');
+  const inputDisabled = !canExecuteAgent || Boolean(draftStatus?.restoring);
+  useComposerAutofocus(textareaRef, { threadId, disabled: inputDisabled });
   // On a brand-new chat, starting the call must transition the page out of its
   // new-thread state (same as the first text send) or the chat never loads messages.
   const voiceCall = useVoiceCall({ agentId, threadId, onCallStarted: refreshThreadList });
@@ -436,7 +439,6 @@ const AgentComposer = ({
               <ComposerInput
                 ref={textareaRef}
                 value={text}
-                autoFocus={false}
                 placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
                 onChange={event => {
                   setThreadInput(event.target.value);
@@ -453,7 +455,7 @@ const AgentComposer = ({
                     void submit();
                   }
                 }}
-                disabled={!canExecuteAgent || draftStatus?.restoring}
+                disabled={inputDisabled}
               />
               {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning />}
               <ComposerActions>
@@ -481,7 +483,7 @@ const AgentComposer = ({
 };
 
 const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript: (text: string) => void }) => {
-  const { requestContext } = usePlaygroundStore();
+  const [requestContext] = useEntityRequestContext('agent', agentId ?? '');
   const { start, stop, isListening, transcript } = useSpeechRecognition({ agentId, requestContext });
 
   useEffect(() => {

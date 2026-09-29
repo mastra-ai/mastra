@@ -29,6 +29,10 @@ export const experimentReviewQueueLink = (experimentId?: string, resultId?: stri
   return query ? `${REVIEW_QUEUE_PATH}?${query}` : REVIEW_QUEUE_PATH;
 };
 
+/** Traces page with a trace open on one of its scores. */
+export const traceScoreLink = (traceId: string, scoreId: string) =>
+  `/traces?traceId=${encodeURIComponent(traceId)}&scoreId=${encodeURIComponent(scoreId)}`;
+
 export const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}/threads/new`,
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,

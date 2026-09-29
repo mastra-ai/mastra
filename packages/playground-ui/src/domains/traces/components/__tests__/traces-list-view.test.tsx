@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import '@/test/jsdom-polyfills';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, assert, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -79,7 +80,7 @@ describe('TracesListView columns', () => {
       ]);
       expect(screen.queryByText('Created')).toBeNull();
       expect(screen.queryByText('Entity')).toBeNull();
-      expect(grid.style.gridTemplateColumns).toBe('9rem 7rem 14rem minmax(8rem,1fr) 6rem 7rem 8rem');
+      expect(grid.style.gridTemplateColumns).toBe('11rem 7rem 14rem minmax(8rem,1fr) 6rem 7rem 8rem');
     });
   });
 
@@ -107,7 +108,7 @@ describe('TracesListView columns', () => {
 
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
       assert(grid);
-      expect(grid.style.gridTemplateColumns).toBe('9rem minmax(8rem,1fr) 6rem 7rem 8rem 8rem 8rem minmax(8rem,14rem)');
+      expect(grid.style.gridTemplateColumns).toBe('11rem minmax(8rem,1fr) 6rem 7rem 8rem 8rem 8rem minmax(8rem,14rem)');
     });
   });
 });

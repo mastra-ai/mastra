@@ -1,17 +1,13 @@
 import type { MCPToolType } from '@mastra/core/mcp';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Tabs, Tab, TabList } from '@mastra/playground-ui/components/Tabs';
+import type { RequestContextEntityType } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { DynamicForm } from '@mastra/playground-ui/lib/form/dynamic-form';
 import { isEmptyZodObject } from '@mastra/playground-ui/lib/form/is-empty-zod-object';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useState } from 'react';
 import type { ZodType } from 'zod';
-import {
-  RequestContextSchemaForm,
-  SchemaRequestContextProvider,
-  useSchemaRequestContext,
-} from '@/domains/request-context';
+import { RequestContextPopover } from '@/domains/run-options/components/request-context-popover';
 import { ToolInformation } from '@/domains/tools/components/ToolInformation';
 
 interface ToolExecutorProps {
@@ -23,62 +19,47 @@ interface ToolExecutorProps {
   toolDescription: string;
   toolId: string;
   toolType?: MCPToolType;
-  requestContextSchema?: string;
+  requestContextEntityType: RequestContextEntityType;
+  requestContextEntityId: string;
 }
 
-/** Inner component that can access SchemaRequestContext */
-const ToolExecutorContent = ({
+const ToolExecutor = ({
   isExecutingTool,
   zodInputSchema,
   handleExecuteTool,
-  result,
   errorString,
   toolDescription,
   toolId,
   toolType,
-  requestContextSchema,
-}: Omit<ToolExecutorProps, 'executionResult'> & { result: any }) => {
+  requestContextEntityType,
+  requestContextEntityId,
+  executionResult: result,
+}: ToolExecutorProps) => {
   const hasResult = errorString !== undefined || result !== undefined;
   const code = JSON.stringify(result ?? {}, null, 2);
-  const [selectedTab, setSelectedTab] = useState('input-data');
-  const { schemaValues, setSchemaValues } = useSchemaRequestContext();
+  const [requestContext] = useEntityRequestContext(requestContextEntityType, requestContextEntityId);
   const hasInputFields = !isEmptyZodObject(zodInputSchema);
-  const hasConfiguration = hasInputFields || Boolean(requestContextSchema);
 
   return (
     <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
       <div className="flex w-full flex-col items-center p-5 lg:flex-row lg:items-start lg:justify-center">
         <div className="grid w-full max-w-3xl min-w-0 content-start gap-5">
           <ToolInformation toolDescription={toolDescription} toolId={toolId} toolType={toolType} />
-          {hasConfiguration && (
-            <Tabs defaultTab="input-data" value={selectedTab} onValueChange={setSelectedTab}>
-              <TabList variant="pill">
-                <Tab value="input-data">Input Data</Tab>
-                {requestContextSchema && <Tab value="request-context">Request Context</Tab>}
-              </TabList>
-            </Tabs>
-          )}
-          <div className={cn(selectedTab !== 'input-data' && 'hidden')}>
+          <div>
             <DynamicForm
               isSubmitLoading={isExecutingTool}
               schema={zodInputSchema}
               onSubmit={data => {
-                handleExecuteTool(data, schemaValues);
+                handleExecuteTool(data, requestContext);
               }}
               className="space-y-4"
+              submitActions={
+                <RequestContextPopover entityType={requestContextEntityType} entityId={requestContextEntityId} />
+              }
             >
               {!hasInputFields && <Notice variant="info">No input is required to run this tool.</Notice>}
             </DynamicForm>
           </div>
-          {requestContextSchema && (
-            <div className={cn(selectedTab !== 'request-context' && 'hidden')}>
-              <RequestContextSchemaForm
-                requestContextSchema={requestContextSchema}
-                values={schemaValues}
-                onSave={setSchemaValues}
-              />
-            </div>
-          )}
         </div>
         <div
           className={cn(
@@ -92,34 +73,6 @@ const ToolExecutorContent = ({
         </div>
       </div>
     </div>
-  );
-};
-
-const ToolExecutor = ({
-  isExecutingTool,
-  zodInputSchema,
-  handleExecuteTool,
-  executionResult: result,
-  errorString,
-  toolDescription,
-  toolId,
-  toolType,
-  requestContextSchema,
-}: ToolExecutorProps) => {
-  return (
-    <SchemaRequestContextProvider>
-      <ToolExecutorContent
-        isExecutingTool={isExecutingTool}
-        zodInputSchema={zodInputSchema}
-        handleExecuteTool={handleExecuteTool}
-        result={result}
-        errorString={errorString}
-        toolDescription={toolDescription}
-        toolId={toolId}
-        toolType={toolType}
-        requestContextSchema={requestContextSchema}
-      />
-    </SchemaRequestContextProvider>
   );
 };
 

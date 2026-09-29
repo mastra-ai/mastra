@@ -30,6 +30,11 @@ export function createRecentRequests<T>(max = 10_000) {
       }
     },
 
+    /** Forgets `id`, so a caller that reserved it can release the reservation. */
+    delete(id: string): void {
+      entries.delete(id);
+    },
+
     clear(): void {
       entries.clear();
     },

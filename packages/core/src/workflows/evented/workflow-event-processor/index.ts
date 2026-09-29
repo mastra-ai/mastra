@@ -2502,8 +2502,10 @@ export class WorkflowEventProcessor extends EventProcessor {
         const existingSuspendPayload = existingStepResult?.suspendPayload as any;
         const iterationSuspendPayload = prevResult.suspendPayload as any;
         const foreachOutput = [...(existingSuspendPayload?.__workflow_meta?.foreachOutput ?? [])];
+        // Drop `payload`: it holds the whole foreach input array, which is already stored once on the step.
+        const { payload: _payload, ...iterationRecord } = prevResult as any;
         foreachOutput[currentIdx] =
-          prevResult.status === 'suspended' ? prevResult : { ...prevResult, suspendPayload: {} };
+          prevResult.status === 'suspended' ? iterationRecord : { ...iterationRecord, suspendPayload: {} };
         const suspendPayload = {
           ...(existingSuspendPayload ?? iterationSuspendPayload),
           __workflow_meta: {

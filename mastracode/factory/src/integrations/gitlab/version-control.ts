@@ -36,7 +36,10 @@ export interface GitLabVersionControlContext {
 
 export interface GitLabVersionControlDependencies {
   contextForConnection(connection: IntegrationConnection): Promise<GitLabVersionControlContext>;
-  contextForStoredInstallation?(connection: IntegrationConnection, host: string | undefined): Promise<GitLabVersionControlContext>;
+  contextForStoredInstallation?(
+    connection: IntegrationConnection,
+    host: string | undefined,
+  ): Promise<GitLabVersionControlContext>;
 }
 
 export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies): VersionControl {
@@ -54,7 +57,10 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
     const mergeRequests = await context.api.listMergeRequests(input.sourceId, { page, state });
     return {
       pullRequests: mergeRequests
-        .filter(mergeRequest => input.state !== 'closed' || mergeRequest.state === 'closed' || mergeRequest.state === 'merged')
+        .filter(
+          mergeRequest =>
+            input.state !== 'closed' || mergeRequest.state === 'closed' || mergeRequest.state === 'merged',
+        )
         .filter(mergeRequest => input.includeDrafts !== false || !isDraft(mergeRequest))
         .map(toPullRequest),
       nextCursor: mergeRequests.length === GITLAB_MERGE_REQUESTS_PAGE_SIZE ? String(page + 1) : null,
@@ -173,7 +179,11 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
     const mergeRequestIid = requirePositiveId(input.pullRequestId, 'merge request');
     const approvalPrefix = `${mergeRequestIid}:approval`;
     const commentPrefix = `${mergeRequestIid}:comment:`;
-    if (input.reviewId !== approvalPrefix && !input.reviewId.startsWith(`${approvalPrefix}:`) && !input.reviewId.startsWith(commentPrefix)) {
+    if (
+      input.reviewId !== approvalPrefix &&
+      !input.reviewId.startsWith(`${approvalPrefix}:`) &&
+      !input.reviewId.startsWith(commentPrefix)
+    ) {
       return null;
     }
     const context = await deps.contextForConnection(input.connection);
@@ -182,12 +192,14 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
       if (reviewerKey === '') return null;
       const currentUser = reviewerKey === null ? await context.api.getCurrentUser() : null;
       const approvals = await context.api.getMergeRequestApprovals(input.sourceId, mergeRequestIid);
-      const user = (approvals.approved_by ?? []).map(entry => entry.user).find(candidate =>
-        reviewerKey === null
-          ? (currentUser?.id !== undefined && candidate.id === currentUser.id) ||
-            candidate.username === currentUser?.username
-          : String(candidate.id ?? candidate.username) === reviewerKey,
-      );
+      const user = (approvals.approved_by ?? [])
+        .map(entry => entry.user)
+        .find(candidate =>
+          reviewerKey === null
+            ? (currentUser?.id !== undefined && candidate.id === currentUser.id) ||
+              candidate.username === currentUser?.username
+            : String(candidate.id ?? candidate.username) === reviewerKey,
+        );
       return user ? toApprovalReview(webBaseUrl(context), input.sourceId, mergeRequestIid, user) : null;
     }
     const noteId = parsePositiveInteger(input.reviewId.slice(commentPrefix.length));
@@ -650,7 +662,8 @@ function webBaseUrl(context: GitLabVersionControlContext): string {
   } catch {
     throw new GitLabApiError('GitLab web base URL is invalid.', 400);
   }
-  const loopback = url.hostname === 'localhost' || url.hostname === '[::1]' || /^127(?:\.\d{1,3}){3}$/.test(url.hostname);
+  const loopback =
+    url.hostname === 'localhost' || url.hostname === '[::1]' || /^127(?:\.\d{1,3}){3}$/.test(url.hostname);
   if (
     url.host !== host ||
     (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) ||
@@ -749,9 +762,7 @@ async function resolveMember(api: GitLabApiClient, sourceId: string, username: s
 }
 
 async function reviewerIds(api: GitLabApiClient, sourceId: string, users: GitLabUser[]): Promise<number[]> {
-  return Promise.all(
-    users.map(async user => user.id ?? (await resolveMember(api, sourceId, user.username)).id),
-  );
+  return Promise.all(users.map(async user => user.id ?? (await resolveMember(api, sourceId, user.username)).id));
 }
 
 function rejectTeamReviewers(teams: string[] | undefined): void {

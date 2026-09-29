@@ -1,11 +1,11 @@
 import type { ComponentType, ReactNode, SVGProps } from 'react';
-import { AgentCrumb, AgentSwitcherAction } from '@/domains/agents/agent-crumb';
-import { DatasetCrumb, DatasetSwitcherAction } from '@/domains/datasets/dataset-crumb';
-import { McpServerCrumb, McpServerSwitcherAction } from '@/domains/mcps/mcp-crumbs';
-import { ProcessorCrumb, ProcessorSwitcherAction } from '@/domains/processors/processor-crumb';
-import { ScorerCrumb, ScorerSwitcherAction } from '@/domains/scores/scorer-crumb';
-import { ToolCrumb, ToolSwitcherAction } from '@/domains/tools/tool-crumb';
-import { WorkflowCrumb, WorkflowSwitcherAction } from '@/domains/workflows/workflow-crumbs';
+import { AgentCrumb, AgentSwitcher } from '@/domains/agents/agent-crumb';
+import { DatasetCrumb, DatasetSwitcher } from '@/domains/datasets/dataset-crumb';
+import { McpServerCrumb, McpServerSwitcher } from '@/domains/mcps/mcp-crumbs';
+import { ProcessorCrumb, ProcessorSwitcher } from '@/domains/processors/processor-crumb';
+import { ScorerCrumb, ScorerSwitcher } from '@/domains/scores/scorer-crumb';
+import { ToolCrumb, ToolSwitcher } from '@/domains/tools/tool-crumb';
+import { WorkflowCrumb, WorkflowSwitcher } from '@/domains/workflows/workflow-crumbs';
 import { findNavItem } from '@/lib/nav/nav-items';
 
 export type CrumbIcon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -15,8 +15,9 @@ interface CrumbBase {
   id: string;
   to?: string;
   icon?: CrumbIcon;
-  /** Hook-driven control rendered next to the crumb label (e.g. an icon-only entity switcher). */
+  /** Hook-driven control rendered next to the crumb label (e.g. a copy button). */
   Action?: ComponentType;
+  Switcher?: ComponentType;
 }
 
 export type CrumbDef = CrumbBase &
@@ -49,39 +50,38 @@ export const truncateItemIdCrumb = (value: string | undefined) => {
   return decoded.length > 8 ? `${decoded.slice(0, 8)}...` : decoded;
 };
 
-// Entity crumbs: name + icon-only switcher in the crumb `action` slot.
 export const agentCrumb = {
   id: 'agent',
   Component: AgentCrumb,
-  Action: AgentSwitcherAction,
+  Switcher: AgentSwitcher,
 } satisfies CrumbDef;
 export const scorerCrumb = {
   id: 'scorer',
   Component: ScorerCrumb,
-  Action: ScorerSwitcherAction,
+  Switcher: ScorerSwitcher,
 } satisfies CrumbDef;
 export const toolCrumb = {
   id: 'tool',
   Component: ToolCrumb,
-  Action: ToolSwitcherAction,
+  Switcher: ToolSwitcher,
 } satisfies CrumbDef;
 export const processorCrumb = {
   id: 'processor',
   Component: ProcessorCrumb,
-  Action: ProcessorSwitcherAction,
+  Switcher: ProcessorSwitcher,
 } satisfies CrumbDef;
 export const mcpServerCrumb = {
   id: 'mcp-server',
   Component: McpServerCrumb,
-  Action: McpServerSwitcherAction,
+  Switcher: McpServerSwitcher,
 } satisfies CrumbDef;
 export const workflowCrumb = {
   id: 'workflow',
   Component: WorkflowCrumb,
-  Action: WorkflowSwitcherAction,
+  Switcher: WorkflowSwitcher,
 } satisfies CrumbDef;
 export const datasetCrumb = {
   id: 'dataset',
   Component: DatasetCrumb,
-  Action: DatasetSwitcherAction,
+  Switcher: DatasetSwitcher,
 } satisfies CrumbDef;

@@ -14,12 +14,11 @@ import { useWatch } from 'react-hook-form';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { SectionHeader, DisplayConditionsDialog } from '@/domains/cms';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 export function WorkflowsPage() {
   const { form, readOnly } = useAgentEditFormContext();
   const { control } = form;
-  const { data: workflows } = useWorkflows({ requestContext: usePlaygroundStore().requestContext });
+  const { data: workflows } = useWorkflows();
   const selectedWorkflows = useWatch({ control, name: 'workflows' });
   const variables = useWatch({ control, name: 'variables' });
   const [search, setSearch] = useState('');
