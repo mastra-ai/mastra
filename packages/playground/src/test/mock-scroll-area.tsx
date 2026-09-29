@@ -11,7 +11,7 @@ import type { ComponentProps } from 'react';
 type MockScrollAreaProps = ComponentProps<'div'> &
   Pick<
     ScrollAreaProps,
-    'maxHeight' | 'autoScroll' | 'orientation' | 'scrollButtons' | 'mask' | 'showMask' | 'revealScrollbarOnHover'
+    'maxHeight' | 'autoScroll' | 'orientation' | 'scrollButtons' | 'mask' | 'revealScrollbarOnHover'
   >;
 
 export function ScrollArea({
@@ -20,7 +20,6 @@ export function ScrollArea({
   orientation: _orientation,
   scrollButtons: _scrollButtons,
   mask: _mask,
-  showMask: _showMask,
   revealScrollbarOnHover: _revealScrollbarOnHover,
   ...props
 }: MockScrollAreaProps) {

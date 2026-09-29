@@ -19,6 +19,14 @@ type MaskFadeDepth = `${number}${'rem' | 'px'}`;
 type MaskSide = boolean | MaskFadeDepth;
 
 const DEFAULT_MASK_FADE_DEPTH: MaskFadeDepth = '2rem';
+const NO_MASK_FADE: MaskFadeDepth = '0px';
+
+const SCROLL_DRIVEN_FADE_CLASSES = [
+  'mask-t-from-[calc(100%-min(var(--scroll-area-fade-top),var(--scroll-area-overflow-y-start,0px)))]',
+  'mask-b-from-[calc(100%-min(var(--scroll-area-fade-bottom),var(--scroll-area-overflow-y-end,0px)))]',
+  'mask-l-from-[calc(100%-min(var(--scroll-area-fade-left),var(--scroll-area-overflow-x-start,0px)))]',
+  'mask-r-from-[calc(100%-min(var(--scroll-area-fade-right),var(--scroll-area-overflow-x-end,0px)))]',
+].join(' ');
 
 export type MaskSides = {
   top?: MaskSide;
@@ -35,6 +43,8 @@ export type MaskSides = {
  * - `true` / omitted: fade the edges that match `orientation`, 2rem deep.
  * - `false`: no fade.
  * - object: per-side override on top of the orientation default; a length (`'5rem'`) sets that side's fade depth.
+ *
+ * A fade grows with the distance scrolled from its edge, up to its depth.
  */
 export type ScrollAreaMask = boolean | MaskSides;
 
@@ -57,8 +67,6 @@ export type ScrollAreaProps = React.ComponentProps<typeof ScrollAreaPrimitive.Ro
   scrollButtons?: ScrollAreaScrollButtons;
   /** Fade content at the edges where it's clipped by overflow. Defaults to the axes matching `orientation`. */
   mask?: ScrollAreaMask;
-  /** @deprecated Use `mask` instead. Retained for backward compatibility. */
-  showMask?: boolean;
   /**
    * Reveal the overlay scrollbar when the pointer hovers the area. When `false`,
    * the scrollbar only appears while actively scrolling. Defaults to `true`.
@@ -102,14 +110,12 @@ function resolveMask(mask: ScrollAreaMask | undefined, orientation: Orientation)
   return sides;
 }
 
-function maskClasses(sides: ResolvedMask) {
-  return cn(
-    sides.top && 'data-[overflow-y-start]:mask-t-from-[calc(100%-var(--scroll-area-fade-top))]',
-    sides.bottom && 'data-[overflow-y-end]:mask-b-from-[calc(100%-var(--scroll-area-fade-bottom))]',
-    sides.left && 'data-[overflow-x-start]:mask-l-from-[calc(100%-var(--scroll-area-fade-left))]',
-    sides.right && 'data-[overflow-x-end]:mask-r-from-[calc(100%-var(--scroll-area-fade-right))]',
-  );
-}
+const fadeDepthVars = (sides: ResolvedMask): ScrollAreaViewportStyle => ({
+  '--scroll-area-fade-top': sides.top || NO_MASK_FADE,
+  '--scroll-area-fade-bottom': sides.bottom || NO_MASK_FADE,
+  '--scroll-area-fade-left': sides.left || NO_MASK_FADE,
+  '--scroll-area-fade-right': sides.right || NO_MASK_FADE,
+});
 
 function clampScrollButtonNumber(value: number | undefined, fallback: number, min: number) {
   const resolvedValue = value ?? fallback;
@@ -292,22 +298,16 @@ function ScrollArea({
   orientation = 'vertical',
   scrollButtons,
   mask,
-  showMask,
   revealScrollbarOnHover = true,
   ...props
 }: ScrollAreaProps) {
   const areaRef = React.useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: autoScroll });
 
-  const effectiveMask: ScrollAreaMask | undefined = mask !== undefined ? mask : showMask;
-  const sides = resolveMask(effectiveMask, orientation);
+  const sides = resolveMask(mask, orientation);
+  const fadesAnySide = Object.values(sides).some(Boolean);
 
-  const viewportStyle: ScrollAreaViewportStyle = {
-    '--scroll-area-fade-top': sides.top || undefined,
-    '--scroll-area-fade-bottom': sides.bottom || undefined,
-    '--scroll-area-fade-left': sides.left || undefined,
-    '--scroll-area-fade-right': sides.right || undefined,
-  };
+  const viewportStyle = fadeDepthVars(sides);
   if (maxHeight) viewportStyle.maxHeight = maxHeight;
   if (orientation === 'vertical') {
     viewportStyle.overflowX = 'hidden';
@@ -326,7 +326,7 @@ function ScrollArea({
 
   const viewport: ScrollAreaViewportContextValue = {
     areaRef,
-    className: cn('size-full', maskClasses(sides)),
+    className: cn('size-full', fadesAnySide && SCROLL_DRIVEN_FADE_CLASSES),
     style: viewportStyle,
     contentStyle,
   };

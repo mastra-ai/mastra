@@ -121,7 +121,7 @@ describe('ScrollArea', () => {
       const viewport = getViewport();
       expect(viewport.classList.contains('caller-viewport')).toBe(true);
       expect(viewport.style.maxHeight).toBe('400px');
-      expect(viewport.className).toContain('data-[overflow-y-end]:mask-b-from');
+      expect(viewport.className).toContain('mask-b-from');
     });
 
     it('hands the viewport to a callback ref', () => {
@@ -358,13 +358,11 @@ describe('ScrollArea', () => {
 describe('ScrollArea — fade masks', () => {
   const maskSides = (props: Partial<React.ComponentProps<typeof ScrollArea>> = {}) => {
     renderArea(props);
-    const className = getViewport().className;
-    return {
-      top: className.includes('data-[overflow-y-start]:mask-t-from'),
-      bottom: className.includes('data-[overflow-y-end]:mask-b-from'),
-      left: className.includes('data-[overflow-x-start]:mask-l-from'),
-      right: className.includes('data-[overflow-x-end]:mask-r-from'),
-    };
+    const viewport = getViewport();
+    const fades = (side: string) =>
+      viewport.className.includes('mask-t-from') &&
+      viewport.style.getPropertyValue(`--scroll-area-fade-${side}`) !== '0px';
+    return { top: fades('top'), bottom: fades('bottom'), left: fades('left'), right: fades('right') };
   };
 
   it('fades both ends of the axis it scrolls', () => {
@@ -441,10 +439,6 @@ describe('ScrollArea — fade masks', () => {
     ['right', { right: false }, { top: true, bottom: true, left: true, right: false }],
   ])('turns off the %s end on its own', (_, mask, expected) => {
     expect(maskSides({ orientation: 'both', mask })).toEqual(expected);
-  });
-
-  it('still answers to the older showMask prop', () => {
-    expect(maskSides({ showMask: false })).toEqual({ top: false, bottom: false, left: false, right: false });
   });
 
   it('lets a single end override the axis it belongs to', () => {
