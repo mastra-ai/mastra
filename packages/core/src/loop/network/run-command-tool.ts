@@ -166,7 +166,9 @@ export function extractBaseCommand(
   if (platform !== 'win32') return lower;
   // Windows ignores trailing dots/spaces and resolves executable extensions (`rm.exe.` runs `rm.exe`).
   // On POSIX these are distinct files, so normalizing there would let `./echo.` match an `echo` allowlist entry.
-  const trimmedName = lower.replace(/[. ]+$/, '');
+  let end = lower.length;
+  while (end > 0 && (lower[end - 1] === '.' || lower[end - 1] === ' ')) end--;
+  const trimmedName = lower.slice(0, end);
   return stripExtension ? trimmedName.replace(/\.(exe|cmd|bat|com)$/, '') : trimmedName;
 }
 
