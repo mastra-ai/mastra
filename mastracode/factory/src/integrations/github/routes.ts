@@ -795,6 +795,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             author: pr.author,
             assignees: pr.assignees ?? [],
             requestedReviewers: pr.requestedReviewers ?? [],
+            labels: pr.labels ?? [],
             baseBranch: pr.baseBranch,
             headBranch: pr.headBranch,
             createdAt: pr.createdAt,

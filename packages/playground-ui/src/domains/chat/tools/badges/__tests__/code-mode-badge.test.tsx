@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import '@/test/jsdom-polyfills';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -48,8 +49,7 @@ describe('CodeModeBadge', () => {
       />,
     );
 
-    // Badge starts collapsed; expand it.
-    fireEvent.click(screen.getByText('execute_typescript'));
+    fireEvent.click(screen.getByRole('button', { name: /execute_typescript/ }));
 
     expect(screen.getByTestId('code-mode-program').textContent).toContain('external_getOrders');
     expect(screen.getByTestId('code-mode-result')).toBeTruthy();
@@ -69,7 +69,7 @@ describe('CodeModeBadge', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('execute_typescript'));
+    fireEvent.click(screen.getByRole('button', { name: /execute_typescript/ }));
 
     // The raw program is a single line (no newlines). Formatting is async
     // (prettier loads lazily), so wait for the reflowed, multi-line source.
@@ -94,7 +94,7 @@ describe('CodeModeBadge', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('sales_code'));
+    fireEvent.click(screen.getByRole('button', { name: /sales_code/ }));
 
     const error = screen.getByTestId('code-mode-error');
     expect(error.textContent).toContain('Error: boom');

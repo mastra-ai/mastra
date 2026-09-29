@@ -46,9 +46,9 @@ export class HttpTransport extends LoggerTransport {
     this.flushInterval = options.flushInterval || 10000;
     this.timeout = options.timeout || 30000;
     this.retryOptions = {
-      maxRetries: options.retryOptions?.maxRetries || 3,
-      retryDelay: options.retryOptions?.retryDelay || 1000,
-      exponentialBackoff: options.retryOptions?.exponentialBackoff || true,
+      maxRetries: options.retryOptions?.maxRetries ?? 3,
+      retryDelay: options.retryOptions?.retryDelay ?? 1000,
+      exponentialBackoff: options.retryOptions?.exponentialBackoff ?? true,
     };
 
     this.logBuffer = [];

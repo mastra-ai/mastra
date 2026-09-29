@@ -9,6 +9,7 @@ import { THINK_COMMAND_DESCRIPTOR } from '@mastra/code-sdk/thinking';
 import { loadCustomCommands } from '@mastra/code-sdk/utils/slash-command-loader';
 import { ThreadLockError } from '@mastra/code-sdk/utils/thread-lock';
 import type { AgentControllerEventListener } from '@mastra/core/agent-controller';
+import { reconcileChatBoundarySpacers } from './chat-boundary-reconciliation.js';
 import { isUserInvocable } from './commands/skill-filters.js';
 import { renderBanner } from './components/banner.js';
 import { IdleCounterComponent } from './components/idle-counter.js';
@@ -21,6 +22,7 @@ import { showModalOverlay } from './overlay.js';
 import type { TUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
 import { theme } from './theme.js';
+import { isEventRoutedToCurrentThread } from './thread-routing.js';
 import { isSubconsciousEnabled } from './utils/experimental-features.js';
 
 // =============================================================================
@@ -144,6 +146,8 @@ export function setupKeyboardShortcuts(
     for (const shell of state.allShellComponents) {
       shell.setExpanded(state.toolOutputExpanded);
     }
+    // Expanded quiet shell calls leave their shared box, so re-measure chat spacing.
+    reconcileChatBoundarySpacers(state.chatContainer);
     state.ui.requestRender();
   });
 
@@ -675,13 +679,19 @@ export function subscribeToAgentController(state: TUIState, handleEvent: (event:
     if (stack) process.stderr.write(stack + '\n');
   };
   const listener: AgentControllerEventListener = event => {
-    // Notify at receipt, before queueing: a pending prompt blocks the serial
-    // queue until answered, which would starve any notification queued behind
-    // it — exactly when the user has walked away and needs the ping.
-    notifyForInputRequest(state, event);
-    // PermissionRequest hooks starve the same way (#20861) — dispatch them at
-    // receipt too, before the event is chained onto the serial queue.
-    runPermissionHooksForEvent(state, event);
+    // Notifications and hooks run at receipt, before queueing, so they must
+    // apply the same thread routing the dispatch queue does — otherwise a
+    // detached thread's approval would ping the user and run permission hooks
+    // for a call they cannot act on.
+    if (isEventRoutedToCurrentThread(event, state)) {
+      // Notify at receipt, before queueing: a pending prompt blocks the serial
+      // queue until answered, which would starve any notification queued behind
+      // it — exactly when the user has walked away and needs the ping.
+      notifyForInputRequest(state, event);
+      // PermissionRequest hooks starve the same way (#20861) — dispatch them at
+      // receipt too, before the event is chained onto the serial queue.
+      runPermissionHooksForEvent(state, event);
+    }
     eventQueue = eventQueue.then(async () => {
       if (state.options.backgroundToolsEnabled && event.type === 'tool_suspended') {
         // Start interactive prompts in event order, but don't park the finite

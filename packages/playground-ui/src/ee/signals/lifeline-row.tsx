@@ -1,10 +1,10 @@
 import { LifelinePoint } from './lifeline-point';
+import { getSignalAreaClass, getSignalColor, getSignalConnectorClass } from './signal-colors';
 import { formatSnapshotCutoff } from './signal-formatting';
 import type { ThemeSelection } from './theme-drilldown-data';
 import { lifelineConnectors, lifelineSegments } from './theme-lifelines-data';
 import type { ThemeLifeline, ThemeLifelinePoint } from './theme-lifelines-data';
 import type { ThemeSnapshot, TraceSignalName } from './types';
-import { nodeColor } from '@/ds/components/SankeyChart';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHoverInGroup } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
@@ -42,14 +42,12 @@ export function LifelineRow({
   signalName,
   snapshots,
   positions,
-  hue,
   onThemeSelect,
 }: {
   row: ThemeLifeline;
   signalName: TraceSignalName;
   snapshots: ThemeSnapshot[];
   positions: number[];
-  hue: number;
   onThemeSelect: (selection: ThemeSelection, snapshotIndex: number) => void;
 }) {
   const isPersistent = row.points.length * 2 >= snapshots.length;
@@ -83,13 +81,14 @@ export function LifelineRow({
             {segments.map(segment => {
               const area = lifelineArea(segment, positions);
               if (!area) return undefined;
-              return <polygon key={`area-${area.key}`} fill={nodeColor(hue)} fillOpacity={0.14} points={area.points} />;
+              return (
+                <polygon key={`area-${area.key}`} className={getSignalAreaClass(signalName)} points={area.points} />
+              );
             })}
             {connectors.map(({ from, to }) => (
               <line
                 key={`${from.snapshotIndex}-${to.snapshotIndex}`}
-                stroke={nodeColor(hue)}
-                strokeOpacity={0.45}
+                className={getSignalConnectorClass(signalName)}
                 strokeWidth={1.2}
                 vectorEffect="non-scaling-stroke"
                 x1={positions[from.snapshotIndex]}
@@ -109,7 +108,7 @@ export function LifelineRow({
               title={title}
               positionPercent={positions[point.snapshotIndex]}
               height={barHeight(point.share)}
-              color={nodeColor(hue)}
+              color={getSignalColor(signalName)}
               onSelect={
                 themeId === undefined
                   ? undefined

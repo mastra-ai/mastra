@@ -104,9 +104,9 @@ export const FilterableList = ({
               const checked = isChecked(item.id);
               const checkboxStyle: CSSProperties | undefined = checked
                 ? {
-                    backgroundColor: agentColor.background,
-                    borderColor: agentColor.background,
-                    color: agentColor.foreground,
+                    backgroundColor: agentColor.tint,
+                    borderColor: agentColor.tint,
+                    color: 'var(--background)',
                   }
                 : undefined;
 

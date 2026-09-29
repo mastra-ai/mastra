@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
@@ -32,11 +33,11 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
   const { paths, navigate } = useLinkComponent();
 
   // Resolve the thread's actual resourceId (may differ from agentId for externally-created threads)
-  const { data: thread } = useThread({ threadId, agentId });
+  const { data: thread } = useThread({ threadId, agentId }, useEntityRequestContext('agent', agentId)[0]);
   const effectiveResourceId = thread?.resourceId ?? agentId;
 
   // Get memory config to check if semantic recall is enabled
-  const { data, isLoading: isConfigLoading } = useMemoryConfig(agentId);
+  const { data, isLoading: isConfigLoading } = useMemoryConfig(agentId, useEntityRequestContext('agent', agentId)[0]);
 
   // Check if semantic recall is enabled
   const config = data?.config;
@@ -51,11 +52,14 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
   const isOMEnabled = omStatus?.observationalMemory?.enabled ?? false;
 
   // Get memory search hook
-  const { mutateAsync: searchMemory, data: searchMemoryData } = useMemorySearch({
-    agentId: agentId || '',
-    resourceId: effectiveResourceId || '',
-    threadId,
-  });
+  const { mutateAsync: searchMemory, data: searchMemoryData } = useMemorySearch(
+    {
+      agentId: agentId || '',
+      resourceId: effectiveResourceId || '',
+      threadId,
+    },
+    useEntityRequestContext('agent', agentId)[0],
+  );
 
   // Get clone thread hook
   const { mutateAsync: cloneThread, isPending: isCloning } = useCloneThread();
@@ -146,7 +150,9 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
                 <span
                   className={cn(
                     'rounded px-2 py-0.5 text-column',
-                    searchScope === 'resource' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400',
+                    searchScope === 'resource'
+                      ? 'bg-badge-purple-strong text-badge-purple-foreground'
+                      : 'bg-badge-blue-strong text-badge-blue-foreground',
                   )}
                   title={
                     searchScope === 'resource' ? 'Searching across all threads' : 'Searching within current thread only'
@@ -175,7 +181,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
                 target="_blank"
                 rel="noopener noreferrer"
                 className={cn(
-                  'inline-flex items-center gap-2 text-body text-blue-400 hover:text-blue-300',
+                  'inline-flex items-center gap-2 text-body text-info-indicator hover:underline',
                   controlStateColorTransition,
                 )}
               >
@@ -199,7 +205,9 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
         <div className="border-b border-border p-4">
           <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
             <div className="mb-1 flex items-center gap-2">
-              <span className="rounded bg-green-500/20 px-2 py-0.5 text-column text-green-400">Remote</span>
+              <span className="rounded bg-badge-green-strong px-2 py-0.5 text-column text-badge-green-foreground">
+                Remote
+              </span>
               <h3 className="text-subheading text-foreground">Gateway</h3>
             </div>
             <p className="text-caption text-muted-foreground">

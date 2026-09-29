@@ -445,11 +445,9 @@ export function buildDeleteFilterQuery(filter: PGVectorFilter): FilterResult {
       const entries = Object.entries(f || {});
       if (entries.length === 0) return '';
 
-      const [firstKey, firstValue] = entries[0] || [];
-      if (['$and', '$or', '$not', '$nor'].includes(firstKey as string)) {
-        return buildCondition(firstKey as string, firstValue, parentPath);
-      }
-      return entries.map(([k, v]) => buildCondition(k, v, parentPath)).join(` ${joinOperator} `);
+      // The keys of one branch are an implicit AND: `{ a: 1, b: 2 }` matches only when both hold.
+      const branchConditions = entries.map(([k, v]) => buildCondition(k, v, parentPath));
+      return branchConditions.length === 1 ? branchConditions[0]! : `(${branchConditions.join(' AND ')})`;
     });
 
     const joined = conditions.join(` ${joinOperator} `);
@@ -604,11 +602,9 @@ export function buildFilterQuery(filter: PGVectorFilter, minScore: number, topK:
       const entries = Object.entries(f || {});
       if (entries.length === 0) return '';
 
-      const [firstKey, firstValue] = entries[0] || [];
-      if (['$and', '$or', '$not', '$nor'].includes(firstKey as string)) {
-        return buildCondition(firstKey as string, firstValue, parentPath);
-      }
-      return entries.map(([k, v]) => buildCondition(k, v, parentPath)).join(` ${joinOperator} `);
+      // The keys of one branch are an implicit AND: `{ a: 1, b: 2 }` matches only when both hold.
+      const branchConditions = entries.map(([k, v]) => buildCondition(k, v, parentPath));
+      return branchConditions.length === 1 ? branchConditions[0]! : `(${branchConditions.join(' AND ')})`;
     });
 
     const joined = conditions.join(` ${joinOperator} `);

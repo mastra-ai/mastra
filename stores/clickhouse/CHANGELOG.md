@@ -1,5 +1,14 @@
 # @mastra/clickhouse
 
+## 1.21.2-alpha.0
+
+### Patch Changes
+
+- Fixed the Studio Traces page running out of memory or timing out on large ClickHouse databases. Trace queries no longer read every stored trace's full data before applying the selected time range, which cuts memory use and data read on large tables. Fixes [#25141](https://github.com/mastra-ai/mastra/issues/25141). ([#25225](https://github.com/mastra-ai/mastra/pull/25225))
+
+- Updated dependencies [[`9ce3444`](https://github.com/mastra-ai/mastra/commit/9ce3444d1a6b17e72b0a20c74603abaf252a843e), [`3b77788`](https://github.com/mastra-ai/mastra/commit/3b77788a08df1e754282d39c42823e6e1c5f2742), [`987257a`](https://github.com/mastra-ai/mastra/commit/987257a34cda8a153fe592c31d75fbb1dee55202), [`65a93a2`](https://github.com/mastra-ai/mastra/commit/65a93a2a3b1434d605a6a417cb83d2d58e16bfc0), [`fd92729`](https://github.com/mastra-ai/mastra/commit/fd92729380a29f2a0ec822e39f3c09eb9aaa5ac5), [`79c3b1f`](https://github.com/mastra-ai/mastra/commit/79c3b1fa4d470585a00558b317ed47db9b1decd4), [`4092ef2`](https://github.com/mastra-ai/mastra/commit/4092ef29aad09f2ba5f90c92a4d4d3bd444eae67), [`5026973`](https://github.com/mastra-ai/mastra/commit/50269736f432cee1170627b2b6f88ba1431e837f)]:
+  - @mastra/core@1.72.0-alpha.7
+
 ## 1.21.1
 
 ### Patch Changes

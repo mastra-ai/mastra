@@ -354,5 +354,336 @@ export function createBackgroundTasksTests({ storage }: BackgroundTasksTestOptio
         expect(await bgStorage.getRunningCountByAgent('a3')).toBe(0);
       });
     });
+
+    describe('execution ownership', () => {
+      // Adapters store timestamps with differing precision (seconds for some
+      // SQL dialects, ISO strings for schemaless stores), so compare with a
+      // tolerance rather than for equality.
+      const expectCloseTo = (actual: Date | undefined, expected: Date) => {
+        const reader = actual as unknown;
+        // Some adapters hand back ISO strings rather than Date instances.
+        const asDate = reader instanceof Date ? reader : new Date(reader as string);
+        expect(Number.isNaN(asDate.getTime())).toBe(false);
+        expect(Math.abs(asDate.getTime() - expected.getTime())).toBeLessThan(5_000);
+      };
+
+      it('round-trips ownerId and leaseExpiresAt through createTask + getTask', async () => {
+        if (!bgStorage) return;
+        const leaseExpiresAt = new Date(Date.now() + 60_000);
+        const task = createSampleTask({
+          status: 'running',
+          startedAt: new Date(),
+          ownerId: 'worker-a',
+          leaseExpiresAt,
+        });
+        await bgStorage.createTask(task);
+
+        const result = await bgStorage.getTask(task.id);
+        expect(result!.ownerId).toBe('worker-a');
+        expectCloseTo(result!.leaseExpiresAt, leaseExpiresAt);
+      });
+
+      it('stores no owner for an unowned task', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask();
+        await bgStorage.createTask(task);
+
+        const result = await bgStorage.getTask(task.id);
+        expect(result!.ownerId ?? null).toBeNull();
+        expect(result!.leaseExpiresAt ?? null).toBeNull();
+      });
+
+      it('claims a pending task fenced on its unowned state', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({ status: 'pending' });
+        await bgStorage.createTask(task);
+
+        const claimed = await bgStorage.updateTask(
+          task.id,
+          {
+            status: 'running',
+            startedAt: new Date(),
+            ownerId: 'worker-a',
+            leaseExpiresAt: new Date(Date.now() + 60_000),
+          },
+          { expectedStatus: 'pending', expectedOwnerId: null, expectedLeaseExpiresAt: null },
+        );
+
+        expect(claimed).toBe(true);
+        const stored = await bgStorage.getTask(task.id);
+        expect(stored!.status).toBe('running');
+        expect(stored!.ownerId).toBe('worker-a');
+        expectCloseTo(stored!.leaseExpiresAt, new Date(Date.now() + 60_000));
+      });
+
+      it('refuses a claim fenced on an owner that does not match', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({
+          status: 'running',
+          startedAt: new Date(),
+          ownerId: 'worker-a',
+          leaseExpiresAt: new Date(Date.now() + 60_000),
+        });
+        await bgStorage.createTask(task);
+
+        expect(
+          await bgStorage.updateTask(
+            task.id,
+            { ownerId: 'worker-b', leaseExpiresAt: new Date(Date.now() + 60_000) },
+            { expectedOwnerId: null },
+          ),
+        ).toBe(false);
+        expect((await bgStorage.getTask(task.id))!.ownerId).toBe('worker-a');
+      });
+
+      it('reclaims an expired lease fenced on the stale owner and expiry', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({
+          status: 'running',
+          startedAt: new Date(Date.now() - 120_000),
+          ownerId: 'worker-a',
+          leaseExpiresAt: new Date(Date.now() - 60_000),
+        });
+        await bgStorage.createTask(task);
+
+        // Fence on the ownership state read back through the store, not on the
+        // Date that was written. Adapters round-trip timestamps with differing
+        // precision; a fence that only matches the original Date would fail on
+        // a store that truncates or reformats it, silently stalling recovery.
+        const observed = await bgStorage.getTask(task.id);
+        expect(observed!.ownerId).toBe('worker-a');
+        expect(observed!.leaseExpiresAt).toBeDefined();
+
+        const reclaimed = await bgStorage.updateTask(
+          task.id,
+          { status: 'pending', startedAt: undefined, ownerId: undefined, leaseExpiresAt: undefined },
+          {
+            expectedStatus: 'running',
+            expectedOwnerId: observed!.ownerId,
+            expectedLeaseExpiresAt: observed!.leaseExpiresAt ?? null,
+          },
+        );
+
+        expect(reclaimed).toBe(true);
+        const stored = await bgStorage.getTask(task.id);
+        expect(stored!.status).toBe('pending');
+        expect(stored!.ownerId ?? null).toBeNull();
+        expect(stored!.leaseExpiresAt ?? null).toBeNull();
+      });
+
+      it('requires the fenced lease expiry to match, not just the owner', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({
+          status: 'running',
+          startedAt: new Date(Date.now() - 120_000),
+          ownerId: 'worker-a',
+          leaseExpiresAt: new Date(Date.now() - 60_000),
+        });
+        await bgStorage.createTask(task);
+
+        expect(
+          await bgStorage.updateTask(
+            task.id,
+            { status: 'pending', ownerId: undefined, leaseExpiresAt: undefined },
+            {
+              expectedStatus: 'running',
+              expectedOwnerId: 'worker-a',
+              expectedLeaseExpiresAt: new Date(Date.now() - 30_000),
+            },
+          ),
+        ).toBe(false);
+        expect((await bgStorage.getTask(task.id))!.status).toBe('running');
+      });
+
+      it('reclaims a running task that has no recorded ownership', async () => {
+        if (!bgStorage) return;
+        // Rows written before durable ownership existed carry no owner/lease.
+        const task = createSampleTask({ status: 'running', startedAt: new Date(Date.now() - 60_000) });
+        await bgStorage.createTask(task);
+
+        const reclaimed = await bgStorage.updateTask(
+          task.id,
+          { status: 'pending', startedAt: undefined, ownerId: undefined, leaseExpiresAt: undefined },
+          { expectedStatus: 'running', expectedOwnerId: null, expectedLeaseExpiresAt: null },
+        );
+
+        expect(reclaimed).toBe(true);
+        expect((await bgStorage.getTask(task.id))!.status).toBe('pending');
+      });
+
+      it('rejects a reclaim that another worker already applied', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({
+          status: 'running',
+          startedAt: new Date(Date.now() - 120_000),
+          ownerId: 'worker-a',
+          leaseExpiresAt: new Date(Date.now() - 60_000),
+        });
+        await bgStorage.createTask(task);
+
+        // Both workers read the same stale ownership back through the store and
+        // race to reclaim it. The first reclaim wins; the second must be
+        // rejected because that state is gone.
+        const observed = await bgStorage.getTask(task.id);
+        const fence = {
+          expectedStatus: 'running' as const,
+          expectedOwnerId: observed!.ownerId ?? null,
+          expectedLeaseExpiresAt: observed!.leaseExpiresAt ?? null,
+        };
+        const first = await bgStorage.updateTask(
+          task.id,
+          { status: 'pending', ownerId: undefined, leaseExpiresAt: undefined },
+          fence,
+        );
+        const second = await bgStorage.updateTask(
+          task.id,
+          { status: 'pending', ownerId: undefined, leaseExpiresAt: undefined },
+          fence,
+        );
+
+        expect(first).toBe(true);
+        expect(second).toBe(false);
+      });
+
+      it('renews a lease fenced on the current owner', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({
+          status: 'running',
+          startedAt: new Date(),
+          ownerId: 'worker-a',
+          leaseExpiresAt: new Date(Date.now() + 5_000),
+        });
+        await bgStorage.createTask(task);
+
+        const renewed = await bgStorage.updateTask(
+          task.id,
+          { leaseExpiresAt: new Date(Date.now() + 60_000) },
+          { expectedStatus: 'running', expectedOwnerId: 'worker-a' },
+        );
+
+        expect(renewed).toBe(true);
+        expectCloseTo((await bgStorage.getTask(task.id))!.leaseExpiresAt, new Date(Date.now() + 60_000));
+      });
+
+      it('refuses to renew a lease held by another owner', async () => {
+        if (!bgStorage) return;
+        const leaseExpiresAt = new Date(Date.now() + 5_000);
+        const task = createSampleTask({
+          status: 'running',
+          startedAt: new Date(),
+          ownerId: 'worker-a',
+          leaseExpiresAt,
+        });
+        await bgStorage.createTask(task);
+
+        expect(
+          await bgStorage.updateTask(
+            task.id,
+            { leaseExpiresAt: new Date(Date.now() + 60_000) },
+            { expectedStatus: 'running', expectedOwnerId: 'worker-b' },
+          ),
+        ).toBe(false);
+        const unchanged = await bgStorage.getTask(task.id);
+        expect(unchanged!.ownerId).toBe('worker-a');
+        expectCloseTo(unchanged!.leaseExpiresAt, leaseExpiresAt);
+      });
+
+      it('clears a lease fenced on its owner so another worker can take over', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({
+          status: 'running',
+          startedAt: new Date(),
+          ownerId: 'worker-a',
+          leaseExpiresAt: new Date(Date.now() + 60_000),
+        });
+        await bgStorage.createTask(task);
+
+        expect(
+          await bgStorage.updateTask(
+            task.id,
+            { ownerId: undefined, leaseExpiresAt: undefined },
+            { expectedOwnerId: 'worker-a' },
+          ),
+        ).toBe(true);
+
+        const released = await bgStorage.getTask(task.id);
+        expect(released!.ownerId ?? null).toBeNull();
+        expect(released!.leaseExpiresAt ?? null).toBeNull();
+      });
+
+      it('refuses to clear a lease held by another owner', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({
+          status: 'running',
+          startedAt: new Date(),
+          ownerId: 'worker-a',
+          leaseExpiresAt: new Date(Date.now() + 60_000),
+        });
+        await bgStorage.createTask(task);
+
+        expect(
+          await bgStorage.updateTask(
+            task.id,
+            { ownerId: undefined, leaseExpiresAt: undefined },
+            { expectedOwnerId: 'worker-b' },
+          ),
+        ).toBe(false);
+        expect((await bgStorage.getTask(task.id))!.ownerId).toBe('worker-a');
+      });
+
+      it('fences terminal writes on the recorded owner', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({
+          status: 'running',
+          startedAt: new Date(),
+          ownerId: 'worker-a',
+          leaseExpiresAt: new Date(Date.now() + 60_000),
+        });
+        await bgStorage.createTask(task);
+
+        const superseded = await bgStorage.updateTask(
+          task.id,
+          { status: 'completed', result: { won: false }, completedAt: new Date() },
+          { expectedStatus: 'running', expectedOwnerId: 'worker-b' },
+        );
+        expect(superseded).toBe(false);
+        expect((await bgStorage.getTask(task.id))!.status).toBe('running');
+
+        const current = await bgStorage.updateTask(
+          task.id,
+          { status: 'completed', result: { won: true }, completedAt: new Date() },
+          { expectedStatus: 'running', expectedOwnerId: 'worker-a' },
+        );
+        expect(current).toBe(true);
+        const completed = await bgStorage.getTask(task.id);
+        expect(completed!.status).toBe('completed');
+        expect(completed!.result).toEqual({ won: true });
+      });
+
+      it('clears ownership when ownerId and leaseExpiresAt are written as undefined', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({
+          status: 'running',
+          startedAt: new Date(),
+          ownerId: 'worker-a',
+          leaseExpiresAt: new Date(Date.now() + 60_000),
+        });
+        await bgStorage.createTask(task);
+
+        expect(
+          await bgStorage.updateTask(task.id, {
+            status: 'pending',
+            startedAt: undefined,
+            ownerId: undefined,
+            leaseExpiresAt: undefined,
+          }),
+        ).toBe(true);
+
+        const cleared = await bgStorage.getTask(task.id);
+        expect(cleared!.status).toBe('pending');
+        expect(cleared!.ownerId ?? null).toBeNull();
+        expect(cleared!.leaseExpiresAt ?? null).toBeNull();
+      });
+    });
   });
 }

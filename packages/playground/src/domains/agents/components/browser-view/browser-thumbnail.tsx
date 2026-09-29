@@ -1,5 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { useBrowserToolCalls } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
@@ -7,7 +8,6 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { Monitor, ChevronUp, ChevronDown, Maximize2, X } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useBrowserFrame, useBrowserSession } from '../../context/browser-session-context';
-import { useBrowserToolCalls } from '../../context/browser-tool-calls-context';
 import { BrowserToolCallItem } from './browser-tool-call-item';
 import { BrowserViewFrame } from './browser-view-frame';
 
@@ -104,7 +104,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
         className={cn(
           'group flex w-full items-center gap-3 px-4 py-3',
           'hover:bg-fill-subtle',
-          'focus:ring-2 focus:ring-accent1 focus:outline-none focus:ring-inset',
+          'focus:ring-2 focus:ring-border-focus focus:outline-none focus:ring-inset',
         )}
       >
         {/* Thumbnail preview */}
@@ -117,14 +117,14 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
             </div>
           )}
           {/* Live indicator dot */}
-          {isLive && <div className="bg-success absolute top-1 right-1 h-2 w-2 animate-pulse rounded-full" />}
+          {isLive && <div className="absolute top-1 right-1 h-2 w-2 animate-pulse rounded-full bg-success-indicator" />}
         </div>
 
         {/* Info section */}
         <div className="min-w-0 flex-1 text-left">
           <div className="flex items-center gap-2">
             <span className="truncate text-subheading text-foreground">{agentName}&apos;s browser</span>
-            <Badge variant={isLive ? 'green' : 'neutral'} size="sm" indicator={isLive ? 'pulse' : 'dot'}>
+            <Badge variant={isLive ? 'success' : 'neutral'} size="sm" indicator={isLive ? 'pulse' : 'dot'}>
               {isLive ? 'Live' : 'Idle'}
             </Badge>
           </div>

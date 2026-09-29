@@ -11,11 +11,11 @@ const defaultIconByTone: Record<EmptyStateTone, React.ReactNode> = {
 
 const iconColorByTone: Record<EmptyStateTone, string> = {
   default: 'text-muted-foreground',
-  error: 'text-error',
+  error: 'text-destructive-indicator',
 };
 
 export type EmptyStateProps = {
-  /** Defaults to the tone's icon, always rendered at 32px. Pass `null` to render no icon. */
+  /** Defaults to the tone's icon, always rendered at 20px. Pass `null` to render no icon. */
   iconSlot?: React.ReactNode;
   titleSlot: React.ReactNode;
   descriptionSlot?: React.ReactNode;
@@ -49,7 +49,7 @@ export function EmptyState({
         className,
       )}
     >
-      {iconSlot && <div className={cn('mb-3 [&_svg]:size-8', iconColorByTone[tone])}>{iconSlot}</div>}
+      {iconSlot && <div className={cn('mb-3 [&_svg]:size-5', iconColorByTone[tone])}>{iconSlot}</div>}
       <HeadingTag className="text-subheading text-foreground">{titleSlot}</HeadingTag>
       {descriptionSlot && <p className="mt-1.5 max-w-md text-caption text-muted-foreground">{descriptionSlot}</p>}
       {actionSlot && <div className="mt-4">{actionSlot}</div>}

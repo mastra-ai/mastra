@@ -1,6 +1,7 @@
 import { Text, visibleWidth } from '@earendil-works/pi-tui';
 import { describe, expect, it } from 'vitest';
 
+import { ErrorDisplayComponent } from '../error-display.js';
 import { JudgeDisplayComponent } from '../judge-display.js';
 import { NotificationComponent } from '../notification.js';
 import { OMOutputComponent } from '../om-output.js';
@@ -150,6 +151,21 @@ describe('width-aware custom component rendering', () => {
     expectReflow(component);
     expect(component.isExpanded()).toBe(true);
     expect(component.render(140).join('\n')).toContain('unique-restored-tail');
+  });
+
+  it('draws the error box borders on a single line at narrow widths', () => {
+    const component = new ErrorDisplayComponent(new Error('boom'), {}, ui);
+    const lines = component.render(40);
+    expect(lines.every(line => visibleWidth(line) <= 40)).toBe(true);
+    // A wrapped border would leave the corner glyph on a different line than the box edge.
+    const plain = (line: string) => line.replace(/\x1b\[[0-9;]*m/g, '');
+    expect(plain(lines.find(line => line.includes('╭')) ?? '').endsWith('╮')).toBe(true);
+    expect(plain(lines.find(line => line.includes('╰')) ?? '').endsWith('╯')).toBe(true);
+  });
+
+  it('keeps the error box within widths narrower than its chrome', () => {
+    const component = new ErrorDisplayComponent(new Error('boom'), {}, ui);
+    expect(component.render(8).every(line => visibleWidth(line) <= 8)).toBe(true);
   });
 
   it('reflows quiet task progress without changing task status', () => {

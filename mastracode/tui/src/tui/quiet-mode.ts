@@ -1,3 +1,5 @@
+import { reconcileChatBoundarySpacers } from './chat-boundary-reconciliation.js';
+import { AssistantMessageComponent } from './components/assistant-message.js';
 import { NotificationSummaryComponent } from './components/notification-summary.js';
 import { NotificationComponent } from './components/notification.js';
 import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
@@ -5,17 +7,20 @@ import type { TUIState } from './state.js';
 
 /**
  * Pushes the current quiet-mode preference into every already-rendered component
- * that renders differently in quiet mode: tool executions, notifications, and
- * notification summaries. Both the onboarding prompt and the `/settings` overlay
- * route through here so the two paths cannot drift.
+ * that renders differently in quiet mode: tool executions, assistant messages,
+ * notifications, and notification summaries. Both the onboarding prompt and the
+ * `/settings` overlay route through here so the two paths cannot drift.
  */
 export function applyQuietModeToRenderedComponents(
-  state: Pick<TUIState, 'allToolComponents'> & Partial<Pick<TUIState, 'messageComponentsById'>>,
+  state: Pick<TUIState, 'allToolComponents'> &
+    Partial<Pick<TUIState, 'messageComponentsById' | 'chatContainer' | 'idleCounter'>>,
   enabled: boolean,
   previewLineLimit: number,
   modeColor: string | undefined,
 ): void {
   const mode = enabled ? 'quiet' : 'normal';
+  // Normal mode shows "Thinking..." in the chat again; the next message update re-syncs quiet mode.
+  if (!enabled) state.idleCounter?.setThinking(false);
   const tools = state.allToolComponents.filter(
     (tool): tool is IToolExecutionComponent => typeof tool.setQuietModeDisplay === 'function',
   );
@@ -32,4 +37,10 @@ export function applyQuietModeToRenderedComponents(
       component.setQuietModeDisplay(mode);
     }
   }
+  if (!state.chatContainer) return;
+  for (const component of state.chatContainer.children) {
+    if (component instanceof AssistantMessageComponent) component.setQuietModeDisplay(mode);
+  }
+  // Quiet shell calls and thinking-only messages change height, so re-measure chat spacing.
+  reconcileChatBoundarySpacers(state.chatContainer);
 }

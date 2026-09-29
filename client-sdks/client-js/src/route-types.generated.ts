@@ -3600,6 +3600,8 @@ type Shared_Type_65 = {
   traceQuery: boolean;
   /** `durationMs` predicates in trace and thread queries */
   traceQueryRootDuration: boolean;
+  /** `runId`, `sessionId`, `userId` and `organizationId` predicates in trace and thread queries */
+  traceQueryContextIds: boolean;
   /** Trace query field discovery (POST /observability/traces/query/fields and /values) */
   traceQueryDiscovery: boolean;
   /** Trusted tenant scoping of trace and thread queries */
@@ -6805,6 +6807,8 @@ export type GetWorkflowsWorkflowIdRuns_QueryParams = {
         | 'skipped'
       )
     | undefined;
+  /** When true, each run snapshot is reduced to { status, timestamp }. Defaults to false. */
+  summary?: boolean | undefined;
 };
 
 export type GetWorkflowsWorkflowIdRuns_Response = {

@@ -88,31 +88,29 @@ const drawerPopupVariants = cva(
       },
       variant: {
         default: '',
-        floating: 'drawer-popup-floating pointer-events-auto rounded-lg border',
+        floating: 'drawer-popup-floating pointer-events-auto rounded-lg',
       },
     },
     compoundVariants: [
       {
         side: 'bottom',
         variant: 'default',
-        className:
-          '-mb-12 h-[var(--drawer-height,auto)] max-h-[calc(85vh_+_3rem)] w-full rounded-t-xl border-x border-t pb-12',
+        className: '-mb-12 h-[var(--drawer-height,auto)] max-h-[calc(85vh_+_3rem)] w-full rounded-t-xl pb-12',
       },
       {
         side: 'top',
         variant: 'default',
-        className:
-          '-mt-12 h-[var(--drawer-height,auto)] max-h-[calc(85vh_+_3rem)] w-full rounded-b-xl border-x border-b pt-12',
+        className: '-mt-12 h-[var(--drawer-height,auto)] max-h-[calc(85vh_+_3rem)] w-full rounded-b-xl pt-12',
       },
       {
         side: 'left',
         variant: 'default',
-        className: 'h-full w-[20rem] max-w-[85vw] rounded-r-xl border-y border-r',
+        className: 'h-full w-[20rem] max-w-[85vw] rounded-r-xl',
       },
       {
         side: 'right',
         variant: 'default',
-        className: 'h-full w-[20rem] max-w-[85vw] rounded-l-xl border-y border-l',
+        className: 'h-full w-[20rem] max-w-[85vw] rounded-l-xl',
       },
       {
         side: ['left', 'right'],

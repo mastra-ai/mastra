@@ -159,6 +159,8 @@ import { providerHistoryRejectionRetryScenario } from './provider-history-reject
 import { pruneCommandScenario } from './prune-command.js';
 import { pruneRenderStateScenario } from './prune-render-state.js';
 import { quietSettingsScenario } from './quiet-settings.js';
+import { quietShellDescriptionScenario } from './quiet-shell-description.js';
+import { quietShellGroupedScenario } from './quiet-shell-grouped.js';
 import { quietStreamingPreviewHeightScenario } from './quiet-streaming-preview-height.js';
 import { quietToolHistoryParityScenario } from './quiet-tool-history-parity.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
@@ -179,6 +181,7 @@ import { shellPassthroughNonpersistentScenario } from './shell-passthrough-nonpe
 import { skillTabAutocompleteScenario } from './skill-tab-autocomplete.js';
 import { skillsCommandActivationScenario } from './skills-command-activation.js';
 import { skillsSymlinkDedupeScenario } from './skills-symlink-dedupe.js';
+import { startupInterruptedScenario } from './startup-interrupted.js';
 import { startupScenario } from './startup.js';
 import { stateCommandsScenario } from './state-commands.js';
 import { stateSignalBrowserProcessorScenario } from './state-signal-browser-processor.js';
@@ -226,6 +229,7 @@ export type { McE2eScenario, McE2eScenarioRuntime, ScenarioName } from './types.
 export const scenarios: Record<ScenarioName, McE2eScenario> = {
   startup: startupScenario,
   'abort-followup': abortFollowupScenario,
+  'startup-interrupted': startupInterruptedScenario,
   'branch-context-long-name': branchContextLongNameScenario,
   'active-signal-followup': activeSignalFollowupScenario,
   'agent-connections-expected-reply-watchdog': agentConnectionsExpectedReplyWatchdogScenario,
@@ -375,6 +379,8 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'prune-render-state': pruneRenderStateScenario,
   'cross-agent-settings': crossAgentSettingsScenario,
   'quiet-settings': quietSettingsScenario,
+  'quiet-shell-description': quietShellDescriptionScenario,
+  'quiet-shell-grouped': quietShellGroupedScenario,
   'web-search-provider-settings': webSearchProviderSettingsScenario,
   'quiet-streaming-preview-height': quietStreamingPreviewHeightScenario,
   'quiet-tool-history-parity': quietToolHistoryParityScenario,

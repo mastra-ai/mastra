@@ -8,6 +8,7 @@
  * - Docker daemon running locally
  */
 
+import { randomUUID } from 'node:crypto';
 import Docker from 'dockerode';
 import { afterAll, describe, expect, it } from 'vitest';
 import { DockerSandbox } from '../sandbox';
@@ -71,6 +72,19 @@ describe('DockerTemplate (integration)', () => {
     const result = await template.build({ force: true });
     expect(result.status).toBe('failed');
     expect(result.error).toBeTruthy();
+  }, 300000);
+
+  it('does not leave the failed step container behind', async () => {
+    const marker = randomUUID();
+    const template = new DockerTemplate({ baseImage: 'node:22-slim' }).runCmd(`exit 23 # ${marker}`);
+    templates.push(template);
+    const result = await template.build({ force: true });
+    expect(result.status).toBe('failed');
+    expect(result.error).toContain(marker);
+    await template.dispose();
+
+    const containers = await new Docker().listContainers({ all: true });
+    expect(containers.filter(c => c.Command.includes(marker))).toEqual([]);
   }, 300000);
 
   it('exposes secrets to runWithSecrets steps without leaving them in the image', async () => {

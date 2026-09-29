@@ -1,5 +1,23 @@
 # @mastra/observability
 
+## 1.18.2-alpha.1
+
+### Patch Changes
+
+- Fixed `model_step` spans exporting the provider's raw HTTP response body in their metadata. For some providers (for example, Azure OpenAI's Responses API) this added hundreds of kilobytes to each step span while repeating output and usage already on the span. Response headers are still exported, so provider request IDs and rate-limit details remain available for debugging. Fixes #24826. ([#25347](https://github.com/mastra-ai/mastra/pull/25347))
+
+- Updated dependencies [[`9ce3444`](https://github.com/mastra-ai/mastra/commit/9ce3444d1a6b17e72b0a20c74603abaf252a843e), [`3b77788`](https://github.com/mastra-ai/mastra/commit/3b77788a08df1e754282d39c42823e6e1c5f2742), [`987257a`](https://github.com/mastra-ai/mastra/commit/987257a34cda8a153fe592c31d75fbb1dee55202), [`65a93a2`](https://github.com/mastra-ai/mastra/commit/65a93a2a3b1434d605a6a417cb83d2d58e16bfc0), [`fd92729`](https://github.com/mastra-ai/mastra/commit/fd92729380a29f2a0ec822e39f3c09eb9aaa5ac5), [`79c3b1f`](https://github.com/mastra-ai/mastra/commit/79c3b1fa4d470585a00558b317ed47db9b1decd4), [`4092ef2`](https://github.com/mastra-ai/mastra/commit/4092ef29aad09f2ba5f90c92a4d4d3bd444eae67), [`5026973`](https://github.com/mastra-ai/mastra/commit/50269736f432cee1170627b2b6f88ba1431e837f)]:
+  - @mastra/core@1.72.0-alpha.7
+
+## 1.18.2-alpha.0
+
+### Patch Changes
+
+- Fixed cost estimates for Anthropic 1-hour prompt-cache writes. The 5-minute and 1-hour cache-write token counts are now read from the provider's raw usage, so 1-hour writes are priced at their real rate instead of the cheaper 5-minute rate. ([#25011](https://github.com/mastra-ai/mastra/issues/25011)) ([#25089](https://github.com/mastra-ai/mastra/pull/25089))
+
+- Updated dependencies [[`af4aed5`](https://github.com/mastra-ai/mastra/commit/af4aed50ad96b340d82a67c3f01cbf358b156ab2), [`4601dfa`](https://github.com/mastra-ai/mastra/commit/4601dfac7c2bfdf04f041b1725c8ac4ae92a8d7d), [`63927e8`](https://github.com/mastra-ai/mastra/commit/63927e89c1b9db0fc87eef8503e3a03204f24b09), [`ec005d5`](https://github.com/mastra-ai/mastra/commit/ec005d517ea10b7742e67f7e75bf89259d72c37e), [`56fef1c`](https://github.com/mastra-ai/mastra/commit/56fef1cdd92a671c3de2cc5e4a319c637f700cf4), [`4d40bd9`](https://github.com/mastra-ai/mastra/commit/4d40bd91ccb00db163365a319b5d82bfb56a9ace), [`d2f0cd7`](https://github.com/mastra-ai/mastra/commit/d2f0cd7c5d5f5f06cf5b65cf78a9f14ac052dbb1), [`c01f1ad`](https://github.com/mastra-ai/mastra/commit/c01f1ad358db0ab361fdb1b2f4f77c88540c2671), [`676fcbf`](https://github.com/mastra-ai/mastra/commit/676fcbfc5f770ee45560c7b558b17ad5ff25d9e7)]:
+  - @mastra/core@1.72.0-alpha.1
+
 ## 1.18.1
 
 ### Patch Changes

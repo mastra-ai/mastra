@@ -35,7 +35,8 @@ interface StripStyle extends CSSProperties {
   '--stages'?: number;
 }
 
-const HATCH = `repeating-linear-gradient(-45deg, ${AGENT_COLOR} 0 2.25px, transparent 2.25px 6px)`;
+const HATCH =
+  'repeating-linear-gradient(-45deg, var(--chart-sequential-3) 0 2.25px, var(--badge-purple-subtle) 2.25px 6px)';
 
 function percent(part: number, whole: number): number {
   return whole === 0 ? 0 : Math.round((part / whole) * 100);
@@ -272,12 +273,12 @@ export function StageFunnel({
         >
           <defs>
             <linearGradient id={coreId} x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor={AGENT_COLOR} stopOpacity="0.5" />
-              <stop offset="100%" stopColor={AGENT_COLOR} stopOpacity="0.95" />
+              <stop offset="0%" stopColor="var(--chart-sequential-5)" />
+              <stop offset="100%" stopColor={AGENT_COLOR} />
             </linearGradient>
             <pattern id={hatchId} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <rect width="6" height="6" fill={AGENT_COLOR} fillOpacity="0.1" />
-              <line x1="0" y1="0" x2="0" y2="6" stroke={AGENT_COLOR} strokeOpacity="0.45" strokeWidth="2.25" />
+              <rect width="6" height="6" fill="var(--badge-purple-subtle)" />
+              <line x1="0" y1="0" x2="0" y2="6" stroke="var(--chart-sequential-3)" strokeWidth="2.25" />
             </pattern>
             {funnel.map((step, index) => (
               <clipPath key={step.stage} id={`${clipId}-${index}`}>
@@ -383,7 +384,7 @@ export function StageFunnel({
           <span className="h-2 w-4 rounded-full opacity-50" style={{ backgroundColor: HUMAN_COLOR }} />
         </Key>
         <Key label="left the flow">
-          <span className="h-2 w-4 rounded-full opacity-60" style={{ backgroundImage: HATCH }} />
+          <span className="h-2 w-4 rounded-full" style={{ backgroundImage: HATCH }} />
         </Key>
         <span className="ml-auto flex flex-col items-end gap-0.5">
           {pullRequests > 0 ? (

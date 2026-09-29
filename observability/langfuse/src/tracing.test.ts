@@ -10,6 +10,7 @@ const processedSpans: any[] = [];
 const mockForceFlush = vi.fn().mockResolvedValue(undefined);
 const mockShutdown = vi.fn().mockResolvedValue(undefined);
 const processorConstructorArgs: any[] = [];
+const converterConstructorArgs: any[] = [];
 
 vi.mock('@langfuse/otel', () => {
   class MockLangfuseSpanProcessor {
@@ -70,6 +71,9 @@ vi.mock('@mastra/otel-exporter', () => {
   }
 
   class MockSpanConverter {
+    constructor(params: any) {
+      converterConstructorArgs.push(params);
+    }
     convertSpan = vi.fn().mockImplementation((span: any) => ({
       name: span.name,
       attributes: {
@@ -134,6 +138,7 @@ describe('LangfuseExporter', () => {
   beforeEach(() => {
     processedSpans.length = 0;
     processorConstructorArgs.length = 0;
+    converterConstructorArgs.length = 0;
     clientConstructorArgs.length = 0;
     mockScoreCreate.mockClear();
     mockForceFlush.mockClear();
@@ -223,6 +228,34 @@ describe('LangfuseExporter', () => {
           exportMode: 'batched',
         }),
       );
+    });
+
+    it('passes resource attributes to the span converter after init', async () => {
+      exporter = new LangfuseExporter({
+        publicKey: 'pk-test',
+        secretKey: 'sk-test',
+        resourceAttributes: { 'service.version': 'my-app-2.3.1' },
+      });
+      exporter.init({ config: { serviceName: 'my-app' } } as any);
+      await exportSpan(exporter, makeSpan());
+
+      expect(converterConstructorArgs[0]).toEqual(
+        expect.objectContaining({
+          serviceName: 'my-app',
+          config: { resourceAttributes: { 'service.version': 'my-app-2.3.1' } },
+        }),
+      );
+    });
+
+    it('passes resource attributes to the standalone span converter', async () => {
+      exporter = new LangfuseExporter({
+        publicKey: 'pk-test',
+        secretKey: 'sk-test',
+        resourceAttributes: { 'service.version': 'my-app-2.3.1' },
+      });
+      await exportSpan(exporter, makeSpan());
+
+      expect(converterConstructorArgs[0].config.resourceAttributes).toEqual({ 'service.version': 'my-app-2.3.1' });
     });
 
     it('uses immediate export mode when realtime is true', () => {
@@ -613,12 +646,12 @@ describe('LangfuseExporter', () => {
       expect(attrs['mastra.metadata.traceName']).toBeUndefined();
     });
 
-    it('maps version metadata to langfuse.trace.version', async () => {
+    it('maps version metadata to langfuse.version', async () => {
       exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
       await exportSpan(exporter, makeSpan({ metadata: { version: '2.1.0' } }));
 
       const attrs = processedSpans[0].attributes;
-      expect(attrs['langfuse.trace.version']).toBe('2.1.0');
+      expect(attrs['langfuse.version']).toBe('2.1.0');
       expect(attrs['mastra.metadata.version']).toBeUndefined();
     });
 
@@ -815,7 +848,7 @@ describe('LangfuseExporter', () => {
       expect(attrs['user.id']).toBe('user-123');
       expect(attrs['session.id']).toBe('thread-1');
       expect(attrs['langfuse.trace.name']).toBe('custom-trace-name');
-      expect(attrs['langfuse.trace.version']).toBe('2.1.0');
+      expect(attrs['langfuse.version']).toBe('2.1.0');
       expect(attrs['langfuse.trace.metadata.userId']).toBeUndefined();
       expect(attrs['langfuse.trace.metadata.threadId']).toBeUndefined();
       expect(attrs['langfuse.trace.metadata.sessionId']).toBeUndefined();

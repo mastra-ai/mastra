@@ -91,7 +91,7 @@ export function MessageBubble({
           <>
             {steeringStatus && (
               <span
-                className={cn('text-meta text-muted-foreground', steeringFailed && 'text-notice-destructive-fg')}
+                className={cn('text-meta text-muted-foreground', steeringFailed && 'text-destructive-indicator')}
                 aria-live="polite"
               >
                 {steeringStatus}
@@ -217,9 +217,7 @@ export function MessageBubble({
   if (signalRow) {
     if (signalRow.kind === 'state') {
       if (SUPPRESSED_STATE_SIGNAL_IDS.has(signalRow.stateId)) return null;
-      return (
-        <SignalRow kind="state" label={`State ${signalRow.mode}: ${signalRow.stateId}`} message={signalRow.text} />
-      );
+      return <SignalRow kind="state" label={signalRow.stateId} mode={signalRow.mode} message={signalRow.text} />;
     }
     if (signalRow.kind === 'gap') return <TimeGap text={signalRow.text} />;
     if (signalRow.kind === 'reminder') {
