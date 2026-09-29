@@ -333,6 +333,36 @@ describe('handler dispatch gating', () => {
     expect(ctx.requestContext.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
   });
 
+  it("uses the existing Factory session owner's credentials when another linked user replies", async () => {
+    const thread = makeSubscribedThread();
+    const accountLinks = fullStore({ orgId: 'org-1', userId: 'responder-1', defaultFactoryProjectId: 'fp-1' });
+    const projects = makeProjects([{ id: 'fp-1' }]);
+    const sourceControl = {
+      sessions: {
+        getBySessionId: vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'owner-1' }),
+      },
+    } as any;
+    const mastra = {
+      getStorage: () => ({
+        getStore: vi.fn().mockResolvedValue({
+          listThreads: vi.fn().mockResolvedValue({
+            threads: [{ id: 'thread-1', resourceId: 'session-1' }],
+          }),
+        }),
+      }),
+    };
+    const defaultHandler = vi.fn();
+    const handlers = createHandlers({ accountLinks, projects, sourceControl });
+    const message = makeMessage('T-1');
+
+    const ctx = handlerCtx(mastra);
+    await handlers.onSubscribedMessage!(thread, message, defaultHandler, ctx);
+
+    expect(defaultHandler).toHaveBeenCalledWith(thread, message);
+    expect(sourceControl.sessions.getBySessionId).toHaveBeenCalledWith('session-1');
+    expect(ctx.requestContext.get('user')).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
+  });
+
   it('stamps the tenant for a linked sender even when factory routing is ungated', async () => {
     // The silent-failure path: with no `projects` dep, `resolveFactoryForLink`
     // returns `ungated`, so this sender leaves the gate without a routed
