@@ -337,6 +337,27 @@ describe('hydrateFactorySession', () => {
     warn.mockRestore();
   });
 
+  it('applies the remaining subagent models when one fails', async () => {
+    const { session, double } = createSessionDouble();
+    double.subagents.model.set.mockRejectedValueOnce(new Error('explore unavailable'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await hydrateFactorySession(session, {
+      orgId: 'org-1',
+      factoryProjectId: 'proj-1',
+      defaultModelId: 'openai/gpt-5.6',
+    });
+
+    expect(double.subagents.model.set).toHaveBeenCalledWith({ modelId: 'openai/gpt-5.6', agentType: 'plan' });
+    expect(double.subagents.model.set).toHaveBeenCalledWith({ modelId: 'openai/gpt-5.6', agentType: 'execute' });
+    expect(warn).toHaveBeenCalledWith('[Factory Start] Failed to apply factory default subagent model', {
+      agentType: 'explore',
+      modelId: 'openai/gpt-5.6',
+      error: 'explore unavailable',
+    });
+    warn.mockRestore();
+  });
+
   it('still applies the default model when memory settings fail to load', async () => {
     const { session, double } = createSessionDouble();
     const memorySettings = { get: vi.fn(async () => Promise.reject(new Error('storage down'))) };
