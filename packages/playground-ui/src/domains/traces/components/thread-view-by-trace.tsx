@@ -182,11 +182,11 @@ function ThreadTraceRowContent({
           <TraceThreadItemView traceId={traceId} onHighlightSpans={highlightSpans} />
         </ThreadTrace.TabContent>
         {withFeedback && (
-          <ThreadTrace.TabContent value="feedback" className="min-h-0 py-3 pl-2">
+          <ThreadTrace.TabContent value="feedback" className="min-h-0 py-3">
             <TraceFeedbackTab key={traceId} traceId={traceId} variant="thread" />
           </ThreadTrace.TabContent>
         )}
-        <ThreadTrace.TabContent value="scores" className="min-h-0 py-3 pl-2">
+        <ThreadTrace.TabContent value="scores" className="min-h-0 py-3">
           {rootSpanId ? (
             <TraceScoresTab
               key={traceId}

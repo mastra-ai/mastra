@@ -246,7 +246,7 @@ describe('ThreadViewByTrace', () => {
     expect(rows).toEqual(['trace-a', 'trace-b']);
   });
 
-  it('underlines each turn and frames the messages column with side borders, like the trace panel', async () => {
+  it('underlines each turn and separates the messages column from the trace with a right border', async () => {
     installHandlers();
     const { queryClient } = renderView();
 
@@ -259,7 +259,7 @@ describe('ThreadViewByTrace', () => {
     expect(rows).toHaveLength(2);
     for (const row of rows) {
       expect(row.className).toContain('border-b');
-      expect(row.querySelector('[data-slot=thread-trace-messages]')?.className).toContain('border-x');
+      expect(row.querySelector('[data-slot=thread-trace-messages]')?.className).toContain('border-r');
       expect((row.children[1] as HTMLElement).className).not.toMatch(/border|rounded/);
     }
   });
