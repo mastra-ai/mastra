@@ -190,18 +190,20 @@ export class EventedExecutionEngine extends ExecutionEngine {
           },
         });
       } else if (params.restart) {
-        const prevStepId = getStepId(this.resolveWorkflow(params.workflowId, params.runId), params.restart.activePaths);
-        const prevResult = params.restart.stepResults[prevStepId ?? 'input'];
+        const isPreFirstStepRestart = params.restart.activePaths.length === 0;
+        const executionPath = isPreFirstStepRestart ? [0] : params.restart.activePaths;
+        const prevStepId = getStepId(this.resolveWorkflow(params.workflowId, params.runId), executionPath);
+        const prevResult = params.restart.stepResults[isPreFirstStepRestart ? 'input' : (prevStepId ?? 'input')];
         await pubsub.publish('workflows', {
           type: 'workflow.start',
           runId: params.runId,
           data: {
             workflowId: params.workflowId,
             runId: params.runId,
-            executionPath: params.restart.activePaths,
+            executionPath,
             stepResults: params.restart.stepResults,
             restart: params.restart,
-            prevResult: { status: 'success', output: prevResult?.payload },
+            prevResult: { status: 'success', output: isPreFirstStepRestart ? prevResult : prevResult?.payload },
             requestContext: params.requestContext.toJSON(),
             actor: params.actor,
             format: params.format,

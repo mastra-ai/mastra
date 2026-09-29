@@ -1763,9 +1763,11 @@ export class WorkflowEventProcessor extends EventProcessor {
           })) ?? ({ context: {} } as WorkflowRunState);
 
         const restartParams = createRestartExecutionParams({ snapshot, graph: nestedWorkflow.buildExecutionGraph() });
-
-        const nestedPrevStepId = getStepId(nestedWorkflow, snapshot.activePaths);
-        const nestedPrevResult = restartParams.stepResults[nestedPrevStepId ?? 'input'];
+        const isPreFirstStepRestart = restartParams.activePaths.length === 0;
+        const nestedExecutionPath = isPreFirstStepRestart ? [0] : restartParams.activePaths;
+        const nestedPrevStepId = getStepId(nestedWorkflow, nestedExecutionPath);
+        const nestedPrevResult =
+          restartParams.stepResults[isPreFirstStepRestart ? 'input' : (nestedPrevStepId ?? 'input')];
 
         await this.mastra.pubsub.publish('workflows', {
           type: 'workflow.start',
@@ -1786,10 +1788,13 @@ export class WorkflowEventProcessor extends EventProcessor {
               activeStepsPath,
               resumeData,
             },
-            executionPath: restartParams.activePaths,
+            executionPath: nestedExecutionPath,
             runId: nestedRunId,
             stepResults: restartParams.stepResults,
-            prevResult: { status: 'success', output: nestedPrevResult?.payload },
+            prevResult: {
+              status: 'success',
+              output: isPreFirstStepRestart ? nestedPrevResult : nestedPrevResult?.payload,
+            },
             restart: restartParams,
             activeStepsPath: restartParams.activeStepsPath,
             requestContext,
