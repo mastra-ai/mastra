@@ -1,11 +1,8 @@
-import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
 export type DatabaseSettings =
-  | { provider: 'libsql' }
-  | { provider: 'postgres-local' }
-  | { provider: 'platform'; databaseId: string };
+  { provider: 'libsql' } | { provider: 'postgres-local' } | { provider: 'platform'; databaseId: string };
 
 export interface FactoryDevSettings {
   version: 1;
@@ -25,7 +22,10 @@ export interface FactoryDevSettings {
 export const settingsPath = (root: string) => path.join(root, '.factory', 'settings.json');
 
 async function atomicWrite(file: string, contents: string): Promise<void> {
-  const tempFile = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.${randomUUID()}.tmp`);
+  const tempFile = path.join(
+    path.dirname(file),
+    `.${path.basename(file)}.${process.pid}.${globalThis.crypto.randomUUID()}.tmp`,
+  );
   try {
     await fs.writeFile(tempFile, contents, { mode: 0o600 });
     await fs.chmod(tempFile, 0o600);

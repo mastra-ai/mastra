@@ -9,7 +9,6 @@
  * - Linux: Uses bubblewrap (bwrap) for namespace isolation
  */
 
-import * as crypto from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -394,11 +393,13 @@ export class LocalSandbox extends MastraSandbox<string> {
 
         // Generate a deterministic hash from workspace path and config
         // This allows identical sandboxes to share profiles while preventing collisions
-        const configHash = crypto
-          .createHash('sha256')
-          .update(this.workingDirectory)
-          .update(JSON.stringify(this._nativeSandboxConfig))
-          .digest('hex')
+        const configHash = Buffer.from(
+          await globalThis.crypto.subtle.digest(
+            'SHA-256',
+            new TextEncoder().encode(this.workingDirectory + JSON.stringify(this._nativeSandboxConfig)),
+          ),
+        )
+          .toString('hex')
           .slice(0, 8);
 
         // Write profile to .sandbox-profiles/ in cwd (outside working directory)

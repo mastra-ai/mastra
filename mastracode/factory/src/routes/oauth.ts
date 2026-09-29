@@ -14,8 +14,6 @@
  * user codes, poll delays).
  */
 
-import { randomUUID } from 'node:crypto';
-
 import { nextPollDelayMs } from '@mastra/code-sdk/auth/device-code';
 import { completeAnthropicLogin, startAnthropicLogin } from '@mastra/code-sdk/auth/providers/anthropic';
 import {
@@ -304,7 +302,7 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 502);
           }
 
-          const sessionId = randomUUID();
+          const sessionId = globalThis.crypto.randomUUID();
           const tenant = sessionTenant(ctx);
           await (
             await sessionStore(ctx)

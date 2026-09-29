@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { posix } from 'node:path';
 import type {
   CommandResult,
@@ -187,7 +186,7 @@ export class CloudflareSandbox extends MastraSandbox {
   constructor(options: CloudflareSandboxOptions) {
     const name = options.name ?? 'Cloudflare Sandbox';
     super({ ...options, name });
-    this.id = options.id ?? `cloudflare-sandbox-${randomUUID()}`;
+    this.id = options.id ?? `cloudflare-sandbox-${globalThis.crypto.randomUUID()}`;
     this.name = name;
     this.sandboxId = options.sandboxId;
     this.commandTimeout = options.commandTimeout ?? DEFAULT_COMMAND_TIMEOUT_MS;

@@ -4,7 +4,6 @@
  * so they carry across threads and restarts.
  */
 
-import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { MastraBrowser } from '@mastra/core/browser';
@@ -1385,7 +1384,7 @@ function getSignalSettingsForSave(settings: GlobalSettings, filePath: string): S
 }
 
 function writeFileAtomically(filePath: string, content: string): void {
-  const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+  const tempPath = `${filePath}.${process.pid}.${globalThis.crypto.randomUUID()}.tmp`;
   try {
     // Preserve the target's mode across the rename (auth.json keeps its 0600);
     // new files default to owner-only since these are local app-data files.
