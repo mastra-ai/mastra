@@ -484,6 +484,37 @@ describe('GitLabRules', () => {
     ]);
   });
 
+  it('records the open merge request on its authoring Work card and clears it on close', async () => {
+    const { seeded, project, service } = await setup();
+    const work = (
+      await seeded.workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: { integrationId: 'gitlab', type: 'issue', externalId: 'gitlab-issue:authoring' },
+          title: 'Authoring work',
+          board: 'work',
+          stages: ['execute'],
+          sessions: { work: { sessionId: 'work-session', threadId: 'work-thread', branch: 'feature-17' } },
+          metadata: { authorTrusted: true },
+        },
+      })
+    ).item;
+    await service.ingest(mergeRequestOpened());
+    expect((await seeded.workItems.get({ orgId: 'org-1', id: work.id }))?.metadata?.openPullRequestNumber).toBe(17);
+
+    const closed = mergeRequestOpened('delivery-mr-close');
+    await service.ingest({
+      ...closed,
+      payload: {
+        ...closed.payload,
+        object_attributes: { ...closed.payload.object_attributes, action: 'close', state: 'closed' },
+      },
+    });
+    expect((await seeded.workItems.get({ orgId: 'org-1', id: work.id }))?.metadata?.openPullRequestNumber).toBeNull();
+  });
+
   it('does not route an MR note to an unrelated Work branch', async () => {
     const { seeded, project, service } = await setup();
     await seeded.workItems.upsert({

@@ -120,6 +120,8 @@ function mergeRequestUpdated(context: FactoryGitLabRuleContext) {
   if (!context.item || context.item.source !== 'gitlab-pr' || context.board !== 'review') return;
   if (!context.mergeRequest || context.mergeRequest.state !== 'open' || context.mergeRequest.merged) return;
   if (context.item.stages.some(stage => stage === 'intake')) return;
+  // An untrusted push must not start review passes on demand.
+  if (!trustedGitLabActor(context) && !context.mergeRequest.factoryAuthored) return;
   const alreadyReviewing = context.item.stages.some(stage => stage === 'review');
   return {
     type: 'transition',

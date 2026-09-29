@@ -369,6 +369,9 @@ function reReviewUpdatedPullRequest(context: FactoryGithubRuleContext) {
   // stage to supersede it. `reviewPullRequest` cancels the stale run and picks
   // the right skill for the entry it sees.
   if (context.item.stages.some(stage => stage === 'intake')) return;
+  // A fork's author controls its head branch, so an untrusted push must not be
+  // able to start review passes on demand; a maintainer can still request one.
+  if (!trustedGithubActor(context) && !context.pullRequest.factoryAuthored) return;
   const alreadyReviewing = context.item.stages.some(stage => stage === 'review');
   return {
     type: 'transition',

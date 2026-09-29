@@ -1828,6 +1828,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 decisions: input.evaluation.outcome === 'accepted' ? input.evaluation.decisions : [],
               }
             : { status: 'rejected', transitionId: input.ingress.transitionId, itemId: input.workItemId, code, reason };
+        // A stale revision only lost a race with another write; recording it
+        // under this identity would replay the loss to every retry, so a
+        // re-read at the current revision could never commit the transition.
+        if (code === 'stale') return { status: 'committed', item, result };
         const ingress = await ops.insertOne<GovernanceDbRow>('factory_rule_ingress', {
           org_id: input.orgId,
           factory_project_id: input.factoryProjectId,
