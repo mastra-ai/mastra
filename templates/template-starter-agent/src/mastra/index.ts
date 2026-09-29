@@ -24,9 +24,7 @@ if (!databaseUrl) {
 
 const redisUrl = process.env.REDIS_URL;
 if (!redisUrl) {
-  throw new Error(
-    'REDIS_URL is not set. The durable agent needs Redis so streams survive disconnects and restarts.',
-  );
+  throw new Error('REDIS_URL is not set. The durable agent needs Redis so streams survive disconnects and restarts.');
 }
 
 export const mastra = new Mastra({
