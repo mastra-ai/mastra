@@ -115,6 +115,23 @@ describe('FileTransport', () => {
       expect(logs.total).toBeGreaterThan(0);
     });
 
+    it('should preserve valid logs when the file contains a malformed entry', async () => {
+      const validLogs = [
+        { msg: 'before malformed entry', time: 1 },
+        { msg: 'after malformed entry', time: 2 },
+      ];
+      fs.writeFileSync(testPath, `${JSON.stringify(validLogs[0])}\n{"msg":\n${JSON.stringify(validLogs[1])}\n`);
+
+      try {
+        const result = await fileLogger.listLogs({ returnPaginationResults: false });
+
+        expect(result.logs).toEqual(validLogs);
+        expect(result.total).toBe(validLogs.length);
+      } finally {
+        fs.writeFileSync(testPath, '');
+      }
+    });
+
     it('should return empty array for listLogsByRunId', async () => {
       const logger = new PinoLogger({
         name: 'test-logger',
