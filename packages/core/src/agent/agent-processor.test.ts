@@ -4046,8 +4046,8 @@ describe('error processors — shared stability defaults', () => {
     const resolved = await agent.listErrorProcessors();
 
     // Naming only the retry processor must not put it ahead of the repairs: error processors
-    // short-circuit on the first `{ retry: true }`, and the retry processor's bad-request matcher
-    // claims any 400, so both repairs have to stay ahead of it.
+    // short-circuit on the first `{ retry: true }`, and a retry processor configured with broad
+    // matchers would claim errors the repairs could fix, so both repairs have to stay ahead of it.
     expect(resolved.map(processor => processor.id)).toEqual([...DEFAULT_ERROR_PROCESSOR_IDS]);
     expect(resolved[2]).toBe(customRetry);
   });

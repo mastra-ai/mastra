@@ -352,8 +352,8 @@ describe('createBuilderAgent stability processors', () => {
 
     const resolved = await agent.listErrorProcessors();
     // The caller's instance is the one that runs. Both added repairs are inserted ahead of it,
-    // because this processor's bad-request matcher claims any 400 and ahead of the repairs it
-    // would resend a request they could have fixed.
+    // because a retry processor configured with broad matchers would otherwise resend a request
+    // the repairs could have fixed.
     expect(resolved[2]).toBe(callerRetry);
     expect(resolved.map(processor => processor.id)).toEqual([
       'provider-history-compat',

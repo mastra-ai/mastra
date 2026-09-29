@@ -99,7 +99,7 @@ describeForAllEngines('AIMock loop scenario: onDelegationComplete bail()', engin
       model: openai(SCENARIO_MODEL_ID),
       // Agents resolve the shared stability error processors by default; opt out so their retries do
       // not add provider requests to the count this case asserts.
-      errorProcessors: [],
+      errorProcessorDefaults: false,
     });
 
     const agent2 = new Agent({
@@ -109,7 +109,7 @@ describeForAllEngines('AIMock loop scenario: onDelegationComplete bail()', engin
       instructions: 'You are agent 2.',
       model: openai(SCENARIO_MODEL_ID),
       // See the note on agent1: no processor-level retries in this scenario.
-      errorProcessors: [],
+      errorProcessorDefaults: false,
     });
 
     const { requests } = await runLoopScenario({
