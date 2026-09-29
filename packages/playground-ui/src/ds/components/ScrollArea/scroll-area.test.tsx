@@ -385,6 +385,16 @@ describe('ScrollArea — fade masks', () => {
     });
   });
 
+  it('fades 2rem deep unless a side asks for its own depth, which beats its axis shorthand', () => {
+    renderArea({ mask: { y: '3rem', bottom: '5rem', x: true } });
+    const viewport = getViewport();
+
+    expect(viewport.style.getPropertyValue('--scroll-area-fade-top')).toBe('3rem');
+    expect(viewport.style.getPropertyValue('--scroll-area-fade-bottom')).toBe('5rem');
+    expect(viewport.style.getPropertyValue('--scroll-area-fade-left')).toBe('2rem');
+    expect(viewport.style.getPropertyValue('--scroll-area-fade-right')).toBe('2rem');
+  });
+
   it('fades all four ends when it scrolls both ways', () => {
     expect(maskSides({ orientation: 'both' })).toEqual({ top: true, bottom: true, left: true, right: true });
   });

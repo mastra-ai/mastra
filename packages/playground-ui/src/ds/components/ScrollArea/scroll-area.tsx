@@ -15,21 +15,26 @@ const DEFAULT_SCROLL_BUTTON_INTERVAL_TIME = 20;
 const MIN_SCROLL_BUTTON_SPEED = 1;
 const MIN_SCROLL_BUTTON_INTERVAL_TIME = 16;
 
+type MaskFadeDepth = `${number}${'rem' | 'px'}`;
+type MaskSide = boolean | MaskFadeDepth;
+
+const DEFAULT_MASK_FADE_DEPTH: MaskFadeDepth = '2rem';
+
 export type MaskSides = {
-  top?: boolean;
-  bottom?: boolean;
-  left?: boolean;
-  right?: boolean;
+  top?: MaskSide;
+  bottom?: MaskSide;
+  left?: MaskSide;
+  right?: MaskSide;
   /** Shorthand: sets both `left` and `right`. Per-side keys override. */
-  x?: boolean;
+  x?: MaskSide;
   /** Shorthand: sets both `top` and `bottom`. Per-side keys override. */
-  y?: boolean;
+  y?: MaskSide;
 };
 
 /**
- * - `true` / omitted: fade the edges that match `orientation`.
+ * - `true` / omitted: fade the edges that match `orientation`, 2rem deep.
  * - `false`: no fade.
- * - object: per-side override on top of the orientation default.
+ * - object: per-side override on top of the orientation default; a length (`'5rem'`) sets that side's fade depth.
  */
 export type ScrollAreaMask = boolean | MaskSides;
 
@@ -67,39 +72,48 @@ export type ScrollAreaProps = React.ComponentPropsWithoutRef<typeof ScrollAreaPr
   viewportRef?: React.Ref<HTMLDivElement>;
 };
 
-type ResolvedMask = { top: boolean; bottom: boolean; left: boolean; right: boolean };
+type ResolvedMask = Record<'top' | 'bottom' | 'left' | 'right', MaskFadeDepth | false>;
+
+type ScrollAreaViewportStyle = React.CSSProperties & {
+  '--scroll-area-fade-top'?: MaskFadeDepth;
+  '--scroll-area-fade-bottom'?: MaskFadeDepth;
+  '--scroll-area-fade-left'?: MaskFadeDepth;
+  '--scroll-area-fade-right'?: MaskFadeDepth;
+};
+
+const fadeDepth = (side: MaskSide) => (side === true ? DEFAULT_MASK_FADE_DEPTH : side);
 
 function resolveMask(mask: ScrollAreaMask | undefined, orientation: Orientation): ResolvedMask {
   if (mask === false) return { top: false, bottom: false, left: false, right: false };
 
-  const vertical = orientation === 'vertical' || orientation === 'both';
-  const horizontal = orientation === 'horizontal' || orientation === 'both';
-  const sides: ResolvedMask = { top: vertical, bottom: vertical, left: horizontal, right: horizontal };
+  const verticalFade = (orientation === 'vertical' || orientation === 'both') && DEFAULT_MASK_FADE_DEPTH;
+  const horizontalFade = (orientation === 'horizontal' || orientation === 'both') && DEFAULT_MASK_FADE_DEPTH;
+  const sides: ResolvedMask = { top: verticalFade, bottom: verticalFade, left: horizontalFade, right: horizontalFade };
 
   if (mask === true || mask === undefined) return sides;
 
   if (mask.y !== undefined) {
-    sides.top = mask.y;
-    sides.bottom = mask.y;
+    sides.top = fadeDepth(mask.y);
+    sides.bottom = fadeDepth(mask.y);
   }
   if (mask.x !== undefined) {
-    sides.left = mask.x;
-    sides.right = mask.x;
+    sides.left = fadeDepth(mask.x);
+    sides.right = fadeDepth(mask.x);
   }
-  if (mask.top !== undefined) sides.top = mask.top;
-  if (mask.bottom !== undefined) sides.bottom = mask.bottom;
-  if (mask.left !== undefined) sides.left = mask.left;
-  if (mask.right !== undefined) sides.right = mask.right;
+  if (mask.top !== undefined) sides.top = fadeDepth(mask.top);
+  if (mask.bottom !== undefined) sides.bottom = fadeDepth(mask.bottom);
+  if (mask.left !== undefined) sides.left = fadeDepth(mask.left);
+  if (mask.right !== undefined) sides.right = fadeDepth(mask.right);
 
   return sides;
 }
 
 function maskClasses(sides: ResolvedMask) {
   return cn(
-    sides.top && 'data-[overflow-y-start]:mask-t-from-[calc(100%-3rem)]',
-    sides.bottom && 'data-[overflow-y-end]:mask-b-from-[calc(100%-5rem)]',
-    sides.left && 'data-[overflow-x-start]:mask-l-from-[calc(100%-2rem)]',
-    sides.right && 'data-[overflow-x-end]:mask-r-from-[calc(100%-2rem)]',
+    sides.top && 'data-[overflow-y-start]:mask-t-from-[calc(100%-var(--scroll-area-fade-top))]',
+    sides.bottom && 'data-[overflow-y-end]:mask-b-from-[calc(100%-var(--scroll-area-fade-bottom))]',
+    sides.left && 'data-[overflow-x-start]:mask-l-from-[calc(100%-var(--scroll-area-fade-left))]',
+    sides.right && 'data-[overflow-x-end]:mask-r-from-[calc(100%-var(--scroll-area-fade-right))]',
   );
 }
 
@@ -291,7 +305,12 @@ const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
     const effectiveMask: ScrollAreaMask | undefined = mask !== undefined ? mask : showMask;
     const sides = resolveMask(effectiveMask, orientation);
 
-    const viewportStyle: React.CSSProperties = {};
+    const viewportStyle: ScrollAreaViewportStyle = {
+      '--scroll-area-fade-top': sides.top || undefined,
+      '--scroll-area-fade-bottom': sides.bottom || undefined,
+      '--scroll-area-fade-left': sides.left || undefined,
+      '--scroll-area-fade-right': sides.right || undefined,
+    };
     if (maxHeight) viewportStyle.maxHeight = maxHeight;
     if (orientation === 'vertical') {
       viewportStyle.overflowX = 'hidden';
