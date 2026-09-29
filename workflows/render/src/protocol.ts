@@ -8,6 +8,7 @@ export const MAX_INPUT_BYTES = 4_000_000;
 /** Reject lossy JSON rather than silently changing user input at the boundary. */
 export function json(value: unknown, label = 'value', limit = MAX_INPUT_BYTES): Json {
   const ancestors = new Set<object>();
+  /** Copy strict JSON recursively, rejecting cycles, accessors and values that serialization would lose. */
   function visit(current: unknown, path: string): Json {
     if (current === null || typeof current === 'string' || typeof current === 'boolean') return current;
     if (typeof current === 'number' && Number.isFinite(current)) return current;
@@ -22,11 +23,17 @@ export function json(value: unknown, label = 'value', limit = MAX_INPUT_BYTES): 
         throw new RenderProtocolError(`${path} must be a plain object`);
       }
       if (Object.getOwnPropertySymbols(current).length) throw new RenderProtocolError(`${path} contains symbol keys`);
-      const result: Record<string, Json> = Object.create(null);
+      const result: Record<string, Json> = {};
       for (const key of Object.keys(current)) {
         const descriptor = Object.getOwnPropertyDescriptor(current, key)!;
         if (!('value' in descriptor)) throw new RenderProtocolError(`${path}.${key} is an accessor`);
-        result[key] = visit(descriptor.value, `${path}.${key}`);
+        // Preserve ordinary object behavior without invoking the inherited __proto__ setter.
+        Object.defineProperty(result, key, {
+          value: visit(descriptor.value, `${path}.${key}`),
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
       }
       return result;
     } finally {
@@ -97,6 +104,7 @@ export const stepOutcomeSchema = z
   .strict();
 export type StepOutcome = z.infer<typeof stepOutcomeSchema>;
 
+/** Check the full positional-argument size and validate a strict protocol envelope. */
 export function parseEnvelope<S extends z.ZodTypeAny>(schema: S, value: unknown): z.output<S> {
   // The provider input is a positional argument array, so include its framing in the limit.
   json([value], 'task arguments');

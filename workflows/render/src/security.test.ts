@@ -150,6 +150,16 @@ describe('dispatch proof boundaries', () => {
     verifyDispatch(JSON.parse(JSON.stringify({ ...signed, input: { b: 2, a: 1 } })), record);
     expect(JSON.stringify(signed)).not.toContain(record.workerClaim);
   });
+  it('signs prototype-related own properties as data and rejects their tampering', () => {
+    const { record, signed } = authorizedFixture();
+    const envelope = { ...signed, input: JSON.parse('{"__proto__":{"admin":true},"constructor":"data"}') };
+    const authorized = authorizeDispatch(envelope, record.workerClaim!);
+    const received = JSON.parse(JSON.stringify(authorized));
+    expect(() => verifyDispatch(received, record)).not.toThrow();
+    expect(({} as Record<string, unknown>).admin).toBeUndefined();
+    received.input.__proto__.admin = false;
+    expect(() => verifyDispatch(received, record)).toThrow('does not match');
+  });
   it('binds the root to its input, state and request context', () => {
     const root = {
       version: 1 as const,

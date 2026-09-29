@@ -1,4 +1,5 @@
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
 import { PostgresStore } from '@mastra/pg';
@@ -30,10 +31,12 @@ const inputSchema = z.object({
 const stateSchema = z.object({ prepared: z.boolean() });
 const childOutput = z.object({ value: z.number(), pid: z.number(), start: z.number(), end: z.number() });
 const directory = resolve('.scratch/audit');
+/** Record a synthetic step execution and process ID for native dispatch assertions. */
 function audit(key: string, event: string) {
   mkdirSync(directory, { recursive: true });
   appendFileSync(resolve(directory, `${key}.jsonl`), `${JSON.stringify({ event, pid: process.pid })}\n`);
 }
+/** Atomically claim the first synthetic attempt to inject one retryable failure. */
 function firstAttempt(key: string) {
   try {
     writeFileSync(resolve(directory, `${key}.once`), '1', { flag: 'wx' });
@@ -55,6 +58,7 @@ const prepare = adapter.createStep({
     return { ...inputData, value: inputData.value + 1 };
   },
 });
+/** Build a fixture step with explicit native retry behavior and execution timing. */
 function operation<const Id extends string>(id: Id, factor: number) {
   return adapter.createStep({
     id,
@@ -99,6 +103,12 @@ const finish = adapter.createStep({
   stateSchema,
   execute: async ({ inputData, state, requestContext, getInitData, getStepResult }) => {
     const original = getInitData<z.infer<typeof inputSchema>>();
+    for (const value of [inputData, state, original, getStepResult(prepare)]) {
+      assert.equal(Object.getPrototypeOf(value), Object.prototype);
+      assert.equal(value.constructor, Object);
+      assert.equal(String(value), '[object Object]');
+    }
+    assert.equal(inputData.hasOwnProperty('double'), true);
     audit(original.audit, 'finish');
     const native = await getRenderTaskContext().run(
       nativeProof,
@@ -131,7 +141,12 @@ export const workflow = adapter
   })
   .then(prepare)
   .parallel([double, triple])
-  .map(async ({ inputData }) => inputData)
+  .map(async ({ inputData }) => {
+    assert.equal(inputData.hasOwnProperty('double'), true);
+    assert.equal(Object.getPrototypeOf(inputData), Object.prototype);
+    assert.ok(Object.isFrozen(inputData));
+    return inputData;
+  })
   .then(finish)
   .commit();
 const loopSchema = z.object({
@@ -163,6 +178,7 @@ const revise = adapter.createStep({
     return { ...inputData, round, pids: [...inputData.pids, process.pid] };
   },
 });
+/** Build a fixture loop that records iteration, state and cancellation behavior. */
 function makeLoopWorkflow(kind: 'dowhile' | 'dountil') {
   return adapter
     .createWorkflow({
