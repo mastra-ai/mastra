@@ -1,11 +1,16 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { format } from 'node:util';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { Agent } from '../../agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
+import { ConsoleLogger } from '../../logger';
+import type { IMastraLogger, LogFilter } from '../../logger';
 import { RequestContext } from '../../request-context';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryMemory } from '../../storage/domains/memory/inmemory';
 import { AgentChannels } from '../agent-channels';
 import { getChatModule } from '../chat-lazy';
+import { ChannelSessionRejectedError } from '../errors';
 import { matchesDomain, extractUrls } from '../inline-media';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
@@ -631,6 +636,164 @@ describe('AgentChannels', () => {
       const { requestContext } = dispatchApproval.mock.calls[0]![0];
       expect(requestContext.get('tenantId')).toBe('tenant-42');
       expect(requestContext.get('channel')).toBeDefined();
+    });
+
+    describe('approval requester check', () => {
+      async function setup(record: Record<string, unknown>, mastra = makeMastra()) {
+        const adapter = createMockAdapter('discord');
+        const channels = new AgentChannels({ adapters: { discord: adapter } });
+        channels.__setAgent(mockAgent);
+        const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        channels.__setLogger(logger as any);
+        await channels.initialize(mastra);
+        (channels as any).findThreadMapping = vi
+          .fn()
+          .mockResolvedValue({ thread: { id: 'mastra-thread-1', resourceId: 'resource-1' } });
+        (channels as any).pendingApprovalCards.set('tool-call-1', {
+          runId: 'run-1',
+          toolName: 'lookup',
+          args: {},
+          ...record,
+        });
+        const dispatchApproval = vi.fn().mockResolvedValue(undefined);
+        const dispatchDecline = vi.fn().mockResolvedValue(undefined);
+        (channels as any).dispatchApproval = dispatchApproval;
+        (channels as any).dispatchDecline = dispatchDecline;
+        const click = (actionId: string, userId: string) =>
+          (channels.sdk as any).processAction({
+            ...makeActionEvent(adapter, actionId),
+            user: { userId, userName: userId, fullName: userId },
+            thread: { id: 'channel-1:thread-1', channelId: 'channel-1', isDM: false },
+          });
+        return { adapter, channels, logger, dispatchApproval, dispatchDecline, click };
+      }
+
+      it('ignores approve and decline clicks from a user other than the requester', async () => {
+        const { adapter, logger, dispatchApproval, dispatchDecline, click } = await setup({ requesterId: 'alice' });
+
+        await click('tool_approve:tool-call-1', 'mallory');
+        await click('tool_deny:tool-call-1', 'mallory');
+
+        expect(dispatchApproval).not.toHaveBeenCalled();
+        expect(dispatchDecline).not.toHaveBeenCalled();
+        expect(adapter.editMessage).not.toHaveBeenCalled();
+        expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('only alice may answer'), expect.anything());
+      });
+
+      it('lets the requester approve', async () => {
+        const { dispatchApproval, click } = await setup({ requesterId: 'alice' });
+        await click('tool_approve:tool-call-1', 'alice');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
+      it('checks the requester when the approval is recovered from stored messages', async () => {
+        const messages = [
+          {
+            role: 'assistant',
+            content: {
+              metadata: {
+                pendingToolApprovals: {
+                  lookup: { toolCallId: 'tool-call-1', runId: 'run-1', toolName: 'lookup', args: {} },
+                },
+              },
+            },
+          },
+          {
+            role: 'user',
+            content: {
+              providerMetadata: { mastra: { channels: { discord: { author: { userId: 'alice' } } } } },
+            },
+          },
+        ];
+        const { channels, dispatchApproval, click } = await setup({}, {
+          getStorage: () => ({ getStore: async () => ({ listMessages: async () => ({ messages }) }) }),
+          getServer: () => null,
+        } as any);
+        (channels as any).pendingApprovalCards.clear();
+
+        await click('tool_approve:tool-call-1', 'mallory');
+        expect(dispatchApproval).not.toHaveBeenCalled();
+
+        await click('tool_approve:tool-call-1', 'alice');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
+      it('ignores all clicks when stored messages cannot identify a single requester', async () => {
+        const author = (userId: string) => ({
+          role: 'user',
+          content: { providerMetadata: { mastra: { channels: { discord: { author: { userId } } } } } },
+        });
+        const messages = [
+          {
+            role: 'assistant',
+            content: {
+              metadata: {
+                pendingToolApprovals: {
+                  lookup: { toolCallId: 'tool-call-1', runId: 'run-1', toolName: 'lookup', args: {} },
+                },
+              },
+            },
+          },
+          author('bob'),
+          author('alice'),
+        ];
+        const { channels, dispatchApproval, click } = await setup({}, {
+          getStorage: () => ({ getStore: async () => ({ listMessages: async () => ({ messages }) }) }),
+          getServer: () => null,
+        } as any);
+        (channels as any).pendingApprovalCards.clear();
+
+        await click('tool_approve:tool-call-1', 'bob');
+        await click('tool_approve:tool-call-1', 'alice');
+        expect(dispatchApproval).not.toHaveBeenCalled();
+      });
+
+      it('keeps a stashed requester when the run id is recovered from stored messages', async () => {
+        const author = (userId: string) => ({
+          role: 'user',
+          content: { providerMetadata: { mastra: { channels: { discord: { author: { userId } } } } } },
+        });
+        const messages = [
+          {
+            role: 'assistant',
+            content: {
+              metadata: {
+                pendingToolApprovals: {
+                  lookup: { toolCallId: 'tool-call-1', runId: 'run-1', toolName: 'lookup', args: {} },
+                },
+              },
+            },
+          },
+          author('bob'),
+          author('alice'),
+        ];
+        const { dispatchApproval, click } = await setup({ requesterId: 'alice' }, {
+          getStorage: () => ({ getStore: async () => ({ listMessages: async () => ({ messages }) }) }),
+          getServer: () => null,
+        } as any);
+
+        await click('tool_approve:tool-call-1', 'bob');
+        expect(dispatchApproval).not.toHaveBeenCalled();
+        await click('tool_approve:tool-call-1', 'alice');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
+      it('keeps the permissive behavior when no requester was recorded', async () => {
+        const { dispatchApproval, click } = await setup({});
+        await click('tool_approve:tool-call-1', 'mallory');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
+      it('stamps the requester onto approval records posted through the render context', async () => {
+        const { channels } = await setup({});
+        const ctx = (channels as any)._buildRenderContext(
+          { id: 'channel-1:thread-1', channelId: 'channel-1' },
+          'discord',
+          { requesterId: 'alice' },
+        );
+        ctx.onApprovalPosted('tool-call-2', { displayName: 'x', argsSummary: '', startedAt: 0 });
+        expect((channels as any).pendingApprovalCards.get('tool-call-2').requesterId).toBe('alice');
+      });
     });
 
     it('does not register action handling when disabled', async () => {
@@ -1661,6 +1824,406 @@ describe('AgentChannels', () => {
       } as any;
     }
 
+    describe('handler error diagnostics', () => {
+      afterEach(() => vi.restoreAllMocks());
+
+      function embeddedRecord(line: string) {
+        const json = line.slice(line.indexOf('Error handling message ') + 'Error handling message '.length);
+        for (let end = 1; end <= json.length; end++) {
+          if (json[end - 1] !== '}') continue;
+          try {
+            return JSON.parse(json.slice(0, end));
+          } catch {
+            // Nested objects and trailing console metadata are not the complete record.
+          }
+        }
+        throw new Error('No complete JSON diagnostic on the first physical line');
+      }
+
+      async function fixture(
+        thrown: unknown,
+        options: {
+          platform?: string;
+          threadId?: string;
+          formatError?: (error: Error) => string;
+          logger?: IMastraLogger;
+        } = {},
+      ) {
+        const chatMod = await getChatModule();
+        let handler: (...args: any[]) => Promise<void> = async () => {
+          throw new Error('Handler not registered');
+        };
+        vi.spyOn(chatMod.Chat.prototype, 'onDirectMessage').mockImplementation(fn => {
+          handler = fn as typeof handler;
+          return chatMod.Chat.prototype;
+        });
+        const platform = options.platform ?? 'slack';
+        const channels = new AgentChannels({
+          adapters: { [platform]: { adapter: createMockAdapter(platform), formatError: options.formatError } },
+        });
+        channels.__setAgent(mockAgent);
+        const mastra = makeMastra();
+        await channels.initialize(mastra);
+        const storage = vi.spyOn(mastra, 'getStorage').mockImplementation(() => {
+          throw thrown;
+        });
+        const output = vi.spyOn(console, 'error').mockImplementation(() => {});
+        channels.__setLogger(options.logger ?? new ConsoleLogger());
+        const thread = makeChatThread({
+          id: options.threadId ?? 'slack:C123:1790610846.868069',
+          adapter: channels.adapters[platform],
+          post: vi.fn().mockResolvedValue(undefined),
+        });
+        const incoming = { ...message, id: '1790610846.868069', author: { userId: 'U123' } };
+        return {
+          thread,
+          incoming,
+          storage,
+          output,
+          run: (skipped: any[] = []) => handler(thread, incoming, {}, { skipped }),
+          record: () => {
+            expect(output).toHaveBeenCalledTimes(1);
+            const rendered = format(...output.mock.calls[0]!);
+            expect(rendered).toMatch(/^\[CHANNEL\] \[/);
+            const record = embeddedRecord(rendered.split('\n')[0]!);
+            expect(JSON.parse(JSON.stringify(output.mock.calls[0]![1]))).toEqual({ args: [record] });
+            return record;
+          },
+        };
+      }
+
+      it('puts selected pre-session error messages and exact correlation on the first console line', async () => {
+        const cause = new Error('SYNTHETIC_DATABASE_CAUSE');
+        const error = new Error('SYNTHETIC_PRE_SESSION_FAILURE', { cause });
+        const f = await fixture(error);
+        await f.run();
+        expect(f.storage).toHaveBeenCalled();
+        expect(mockAgent.sendMessage).not.toHaveBeenCalled();
+        expect(f.record()).toEqual({
+          platform: 'slack',
+          threadId: 'slack:C123:1790610846.868069',
+          messageId: '1790610846.868069',
+          authorId: 'U123',
+          error: {
+            message: error.message,
+            cause: { message: cause.message },
+          },
+        });
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: SYNTHETIC_PRE_SESSION_FAILURE');
+      });
+
+      it('logs a string throw as a message', async () => {
+        const f = await fixture('plain string');
+        await f.run();
+        expect(f.record().error).toEqual({ message: 'plain string' });
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: plain string');
+      });
+
+      it('passes the original Error to the custom formatter', async () => {
+        const error = new Error('failure');
+        const formatError = vi.fn(() => 'custom feedback');
+        const f = await fixture(error, { formatError });
+        await f.run();
+        expect(f.record().error.message).toBe('failure');
+        expect(formatError).toHaveBeenCalledExactlyOnceWith(error);
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('custom feedback');
+      });
+
+      it.each(['toJSON', 'frozen', 'circular', 'bigint', 'cause', 'toString'])(
+        'extracts selected fields and continues to later senders for %s',
+        async kind => {
+          const error = new Error('failure');
+          if (kind === 'toJSON') {
+            Object.assign(error, {
+              toJSON: () => {
+                throw new Error('serializer failed');
+              },
+            });
+          } else if (kind === 'frozen') {
+            Object.freeze(error);
+          } else if (kind === 'circular') {
+            Object.assign(error, { self: error });
+          } else if (kind === 'bigint') {
+            Object.assign(error, { value: 1n });
+          } else if (kind === 'toString') {
+            Object.assign(error, {
+              value: 1n,
+              toString: () => {
+                throw new Error('coercion failed');
+              },
+            });
+          } else {
+            error.cause = error;
+          }
+          const f = await fixture(error);
+          f.storage.mockImplementationOnce(() => {
+            throw error;
+          });
+          f.storage.mockImplementationOnce(() => {
+            throw new Error('later failure');
+          });
+          await expect(f.run([{ ...f.incoming, id: 'earlier', author: { userId: 'OTHER' } }])).resolves.toBeUndefined();
+          expect(f.thread.post).toHaveBeenNthCalledWith(1, '❌ Error: failure');
+          expect(f.thread.post).toHaveBeenNthCalledWith(2, '❌ Error: later failure');
+          expect(f.output).toHaveBeenCalledTimes(2);
+          const records = f.output.mock.calls.map(call => embeddedRecord(format(...call).split('\n')[0]!));
+          expect(records[0].error).toEqual({
+            message: 'failure',
+            ...(kind === 'cause' ? { cause: { message: 'failure' } } : {}),
+          });
+          expect(records[1].error.message).toBe('later failure');
+          expect(records.map(record => record.authorId)).toEqual(['OTHER', 'U123']);
+        },
+      );
+
+      it('omits payloads, stacks and deeper causes without invoking custom serializers', async () => {
+        const toJSON = vi.fn(() => ({ message: 'SENTINEL_SERIALIZER' }));
+        const stack = vi.fn(() => 'SENTINEL_STACK');
+        const cause = Object.assign(new Error('database unavailable'), {
+          cause: new Error('SENTINEL_DEEP_CAUSE'),
+          request: { headers: { authorization: 'SENTINEL_TOKEN' } },
+          toJSON,
+        });
+        const error = Object.assign(new Error('session failed', { cause }), {
+          details: { errorMessage: 'SENTINEL_UNUSED_FALLBACK', body: 'SENTINEL_BODY' },
+          response: { body: 'SENTINEL_RESPONSE' },
+          toJSON,
+        });
+        Object.defineProperty(error, 'stack', { get: stack });
+        Object.defineProperty(cause, 'stack', { get: stack });
+        const f = await fixture(error);
+        await f.run();
+        expect(f.record().error).toEqual({
+          message: 'session failed',
+          cause: { message: 'database unavailable' },
+        });
+        expect(toJSON).not.toHaveBeenCalled();
+        expect(stack).not.toHaveBeenCalled();
+        expect(format(...f.output.mock.calls[0]!)).not.toContain('SENTINEL');
+        expect(JSON.stringify(f.output.mock.calls[0]![1])).not.toContain('SENTINEL');
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: session failed');
+      });
+
+      it('includes Mastra classification without details or custom toJSON output', async () => {
+        const error = new MastraError(
+          {
+            id: 'CHANNEL_STORAGE_FAILED',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.SYSTEM,
+            text: 'session failed',
+            details: { errorMessage: 'SENTINEL_UNUSED_FALLBACK', token: 'SENTINEL_TOKEN' },
+          },
+          new Error('database unavailable'),
+        );
+        const toJSON = vi.spyOn(error, 'toJSON');
+        const formatError = vi.fn(() => 'custom feedback');
+        const f = await fixture(error, { formatError });
+        await f.run();
+        expect(f.record().error).toEqual({
+          message: 'session failed',
+          code: 'CHANNEL_STORAGE_FAILED',
+          domain: 'STORAGE',
+          category: 'SYSTEM',
+          cause: { message: 'database unavailable' },
+        });
+        expect(toJSON).not.toHaveBeenCalled();
+        expect(format(...f.output.mock.calls[0]!)).not.toContain('SENTINEL');
+        expect(formatError).toHaveBeenCalledExactlyOnceWith(error);
+      });
+
+      it('does not serialize non-string Mastra classification fields', async () => {
+        const toJSON = vi.fn(() => 'SENTINEL_CLASSIFICATION');
+        const error = Object.assign(
+          new MastraError({
+            id: 'INVALID_CLASSIFICATION',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.SYSTEM,
+            text: 'failure',
+          }),
+          { id: { toJSON }, domain: { toJSON }, category: { toJSON } },
+        );
+        const f = await fixture(error);
+        await f.run();
+        expect(f.record().error).toEqual({ message: 'failure' });
+        expect(toJSON).not.toHaveBeenCalled();
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: failure');
+      });
+
+      it('reads each Mastra classification field once before selecting its string value', async () => {
+        const toJSON = vi.fn(() => ({ privateData: 'SENTINEL_CLASSIFICATION' }));
+        const id = vi.fn().mockReturnValueOnce('CHANNEL_STORAGE_FAILED').mockReturnValue({ toJSON });
+        const domain = vi.fn().mockReturnValueOnce('STORAGE').mockReturnValue({ toJSON });
+        const category = vi.fn().mockReturnValueOnce('SYSTEM').mockReturnValue({ toJSON });
+        const error = new MastraError({
+          id: 'CHANNEL_STORAGE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.SYSTEM,
+          text: 'failure',
+        });
+        Object.defineProperties(error, { id: { get: id }, domain: { get: domain }, category: { get: category } });
+        const f = await fixture(error);
+        await f.run();
+        expect(f.record().error).toEqual({
+          message: 'failure',
+          code: 'CHANNEL_STORAGE_FAILED',
+          domain: 'STORAGE',
+          category: 'SYSTEM',
+        });
+        expect(id).toHaveBeenCalledTimes(1);
+        expect(domain).toHaveBeenCalledTimes(1);
+        expect(category).toHaveBeenCalledTimes(1);
+        expect(toJSON).not.toHaveBeenCalled();
+        expect(format(...f.output.mock.calls[0]!)).not.toContain('SENTINEL');
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: failure');
+      });
+
+      it.each([
+        { details: { errorMessage: 'fallback message', token: 'SENTINEL_TOKEN' } },
+        { message: '', details: { errorMessage: 'fallback message', token: 'SENTINEL_TOKEN' } },
+        new MastraError({
+          id: 'EMPTY_MESSAGE',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.SYSTEM,
+          text: '',
+          details: { errorMessage: 'fallback message', token: 'SENTINEL_TOKEN' },
+        }),
+      ])('uses only details.errorMessage when no useful message is available (%#)', async error => {
+        const f = await fixture(error, { formatError: () => 'feedback' });
+        await f.run();
+        expect(f.record().error.message).toBe('fallback message');
+        expect(f.record().error).not.toHaveProperty('details');
+        expect(format(...f.output.mock.calls[0]!)).not.toContain('SENTINEL');
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('feedback');
+      });
+
+      it.each(['cause message', { details: { errorMessage: 'cause message', token: 'SENTINEL_TOKEN' } }])(
+        'extracts only the immediate cause message (%#)',
+        async cause => {
+          const f = await fixture(new Error('failure', { cause }));
+          await f.run();
+          expect(f.record().error).toEqual({ message: 'failure', cause: { message: 'cause message' } });
+        },
+      );
+
+      it.each(['', { details: { errorMessage: '' } }])('omits an empty immediate cause message (%#)', async cause => {
+        const f = await fixture(new Error('failure', { cause }));
+        await f.run();
+        expect(f.record().error).toEqual({ message: 'failure' });
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: failure');
+      });
+
+      it.each([null, undefined, '', { details: { errorMessage: '' } }, { details: { token: 'SENTINEL_TOKEN' } }])(
+        'uses a static message for a throw without a useful message (%#)',
+        async error => {
+          const f = await fixture(error, { formatError: () => 'feedback' });
+          await f.run();
+          expect(f.record().error).toEqual({ message: 'Unknown error' });
+          expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('feedback');
+        },
+      );
+
+      it('keeps feedback working if reading the selected cause fails', async () => {
+        const error = new Error('failure');
+        Object.defineProperty(error, 'cause', {
+          get: () => {
+            throw new Error('SENTINEL_GETTER');
+          },
+        });
+        const f = await fixture(error);
+        await f.run();
+        expect(f.record().error).toEqual({ message: 'Error details unavailable' });
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: failure');
+      });
+
+      it('retains ConsoleLogger filter and observability export envelopes', async () => {
+        const filter = vi.fn<LogFilter>(() => true);
+        const sink = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        const logger = new ConsoleLogger({ filter });
+        logger.__attachObservability({
+          resolveTraceFields: () => undefined,
+          getLogSink: () => sink,
+          options: { correlation: true, export: true },
+        });
+        const error = Object.assign(new Error('failure'), { request: { authorization: 'SENTINEL_TOKEN' } });
+        const f = await fixture(error, { logger });
+        await f.run();
+        const record = f.record();
+        expect(filter).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({
+            component: 'CHANNEL',
+            level: 'error',
+            args: [{ args: [record] }],
+          }),
+        );
+        expect(embeddedRecord(filter.mock.calls[0]![0].message)).toEqual(record);
+        expect(sink.error).toHaveBeenCalledExactlyOnceWith(expect.any(String), { args: [record] });
+        expect(JSON.parse(JSON.stringify(sink.error.mock.calls[0]![1]))).toEqual({ args: [record] });
+        expect(embeddedRecord(sink.error.mock.calls[0]![0])).toEqual(record);
+        expect(JSON.parse(JSON.stringify(filter.mock.calls[0]![0].args))).toEqual([{ args: [record] }]);
+        expect(JSON.stringify(sink.error.mock.calls)).not.toContain('SENTINEL');
+        expect(JSON.stringify(filter.mock.calls)).not.toContain('SENTINEL');
+      });
+
+      it('retains structured metadata in a custom IMastraLogger', async () => {
+        const capture = vi.fn();
+        const logger: IMastraLogger = {
+          debug: vi.fn(),
+          info: vi.fn(),
+          warn: vi.fn(),
+          error: capture,
+          trackException: vi.fn(),
+          getTransports: () => new Map(),
+          listLogs: async () => ({ logs: [], total: 0, page: 1, perPage: 100, hasMore: false }),
+          listLogsByRunId: async () => ({ logs: [], total: 0, page: 1, perPage: 100, hasMore: false }),
+        };
+        const error = new Error('failure');
+        const f = await fixture(error, { logger });
+        await f.run();
+        expect(capture).toHaveBeenCalledTimes(1);
+        const [text, metadata] = capture.mock.calls[0]!;
+        const record = embeddedRecord(text);
+        expect(JSON.parse(JSON.stringify(metadata))).toEqual({ args: [record] });
+        expect(record).toMatchObject({
+          platform: 'slack',
+          threadId: f.thread.id,
+          messageId: f.incoming.id,
+          authorId: 'U123',
+        });
+        expect(metadata.args[0].error).toEqual(record.error);
+      });
+
+      it('keeps deliberate refusal silent and produces no ordinary error diagnostic', async () => {
+        const f = await fixture(new ChannelSessionRejectedError('refused'));
+        await f.run();
+        expect(f.output).not.toHaveBeenCalled();
+        expect(f.thread.post).not.toHaveBeenCalled();
+      });
+
+      it.each(['formatter', 'post'])('preserves existing %s failure behavior', async mode => {
+        const formatError = vi.fn(() => {
+          if (mode === 'formatter') throw new Error('formatter failed');
+          return 'feedback';
+        });
+        const f = await fixture(new Error('failure'), { formatError });
+        if (mode === 'post') f.thread.post.mockRejectedValue(new Error('post failed'));
+        await expect(f.run()).resolves.toBeUndefined();
+        expect(f.record().error.message).toBe('failure');
+        expect(f.thread.post).toHaveBeenCalledTimes(mode === 'post' ? 1 : 0);
+      });
+
+      it('continues to the next sender after an ordinary failed run', async () => {
+        const f = await fixture(new Error('failure'));
+        await f.run([{ ...f.incoming, id: 'earlier', author: { userId: 'OTHER' } }]);
+        expect(f.storage).toHaveBeenCalledTimes(2);
+        expect(f.thread.post).toHaveBeenCalledTimes(2);
+        expect(f.output).toHaveBeenCalledTimes(2);
+        expect(f.output.mock.calls.map(call => embeddedRecord(format(...call).split('\n')[0]!).authorId)).toEqual([
+          'OTHER',
+          'U123',
+        ]);
+      });
+    });
+
     it('passes the resolved Mastra instance to a custom handler as ctx.mastra', async () => {
       const chatMod = await getChatModule();
       // Capture the wrapper AgentChannels registers with the Chat SDK so we can
@@ -1693,7 +2256,200 @@ describe('AgentChannels', () => {
         mastra: mockMastra,
         requestContext: expect.any(RequestContext),
         signalMetadata: {},
+        skipped: [],
       });
+
+      spy.mockRestore();
+    });
+
+    it('gives a custom handler the messages batched by the SDK as ctx.skipped', async () => {
+      const chatMod = await getChatModule();
+      let registeredDMWrapper: ((...args: any[]) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const onDirectMessage = vi.fn(async () => {});
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        handlers: { onDirectMessage },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const earlier = { ...message, id: 'msg-earlier', text: 'first part' };
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await registeredDMWrapper!(chatThread, message, {}, { skipped: [earlier], totalSinceLastHandler: 2 });
+
+      const ctx = onDirectMessage.mock.calls[0]![3] as { skipped: unknown[] };
+      expect(ctx.skipped).toEqual([earlier]);
+
+      spy.mockRestore();
+    });
+
+    it('merges batched messages into one agent turn, oldest first', async () => {
+      const chatMod = await getChatModule();
+      let registeredDMWrapper: ((...args: any[]) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const dispatches: any[] = [];
+      vi.spyOn(channels as any, 'dispatchInboundMessage').mockImplementation(async (args: any) => {
+        dispatches.push(args);
+      });
+
+      const first = { ...message, id: 'm1', text: 'first part', formatted: undefined, attachments: [] };
+      const second = { ...message, id: 'm2', text: 'second part', formatted: undefined, attachments: [] };
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await registeredDMWrapper!(chatThread, second, {}, { skipped: [first], totalSinceLastHandler: 2 });
+
+      expect(dispatches).toHaveLength(1);
+      const serialized = JSON.stringify(dispatches[0].signalContents);
+      expect(serialized).toContain('first part');
+      expect(serialized).toContain('second part');
+      expect(serialized.indexOf('first part')).toBeLessThan(serialized.indexOf('second part'));
+
+      spy.mockRestore();
+    });
+
+    it('does not repeat batched messages as thread history on a first mention', async () => {
+      const chatMod = await getChatModule();
+      let registeredMentionWrapper: ((...args: any[]) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onNewMention').mockImplementation((handler: any) => {
+        registeredMentionWrapper = handler;
+      });
+
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const dispatches: any[] = [];
+      vi.spyOn(channels as any, 'dispatchInboundMessage').mockImplementation(async (args: any) => {
+        dispatches.push(args);
+      });
+
+      const first = { ...message, id: 'm1', text: 'first part', formatted: undefined, attachments: [] };
+      const second = { ...message, id: 'm2', text: 'second part', formatted: undefined, attachments: [] };
+      const older = { ...message, id: 'm0', text: 'older chatter', formatted: undefined, attachments: [] };
+      const chatThread = makeChatThread({
+        adapter: channels.adapters.discord,
+        isDM: false,
+        isSubscribed: vi.fn().mockResolvedValue(false),
+        // newest-first, as the SDK yields them
+        messages: (async function* () {
+          yield second;
+          yield first;
+          yield older;
+        })(),
+      });
+      await registeredMentionWrapper!(chatThread, second, { skipped: [first], totalSinceLastHandler: 2 });
+
+      const serialized = JSON.stringify(dispatches[0].signalContents);
+      expect(serialized).toContain('older chatter');
+      expect(serialized.split('first part')).toHaveLength(2);
+
+      spy.mockRestore();
+    });
+
+    it("dispatches another sender's batched messages as their own turn", async () => {
+      const chatMod = await getChatModule();
+      let registeredDMWrapper: ((...args: any[]) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const dispatches: any[] = [];
+      vi.spyOn(channels as any, 'dispatchInboundMessage').mockImplementation(async (args: any) => {
+        dispatches.push(args);
+      });
+
+      const fromOther = {
+        ...message,
+        id: 'm1',
+        text: 'other user text',
+        author: { userId: 'user-2', userName: 'mallory' },
+        attachments: [],
+      };
+      const current = { ...message, id: 'm2', text: 'my text', formatted: undefined, attachments: [] };
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await registeredDMWrapper!(chatThread, current, {}, { skipped: [fromOther], totalSinceLastHandler: 2 });
+
+      expect(dispatches).toHaveLength(2);
+      const firstTurn = JSON.stringify(dispatches[0].signalContents);
+      const secondTurn = JSON.stringify(dispatches[1].signalContents);
+      expect(firstTurn).toContain('other user text');
+      expect(firstTurn).not.toContain('my text');
+      expect(secondTurn).toContain('my text');
+      expect(secondTurn).not.toContain('other user text');
+      expect(dispatches[0].attributes.messageId).toBe('m1');
+      expect(dispatches[1].attributes.messageId).toBe('m2');
+
+      spy.mockRestore();
+    });
+
+    it("isolates each sender's run and keeps going when one run is refused", async () => {
+      const chatMod = await getChatModule();
+      const { ChannelSessionRejectedError } = await import('../errors');
+      let registeredDMWrapper: ((...args: any[]) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const onDirectMessage = vi.fn((thread: any, msg: any, defaultHandler: any, ctx: any) => {
+        ctx.requestContext.set('tenant', 'current-sender');
+        return defaultHandler(thread, msg);
+      });
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        handlers: { onDirectMessage },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const calls: { id: string; tenant: unknown }[] = [];
+      vi.spyOn(channels as any, 'processChatMessage').mockImplementation(async (...args: any[]) => {
+        calls.push({ id: args[1].id, tenant: args[3].get('tenant') });
+        if (args[1].id === 'a') throw new ChannelSessionRejectedError('no');
+      });
+
+      const author = (userId?: string) => ({ userId, userName: userId ?? 'anon' });
+      const skipped = [
+        { ...message, id: 'a', author: author('user-a') },
+        { ...message, id: 'anon1', author: author(undefined) },
+        { ...message, id: 'anon2', author: author(undefined) },
+      ];
+      const current = { ...message, id: 'c', author: author('user-c') };
+      await registeredDMWrapper!(
+        makeChatThread({ adapter: channels.adapters.discord }),
+        current,
+        {},
+        {
+          skipped,
+          totalSinceLastHandler: 4,
+        },
+      );
+
+      expect(calls).toEqual([
+        { id: 'a', tenant: undefined },
+        { id: 'anon1', tenant: undefined },
+        { id: 'anon2', tenant: undefined },
+        { id: 'c', tenant: 'current-sender' },
+      ]);
 
       spy.mockRestore();
     });

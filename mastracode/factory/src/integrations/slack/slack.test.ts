@@ -22,10 +22,12 @@ function handlerCtx(mastra?: unknown) {
   return { mastra: mastra as any, requestContext: new RequestContext() };
 }
 
-function makeThread() {
+function makeThread({ isDM = false } = {}) {
   return {
     adapter: { name: 'slack' },
     channelId: 'C-1',
+    isDM,
+    post: vi.fn().mockResolvedValue({ id: 'msg-1' }),
     postEphemeral: vi.fn().mockResolvedValue({ id: 'eph-1' }),
   } as any;
 }
@@ -90,9 +92,20 @@ describe('resolveLinkedSender', () => {
     // The link carries NO identity: Slack proves the account during OIDC, so
     // a forwarded card can't bind the original sender to whoever clicks it.
     const card = thread.postEphemeral.mock.calls[0][1];
+    expect(JSON.stringify(card)).toContain('then mention me again.');
     const actions = card.children.find((c: any) => c.type === 'actions');
     const linkButton = actions.children.find((c: any) => c.type === 'link-button');
     expect(linkButton.url).toBe('https://mc.example.com/connect/slack');
+  });
+
+  it('tells an unlinked sender in a DM to message the bot again', async () => {
+    process.env.MASTRACODE_CHANNELS_PUBLIC_URL = 'https://mc.example.com';
+    const thread = makeThread({ isDM: true });
+
+    await resolveLinkedSender({ thread, message: makeMessage('T-1'), accountLinks: makeStore(null) });
+
+    const card = thread.postEphemeral.mock.calls[0][1];
+    expect(JSON.stringify(card)).toContain('then message me again.');
   });
 
   it('treats a missing team id as unlinked and blocks the run, still offering the card', async () => {
@@ -141,7 +154,6 @@ describe('resolveFactoryForLink', () => {
     const thread = makeThread();
     const result = await resolveFactoryForLink({
       thread,
-      message: makeMessage('T-1'),
       link: { orgId: 'org-1', userId: 'user-1', linkedAt: new Date() },
       key: linkKey,
       accountLinks: makeLinkStore(),
@@ -157,7 +169,6 @@ describe('resolveFactoryForLink', () => {
 
     const result = await resolveFactoryForLink({
       thread,
-      message: makeMessage('T-1'),
       link: { orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-2', linkedAt: new Date() },
       key: linkKey,
       accountLinks,
@@ -178,7 +189,6 @@ describe('resolveFactoryForLink', () => {
 
     const result = await resolveFactoryForLink({
       thread,
-      message: makeMessage('T-1'),
       link: { orgId: 'org-1', userId: 'user-1', linkedAt: new Date() },
       key: linkKey,
       accountLinks,
@@ -202,7 +212,6 @@ describe('resolveFactoryForLink', () => {
 
     const result = await resolveFactoryForLink({
       thread,
-      message: makeMessage('T-1'),
       link: { orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-gone', linkedAt: new Date() },
       key: linkKey,
       accountLinks,
@@ -210,8 +219,10 @@ describe('resolveFactoryForLink', () => {
     });
 
     expect(result).toEqual({ status: 'blocked' });
-    // Ephemeral prompt deep-links to Connected Accounts settings.
-    const card = thread.postEphemeral.mock.calls[0][1];
+    // Public thread prompt deep-links to Connected Accounts settings.
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    expect(thread.postEphemeral).not.toHaveBeenCalled();
+    const card = thread.post.mock.calls[0][0];
     const actions = card.children.find((c: any) => c.type === 'actions');
     const linkButton = actions.children.find((c: any) => c.type === 'link-button');
     expect(linkButton.url).toBe('https://mc.example.com/settings/connections');
@@ -225,7 +236,6 @@ describe('resolveFactoryForLink', () => {
 
     const result = await resolveFactoryForLink({
       thread,
-      message: makeMessage('T-1'),
       link: { orgId: 'org-1', userId: 'user-1', linkedAt: new Date() },
       key: linkKey,
       accountLinks: makeLinkStore(),
@@ -233,8 +243,24 @@ describe('resolveFactoryForLink', () => {
     });
 
     expect(result).toEqual({ status: 'blocked' });
-    expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
-    expect(thread.postEphemeral.mock.calls[0][2]).toEqual({ fallbackToDM: true });
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    expect(thread.postEphemeral).not.toHaveBeenCalled();
+    expect(JSON.stringify(thread.post.mock.calls[0][0])).toContain('then mention me again.');
+  });
+
+  it('tells a sender in a DM to message the bot again after picking a factory', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const thread = makeThread({ isDM: true });
+
+    await resolveFactoryForLink({
+      thread,
+      link: { orgId: 'org-1', userId: 'user-1', linkedAt: new Date() },
+      key: linkKey,
+      accountLinks: makeLinkStore(),
+      projects: makeProjects([{ id: 'fp-1' }, { id: 'fp-2' }]),
+    });
+
+    expect(JSON.stringify(thread.post.mock.calls[0][0])).toContain('then message me again.');
   });
 
   it('a personal account (no org) has no factories and is prompted', async () => {
@@ -244,7 +270,6 @@ describe('resolveFactoryForLink', () => {
 
     const result = await resolveFactoryForLink({
       thread,
-      message: makeMessage('T-1'),
       link: { userId: 'user-1', linkedAt: new Date() },
       key: linkKey,
       accountLinks: makeLinkStore(),
@@ -254,7 +279,8 @@ describe('resolveFactoryForLink', () => {
     expect(result).toEqual({ status: 'blocked' });
     // Org-less: never lists factories (they're org-scoped).
     expect(projects.list).not.toHaveBeenCalled();
-    expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    expect(thread.postEphemeral).not.toHaveBeenCalled();
   });
 
   it('blocks without a card when no public URL is configured', async () => {
@@ -265,7 +291,6 @@ describe('resolveFactoryForLink', () => {
 
     const result = await resolveFactoryForLink({
       thread,
-      message: makeMessage('T-1'),
       link: { orgId: 'org-1', userId: 'user-1', linkedAt: new Date() },
       key: linkKey,
       accountLinks: makeLinkStore(),
@@ -273,6 +298,7 @@ describe('resolveFactoryForLink', () => {
     });
 
     expect(result).toEqual({ status: 'blocked' });
+    expect(thread.post).not.toHaveBeenCalled();
     expect(thread.postEphemeral).not.toHaveBeenCalled();
   });
 });
@@ -353,7 +379,8 @@ describe('handler dispatch gating', () => {
     await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx());
 
     expect(defaultHandler).not.toHaveBeenCalled();
-    expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    expect(thread.postEphemeral).not.toHaveBeenCalled();
   });
 
   it('mention handler blocks the same way before any session is created', async () => {
@@ -368,7 +395,8 @@ describe('handler dispatch gating', () => {
     await handlers.onMention!(thread, makeMessage('T-1'), defaultHandler, handlerCtx());
 
     expect(defaultHandler).not.toHaveBeenCalled();
-    expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    expect(thread.postEphemeral).not.toHaveBeenCalled();
   });
 
   it('keeps pre-routing behavior when only account linking is configured (no projects)', async () => {
@@ -605,9 +633,10 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
       deps.projects.get
         .mockResolvedValueOnce({ id: 'fp-1', slackWorkItemsEnabled: true })
         .mockRejectedValueOnce(outage);
-    const resolverDeps = failure === 'multiple providers'
-      ? { ...deps, sourceControls: [sourceControl, makeSourceControl({ integrationId: 'gitlab' })] }
-      : deps;
+    const resolverDeps =
+      failure === 'multiple providers'
+        ? { ...deps, sourceControls: [sourceControl, makeSourceControl({ integrationId: 'gitlab' })] }
+        : deps;
     const workItems = { upsert: vi.fn() };
     const store = { listThreads: vi.fn().mockResolvedValue({ threads: [] }), saveThread: vi.fn() };
     const mastra = { getStorage: () => ({ getStore: async () => store }) };
@@ -1134,6 +1163,43 @@ describe('session start (onSessionStart)', () => {
     expect(session.restoredModel()).toBe('openai/gpt-5.6');
   });
 
+  it("derives observational memory from the sender's provider credentials", async () => {
+    const deps = makeStartDeps({
+      defaultModelId: 'openai/gpt-5.6',
+      activePack: { build: 'deepseek/deepseek-chat' },
+    });
+    const session = makeSession();
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
+    expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
+    expect(session.om.observer.switchModel).not.toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
+    expect(session.model.switch).toHaveBeenLastCalledWith({ modelId: 'deepseek/deepseek-chat' });
+  });
+
+  it('realigns observational memory when the sender model cannot be applied', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const deps = makeStartDeps({
+      defaultModelId: 'anthropic/claude-opus-5',
+      activePack: { build: 'deepseek/deepseek-chat' },
+    });
+    const session = makeSession({ currentModel: 'anthropic/claude-opus-5' });
+    session.model.switch.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('missing credentials'));
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    expect(session.om.observer.switchModel).toHaveBeenLastCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
+    expect(session.om.reflector.switchModel).toHaveBeenLastCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
+    expect(session.om.observer.switchModel).not.toHaveBeenLastCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
+    expect(warn).toHaveBeenCalledWith("[slack] Failed to apply the sender's model pack model", {
+      modelId: 'deepseek/deepseek-chat',
+      error: 'missing credentials',
+    });
+    warn.mockRestore();
+  });
+
   // The point of persisting the choice: the thread keeps the model it started
   // on. A later process — where the sender's pack and the factory default have
   // both moved on — must not retarget a conversation already under way.
@@ -1242,24 +1308,24 @@ describe('session start (onSessionStart)', () => {
     expect(session.state.set).toHaveBeenLastCalledWith(expect.objectContaining({ observationThreshold: 222 }));
   });
 
-  // Memory settings are stored preference, not a choice made on this thread: a
-  // restarted process re-resolves the project's row at session creation, so the
-  // sender's row has to be re-applied even where the model is already decided.
-  it('re-applies the sender memory settings on a restarted session whose model is persisted', async () => {
+  // A restarted process restores the generation model from the thread, then
+  // uses that provider while reapplying the project and sender memory settings.
+  it('re-applies memory settings on a restarted session using the persisted model provider', async () => {
     const deps = makeStartDeps({
-      personalMemoryRecord: { observerModelId: 'openai/gpt-5.4-mini', reflectionThreshold: 333 },
+      personalMemoryRecord: { reflectionThreshold: 333 },
     });
-    const session = makeSession({ persistedModeModel: 'anthropic/claude-fable-5' });
+    const session = makeSession({ persistedModeModel: 'deepseek/deepseek-chat' });
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
-    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
+    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
+    expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
     expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ reflectionThreshold: 333 }));
-    // Still no model re-resolution: the two halves of the hook are independent.
+    // Still no model re-resolution: the persisted thread choice remains authoritative.
     expect(deps.modelPacks.getActive).not.toHaveBeenCalled();
     expect(deps.projects.getById).not.toHaveBeenCalled();
     expect(session.model.switch).not.toHaveBeenCalled();
-    expect(session.restoredModel()).toBe('anthropic/claude-fable-5');
+    expect(session.restoredModel()).toBe('deepseek/deepseek-chat');
   });
 
   // Reaching a storage domain can fail on its own (uninitialized table, a

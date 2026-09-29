@@ -1,8 +1,16 @@
 {
-  "attachment": ["deepseek-v4-flash", "glm-5.3-flash", "mimo-v2.6-flash", "mimo-v2.6-pro", "mimo-v2.6-pro-ultraspeed"],
+  "attachment": [
+    "deepseek-v4-flash",
+    "deepseek-v4.1-flash",
+    "glm-5.3-flash",
+    "mimo-v2.6-flash",
+    "mimo-v2.6-pro",
+    "mimo-v2.6-pro-ultraspeed"
+  ],
   "temperature": [
     "deepseek-v4-flash",
     "deepseek-v4-pro",
+    "deepseek-v4.1-flash",
     "glm-5.2",
     "glm-5.2-fast",
     "glm-5.3-flash",
@@ -11,5 +19,12 @@
     "mimo-v2.6-pro-ultraspeed",
     "qwen3.8-max"
   ],
-  "structuredOutput": ["deepseek-v4-flash", "deepseek-v4-pro", "glm-5.2", "glm-5.2-fast", "glm-5.3-flash"]
+  "structuredOutput": [
+    "deepseek-v4-flash",
+    "deepseek-v4-pro",
+    "deepseek-v4.1-flash",
+    "glm-5.2",
+    "glm-5.2-fast",
+    "glm-5.3-flash"
+  ]
 }

@@ -357,7 +357,7 @@ export class DockerTemplate {
           session.close();
         }
       } else {
-        const build = docker.buildImage(context, { t: tag, nocache }).then(stream => {
+        const build = docker.buildImage(context, { t: tag, nocache, forcerm: true }).then(stream => {
           if (abortSignal?.aborted) {
             (stream as NodeJS.ReadableStream & { destroy?(error?: Error): void }).destroy?.();
             throw createAbortError(abortSignal, 'build Docker template');

@@ -37,8 +37,10 @@ export const VoiceCallPanel = ({ voiceCall }: VoiceCallPanelProps) => {
           className={cn(
             'h-2 w-2 rounded-full',
             voiceCall.status === 'connecting' && 'bg-muted-foreground',
-            voiceCall.status === 'active' && voiceCall.agentState === 'speaking' && 'animate-pulse bg-accent1',
-            voiceCall.status === 'active' && voiceCall.agentState !== 'speaking' && 'bg-green-500',
+            voiceCall.status === 'active' &&
+              voiceCall.agentState === 'speaking' &&
+              'animate-pulse bg-success-indicator',
+            voiceCall.status === 'active' && voiceCall.agentState !== 'speaking' && 'bg-success-indicator',
           )}
         />
         <span className="text-caption text-muted-foreground">{stateLabel}</span>

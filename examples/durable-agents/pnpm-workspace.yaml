@@ -21,3 +21,6 @@ overrides:
   fast-copy@<4.1.1: 4.1.1
   ioredis@>=5.0.0 <6.0.0: 6.0.0
   zod@>=4.0.0 <4.6.5: 4.6.5
+  # Vanta 2026-09-28: nested-lock security floors
+  'protobufjs@>=7.0.0 <7.6.6': 7.6.6
+  '@opentelemetry/auto-instrumentations-node@<0.80.0': 0.80.0

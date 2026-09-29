@@ -86,9 +86,9 @@ export function CardStatus({ status }: { status: BoardCardStatus }) {
       role="alert"
       tabIndex={status.detail === undefined ? undefined : 0}
       className={cn(
-        'text-meta text-error flex w-full min-w-0 items-start gap-1.5',
+        'text-meta text-destructive-indicator flex w-full min-w-0 items-start gap-1.5',
         status.detail !== undefined &&
-          'focus-visible:outline-accent1 relative cursor-help underline decoration-dotted underline-offset-2 outline-none focus-visible:outline-2',
+          'focus-visible:outline-border-focus relative cursor-help underline decoration-dotted underline-offset-2 outline-none focus-visible:outline-2',
       )}
     >
       <TriangleAlert size={11} aria-hidden className="mt-0.5 shrink-0" />
@@ -110,11 +110,11 @@ export function CardStatus({ status }: { status: BoardCardStatus }) {
 
 function labelDotClass(label: string): string {
   const normalized = label.toLowerCase();
-  if (normalized.includes('bug') || normalized.includes('error')) return 'bg-accent2';
-  if (normalized.includes('approval') || normalized.includes('priority')) return 'bg-accent6';
-  if (normalized.includes('triage') || normalized.includes('ready')) return 'bg-accent1';
-  if (normalized.includes('cli') || normalized.includes('linear')) return 'bg-accent3';
-  if (normalized.includes('work') || normalized.includes('trio')) return 'bg-accent6';
+  if (normalized.includes('bug') || normalized.includes('error')) return 'bg-badge-red-indicator';
+  if (normalized.includes('approval') || normalized.includes('priority')) return 'bg-badge-yellow-indicator';
+  if (normalized.includes('triage') || normalized.includes('ready')) return 'bg-badge-green-indicator';
+  if (normalized.includes('cli') || normalized.includes('linear')) return 'bg-badge-blue-indicator';
+  if (normalized.includes('work') || normalized.includes('trio')) return 'bg-badge-yellow-indicator';
   return 'bg-muted-foreground';
 }
 

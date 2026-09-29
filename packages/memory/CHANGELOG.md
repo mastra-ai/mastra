@@ -1,5 +1,58 @@
 # @mastra/memory
 
+## 1.33.0-alpha.4
+
+### Patch Changes
+
+- Observational memory failure messages now include the Mastra error ID (for example `MASTRA_STORAGE_LIBSQL_UPDATE_BUFFERED_OBSERVATIONS_FAILED`), so storage failures show which operation failed instead of only the raw driver message. ([#25366](https://github.com/mastra-ai/mastra/pull/25366))
+
+- Updated dependencies [[`9ce3444`](https://github.com/mastra-ai/mastra/commit/9ce3444d1a6b17e72b0a20c74603abaf252a843e), [`3b77788`](https://github.com/mastra-ai/mastra/commit/3b77788a08df1e754282d39c42823e6e1c5f2742), [`987257a`](https://github.com/mastra-ai/mastra/commit/987257a34cda8a153fe592c31d75fbb1dee55202), [`65a93a2`](https://github.com/mastra-ai/mastra/commit/65a93a2a3b1434d605a6a417cb83d2d58e16bfc0), [`fd92729`](https://github.com/mastra-ai/mastra/commit/fd92729380a29f2a0ec822e39f3c09eb9aaa5ac5), [`79c3b1f`](https://github.com/mastra-ai/mastra/commit/79c3b1fa4d470585a00558b317ed47db9b1decd4), [`4092ef2`](https://github.com/mastra-ai/mastra/commit/4092ef29aad09f2ba5f90c92a4d4d3bd444eae67), [`5026973`](https://github.com/mastra-ai/mastra/commit/50269736f432cee1170627b2b6f88ba1431e837f)]:
+  - @mastra/core@1.72.0-alpha.7
+
+## 1.33.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`43fbe75`](https://github.com/mastra-ai/mastra/commit/43fbe75535650345cf61dee00cf3e7b3f5efaf7f), [`ebd03fd`](https://github.com/mastra-ai/mastra/commit/ebd03fd3bc93fe3930747956724252f7c8834826), [`2c57ba8`](https://github.com/mastra-ai/mastra/commit/2c57ba896b04215fface2a8216b88fe59cfdd041), [`f6effda`](https://github.com/mastra-ai/mastra/commit/f6effdabafa9fc6388478b3e281ad4c457d4200b), [`7f4ce21`](https://github.com/mastra-ai/mastra/commit/7f4ce2190029710851d95f7b75a2fb724782483c), [`3f50f2a`](https://github.com/mastra-ai/mastra/commit/3f50f2a59068fc91ef7ccc513e5d93845faa298e), [`1ba1588`](https://github.com/mastra-ai/mastra/commit/1ba158873dadf3d290b111981c3bc7ef95ab1d1c), [`b537ab1`](https://github.com/mastra-ai/mastra/commit/b537ab14714870e058775530bc55b37c9115613f), [`d4e350a`](https://github.com/mastra-ai/mastra/commit/d4e350a5c1e29a7da5a22da52ed1f33431403012)]:
+  - @mastra/core@1.72.0-alpha.5
+  - @mastra/schema-compat@1.3.12-alpha.1
+
+## 1.33.0-alpha.2
+
+### Minor Changes
+
+- You can now control observational memory retries and choose whether a failed Observer or Reflector stops the agent turn. ([#24863](https://github.com/mastra-ai/mastra/pull/24863))
+
+  - `maxRetries` sets how many times a failed Observer or Reflector call is retried. The default is `8`.
+  - `failurePolicy: 'continue'` lets the agent turn finish when observation or reflection still fails after all retries. The default, `'abort'`, keeps the current behavior.
+  - Messages that were not observed are retried on a later turn.
+  - A cancelled turn always stops, whatever the policy.
+  - Structured extractors now retry a temporary provider failure once. This retry does not use `maxRetries`, and a failed extraction still does not block the turn.
+
+  ```ts
+  import { Memory } from '@mastra/memory';
+
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        observation: { maxRetries: 2, failurePolicy: 'continue' },
+        reflection: { maxRetries: 2, failurePolicy: 'continue' },
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed observational memory merging a later observation group into an earlier truncated group when the truncated group quoted an `<observation-group>` tag inline. The later group is now parsed and shown in reflections with its own ID and range, and stripping group tags keeps both the quoted text and the later observations. ([#24927](https://github.com/mastra-ai/mastra/pull/24927))
+
+- Fixed Observational Memory leaving many remembered dates without a relative time such as "3 weeks ago". Dates with a time ("Mar 22, 2025 at 18:08"), ranges written with an en dash ("Aug 13–27, 2024"), month or year dates ("August 2024", "late 2023", "2035"), and date-range headers the reflector writes ("Date: Aug 1, 2024 - Feb 28, 2025") are now annotated. Dates written inside observations that include their year, such as "exam on January 10, 2024", are annotated too. Dates without a year are left unchanged. ([#25179](https://github.com/mastra-ai/mastra/pull/25179))
+
+- Fixed Observational Memory relative dates being off by a day when memory is read on a server in a different time zone from the one that wrote it. For example, an event from 8 days ago showed as "7 days ago". Fixed "1 week later" showing as "6 days later" across a daylight-saving change. A planned action dated for the current day is no longer marked as likely already happened. ([#25177](https://github.com/mastra-ai/mastra/pull/25177))
+
+- Updated dependencies [[`77c6f1c`](https://github.com/mastra-ai/mastra/commit/77c6f1cf14ba9ba47257829646a4569c4462d12f), [`3d25340`](https://github.com/mastra-ai/mastra/commit/3d2534080417711d1baf2ad947d1205ca95a34cd), [`afc53be`](https://github.com/mastra-ai/mastra/commit/afc53be4c95e83e8613f4e080b5a1926e63c5da6), [`b33985e`](https://github.com/mastra-ai/mastra/commit/b33985eac3e019f58d3785c48ef85eae48b4e068), [`32d71df`](https://github.com/mastra-ai/mastra/commit/32d71df2ce71573b40f9a62b8ac510ad6eadd859), [`444debd`](https://github.com/mastra-ai/mastra/commit/444debd7104ada74fa15d0e70703ee9be180fc75), [`9997948`](https://github.com/mastra-ai/mastra/commit/99979482956903a2cd685b31f53370dd33074799), [`7540eb1`](https://github.com/mastra-ai/mastra/commit/7540eb176c32ffbff45ccc64a8d8fce82ce42a94), [`9623397`](https://github.com/mastra-ai/mastra/commit/96233975b75135852c9b1616b91fd8cb54c77a53)]:
+  - @mastra/core@1.72.0-alpha.3
+
 ## 1.32.2-alpha.1
 
 ### Patch Changes

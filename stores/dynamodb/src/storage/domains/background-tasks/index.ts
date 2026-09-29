@@ -4,6 +4,7 @@ import type {
   TaskFilter,
   TaskListResult,
   UpdateBackgroundTask,
+  UpdateBackgroundTaskOptions,
 } from '@mastra/core/background-tasks';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { BackgroundTasksStorage, createStorageErrorId, TABLE_BACKGROUND_TASKS } from '@mastra/core/storage';
@@ -42,6 +43,8 @@ function toElectroRecord(task: BackgroundTask): Record<string, unknown> {
     startedAtIso: task.startedAt?.toISOString(),
     suspendedAtIso: task.suspendedAt?.toISOString(),
     completedAtIso: task.completedAt?.toISOString(),
+    ownerId: task.ownerId ?? undefined,
+    leaseExpiresAtIso: task.leaseExpiresAt?.toISOString(),
   };
 }
 
@@ -78,6 +81,8 @@ function fromElectroRecord(data: Record<string, any>): BackgroundTask {
     startedAt: asDate(data.startedAtIso),
     suspendedAt: asDate(data.suspendedAtIso),
     completedAt: asDate(data.completedAtIso),
+    ownerId: data.ownerId != null && data.ownerId !== '' ? String(data.ownerId) : undefined,
+    leaseExpiresAt: asDate(data.leaseExpiresAtIso),
   };
 }
 
@@ -113,7 +118,7 @@ export class BackgroundTasksStorageDynamoDB extends BackgroundTasksStorage {
   async updateTask(
     taskId: string,
     update: UpdateBackgroundTask,
-    options?: { expectedStatus?: BackgroundTask['status'] },
+    options?: UpdateBackgroundTaskOptions,
   ): Promise<boolean> {
     try {
       const setFields: Record<string, unknown> = {};
@@ -169,18 +174,52 @@ export class BackgroundTasksStorageDynamoDB extends BackgroundTasksStorage {
           setFields.completedAtIso = update.completedAt.toISOString();
         }
       }
+      if ('ownerId' in update) {
+        if (update.ownerId === undefined || update.ownerId === null) {
+          removeFields.push('ownerId');
+        } else {
+          setFields.ownerId = update.ownerId;
+        }
+      }
+      if ('leaseExpiresAt' in update) {
+        if (update.leaseExpiresAt === undefined || update.leaseExpiresAt === null) {
+          removeFields.push('leaseExpiresAtIso');
+        } else {
+          setFields.leaseExpiresAtIso = update.leaseExpiresAt.toISOString();
+        }
+      }
 
       if (Object.keys(setFields).length === 0 && removeFields.length === 0) return false;
 
       let op = this.service.entities.background_task.patch({ entity: ENTITY, id: taskId }) as any;
       if (Object.keys(setFields).length > 0) op = op.set(setFields);
       if (removeFields.length > 0) op = op.remove(removeFields);
-      if (options?.expectedStatus) {
+      if (options?.expectedStatus !== undefined) {
         op = op.where(({ status }: any, { eq }: any) => eq(status, options.expectedStatus));
+      }
+      if (options?.expectedOwnerId !== undefined) {
+        // `null` means "no owner recorded"; legacy rows have no attribute at all, so
+        // equality against null (always false in DynamoDB) is not usable here.
+        const expectedOwnerId = options.expectedOwnerId;
+        op = op.where(({ ownerId }: any, { eq, notExists }: any) =>
+          expectedOwnerId === null ? notExists(ownerId) : eq(ownerId, expectedOwnerId),
+        );
+      }
+      if (options?.expectedLeaseExpiresAt !== undefined) {
+        const expectedLeaseExpiresAt = options.expectedLeaseExpiresAt;
+        op = op.where(({ leaseExpiresAtIso }: any, { eq, notExists }: any) =>
+          expectedLeaseExpiresAt === null
+            ? notExists(leaseExpiresAtIso)
+            : eq(leaseExpiresAtIso, expectedLeaseExpiresAt.toISOString()),
+        );
       }
       await op.go();
     } catch (error: any) {
-      if (options?.expectedStatus && error?.cause?.name === 'ConditionalCheckFailedException') return false;
+      const hadExpectedCondition =
+        options?.expectedStatus !== undefined ||
+        options?.expectedOwnerId !== undefined ||
+        options?.expectedLeaseExpiresAt !== undefined;
+      if (hadExpectedCondition && error?.cause?.name === 'ConditionalCheckFailedException') return false;
       throw new MastraError(
         {
           id: createStorageErrorId('DYNAMODB', 'BACKGROUND_TASKS_UPDATE', 'FAILED'),

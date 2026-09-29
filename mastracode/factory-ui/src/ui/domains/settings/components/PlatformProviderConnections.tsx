@@ -9,10 +9,11 @@
  */
 
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import {
   Dialog,
+  DialogAction,
   DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -48,7 +49,7 @@ function ApiKeyDialog({ provider, title, pending, onSubmit, onClose }: ApiKeyDia
   const meta = PLATFORM_CONNECT_PROVIDERS[provider];
   const [apiKey, setApiKey] = useState('');
   return (
-    <Dialog open onOpenChange={open => !open && onClose()}>
+    <Dialog open onOpenChange={open => !open && onClose()} pending={pending}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
@@ -57,7 +58,7 @@ function ApiKeyDialog({ provider, title, pending, onSubmit, onClose }: ApiKeyDia
             reaches the browser again.
           </DialogDescription>
         </DialogHeader>
-        <DialogBody className="flex flex-col gap-3">
+        <DialogBody>
           <Input
             aria-label={`${meta.displayName} API key`}
             type="password"
@@ -67,14 +68,10 @@ function ApiKeyDialog({ provider, title, pending, onSubmit, onClose }: ApiKeyDia
           />
         </DialogBody>
         <DialogFooter>
-          <ButtonsGroup>
-            <Button variant="ghost" onClick={onClose} disabled={pending}>
-              Cancel
-            </Button>
-            <Button onClick={() => onSubmit(apiKey.trim())} disabled={pending || !apiKey.trim()}>
-              {pending ? 'Connecting…' : 'Connect'}
-            </Button>
-          </ButtonsGroup>
+          <DialogCancel>Cancel</DialogCancel>
+          <DialogAction disabled={!apiKey.trim()} onConfirm={() => onSubmit(apiKey.trim())}>
+            {pending ? 'Connecting…' : 'Connect'}
+          </DialogAction>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -178,7 +175,7 @@ export function ProviderConnectionsList({ provider, connections }: ProviderConne
               {connectionName(connection)}
             </Txt>
             {connection.status === 'needs_reauth' && (
-              <Txt as="span" variant="meta" className="text-red-400">
+              <Txt as="span" variant="meta" className="text-destructive-indicator">
                 Needs reauthorization
               </Txt>
             )}

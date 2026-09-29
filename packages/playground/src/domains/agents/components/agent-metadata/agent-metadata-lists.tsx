@@ -1,10 +1,10 @@
 import type { GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { useActivatedSkills } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
 import { LoadingBadge } from '@mastra/playground-ui/domains/chat/components/loading-badge';
 import { WORKSPACE_TOOLS_PREFIX } from '@mastra/playground-ui/domains/chat/tools/workspace-tool-constants';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { useActivatedSkills } from '../../context/activated-skills-context';
 import { AgentMetadataExpandableList } from './agent-metadata-expandable-list';
 import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from './agent-metadata-list';
 import { useScorers } from '@/domains/scores';
@@ -152,7 +152,7 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
       renderItem={skill => {
         const isActivated = isSkillActivated(skill.name);
         const badge = (
-          <Badge variant={isActivated ? 'green' : 'neutral'}>
+          <Badge variant={isActivated ? 'success' : 'neutral'}>
             {skill.name}
             {isActivated && <span className="sr-only">Active</span>}
           </Badge>

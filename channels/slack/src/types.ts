@@ -180,24 +180,6 @@ interface SlackProviderConfigBase extends SlackAdapterChannelConfigBase {
   logger?: SlackAdapterConfig['logger'];
 
   /**
-   * Slack App Configuration access token for programmatic app creation.
-   * Generate at: https://api.slack.com/apps > "Your App Configuration Tokens"
-   *
-   * Optional — will rotate to get a fresh token on startup using `refreshToken`.
-   */
-  token?: string;
-
-  /**
-   * Slack App Configuration refresh token.
-   * Used for automatic token rotation. Single-use; each rotation returns a new pair.
-   *
-   * Can be provided here or later via `configure({ refreshToken })`.
-   * If omitted, the provider starts unconfigured and cannot create apps until
-   * `configure()` is called or tokens are loaded from storage.
-   */
-  refreshToken?: string;
-
-  /**
    * Base URL for webhook callbacks.
    * Required when calling connect() to create apps.
    * Can also be set later via setBaseUrl() or auto-detected from server config.
@@ -327,17 +309,70 @@ export interface SlackProviderStaticConfig extends SlackProviderConfigBase {
 }
 
 /**
+ * Self-managed credentials: the provider rotates its own App Configuration
+ * token pair via `tooling.tokens.rotate` and persists it to storage.
+ * Mutually exclusive with {@link SlackDelegatedCredentialsConfig}.
+ */
+export interface SlackSelfManagedCredentialsConfig {
+  /**
+   * Slack App Configuration access token for programmatic app creation.
+   * Generate at: https://api.slack.com/apps > "Your App Configuration Tokens"
+   *
+   * Optional — will rotate to get a fresh token on startup using `refreshToken`.
+   */
+  token?: string;
+
+  /**
+   * Slack App Configuration refresh token.
+   * Used for automatic token rotation. Single-use; each rotation returns a new pair.
+   *
+   * Can be provided here or later via `configure({ refreshToken })`.
+   * If omitted, the provider starts unconfigured and cannot create apps until
+   * `configure()` is called or tokens are loaded from storage.
+   */
+  refreshToken?: string;
+
+  tokenResolver?: never;
+}
+
+/**
+ * Delegated credentials: an external credential manager (e.g. the Mastra
+ * platform) owns the token refresh cycle. The provider never calls
+ * `tooling.tokens.rotate` itself — before each manifest API call it asks the
+ * resolver for a currently-valid access token.
+ *
+ * The resolver is the single source of truth: direct credentials (`token`,
+ * `refreshToken`) cannot be combined with it, `configure()` throws, and
+ * stored config tokens are ignored.
+ */
+export interface SlackDelegatedCredentialsConfig {
+  /** Resolve a fresh App Configuration access token on demand. */
+  tokenResolver: () => Promise<string>;
+  token?: never;
+  refreshToken?: never;
+}
+
+/**
+ * How the provider obtains App Configuration credentials: either directly
+ * (`token` / `refreshToken`, self-rotated) or via a `tokenResolver`
+ * (externally managed) — never both.
+ */
+export type SlackCredentialsConfig = SlackSelfManagedCredentialsConfig | SlackDelegatedCredentialsConfig;
+
+/**
  * Configuration for SlackProvider at the Mastra level.
  *
- * Combines Slack-specific fields (tokens, baseUrl, OAuth callbacks),
+ * Combines Slack-specific fields (credentials, baseUrl, OAuth callbacks),
  * Slack-adapter overrides (`toolDisplay`, `streaming`, `typingStatus`, …), and a
  * curated subset of `AgentChannels` options forwarded to every connected agent
  * (`handlers`, `inlineMedia`, `inlineLinks`, …).
  *
  * `streaming` discriminates which `toolDisplay` modes are available —
- * `'timeline'` / `'grouped'` need streaming on.
+ * `'timeline'` / `'grouped'` need streaming on. Credentials are either direct
+ * (`token` / `refreshToken`) or delegated (`tokenResolver`), never both — see
+ * {@link SlackCredentialsConfig}.
  */
-export type SlackProviderConfig = SlackProviderStreamingConfig | SlackProviderStaticConfig;
+export type SlackProviderConfig = (SlackProviderStreamingConfig | SlackProviderStaticConfig) & SlackCredentialsConfig;
 
 // =============================================================================
 // Agent Configuration (serializable)

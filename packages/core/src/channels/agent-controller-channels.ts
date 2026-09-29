@@ -372,7 +372,7 @@ export class AgentControllerChannels extends AgentChannels {
     // the execution principal on every continuation, not just on the message
     // that opened the session.
     const session = await this.getSessionForThread({ id: memory.thread, resourceId: memory.resource }, requestContext);
-    if (!session.approval.isArmed() || session.approval.getToolCallId() !== toolCallId) {
+    if (!session.approval.isArmed({ toolCallId })) {
       this.log(
         'info',
         `Ignoring stale tool ${decision === 'approve' ? 'approval' : 'denial'} action (no matching parked approval for toolCallId=${toolCallId})`,

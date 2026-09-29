@@ -181,6 +181,7 @@ import { shellPassthroughNonpersistentScenario } from './shell-passthrough-nonpe
 import { skillTabAutocompleteScenario } from './skill-tab-autocomplete.js';
 import { skillsCommandActivationScenario } from './skills-command-activation.js';
 import { skillsSymlinkDedupeScenario } from './skills-symlink-dedupe.js';
+import { startupInterruptedScenario } from './startup-interrupted.js';
 import { startupScenario } from './startup.js';
 import { stateCommandsScenario } from './state-commands.js';
 import { stateSignalBrowserProcessorScenario } from './state-signal-browser-processor.js';
@@ -228,6 +229,7 @@ export type { McE2eScenario, McE2eScenarioRuntime, ScenarioName } from './types.
 export const scenarios: Record<ScenarioName, McE2eScenario> = {
   startup: startupScenario,
   'abort-followup': abortFollowupScenario,
+  'startup-interrupted': startupInterruptedScenario,
   'branch-context-long-name': branchContextLongNameScenario,
   'active-signal-followup': activeSignalFollowupScenario,
   'agent-connections-expected-reply-watchdog': agentConnectionsExpectedReplyWatchdogScenario,

@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { RepositoryPickerDialog } from './RepositoryPickerDialog';
 import { ATTENTION_PREVIEW_LIMIT, useFactoryAttention } from '../../../../hooks/useFactoryAttention';
 import { attentionCountsIn, latestUnreadOrNewestIn } from '../services/attention';
 import type { FactoryAttentionGroup } from '../services/attention';
@@ -40,7 +41,7 @@ export function SidebarAttention() {
   // The badge and the sound stay on the always-mounted query; the tab reads its own.
   const attention = useFactoryAttention(factoryId, 'open', ATTENTION_PREVIEW_LIMIT, 'attention');
   const preview = useFactoryAttention(factoryId, 'open', ATTENTION_PREVIEW_LIMIT, group);
-  const rowProps = useAttentionItemActions(factoryId);
+  const actions = useAttentionItemActions(factoryId);
   const [open, setOpen] = useState(false);
   const items = preview.data?.items ?? [];
   const kinds = attention.data?.kinds;
@@ -86,7 +87,9 @@ export function SidebarAttention() {
         <PopoverTrigger id="attention-trigger" type="button" aria-label={triggerLabel(openCount, unreadCount)}>
           <span className="relative grid size-4 shrink-0 place-items-center" aria-hidden>
             <Inbox size={16} />
-            {openCount > 0 ? <span className="bg-warning1 absolute -top-0.5 -right-0.5 size-1.5 rounded-full" /> : null}
+            {openCount > 0 ? (
+              <span className="bg-warning-indicator absolute -top-0.5 -right-0.5 size-1.5 rounded-full" />
+            ) : null}
           </span>
           <MainSidebar.NavLabel className="flex items-center gap-2">
             <span className="min-w-0 flex-1 truncate">Needs attention</span>
@@ -151,7 +154,11 @@ export function SidebarAttention() {
                       className="animate-in fade-in slide-in-from-bottom-1"
                       style={{ animationDelay: `${index * 40}ms`, animationFillMode: 'backwards' }}
                     >
-                      <AttentionItemRow factoryId={factoryId} {...rowProps(item)} onOpen={() => setOpen(false)} />
+                      <AttentionItemRow
+                        factoryId={factoryId}
+                        {...actions.rowProps(item)}
+                        onOpen={() => setOpen(false)}
+                      />
                     </li>
                   ))}
                 </ul>
@@ -163,6 +170,13 @@ export function SidebarAttention() {
             )}
           </TabContent>
         </Tabs>
+        {actions.repositorySelection ? (
+          <RepositoryPickerDialog
+            repositories={actions.repositories}
+            onClose={actions.closeRepositorySelection}
+            onSelect={actions.selectRepository}
+          />
+        ) : null}
       </PopoverContent>
     </Popover>
   );
