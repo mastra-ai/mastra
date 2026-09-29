@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useDataset } from '@mastra/playground-ui/domains/datasets';
+import { useDatasetItems } from '@mastra/playground-ui/domains/datasets/hooks/use-dataset-items';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, Copy, FlaskConical, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react';
@@ -24,7 +25,6 @@ import {
 } from '@/domains/datasets';
 import { DatasetItemDrawer } from '@/domains/datasets/components/items/dataset-item-drawer';
 import { DatasetItemPanelProvider } from '@/domains/datasets/context/dataset-item-panel-context';
-import { useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { useDatasetItemsUrlState } from '@/domains/datasets/hooks/use-dataset-items-url-state';
 import { datasetCrumb, navCrumb, truncateItemIdCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
 
@@ -187,10 +187,7 @@ function DatasetPage() {
                       <DropdownMenu.Item onSelect={() => setDuplicateDialogOpen(true)}>
                         <Copy /> Duplicate Dataset
                       </DropdownMenu.Item>
-                      <DropdownMenu.Item
-                        onSelect={() => setDeleteDialogOpen(true)}
-                        className="text-red-500 focus:text-red-400"
-                      >
+                      <DropdownMenu.Item onSelect={() => setDeleteDialogOpen(true)} variant="destructive">
                         <Trash2 /> Delete Dataset
                       </DropdownMenu.Item>
                     </DropdownMenu.Content>

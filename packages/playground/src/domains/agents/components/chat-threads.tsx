@@ -18,6 +18,8 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
+import { RenameThreadDialog } from './rename-thread-dialog';
+import { ThreadActionsMenu } from './thread-actions-menu';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export interface ChatThreadsProps {
@@ -27,7 +29,7 @@ export interface ChatThreadsProps {
   resourceId: string;
   resourceType: 'agent' | 'network';
   embedded?: boolean;
-  /** When provided, renders a "Hide threads panel" control next to "New Chat". */
+  /** When provided, renders a "Hide threads panel" control next to "New Thread". */
   onHidePanel?: () => void;
 }
 
@@ -41,10 +43,12 @@ export const ChatThreads = ({
   onHidePanel,
 }: ChatThreadsProps) => {
   const { Link, paths } = useLinkComponent();
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-  const { canDelete } = usePermissions();
+  const [dialog, setDialog] = useState<{ type: 'rename' | 'delete'; thread: StorageThreadType } | null>(null);
+  const { canDelete, canEdit } = usePermissions();
 
   const canDeleteThread = canDelete('memory');
+  const canRenameThread = resourceType === 'agent' && canEdit('memory');
+  const closeDialog = () => setDialog(null);
   const newThreadLink =
     resourceType === 'agent' ? paths.agentNewThreadLink(resourceId) : paths.networkNewThreadLink(resourceId);
 
@@ -57,7 +61,7 @@ export const ChatThreads = ({
             <Icon>
               <Plus />
             </Icon>
-            New Chat
+            New Thread
           </ThreadListNewItem>
           {onHidePanel && (
             <Tooltip>
@@ -103,8 +107,12 @@ export const ChatThreads = ({
                   as={Link}
                   to={threadLink}
                   isActive={isActive}
-                  onDelete={canDeleteThread ? () => setDeleteId(thread.id) : undefined}
-                  deleteLabel="delete thread"
+                  actions={
+                    <ThreadActionsMenu
+                      onRename={canRenameThread ? () => setDialog({ type: 'rename', thread }) : undefined}
+                      onDelete={canDeleteThread ? () => setDialog({ type: 'delete', thread }) : undefined}
+                    />
+                  }
                 >
                   <ThreadTitle title={thread.title} id={thread.id} createdAt={thread.createdAt} />
                 </ThreadListItem>
@@ -115,14 +123,23 @@ export const ChatThreads = ({
       </ThreadList>
 
       <DeleteThreadDialog
-        open={!!deleteId}
-        onOpenChange={() => setDeleteId(null)}
+        open={dialog?.type === 'delete'}
+        onOpenChange={closeDialog}
         onDelete={() => {
-          if (deleteId) {
-            onDelete(deleteId);
+          if (dialog?.type === 'delete') {
+            onDelete(dialog.thread.id);
           }
         }}
       />
+
+      {dialog?.type === 'rename' && (
+        <RenameThreadDialog
+          agentId={resourceId}
+          threadId={dialog.thread.id}
+          initialTitle={dialog.thread.title ?? ''}
+          onOpenChange={open => !open && closeDialog()}
+        />
+      )}
     </>
   );
 };

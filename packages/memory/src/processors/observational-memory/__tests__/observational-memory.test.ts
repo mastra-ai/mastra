@@ -1522,6 +1522,20 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).toContain('\nUser: later');
     });
 
+    it('writes dates and times in the given time zone, whatever the process zone', () => {
+      const message = createTestMessage('late night', 'user');
+      message.createdAt = new Date('2024-03-01T02:30:00Z');
+
+      expect(formatMessagesForObserver([message], { timeZone: 'UTC' })).toMatch(/^Mar 1 2024:\nUser \(2:30 AM\)/);
+      expect(formatMessagesForObserver([message], { timeZone: 'America/Los_Angeles' })).toMatch(
+        /^Feb 29 2024:\nUser \(6:30 PM\)/,
+      );
+      // An unknown zone falls back to the process zone rather than throwing
+      expect(formatMessagesForObserver([message], { timeZone: 'Not/AZone' })).toBe(
+        formatMessagesForObserver([message]),
+      );
+    });
+
     it('should include attachment placeholders for image and file parts', () => {
       const msg = createTestMessage('ignored', 'user');
       msg.content = {
@@ -4926,9 +4940,13 @@ describe('ObservationalMemory Integration', () => {
         observation: {
           messageTokens: 500,
           previousObserverTokens: 2000,
+          maxRetries: 8,
+          failurePolicy: 'abort',
         },
         reflection: {
           observationTokens: 1000,
+          maxRetries: 8,
+          failurePolicy: 'abort',
         },
       });
     });
@@ -4985,13 +5003,13 @@ describe('ObservationalMemory Integration', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
         true,
       );
       const formattedText = formatted.join('\n\n');
 
-      expect(formattedText).toContain('<observation-group id="group-1" range="msg-1:msg-2">');
+      expect(formattedText).toContain('## Group `group-1`\n_range: `msg-1:msg-2`_');
       expect(formattedText).toContain('- 🔴 User prefers direct answers');
-      expect(formattedText).toContain('</observation-group>');
     });
 
     it('should default retrieval mode to false', () => {
@@ -6610,6 +6628,61 @@ describe('Scenario: Cross-session memory (resource scope)', () => {
     expect(resourceRecord?.activeObservations).toContain('Alice');
     expect(resourceRecord?.activeObservations).toContain('TechCorp');
     expect(resourceRecord?.scope).toBe('resource');
+  });
+
+  it('retains resource-scoped input after a continued observation failure and processes it on recovery', async () => {
+    const storage = createInMemoryStorage();
+    const resourceId = 'resource-recovery';
+    let observerCalls = 0;
+    const model = createStreamCapableMockModel({
+      doGenerate: async () => {
+        observerCalls++;
+        if (observerCalls === 1) {
+          throw new TypeError('terminated');
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+          content: [{ type: 'text' as const, text: '<observations>\n- Resource input recovered\n</observations>' }],
+          warnings: [],
+        };
+      },
+    });
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'resource',
+      observation: {
+        model,
+        messageTokens: 1,
+        maxRetries: 0,
+        failurePolicy: 'continue',
+      },
+      reflection: { observationTokens: 100_000 },
+    });
+    const messages = [
+      createTestMessage('Retain this resource-scoped input', 'user', 'resource-msg-1'),
+      createTestMessage('Acknowledged', 'assistant', 'resource-msg-2'),
+    ];
+
+    const failed = await om.observe({ threadId: 'thread-a', resourceId, messages });
+    const failedRecord = await storage.getObservationalMemory(null, resourceId);
+
+    expect(failed.observed).toBe(false);
+    expect(failedRecord?.threadId).toBeNull();
+    expect(failedRecord?.lastObservedAt).toBeUndefined();
+    expect(failedRecord?.observedMessageIds ?? []).toEqual([]);
+    expect((om as any).getUnobservedMessages(messages, failedRecord)).toHaveLength(2);
+
+    const recovered = await om.observe({ threadId: 'thread-a', resourceId, messages });
+    const recoveredRecord = await storage.getObservationalMemory(null, resourceId);
+
+    expect(observerCalls).toBe(2);
+    expect(recovered.observed).toBe(true);
+    expect(recoveredRecord?.lastObservedAt).toBeDefined();
+    expect(recoveredRecord?.observedMessageIds).toEqual(['resource-msg-1', 'resource-msg-2']);
+    expect((om as any).getUnobservedMessages(messages, recoveredRecord)).toHaveLength(0);
+    expect(recoveredRecord?.activeObservations).toContain('<thread id="thread-a">');
   });
 });
 
@@ -11147,6 +11220,10 @@ describe('Full Async Buffering Flow', () => {
     messageCount?: number;
     /** Optional fixed observer responses in call order */
     observerResponses?: string[];
+    /** Number of observer calls that fail before succeeding */
+    observerFailures?: number;
+    failurePolicy?: 'abort' | 'continue';
+    maxRetries?: number;
   }) {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
@@ -11192,7 +11269,10 @@ describe('Full Async Buffering Flow', () => {
         }
 
         // Observer call
-        observerCalls.push({ input: promptText.slice(0, 200) });
+        observerCalls.push({ input: promptText });
+        if (observerCalls.length <= (opts.observerFailures ?? 0)) {
+          throw Object.assign(new Error('observer failed'), { statusCode: 503 });
+        }
         const observerResponse =
           opts.observerResponses?.[observerCalls.length - 1] ??
           `<observations>\nDate: Jan 1, 2025\n* 🔴 Observed at call ${observerCalls.length}\n* User discussed topic ${observerCalls.length}\n</observations>`;
@@ -11221,6 +11301,8 @@ describe('Full Async Buffering Flow', () => {
         bufferTokens: opts.bufferTokens,
         bufferActivation: opts.bufferActivation,
         blockAfter: opts.blockAfter,
+        failurePolicy: opts.failurePolicy,
+        maxRetries: opts.maxRetries,
       },
       reflection: {
         observationTokens: opts.reflectionObservationTokens,
@@ -11355,6 +11437,96 @@ describe('Full Async Buffering Flow', () => {
 
     // Observer should have been called for buffering
     expect(observerCalls.length).toBeGreaterThan(0);
+  });
+
+  it('retries messages from a failed continue-mode async observation', async () => {
+    const { storage, om, threadId, resourceId, step, waitForAsyncOps, observerCalls } =
+      await setupAsyncBufferingScenario({
+        messageTokens: 10000,
+        bufferTokens: 1000,
+        bufferActivation: 0.7,
+        reflectionObservationTokens: 50000,
+        messageCount: 20,
+        observerFailures: 1,
+        maxRetries: 0,
+        failurePolicy: 'continue',
+      });
+
+    await step(0);
+    await waitForAsyncOps();
+
+    const bufferKey = om.buffering.getObservationBufferKey(om.buffering.getLockKey(threadId, resourceId));
+    expect(observerCalls).toHaveLength(1);
+    expect(BufferingCoordinator.lastBufferedAtTime.has(bufferKey)).toBe(false);
+
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    await storage.saveMessages({
+      messages: Array.from({ length: 10 }, (_, index) => ({
+        id: `retry-msg-${index}`,
+        role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
+        content: {
+          format: 2 as const,
+          parts: [{ type: 'text' as const, text: `Retry message ${index}: ${filler}` }],
+        },
+        type: 'text',
+        createdAt: new Date(Date.UTC(2025, 0, 1, 10, index)),
+        threadId,
+        resourceId,
+      })),
+    });
+
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    expect(observerCalls).toHaveLength(2);
+    expect(observerCalls[1]?.input).toContain('The quick brown fox jumps over the lazy dog.');
+    expect(BufferingCoordinator.lastBufferedAtTime.has(bufferKey)).toBe(true);
+  });
+
+  // Default (abort) policy: a failed async-buffer cycle must not advance the buffer
+  // cursor either, so the unobserved messages stay eligible for a later cycle
+  // instead of being silently skipped.
+  it('retains messages from a failed async observation under the default failure policy', async () => {
+    const { storage, om, threadId, resourceId, step, waitForAsyncOps, observerCalls } =
+      await setupAsyncBufferingScenario({
+        messageTokens: 10000,
+        bufferTokens: 1000,
+        bufferActivation: 0.7,
+        reflectionObservationTokens: 50000,
+        messageCount: 20,
+        observerFailures: 1,
+        maxRetries: 0,
+      });
+
+    await step(0);
+    await waitForAsyncOps();
+
+    const bufferKey = om.buffering.getObservationBufferKey(om.buffering.getLockKey(threadId, resourceId));
+    expect(observerCalls).toHaveLength(1);
+    expect(BufferingCoordinator.lastBufferedAtTime.has(bufferKey)).toBe(false);
+
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    await storage.saveMessages({
+      messages: Array.from({ length: 10 }, (_, index) => ({
+        id: `abort-retry-msg-${index}`,
+        role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
+        content: {
+          format: 2 as const,
+          parts: [{ type: 'text' as const, text: `Retry message ${index}: ${filler}` }],
+        },
+        type: 'text',
+        createdAt: new Date(Date.UTC(2025, 0, 1, 10, index)),
+        threadId,
+        resourceId,
+      })),
+    });
+
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    expect(observerCalls).toHaveLength(2);
+    expect(observerCalls[1]?.input).toContain('The quick brown fox jumps over the lazy dog.');
+    expect(BufferingCoordinator.lastBufferedAtTime.has(bufferKey)).toBe(true);
   });
 
   it('should persist buffering markers on observed assistant messages instead of data-only DB messages', async () => {
@@ -19191,5 +19363,111 @@ describe('filterObservedMessages — tool-call/result pair preservation', () => 
     const remainingIds = remaining.map((m: any) => m.id);
 
     expect(remainingIds).not.toContain('tool-call-msg-alone');
+  });
+});
+
+describe('observed time zone wiring', () => {
+  /** Run `fn` with the process time zone pinned, so the record's zone is the only thing that can decide the output. */
+  async function withProcessZone<T>(zone: string, fn: () => Promise<T>): Promise<T> {
+    const previousZone = process.env.TZ;
+    process.env.TZ = zone;
+    try {
+      return await fn();
+    } finally {
+      if (previousZone === undefined) delete process.env.TZ;
+      else process.env.TZ = previousZone;
+    }
+  }
+
+  it('writes Observer dates in the record time zone during observation', async () => {
+    await withProcessZone('UTC', async () => {
+      const storage = createInMemoryStorage();
+      const threadId = 'tz-observer-write-thread';
+      const resourceId = 'tz-observer-write-resource';
+
+      let capturedPrompt: any = null;
+      const mockModel = createStreamCapableMockModel({
+        doGenerate: async options => {
+          capturedPrompt = options.prompt;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+            content: [{ type: 'text' as const, text: '<observations>\n- User was up late\n</observations>' }],
+            warnings: [],
+          };
+        },
+      });
+
+      const om = new ObservationalMemory({
+        storage,
+        observation: { messageTokens: 10, model: mockModel as any },
+        reflection: { observationTokens: 100000 },
+        scope: 'thread',
+      });
+
+      await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+        observedTimezone: 'America/Los_Angeles',
+      });
+
+      const early = createTestMessage('was up late working on the schema migration', 'user', 'tz-msg-1');
+      early.createdAt = new Date('2024-03-01T02:30:00Z');
+      const reply = createTestMessage('noted, we can pick it up tomorrow morning', 'assistant', 'tz-msg-2');
+      reply.createdAt = new Date('2024-03-01T02:31:00Z');
+      await om.observe({ threadId, resourceId, messages: [early, reply] });
+
+      expect(capturedPrompt).not.toBeNull();
+      const promptText = (capturedPrompt as any[])
+        .map(message => (typeof message.content === 'string' ? message.content : JSON.stringify(message.content)))
+        .join('\n');
+      // 2024-03-01T02:30Z is still the evening of Feb 29 in Los Angeles, but already Mar 1 in the pinned process zone
+      expect(promptText).toContain('Feb 29 2024');
+      expect(promptText).toContain('6:30 PM');
+      expect(promptText).not.toContain('Mar 1 2024');
+    });
+  });
+
+  it('annotates relative dates in the record time zone when rendering context', async () => {
+    await withProcessZone('UTC', async () => {
+      const storage = createInMemoryStorage();
+      const threadId = 'tz-render-thread';
+      const resourceId = 'tz-render-resource';
+
+      const om = new ObservationalMemory({
+        storage,
+        observation: { model: createStreamCapableMockModel({}) as any },
+        reflection: { observationTokens: 100000 },
+        scope: 'thread',
+      });
+
+      const record = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+        observedTimezone: 'America/Los_Angeles',
+      });
+      await storage.updateActiveObservations({
+        id: record.id,
+        observations: 'Date: Jun 22, 2024\n- User booked the exam',
+        tokenCount: 50,
+        lastObservedAt: new Date(),
+      });
+
+      const blocks = await om.buildContextSystemMessages({
+        threadId,
+        resourceId,
+        currentDate: new Date('2024-06-23T00:00:00Z'),
+      });
+
+      const text = (blocks ?? []).join('\n\n');
+      // Midnight UTC on Jun 23 is still the evening of Jun 22 in Los Angeles
+      expect(text).toContain('Date: Jun 22, 2024 (today)');
+      expect(text).not.toContain('(yesterday)');
+    });
   });
 });

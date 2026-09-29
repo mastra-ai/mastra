@@ -16,6 +16,8 @@ export interface IncidentioSource {
 export interface IncidentioStatus {
   enabled: boolean;
   configured: boolean;
+  /** Credential mode: a deployment-configured API key or Platform-managed connections. */
+  mode?: 'api-key' | 'platform';
   reason?: 'missing_config' | 'auth_required' | 'organization_required' | 'ready';
 }
 

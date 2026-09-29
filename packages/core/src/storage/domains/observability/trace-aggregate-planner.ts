@@ -103,6 +103,10 @@ export type TrustedTraceAggregateOrderBy =
  *   `timeRange`, even when `interval` is present. `having` applies after grouping and before
  *   ordering and `limit`. `orderBy` ties break on dimension values ascending. `bucket` is never
  *   an ordering target.
+ * - Null dimension values sort last in both directions; compilers emit an explicit `NULLS LAST`
+ *   where the backend default differs.
+ * - An empty population returns `rows: []` with no synthesised zero row, including ungrouped
+ *   requests and a `having` that removes every group.
  * - `limit` counts groups. `truncated` is `true` when more groups survived `having` than `limit`.
  * - When `interval` is present, each surviving group expands to one row per non-empty UTC-aligned
  *   bucket (`floor(startedAt / interval)`), emitted in `bucket` ascending order within the group;

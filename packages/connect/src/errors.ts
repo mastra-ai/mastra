@@ -7,6 +7,7 @@ export type MastraConnectErrorCode =
   | 'unauthorized'
   | 'proxy_error'
   | 'unsupported_credential_type'
+  | 'no_active_connection'
   | 'platform_error';
 
 const MAX_DETAIL_LENGTH = 2000;

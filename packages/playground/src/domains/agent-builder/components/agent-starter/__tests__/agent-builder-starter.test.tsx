@@ -8,7 +8,6 @@ import type * as ReactRouter from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA } from '../../../constants/default-request-context-schema';
 import { AgentBuilderStarter } from '../agent-builder-starter';
-import { usePlaygroundStore } from '@/store/playground-store';
 import { server } from '@/test/msw-server';
 
 const navigateMock = vi.fn();
@@ -45,7 +44,6 @@ const renderStarter = () => {
 
 describe('AgentBuilderStarter', () => {
   beforeEach(() => {
-    usePlaygroundStore.setState({ requestContext: {} });
     // The starter pulls builder settings + provider models so it can pick a
     // model that the admin policy allows. Stub the bare minimum: no policy and
     // an empty provider list, which yields the hard-coded fallback model.

@@ -9,6 +9,7 @@ import {
   evaluateTraceQuery,
   evaluateTraceQueryRequest,
   normalizeTraceQueryResponse,
+  selectTraceQueryRoots,
   THREAD_QUERY_CONFORMANCE_CASES,
   THREAD_QUERY_FIXTURE_DATA,
   TRACE_QUERY_CONFORMANCE_CASES,
@@ -30,6 +31,23 @@ describe('trace-query reference evaluator', () => {
       for (const entry of testCase.expected) {
         expect(Object.keys(entry)).toEqual(['traceId']);
       }
+    }
+  });
+
+  it('selectTraceQueryRoots returns the same roots evaluateTraceQuery paginates', () => {
+    const cases = [
+      TRACE_QUERY_CONFORMANCE_CASES.find(testCase => testCase.request.where === undefined)!,
+      TRACE_QUERY_CONFORMANCE_CASES.find(testCase => testCase.request.where !== undefined)!,
+    ];
+    for (const testCase of cases) {
+      const plan = planTraceQuery(parseTraceQueryRequest(testCase.request));
+      const response = evaluateTraceQuery(TRACE_QUERY_FIXTURE_DATA, plan);
+      if (!('traces' in response)) throw new Error('Expected traces');
+      const selected = selectTraceQueryRoots(TRACE_QUERY_FIXTURE_DATA, plan)
+        .map(root => root.traceId)
+        .sort();
+      expect(selected, testCase.name).toEqual(response.traces.map(trace => trace.traceId).sort());
+      expect(selected.length, testCase.name).toBe(testCase.expected.length);
     }
   });
 

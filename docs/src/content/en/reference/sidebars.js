@@ -185,6 +185,7 @@ const sidebars = {
       label: 'Code SDK',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'code-sdk/acp-server', label: 'ACP server' },
         {
           type: 'doc',
           id: 'code-sdk/mount-agent-controller',
@@ -692,6 +693,7 @@ const sidebars = {
         { type: 'doc', id: 'processors/agents-md-injector', label: 'AgentsMDInjector' },
         { type: 'doc', id: 'processors/batch-parts-processor', label: 'BatchPartsProcessor' },
         { type: 'doc', id: 'processors/classifier-processor', label: 'ClassifierProcessor' },
+        { type: 'doc', id: 'processors/cyber-refusal-handler', label: 'CyberRefusalHandler' },
         { type: 'doc', id: 'processors/language-detector', label: 'LanguageDetector' },
         { type: 'doc', id: 'processors/memory-input-filter', label: 'MemoryInputFilter' },
         { type: 'doc', id: 'processors/message-history-processor', label: 'MessageHistory' },

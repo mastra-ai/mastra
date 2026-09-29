@@ -27,8 +27,8 @@ test.describe('Agent session page', () => {
       // ASSERT: Chat composer is visible (the message input area)
       await expect(page.getByPlaceholder('Enter your message...')).toBeVisible();
 
-      // ASSERT: Left sidebar (thread list with "New Chat" button) is NOT present
-      await expect(page.locator('a:has-text("New Chat")')).not.toBeVisible();
+      // ASSERT: Left sidebar (thread list with "New Thread" button) is NOT present
+      await expect(page.locator('a:has-text("New Thread")')).not.toBeVisible();
 
       // ASSERT: Right info pane (agent information with Overview/Model Settings tabs) is NOT present
       await expect(page.locator('button:has-text("Overview")')).not.toBeVisible();

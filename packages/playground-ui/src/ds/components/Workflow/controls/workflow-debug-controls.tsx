@@ -30,7 +30,7 @@ export function WorkflowDebugControls({
       <div className="rounded-xl border border-border/50 bg-background p-3">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <span className="text-meta text-muted-foreground">Next step</span>
-          <Badge size="sm" icon={<Pause />} emphasis="muted">
+          <Badge size="sm" icon={<Pause />} emphasis="subtle">
             Step by step
           </Badge>
         </div>

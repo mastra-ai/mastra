@@ -71,7 +71,7 @@ export function TimelineNameCol({
         type="button"
         className={cn(
           'flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 self-stretch rounded-md px-2 py-1 text-left text-caption text-foreground',
-          'focus:outline-none focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:ring-inset',
+          'focus:outline-none focus-visible:ring-1 focus-visible:ring-border-focus focus-visible:ring-inset',
         )}
       >
         {spanUI?.color && (
@@ -113,7 +113,7 @@ export function TimelineNameCol({
             className={cn(
               'flex size-5 cursor-pointer items-center justify-center rounded-md',
               'hover:bg-fill [&:hover>svg]:opacity-100 [&>svg]:size-4 [&>svg]:opacity-50',
-              'focus:outline-none focus-visible:ring-1 focus-visible:ring-accent1',
+              'focus:outline-none focus-visible:ring-1 focus-visible:ring-border-focus',
             )}
           >
             {isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}

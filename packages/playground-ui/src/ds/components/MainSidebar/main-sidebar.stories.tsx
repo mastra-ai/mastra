@@ -40,7 +40,6 @@ import {
   MetricsIcon,
   ProcessorIcon,
   PromptIcon,
-  RequestContextIcon,
   ScorersIcon,
   SettingsIcon,
   ToolsIcon,
@@ -121,7 +120,7 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
                     <span className="text-right text-meta text-muted-foreground">
                       {index === 1 ? '91ms' : `${220 + index * 56}ms`}
                     </span>
-                    <span className="text-right text-meta text-accent1">ok</span>
+                    <span className="text-right text-meta text-success-indicator">ok</span>
                   </div>
                 ))}
               </div>
@@ -192,7 +191,6 @@ const studioSections: NavSection[] = [
       { name: 'MCP Servers', url: '/mcps', icon: <McpServerIcon /> },
       { name: 'Tools', url: '/tools', icon: <ToolsIcon /> },
       { name: 'Workspaces', url: '/workspaces', icon: <WorkspacesIcon /> },
-      { name: 'Request Context', url: '/request-context', icon: <RequestContextIcon /> },
     ],
   },
   {

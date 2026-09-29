@@ -18,13 +18,13 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { useDatasetMutations, useDataset } from '@mastra/playground-ui/domains/datasets';
+import { useDatasetItems } from '@mastra/playground-ui/domains/datasets/hooks/use-dataset-items';
 import { DynamicForm } from '@mastra/playground-ui/lib/form/dynamic-form';
 import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronRight, X } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { useDatasetItems } from '../../hooks/use-dataset-items';
 import { DatasetCombobox } from '../dataset-combobox';
 import { DatasetVersions } from '../dataset-versions';
 import { ScorerSelector } from './scorer-selector';
@@ -100,7 +100,9 @@ function PipelineStep({
           aria-hidden="true"
           className={cn(
             'flex size-6 shrink-0 items-center justify-center rounded-full border text-meta',
-            done ? 'border-accent1 bg-accent1 text-white' : 'border-border text-muted-foreground',
+            done
+              ? 'border-success-edge bg-success-subtle text-success-subtle-foreground'
+              : 'border-border text-muted-foreground',
           )}
         >
           {index}
@@ -370,7 +372,7 @@ export function ExperimentTriggerDialog({
           <p data-testid="experiment-run-status" aria-live="polite" className="flex items-center gap-2">
             {missing.length === 0 ? (
               <>
-                <Badge variant="green" indicator="dot">
+                <Badge variant="success" indicator="dot">
                   Ready
                 </Badge>
                 <span className="text-meta text-muted-foreground">

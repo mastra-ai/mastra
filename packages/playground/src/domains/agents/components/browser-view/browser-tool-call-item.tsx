@@ -1,8 +1,8 @@
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import type { BrowserToolCallEntry } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronRight, Check, X, Loader2 } from 'lucide-react';
 import { useState } from 'react';
-import type { BrowserToolCallEntry } from '../../context/browser-tool-calls-context';
 
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
   // AgentBrowser tools
@@ -136,8 +136,8 @@ function StatusDot({ status }: { status: BrowserToolCallEntry['status'] }) {
     case 'pending':
       return <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />;
     case 'complete':
-      return <Check className="h-3 w-3 shrink-0 text-green-500" />;
+      return <Check className="h-3 w-3 shrink-0 text-success-indicator" />;
     case 'error':
-      return <X className="h-3 w-3 shrink-0 text-red-500" />;
+      return <X className="h-3 w-3 shrink-0 text-destructive-indicator" />;
   }
 }
