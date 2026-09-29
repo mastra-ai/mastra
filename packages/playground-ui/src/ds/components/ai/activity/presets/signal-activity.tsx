@@ -8,7 +8,6 @@ export interface SignalActivityProps {
   kind: 'state' | 'reactive' | 'reminder';
   label: string;
   message: string;
-  /** Names the line instead of a preview of the message, e.g. the file a reminder injects. */
   detail?: string;
   mode?: string;
   defaultOpen?: boolean;

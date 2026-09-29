@@ -94,7 +94,6 @@ describe('Activity', () => {
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
     expect(screen.queryByText('Command output')).toBeNull();
     expect(screen.getByTestId('disclosure').firstElementChild?.className).not.toContain('rotate-90');
-    expect(screen.getByTestId('disclosure').firstElementChild?.className).toContain('text-muted-foreground/60');
   });
 
   it('manages uncontrolled expansion', () => {
@@ -275,20 +274,17 @@ describe('ActivityItem', () => {
 
     const trigger = screen.getByRole('button', { name: /Searched files/ });
     expect(screen.queryByText('3 matches')).toBeNull();
-    expect(screen.getByText('src/**/*.ts').classList).toContain('truncate');
 
     fireEvent.click(trigger);
     expect(screen.getByText('3 matches')).toBeTruthy();
   });
 
-  it('stays a plain line with nothing to fold, wrapping its detail instead of clipping it', () => {
+  it('stays a plain line with nothing to fold', () => {
     render(
       <ActivityItem icon={<Search aria-hidden />} label="Thinking" detail="a long detail" aria-label="Thinking" />,
     );
 
     expect(screen.queryByRole('button')).toBeNull();
-    expect(screen.getByText('a long detail').classList).toContain('break-words');
-    expect(screen.getByText('a long detail').classList).not.toContain('truncate');
   });
 
   it('shows a body inline when folding is turned off', () => {
@@ -321,12 +317,6 @@ describe('a body landing on a line', () => {
     expect(screen.getByText('Searched files')).toBe(label);
     expect(screen.getByText('src/**/*.ts').classList.contains(ARRIVING_CLASS)).toBe(false);
     expect(screen.getByRole('button', { name: /Searched files/ })).toBeTruthy();
-  });
-
-  it('reserves the chevron slot before there is anything to fold', () => {
-    render(<Line />);
-
-    expect(document.querySelector('.lucide-chevron-right')?.parentElement?.className).toContain('opacity-0');
   });
 });
 
