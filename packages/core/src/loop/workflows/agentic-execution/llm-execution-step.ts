@@ -2826,6 +2826,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           error: deferredError,
         });
 
+        // Nothing will retry, so record the error on the open inference/step/model
+        // spans too; otherwise only the agent root carries it and the trace tree
+        // cannot show which model call died. Leave them open: the step-finish and
+        // finish chunks that follow close them with their usual attributes.
+        modelSpanTracker?.reportGenerationError({ error: deferredError, endSpan: false });
+
         safeEnqueue(controller, errorChunk);
         await options?.onError?.({ error: deferredError });
         runState.setState({ deferredErrorChunk: undefined });

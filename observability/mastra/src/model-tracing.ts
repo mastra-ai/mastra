@@ -415,12 +415,14 @@ export class ModelSpanTracker {
    * doesn't leave them dangling. No-op if they were already closed.
    */
   reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void {
-    if (this.#currentInferenceSpan) {
-      this.#currentInferenceSpan.error({ error: options.error, endSpan: true });
+    // With `endSpan: false` the spans only record the error and stay open, so the
+    // step-finish / finish chunks that follow still close them with their usual
+    // attributes (finishReason, usage, response metadata).
+    const endSpan = options.endSpan ?? true;
+    this.#currentInferenceSpan?.error({ error: options.error, endSpan });
+    this.#currentStepSpan?.error({ error: options.error, endSpan });
+    if (endSpan) {
       this.#currentInferenceSpan = undefined;
-    }
-    if (this.#currentStepSpan) {
-      this.#currentStepSpan.error({ error: options.error, endSpan: true });
       this.#currentStepSpan = undefined;
     }
     this.#modelSpan?.error(options);

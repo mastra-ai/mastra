@@ -683,6 +683,63 @@ describe('ModelSpanTracker', () => {
     });
   });
 
+  describe('reportGenerationError', () => {
+    it('records the error but keeps spans open when endSpan is false, so step-finish still closes them with attributes', async () => {
+      const modelSpan = tracing.startSpan({ type: SpanType.MODEL_GENERATION, name: 'test-generation' });
+      const tracker = new ModelSpanTracker(modelSpan);
+      const error = new Error('Service Unavailable');
+
+      const stream = createMockStream([
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'error' }, metadata: {} } },
+      ]);
+      const reader = tracker.wrapStream(stream).getReader();
+      await reader.read(); // step-start: MODEL_STEP + MODEL_INFERENCE are open now
+
+      const eventsBefore = testExporter.events.length;
+      tracker.reportGenerationError({ error, endSpan: false });
+
+      // Each of the three spans emits an update carrying the error, and none has ended.
+      const updated = testExporter.events
+        .slice(eventsBefore)
+        .filter(e => e.type === TracingEventType.SPAN_UPDATED)
+        .map(e => e.exportedSpan);
+      expect(updated.map(s => s.type).sort()).toEqual(
+        [SpanType.MODEL_GENERATION, SpanType.MODEL_INFERENCE, SpanType.MODEL_STEP].sort(),
+      );
+      expect(updated.every(s => s.errorInfo?.message === 'Service Unavailable')).toBe(true);
+      expect(testExporter.getSpansByType(SpanType.MODEL_STEP)).toHaveLength(0);
+      expect(testExporter.getSpansByType(SpanType.MODEL_INFERENCE)).toHaveLength(0);
+      expect(modelSpan.endTime).toBeUndefined();
+
+      await reader.read(); // step-finish closes step + inference with the usual attributes
+      await reader.read();
+      tracker.endGeneration();
+
+      const endedStep = testExporter.getSpansByType(SpanType.MODEL_STEP)[0];
+      const endedInference = testExporter.getSpansByType(SpanType.MODEL_INFERENCE)[0];
+      expect(endedStep?.endTime).toBeInstanceOf(Date);
+      expect(endedStep?.attributes?.finishReason).toBe('error');
+      expect(endedStep?.errorInfo?.message).toBe('Service Unavailable');
+      expect(endedInference?.endTime).toBeInstanceOf(Date);
+      expect(endedInference?.errorInfo?.message).toBe('Service Unavailable');
+      expect(modelSpan.endTime).toBeInstanceOf(Date);
+      expect(modelSpan.errorInfo?.message).toBe('Service Unavailable');
+    });
+
+    it('ends the spans by default', () => {
+      const modelSpan = tracing.startSpan({ type: SpanType.MODEL_GENERATION, name: 'test-generation' });
+      const tracker = new ModelSpanTracker(modelSpan);
+      tracker.startStep({ messageId: 'msg-1' });
+
+      tracker.reportGenerationError({ error: new Error('boom') });
+
+      expect(testExporter.getSpansByType(SpanType.MODEL_STEP)[0]?.endTime).toBeInstanceOf(Date);
+      expect(modelSpan.endTime).toBeInstanceOf(Date);
+      expect(modelSpan.errorInfo?.message).toBe('boom');
+    });
+  });
+
   describe('infrastructure chunk filtering', () => {
     it('should NOT create spans for infrastructure chunks (response-metadata, error, abort, etc.)', async () => {
       const modelSpan = tracing.startSpan({
