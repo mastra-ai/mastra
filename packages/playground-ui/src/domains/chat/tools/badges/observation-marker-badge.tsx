@@ -436,7 +436,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
         <div className="my-1">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-destructive-subtle px-2 py-1 text-column text-destructive-subtle-foreground state-layer"
+            className="state-layer inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-destructive-subtle px-2 py-1 text-column text-destructive-subtle-foreground"
           >
             {isExpanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
             <XCircle className="size-3" />
@@ -538,7 +538,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
         <div className="my-1">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-dashed border-destructive-edge bg-destructive-subtle px-2 py-1 text-column text-destructive-subtle-foreground state-layer"
+            className="state-layer inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-dashed border-destructive-edge bg-destructive-subtle px-2 py-1 text-column text-destructive-subtle-foreground"
           >
             {isExpanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
             <XCircle className="size-3" />
