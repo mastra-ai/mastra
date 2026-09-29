@@ -12,12 +12,12 @@ const SIGNAL_HUES: Record<string, SignalHue> = {
 const CUSTOM_SIGNAL_HUES: SignalHue[] = ['pink', 'yellow'];
 
 const SIGNAL_AREA_CLASS: Record<SignalHue, string> = {
-  green: 'fill-badge-green-subtle',
-  orange: 'fill-badge-orange-subtle',
-  blue: 'fill-badge-blue-subtle',
-  purple: 'fill-badge-purple-subtle',
-  pink: 'fill-badge-pink-subtle',
-  yellow: 'fill-badge-yellow-subtle',
+  green: 'fill-badge-green-indicator opacity-15',
+  orange: 'fill-badge-orange-indicator opacity-15',
+  blue: 'fill-badge-blue-indicator opacity-15',
+  purple: 'fill-badge-purple-indicator opacity-15',
+  pink: 'fill-badge-pink-indicator opacity-15',
+  yellow: 'fill-badge-yellow-indicator opacity-15',
 };
 
 const SIGNAL_CONNECTOR_CLASS: Record<SignalHue, string> = {

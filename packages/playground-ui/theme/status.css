@@ -80,6 +80,8 @@
   --product-persistent-server: var(--badge-purple-strong);
   --product-persistent-server-foreground: var(--badge-purple-foreground);
   --product-persistent-server-subtle: var(--badge-purple-subtle);
+
+  --brand-green-indicator: var(--color-brand-green);
 }
 
 html.light {
@@ -149,6 +151,8 @@ html.light {
   --product-factory-foreground: var(--orange-950);
   --product-workers-foreground: var(--yellow-950);
   --product-persistent-server-foreground: var(--purple-950);
+
+  --brand-green-indicator: var(--green-700);
 }
 
 @theme inline {
@@ -228,4 +232,5 @@ html.light {
   --color-product-persistent-server: var(--product-persistent-server);
   --color-product-persistent-server-foreground: var(--product-persistent-server-foreground);
   --color-product-persistent-server-subtle: var(--product-persistent-server-subtle);
+  --color-brand-green-indicator: var(--brand-green-indicator);
 }

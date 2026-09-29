@@ -77,8 +77,8 @@ export function ScheduleTriggersList({
             as="span"
             variant="caption"
             font="mono"
-            tone={isLinked ? undefined : 'muted'}
-            className={isLinked ? 'whitespace-nowrap text-success-indicator' : 'whitespace-nowrap'}
+            tone={isLinked ? 'ink' : 'muted'}
+            className="whitespace-nowrap"
           >
             {t.runId}
           </Txt>

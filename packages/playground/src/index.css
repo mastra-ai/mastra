@@ -147,13 +147,19 @@ th:has(header) {
   }
   /*
    * The gradient is clipped to the glyphs: the text is painted transparent and
-   * the sweep lives in its background. `--shimmer-base` is the resting text tone,
-   * so each tone in the greeting sets it and still gets the same white highlight.
+   * the sweep lives in its background. `--shimmer-base` is the resting text tone
+   * and `--shimmer-highlight` the contrasting tone the band passes through.
    */
   .starter-shimmer {
     --shimmer-base: var(--color-muted-foreground);
+    --shimmer-highlight: var(--color-foreground);
     color: transparent;
-    background-image: linear-gradient(115deg, var(--shimmer-base) 42%, var(--foreground) 50%, var(--shimmer-base) 58%);
+    background-image: linear-gradient(
+      115deg,
+      var(--shimmer-base) 42%,
+      var(--shimmer-highlight) 50%,
+      var(--shimmer-base) 58%
+    );
     background-size: 300% 100%;
     background-position: 100% 0;
     background-repeat: no-repeat;
@@ -163,6 +169,7 @@ th:has(header) {
   }
   .starter-shimmer-ink {
     --shimmer-base: var(--color-foreground);
+    --shimmer-highlight: var(--color-muted-foreground);
   }
 
   /*

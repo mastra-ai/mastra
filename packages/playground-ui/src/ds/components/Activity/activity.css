@@ -49,7 +49,7 @@
   --belt-sway: 1;
   --wick-fill: 1;
   --wick-drift: 0;
-  --belt-hue: var(--color-brand-blue);
+  --belt-hue: var(--info-indicator);
 }
 
 .session-belt {
