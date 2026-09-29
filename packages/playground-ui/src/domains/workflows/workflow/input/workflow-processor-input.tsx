@@ -20,6 +20,22 @@ type WorkflowProcessorInputProps = Omit<WorkflowInputDataProps, 'defaultValues'>
   onChange: (draft: ProcessorDraft) => void;
 };
 
+type ProcessorErrors = { phase: string[]; message: string[] };
+
+const NO_ERRORS: ProcessorErrors = { phase: [], message: [] };
+
+function ErrorLines({ errors }: { errors: string[] }) {
+  return (
+    <span className="space-y-1">
+      {errors.map(error => (
+        <span key={error} className="block">
+          {error}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 export const WorkflowProcessorInput = ({
   schema,
   value,
@@ -34,14 +50,19 @@ export const WorkflowProcessorInput = ({
   submitButtonVariant,
   submitButtonFullWidth,
 }: WorkflowProcessorInputProps) => {
-  const [errors, setErrors] = useState<string[]>([]);
+  const [errors, setErrors] = useState<ProcessorErrors>(NO_ERRORS);
 
   const handleSubmit = () => {
-    setErrors([]);
+    setErrors(NO_ERRORS);
 
     const result = schema.safeParse(value);
     if (!result.success) {
-      setErrors(result.error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`));
+      const nextErrors: ProcessorErrors = { phase: [], message: [] };
+      for (const issue of result.error.issues) {
+        const fieldErrors = issue.path[0] === 'phase' ? nextErrors.phase : nextErrors.message;
+        fieldErrors.push(`${issue.path.join('.')}: ${issue.message}`);
+      }
+      setErrors(nextErrors);
       return;
     }
     onSubmit(result.data);
@@ -49,12 +70,12 @@ export const WorkflowProcessorInput = ({
 
   return (
     <div className="flex flex-col gap-4">
-      <Field invalid={errors.length > 0}>
+      <Field invalid={errors.phase.length > 0}>
         <FieldLabel>Phase</FieldLabel>
         <Select
           value={value.phase}
           onValueChange={phase => {
-            setErrors([]);
+            setErrors(NO_ERRORS);
             onChange(withPhaseRole({ ...value, phase }));
           }}
           disabled={isSubmitLoading}
@@ -73,31 +94,22 @@ export const WorkflowProcessorInput = ({
         <FieldDescription>
           {PROCESSOR_PHASES.find(phaseOption => phaseOption.value === value.phase)?.label}
         </FieldDescription>
+        <FieldError>{errors.phase.length > 0 && <ErrorLines errors={errors.phase} />}</FieldError>
       </Field>
 
-      <Field invalid={errors.length > 0}>
+      <Field invalid={errors.message.length > 0}>
         <FieldLabel>Test Message</FieldLabel>
         <Textarea
           value={getProcessorMessage(value)}
           onChange={event => {
-            setErrors([]);
+            setErrors(NO_ERRORS);
             onChange(withPhaseRole(updateProcessorMessage(value, event.target.value)));
           }}
           placeholder="Enter a test message..."
           rows={4}
           disabled={isSubmitLoading}
         />
-        <FieldError>
-          {errors.length > 0 && (
-            <span className="space-y-1">
-              {errors.map(error => (
-                <span key={error} className="block">
-                  {error}
-                </span>
-              ))}
-            </span>
-          )}
-        </FieldError>
+        <FieldError>{errors.message.length > 0 && <ErrorLines errors={errors.message} />}</FieldError>
       </Field>
 
       {children}
