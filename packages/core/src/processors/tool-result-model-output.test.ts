@@ -665,4 +665,87 @@ describe('toModelOutput after processToolResult', () => {
     expect(mapper.mock.calls.map(c => c[0])).toEqual(['NEW-RESULT']);
     expect(secondPrompt(prompts)).toContain('mapped: NEW-RESULT');
   });
+
+  const sameStreamReusedIdModel = () =>
+    new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'r1', modelId: 'mock', timestamp: new Date(0) },
+          {
+            type: 'tool-call',
+            toolCallId: 'call-provider',
+            toolName: 'web_search',
+            input: '{}',
+            providerExecuted: true,
+          },
+          {
+            type: 'tool-result',
+            toolCallId: 'call-provider',
+            toolName: 'web_search',
+            providerExecuted: true,
+            result: 'hits',
+          },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+        ] as any[]),
+      }),
+    });
+  const providerReusedIdHistory = [
+    { role: 'user', content: 'earlier' },
+    {
+      role: 'assistant',
+      content: [
+        { type: 'tool-call', toolCallId: 'call-provider', toolName: 'web_search', input: {}, providerExecuted: true },
+        {
+          type: 'tool-result',
+          toolCallId: 'call-provider',
+          toolName: 'web_search',
+          output: { type: 'text', value: 'OLD-HITS' },
+        },
+      ],
+    },
+    { role: 'user', content: 'again' },
+  ];
+  const webSearch = { type: 'provider-defined', id: 'openai.web_search', args: {} } as any;
+
+  it('does not read back an older result for a same-stream provider result that reused the id', async () => {
+    const agent = new Agent({
+      id: 'mo-same-stream-reused',
+      name: 'mo-same-stream-reused',
+      instructions: 'x',
+      model: sameStreamReusedIdModel() as LanguageModelV2,
+      tools: { web_search: webSearch },
+      outputProcessors: [observer as any],
+    });
+    const stream = await agent.stream(providerReusedIdHistory as any, { maxSteps: 1 });
+    const chunks: any[] = [];
+    for await (const c of stream.fullStream) chunks.push(c);
+
+    expect(chunks.find(c => c.type === 'tool-result')?.payload.result).toBe('hits');
+  });
+
+  it('durable engine does not read back an older result for a same-stream provider result that reused the id', async () => {
+    const baseAgent = new Agent({
+      id: 'mo-durable-same-stream-reused',
+      name: 'mo-durable-same-stream-reused',
+      instructions: 'x',
+      model: sameStreamReusedIdModel() as LanguageModelV2,
+      tools: { web_search: webSearch },
+      outputProcessors: [observer as any],
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    new Mastra({
+      agents: { 'mo-durable-same-stream-reused': durableAgent as any },
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub,
+    });
+    const stream = await durableAgent.stream(providerReusedIdHistory as any, { maxSteps: 1 });
+    const chunks: any[] = [];
+    for await (const c of stream.fullStream) chunks.push(c);
+
+    expect(chunks.find(c => c.type === 'tool-result')?.payload.result).toBe('hits');
+  });
 });

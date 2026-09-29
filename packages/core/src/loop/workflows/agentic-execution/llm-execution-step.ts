@@ -89,7 +89,7 @@ import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
 import { composeStepInput } from '../../shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-call-headers';
-import { readToolResultFromMessageList } from '../../shared/read-tool-result';
+import { readToolResultFromMessageList, snapshotToolResult } from '../../shared/read-tool-result';
 import { recordTerminalErrorMessage } from '../../shared/record-terminal-error-message';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../shared/step-content-chunk-types';
 import { TERMINAL_FINISH_REASONS } from '../../shared/terminal-finish-reasons';
@@ -1000,6 +1000,7 @@ async function processOutputStream<OUTPUT = undefined>({
           // tools take a different path through llm-mapping-step.ts, which has its
           // own processToolResult invocation site.
           if (hasProcessToolResult) {
+            const resultBefore = snapshotToolResult(messageList, chunk.payload.toolCallId);
             try {
               await getToolResultProcessorRunner().runProcessToolResult({
                 steps: (toolResultSteps ?? []) as Array<StepResult<any>>,
@@ -1020,7 +1021,11 @@ async function processOutputStream<OUTPUT = undefined>({
 
               // Sync any processor mutation back into the chunk so streaming clients
               // see the post-processor value, not the raw tool return.
-              const postProcessorResult = readToolResultFromMessageList(messageList, chunk.payload.toolCallId);
+              const postProcessorResult = readToolResultFromMessageList(
+                messageList,
+                chunk.payload.toolCallId,
+                resultBefore,
+              );
               if (postProcessorResult !== undefined) {
                 (chunk.payload as { result: unknown }).result = postProcessorResult;
               }
