@@ -793,4 +793,36 @@ describe('toModelOutput after processToolResult', () => {
 
     expect(chunks.find(c => c.type === 'tool-result')?.payload.result).toBe('OLD-HITS');
   });
+
+  it('durable engine keeps a same-stream provider rewrite that reused the id and equals the earlier value', async () => {
+    const constant = {
+      id: 'constant',
+      async processToolResult({ toolCallId, toolName, messageList }: any) {
+        messageList.updateToolInvocation({
+          type: 'tool-invocation',
+          toolInvocation: { state: 'result', toolCallId, toolName, args: {}, result: 'OLD-HITS' },
+        });
+      },
+    };
+    const baseAgent = new Agent({
+      id: 'mo-durable-same-stream-reused-rewrite',
+      name: 'mo-durable-same-stream-reused-rewrite',
+      instructions: 'x',
+      model: sameStreamReusedIdModel() as LanguageModelV2,
+      tools: { web_search: webSearch },
+      outputProcessors: [constant as any],
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    new Mastra({
+      agents: { 'mo-durable-same-stream-reused-rewrite': durableAgent as any },
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub,
+    });
+    const stream = await durableAgent.stream(providerReusedIdHistory as any, { maxSteps: 1 });
+    const chunks: any[] = [];
+    for await (const c of stream.fullStream) chunks.push(c);
+
+    expect(chunks.find(c => c.type === 'tool-result')?.payload.result).toBe('OLD-HITS');
+  });
 });

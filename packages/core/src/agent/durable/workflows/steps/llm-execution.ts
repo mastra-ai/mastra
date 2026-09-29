@@ -1419,7 +1419,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         resultPayload.toolCallId,
                         resultBefore,
                       );
-                      if (postProcessorResult !== undefined && postProcessorResult !== resultPayload.result) {
+                      if (postProcessorResult !== undefined) {
                         resultPayload.result = postProcessorResult;
                       }
                     } catch (error) {

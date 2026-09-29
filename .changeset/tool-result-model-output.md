@@ -6,4 +6,4 @@ Rewritten tool results from `processToolResult` (for example a redacted secret) 
 
 A provider-executed result that arrives in the same response as its call still can't be rewritten by a processor.
 
-When a provider reused a tool call id from an earlier turn (for example `call_0`) and an output processor with `processToolResult` was registered, the streamed `tool-result` chunk could show the earlier turn's result. It now shows this turn's result.
+When a provider reused a tool call id from an earlier turn (for example `call_0`) and an output processor with `processToolResult` was registered, the streamed `tool-result` chunk could show the earlier turn's result. It now shows this turn's result, including for a provider-executed result that arrives in the same response as its call.
