@@ -25,7 +25,6 @@ import type {
   TraceQueryIssue,
   TraceQueryLiteral,
   TraceQueryMembershipOperator,
-  TraceQueryPathOrLiteral,
   TraceQueryPlanOptions,
   TraceQueryScalarPredicate,
   TraceQueryTenantScope,
@@ -347,7 +346,16 @@ function planHaving(
     return { type: 'membership', measure, operator: predicate.op, values: values as number[] };
   }
 
-  const comparison = predicate as Extract<TraceQueryScalarPredicate, { left: TraceQueryPathOrLiteral }>;
+  if (predicate.op === 'matches' || predicate.op === 'notMatches') {
+    state.issues.push({
+      code: 'operator_not_allowed',
+      path: [...path, 'op'],
+      message: 'Text operators are not supported in having; measures are numeric',
+    });
+    return undefined;
+  }
+
+  const comparison = predicate as Extract<TraceQueryScalarPredicate, { op: TraceQueryComparisonOperator }>;
   if (!('path' in comparison.left) || !('literal' in comparison.right)) {
     state.issues.push({
       code: 'invalid_operands',

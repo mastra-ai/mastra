@@ -285,9 +285,13 @@ export const TRACE_FILTER_BAR_OPERATORS: (FilterBarOperator & { id: TraceFilterO
   { id: 'gte', label: 'at least' },
   { id: 'lt', label: 'less than' },
   { id: 'lte', label: 'at most' },
+  { id: 'matches', label: 'matches', freeText: true },
+  { id: 'notMatches', label: 'does not match', freeText: true },
 ];
 
 const TRACE_STRING_OPERATORS: TraceFilterOperatorId[] = ['is', 'isNot', 'in', 'notIn', 'exists', 'notExists'];
+/** Human-written text fields also support case-insensitive word matching. */
+const TRACE_TEXT_OPERATORS: TraceFilterOperatorId[] = [...TRACE_STRING_OPERATORS, 'matches', 'notMatches'];
 /** Fields every trace carries (`traceId`, `entityName`): presence operators would never be false. */
 const TRACE_REQUIRED_STRING_OPERATORS: TraceFilterOperatorId[] = ['is', 'isNot', 'in', 'notIn'];
 const TRACE_NUMBER_OPERATORS: TraceFilterOperatorId[] = [
@@ -412,7 +416,10 @@ const TRACE_FILTER_BAR_RELATED_FIELD_IDS = [
 ] as const;
 type TraceFilterRelatedFieldId = (typeof TRACE_FILTER_BAR_RELATED_FIELD_IDS)[number];
 
-const TRACE_FILTER_BAR_PRESENCE_FIELD_IDS = new Set<string>(['spans.error', 'feedback.comment']);
+const TRACE_FILTER_BAR_PRESENCE_FIELD_IDS = new Set<string>(['spans.error']);
+const TRACE_FILTER_BAR_TEXT_MATCH_FIELD_IDS = new Set<string>(['spans.name', 'feedback.comment']);
+/** Free text with no value discovery: the values endpoint rejects these paths. */
+const TRACE_FILTER_BAR_FREE_TEXT_RELATED_FIELD_IDS = new Set<string>(['feedback.comment']);
 
 const byLabel = (a: FilterBarField, b: FilterBarField) => a.label.localeCompare(b.label);
 
@@ -458,10 +465,10 @@ export function createTraceFilterBarFields({
   });
   const relatedPick = (id: TraceFilterRelatedFieldId): FilterBarField => {
     const [scope, path] = id.split('.') as [TraceQueryRelatedScope, string];
-    const resolver = valueSuggestions?.(scope, path);
+    const resolver = TRACE_FILTER_BAR_FREE_TEXT_RELATED_FIELD_IDS.has(id) ? undefined : valueSuggestions?.(scope, path);
     return {
       ...traceFieldBase(id),
-      operators: TRACE_STRING_OPERATORS,
+      operators: TRACE_FILTER_BAR_TEXT_MATCH_FIELD_IDS.has(id) ? TRACE_TEXT_OPERATORS : TRACE_STRING_OPERATORS,
       ...(resolver ? { strict: true, suggestions: resolver } : {}),
     };
   };
