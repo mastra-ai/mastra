@@ -24,22 +24,22 @@ type CapabilityCollection =
 
 const toneClassName: Record<CapabilityTone, { icon: string }> = {
   purple: {
-    icon: 'text-purple-700 dark:text-purple-300',
+    icon: 'text-badge-purple-indicator',
   },
   amber: {
-    icon: 'text-amber-700 dark:text-amber-300',
+    icon: 'text-badge-yellow-indicator',
   },
   emerald: {
-    icon: 'text-emerald-700 dark:text-emerald-300',
+    icon: 'text-badge-green-indicator',
   },
   sky: {
-    icon: 'text-sky-700 dark:text-sky-300',
+    icon: 'text-badge-blue-indicator',
   },
   cyan: {
-    icon: 'text-cyan-700 dark:text-cyan-300',
+    icon: 'text-badge-cyan-indicator',
   },
   orange: {
-    icon: 'text-orange-700 dark:text-orange-300',
+    icon: 'text-badge-orange-indicator',
   },
 };
 

@@ -29,8 +29,8 @@ function StepStatusMarker({ status, variant }: { status: string; variant: Proces
     return (
       <span
         className={cn('flex size-4 items-center justify-center self-center [&>svg]:size-4', transitions.colors, {
-          '[&>svg]:text-positive1': status === 'success',
-          '[&>svg]:text-negative1': status === 'failed',
+          '[&>svg]:text-success-indicator': status === 'success',
+          '[&>svg]:text-destructive-indicator': status === 'failed',
         })}
       >
         {status === 'pending' ? <PendingRing /> : getStatusIcon(status)}
@@ -45,12 +45,12 @@ function StepStatusMarker({ status, variant }: { status: string; variant: Proces
         transitions.colors,
         transitions.transform,
         {
-          '[&>svg]:text-notice-success-fg': status === 'success',
-          '[&>svg]:text-notice-destructive-fg': status === 'failed',
+          '[&>svg]:text-success-indicator': status === 'success',
+          '[&>svg]:text-destructive-indicator': status === 'failed',
           'border border-dashed border-placeholder': status === 'pending',
           '[&>svg]:size-4': status !== 'running',
-          'bg-accent1Dark': status === 'success',
-          'bg-accent2Dark': status === 'failed',
+          'bg-success-subtle': status === 'success',
+          'bg-destructive-subtle': status === 'failed',
           'scale-110': status === 'success' || status === 'failed',
         },
       )}

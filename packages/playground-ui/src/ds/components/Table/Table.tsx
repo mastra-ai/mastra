@@ -115,7 +115,7 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
           'transition-colors duration-normal ease-out-custom',
           'hover:bg-fill-subtle',
           // Focus state
-          'focus:bg-fill-subtle focus:ring-1 focus:ring-accent1/50 focus:outline-hidden focus:ring-inset',
+          'focus:bg-fill-subtle focus:ring-1 focus:ring-border-focus focus:outline-hidden focus:ring-inset',
           selected && 'bg-fill-hover',
           onClick && 'cursor-pointer',
           className,

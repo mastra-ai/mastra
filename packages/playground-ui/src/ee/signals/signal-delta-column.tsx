@@ -1,11 +1,10 @@
-import { getSignalHue } from './signal-colors';
+import { getSignalColor } from './signal-colors';
 import { signalDescription, signalLabel } from './signal-formatting';
 import { computeThemeShareDeltas, themeShareSeries } from './theme-compare-data';
 import { ThemeCompareSparkline } from './theme-compare-sparkline';
 import type { ThemeSelection } from './theme-drilldown-data';
 import type { ThemeFlowResponse, TraceSignalName } from './types';
 import { useTraceIntelligence } from './use-trace-intelligence';
-import { nodeColor } from '@/ds/components/SankeyChart';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
 function percent(share: number) {
@@ -43,10 +42,7 @@ export function SignalDeltaColumn({
 
   return (
     <section aria-label={`${label} changes`} className="min-w-0">
-      <h3
-        className="font-mono text-column tracking-widest uppercase"
-        style={{ color: nodeColor(getSignalHue(signalName)) }}
-      >
+      <h3 className="font-mono text-column tracking-widest uppercase" style={{ color: getSignalColor(signalName) }}>
         <Tooltip>
           <TooltipTrigger aria-label={signalName} className="cursor-default uppercase">
             {label}
@@ -84,7 +80,7 @@ export function SignalDeltaColumn({
             <li
               key={delta.label}
               className={`rounded-lg border border-border ${
-                delta.delta > 0 ? 'bg-green-500/5' : delta.delta < 0 ? 'bg-red-500/5' : 'bg-card'
+                delta.delta > 0 ? 'bg-success-subtle' : delta.delta < 0 ? 'bg-destructive-subtle' : 'bg-card'
               }`}
             >
               {themeId === undefined ? (

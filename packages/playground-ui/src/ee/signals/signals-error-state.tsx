@@ -13,7 +13,7 @@ export function SignalsErrorState({
   return (
     <section className="m-4 rounded-lg border border-border bg-background p-6 lg:m-6" role="alert">
       <div className="flex items-start gap-3">
-        <TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-red-500" />
+        <TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-destructive-indicator" />
         <div>
           <h1 className="text-subheading text-foreground">{message}</h1>
           <p className="mt-1 text-caption text-muted-foreground">Check the connection and try again.</p>

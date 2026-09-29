@@ -187,10 +187,7 @@ function DatasetPage() {
                       <DropdownMenu.Item onSelect={() => setDuplicateDialogOpen(true)}>
                         <Copy /> Duplicate Dataset
                       </DropdownMenu.Item>
-                      <DropdownMenu.Item
-                        onSelect={() => setDeleteDialogOpen(true)}
-                        className="text-red-500 focus:text-red-400"
-                      >
+                      <DropdownMenu.Item onSelect={() => setDeleteDialogOpen(true)} variant="destructive">
                         <Trash2 /> Delete Dataset
                       </DropdownMenu.Item>
                     </DropdownMenu.Content>
