@@ -3351,6 +3351,56 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('delivers a claimed-owner wake when the owner answers discovery after the first attempt window', async () => {
+    class SlowDiscoveryPubSub extends EventEmitterPubSub {
+      override async publish(...args: Parameters<EventEmitterPubSub['publish']>): Promise<void> {
+        const [topic, event] = args;
+        if (
+          topic === 'agent.thread-owner-discovery' &&
+          (event.data as { type?: string } | undefined)?.type === 'thread-owner-request'
+        ) {
+          await new Promise(resolve => setTimeout(resolve, 150));
+        }
+        return super.publish(...args);
+      }
+    }
+    const pubsub = new SlowDiscoveryPubSub();
+    const ownerRuntime = agentThreadStreamRuntime;
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const ownerAgent = new Agent({
+      id: 'slow-discovery-owner-agent',
+      name: 'Slow Discovery Owner Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('owner response'),
+      pubsub,
+    });
+    const senderAgent = new Agent({
+      id: 'slow-discovery-sender-agent',
+      name: 'Slow Discovery Sender Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const target = { resourceId: 'slow-discovery-user', threadId: 'slow-discovery-thread' };
+
+    const subscription = await ownerRuntime.subscribeToThread(ownerAgent, target, pubsub);
+    const nextRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+    const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, target, pubsub);
+    expect(claim.claimed).toBe(true);
+
+    const signalResult = senderRuntime.sendSignal(
+      senderAgent,
+      { type: 'user-message', contents: 'wake the slow owner' },
+      { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+      pubsub,
+    );
+    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'deliver' });
+    await nextRun;
+
+    claim.unsubscribe();
+    subscription.unsubscribe();
+  });
+
   it('clears the owner-discovery reply topic when discovery times out without an owner', async () => {
     const cleared: string[] = [];
     class RecordingPubSub extends EventEmitterPubSub {
