@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import { LibSQLVector } from '@mastra/libsql';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -35,6 +39,11 @@ vi.mock('../project.js', () => ({
   getVectorDatabasePath: () => '/tmp/mc-prune-vectors.db',
 }));
 
+vi.mock('../maintenance-lock.js', async importOriginal => ({
+  ...(await importOriginal<typeof import('../maintenance-lock.js')>()),
+  acquireMaintenanceLock: vi.fn(),
+}));
+
 vi.mock('../storage-factory.js', () => ({
   createStorage: vi.fn(),
   createVectorStore: vi.fn(),
@@ -49,6 +58,7 @@ vi.mock('../storage-maintenance.js', async importOriginal => {
 });
 
 import { loadSettings } from '../../onboarding/settings.js';
+import { acquireMaintenanceLock, MaintenanceLockError } from '../maintenance-lock.js';
 import { detectProject, getStorageConfig } from '../project.js';
 import { runPruneCommand } from '../prune-cli.js';
 import { createStorage, createVectorStore } from '../storage-factory.js';
@@ -81,9 +91,13 @@ function lastRunArgs() {
 let storage: ReturnType<typeof makeStorage>;
 let logged: string[];
 let errored: string[];
+let releaseLock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  vi.restoreAllMocks();
   vi.clearAllMocks();
+  releaseLock = vi.fn();
+  vi.mocked(acquireMaintenanceLock).mockReturnValue(releaseLock);
   vi.mocked(loadSettings).mockReturnValue({ storage: SETTINGS_STORAGE } as never);
   vi.mocked(detectProject).mockReturnValue({
     resourceId: 'res-1',
@@ -200,12 +214,74 @@ describe('runPruneCommand', () => {
     const foreignClose = vi.fn(async () => {});
     vi.mocked(createVectorStore).mockResolvedValue({ close: foreignClose } as never);
 
-    await runPruneCommand([]);
+    await runPruneCommand(['--vacuum']);
     await lastMaintenance().closeStorage!();
 
     expect(storage.close).toHaveBeenCalledOnce();
     // A PG vector shares the store's connection — closing it here would be wrong.
     expect(foreignClose).not.toHaveBeenCalled();
+  });
+
+  it('does not open the vector store without --vacuum', async () => {
+    // Opening it would create mastra-vectors.db (+ sidecars) as a side effect.
+    expect(await runPruneCommand([])).toBe(0);
+    expect(createVectorStore).not.toHaveBeenCalled();
+  });
+
+  it('does not open the vector store for --vacuum on a remote database', async () => {
+    vi.mocked(getStorageConfig).mockReturnValue({
+      backend: 'libsql',
+      url: 'libsql://example.turso.io',
+      isRemote: true,
+    } as never);
+
+    expect(await runPruneCommand(['--vacuum'])).toBe(0);
+    expect(createVectorStore).not.toHaveBeenCalled();
+  });
+
+  it('closes storage when opening the vector store throws', async () => {
+    vi.mocked(createVectorStore).mockRejectedValue(new Error('vector open failed'));
+
+    expect(await runPruneCommand(['--vacuum'])).toBe(1);
+    expect(storage.close).toHaveBeenCalledOnce();
+    expect(runStorageMaintenance).not.toHaveBeenCalled();
+    expect(releaseLock).toHaveBeenCalledOnce();
+  });
+
+  it('loads the project .env before resolving the storage config', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-prune-env-'));
+    const key = 'MC_PRUNE_TEST_DB_PATH';
+    fs.writeFileSync(path.join(dir, '.env'), `${key}=/from/dotenv.db\n`);
+    vi.spyOn(process, 'cwd').mockReturnValue(dir);
+    delete process.env[key];
+    let seen: string | undefined;
+    vi.mocked(getStorageConfig).mockImplementation(() => {
+      seen = process.env[key];
+      return { backend: 'libsql', url: 'file:/tmp/mc-prune-test.db', isRemote: false } as never;
+    });
+
+    try {
+      expect(await runPruneCommand([])).toBe(0);
+      expect(seen).toBe('/from/dotenv.db');
+    } finally {
+      delete process.env[key];
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses without touching the database when the maintenance lock is unavailable', async () => {
+    vi.mocked(acquireMaintenanceLock).mockImplementation(() => {
+      throw new MaintenanceLockError('mastracode is running (PID 4242).', [4242]);
+    });
+
+    expect(await runPruneCommand([])).toBe(1);
+    expect(createStorage).not.toHaveBeenCalled();
+    expect(errored.join('\n')).toContain('mastracode is running (PID 4242)');
+  });
+
+  it('releases the maintenance lock after pruning', async () => {
+    expect(await runPruneCommand([])).toBe(0);
+    expect(releaseLock).toHaveBeenCalledOnce();
   });
 
   it('returns 1 and still releases the connection when maintenance fails', async () => {

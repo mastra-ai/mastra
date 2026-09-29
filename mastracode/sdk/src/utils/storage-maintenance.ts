@@ -15,6 +15,8 @@
 
 import { closeSync, existsSync, openSync, readSync, renameSync, rmSync, statSync, statfsSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { setFlagsFromString } from 'node:v8';
+import { runInNewContext } from 'node:vm';
 
 import type { MastraCompositeStore, PruneOptions, PruneResult, RetentionConfig } from '@mastra/core/storage';
 // Native `libsql` driver, deliberately alongside `@libsql/client` (used by the
@@ -117,6 +119,26 @@ function journalModeFromHeader(file: string): 'wal' | 'delete' | 'unknown' {
 }
 
 /**
+ * Force a full GC so statements of already-closed libsql connections are
+ * finalized and release their file locks (libsql-js#228). `gc` is only global
+ * under --expose-gc, so enable it at runtime and fetch it from a fresh context.
+ */
+async function releaseClosedConnections(): Promise<void> {
+  // Let pending close() callbacks settle before collecting.
+  await new Promise(resolve => setImmediate(resolve));
+  const gc =
+    (globalThis as { gc?: () => void }).gc ??
+    (() => {
+      setFlagsFromString('--expose-gc');
+      return runInNewContext('gc') as () => void;
+    })();
+  // Native finalizers run after the collection; a second pass collects what they freed.
+  gc();
+  await new Promise(resolve => setTimeout(resolve, 50));
+  gc();
+}
+
+/**
  * Compact each local libsql db file by streaming a `VACUUM INTO` copy next to
  * it, then swapping the copy into place. Reports before/after sizes.
  *
@@ -162,6 +184,11 @@ export async function reclaimLibSQLDisk(
     // https://github.com/tursodatabase/libsql-js/issues/228 (fix in flight in
     // PR #214). Once that lands, the header check can become a plain
     // journal_mode query.
+    //
+    // The same bug means the caller's own storage connection, closed by
+    // closeStorage(), still holds the lock until its statements are
+    // finalized; collect them first so the probe doesn't see ourselves.
+    await releaseClosedConnections();
     const probe = new Database(file);
     try {
       probe.exec('PRAGMA busy_timeout = 2000');

@@ -660,7 +660,7 @@ If a PostgreSQL connection fails on startup, Mastra Code falls back to LibSQL an
 
 The database grows as threads, messages, and telemetry accumulate. Deleting rows doesn't shrink the file on its own, because SQLite keeps the freed pages for reuse.
 
-In a session, run `/prune` to delete data older than the retention policies. Run `/prune vacuum` to compact the files afterwards and return that space to the operating system. Add `keep-memory` to keep chat history. Both forms close the session when they finish, because maintenance needs the database to itself.
+In a session, run `/prune` to delete data older than the retention policies. Run `/prune vacuum` to compact the files afterward and return that space to the operating system. Add `keep-memory` to keep chat history. Both forms close the session when they finish, because maintenance needs the database to itself.
 
 If a session won't start, run the same maintenance from a shell instead:
 
@@ -670,7 +670,9 @@ mastracode prune --vacuum        # then compact the files to reclaim disk
 mastracode prune --keep-memory   # keep chat history
 ```
 
-`--vacuum` needs enough free disk for the compacted copy before it can swap that copy into place.
+`--vacuum` needs enough free disk for the compacted copy before it can swap that copy into place. Compaction only applies to a local libsql database. With remote libsql or Postgres, `prune` deletes rows but doesn't compact or return space to the operating system.
+
+`mastracode prune` refuses to run while any Mastra Code session is open. A session that starts while `prune` is running waits for it to finish.
 
 The retention defaults are 14 days for traces and logs, 30 days for scorer results and workflow snapshots, and 90 days for chat history.
 

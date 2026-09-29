@@ -11,14 +11,19 @@
  * Usage:
  *   mastracode prune                 delete rows older than the retention policies
  *   mastracode prune --vacuum        prune, then checkpoint WAL + VACUUM to return disk to the OS
+ *                                    (local libsql only; remote libsql and Postgres only prune rows)
  *   mastracode prune --keep-memory   prune, but keep chat history (messages/threads)
  */
 
+import path from 'node:path';
+
+import type { MastraVector } from '@mastra/core/vector';
 import { LibSQLVector } from '@mastra/libsql';
 
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadSettings } from '../onboarding/settings.js';
 
+import { acquireMaintenanceLock } from './maintenance-lock.js';
 import { detectProject, getStorageConfig } from './project.js';
 import { createStorage, createVectorStore } from './storage-factory.js';
 import {
@@ -32,6 +37,7 @@ const USAGE = `Usage: mastracode prune [--vacuum] [--keep-memory]
 
   --vacuum        After pruning, compact the local database files so freed
                   pages are returned to the OS. Needs free disk for the copy.
+                  Local libsql only; remote libsql and Postgres only prune rows.
   --keep-memory   Prune everything except chat history (messages/threads).
 `;
 
@@ -54,6 +60,32 @@ export async function runPruneCommand(args: string[]): Promise<number> {
   const vacuum = flags.has('--vacuum');
   const keepMemory = flags.has('--keep-memory');
 
+  // Maintenance needs the database to itself: hold the lock for the whole run
+  // and refuse while any mastracode session is registered.
+  let releaseLock: () => void;
+  try {
+    releaseLock = acquireMaintenanceLock();
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    return 1;
+  }
+
+  try {
+    return await prune({ vacuum, keepMemory });
+  } finally {
+    releaseLock();
+  }
+}
+
+async function prune({ vacuum, keepMemory }: { vacuum: boolean; keepMemory: boolean }): Promise<number> {
+  // Startup loads the project .env before resolving storage (MASTRA_DB_PATH,
+  // MASTRA_STORAGE_BACKEND, ...); do the same or prune targets another database.
+  try {
+    process.loadEnvFile(path.join(process.cwd(), '.env'));
+  } catch {
+    // No .env file — keys may be in the shell environment
+  }
+
   // Resolve storage exactly the way startup does, so prune targets the same
   // database the TUI uses — honoring MASTRA_DB_PATH / MASTRA_STORAGE_BACKEND,
   // global settings, and a project's own .mastracode/database.json.
@@ -64,10 +96,7 @@ export async function runPruneCommand(args: string[]): Promise<number> {
   const { storage, backend, warning } = await createStorage(storageConfig);
   if (warning) console.log(warning);
 
-  // The vector store's connection must close alongside storage: the compaction
-  // refuses to swap files while any connection is open.
-  const vector = await createVectorStore(storageConfig, backend);
-
+  let vector: MastraVector | undefined;
   try {
     // The libsql factory does not init (the PG path already has); init is
     // coalesced, so tables are guaranteed to exist before we delete from them.
@@ -78,12 +107,20 @@ export async function runPruneCommand(args: string[]): Promise<number> {
       console.log(`Database: ${localDbFiles.join(', ')}`);
     }
 
+    // Only the local-libsql compaction needs the vector connection (its file
+    // swap refuses while any connection is open). Opening it otherwise would
+    // create mastra-vectors.db as a side effect.
+    if (vacuum && localDbFiles.length > 0) {
+      vector = await createVectorStore(storageConfig, backend);
+    }
+    const libsqlVector = vector instanceof LibSQLVector ? vector : undefined;
+
     const maintenance = createStorageMaintenance({
       storage,
       backend,
       retention: DEFAULT_RETENTION,
       localDbFiles,
-      ...(vector instanceof LibSQLVector ? { closeVector: () => vector.close() } : {}),
+      ...(libsqlVector ? { closeVector: () => libsqlVector.close() } : {}),
     });
 
     await runStorageMaintenance({ maintenance, vacuum, keepMemory, log: line => console.log(line) });

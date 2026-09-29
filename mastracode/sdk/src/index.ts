@@ -31,7 +31,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
 import type { ApiRoute } from '@mastra/core/server';
 import { TaskSignalProvider } from '@mastra/core/signals';
-import { InMemoryDB, InMemoryHarness, MastraCompositeStore, ScoresInMemory } from '@mastra/core/storage';
+import { InMemoryHarness, MastraCompositeStore } from '@mastra/core/storage';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '@mastra/core/tools';
 import type { MastraVector } from '@mastra/core/vector';
 import { DuckDBStore } from '@mastra/duckdb';
@@ -101,7 +101,9 @@ import { stateSchema } from './schema.js';
 import type { MastraCodeState } from './schema.js';
 
 import { mastraBrand } from './theme-palette.js';
+import { DiscardingScoresStorage } from './utils/discarding-scores-storage.js';
 import { syncGateways } from './utils/gateway-sync.js';
+import { registerSessionAndWaitForMaintenance } from './utils/maintenance-lock.js';
 import {
   detectProject,
   getObservabilityDatabasePath,
@@ -520,6 +522,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     ? undefined
     : ((config?.storage as StorageConfig | undefined) ??
       getStorageConfig(project.rootPath, globalSettings.storage, configDir));
+  if (!injectedStorage) {
+    // Register first, then check the maintenance lock, so `mastracode prune`
+    // (lock first, then sessions) can never run against an open session.
+    await registerSessionAndWaitForMaintenance({
+      onWait: pid => console.error(`Waiting for storage maintenance (mastracode prune, PID ${pid}) to finish...`),
+    });
+  }
   const storageResult: StorageResult = injectedStorage
     ? { storage: injectedStorage, backend: resolveInjectedStorageBackend(injectedStorage, config?.storageBackend) }
     : await createStorage(storageConfig!);
@@ -553,14 +562,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   }
 
   const harnessStorage = new InMemoryHarness();
-  // mastracode registers `outcome` and `efficiency` scorers that fire on every
-  // session, and the scorer hook persists each result through the legacy scores
-  // domain (`validateAndSaveScore` → `getStore('scores')`). Nothing in
-  // mastracode reads scores back — there is no UI, command, or API surface over
-  // them — so writing them to libsql only grew mastra.db without bound. Keep the
-  // domain in-memory (like harness above) so scorer runs stay error-free but
-  // leave nothing on disk.
-  const scoresStorage = new ScoresInMemory({ db: new InMemoryDB() });
+  // mastracode's scorers persist every result through the scores domain, but
+  // nothing reads scores back. Accept the writes and keep nothing, so they
+  // neither grow mastra.db nor the process heap.
+  const scoresStorage = new DiscardingScoresStorage();
 
   const storage = new MastraCompositeStore({
     id: 'mastra-code-storage',

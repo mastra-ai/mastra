@@ -202,6 +202,10 @@ vi.mock('./utils/thread-lock.js', () => ({
   releaseThreadLock: vi.fn(),
 }));
 
+vi.mock('./utils/maintenance-lock.js', () => ({
+  registerSessionAndWaitForMaintenance: vi.fn(async () => {}),
+}));
+
 describe('createMastraCode startup performance', () => {
   it('does not wait for background gateway sync before returning storage warnings', async () => {
     const [{ syncGateways }, { createStorage }] = await Promise.all([
@@ -234,27 +238,42 @@ describe('createMastraCode startup performance', () => {
   });
 });
 
+describe('storage maintenance exclusion', () => {
+  it('registers the session and waits for maintenance before opening storage', async () => {
+    const [{ registerSessionAndWaitForMaintenance }, { createStorage }] = await Promise.all([
+      import('./utils/maintenance-lock.js'),
+      import('./utils/storage-factory.js'),
+    ]);
+    const order: string[] = [];
+    vi.mocked(registerSessionAndWaitForMaintenance).mockImplementationOnce(async () => {
+      order.push('wait');
+    });
+    vi.mocked(createStorage).mockImplementationOnce((async () => {
+      order.push('storage');
+      return { storage: {}, backend: 'memory' };
+    }) as never);
+    const { createMastraCode } = await import('./index.js');
+
+    await createMastraCode();
+
+    expect(order).toEqual(['wait', 'storage']);
+  });
+});
+
 describe('scores storage domain', () => {
   it('keeps scorer results out of the default libsql store', async () => {
-    const { ScoresInMemory } = await import('@mastra/core/storage');
+    const { DiscardingScoresStorage } = await import('./utils/discarding-scores-storage.js');
     const { createMastraCode } = await import('./index.js');
 
     const result = await createMastraCode();
 
-    // mastracode registers `outcome` and `efficiency` scorers that fire on every
-    // session, and core's scorer hook persists each result through the `scores`
-    // domain. Nothing in mastracode reads scores back, so the domain must be
-    // in-memory instead of falling through to the default libsql store — that
-    // fallthrough is what grew mastra.db without bound (#22056).
-    //
-    // This also catches the `scores: false` variant: a disabled domain resolves
-    // to undefined, and core's validateAndSaveScore() then throws
-    // MASTRA_SCORES_STORAGE_NOT_AVAILABLE on every scorer run.
+    // mastracode's scorers persist every result through the `scores` domain, and
+    // nothing reads them back. The domain must accept writes (a missing domain
+    // makes validateAndSaveScore() throw MASTRA_SCORES_STORAGE_NOT_AVAILABLE)
+    // without writing to libsql (#22056) or retaining payloads in memory.
     const scores = await result.storage.getStore('scores');
-    expect(scores).toBeInstanceOf(ScoresInMemory);
+    expect(scores).toBeInstanceOf(DiscardingScoresStorage);
 
-    // The domain is functional, not a stub: a saved score round-trips through
-    // memory and never reaches a durable store.
     const saved = await scores!.saveScore({
       scorerId: 'outcome',
       entityId: 'thread-1',
@@ -266,7 +285,9 @@ describe('scores storage domain', () => {
       entity: {},
     });
     expect(saved.score.id).toEqual(expect.any(String));
-    expect(await scores!.getScoreById({ id: saved.score.id })).toEqual(saved.score);
+    expect(await scores!.getScoreById({ id: saved.score.id })).toBeNull();
+    const listed = await scores!.listScoresByRunId({ runId: 'run-1', pagination: { page: 0, perPage: 10 } });
+    expect(listed.scores).toEqual([]);
   });
 });
 
