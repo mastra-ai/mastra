@@ -578,17 +578,13 @@ export class GitLabApiClient {
     projectId: string,
     options: { query?: string; page?: number } = {},
   ): Promise<GitLabMember[]> {
-    return this.#request<GitLabMember[]>(
-      'GET',
-      `/api/v4/projects/${encodeURIComponent(projectId)}/members/all`,
-      {
-        query: {
-          query: options.query,
-          page: options.page ?? 1,
-          per_page: GITLAB_DISCUSSIONS_PAGE_SIZE,
-        },
+    return this.#request<GitLabMember[]>('GET', `/api/v4/projects/${encodeURIComponent(projectId)}/members/all`, {
+      query: {
+        query: options.query,
+        page: options.page ?? 1,
+        per_page: GITLAB_DISCUSSIONS_PAGE_SIZE,
       },
-    );
+    });
   }
 
   async #request<T>(

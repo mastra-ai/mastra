@@ -5,10 +5,10 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/pla
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { ChevronRight } from 'lucide-react';
 import { z } from 'zod';
 import { useMemoryConfig } from '@/domains/memory/hooks';
-import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 
 interface MemoryConfigSection {
   title: string;

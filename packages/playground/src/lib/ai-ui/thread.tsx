@@ -23,6 +23,8 @@ import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SaveFullConversationAction } from '@mastra/playground-ui/domains/chat';
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
+import { MessageRow } from '@mastra/playground-ui/domains/chat/messages/message-row';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { useSpeechRecognition } from '@mastra/react';
 import type { MessageFactoryPart } from '@mastra/react/ui';
@@ -36,7 +38,6 @@ import { ComposerFileDrop } from './attachments/composer-file-drop';
 import { useReadAloud } from './chat/use-read-aloud';
 import { BracketOverlay } from './components/bracket-overlay';
 import { useComposerAutofocus } from './hooks/use-composer-autofocus';
-import { MessageRow } from './messages/message-row';
 import { SuggestedPromptList } from './suggested-prompt-list';
 import { TaskPanel } from './task-panel';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
@@ -45,7 +46,6 @@ import { ComposerModelSettings } from '@/domains/agents/components/composer-mode
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
-import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 import { useVoiceCall, VoiceCallButton, VoiceCallPanel } from '@/domains/voice';
 import type { VoiceCallControls } from '@/domains/voice';
 import { startViewTransition } from '@/lib/routing';

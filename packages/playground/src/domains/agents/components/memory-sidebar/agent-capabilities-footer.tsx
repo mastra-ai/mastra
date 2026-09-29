@@ -1,6 +1,7 @@
 import type { GetAgentResponse, GetMemoryStatusResponse } from '@mastra/client-js';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
@@ -13,7 +14,6 @@ import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useMemory } from '@/domains/memory/hooks/use-memory';
-import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 
 type CapabilityTone = 'purple' | 'amber' | 'emerald' | 'sky' | 'cyan' | 'orange';
 

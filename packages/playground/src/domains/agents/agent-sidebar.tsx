@@ -1,8 +1,8 @@
 import type { StorageThreadType } from '@mastra/core/memory';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { MemorySidebar } from '@/domains/agents/components/memory-sidebar/memory-sidebar';
 import { useDeleteThread } from '@/domains/memory/hooks/use-memory';
-import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 
 export function AgentSidebar({
   agentId,

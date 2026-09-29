@@ -3,3 +3,8 @@ packages:
 
 allowBuilds:
   esbuild: true
+
+overrides:
+  # Vanta 2026-09-28: nested-lock security floors
+  'postcss@<8.5.23': 8.5.23
+  'nanoid@>=3.0.0 <3.3.19': 3.3.19

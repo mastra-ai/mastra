@@ -1,8 +1,11 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
+import { BrowserToolCallsProvider } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
@@ -10,17 +13,14 @@ import { SessionHeader } from '@/components/session-header';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
 import { AgentChatLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
 import { AgentUnavailable } from '@/domains/agents/components/agent-unavailable';
-import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
 import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-observational-memory-context';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
-import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-settings';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
-import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 import { AgentRunActions } from '@/domains/run-options/components/agent-run-actions';
 
 function AgentSession() {

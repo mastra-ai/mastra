@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import '@/test/jsdom-polyfills';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ObservationMarkerBadge } from '../observation-marker-badge';

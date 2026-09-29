@@ -901,6 +901,78 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(branchDelta.delta).toEqual({ limit: 10, hasMore: false });
     });
 
+    it('stores span payload only once when an ended span is written', async () => {
+      const payload = {
+        input: { prompt: 'hi' },
+        attributes: { a: 1 },
+        metadata: { m: 'x' },
+        requestContext: { r: 'y' },
+      };
+      const base = {
+        isEvent: false,
+        parentSpanId: null,
+        name: 'root',
+        spanType: SpanType.GENERIC,
+        entityType: null,
+        entityId: 'agent-payload',
+        entityName: null,
+        userId: null,
+        organizationId: null,
+        resourceId: null,
+        runId: null,
+        sessionId: null,
+        threadId: null,
+        requestId: null,
+        environment: null,
+        source: null,
+        serviceName: null,
+        scope: null,
+        tags: null,
+        links: null,
+        output: null,
+        error: null,
+        ...payload,
+      } as const;
+      const startedAt = new Date(Date.UTC(2026, 0, 2));
+      const started = { ...base, traceId: 'trace-payload', spanId: 'span-payload', startedAt, endedAt: null };
+      const ended = { ...started, endedAt: new Date(startedAt.getTime() + 1000), output: { ok: true } };
+      const event = {
+        ...base,
+        traceId: 'trace-event',
+        spanId: 'span-event',
+        isEvent: true,
+        startedAt,
+        endedAt: startedAt,
+      };
+
+      await storage.batchCreateSpans({ records: [started, event] });
+      await storage.batchCreateSpans({ records: [ended] });
+
+      const rows = await store.db.query<Record<string, unknown>>(
+        `SELECT spanId, eventType, endedAt, input, attributes, metadata, requestContext FROM span_events ORDER BY spanId, eventType, endedAt NULLS FIRST, cursorId`,
+      );
+      const payloadCols = (r: Record<string, unknown>) => [r.input, r.attributes, r.metadata, r.requestContext];
+      const spanRows = rows.filter(r => r.spanId === 'span-payload');
+      expect(spanRows.map(r => r.eventType)).toEqual(['end', 'start', 'start']);
+      // end row and the SPAN_STARTED start row carry the payload; the SPAN_ENDED start row does not.
+      expect(payloadCols(spanRows[0]!).every(v => v != null)).toBe(true);
+      expect(payloadCols(spanRows[1]!).every(v => v != null)).toBe(true);
+      expect(payloadCols(spanRows[2]!).every(v => v == null)).toBe(true);
+      const eventRows = rows.filter(r => r.spanId === 'span-event');
+      expect(eventRows).toHaveLength(1);
+      expect(payloadCols(eventRows[0]!).every(v => v != null)).toBe(true);
+
+      const span = (await storage.getSpan({ traceId: 'trace-payload', spanId: 'span-payload' }))!.span;
+      expect(span).toMatchObject({ ...payload, output: { ok: true } });
+
+      // Ended-only-once span: payload comes from the end row.
+      await storage.batchCreateSpans({ records: [{ ...ended, traceId: 'trace-once', spanId: 'span-once' }] });
+      const once = (await storage.getSpan({ traceId: 'trace-once', spanId: 'span-once' }))!.span;
+      expect(once).toMatchObject(payload);
+      const listed = await storage.listTraces({ filters: { entityId: 'agent-payload' } });
+      expect(listed.spans.map(s => s.traceId).sort()).toEqual(['trace-event', 'trace-once', 'trace-payload']);
+    });
+
     it('listTracesLight returns seeded traces via the facade', async () => {
       await storage.batchCreateSpans({
         records: [

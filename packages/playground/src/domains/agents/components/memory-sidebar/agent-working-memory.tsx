@@ -4,6 +4,7 @@ import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRende
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
@@ -14,7 +15,6 @@ import { useState } from 'react';
 import { useWorkingMemory } from '../../context/agent-working-memory-context';
 import { CodeDisplay } from './code-display';
 import { useMemoryConfig } from '@/domains/memory/hooks';
-import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 
 interface AgentWorkingMemoryProps {
   agentId: string;

@@ -2,6 +2,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { frameSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -26,7 +27,6 @@ import { AgentMetadataSection } from '../agent-metadata/agent-metadata-section';
 import { AgentMemoryConfig } from '../agent-settings/agent-memory-config';
 import { AgentSystemPrompt } from './agent-system-prompt';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
-import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 import { useRouteSidePanel } from '@/lib/route-side-panel';
 
 export interface AgentOverviewPanelProps {
