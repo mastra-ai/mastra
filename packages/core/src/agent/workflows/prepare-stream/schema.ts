@@ -43,12 +43,18 @@ export type AgentCapabilities = {
         overrides?: InputProcessorOrWorkflow[];
         errorOverrides?: ErrorProcessorOrWorkflow[];
       }) => Promise<LLMRequestProcessorOrWorkflow[]> | LLMRequestProcessorOrWorkflow[]);
+  /**
+   * The function form resolves the run's error processors once and reports whether the caller
+   * configured any themselves (excluding framework defaults).
+   */
   errorProcessors?:
     | ErrorProcessorOrWorkflow[]
     | ((args: {
         requestContext: RequestContext;
         overrides?: ErrorProcessorOrWorkflow[];
-      }) => Promise<ErrorProcessorOrWorkflow[]> | ErrorProcessorOrWorkflow[]);
+      }) =>
+        | Promise<{ errorProcessors: ErrorProcessorOrWorkflow[]; hasConfiguredErrorProcessors: boolean }>
+        | { errorProcessors: ErrorProcessorOrWorkflow[]; hasConfiguredErrorProcessors: boolean });
   llm: MastraLLMVNext;
 };
 

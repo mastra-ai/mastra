@@ -1850,13 +1850,21 @@ export class Agent<
   }): Promise<ErrorProcessorOrWorkflow[]> {
     if (overrides) return overrides;
 
-    const configured = this.#errorProcessors
-      ? typeof this.#errorProcessors === 'function'
-        ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
-        : this.#errorProcessors
-      : undefined;
-
+    const configured = await this.#resolveConfiguredErrorProcessors(requestContext);
     if (!includeDefaults) return configured ?? [];
+    return this.#withErrorProcessorDefaults(configured);
+  }
+
+  async #resolveConfiguredErrorProcessors(
+    requestContext: RequestContext,
+  ): Promise<ErrorProcessorOrWorkflow[] | undefined> {
+    if (!this.#errorProcessors) return undefined;
+    return typeof this.#errorProcessors === 'function'
+      ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
+      : this.#errorProcessors;
+  }
+
+  #withErrorProcessorDefaults(configured: ErrorProcessorOrWorkflow[] | undefined): ErrorProcessorOrWorkflow[] {
     if (this.#errorProcessorDefaults === false) return configured ?? [];
     if (!configured) return defaultStabilityErrorProcessors();
 
@@ -1887,6 +1895,26 @@ export class Agent<
     }
 
     return resolved;
+  }
+
+  /**
+   * Resolves a run's error processors once: the list the error lane runs (call-time `overrides`
+   * verbatim, otherwise the configured list merged with the defaults) and whether the caller
+   * configured any themselves. A dynamic `errorProcessors` function is invoked at most once, so
+   * the request lane, the error lane and the retry-cap warning all see the same instances.
+   * @internal
+   */
+  async __resolveRunErrorProcessors(
+    requestContext: RequestContext,
+    overrides?: ErrorProcessorOrWorkflow[],
+  ): Promise<{ errorProcessors: ErrorProcessorOrWorkflow[]; hasConfiguredErrorProcessors: boolean }> {
+    if (overrides) return { errorProcessors: overrides, hasConfiguredErrorProcessors: overrides.length > 0 };
+
+    const configured = await this.#resolveConfiguredErrorProcessors(requestContext);
+    return {
+      errorProcessors: this.#withErrorProcessorDefaults(configured),
+      hasConfiguredErrorProcessors: Boolean(configured?.some(processor => processor.id)),
+    };
   }
 
   /**
@@ -7932,7 +7960,7 @@ export class Agent<
       }: {
         requestContext: RequestContext;
         overrides?: ErrorProcessorOrWorkflow[];
-      }) => this.#resolveErrorProcessors({ requestContext, overrides }),
+      }) => this.__resolveRunErrorProcessors(requestContext, overrides),
       llm,
     };
 

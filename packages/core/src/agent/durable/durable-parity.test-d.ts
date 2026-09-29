@@ -133,6 +133,7 @@ type PhantomSerializedKeys = Exclude<
   // These are durable-internal representations that don't map 1:1 to a
   // base option key but are derived from one:
   | 'hasErrorProcessors' // derived from configured errorProcessors.length (no framework defaults)
+  | 'emptyErrorProcessorOverride' // derived from a call-time errorProcessors: [] (replaces the defaults)
   | 'skipBgTaskWait' // derived from _skipBgTaskWait
   | 'agentMaxRetries' // derived from the agent's maxRetries config
   | 'agentMaxRetriesConfigured' // preserves omitted vs explicitly configured maxRetries

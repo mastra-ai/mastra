@@ -4039,6 +4039,19 @@ describe('error processors — shared stability defaults', () => {
     expect(resolved[0]).toBe(customCompat);
   });
 
+  it('resolves a dynamic error-processor list once per run and runs the same instance in both lanes', async () => {
+    const processLLMRequest = vi.fn(() => undefined);
+    const resolver = vi.fn((): Processor[] => [
+      { id: 'dynamic-error', processLLMRequest, processAPIError: () => undefined },
+    ]);
+    const agent = bareAgent({ errorProcessorDefaults: false, errorProcessors: resolver });
+
+    await agent.generate('hello');
+
+    expect(resolver).toHaveBeenCalledTimes(1);
+    expect(processLLMRequest).toHaveBeenCalledTimes(1);
+  });
+
   it('inserts the added repair processors ahead of a caller retry processor', async () => {
     const customRetry = new StreamErrorRetryProcessor({ maxRetries: 5 });
     const agent = bareAgent({ errorProcessors: [customRetry] });

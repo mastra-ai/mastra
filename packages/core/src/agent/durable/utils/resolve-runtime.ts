@@ -259,9 +259,17 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       // the cross-process system prompt. Mirrors preparation.ts.
       try {
         inputProcessors = await (agent as any).listInputProcessors?.(resolveRequestContext);
-        llmRequestInputProcessors = await (agent as any).__listLLMRequestProcessors?.(resolveRequestContext);
         outputProcessors = await (agent as any).listOutputProcessors?.(resolveRequestContext);
-        errorProcessors = await (agent as any).listErrorProcessors?.(resolveRequestContext);
+        // A call-time `errorProcessors: []` replaced the resolved list, defaults included. Honor
+        // it here too, and resolve the error list once so both lanes share its instances.
+        const errorProcessorOverride = input.options?.emptyErrorProcessorOverride ? [] : undefined;
+        errorProcessors = (
+          await (agent as any).__resolveRunErrorProcessors?.(resolveRequestContext, errorProcessorOverride)
+        )?.errorProcessors;
+        llmRequestInputProcessors = await (agent as any).__listLLMRequestProcessors?.(
+          resolveRequestContext,
+          errorProcessors,
+        );
         // A fresh processor-state map is correct here: on a cross-process worker
         // there is no prior state to carry, and processors are re-run per step.
         processorStates = globalEntry?.processorStates ?? new Map<string, ProcessorState>();

@@ -1527,6 +1527,14 @@ export class DurableAgent<
     return this.#wrappedAgent.getConfiguredErrorProcessorIds(requestContext);
   }
 
+  override async __resolveRunErrorProcessors(requestContext: any, overrides?: any) {
+    return this.#wrappedAgent.__resolveRunErrorProcessors(requestContext, overrides);
+  }
+
+  override async __listLLMRequestProcessors(requestContext?: any, errorProcessorOverrides?: any) {
+    return this.#wrappedAgent.__listLLMRequestProcessors(requestContext, errorProcessorOverrides);
+  }
+
   // --- Sub-agents ---
   override listAgents(options?: any) {
     return this.#wrappedAgent.listAgents(options);

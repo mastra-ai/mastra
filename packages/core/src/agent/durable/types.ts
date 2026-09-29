@@ -224,6 +224,12 @@ export interface SerializableDurableOptions {
   returnScorerData?: boolean;
   /** Whether error processors are configured (flag only, instances are non-serializable) */
   hasErrorProcessors?: boolean;
+  /**
+   * The call passed `errorProcessors: []`, replacing the agent's resolved list (defaults included)
+   * with none. Processor instances aren't serializable, so this marker is what lets a worker that
+   * rebuilds the pipeline honor that override.
+   */
+  emptyErrorProcessorOverride?: boolean;
   /** Provider-specific options passed to the language model */
   providerOptions?: SharedProviderOptions;
   /** Structured output configuration */
