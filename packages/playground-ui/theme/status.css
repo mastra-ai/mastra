@@ -91,9 +91,9 @@ html.light {
   --destructive-indicator: var(--red-600);
   --destructive-subtle-foreground: var(--red-950);
   --warning-subtle: var(--yellow-100);
-  --warning-edge: var(--yellow-300);
+  --warning-edge: var(--yellow-200);
   --warning-indicator: var(--yellow-700);
-  --warning-subtle-foreground: var(--yellow-950);
+  --warning-subtle-foreground: var(--yellow-800);
   --success-subtle: var(--green-100);
   --success-edge: var(--green-300);
   --success-indicator: var(--green-700);

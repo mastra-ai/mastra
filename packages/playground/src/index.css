@@ -145,11 +145,6 @@ th:has(header) {
       background-position: 0% 0;
     }
   }
-  /*
-   * The gradient is clipped to the glyphs: the text is painted transparent and
-   * the sweep lives in its background. `--shimmer-base` is the resting text tone
-   * and `--shimmer-highlight` the contrasting tone the band passes through.
-   */
   .starter-shimmer {
     --shimmer-base: var(--color-muted-foreground);
     --shimmer-highlight: var(--color-foreground);
