@@ -440,6 +440,7 @@ describe('withMastra middleware', () => {
 
     it('should run processOutputResult after streaming completes', async () => {
       let outputText = '';
+      let processedUsage: ProcessOutputResultArgs['result']['usage'];
 
       const upperCaseProcessor: OutputProcessor = {
         id: 'upper',
@@ -460,6 +461,7 @@ describe('withMastra middleware', () => {
       const inspectorProcessor: OutputProcessor = {
         id: 'inspector',
         async processOutputResult(args: ProcessOutputResultArgs) {
+          processedUsage = args.result.usage;
           outputText = args.messageList.get.response
             .db()
             .map(
@@ -490,6 +492,11 @@ describe('withMastra middleware', () => {
 
       expect(fullText).toBe('TEST RESPONSE');
       expect(outputText).toBe('TEST RESPONSE');
+      expect(processedUsage).toEqual({
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+      });
     });
 
     it('should not run processOutputResult when stream errors without finishing', async () => {

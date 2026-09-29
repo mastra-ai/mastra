@@ -784,9 +784,9 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
                     .map(p => (p as any).payload?.text ?? '')
                     .join(''),
                   usage: finishChunk?.payload?.output?.usage ?? {
-                    inputTokens: 0,
-                    outputTokens: 0,
-                    totalTokens: 0,
+                    inputTokens: undefined,
+                    outputTokens: undefined,
+                    totalTokens: undefined,
                   },
                   finishReason: finishChunk?.payload?.stepResult?.reason ?? 'unknown',
                   steps: [],
