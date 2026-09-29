@@ -831,6 +831,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                 outputTokens: 0,
                 totalTokens: 0,
               },
+              usageAggregationVersion: 1,
               lastStepResult: undefined,
             };
             return iterationState;

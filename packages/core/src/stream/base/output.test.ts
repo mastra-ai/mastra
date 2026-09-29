@@ -632,6 +632,223 @@ describe('MastraModelOutput', () => {
   });
 
   describe('usage raw passthrough', () => {
+    it('keeps missing usage counts unknown across multiple steps and finish metadata', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      let finishPayload: any;
+
+      const stream = createChunkStream([
+        createStepFinishChunk(runId, undefined, { inputTokens: 10, outputTokens: 20, totalTokens: 30 }),
+        createStepFinishChunk(runId, undefined, { outputTokens: 5 }),
+        createFinishChunk(runId, undefined, { inputTokens: 10, outputTokens: 25, totalTokens: 35 }),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: {
+          runId,
+          onFinish: async payload => {
+            finishPayload = payload;
+          },
+        },
+      });
+
+      await output.consumeStream();
+
+      expect(finishPayload?.usage).toMatchObject({
+        inputTokens: undefined,
+        outputTokens: 25,
+        totalTokens: undefined,
+      });
+      expect(finishPayload?.totalUsage).toMatchObject({
+        inputTokens: undefined,
+        outputTokens: 25,
+        totalTokens: undefined,
+      });
+      await expect(output.usage).resolves.toMatchObject({
+        inputTokens: undefined,
+        outputTokens: 25,
+        totalTokens: undefined,
+      });
+      await expect(output.totalUsage).resolves.toMatchObject({
+        inputTokens: undefined,
+        outputTokens: 25,
+        totalTokens: undefined,
+      });
+    });
+
+    it('keeps a missing count unknown when a later step reports it', async () => {
+      const runId = 'test-run';
+      let finishPayload: any;
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([
+          createStepFinishChunk(runId, undefined, { outputTokens: 20 }),
+          createStepFinishChunk(runId, undefined, { inputTokens: 10, outputTokens: 5 }),
+          createFinishChunk(runId, undefined, { inputTokens: 10, outputTokens: 25 }),
+        ]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: {
+          runId,
+          onFinish: async payload => {
+            finishPayload = payload;
+          },
+        },
+      });
+
+      await output.consumeStream();
+
+      expect(finishPayload?.totalUsage).toMatchObject({
+        inputTokens: undefined,
+        outputTokens: 25,
+        totalTokens: undefined,
+      });
+    });
+
+    it('keeps all usage counts unknown when every step omits them', async () => {
+      const runId = 'test-run';
+      let finishPayload: any;
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([
+          createStepFinishChunk(runId, undefined, {}),
+          createFinishChunk(runId, undefined, {}),
+        ]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: {
+          runId,
+          onFinish: async payload => {
+            finishPayload = payload;
+          },
+        },
+      });
+
+      await output.consumeStream();
+
+      expect(finishPayload?.usage).toMatchObject({
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+      });
+      expect(finishPayload?.totalUsage).toMatchObject({
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+      });
+    });
+
+    it('preserves explicit zero usage as known', async () => {
+      const runId = 'test-run';
+      let finishPayload: any;
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([
+          createStepFinishChunk(runId, undefined, { inputTokens: 0, outputTokens: 0, totalTokens: 0 }),
+          createFinishChunk(runId, undefined, { inputTokens: 0, outputTokens: 0, totalTokens: 0 }),
+        ]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: {
+          runId,
+          onFinish: async payload => {
+            finishPayload = payload;
+          },
+        },
+      });
+
+      await output.consumeStream();
+
+      expect(finishPayload?.totalUsage).toMatchObject({ inputTokens: 0, outputTokens: 0, totalTokens: 0 });
+    });
+
+    it('persists incomplete counters across stream state restoration', () => {
+      const runId = 'test-run';
+      const original = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+      original.updateUsageCount({ inputTokens: 10, outputTokens: 20, totalTokens: 30 });
+      original.updateUsageCount({ outputTokens: 5 });
+
+      const restored = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+        initialState: original.serializeState(),
+      });
+      restored.updateUsageCount({ inputTokens: 7, outputTokens: 3, totalTokens: 10 });
+
+      expect(restored.serializeState()).toMatchObject({
+        usageCount: { inputTokens: undefined, outputTokens: 28, totalTokens: undefined },
+        usageCountInitialized: true,
+        usageCountMissing: expect.arrayContaining(['inputTokens', 'totalTokens']),
+      });
+    });
+
+    it('fails closed when restoring legacy usage state without completeness metadata', () => {
+      const runId = 'test-run';
+      const original = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+      original.updateUsageCount({
+        inputTokens: 10,
+        outputTokens: 20,
+        totalTokens: 30,
+        reasoningTokens: 1,
+        cachedInputTokens: 2,
+        cacheCreationInputTokens: 3,
+        cacheCreationInputTokens5m: 4,
+        cacheCreationInputTokens1h: 5,
+      });
+      const legacyState: any = original.serializeState();
+      delete legacyState.usageCountInitialized;
+      delete legacyState.usageCountMissing;
+
+      const restored = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+        initialState: legacyState,
+      });
+      restored.updateUsageCount({
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2,
+        reasoningTokens: 1,
+        cachedInputTokens: 1,
+        cacheCreationInputTokens: 1,
+        cacheCreationInputTokens5m: 1,
+        cacheCreationInputTokens1h: 1,
+      });
+
+      expect(restored.serializeState().usageCount).toMatchObject({
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+        reasoningTokens: undefined,
+        cachedInputTokens: undefined,
+        cacheCreationInputTokens: undefined,
+        cacheCreationInputTokens5m: undefined,
+        cacheCreationInputTokens1h: undefined,
+      });
+    });
+
     it('should expose raw usage in onStepFinish callback', async () => {
       const runId = 'test-run';
       const rawUsage = {

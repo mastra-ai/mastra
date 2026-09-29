@@ -37,10 +37,13 @@ export function calculateAccumulatedUsage(
   currentUsage: AccumulatedUsage,
   executionUsage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number },
 ): AccumulatedUsage {
+  const accumulate = (current: number | undefined, next: number | undefined) =>
+    current !== undefined && next !== undefined ? current + next : undefined;
+
   return {
-    inputTokens: currentUsage.inputTokens + (executionUsage?.inputTokens || 0),
-    outputTokens: currentUsage.outputTokens + (executionUsage?.outputTokens || 0),
-    totalTokens: currentUsage.totalTokens + (executionUsage?.totalTokens || 0),
+    inputTokens: accumulate(currentUsage.inputTokens, executionUsage?.inputTokens),
+    outputTokens: accumulate(currentUsage.outputTokens, executionUsage?.outputTokens),
+    totalTokens: accumulate(currentUsage.totalTokens, executionUsage?.totalTokens),
   };
 }
 
@@ -85,7 +88,14 @@ export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput):
 export function createBaseIterationStateUpdate(input: IterationStateUpdateInput): BaseIterationState {
   const { currentState, executionOutput } = input;
 
-  const newUsage = calculateAccumulatedUsage(currentState.accumulatedUsage, executionOutput.output.usage);
+  // Legacy states with completed steps cannot prove whether their numeric totals
+  // include every provider measurement. Preserve the zero identity only for a
+  // pre-first-step state; otherwise migrate the accumulator to unknown.
+  const currentUsage =
+    currentState.usageAggregationVersion === 1 || currentState.accumulatedSteps.length === 0
+      ? currentState.accumulatedUsage
+      : { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
+  const newUsage = calculateAccumulatedUsage(currentUsage, executionOutput.output.usage);
   const stepRecord = buildStepRecord(executionOutput);
   const lastStepResult = { ...executionOutput.stepResult };
   delete lastStepResult.request;
@@ -106,6 +116,7 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     iterationCount: currentState.iterationCount + 1,
     accumulatedSteps: [...currentState.accumulatedSteps, stepRecord],
     accumulatedUsage: newUsage,
+    usageAggregationVersion: 1,
     lastStepResult,
     backgroundTaskPending: executionOutput.backgroundTaskPending,
     delegationBailed: executionOutput.delegationBailed,

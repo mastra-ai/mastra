@@ -1350,7 +1350,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   "text": "Hello, world!",
                   "toolCalls": [],
                   "usage": {
-                    "cachedInputTokens": 3,
                     "inputTokens": 6,
                     "outputTokens": 20,
                     "raw": {
@@ -1360,7 +1359,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "reasoningTokens": 10,
                       "totalTokens": 23,
                     },
-                    "reasoningTokens": 10,
                     "totalTokens": 36,
                   },
                 },
@@ -1733,7 +1731,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   "text": "Hello, world!",
                   "toolCalls": [],
                   "usage": {
-                    "cachedInputTokens": 3,
                     "inputTokens": 6,
                     "outputTokens": 20,
                     "raw": {
@@ -1743,7 +1740,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "reasoningTokens": 10,
                       "totalTokens": 23,
                     },
-                    "reasoningTokens": 10,
                     "totalTokens": 36,
                   },
                 },
@@ -2203,7 +2199,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "cacheCreationInputTokens": undefined,
               "cacheCreationInputTokens1h": undefined,
               "cacheCreationInputTokens5m": undefined,
-              "cachedInputTokens": 3,
+              "cachedInputTokens": undefined,
               "inputTokens": 6,
               "outputTokens": 20,
               "raw": {
@@ -2213,7 +2209,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "reasoningTokens": 10,
                 "totalTokens": 23,
               },
-              "reasoningTokens": 10,
+              "reasoningTokens": undefined,
               "totalTokens": 36,
             }
           `);
@@ -2225,7 +2221,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "cacheCreationInputTokens": undefined,
               "cacheCreationInputTokens1h": undefined,
               "cacheCreationInputTokens5m": undefined,
-              "cachedInputTokens": 3,
+              "cachedInputTokens": undefined,
               "inputTokens": 6,
               "outputTokens": 20,
               "raw": {
@@ -2235,7 +2231,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "reasoningTokens": 10,
                 "totalTokens": 23,
               },
-              "reasoningTokens": 10,
+              "reasoningTokens": undefined,
               "totalTokens": 36,
             }
           `);
@@ -8376,9 +8372,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   "text": "Hello",
                   "toolCalls": [],
                   "usage": {
-                    "inputTokens": 0,
-                    "outputTokens": 0,
-                    "totalTokens": 0,
+                    "inputTokens": undefined,
+                    "outputTokens": undefined,
+                    "totalTokens": undefined,
                   },
                 },
                 "stepResult": {
