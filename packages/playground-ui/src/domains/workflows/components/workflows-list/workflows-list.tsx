@@ -14,6 +14,7 @@ import {
   DataListSkeleton as EntityListSkeleton,
   useDataListKeyboard,
 } from '@/ds/components/DataList';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/utils/cn';
@@ -246,7 +247,7 @@ export function WorkflowsList({
     [sortedData, workflows, expandedPaths],
   );
 
-  // Inline rows are non-interactive; keyboard navigation only visits workflow rows.
+  // Unregistered rows are non-interactive; keyboard navigation only visits workflow rows.
   const interactiveIndexByPathKey = useMemo(() => {
     const map = new Map<string, number>();
     for (const row of rows) {
@@ -300,24 +301,30 @@ export function WorkflowsList({
         const isExpanded = expandedPaths.has(row.pathKey);
         const toggle = () => toggleExpanded(row.pathKey);
 
-        if (row.kind === 'inline') {
-          // Same wrapper shape as workflow rows so the shared column tracks
-          // stay identical; the non-link body mirrors the RowLink's subgrid
-          // structure (span, gap, padding) without the interactivity.
+        if (row.kind === 'unregistered') {
+          // Mirrors WorkflowRow's RowWrapper + RowLink layout, minus hover and press states.
           return (
-            <EntityList.RowWrapper key={`workflow-${row.pathKey}`}>
+            <EntityList.RowStatic key={`workflow-${row.pathKey}`} className="gap-0 px-0">
               <TreeToggleCell row={row} isExpanded={isExpanded} onToggle={toggle} />
-              <div className="col-span-5 col-start-2 grid grid-cols-subgrid gap-5 px-5">
+              <div className="col-span-5 col-start-2 grid grid-cols-subgrid gap-4 px-3">
                 <EntityList.NameCell>
                   <span className="flex items-center gap-1.5">
                     <TreeConnector guides={row.guides} isLastChild={row.isLastChild} />
                     <span className="truncate">{truncateString(row.stepId, 50)}</span>
-                    <span
-                      title="Nested workflow not registered standalone"
-                      className="shrink-0 text-body-sm text-muted-foreground"
-                    >
-                      inline
-                    </span>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={<span />}
+                        role="note"
+                        tabIndex={0}
+                        className="shrink-0 rounded-sm text-body-sm text-muted-foreground focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-border-focus focus-visible:outline-solid"
+                      >
+                        not registered
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-72">
+                        Runs as a step of its parent workflow. Add it to the workflows of your Mastra instance to open,
+                        run, and inspect it on its own page.
+                      </TooltipContent>
+                    </Tooltip>
                   </span>
                 </EntityList.NameCell>
                 <EntityList.DescriptionCell>{truncateString(row.description ?? '', 200)}</EntityList.DescriptionCell>
@@ -325,7 +332,7 @@ export function WorkflowsList({
                 <EntityList.TextCell className="text-center">{''}</EntityList.TextCell>
                 <EntityList.TextCell className="text-center">{''}</EntityList.TextCell>
               </div>
-            </EntityList.RowWrapper>
+            </EntityList.RowStatic>
           );
         }
 
