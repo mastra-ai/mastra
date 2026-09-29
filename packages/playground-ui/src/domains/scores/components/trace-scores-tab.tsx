@@ -59,7 +59,7 @@ function TraceScoreCard({ score, onSelect }: { score: ClientScoreRowData; onSele
   const createdAt = new Date(score.createdAt);
   const scorerName = String(score.scorer?.name || score.scorer?.id || 'Scorer');
   const { Link, paths } = useLinkComponent();
-  const scorerHref = paths.scorerLink(score.scorerId, { scoreId: score.id });
+  const scorerHref = paths.scorerLink(score.scorerId);
 
   return (
     <MetricsKpiCard className="min-w-0">
@@ -81,7 +81,7 @@ function TraceScoreCard({ score, onSelect }: { score: ClientScoreRowData; onSele
       {score.reason && <TraceScoreReason reason={score.reason} />}
       {scorerHref && (
         <Button
-          render={<Link href={scorerHref} />}
+          render={<Link href={`${scorerHref}?scoreId=${score.id}`} />}
           variant="ghost"
           size="sm"
           className="-ml-2 justify-self-start"

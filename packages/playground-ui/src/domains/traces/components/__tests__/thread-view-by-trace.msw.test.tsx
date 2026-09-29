@@ -581,7 +581,7 @@ describe('ThreadViewByTrace', () => {
     });
 
     describe('given a scored trace', () => {
-      it('when scorerLink resolves, then "Open scorer run" links to the scorer run built by the link provider', async () => {
+      it('when scorerLink resolves, then "Open scorer run" links to that score on the scorer page', async () => {
         installHandlers();
         installFeedbackHandlers();
         installScore();
