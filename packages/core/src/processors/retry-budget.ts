@@ -6,10 +6,11 @@ import type { IMastraLogger } from '../logger';
  *
  * This is a backstop against a processor that returns `{ retry: true }`
  * unconditionally — not a retry budget to design against. Every built-in error
- * processor self-limits to at most one retry (`PrefillErrorHandler` and
- * `ProviderHistoryCompat` bail on `retryCount > 0`, `StreamErrorRetryProcessor`
- * defaults to `maxRetries: 1`), so this cap only takes effect for a processor
- * that never stops asking.
+ * processor self-limits below it (`PrefillErrorHandler` and
+ * `ProviderHistoryCompat` bail on `retryCount > 0`; `StreamErrorRetryProcessor`
+ * defaults to `maxRetries: 1`, and the shared default stack configures it for at
+ * most 2), so this cap only takes effect for a processor that never stops
+ * asking, or one configured above it.
  *
  * Kept deliberately low: each retry is a full model call billed to the user and
  * also consumes an iteration of the agent's step budget (`stopWhen`, which

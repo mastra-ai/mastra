@@ -8,7 +8,8 @@ You stay in control of the list:
 
 ```ts
 // Replace one default: your instance with the same id takes its slot.
-new Agent({ ..., errorProcessors: [new StreamErrorRetryProcessor({ maxRetries: 5 })] })
+// Retries above 3 also need maxProcessorRetries.
+new Agent({ ..., errorProcessors: [new StreamErrorRetryProcessor({ maxRetries: 5 })], maxProcessorRetries: 5 })
 
 // Run only your own processors — none of the defaults are merged in.
 new Agent({ ..., errorProcessors: [myProcessor], errorProcessorDefaults: false })
@@ -19,6 +20,6 @@ new Agent({ ..., errorProcessorDefaults: false })
 
 `errorProcessorDefaults: false` is the only opt-out: an empty `errorProcessors` list merges like any other and still gets the defaults.
 
-The default retry processor retries transient failures only. Transient failures recover through provider `isRetryable` metadata or the built-in connection-reset matcher, while deterministic failures — a rejected structured-output attempt, a validation error, or any HTTP 400 the repair processors cannot fix — surface immediately instead of being replayed unchanged. Pass `StreamErrorRetryProcessor({ retryUnknownErrors: true })` in `errorProcessors` to retry unmatched errors. `createCodingAgent` keeps its shipped behavior, retrying both unmatched errors and bad-request responses, as it always has.
+The default retry processor retries transient failures only. Transient failures recover through provider `isRetryable` metadata, the built-in OpenAI stream-error matcher, or the connection-reset matcher, while deterministic failures — a rejected structured-output attempt, a validation error, or any HTTP 400 the repair processors cannot fix — surface immediately instead of being replayed unchanged. Pass `StreamErrorRetryProcessor({ retryUnknownErrors: true })` in `errorProcessors` to retry unmatched errors. `createCodingAgent` keeps its shipped behavior, retrying both unmatched errors and bad-request responses, as it always has.
 
 Error-processor retries are bounded by a safety cap of `3` per turn when you don't set `maxProcessorRetries`; the defaults stop well below it on their own. The "errorProcessors are configured without an explicit maxProcessorRetries" warning now fires only when you configured error processors yourself, not for the framework defaults.
