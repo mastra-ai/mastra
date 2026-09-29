@@ -668,6 +668,12 @@ export interface ConfigRoutesDeps extends RouteDependencies {
    * defaults. Defaults to the standard app-data location; injectable for tests.
    */
   settingsPath?: string;
+  /**
+   * Organization this deployment serves (`MASTRACODE_DEPLOYMENT_ORGANIZATION_ID`).
+   * When auth is enabled, only admins of this organization may write
+   * deployment-wide settings; without it those writes stay blocked.
+   */
+  deploymentOrganizationId?: string;
 }
 
 /**
@@ -716,7 +722,17 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       await auth.ensureUser(c);
       const tenant = auth.tenant(c);
       if (!tenant) return { ok: false, status: 401, error: 'unauthorized' };
-      if (!(await auth.isOrganizationAdmin(c, tenantOrgId(tenant)))) {
+      const orgId = tenantOrgId(tenant);
+      if (!options.deploymentOrganizationId || orgId !== options.deploymentOrganizationId) {
+        return {
+          ok: false,
+          status: 403,
+          error: 'deployment_organization_required',
+          message:
+            "Deployment thinking defaults are shared by the whole deployment. Set MASTRACODE_DEPLOYMENT_ORGANIZATION_ID to let that organization's admins change them while authentication is enabled",
+        };
+      }
+      if (!(await auth.isOrganizationAdmin(c, orgId))) {
         return {
           ok: false,
           status: 403,
@@ -1190,8 +1206,9 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       // `models.modeThinkingDefaults`. These are what request-time resolution
       // falls back to when a session carries no explicit override — including
       // automated (rule-driven) Factory runs nobody opens interactively. When
-      // auth is enabled, only signed-in organization admins may write them,
-      // because the settings file is shared by the whole deployment.
+      // auth is enabled, only signed-in admins of the configured deployment
+      // organization may write them, because the settings file is shared by
+      // the whole deployment.
 
       registerApiRoute('/web/config/thinking', {
         method: 'GET',

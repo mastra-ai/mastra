@@ -121,6 +121,8 @@ export interface FactoryApiRoutesDeps {
   intakeReady: boolean;
   factoryReady: boolean;
   knowledgeEnabled: boolean;
+  /** Organization this deployment serves; its admins may edit deployment-wide settings. */
+  deploymentOrganizationId?: string;
   /** Resolved Factory rule set, threaded from the host (no service locator). */
   configVersion: string;
   /** Boards installed for this Factory instance. */
@@ -719,6 +721,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       factoryProjects: deps.domains.projects,
       customProviders: deps.domains.customProviders,
       features: { knowledge: deps.knowledgeEnabled },
+      deploymentOrganizationId: deps.deploymentOrganizationId,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
       onCustomProvidersChanged: invalidateCustomProvidersSnapshots,
     }).routes(),

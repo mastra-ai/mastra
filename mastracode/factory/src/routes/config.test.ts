@@ -1413,7 +1413,11 @@ describe('thinking defaults routes', () => {
 
   function buildApp(
     user: { workosId: string; organizationId?: string } | null,
-    opts: { authEnabled?: boolean; isOrganizationAdmin?: (orgId: string, userId: string) => Promise<boolean> } = {},
+    opts: {
+      authEnabled?: boolean;
+      isOrganizationAdmin?: (orgId: string, userId: string) => Promise<boolean>;
+      deploymentOrganizationId?: string | null;
+    } = {},
   ) {
     const app = new Hono();
     app.use('*', async (c, next) => {
@@ -1429,6 +1433,9 @@ describe('thinking defaults routes', () => {
         }),
         controller,
         settingsPath,
+        ...(opts.deploymentOrganizationId === null
+          ? {}
+          : { deploymentOrganizationId: opts.deploymentOrganizationId ?? 'org1' }),
       }).routes(),
     );
     return app;
@@ -1530,6 +1537,24 @@ describe('thinking defaults routes', () => {
 
     const signedOut = await putThinking(buildApp(null), { globalDefault: 'high' });
     expect(signedOut.status).toBe(401);
+
+    const read = await buildApp(null, { authEnabled: false }).request('/web/config/thinking');
+    expect(await read.json()).toMatchObject({ globalDefault: 'off' });
+  });
+
+  it('rejects admins of other organizations and blocks writes when no deployment organization is configured', async () => {
+    const otherOrgAdmin = buildApp(
+      { workosId: 'user-b', organizationId: 'org2' },
+      { isOrganizationAdmin: async () => true },
+    );
+    expect(await (await otherOrgAdmin.request('/web/config/thinking')).json()).toMatchObject({ editable: false });
+    const crossTenant = await putThinking(otherOrgAdmin, { globalDefault: 'high' });
+    expect(crossTenant.status).toBe(403);
+    expect(await crossTenant.json()).toMatchObject({ error: 'deployment_organization_required' });
+
+    const unconfigured = buildApp(userA, { isOrganizationAdmin: async () => true, deploymentOrganizationId: null });
+    expect(await (await unconfigured.request('/web/config/thinking')).json()).toMatchObject({ editable: false });
+    expect((await putThinking(unconfigured, { globalDefault: 'high' })).status).toBe(403);
 
     const read = await buildApp(null, { authEnabled: false }).request('/web/config/thinking');
     expect(await read.json()).toMatchObject({ globalDefault: 'off' });
