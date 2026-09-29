@@ -338,7 +338,8 @@ export class GoalManager {
     } catch {
       // Persistence is not critical, but keep the retry scoped to the thread
       // this delete targeted so an empty save elsewhere cannot delete a goal.
-      this.pendingDelete = { threadId };
+      // An unknown thread would widen the retry to every thread, so keep the old scope then.
+      if (threadId) this.pendingDelete = { threadId };
     }
   }
 

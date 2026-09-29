@@ -9,6 +9,19 @@ let restartApp: (() => Promise<void>) | undefined;
 
 const OBJECTIVE = 'Complete the max-runs goal e2e objective.';
 const FOLLOW_UP = 'Looks good, please keep going.';
+const PAUSED_REASON = 'Ran out of evaluation budget (1 runs) before reaching the goal — raise maxRuns to resume.';
+
+function readGoal(dbPath: string): { status?: string; pausedReason?: string } {
+  const db = new DatabaseSync(dbPath);
+  try {
+    const row = db.prepare(`select value from mastra_thread_state where type = 'goal'`).get() as
+      | { value: string }
+      | undefined;
+    return row ? JSON.parse(row.value) : {};
+  } finally {
+    db.close();
+  }
+}
 
 /**
  * Regression: once a goal has consumed its full run budget while still
@@ -69,7 +82,7 @@ export const goalMaxRunsEndsGoalScenario: McE2eScenario = {
     terminal.submit('/goal status');
     await runtime.waitForScreenText(/Goal \((\w+)\): "Complete the max-runs goal e2e objective\."/i, terminal, 8_000);
     // The pause cause travels with the paused goal and is shown in /goal status.
-    await runtime.waitForScreenText(/— paused: Ran\b/i, terminal, 8_000);
+    await runtime.waitForScreenText(/— paused: Ran\s+out\s+of\s+evaluation\s+budget\s+\(1\s+runs\)/i, terminal, 8_000);
 
     const view = stripAnsi(terminal.serialize().view);
     const continueBoxes = view.match(/Goal\s+○\s+continue\s+\(1\/1\)/g)?.length ?? 0;
@@ -88,7 +101,16 @@ export const goalMaxRunsEndsGoalScenario: McE2eScenario = {
 
     // Restart on the same app data: the pause cause must come back from
     // storage, not from the previous process's in-memory goal.
-    const pauseLines = () => stripAnsi(terminal.serialize().view).match(/— paused: Ran\b/g)?.length ?? 0;
+    const stored = readGoal(dbPath);
+    if (stored.status !== 'paused' || stored.pausedReason !== PAUSED_REASON) {
+      throw new Error(
+        `Expected the stored goal paused with ${JSON.stringify(PAUSED_REASON)} before restart, found ${JSON.stringify(stored)}`,
+      );
+    }
+    // The status line wraps, so collapse whitespace before counting the cause.
+    const pauseLines = () =>
+      stripAnsi(terminal.serialize().view).replace(/\s+/g, ' ').split('— paused: Ran out of evaluation budget (1 runs)')
+        .length - 1;
     await restartApp?.();
     await runtime.waitForScreenText(/Project:/i, terminal, 30_000);
     await runtime.sleep(500);
@@ -132,7 +154,7 @@ export const goalMaxRunsEndsGoalScenario: McE2eScenario = {
           `Expected the persisted goal to be paused after reaching max runs, found ${JSON.stringify(record.status)}`,
         );
       }
-      if (!record.pausedReason?.startsWith('Ran')) {
+      if (record.pausedReason !== PAUSED_REASON) {
         throw new Error(`Expected the persisted pause cause, found ${JSON.stringify(record.pausedReason)}`);
       }
       if (record.runsUsed !== 1) {
