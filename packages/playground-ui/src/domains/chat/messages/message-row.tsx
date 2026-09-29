@@ -21,6 +21,8 @@ import {
   isUserSignalType,
   toReactiveSignalData,
 } from '@/domains/chat/messages/signal-data';
+import { parseSkillActivation } from '@/domains/chat/messages/skill-activation';
+import { SkillMessage } from '@/domains/chat/messages/skill-message';
 import { ToolCallEffects } from '@/domains/chat/tools/tool-call-effects';
 import { ToolCard } from '@/domains/chat/tools/tool-card';
 import type { DataMessagePart } from '@/domains/chat/tools/tool-card';
@@ -251,6 +253,22 @@ export const MessageRow = memo(function MessageRow({
   const displayRole = dbMessage.role;
 
   if (displayRole === 'user') {
+    const soleText = parts.length === 1 && parts[0]?.type === 'text' ? readField(parts[0], 'text') : undefined;
+    const skillActivation = typeof soleText === 'string' ? parseSkillActivation(soleText) : undefined;
+    if (skillActivation) {
+      return (
+        <Message
+          {...rootProps}
+          from="assistant"
+          className={className}
+          data-message-id={message.id}
+          footer={footer && <MessageActions visibility={readOnly ? 'hover' : 'always'}>{footer}</MessageActions>}
+        >
+          <SkillMessage activation={skillActivation} />
+        </Message>
+      );
+    }
+
     const isPending = isPendingMessage(message);
     const text = getTextFromParts(message);
     const canCopy = text.trim().length > 0;
