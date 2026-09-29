@@ -87,6 +87,49 @@ describe('renderRouteTypesFileContent', () => {
     expect(rendered).toMatch(/plain: \{\s*\[key: string\]: number;\s*\}/);
   });
 
+  it('keeps finite-key records optional when Zod lets callers omit keys', () => {
+    const rendered = renderFixtureRoutes([
+      {
+        method: 'POST',
+        path: '/partial-records',
+        responseType: 'json',
+        bodySchema: z.object({
+          partial: z.partialRecord(z.enum(['a', 'b']), z.number()),
+          optionalValues: z.record(z.enum(['a', 'b']), z.number().optional()),
+        }),
+        responseSchema: z.object({
+          optionalValues: z.record(z.enum(['a', 'b']), z.number().optional()),
+        }),
+        handler: async () => ({}),
+      },
+    ]);
+
+    expect(rendered).toMatch(/PostPartialRecords_Body = \{\s*partial: \{\s*\[K in "a" \| "b"\]\?: number;/);
+    expect(rendered).toMatch(
+      /optionalValues: \{\s*\[K in "a" \| "b"\]\?: number \| undefined;\s*\};\s*\};\s*export type PostPartialRecords_Response/,
+    );
+    expect(rendered).toMatch(
+      /PostPartialRecords_Response = \{\s*optionalValues: \{\s*\[K in "a" \| "b"\]: number \| undefined;/,
+    );
+  });
+
+  it('keeps repeated short literal-keyed records as mapped types', () => {
+    const shortRecord = z.record(z.enum(['a']), z.number());
+
+    const rendered = renderFixtureRoutes([
+      {
+        method: 'GET',
+        path: '/short-records',
+        responseType: 'json',
+        responseSchema: z.object({ first: shortRecord, second: shortRecord }),
+        handler: async () => ({}),
+      },
+    ]);
+
+    expect(rendered).toMatch(/first: \{\s*\[K in "a"\]: number;\s*\};\s*second: \{\s*\[K in "a"\]: number;/);
+    expect(rendered).not.toMatch(/\[key: "a"\]/);
+  });
+
   it('promotes repeated nested schemas during the rendering pass', () => {
     const nestedSchema = z.object({
       first: z.string(),

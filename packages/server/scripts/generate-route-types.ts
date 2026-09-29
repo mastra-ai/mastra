@@ -143,7 +143,10 @@ function renderLiteralKeyedRecord(schema: z4.$ZodType, tsLib: typeof ts, io: Zod
       io,
       overrideFunction: createSchemaOverrideFunction(io),
     }).node;
-  const exhaustive = def.keyType._zod.values !== undefined;
+  const exhaustive =
+    def.keyType._zod.values !== undefined &&
+    !def.partial &&
+    !(io === 'input' && def.valueType._zod.optin !== undefined);
 
   return tsLib.factory.createMappedTypeNode(
     undefined,
@@ -205,7 +208,7 @@ function createSchemaOverrideFunction(io: ZodIo) {
     }
 
     if (!sharedName) {
-      return undefined;
+      return renderLiteralKeyedRecord(schema, tsLib, io);
     }
 
     return tsLib.factory.createTypeReferenceNode(sharedName);
