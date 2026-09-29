@@ -529,32 +529,82 @@ function makePart(
 const PROVIDER_FILE_ID_PATTERN = /^file-[A-Za-z0-9_-]+$/;
 // Scheme followed by `//` — matches http(s), gs, s3, file, etc. but not data:/blob: URIs or Windows paths.
 const REUSABLE_URL_PATTERN = /^[a-z][a-z0-9+.-]*:\/\/\S+$/i;
+const DATA_URI_PATTERN = /^data:([^;,]*)/i;
+const INLINE_DATA_OMITTED = '(inline data omitted)';
+
+/**
+ * Reads the payload and media type of a stored image/file part. Stored parts use the v4
+ * (`data`/`mimeType`) or v5 (`url`/`mediaType`) shape; prompt-style image parts carry the
+ * payload in `image`. A data URI's header supplies the media type when none was stored.
+ */
+function readAttachmentPayload(part: Record<string, unknown>) {
+  const payload = part.image ?? part.data ?? part.url;
+  const payloadString = payload instanceof URL ? payload.href : typeof payload === 'string' ? payload.trim() : '';
+  const dataUriMatch = DATA_URI_PATTERN.exec(payloadString);
+  const mediaType = [part.mimeType, part.mediaType, dataUriMatch?.[1]].find(
+    (v): v is string => typeof v === 'string' && v.length > 0,
+  );
+  const hasBytes = payload instanceof Uint8Array || payload instanceof ArrayBuffer;
+  return { payload, payloadString, isDataUri: dataUriMatch !== null, hasBytes, mediaType };
+}
+
+/** Returns the reference text for a payload the agent can reuse, or undefined for inline data. */
+function describeReusableReference(payloadString: string): string | undefined {
+  if (PROVIDER_FILE_ID_PATTERN.test(payloadString)) return `file id: ${payloadString}`;
+  if (REUSABLE_URL_PATTERN.test(payloadString)) return `url: ${payloadString}`;
+  return undefined;
+}
 
 /**
  * Renders an image/file part with its media type and, when the stored payload is a reusable
  * reference (URL or provider file ID), that reference so the agent can reuse the attachment.
- * Stored parts use the v4 (`data`/`mimeType`) or v5 (`url`/`mediaType`) shape; prompt-style
- * image parts carry the payload in `image`. Inline payloads (data URIs, base64, bytes) are never rendered.
+ * Inline payloads (data URIs, base64, bytes) are never rendered.
  */
 function formatAttachmentPart(partType: 'image' | 'file', part: Record<string, unknown>): string {
   const filename = typeof part.filename === 'string' && part.filename ? `: ${part.filename}` : '';
-  const payload = part.image ?? part.data ?? part.url;
-  const payloadString = payload instanceof URL ? payload.href : typeof payload === 'string' ? payload.trim() : '';
-  let mediaType = [part.mimeType, part.mediaType].find((v): v is string => typeof v === 'string' && v.length > 0);
+  const { payloadString, isDataUri, hasBytes, mediaType } = readAttachmentPayload(part);
 
   let reference = '';
-  if (payloadString.startsWith('data:')) {
-    mediaType ??= /^data:([^;,]+)/.exec(payloadString)?.[1];
-    reference = '(inline data omitted)';
-  } else if (PROVIDER_FILE_ID_PATTERN.test(payloadString)) {
-    reference = `file id: ${payloadString}`;
-  } else if (REUSABLE_URL_PATTERN.test(payloadString)) {
-    reference = `url: ${payloadString}`;
-  } else if (payloadString || payload instanceof Uint8Array || payload instanceof ArrayBuffer) {
-    reference = '(inline data omitted)';
+  if (!isDataUri && payloadString) {
+    reference = describeReusableReference(payloadString) ?? INLINE_DATA_OMITTED;
+  } else if (isDataUri || hasBytes) {
+    reference = INLINE_DATA_OMITTED;
   }
 
   return [`[${partType === 'image' ? 'Image' : 'File'}${filename}]`, mediaType, reference].filter(Boolean).join(' ');
+}
+
+const INLINE_MEDIA_PART_TYPES = new Set(['media', 'image-data', 'file-data', 'image', 'file']);
+
+/**
+ * Replaces inline media payloads nested in a stored tool result (for example a `media` part in
+ * `modelOutput`, or a viewed attachment) with a placeholder, so rendering the result as text never
+ * dumps base64. URLs and provider file IDs are kept because the agent can reuse them.
+ */
+function omitInlineMediaPayloads(value: unknown, seen = new WeakMap<object, unknown>()): unknown {
+  if (typeof value !== 'object' || value === null) return value;
+  if (seen.has(value)) return seen.get(value);
+
+  if (Array.isArray(value)) {
+    const items: unknown[] = [];
+    seen.set(value, items);
+    for (const item of value) items.push(omitInlineMediaPayloads(item, seen));
+    return items;
+  }
+
+  const record = value as Record<string, unknown>;
+  const isMediaPart = typeof record.type === 'string' && INLINE_MEDIA_PART_TYPES.has(record.type);
+  const result: Record<string, unknown> = {};
+  seen.set(value, result);
+  for (const [key, entry] of Object.entries(record)) {
+    const isPayloadKey = key === 'data' || key === 'image';
+    if (isMediaPart && isPayloadKey && typeof entry === 'string' && !describeReusableReference(entry.trim())) {
+      result[key] = INLINE_DATA_OMITTED;
+    } else {
+      result[key] = omitInlineMediaPayloads(entry, seen);
+    }
+  }
+  return result;
 }
 
 /**
@@ -598,15 +648,9 @@ function isRecallAttachmentContent(value: unknown): value is RecallAttachmentCon
 function resolveViewableAttachment(
   part: Record<string, unknown>,
 ): { data: string; mimeType: string } | { note: string } {
-  const payload = part.image ?? part.data ?? part.url;
-  const payloadString = payload instanceof URL ? payload.href : typeof payload === 'string' ? payload.trim() : '';
-  let mediaType = [part.mimeType, part.mediaType].find((v): v is string => typeof v === 'string' && v.length > 0);
+  const { payload, payloadString, isDataUri, hasBytes, mediaType } = readAttachmentPayload(part);
 
-  if (payloadString.startsWith('data:')) {
-    mediaType ??= /^data:([^;,]+)/i.exec(payloadString)?.[1];
-  }
-
-  if (!payloadString && !(payload instanceof Uint8Array) && !(payload instanceof ArrayBuffer)) {
+  if (!payloadString && !hasBytes) {
     return { note: 'This attachment has no stored payload to show.' };
   }
 
@@ -626,7 +670,8 @@ function resolveViewableAttachment(
     return { note: 'This attachment is too large to show inline.' };
   }
 
-  const bytes = decodeImageBuffer(payloadString || payload);
+  // decodeImageBuffer only recognizes a lowercase `data:` scheme.
+  const bytes = decodeImageBuffer(isDataUri ? `data:${payloadString.slice(5)}` : payloadString || payload);
   if (!bytes) {
     return { note: "This attachment's payload is not inline data or an http(s) URL, so it can't be shown." };
   }
@@ -639,19 +684,25 @@ function resolveViewableAttachment(
 }
 
 /**
- * Presents a resolved attachment to the model as a native media part alongside its text
- * description. `media` covers both shapes: base64 stays inline, and an http(s) URL is turned
- * into an `image-url`/`file-url` part when the prompt is built.
+ * Presents a resolved attachment to the model as a native part alongside its text description.
+ * Base64 payloads become a `media` part. http(s) URLs become `image-url`/`file-url` parts, which is
+ * the shape core expects for remote media (`media.data` is base64-only); AI SDK v6+ providers
+ * fetch them, while v5 providers have no tool-result part for a remote URL.
  */
 function recallAttachmentToModelOutput(output: unknown): unknown {
   if (!isRecallAttachmentContent(output)) return undefined;
   const [textPart, attachment] = output.content;
+  const isImage = attachment.mimeType.toLowerCase().startsWith('image/');
+  const attachmentPart = isHttpUrlString(attachment.data)
+    ? {
+        type: isImage ? ('image-url' as const) : ('file-url' as const),
+        url: attachment.data,
+        mediaType: attachment.mimeType,
+      }
+    : { type: 'media' as const, data: attachment.data, mediaType: attachment.mimeType };
   return {
     type: 'content' as const,
-    value: [
-      { type: 'text' as const, text: textPart.text },
-      { type: 'media' as const, data: attachment.data, mediaType: attachment.mimeType },
-    ],
+    value: [{ type: 'text' as const, text: textPart.text }, attachmentPart],
   };
 }
 
@@ -697,7 +748,9 @@ function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): Formatt
               part as { providerMetadata?: Record<string, any> },
               inv.result,
             );
-            const resultStr = formatToolResultForObserver(resultValue, { maxTokens: HIGH_DETAIL_TOOL_RESULT_TOKENS });
+            const resultStr = formatToolResultForObserver(omitInlineMediaPayloads(resultValue), {
+              maxTokens: HIGH_DETAIL_TOOL_RESULT_TOKENS,
+            });
             const fullText = `[Tool Result: ${inv.toolName}]\n${resultStr}`;
             parts.push(makePart(msg, i, 'tool-result', fullText, detail, inv.toolName));
           }
@@ -725,7 +778,9 @@ function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): Formatt
         const toolName = (part as any).toolName;
         if (toolName) {
           const rawResult = (part as any).output ?? (part as any).result;
-          const resultStr = formatToolResultForObserver(rawResult, { maxTokens: HIGH_DETAIL_TOOL_RESULT_TOKENS });
+          const resultStr = formatToolResultForObserver(omitInlineMediaPayloads(rawResult), {
+            maxTokens: HIGH_DETAIL_TOOL_RESULT_TOKENS,
+          });
           const fullText = `[Tool Result: ${toolName}]\n${resultStr}`;
           parts.push(makePart(msg, i, 'tool-result', fullText, detail, toolName));
         }
@@ -1711,6 +1766,13 @@ export const recallTool = (
         throw new Error('Thread ID is required for recall');
       }
 
+      if (viewAttachment && (!cursor || partIndex === undefined || partIndex === null)) {
+        return {
+          messages:
+            'viewAttachment needs both cursor and partIndex so it knows which attachment to show. Call recall with cursor, partIndex, and viewAttachment: true.',
+        };
+      }
+
       // No cursor — read from the start of the thread
       if (!cursor) {
         const result = await recallThreadFromStart({
@@ -1756,13 +1818,6 @@ export const recallTool = (
           threadScope,
           retrievalScope,
         });
-      }
-
-      if (viewAttachment) {
-        return {
-          messages:
-            'viewAttachment needs both cursor and partIndex so it knows which attachment to show. Call recall with cursor, partIndex, and viewAttachment: true.',
-        };
       }
 
       return recallMessages({

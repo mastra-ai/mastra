@@ -1742,16 +1742,59 @@ describe('om-tools', () => {
                   mimeType: 'image/png',
                   filename: 'original.png',
                 } as any,
-                { type: 'file', url: 'https://example.invalid/deck.pptx', mediaType: 'application/vnd.ms-powerpoint' },
+                {
+                  type: 'file',
+                  url: 'https://example.invalid/deck.pptx',
+                  mediaType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                },
                 { type: 'file', data: `data:image/png;base64,${base64Png}`, filename: 'inline.png' } as any,
                 { type: 'file', data: base64Png, mimeType: 'image/png' } as any,
                 { type: 'file', data: 'file-abc123', mimeType: 'application/pdf', filename: 'uploaded.pdf' } as any,
                 { type: 'file', data: signedUrl, mimeType: 'application/pdf', filename: 'report.pdf' } as any,
                 { type: 'image', image: 'https://example.invalid/photo.png', mimeType: 'image/png' } as any,
                 { type: 'file', data: new URL('https://example.invalid/scan.png'), mimeType: 'image/png' } as any,
+                { type: 'file', data: `DATA:image/png;base64,${base64Png}` } as any,
               ],
             },
             createdAt: new Date('2024-01-01T10:00:00Z'),
+          },
+          {
+            id: 'msg-viewed-attachment',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    state: 'result',
+                    toolCallId: 'call-view',
+                    toolName: 'recall',
+                    args: { cursor: 'msg-attachments', partIndex: 2, viewAttachment: true },
+                    result: {
+                      content: [
+                        { type: 'text', text: '[File: inline.png] image/png (inline data omitted)' },
+                        { type: 'file', data: base64Png, mimeType: 'image/png' },
+                      ],
+                    },
+                  },
+                  providerMetadata: {
+                    mastra: {
+                      modelOutput: {
+                        type: 'content',
+                        value: [
+                          { type: 'text', text: '[File: inline.png] image/png (inline data omitted)' },
+                          { type: 'media', data: base64Png, mediaType: 'image/png' },
+                        ],
+                      },
+                    },
+                  },
+                } as any,
+              ],
+            },
+            createdAt: new Date('2024-01-01T10:01:00Z'),
           },
           {
             id: 'msg-attachments-text',
@@ -1783,7 +1826,9 @@ describe('om-tools', () => {
 
     it('reads v5-shaped file parts (url/mediaType)', async () => {
       const result = await fetchPart(1);
-      expect(result.text).toBe('[File] application/vnd.ms-powerpoint url: https://example.invalid/deck.pptx');
+      expect(result.text).toBe(
+        '[File] application/vnd.openxmlformats-officedocument.presentationml.presentation url: https://example.invalid/deck.pptx',
+      );
     });
 
     it('omits inline data but keeps the media type', async () => {
@@ -1907,7 +1952,7 @@ describe('om-tools', () => {
 
       const unsupportedType = await viewAttachment(1);
       expect(unsupportedType.messages).toBe(
-        "[File] application/vnd.ms-powerpoint url: https://example.invalid/deck.pptx — Attachments of type application/vnd.ms-powerpoint can't be shown inline. Use the attachment's url or file id if you need to reference it.",
+        "[File] application/vnd.openxmlformats-officedocument.presentationml.presentation url: https://example.invalid/deck.pptx — Attachments of type application/vnd.openxmlformats-officedocument.presentationml.presentation can't be shown inline. Use the attachment's url or file id if you need to reference it.",
       );
     });
 
@@ -1924,6 +1969,110 @@ describe('om-tools', () => {
       )) as any;
       expect(missingPartIndex.messages).toContain('viewAttachment needs both cursor and partIndex');
       expect(missingPartIndex.content).toBeUndefined();
+
+      const missingCursor = (await recall.execute?.({ mode: 'messages', partIndex: 2, viewAttachment: true }, {
+        memory,
+        agent: { threadId, resourceId },
+      } as any)) as any;
+      expect(missingCursor).toEqual({
+        messages:
+          'viewAttachment needs both cursor and partIndex so it knows which attachment to show. Call recall with cursor, partIndex, and viewAttachment: true.',
+      });
+    });
+
+    it('reads data URIs with an uppercase scheme', async () => {
+      const described = await fetchPart(8);
+      expect(described.text).toBe('[File] image/png (inline data omitted)');
+
+      await expect(viewAttachment(8)).resolves.toEqual({
+        content: [
+          { type: 'text', text: '[File] image/png (inline data omitted)' },
+          { type: 'file', data: base64Png, mimeType: 'image/png' },
+        ],
+      });
+    });
+
+    it('does not print inline media from a stored viewAttachment result', async () => {
+      const result = await recallPart({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-viewed-attachment',
+        partIndex: 0,
+      });
+
+      expect(result.text).toContain('[Tool Result: recall]');
+      expect(result.text).toContain('"data": "(inline data omitted)"');
+      expect(result.text).not.toContain(base64Png);
+    });
+
+    it('does not show an attachment from another thread in thread scope', async () => {
+      await memory.saveThread({
+        thread: {
+          id: 'thread-attachments-other',
+          resourceId,
+          title: 'Other thread',
+          createdAt: new Date('2024-01-01T09:00:00Z'),
+          updatedAt: new Date('2024-01-01T09:00:00Z'),
+        },
+      });
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-other-attachment',
+            threadId: 'thread-attachments-other',
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'file', data: `data:image/png;base64,${base64Png}`, filename: 'secret.png' } as any],
+            },
+            createdAt: new Date('2024-01-01T09:00:00Z'),
+          },
+        ],
+      });
+
+      const threadScopedRecall = memory.listTools({
+        observationalMemory: { model: 'test-model', scope: 'thread', retrieval: { scope: 'thread' } },
+      } as any).recall!;
+
+      await expect(
+        threadScopedRecall.execute?.(
+          { mode: 'messages', cursor: 'msg-other-attachment', partIndex: 0, viewAttachment: true },
+          { memory, agent: { threadId, resourceId } } as any,
+        ),
+      ).rejects.toThrow('Could not resolve cursor message: msg-other-attachment');
+    });
+
+    it('does not show an attachment from another resource', async () => {
+      await memory.saveThread({
+        thread: {
+          id: 'thread-foreign',
+          resourceId: 'resource-foreign',
+          title: 'Foreign thread',
+          createdAt: new Date('2024-01-01T09:00:00Z'),
+          updatedAt: new Date('2024-01-01T09:00:00Z'),
+        },
+      });
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-foreign-attachment',
+            threadId: 'thread-foreign',
+            resourceId: 'resource-foreign',
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'file', data: `data:image/png;base64,${base64Png}`, filename: 'foreign.png' } as any],
+            },
+            createdAt: new Date('2024-01-01T09:00:00Z'),
+          },
+        ],
+      });
+
+      await expect(viewAttachment(0, 'msg-foreign-attachment')).rejects.toThrow(
+        'Could not resolve cursor message: msg-foreign-attachment',
+      );
     });
 
     it('maps a viewed attachment to text plus a native media part for the model', async () => {
@@ -1935,6 +2084,22 @@ describe('om-tools', () => {
         value: [
           { type: 'text', text: '[File: inline.png] image/png (inline data omitted)' },
           { type: 'media', data: base64Png, mediaType: 'image/png' },
+        ],
+      });
+
+      // Remote attachments use the URL-shaped parts core expects; `media.data` is base64-only.
+      expect(recall.toModelOutput!(await viewAttachment(0))).toEqual({
+        type: 'content',
+        value: [
+          { type: 'text', text: '[File: original.png] image/png url: https://example.invalid/original.png' },
+          { type: 'image-url', url: 'https://example.invalid/original.png', mediaType: 'image/png' },
+        ],
+      });
+      expect(recall.toModelOutput!(await viewAttachment(5))).toEqual({
+        type: 'content',
+        value: [
+          { type: 'text', text: `[File: report.pdf] application/pdf url: ${signedUrl}` },
+          { type: 'file-url', url: signedUrl, mediaType: 'application/pdf' },
         ],
       });
 

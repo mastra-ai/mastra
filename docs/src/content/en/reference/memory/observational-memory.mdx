@@ -1308,7 +1308,7 @@ Mastra also injects scope-aware usage instructions into the agent's context. For
     isOptional: true,
     defaultValue: 'false',
     description:
-      'Show the attachment itself rather than only describing it. Requires `cursor` and `partIndex`, and applies when that part is an `image` or `file`. Inline data is sent as a native media part; an `http(s)` URL is passed through for the model provider to fetch. Media types outside `image/*` and `application/pdf`, provider file IDs, and oversized payloads come back as an explanation instead.',
+      'Show the attachment itself rather than only describing it. Requires `cursor` and `partIndex`, and applies when that part is an `image` or `file`. Inline data is sent as a native media part; an `http(s)` URL is sent as an `image-url` or `file-url` part for the model provider to fetch, which AI SDK v6 and later models support. Media types outside `image/*` and `application/pdf`, provider file IDs, and oversized payloads come back as an explanation instead.',
   },
   {
     name: 'before',
