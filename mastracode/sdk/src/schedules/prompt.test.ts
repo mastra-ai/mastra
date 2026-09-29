@@ -29,7 +29,7 @@ describe('formatScriptOutput', () => {
 describe('assembleSchedulePrompt', () => {
   it('returns a plain prompt unchanged', async () => {
     const opts = options();
-    await expect(assembleSchedulePrompt({ prompt: 'check deploy' }, opts)).resolves.toBe('check deploy');
+    await expect(assembleSchedulePrompt({ prompt: 'check deploy' }, opts)).resolves.toEqual({ prompt: 'check deploy' });
     expect(opts.runScript).not.toHaveBeenCalled();
   });
 
@@ -39,15 +39,15 @@ describe('assembleSchedulePrompt', () => {
       { file: { path: '/work/check.sh', displayPath: './check.sh', mode: 'exec' }, extraPrompt: 'Report it' },
       opts,
     );
-    expect(prompt).toBe('Output of ./check.sh (exit 0):\nOK\n\nReport it');
+    expect(prompt).toEqual({ prompt: 'Output of ./check.sh (exit 0):\nOK\n\nReport it', outcome: 'exit 0' });
     expect(opts.runScript).toHaveBeenCalledWith('/work/check.sh', { cwd, timeoutMs: SCRIPT_TIMEOUT_MS });
   });
 
   it('reads prompt files on every call', async () => {
     const readFile = vi.fn().mockResolvedValueOnce('first').mockResolvedValueOnce('second');
     const spec = { file: { path: '/work/p.md', displayPath: './p.md', mode: 'prompt' as const } };
-    await expect(assembleSchedulePrompt(spec, options({ readFile }))).resolves.toBe('first');
-    await expect(assembleSchedulePrompt(spec, options({ readFile }))).resolves.toBe('second');
+    await expect(assembleSchedulePrompt(spec, options({ readFile }))).resolves.toEqual({ prompt: 'first' });
+    await expect(assembleSchedulePrompt(spec, options({ readFile }))).resolves.toEqual({ prompt: 'second' });
   });
 
   it('turns failures into prompt text instead of skipping', async () => {
@@ -55,6 +55,14 @@ describe('assembleSchedulePrompt', () => {
       { file: { path: '/work/gone.sh', displayPath: './gone.sh', mode: 'exec' }, extraPrompt: 'Report it' },
       options({ runScript: vi.fn(async () => Promise.reject(new Error('ENOENT'))) }),
     );
-    expect(prompt).toBe('Schedule ./gone.sh failed: ENOENT\n\nReport it');
+    expect(prompt).toEqual({ prompt: 'Schedule ./gone.sh failed: ENOENT\n\nReport it', outcome: 'failed' });
+  });
+
+  it('reports killed scripts', async () => {
+    const result = await assembleSchedulePrompt(
+      { file: { path: '/work/slow.sh', displayPath: './slow.sh', mode: 'exec' } },
+      options({ runScript: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: null })) }),
+    );
+    expect(result.outcome).toBe('killed');
   });
 });

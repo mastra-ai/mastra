@@ -379,6 +379,8 @@ export interface SignalSettings {
   experimentalGithubSignals: boolean;
   /** Experimental: enable cross-agent communication (thread ownership advertisement, peer discovery, and agent connection tools). */
   experimentalCrossAgentSignals: boolean;
+  /** Experimental: give the agent tools to create and manage `/schedules` schedules on its thread. */
+  experimentalScheduleTools: boolean;
   /** Poll interval for GitHub PR subscriptions. */
   githubPollIntervalMs: number;
 }
@@ -473,6 +475,7 @@ const DEFAULTS: GlobalSettings = {
     unixSocketPubSub: false,
     experimentalGithubSignals: false,
     experimentalCrossAgentSignals: false,
+    experimentalScheduleTools: false,
     githubPollIntervalMs: GITHUB_POLL_INTERVAL_DEFAULT_MS,
   },
   mcp: { claudeCodeGlobal: false, codexGlobal: false },
@@ -497,6 +500,7 @@ function signalSettingsEqual(left: SignalSettings, right: SignalSettings): boole
     left.unixSocketPubSub === right.unixSocketPubSub &&
     left.experimentalGithubSignals === right.experimentalGithubSignals &&
     left.experimentalCrossAgentSignals === right.experimentalCrossAgentSignals &&
+    left.experimentalScheduleTools === right.experimentalScheduleTools &&
     left.githubPollIntervalMs === right.githubPollIntervalMs
   );
 }
@@ -652,6 +656,10 @@ function parseSignalSettings(rawSignals: unknown): SignalSettings {
       typeof raw.experimentalCrossAgentSignals === 'boolean'
         ? raw.experimentalCrossAgentSignals
         : DEFAULTS.signals.experimentalCrossAgentSignals,
+    experimentalScheduleTools:
+      typeof raw.experimentalScheduleTools === 'boolean'
+        ? raw.experimentalScheduleTools
+        : DEFAULTS.signals.experimentalScheduleTools,
     githubPollIntervalMs: parseGithubPollIntervalMs(raw.githubPollIntervalMs),
   };
 }

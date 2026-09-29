@@ -117,16 +117,43 @@ export function validateInterval({ ms }: { ms: number }): IntervalCheck {
   };
 }
 
+/** Hour-and-longer cadences: which local wall-clock slot a minute belongs to. */
+function hourSlotKey(date: Date, stepHours: number): number {
+  return (
+    ((date.getFullYear() * 12 + date.getMonth()) * 31 + date.getDate()) * 24 +
+    Math.floor(date.getHours() / stepHours) * stepHours
+  );
+}
+
 /**
- * The first boundary strictly after `after`, counting `intervalMs` steps from
- * local midnight. For intervals that divide the day this matches the wall
- * clock (5m → :00, :05, ...; 1d → midnight). Computing from `after` rather
- * than from the previous fire means a late timer (sleep, busy event loop)
- * skips missed boundaries instead of bursting to catch up.
+ * The first boundary strictly after `after`, on the local wall clock
+ * (5m → :00, :05, ...; 2h → 00:00, 02:00, ...; 1d → midnight). `intervalMs`
+ * must pass {@link validateInterval}.
+ *
+ * Around daylight-saving changes this behaves like cron:
+ * - Sub-hour cadences follow the minute hand, so they keep firing every N real
+ *   minutes through both the skipped and the repeated hour.
+ * - Hourly and daily cadences fire once per wall-clock slot. A boundary that
+ *   falls in a skipped hour fires at the first minute after the jump (02:00 →
+ *   03:00), and a repeated hour does not fire a second time.
+ *
+ * Computing from `after` rather than from the previous fire means a late
+ * timer (sleep, busy event loop) skips missed boundaries instead of bursting
+ * to catch up.
  */
 export function nextFireTime(intervalMs: number, after: number): number {
-  const midnight = new Date(after);
-  midnight.setHours(0, 0, 0, 0);
-  const start = midnight.getTime();
-  return start + (Math.floor((after - start) / intervalMs) + 1) * intervalMs;
+  const cursor = new Date(after);
+  cursor.setSeconds(0, 0);
+  const stepMinutes = intervalMs / MINUTE_MS;
+  // Walk minute by minute: at most an hour for sub-hour cadences, ~a day otherwise.
+  if (stepMinutes < 60) {
+    do cursor.setTime(cursor.getTime() + MINUTE_MS);
+    while (cursor.getMinutes() % stepMinutes !== 0);
+    return cursor.getTime();
+  }
+  const stepHours = stepMinutes / 60;
+  const startSlot = hourSlotKey(new Date(after), stepHours);
+  do cursor.setTime(cursor.getTime() + MINUTE_MS);
+  while (hourSlotKey(cursor, stepHours) <= startSlot);
+  return cursor.getTime();
 }

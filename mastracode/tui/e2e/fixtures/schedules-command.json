@@ -19,6 +19,31 @@
       "response": {
         "content": "Schedule tick handled."
       }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Start a slow scheduled run."
+      },
+      "chunkSize": 4,
+      "streamingProfile": {
+        "ttft": 500,
+        "tps": 4
+      },
+      "response": {
+        "content": "Slow run started and finished."
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "BUSY-SCHEDULE-PING"
+      },
+      "response": {
+        "content": "Busy schedule handled."
+      }
     }
   ]
 }

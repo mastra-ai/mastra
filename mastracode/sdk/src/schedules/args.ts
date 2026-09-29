@@ -48,6 +48,22 @@ function expandHome(token: string, homeDir: string | undefined): string {
   return token;
 }
 
+/**
+ * Resolve a file token against `cwd` (and `~/`). Returns undefined when the
+ * file does not exist. Executable files and script extensions run; anything
+ * else is read as prompt text at fire time.
+ */
+export function resolveScheduleFile(
+  token: string,
+  options: ScheduleCreateArgsOptions,
+): ScheduleCreateSpec['file'] | undefined {
+  const absPath = path.resolve(options.cwd, expandHome(token, options.homeDir));
+  if (!options.fileExists(absPath)) return undefined;
+  const ext = path.extname(absPath).toLowerCase();
+  const mode: ScheduleFileMode = options.isExecutable(absPath) || EXEC_EXTENSIONS.has(ext) ? 'exec' : 'prompt';
+  return { path: absPath, displayPath: token, mode };
+}
+
 export function parseScheduleCreateArgs(
   args: string[],
   options: ScheduleCreateArgsOptions,
@@ -83,11 +99,9 @@ export function parseScheduleCreateArgs(
 
   const firstToken = remaining[0]!;
   if (looksLikePath(firstToken)) {
-    const absPath = path.resolve(options.cwd, expandHome(firstToken, options.homeDir));
-    if (options.fileExists(absPath)) {
-      const ext = path.extname(absPath).toLowerCase();
-      const mode: ScheduleFileMode = options.isExecutable(absPath) || EXEC_EXTENSIONS.has(ext) ? 'exec' : 'prompt';
-      spec.file = { path: absPath, displayPath: firstToken, mode };
+    const file = resolveScheduleFile(firstToken, options);
+    if (file) {
+      spec.file = file;
       const extra = stripWrappingQuotes(remaining.slice(1).join(' ').trim());
       if (extra) spec.extraPrompt = extra;
       return spec;

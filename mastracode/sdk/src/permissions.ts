@@ -67,6 +67,13 @@ const TOOL_CATEGORY_MAP: Record<string, ToolCategory> = {
   'delete-workflow': 'edit',
   'run-workflow': 'execute',
 
+  // Schedule tools (experimental, opt-in). Creating or firing a schedule can
+  // run a script on every fire, so both need the same approval as a command.
+  schedule_list: 'read',
+  schedule_update: 'edit',
+  schedule_create: 'execute',
+  schedule_run: 'execute',
+
   // Interactive / planning tools — always allowed (no category needed)
   // ask_user, task_write, task_update, task_complete, task_check, submit_plan, request_access
 };

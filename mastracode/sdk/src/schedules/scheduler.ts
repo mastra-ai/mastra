@@ -7,7 +7,8 @@
  */
 import { randomUUID } from 'node:crypto';
 import type { ScheduleCreateSpec } from './args.js';
-import { nextFireTime } from './interval.js';
+import { nextFireTime, validateInterval } from './interval.js';
+import type { AssembledPrompt } from './prompt.js';
 
 /** `source` attribute on fired signals; the TUI labels these turns `schedule`. */
 export const SCHEDULE_SIGNAL_SOURCE = 'schedule';
@@ -20,6 +21,8 @@ export type ThreadSchedule = {
   prompt?: string;
   file?: ScheduleCreateSpec['file'];
   extraPrompt?: string;
+  /** Who created it: the user via `/schedules`, or the agent via its schedule tools. */
+  createdBy: 'user' | 'agent';
   status: 'active' | 'paused';
   /** Next boundary this schedule fires at; only meaningful while active. */
   nextFireAt: number;
@@ -28,13 +31,18 @@ export type ThreadSchedule = {
 
 export type ThreadSchedulerOptions = {
   /** Build the prompt for one fire (runs scripts / reads files). */
-  assemblePrompt: (schedule: ThreadSchedule) => Promise<string>;
+  assemblePrompt: (schedule: ThreadSchedule) => Promise<AssembledPrompt>;
   /** Hand the prompt to the agent for the schedule's thread. */
-  deliver: (schedule: ThreadSchedule, prompt: string) => Promise<void>;
+  deliver: (schedule: ThreadSchedule, assembled: AssembledPrompt) => Promise<void>;
   /** A fire failed before reaching the agent. */
   onError?: (error: unknown, schedule: ThreadSchedule) => void;
   now?: () => number;
 };
+
+/** How late a timer may run before its fire counts as missed (sleep, stalled event loop). */
+export const LATE_FIRE_GRACE_MS = 60_000;
+
+export type ScheduleRunResult = 'fired' | 'busy' | 'not-found';
 
 type Entry = { schedule: ThreadSchedule; timer?: ReturnType<typeof setTimeout>; inFlight: number };
 
@@ -50,10 +58,17 @@ export class ThreadScheduler {
     return this.#options.now?.() ?? Date.now();
   }
 
+  /** Throws when the interval is not a supported wall-clock cadence (see `validateInterval`). */
   create(
-    spec: Pick<ScheduleCreateSpec, 'interval' | 'prompt' | 'file' | 'extraPrompt'>,
+    spec: Pick<ScheduleCreateSpec, 'interval' | 'prompt' | 'file' | 'extraPrompt'> & { createdBy?: 'user' | 'agent' },
     target: { threadId: string; resourceId: string },
   ): ThreadSchedule {
+    const check = validateInterval(spec.interval);
+    if ('error' in check) {
+      throw new Error(
+        `Invalid schedule interval: ${check.error}${check.suggestion ? ` Try ${check.suggestion}.` : ''}`,
+      );
+    }
     const now = this.#now();
     const schedule: ThreadSchedule = {
       id: randomUUID(),
@@ -62,6 +77,7 @@ export class ThreadScheduler {
       interval: spec.interval,
       ...(spec.file ? { file: spec.file } : { prompt: spec.prompt ?? '' }),
       ...(spec.extraPrompt ? { extraPrompt: spec.extraPrompt } : {}),
+      createdBy: spec.createdBy ?? 'user',
       status: 'active',
       nextFireAt: nextFireTime(spec.interval.ms, now),
       createdAt: now,
@@ -106,12 +122,22 @@ export class ThreadScheduler {
     return true;
   }
 
-  /** Fire once now, outside the cadence. Resolves once the agent accepted the prompt. */
-  async run(id: string): Promise<boolean> {
+  /** Whether a fire of this schedule (timer or manual) is still assembling or delivering. */
+  isFiring(id: string): boolean {
+    return (this.#entries.get(id)?.inFlight ?? 0) > 0;
+  }
+
+  /**
+   * Fire once now, outside the cadence. Returns `busy` without firing when a
+   * fire of this schedule is still running (a slow script, say), so the same
+   * script never runs twice at once. Resolves once the fire finished.
+   */
+  async run(id: string): Promise<ScheduleRunResult> {
     const entry = this.#entries.get(id);
-    if (!entry) return false;
+    if (!entry) return 'not-found';
+    if (entry.inFlight > 0) return 'busy';
     await this.#fire(entry);
-    return true;
+    return 'fired';
   }
 
   /** Drop every schedule and timer (process shutdown). */
@@ -128,8 +154,11 @@ export class ThreadScheduler {
         if (this.#entries.get(entry.schedule.id) !== entry || entry.schedule.status !== 'active') return;
         // Timers can fire a hair early; step from the later of now and the
         // intended boundary so the same boundary is never fired twice.
-        entry.schedule.nextFireAt = nextFireTime(entry.schedule.interval.ms, Math.max(this.#now(), scheduledAt));
+        const now = this.#now();
+        entry.schedule.nextFireAt = nextFireTime(entry.schedule.interval.ms, Math.max(now, scheduledAt));
         this.#arm(entry);
+        // A timer that ran long after its boundary (machine asleep) is a missed fire, not a late one.
+        if (now - scheduledAt > LATE_FIRE_GRACE_MS) return;
         // A slow script can outlast a short interval; don't stack fires.
         if (entry.inFlight === 0) void this.#fire(entry);
       },
@@ -142,9 +171,9 @@ export class ThreadScheduler {
     const schedule = { ...entry.schedule };
     entry.inFlight++;
     try {
-      const prompt = await this.#options.assemblePrompt(schedule);
+      const assembled = await this.#options.assemblePrompt(schedule);
       if (this.#entries.get(schedule.id) !== entry) return; // deleted meanwhile
-      await this.#options.deliver(schedule, prompt);
+      await this.#options.deliver(schedule, assembled);
     } catch (error) {
       this.#options.onError?.(error, schedule);
     } finally {
@@ -163,4 +192,22 @@ export function describeScheduleSource(schedule: Pick<ThreadSchedule, 'prompt' |
   const verb = schedule.file.mode === 'exec' ? 'run' : 'read';
   const extra = schedule.extraPrompt ? ` + "${schedule.extraPrompt}"` : '';
   return `${verb} ${schedule.file.displayPath}${extra}`;
+}
+
+/**
+ * Attributes on a fired schedule signal. They carry everything the transcript
+ * header needs, so reloaded history renders without the process-local entry.
+ */
+export function scheduleSignalAttributes(
+  schedule: ThreadSchedule,
+  assembled: Pick<AssembledPrompt, 'outcome'> = {},
+): Record<string, string> {
+  return {
+    source: SCHEDULE_SIGNAL_SOURCE,
+    scheduleId: schedule.id,
+    scheduleCadence: schedule.interval.label,
+    scheduleSource: describeScheduleSource(schedule),
+    scheduleCreatedBy: schedule.createdBy,
+    ...(assembled.outcome ? { scheduleOutcome: assembled.outcome } : {}),
+  };
 }

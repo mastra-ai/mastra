@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
+import { statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { hostname } from 'node:os';
+import { homedir, hostname } from 'node:os';
 import path from 'node:path';
 
 import type { Agent } from '@mastra/core/agent';
@@ -113,8 +114,10 @@ import { setAuthStorage as setXAIAuthStorage } from './providers/xai.js';
 
 import {
   assembleSchedulePrompt,
+  createScheduleTools,
+  isExecutableFile,
   runScript,
-  SCHEDULE_SIGNAL_SOURCE,
+  scheduleSignalAttributes,
   shortScheduleId,
   ThreadScheduler,
 } from './schedules/index.js';
@@ -371,6 +374,13 @@ export interface MastraCodeConfig {
    */
   crossAgentSignals?: boolean;
   /**
+   * Enable the experimental agent schedule tools (`schedule_create`,
+   * `schedule_list`, `schedule_update`, `schedule_run`), which manage the same
+   * process-local schedules as `/schedules`. Defaults to the
+   * `signals.experimentalScheduleTools` global setting (off).
+   */
+  scheduleTools?: boolean;
+  /**
    * Prepare the request context of a wake: a run on a thread with no inbound
    * request, such as a notification or cross-agent signal delivered to an idle
    * thread. Hosts that resolve credentials per tenant use this to attach the
@@ -583,6 +593,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // never the PubSub transport itself.
   const useCrossAgentSignals =
     config?.crossAgentSignals ?? globalSettings.signals?.experimentalCrossAgentSignals ?? false;
+  const useScheduleTools = config?.scheduleTools ?? globalSettings.signals?.experimentalScheduleTools ?? false;
 
   // Storage. An injected instance is used as-is — no connection test, no
   // LibSQL fallback: if the injected store fails, that's a hard error.
@@ -909,27 +920,49 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         runScript,
         readFile: absPath => readFile(absPath, 'utf8'),
       }),
-    deliver: async (schedule, prompt) => {
+    deliver: async (schedule, assembled) => {
       const target = { resourceId: schedule.resourceId, threadId: schedule.threadId };
       const streamOptions = await getWakeStreamOptions(target);
-      await codeAgent.sendSignal(
+      // A busy thread gets the prompt as the running agent's next input
+      // (`deliver`); `persist` would only write it to history without a run.
+      const accepted = await codeAgent.sendSignal(
         {
           type: 'user',
           tagName: 'user',
-          contents: prompt,
-          attributes: { source: SCHEDULE_SIGNAL_SOURCE, scheduleId: schedule.id },
+          contents: assembled.prompt,
+          attributes: scheduleSignalAttributes(schedule, assembled),
         },
         {
           ...target,
-          ifActive: { behavior: 'persist' },
+          ifActive: { behavior: 'deliver' },
           ifIdle: { behavior: 'wake', ...(streamOptions ? { streamOptions } : {}) },
         },
       ).accepted;
+      if (accepted.action === 'blocked' || accepted.action === 'discard') {
+        throw new Error(`the agent did not accept the prompt (${accepted.action})`);
+      }
     },
     onError: (error, schedule) => {
       console.warn(`Schedule ${shortScheduleId(schedule.id)} failed to fire:`, error);
     },
   });
+  const scheduleTools = useScheduleTools
+    ? createScheduleTools({
+        scheduler: threadScheduler,
+        fileOptions: () => ({
+          cwd: project.rootPath,
+          homeDir: homedir(),
+          fileExists: absPath => {
+            try {
+              return statSync(absPath).isFile();
+            } catch {
+              return false;
+            }
+          },
+          isExecutable: isExecutableFile,
+        }),
+      })
+    : undefined;
 
   const githubSignals: GithubSignals | undefined =
     globalSettings.signals?.experimentalGithubSignals && !config?.disableGithubSignals
@@ -1083,6 +1116,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       storage,
       pluginTools,
       backgroundToolsEnabled,
+      scheduleTools,
     ),
     hooks: createToolHooks(hookManager, config?.postToolObserver),
     scorers: {

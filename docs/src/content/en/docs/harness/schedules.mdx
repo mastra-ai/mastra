@@ -229,15 +229,19 @@ Mastra Code offers the `/schedules` command, which attaches a recurring prompt t
 - A path that resolves to an existing file is read at fire time. Files with an executable bit or a `.sh`, `.js`, `.mjs`, `.cjs`, `.ts`, or `.py` extension run as a script from the project root with a 60-second timeout, and their stdout, stderr, and exit code become the prompt. Any other file is sent as prompt text. The extra prompt is appended in both cases and is never passed to the script.
 - A path-looking token that doesn't exist is used as prompt text with a warning.
 
-Each fire arrives on the thread as a `user`-type signal labelled `schedule` in the transcript. If the thread is busy the prompt is queued as the next turn rather than interrupting the current one. If it's idle, the thread wakes and runs. Schedules fire on any thread in the process, not only the one focused in the terminal.
+Each fire arrives on the thread as a `user`-type signal and shows in the transcript as a `schedule` entry with the schedule's id, cadence, source, and script exit status. If the thread is busy, the running agent receives the prompt as its next input, the same way a message you type mid-run does. If the thread is idle, it wakes and runs. Schedules fire on any thread in the process, not only the one focused in the terminal. After `/new`, `create` binds the schedule to the new thread.
 
-Bare `/schedules` lists the current thread's schedules with an 8-character id, cadence, and next fire time. `delete`, `pause`, `resume`, and `run` accept an id prefix and default to the only schedule on the thread when there's one. `run` fires the schedule once, off-cadence. A thread holds at most 10 schedules.
+Bare `/schedules` lists the current thread's schedules with an 8-character id, cadence, and next fire time. `delete`, `pause`, `resume`, and `run` accept an id prefix, and you can leave the id out when the thread has exactly one schedule. `run` fires the schedule once, off-cadence, and is skipped while a fire of the same schedule is still running.
 
 Things to know:
 
 - **Session scoped.** Schedules exist only in the Mastra Code process that created them and stop when it exits. Other Mastra Code processes sharing the same database never see or fire them.
-- **Clock boundaries.** `5m` fires at :00, :05, :10 and so on, not five minutes after creation, and `1d` fires at local midnight. A fire missed while the machine slept doesn't replay, and the schedule resumes at the next boundary.
+- **Clock boundaries.** `5m` fires at :00, :05, :10 and so on, not five minutes after creation, and `1d` fires at local midnight. Hour and day cadences follow wall-clock time across daylight saving changes, like cron. A fire missed while the machine slept, or one whose timer runs more than a minute late, is skipped, and the schedule resumes at the next boundary.
 - **Overlapping fires are skipped.** If a script is still running when the next boundary arrives, that fire doesn't run.
+
+### Agent schedule tools
+
+Turning on **Experimental schedule tools** in `/settings` (restart required) gives the agent four tools that manage the same schedules: `schedule_create`, `schedule_list`, `schedule_update` (pause, resume, or delete), and `schedule_run`. The tools only see and change schedules on the thread of the run that calls them. Because a schedule can run a script on every fire, `schedule_create` and `schedule_run` need the same approval as running a shell command unless YOLO mode is on. Schedules the agent creates are marked `created by agent` in the transcript.
 
 ## Related
 

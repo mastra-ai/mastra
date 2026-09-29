@@ -1,10 +1,9 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import { describeScheduleSource, parseScheduleCreateArgs, shortScheduleId } from '@mastra/code-sdk/schedules';
-import type { ThreadSchedule, ThreadScheduler } from '@mastra/code-sdk/schedules';
+import type { ScheduleCreateSpec, ThreadSchedule, ThreadScheduler } from '@mastra/code-sdk/schedules';
 import type { SlashCommandContext } from './types.js';
 
-const MAX_SCHEDULES_PER_THREAD = 10;
 const USAGE = 'Usage: /schedules [create <interval> <prompt|file [extra prompt]> | delete|pause|resume|run [id]]';
 
 async function resolveThread(ctx: SlashCommandContext): Promise<{ threadId?: string; resourceId?: string }> {
@@ -53,17 +52,39 @@ export async function handleSchedulesCommand(ctx: SlashCommandContext, args: str
     return;
   }
 
-  const { threadId, resourceId } = await resolveThread(ctx);
-  if (!threadId || !resourceId) {
-    ctx.showError('Schedules need an active thread. Send a message first, then try again.');
+  const [subcommand, ...rest] = args;
+  const sub = subcommand?.toLowerCase();
+  if (sub && !['create', 'delete', 'pause', 'resume', 'run'].includes(sub)) {
+    ctx.showError(`Unknown subcommand "${subcommand}". ${USAGE}`);
     return;
   }
 
-  const [subcommand, ...rest] = args;
-  const sub = subcommand?.toLowerCase();
+  if (sub === 'create') {
+    const parsed = parseCreateArgs(ctx, rest);
+    if ('error' in parsed) {
+      ctx.showError(`${parsed.error}\n${USAGE}`);
+      return;
+    }
+    // After /new the session still reports the previous thread's id until the
+    // new thread is created, so create it now rather than binding the schedule
+    // to the thread the user just left.
+    if (ctx.state.pendingNewThread || !ctx.state.session.thread.getId()) {
+      await ctx.state.session.thread.create();
+      ctx.state.pendingNewThread = false;
+    }
+    const target = await resolveThread(ctx);
+    if (!target.threadId || !target.resourceId) {
+      ctx.showError('Schedules need an active thread. Send a message first, then try again.');
+      return;
+    }
+    createSchedule(ctx, scheduler, parsed, { threadId: target.threadId, resourceId: target.resourceId });
+    return;
+  }
 
+  // A pending /new thread has no schedules yet; don't show the old thread's.
+  const { threadId } = ctx.state.pendingNewThread ? {} : await resolveThread(ctx);
   if (!sub) {
-    const schedules = scheduler.list({ threadId });
+    const schedules = threadId ? scheduler.list({ threadId }) : [];
     ctx.showInfo(
       schedules.length === 0
         ? 'No schedules on this thread. Use /schedules create <interval> <prompt|file>.'
@@ -71,27 +92,11 @@ export async function handleSchedulesCommand(ctx: SlashCommandContext, args: str
     );
     return;
   }
-
-  if (sub === 'create') {
-    createSchedule(ctx, scheduler, rest, { threadId, resourceId });
-    return;
-  }
-
-  if (sub === 'delete' || sub === 'pause' || sub === 'resume' || sub === 'run') {
-    manageSchedule(ctx, scheduler, sub, rest[0], threadId);
-    return;
-  }
-
-  ctx.showError(`Unknown subcommand "${subcommand}". ${USAGE}`);
+  manageSchedule(ctx, scheduler, sub as 'delete' | 'pause' | 'resume' | 'run', rest[0], threadId);
 }
 
-function createSchedule(
-  ctx: SlashCommandContext,
-  scheduler: ThreadScheduler,
-  args: string[],
-  target: { threadId: string; resourceId: string },
-): void {
-  const parsed = parseScheduleCreateArgs(args, {
+function parseCreateArgs(ctx: SlashCommandContext, args: string[]): ReturnType<typeof parseScheduleCreateArgs> {
+  return parseScheduleCreateArgs(args, {
     cwd: ctx.state.projectInfo.rootPath,
     homeDir: os.homedir(),
     fileExists: absPath => {
@@ -110,18 +115,14 @@ function createSchedule(
       }
     },
   });
-  if ('error' in parsed) {
-    ctx.showError(`${parsed.error}\n${USAGE}`);
-    return;
-  }
+}
 
-  if (scheduler.list({ threadId: target.threadId }).length >= MAX_SCHEDULES_PER_THREAD) {
-    ctx.showError(
-      `This thread already has ${MAX_SCHEDULES_PER_THREAD} schedules. Delete one with /schedules delete <id> first.`,
-    );
-    return;
-  }
-
+function createSchedule(
+  ctx: SlashCommandContext,
+  scheduler: ThreadScheduler,
+  parsed: ScheduleCreateSpec,
+  target: { threadId: string; resourceId: string },
+): void {
   const schedule = scheduler.create(parsed, target);
   const lines = [
     `Created schedule ${shortScheduleId(schedule.id)}: every ${schedule.interval.label}, next in ${formatNextFire(schedule.nextFireAt)} — ${describeScheduleSource(schedule)}`,
@@ -136,9 +137,9 @@ function manageSchedule(
   scheduler: ThreadScheduler,
   action: 'delete' | 'pause' | 'resume' | 'run',
   idPrefix: string | undefined,
-  threadId: string,
+  threadId: string | undefined,
 ): void {
-  const schedules = scheduler.list({ threadId });
+  const schedules = threadId ? scheduler.list({ threadId }) : [];
   if (schedules.length === 0) {
     ctx.showError('No schedules on this thread.');
     return;
@@ -155,7 +156,7 @@ function manageSchedule(
       ctx.showError(`"${idPrefix}" matches ${targets.length} schedules; give more of the id.\n${formatList(targets)}`);
       return;
     }
-  } else if (schedules.length === 1 || action === 'delete') {
+  } else if (schedules.length === 1) {
     targets = schedules;
   } else {
     ctx.showError(
@@ -164,14 +165,21 @@ function manageSchedule(
     return;
   }
 
-  for (const schedule of targets) {
+  const schedule = targets[0]!;
+  const id = shortScheduleId(schedule.id);
+  if (action === 'run') {
+    if (scheduler.isFiring(schedule.id)) {
+      ctx.showInfo(`Schedule ${id} is already firing; skipped so its prompt isn't sent twice.`);
+      return;
+    }
     // `run` resolves after the prompt is assembled and handed to the agent
     // (scripts can take up to a minute); fire failures are reported by the
     // scheduler, so don't hold the command open for it.
-    if (action === 'run') void scheduler.run(schedule.id);
-    else scheduler[action](schedule.id);
+    void scheduler.run(schedule.id);
+    ctx.showInfo(`Triggered schedule ${id}`);
+    return;
   }
-  const verbs = { delete: 'Deleted', pause: 'Paused', resume: 'Resumed', run: 'Triggered' } as const;
-  const ids = targets.map(schedule => shortScheduleId(schedule.id)).join(', ');
-  ctx.showInfo(`${verbs[action]} schedule${targets.length > 1 ? 's' : ''} ${ids}`);
+  scheduler[action](schedule.id);
+  const verbs = { delete: 'Deleted', pause: 'Paused', resume: 'Resumed' } as const;
+  ctx.showInfo(`${verbs[action]} schedule ${id}`);
 }

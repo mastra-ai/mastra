@@ -30,6 +30,7 @@ export interface SettingsConfig {
   libsqlUrl: string;
   experimentalGithubSignals: boolean;
   experimentalCrossAgentSignals: boolean;
+  experimentalScheduleTools: boolean;
   backgroundToolsEnabled: boolean;
   webSearchProvider: WebSearchProviderSetting;
   tavilyKeyAvailable: boolean;
@@ -46,6 +47,7 @@ export interface SettingsCallbacks {
   onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => void;
   onExperimentalGithubSignalsChange: (enabled: boolean) => boolean | void | Promise<boolean | void>;
   onExperimentalCrossAgentSignalsChange: (enabled: boolean) => boolean | void | Promise<boolean | void>;
+  onExperimentalScheduleToolsChange: (enabled: boolean) => void;
   onBackgroundToolsChange: (enabled: boolean) => void;
   onWebSearchProviderChange: (provider: WebSearchProviderSetting) => void;
   onApiKeys?: () => void;
@@ -503,6 +505,35 @@ export class SettingsComponent extends Box implements Focusable {
               const accepted = await callbacks.onExperimentalCrossAgentSignalsChange(nextValue);
               config.experimentalCrossAgentSignals = accepted === false ? !nextValue : nextValue;
               done(config.experimentalCrossAgentSignals ? 'On' : 'Off');
+            },
+            () => done(),
+          ),
+      },
+      {
+        id: 'experimentalScheduleTools',
+        label: 'Experimental schedule tools',
+        description: 'Let the agent create and manage /schedules on its thread (restart required).',
+        currentValue: config.experimentalScheduleTools ? 'On' : 'Off',
+        submenu: (_currentValue, done) =>
+          new SelectSubmenu(
+            [
+              {
+                value: 'on',
+                label: '  On',
+                description: 'Give the agent schedule_create, schedule_list, schedule_update, and schedule_run',
+              },
+              {
+                value: 'off',
+                label: '  Off',
+                description: 'Only you can manage schedules, with /schedules',
+              },
+            ],
+            config.experimentalScheduleTools ? 'on' : 'off',
+            value => {
+              const enabled = value === 'on';
+              callbacks.onExperimentalScheduleToolsChange(enabled);
+              config.experimentalScheduleTools = enabled;
+              done(enabled ? 'On' : 'Off');
             },
             () => done(),
           ),

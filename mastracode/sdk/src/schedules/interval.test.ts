@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { nextFireTime, parseInterval, validateInterval } from './interval.js';
 
 describe('parseInterval', () => {
@@ -81,5 +81,55 @@ describe('nextFireTime', () => {
   it('skips missed boundaries instead of catching up', () => {
     // Woken 17 minutes late: fire at the next boundary after now, not the missed ones.
     expect(nextFireTime(5 * 60_000, at(10, 27, 1))).toBe(at(10, 30));
+  });
+});
+
+describe('nextFireTime across daylight-saving changes', () => {
+  const originalTz = process.env.TZ;
+  beforeAll(() => {
+    process.env.TZ = 'America/New_York';
+  });
+  afterAll(() => {
+    process.env.TZ = originalTz;
+  });
+  // Local wall-clock time in New York, rendered as `YYYY-MM-DD HH:MM`.
+  const local = (ms: number) => {
+    const d = new Date(ms);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+  const HOUR = 3_600_000;
+  // 2026-03-08 02:00 EST jumps to 03:00 EDT; 2026-11-01 02:00 EDT falls back to 01:00 EST.
+  const springNoon = new Date('2026-03-08T12:00:00-04:00').getTime();
+  const fallNoon = new Date('2026-11-01T12:00:00-05:00').getTime();
+
+  it('keeps daily and multi-hour cadences on the wall clock after the change', () => {
+    expect(local(nextFireTime(24 * HOUR, springNoon))).toBe('2026-03-09 00:00');
+    expect(local(nextFireTime(2 * HOUR, springNoon))).toBe('2026-03-08 14:00');
+    expect(local(nextFireTime(24 * HOUR, fallNoon))).toBe('2026-11-02 00:00');
+    expect(local(nextFireTime(2 * HOUR, fallNoon))).toBe('2026-11-01 14:00');
+  });
+
+  it('fires a boundary inside the skipped hour at the first minute after the jump', () => {
+    const before = new Date('2026-03-08T01:30:00-05:00').getTime();
+    expect(local(nextFireTime(HOUR, before))).toBe('2026-03-08 03:00');
+    expect(local(nextFireTime(2 * HOUR, before))).toBe('2026-03-08 03:00');
+    // …and the next hourly boundary is 04:00, not a second 03:00.
+    expect(local(nextFireTime(HOUR, nextFireTime(HOUR, before)))).toBe('2026-03-08 04:00');
+  });
+
+  it('does not repeat hourly boundaries in the repeated hour', () => {
+    const firstOneAm = new Date('2026-11-01T01:00:00-04:00').getTime();
+    const next = nextFireTime(HOUR, firstOneAm);
+    expect(next).toBe(new Date('2026-11-01T02:00:00-05:00').getTime());
+  });
+
+  it('keeps sub-hour cadences on real minutes through both changes', () => {
+    const lastEst = new Date('2026-03-08T01:55:00-05:00').getTime();
+    expect(nextFireTime(5 * 60_000, lastEst) - lastEst).toBe(5 * 60_000);
+    const lastEdt = new Date('2026-11-01T01:55:00-04:00').getTime();
+    const next = nextFireTime(5 * 60_000, lastEdt);
+    expect(next - lastEdt).toBe(5 * 60_000);
+    expect(local(next)).toBe('2026-11-01 01:00');
   });
 });

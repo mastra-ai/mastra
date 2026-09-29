@@ -28,6 +28,7 @@ import { OMMarkerComponent } from './components/om-marker.js';
 import { OMOutputComponent } from './components/om-output.js';
 import { PlanResultComponent } from './components/plan-approval-inline.js';
 import { ReactiveSignalComponent } from './components/reactive-signal.js';
+import { ScheduleFireComponent } from './components/schedule-fire.js';
 import { SlashCommandComponent } from './components/slash-command.js';
 import { StateSignalComponent } from './components/state-signal.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
@@ -65,7 +66,6 @@ import { BOX_INDENT, getMarkdownTheme, theme } from './theme.js';
 export { formatToolResult };
 
 const WHILE_ACTIVE_USER_MESSAGE_LABEL = 'steer';
-const SCHEDULE_USER_MESSAGE_LABEL = 'schedule';
 // These are internal control-plane signals handled by GithubSignals. The user-visible
 // result is rendered by github-sync-status, so showing these would duplicate the UI.
 const HIDDEN_REACTIVE_SIGNAL_TAGS = new Set(['github-subscribe-pr', 'github-unsubscribe-pr']);
@@ -75,11 +75,12 @@ function shouldRenderReactiveSignal(tagName: string): boolean {
   return !HIDDEN_REACTIVE_SIGNAL_TAGS.has(tagName);
 }
 
+function getSignalAttributes(message: MastraDBMessage): Record<string, unknown> | undefined {
+  return (message.content?.metadata?.signal as { attributes?: Record<string, unknown> } | undefined)?.attributes;
+}
+
 function getUserMessageLabel(message: MastraDBMessage, fallbackLabel?: string): string | undefined {
-  const signalAttributes = (message.content?.metadata?.signal as { attributes?: Record<string, unknown> } | undefined)
-    ?.attributes;
-  if (signalAttributes?.source === 'schedule') return SCHEDULE_USER_MESSAGE_LABEL;
-  if (signalAttributes?.delivery === 'while-active') return WHILE_ACTIVE_USER_MESSAGE_LABEL;
+  if (getSignalAttributes(message)?.delivery === 'while-active') return WHILE_ACTIVE_USER_MESSAGE_LABEL;
   return fallbackLabel;
 }
 
@@ -672,6 +673,29 @@ export function addUserMessage(state: TUIState, message: MastraDBMessage, option
   // Strip [image] markers from text since we show count separately
   const displayText = imageCount > 0 ? textContent.replace(/\[image\]\s*/g, '').trim() : textContent.trim();
   const exactDisplayText = displayText.trim();
+
+  const signalAttributes = getSignalAttributes(message);
+  if (signalAttributes?.source === 'schedule') {
+    const component = new ScheduleFireComponent({
+      prompt: exactDisplayText,
+      attributes: signalAttributes,
+      quietDisplayMode: state.quietMode ? 'quiet' : 'normal',
+      quietPreviewLineLimit: state.quietModeMaxToolPreviewLines,
+    });
+    component.setExpanded(state.toolOutputExpanded);
+    // Registered with the tool components so ctrl+e and quiet-mode changes reach it.
+    state.allToolComponents.push(component as any);
+    state.messageComponentsById.set(message.id, component);
+    if (state.streamingComponent && state.session.displayState.get().isRunning) {
+      state.chatContainer.addChild(component);
+      state.followUpComponents.push(component);
+      reconcileChatBoundarySpacers(state.chatContainer);
+    } else {
+      addChildBeforeFollowUps(state, component);
+    }
+    state.ui.requestRender();
+    return;
+  }
 
   const slashCommandMatch = exactDisplayText.match(/^<slash-command\s+name="([^"]*)">([\s\S]*?)<\/slash-command>$/);
   if (slashCommandMatch) {

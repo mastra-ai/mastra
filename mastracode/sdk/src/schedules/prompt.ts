@@ -14,6 +14,13 @@ export type ScriptResult = { stdout: string; stderr: string; exitCode: number | 
 
 export type RunScript = (absPath: string, options: { cwd: string; timeoutMs: number }) => Promise<ScriptResult>;
 
+/**
+ * One fire's prompt. `outcome` summarizes a file-backed fire for the
+ * transcript header: `exit 0`, `exit 3`, `killed` (timeout/signal), or
+ * `failed` (the file could not be run or read).
+ */
+export type AssembledPrompt = { prompt: string; outcome?: string };
+
 export type AssemblePromptOptions = {
   cwd: string;
   runScript: RunScript;
@@ -39,20 +46,23 @@ function errorMessage(error: unknown): string {
 export async function assembleSchedulePrompt(
   spec: Pick<ScheduleCreateSpec, 'prompt' | 'file' | 'extraPrompt'>,
   options: AssemblePromptOptions,
-): Promise<string> {
+): Promise<AssembledPrompt> {
   const { file } = spec;
-  if (!file) return spec.prompt ?? '';
+  if (!file) return { prompt: spec.prompt ?? '' };
 
   let text: string;
+  let outcome: string | undefined;
   try {
     if (file.mode === 'exec') {
       const result = await options.runScript(file.path, { cwd: options.cwd, timeoutMs: SCRIPT_TIMEOUT_MS });
       text = formatScriptOutput(file.displayPath, result);
+      outcome = result.exitCode === null ? 'killed' : `exit ${result.exitCode}`;
     } else {
       text = (await options.readFile(file.path)).trim();
     }
   } catch (error) {
     text = `Schedule ${file.displayPath} failed: ${errorMessage(error)}`;
+    outcome = 'failed';
   }
-  return appendExtra(text, spec.extraPrompt);
+  return { prompt: appendExtra(text, spec.extraPrompt), ...(outcome ? { outcome } : {}) };
 }

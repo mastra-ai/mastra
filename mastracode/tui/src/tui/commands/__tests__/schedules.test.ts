@@ -24,17 +24,34 @@ afterEach(() => {
   for (const scheduler of schedulers.splice(0)) scheduler.stop();
 });
 
-function createContext(options: { threadId?: string | undefined; scheduler?: boolean } = {}) {
-  const deliver = vi.fn(async (_schedule: unknown, _prompt: string) => {});
-  const scheduler = new ThreadScheduler({ assemblePrompt: async s => s.prompt ?? '', deliver });
+function createContext(
+  options: { threadId?: string | undefined; scheduler?: boolean; pendingNewThread?: boolean } = {},
+) {
+  const deliver = vi.fn(async (_schedule: unknown, _assembled: { prompt: string }) => {});
+  const assemblePrompt = vi.fn(
+    async (s: { prompt?: string }): Promise<{ prompt: string }> => ({
+      prompt: s.prompt ?? '',
+    }),
+  );
+  const scheduler = new ThreadScheduler({ assemblePrompt, deliver });
   schedulers.push(scheduler);
-  const threadId = 'threadId' in options ? options.threadId : 'thread-1';
+  let threadId = 'threadId' in options ? options.threadId : 'thread-1';
   const session = {
     identity: { getResourceId: vi.fn(() => 'resource-1') },
-    thread: { getId: vi.fn(() => threadId), list: vi.fn(async () => [{ id: 'thread-1', resourceId: 'resource-1' }]) },
+    thread: {
+      getId: vi.fn(() => threadId),
+      create: vi.fn(async () => {
+        threadId = 'thread-new';
+        return { id: threadId };
+      }),
+      list: vi.fn(async () => [
+        { id: 'thread-1', resourceId: 'resource-1' },
+        { id: 'thread-new', resourceId: 'resource-1' },
+      ]),
+    },
   };
   const ctx = {
-    state: { session, projectInfo: { rootPath: workspaceDir } },
+    state: { session, projectInfo: { rootPath: workspaceDir }, pendingNewThread: options.pendingNewThread ?? false },
     threadScheduler: options.scheduler === false ? undefined : scheduler,
     showInfo: vi.fn(),
     showError: vi.fn(),
@@ -43,6 +60,8 @@ function createContext(options: { threadId?: string | undefined; scheduler?: boo
     ctx,
     scheduler,
     deliver,
+    assemblePrompt,
+    session,
     showInfo: ctx.showInfo as ReturnType<typeof vi.fn>,
     showError: ctx.showError as ReturnType<typeof vi.fn>,
   };
@@ -57,11 +76,17 @@ describe('/schedules guards', () => {
     expect(showError).toHaveBeenCalledWith(expect.stringContaining('Schedules are unavailable'));
   });
 
-  it('requires an active thread', async () => {
-    const { ctx, showError, scheduler } = createContext({ threadId: undefined });
+  it('creates a thread first when the session has none yet', async () => {
+    const { ctx, scheduler, session } = createContext({ threadId: undefined });
     await handleSchedulesCommand(ctx, ['create', '5m', 'hi']);
-    expect(showError).toHaveBeenCalledWith(expect.stringContaining('active thread'));
-    expect(scheduler.list()).toEqual([]);
+    expect(session.thread.create).toHaveBeenCalledTimes(1);
+    expect(scheduler.list()).toEqual([expect.objectContaining({ threadId: 'thread-new' })]);
+  });
+
+  it('does not create a thread for invalid create args', async () => {
+    const { ctx, session } = createContext({ threadId: undefined });
+    await handleSchedulesCommand(ctx, ['create', '90m', 'hi']);
+    expect(session.thread.create).not.toHaveBeenCalled();
   });
 
   it('rejects unknown subcommands with usage', async () => {
@@ -167,13 +192,32 @@ describe('/schedules create', () => {
     expect(showError).toHaveBeenCalledWith(expect.stringMatching(/Try 2h\.[\s\S]*Usage:/));
     expect(scheduler.list()).toEqual([]);
   });
+});
 
-  it('caps schedules per thread', async () => {
-    const { ctx, scheduler, showError } = createContext();
-    for (let i = 0; i < 10; i++) await handleSchedulesCommand(ctx, ['create', '5m', `p${i}`]);
-    await handleSchedulesCommand(ctx, ['create', '5m', 'one more']);
-    expect(scheduler.list()).toHaveLength(10);
-    expect(showError).toHaveBeenCalledWith(expect.stringContaining('already has 10 schedules'));
+describe('/schedules after /new', () => {
+  it('binds a new schedule to the new thread, not the one just left', async () => {
+    const { ctx, scheduler, session } = createContext({ pendingNewThread: true });
+    await handleSchedulesCommand(ctx, ['create', '1m', 'ping']);
+    expect(session.thread.create).toHaveBeenCalledTimes(1);
+    expect(ctx.state.pendingNewThread).toBe(false);
+    expect(scheduler.list()).toEqual([expect.objectContaining({ threadId: 'thread-new', prompt: 'ping' })]);
+  });
+
+  it('does not list or manage the previous thread’s schedules', async () => {
+    const { ctx, scheduler, showInfo, showError, session } = createContext({ pendingNewThread: true });
+    const old = scheduler.create(
+      { interval: { ms: 300_000, label: '5m' }, prompt: 'old' },
+      {
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+      },
+    );
+    await handleSchedulesCommand(ctx, []);
+    expect(lastInfo(showInfo)).toContain('No schedules on this thread');
+    await handleSchedulesCommand(ctx, ['pause']);
+    expect(showError).toHaveBeenCalledWith('No schedules on this thread.');
+    expect(scheduler.list()[0]).toMatchObject({ id: old.id, status: 'active' });
+    expect(session.thread.create).not.toHaveBeenCalled();
   });
 });
 
@@ -209,11 +253,11 @@ describe('/schedules delete|pause|resume|run', () => {
     expect(showError).toHaveBeenCalledWith(expect.stringContaining('specify an id: /schedules run <id>'));
   });
 
-  it('bare delete removes every schedule on the thread', async () => {
-    const { ctx, scheduler, showInfo } = await withTwo();
+  it('requires an id for delete when several exist', async () => {
+    const { ctx, scheduler, showError } = await withTwo();
     await handleSchedulesCommand(ctx, ['delete']);
-    expect(scheduler.list()).toEqual([]);
-    expect(lastInfo(showInfo)).toMatch(/^Deleted schedules /);
+    expect(scheduler.list()).toHaveLength(2);
+    expect(showError).toHaveBeenCalledWith(expect.stringContaining('specify an id: /schedules delete <id>'));
   });
 
   it('resolves ids by case-insensitive prefix', async () => {
@@ -232,6 +276,22 @@ describe('/schedules delete|pause|resume|run', () => {
     const { ctx, deliver, first, showInfo } = await withTwo();
     await handleSchedulesCommand(ctx, ['run', first.id.slice(0, 8)]);
     expect(lastInfo(showInfo)).toBe(`Triggered schedule ${first.id.slice(0, 8)}`);
-    await vi.waitFor(() => expect(deliver).toHaveBeenCalledWith(expect.objectContaining({ id: first.id }), 'first'));
+    await vi.waitFor(() =>
+      expect(deliver).toHaveBeenCalledWith(expect.objectContaining({ id: first.id }), { prompt: 'first' }),
+    );
+  });
+
+  it('run reports a schedule that is still firing instead of firing it twice', async () => {
+    const { ctx, scheduler, assemblePrompt, showInfo } = createContext();
+    await handleSchedulesCommand(ctx, ['create', '5m', 'slow']);
+    const id = scheduler.list()[0]!.id;
+    let release!: () => void;
+    assemblePrompt.mockImplementationOnce(() => new Promise(resolve => (release = () => resolve({ prompt: 'slow' }))));
+    await handleSchedulesCommand(ctx, ['run']);
+    expect(lastInfo(showInfo)).toBe(`Triggered schedule ${id.slice(0, 8)}`);
+    await handleSchedulesCommand(ctx, ['run']);
+    expect(lastInfo(showInfo)).toContain('is already firing; skipped');
+    expect(assemblePrompt).toHaveBeenCalledTimes(1);
+    release();
   });
 });

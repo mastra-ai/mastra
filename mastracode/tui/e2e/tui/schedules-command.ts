@@ -5,11 +5,12 @@ import type { McE2eScenario } from './types.js';
 
 const SCRIPT_MARKER = 'SCHEDULE-CHECK-OK';
 const EXTRA_PROMPT = 'Report the result';
+const BUSY_PROMPT = 'BUSY-SCHEDULE-PING';
 
 export const schedulesCommandScenario: McE2eScenario = {
   name: 'schedules-command',
   description:
-    'Create a script-backed /schedules entry, fire it manually, and verify the script output reaches the model as a schedule turn.',
+    'Create a script-backed /schedules entry, fire it manually, and verify the script output reaches the model as a schedule turn; then fire a schedule while the agent is busy and verify it is delivered to the running agent.',
   testName: 'creates, fires, and deletes a session-scoped schedule through the real TUI',
   projectFixture: 'long-branch',
   useOpenAIModel: true,
@@ -65,14 +66,37 @@ export const schedulesCommandScenario: McE2eScenario = {
     await runtime.waitForScreenText(/No schedules on this thread/i, terminal);
     runtime.printScreen('after delete', terminal);
 
+    // A fire that lands while the agent is busy must reach the running agent,
+    // not just be written to history.
+    terminal.submit(`/schedules create 1h ${BUSY_PROMPT}`);
+    await runtime.waitForScreenText(/Created schedule/i, terminal, 30_000);
+    terminal.submit('Start a slow scheduled run.');
+    await runtime.waitForScreenText(/Slow run/i, terminal, 15_000);
+    terminal.submit('/schedules run');
+    await runtime.waitForScreenText(/Busy schedule handled\./i, terminal, 60_000);
+    runtime.printScreen('after busy fire', terminal);
+    expect(terminal.serialize().view).toContain(BUSY_PROMPT);
+
     terminal.keyCtrlC();
     runtime.printScreen('after Ctrl-C', terminal);
   },
   verifyAimockRequests(requests) {
-    const serializedBodies = requests.map(request => JSON.stringify((request as { body?: unknown }).body));
-    const scheduleRequests = serializedBodies.filter(
-      body => body.includes(SCRIPT_MARKER) && body.includes(EXTRA_PROMPT) && body.includes('source=\\"schedule\\"'),
+    // Later requests replay earlier turns as history, so look at the newest
+    // user message of each request to see what each request was answering.
+    const latestUserMessages = requests.map(request => {
+      const messages = ((request as { body?: { messages?: Array<{ role?: string; content?: unknown }> } }).body
+        ?.messages ?? []) as Array<{ role?: string; content?: unknown }>;
+      const latest = [...messages].reverse().find(message => message.role === 'user');
+      return JSON.stringify(latest?.content ?? '');
+    });
+    const scheduleFires = latestUserMessages.filter(
+      content =>
+        content.includes(SCRIPT_MARKER) && content.includes(EXTRA_PROMPT) && content.includes('source=\\"schedule\\"'),
     );
-    expect(scheduleRequests).toHaveLength(1);
+    expect(scheduleFires).toHaveLength(1);
+    const busyFires = latestUserMessages.filter(
+      content => content.includes(BUSY_PROMPT) && content.includes('source=\\"schedule\\"'),
+    );
+    expect(busyFires).toHaveLength(1);
   },
 };
