@@ -185,7 +185,8 @@ export interface ResolvedFactorySourceRepository {
  * session), and the two steps fail for different reasons worth reporting apart.
  */
 export type FactorySourceRepositoryResult =
-  ({ found: true } & ResolvedFactorySourceRepository) | { found: false; reason: 'connection' | 'repository' };
+  | ({ found: true } & ResolvedFactorySourceRepository)
+  | { found: false; reason: 'connection' | 'repository' };
 
 /**
  * Resolve which repository a factory project's source-control runs act on: the
