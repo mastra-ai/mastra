@@ -363,6 +363,55 @@ describe('handler dispatch gating', () => {
     expect(ctx.requestContext.get('user')).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
   });
 
+  it("rejects an existing Factory session when the responder is linked to another organization", async () => {
+    const thread = makeSubscribedThread();
+    const accountLinks = fullStore({ orgId: 'org-2', userId: 'responder-1', defaultFactoryProjectId: 'fp-1' });
+    const projects = makeProjects([{ id: 'fp-1' }]);
+    const sourceControl = {
+      sessions: {
+        getBySessionId: vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'owner-1' }),
+      },
+    } as any;
+    const mastra = {
+      getStorage: () => ({
+        getStore: vi.fn().mockResolvedValue({
+          listThreads: vi.fn().mockResolvedValue({
+            threads: [{ id: 'thread-1', resourceId: 'session-1' }],
+          }),
+        }),
+      }),
+    };
+    const defaultHandler = vi.fn();
+    const handlers = createHandlers({ accountLinks, projects, sourceControl });
+
+    await expect(
+      handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(mastra)),
+    ).rejects.toThrow('Could not authorize the owner of Slack Factory session session-1.');
+    expect(defaultHandler).not.toHaveBeenCalled();
+  });
+
+  it('rejects a subscribed Factory follow-up when its internal thread cannot be resolved', async () => {
+    const thread = makeSubscribedThread();
+    const accountLinks = fullStore({ orgId: 'org-1', userId: 'responder-1', defaultFactoryProjectId: 'fp-1' });
+    const projects = makeProjects([{ id: 'fp-1' }]);
+    const sourceControl = { sessions: { getBySessionId: vi.fn() } } as any;
+    const mastra = {
+      getStorage: () => ({
+        getStore: vi.fn().mockResolvedValue({
+          listThreads: vi.fn().mockResolvedValue({ threads: [] }),
+        }),
+      }),
+    };
+    const defaultHandler = vi.fn();
+    const handlers = createHandlers({ accountLinks, projects, sourceControl });
+
+    await expect(
+      handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(mastra)),
+    ).rejects.toThrow(`Could not resolve the internal Slack thread for ${thread.id}.`);
+    expect(sourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
+    expect(defaultHandler).not.toHaveBeenCalled();
+  });
+
   it('stamps the tenant for a linked sender even when factory routing is ungated', async () => {
     // The silent-failure path: with no `projects` dep, `resolveFactoryForLink`
     // returns `ungated`, so this sender leaves the gate without a routed

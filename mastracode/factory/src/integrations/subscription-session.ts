@@ -74,9 +74,16 @@ export async function prepareSessionRunContext(
   requestContext: RequestContext,
   sessionId: string,
   sourceControl: SubscriptionSessionLookup,
+  options?: { expectedOrgId?: string },
 ): Promise<boolean> {
   const sessionRow = await sourceControl.sessions.getBySessionId(sessionId);
-  if (!sessionRow || !hasResolvedOrg(sessionRow.orgId)) return false;
+  if (
+    !sessionRow ||
+    !hasResolvedOrg(sessionRow.orgId) ||
+    (options?.expectedOrgId !== undefined && sessionRow.orgId !== options.expectedOrgId)
+  ) {
+    return false;
+  }
   requestContext.set('user', { workosId: sessionRow.userId, organizationId: sessionRow.orgId });
   await primeTenantCredentialsForRequestContext(requestContext);
   return true;

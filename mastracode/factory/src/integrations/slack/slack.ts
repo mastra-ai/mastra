@@ -692,17 +692,30 @@ async function prepareExistingSessionOwnerContext(
   thread: HandlerThread,
   deps: SlackChannelDeps,
   ctx: ChannelHandlerContext,
+  options: { expectedOrgId?: string; requireInternalThread: boolean },
 ): Promise<void> {
   const sourceControls = configuredSourceControls(deps);
   if (sourceControls.length === 0) return;
   const internalThread = await findInternalThread(ctx.mastra, thread);
-  if (!internalThread || internalThread.resourceId.startsWith('channel:')) return;
+  if (!internalThread) {
+    if (options.requireInternalThread) {
+      throw new Error(`Could not resolve the internal Slack thread for ${thread.id}.`);
+    }
+    return;
+  }
+  if (internalThread.resourceId.startsWith('channel:')) return;
+  if (!options.expectedOrgId) {
+    throw new Error(`Could not authorize the owner of Slack Factory session ${internalThread.resourceId}.`);
+  }
 
-  const prepared = await prepareSessionRunContext(ctx.requestContext, internalThread.resourceId, {
-    sessions: createSourceControlSessionLookup(sourceControls),
-  });
+  const prepared = await prepareSessionRunContext(
+    ctx.requestContext,
+    internalThread.resourceId,
+    { sessions: createSourceControlSessionLookup(sourceControls) },
+    { expectedOrgId: options.expectedOrgId },
+  );
   if (!prepared) {
-    throw new Error(`Could not resolve the owner of Slack Factory session ${internalThread.resourceId}.`);
+    throw new Error(`Could not authorize the owner of Slack Factory session ${internalThread.resourceId}.`);
   }
 }
 
@@ -722,6 +735,7 @@ async function gateDispatch(
   message: HandlerMessage,
   deps: SlackChannelDeps,
   ctx: ChannelHandlerContext,
+  options: { requireInternalThread: boolean } = { requireInternalThread: false },
 ): Promise<{
   routed?: { link: ChannelAccountLink; factoryProjectId: string; slackWorkItemsEnabled: boolean };
 } | null> {
@@ -737,7 +751,10 @@ async function gateDispatch(
     // stamping only in the routed branch would silently run them on default
     // credentials.
     ctx.requestContext.set('user', { id: sender.link.userId, organizationId: sender.link.orgId });
-    await prepareExistingSessionOwnerContext(thread, deps, ctx);
+    await prepareExistingSessionOwnerContext(thread, deps, ctx, {
+      expectedOrgId: sender.link.orgId,
+      requireInternalThread: options.requireInternalThread,
+    });
 
     const route = await resolveFactoryForLink({ thread, ...sender, accountLinks, projects });
     if (route.status === 'blocked') return null;
@@ -999,7 +1016,7 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       // (e.g. the link was removed mid-conversation), and it must still
       // resolve a factory (e.g. the default was cleared or its factory
       // deleted mid-conversation).
-      const gate = await gateDispatch(thread, message, deps, ctx);
+      const gate = await gateDispatch(thread, message, deps, ctx, { requireInternalThread: true });
       if (!gate) return;
       await defaultHandler(thread, message);
     },
