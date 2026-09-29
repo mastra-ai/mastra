@@ -3173,7 +3173,7 @@ export class Workflow<
         }
         if (isResume && (nestedStatus === 'running' || nestedStatus === 'waiting')) {
           restartNested = true;
-        } else if (restart && (nestedStatus === 'suspended' || nestedStatus === 'paused')) {
+        } else if (restart && nestedStatus === 'suspended') {
           restartNested = false;
           resumeNested = true;
         }

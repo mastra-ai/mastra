@@ -231,7 +231,7 @@ export async function executeStep(
     workflowStatus: 'running',
     requestContext,
     phase: 'start',
-    recordResumedStepStart: resumeDataToUse !== undefined,
+    recordResumedStepStart: resumeDataToUse !== undefined && executionContext.foreachIndex === undefined,
   });
 
   // Check if this is a nested workflow that requires special handling
