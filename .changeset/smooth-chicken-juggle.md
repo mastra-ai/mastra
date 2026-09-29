@@ -24,3 +24,21 @@
 ---
 
 Added support for thread archiving. Threads now store an `archivedAt` timestamp, and `listThreads` supports the `archived` filter. Existing tables get the new nullable column automatically on `init()`; existing threads are treated as not archived.
+
+```typescript
+// Existing calls continue to return both active and archived threads.
+await memory.listThreads({ filter: { resourceId: 'user-123' } });
+
+await memory.archiveThread({ threadId: 'thread-123' });
+
+// Exclude archived threads from active conversation lists.
+await memory.listThreads({
+  filter: { resourceId: 'user-123', archived: false },
+});
+
+// Retrieve archived threads, then restore a conversation.
+await memory.listThreads({
+  filter: { resourceId: 'user-123', archived: true },
+});
+await memory.unarchiveThread({ threadId: 'thread-123' });
+```

@@ -1041,7 +1041,6 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         // Convert date strings back to Date objects for consistency
         createdAt: typeof data.createdAt === 'string' ? new Date(data.createdAt) : data.createdAt,
         updatedAt: typeof data.updatedAt === 'string' ? new Date(data.updatedAt) : data.updatedAt,
-        archivedAt: data.archivedAt ? new Date(data.archivedAt) : null,
         // Ensure workingMemory is always returned as a string, regardless of automatic parsing
         workingMemory: typeof data.workingMemory === 'object' ? JSON.stringify(data.workingMemory) : data.workingMemory,
         // metadata is already transformed by the entity's getter

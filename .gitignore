@@ -46,6 +46,7 @@ memory.db-*
 .npmrc
 
 # Test directories
+stores/lance/test/__manifest/
 packages/core/test-outputs/
 voice/**/test-outputs/
 voice/**/test-data/

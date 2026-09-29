@@ -137,9 +137,12 @@ export class MemoryThread extends BaseResource {
   ): Promise<RouteResponse<'POST /memory/threads/:threadId/archive'>> {
     const agentId = this.requireAgentId(opts.agentId, 'archive');
     const contextParam = requestContextQueryString(opts.requestContext, '&');
-    return this.request(`/memory/threads/${this.threadId}/archive?agentId=${agentId}${contextParam}`, {
-      method: 'POST',
-    });
+    return this.request(
+      `/memory/threads/${encodeURIComponent(this.threadId)}/archive?agentId=${encodeURIComponent(agentId)}${contextParam}`,
+      {
+        method: 'POST',
+      },
+    );
   }
 
   /**
@@ -153,9 +156,12 @@ export class MemoryThread extends BaseResource {
   ): Promise<RouteResponse<'POST /memory/threads/:threadId/unarchive'>> {
     const agentId = this.requireAgentId(opts.agentId, 'unarchive');
     const contextParam = requestContextQueryString(opts.requestContext, '&');
-    return this.request(`/memory/threads/${this.threadId}/unarchive?agentId=${agentId}${contextParam}`, {
-      method: 'POST',
-    });
+    return this.request(
+      `/memory/threads/${encodeURIComponent(this.threadId)}/unarchive?agentId=${encodeURIComponent(agentId)}${contextParam}`,
+      {
+        method: 'POST',
+      },
+    );
   }
 
   /**

@@ -112,6 +112,26 @@ describe('MemoryThread', () => {
   });
 
   describe('archive / unarchive', () => {
+    it.each(['archive', 'unarchive'] as const)(
+      'should encode identifiers for %s and preserve request context',
+      async action => {
+        const specialThreadId = 'thread/with?reserved&chars# %';
+        const specialAgentId = 'agent/with?reserved&chars# %';
+        const specialThread = new MemoryThread(clientOptions, specialThreadId, specialAgentId);
+        mockFetchResponse({ id: specialThreadId });
+
+        await specialThread[action]({ requestContext: { tenant: 'tenant & one' } });
+
+        const url = new URL(String(vi.mocked(global.fetch).mock.calls[0]![0]));
+        expect(url.pathname).toBe(`/api/memory/threads/${encodeURIComponent(specialThreadId)}/${action}`);
+        expect(url.searchParams.get('agentId')).toBe(specialAgentId);
+        expect(JSON.parse(Buffer.from(url.searchParams.get('requestContext')!, 'base64').toString('utf8'))).toEqual({
+          tenant: 'tenant & one',
+        });
+        expect(url.hash).toBe('');
+      },
+    );
+
     it.each(['archive', 'unarchive'] as const)('should POST to the %s endpoint', async action => {
       const mockResponse = { id: threadId, archivedAt: action === 'archive' ? new Date().toISOString() : null };
       mockFetchResponse(mockResponse);

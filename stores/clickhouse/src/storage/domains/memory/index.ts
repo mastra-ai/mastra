@@ -909,7 +909,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           await this.client.command({
             query: `ALTER TABLE ${TABLE_THREADS} UPDATE archivedAt = {archivedAt:Nullable(DateTime64(3))} WHERE id = {id:String}`,
             query_params: { id, archivedAt: archivedAt ? archivedAt.toISOString().replace('Z', '') : null },
-            clickhouse_settings: { mutations_sync: '1' },
+            clickhouse_settings: { mutations_sync: '2' },
           });
         }
         return { ...existingThread, ...(archivedAt !== undefined ? { archivedAt } : {}) };
