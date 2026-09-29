@@ -35,20 +35,27 @@ const FOLDER_CLASS = 'text-muted-foreground!';
 
 function ChangeCounts({ additions, deletions, binary }: Pick<WorkspaceChange, 'additions' | 'deletions' | 'binary'>) {
   if (binary) {
-    return <span className="text-meta text-muted-foreground shrink-0">Binary</span>;
+    return (
+      <Txt as="span" variant="meta" tone="muted" className="shrink-0">
+        Binary
+      </Txt>
+    );
   }
   if (additions === undefined || deletions === undefined) return null;
 
   return (
-    <span
-      className="text-meta flex shrink-0 items-center gap-1 font-mono tabular-nums"
+    <Txt
+      as="span"
+      variant="meta"
+      font="mono"
+      className="flex shrink-0 items-center gap-1 tabular-nums"
       aria-label={`${additions} ${additions === 1 ? 'addition' : 'additions'} and ${deletions} ${
         deletions === 1 ? 'deletion' : 'deletions'
       }`}
     >
       <span className="text-success-indicator">+{additions}</span>
       <span className="text-destructive-indicator">−{deletions}</span>
-    </span>
+    </Txt>
   );
 }
 
@@ -172,9 +179,9 @@ function ChangeTreeItem({ node, openFolders, onFolderOpenChange }: ChangeTreeIte
         {node.change.previousPath ? `${splitPath(node.change.previousPath).name} → ${node.name}` : node.name}
       </Tree.Label>
       <span className="ml-auto flex shrink-0 items-center gap-2">
-        <span className={cn('text-meta shrink-0', STATUS_CLASSES[node.change.status])}>
+        <Txt as="span" variant="meta" className={cn('shrink-0', STATUS_CLASSES[node.change.status])}>
           {STATUS_LABELS[node.change.status]}
-        </span>
+        </Txt>
         <ChangeCounts {...node.change} />
       </span>
     </Tree.File>
@@ -222,9 +229,9 @@ function DiffViewer({
         </div>
         {change ? (
           <span className="flex shrink-0 items-center gap-2">
-            <span className={cn('text-meta shrink-0', STATUS_CLASSES[change.status])}>
+            <Txt as="span" variant="meta" className={cn('shrink-0', STATUS_CLASSES[change.status])}>
               {STATUS_LABELS[change.status]}
-            </span>
+            </Txt>
             <ChangeCounts {...change} />
           </span>
         ) : null}

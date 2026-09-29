@@ -17,6 +17,7 @@ import {
 } from '@/ds/components/Dialog';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { FieldBlock } from '@/ds/components/FormFieldBlocks';
+import { Txt } from '@/ds/components/Txt';
 
 const METADATA_KEY_FIELD_NAME = 'trace-metadata-key';
 const EMPTY_KEYS: readonly string[] = [];
@@ -131,9 +132,9 @@ export function TraceColumnsMenu({
             </DropdownMenu.CheckboxItem>
           ))}
           {usageDisabledReason && (
-            <p className="px-2 py-1 text-meta text-placeholder" role="note">
+            <Txt variant="meta" tone="faint" className="px-2 py-1" role="note">
               {usageDisabledReason}
-            </p>
+            </Txt>
           )}
 
           <DropdownMenu.Separator />

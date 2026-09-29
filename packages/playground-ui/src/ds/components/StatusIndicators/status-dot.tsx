@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { statusDotClass, type StatusPresentation, type StatusPresentationFn } from './status-dot-styles';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
 
 const HOVER_POPOVER_LEAVE_MS = 120;
 
@@ -59,7 +60,9 @@ function StatusDotPopoverInner<T>({
           onMouseEnter={onHoverOpen}
           onMouseLeave={onHoverScheduleClose}
         >
-          <p className="text-column text-foreground">{resolved.label}</p>
+          <Txt variant="column" tone="ink">
+            {resolved.label}
+          </Txt>
           <p className="mt-1 text-pretty text-muted-foreground">{resolved.description}</p>
         </PopoverContent>
       </Popover>

@@ -16,6 +16,7 @@ if (!process.env.DATABASE_URL) {
 
 export const mastra = new Mastra({
   storage: new PostgresStore({
+    id: 'mastra-storage',
     connectionString: process.env.DATABASE_URL,
   }),
   agents: { connectAgent },

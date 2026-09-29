@@ -1,5 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useBrowserToolCalls } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
@@ -123,12 +124,16 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
         {/* Info section */}
         <div className="min-w-0 flex-1 text-left">
           <div className="flex items-center gap-2">
-            <span className="truncate text-subheading text-foreground">{agentName}&apos;s browser</span>
+            <Txt as="span" variant="subheading" tone="ink" className="truncate">
+              {agentName}&apos;s browser
+            </Txt>
             <Badge variant={isLive ? 'success' : 'neutral'} size="sm" indicator={isLive ? 'pulse' : 'dot'}>
               {isLive ? 'Live' : 'Idle'}
             </Badge>
           </div>
-          <p className="mt-0.5 truncate text-caption text-muted-foreground">{displayUrl}</p>
+          <Txt variant="caption" tone="muted" className="mt-0.5 truncate">
+            {displayUrl}
+          </Txt>
         </div>
 
         {/* Expand/collapse indicator */}

@@ -15,6 +15,7 @@ import { CardSourceDescription } from './BoardCardDetails';
 import { CardActions } from './BoardCardParts';
 import { CandidateCardRows } from './CandidateCardRows';
 import { CardDetailsPanel } from './CardDetailsPanel';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 export function CandidateDetailsPanel({
   candidate,
@@ -116,7 +117,9 @@ export function CandidateDetailsPanel({
     >
       <ScrollArea className="flex min-h-0 grow flex-col" viewPortClassName="min-h-0 grow">
         <div className="stream-landing flex flex-col gap-2 p-3">
-          <h3 className="text-label text-foreground m-0 font-[550] wrap-anywhere">{candidate.title}</h3>
+          <Txt as="h3" variant="label" tone="ink" className="m-0 font-[550] wrap-anywhere">
+            {candidate.title}
+          </Txt>
           <CardSourceDescription
             item={candidate}
             projectRepositoryId={projectRepositoryId}

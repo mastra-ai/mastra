@@ -98,10 +98,15 @@ export function ConnectedAccountsSection() {
           className="group hover:bg-fill focus-visible:ring-border-focus block cursor-pointer rounded-xl outline-hidden transition-colors focus-visible:ring-2"
         >
           <SettingsRow label={slackLabel}>
-            <span className="text-caption text-muted-foreground group-hover:text-foreground flex items-center gap-2">
+            <Txt
+              as="span"
+              variant="caption"
+              tone="muted"
+              className="group-hover:text-foreground flex items-center gap-2"
+            >
               Configure
               <ChevronRight aria-hidden="true" />
-            </span>
+            </Txt>
           </SettingsRow>
         </Link>
       ) : (
@@ -112,10 +117,15 @@ export function ConnectedAccountsSection() {
           className="group hover:bg-fill focus-visible:ring-border-focus block w-full cursor-pointer rounded-xl text-left outline-hidden transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <SettingsRow label={slackLabel}>
-            <span className="text-caption text-muted-foreground group-hover:text-foreground flex items-center gap-2">
+            <Txt
+              as="span"
+              variant="caption"
+              tone="muted"
+              className="group-hover:text-foreground flex items-center gap-2"
+            >
               Connect
               <ChevronRight aria-hidden="true" />
-            </span>
+            </Txt>
           </SettingsRow>
         </button>
       )}

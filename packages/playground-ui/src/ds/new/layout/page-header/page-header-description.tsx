@@ -10,7 +10,6 @@ export interface PageHeaderDescriptionProps extends ComponentPropsWithoutRef<'p'
 export function PageHeaderDescription({ children, className, isLoading, ...props }: PageHeaderDescriptionProps) {
   return (
     <Txt
-      as="p"
       variant="caption"
       tone="muted"
       data-slot="page-header-description"

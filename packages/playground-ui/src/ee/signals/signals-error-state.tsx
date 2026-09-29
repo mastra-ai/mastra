@@ -1,5 +1,6 @@
 import { TriangleAlert, X, RotateCcw } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
+import { Txt } from '@/ds/components/Txt';
 
 export function SignalsErrorState({
   message,
@@ -15,8 +16,12 @@ export function SignalsErrorState({
       <div className="flex items-start gap-3">
         <TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-destructive-indicator" />
         <div>
-          <h1 className="text-subheading text-foreground">{message}</h1>
-          <p className="mt-1 text-caption text-muted-foreground">Check the connection and try again.</p>
+          <Txt as="h1" variant="subheading" tone="ink">
+            {message}
+          </Txt>
+          <Txt variant="caption" tone="muted" className="mt-1">
+            Check the connection and try again.
+          </Txt>
           <div className="mt-4 flex flex-wrap gap-2">
             <Button icon={<RotateCcw />} onClick={onRetry} size="sm" type="button">
               Retry
