@@ -11,7 +11,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createMastraCodeAgentController } from '../../index.js';
 import { TOOL_NAME_OVERRIDES } from '../../tool-names.js';
 import { setCustomProvidersSource } from '../custom-provider-source.js';
-import { TOOL_NAME_OVERRIDES } from '../../tool-names.js';
 import { executeSubagent } from './execute.js';
 import { exploreSubagent } from './explore.js';
 import { planSubagent } from './plan.js';
@@ -198,6 +197,50 @@ describe('native subagents', () => {
     } finally {
       await new Promise(resolve => server.close(resolve));
     }
+  }, 30_000);
+
+  it('reports a gateway lookup failure instead of resolving the model elsewhere', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'native-subagents-'));
+    directories.push(directory);
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: directory }) });
+    const { controller } = await createMastraCodeAgentController({
+      cwd: directory,
+      homeDir: directory,
+      settingsPath: join(directory, 'settings.json'),
+      storage: new InMemoryStore(),
+      storageBackend: 'libsql',
+      workspace,
+      intervalHandlers: [],
+      disableMcp: true,
+      disableHooks: true,
+      disablePlugins: true,
+      disableGithubSignals: true,
+    });
+    await controller.init();
+    controller.getMastra()!.addGateway({
+      id: 'broken-claimer',
+      name: 'Broken claimer',
+      handlesModel: () => {
+        throw new Error('gateway lookup exploded');
+      },
+      fetchProviders: async () => ({}),
+      buildUrl: () => undefined,
+      getApiKey: async () => 'unused',
+      resolveLanguageModel: () => {
+        throw new Error('unreachable');
+      },
+    });
+    const session = await controller.createSession({ id: 'broken', ownerId: 'test' });
+    const requestContext = new RequestContext();
+    const toolsets = await controller['buildToolsets'](session, requestContext);
+
+    const result = await toolsets.controllerBuiltIn!.subagent!.execute!(
+      { agentType: 'explore', task: 'Answer', modelId: 'unclaimed/model' },
+      { workspace, requestContext, agent: { toolCallId: 'broken' } } as any,
+    );
+
+    expect(result).toMatchObject({ isError: true });
+    expect(result).toHaveProperty('content', expect.stringContaining('gateway lookup exploded'));
   }, 30_000);
 
   it('keeps isolated definitions free of parent task tools and nested delegation', () => {

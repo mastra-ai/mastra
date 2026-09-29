@@ -469,8 +469,11 @@ function routesToOtherGateway(
 ): boolean {
   try {
     return !sdkGatewayIds.has(getGatewayId(findGatewayForModel(modelId, gateways)));
-  } catch {
-    return false;
+  } catch (error) {
+    // No gateway at all falls back to the SDK resolver; any other lookup
+    // failure is the gateway's to report, not a reason to switch providers.
+    if ((error as { id?: string })?.id === 'MODEL_ROUTER_NO_GATEWAY_FOUND') return false;
+    throw error;
   }
 }
 
