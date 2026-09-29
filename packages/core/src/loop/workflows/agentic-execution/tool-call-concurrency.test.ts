@@ -171,6 +171,20 @@ describe('tool call concurrency resolution', () => {
       ).toBe(1);
     });
 
+    it('serializes a called suspend tool emitted by its id rather than its registry key', () => {
+      expect(
+        resolveToolCallConcurrency({
+          tools: {
+            safe: safeTool,
+            renamedSuspend: { ...suspendTool, id: 'suspend-by-id' },
+          },
+          configuredConcurrency: 4,
+          strategy: 'called',
+          calledToolNames: ['safe', 'suspend-by-id'],
+        }),
+      ).toBe(1);
+    });
+
     it('serializes a batch that actually called an approval tool', () => {
       expect(
         resolveToolCallConcurrency({

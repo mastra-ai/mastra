@@ -395,7 +395,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
           const scopeCtx = { mastra: rest.mastra, runId: rest.runId, _internal };
           const toolCalls = Array.isArray(inputData) ? (inputData as { toolName?: unknown }[]) : [];
           return resolveToolCallConcurrency({
-            requireToolApproval: rest.requireToolApproval,
+            requireToolApproval: rest.requireToolApproval ?? rest.requestContext?.get('__mastra_requireToolApproval'),
             tools: (readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as Tools | undefined) ?? rest.tools,
             activeTools:
               readScoped(scopeCtx, STEP_ACTIVE_TOOLS_KEY, 'stepActiveTools') ??
