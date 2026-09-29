@@ -64,6 +64,7 @@ const textTones: { token: ColorToken; className: string; role: string; sample: s
 
 const hues = ['red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink'];
 const steps = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
+const softSteps = new Set([300, 600, 900, 950]);
 const statusRoles = ['destructive', 'warning', 'success', 'info'];
 const products = [
   { role: 'studio', label: 'Studio' },
@@ -85,7 +86,7 @@ const chartSeriesTokens = [
   { token: 'chart-red', note: 'Errors, stacked on --chart-blue' },
 ];
 
-const chartSoftSteps = [1, 2, 3, 4, 5];
+const chartSequentialSteps = [1, 2, 3, 4, 5];
 
 const spanTypeTokens = [
   { token: 'span-agent', label: 'Agent' },
@@ -185,7 +186,7 @@ export const ColorFoundations: Story = {
 
       <FoundationSection
         label="Chromatic ramps"
-        description="Shared primitives, from light 50 to dark 950. Roles select a step for each theme."
+        description="Shared primitives, from light 50 to dark 950. The soft row under 300, 600, 900 and 950 is a lower-chroma companion that badges and subtle status fills are built on. Roles select a step for each theme."
       >
         {hues.map(hue => (
           <SpecimenGroup key={hue} label={hue}>
@@ -195,6 +196,17 @@ export const ColorFoundations: Story = {
                   <Swatch value={`var(--${hue}-${step})`} />
                 </Specimen>
               ))}
+            </div>
+            <div className="grid grid-cols-3 gap-3 sm:grid-cols-6 lg:grid-cols-11">
+              {steps.map(step =>
+                softSteps.has(step) ? (
+                  <Specimen key={step} name={`soft-${step}`}>
+                    <Swatch value={`var(--${hue}-soft-${step})`} />
+                  </Specimen>
+                ) : (
+                  <div key={step} />
+                ),
+              )}
             </div>
           </SpecimenGroup>
         ))}
@@ -320,7 +332,7 @@ export const ProductColors: Story = {
 export const Charts: Story = {
   render: () => (
     <FoundationPage
-      eyebrow={`Color / ${chartSeriesTokens.length + chartSoftSteps.length} tokens`}
+      eyebrow={`Color / ${chartSeriesTokens.length + chartSequentialSteps.length} tokens`}
       title="Charts"
       description="Categorical series and sequential scales, shown as fills, dots, and lines."
     >
@@ -339,7 +351,7 @@ export const Charts: Story = {
         </SpecimenGroup>
         <SpecimenGroup label="Ordered by lightness">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-            {chartSoftSteps.map(step => (
+            {chartSequentialSteps.map(step => (
               <Specimen key={step} name={`--chart-sequential-${step}`}>
                 <SeriesSwatch value={`var(--chart-sequential-${step})`} />
               </Specimen>

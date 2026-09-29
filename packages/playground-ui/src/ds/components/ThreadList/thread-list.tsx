@@ -46,7 +46,7 @@ export const ThreadListNewItem = ({ render, children }: ThreadListNewItemProps) 
 };
 
 export const ThreadListSeparator = () => (
-  <div role="separator" aria-orientation="horizontal" className="-mx-1 my-1 h-px bg-border/40" />
+  <div role="separator" aria-orientation="horizontal" className="-mx-1 h-px shrink-0 bg-border/40" />
 );
 
 export interface ThreadListItemsProps {
