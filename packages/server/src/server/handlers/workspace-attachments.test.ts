@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
-import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
+import { LocalFilesystem, LocalSandbox, Workspace } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
 import { routeAttachmentsToWorkspace, WORKSPACE_REQUIRED_ERROR_CODE } from './workspace-attachments';
@@ -175,6 +175,79 @@ describe('routeAttachmentsToWorkspace', () => {
       });
 
       expect(message!.content).toEqual([text, pdf, { type: 'text', text: expect.stringContaining('/a.xls') }, image]);
+    });
+  });
+
+  describe('given dynamically resolved providers', () => {
+    it.each(['filesystem', 'sandbox'] as const)(
+      'writes to the resolved %s using the request context',
+      async provider => {
+        const { basePath } = await createWorkspace();
+        const requestContext = new RequestContext();
+        const filesystem = new LocalFilesystem({ basePath });
+        const sandbox = Object.assign(new LocalSandbox({ workingDirectory: basePath }), {
+          writeFiles: vi.fn(async (files: { path: string; content: string | Buffer }[]) => {
+            for (const file of files) await filesystem.writeFile(file.path, file.content);
+          }),
+        });
+        const resolveFilesystem = vi.fn(async () => filesystem);
+        const resolveSandbox = vi.fn(async () => sandbox);
+        const workspace = new Workspace(
+          provider === 'filesystem' ? { filesystem: resolveFilesystem } : { sandbox: resolveSandbox },
+        );
+
+        const [message] = await routeAttachmentsToWorkspace({
+          agent: createAgent(workspace),
+          messages: [{ role: 'user', content: [{ type: 'file', data: BASE64, mediaType: XLSX, filename: 'r.xlsx' }] }],
+          requestContext,
+        });
+
+        const resolver = provider === 'filesystem' ? resolveFilesystem : resolveSandbox;
+        expect(resolver).toHaveBeenCalledWith({ requestContext });
+        const text = (message!.content[0] as unknown as { text: string }).text;
+        expect(new Uint8Array(await readFile(join(basePath, uploadedPath(text))))).toEqual(BYTES);
+      },
+    );
+  });
+
+  describe('given a mounted filesystem', () => {
+    it.each([false, true])('uploads to the first writable mount (dynamic: %s)', async dynamic => {
+      const { basePath } = await createWorkspace();
+      const mounted = new Workspace({
+        mounts: {
+          '/readonly': new LocalFilesystem({ basePath: join(basePath, 'readonly'), readOnly: true }),
+          '/data': new LocalFilesystem({ basePath: join(basePath, 'data') }),
+        },
+      });
+      const workspace = dynamic ? new Workspace({ filesystem: async () => mounted.filesystem! }) : mounted;
+
+      const [message] = await routeAttachmentsToWorkspace({
+        agent: createAgent(workspace),
+        messages: [{ role: 'user', content: [{ type: 'file', data: BASE64, mediaType: XLSX, filename: 'r.xlsx' }] }],
+        requestContext: new RequestContext(),
+      });
+
+      const text = (message!.content[0] as unknown as { text: string }).text;
+      const path = `/data/${uploadedPath(text)}`;
+      expect(text).toContain(`at ${path}.`);
+      expect(await mounted.filesystem!.readFile(path)).toEqual(Buffer.from(BYTES));
+      expect(new Uint8Array(await readFile(join(basePath, 'data', uploadedPath(text))))).toEqual(BYTES);
+    });
+
+    it('rejects uploads when all mounts are read-only', async () => {
+      const { basePath } = await createWorkspace();
+      const filesystem = new LocalFilesystem({ basePath, readOnly: true });
+      const writeFile = vi.spyOn(filesystem, 'writeFile');
+      const workspace = new Workspace({ mounts: { '/data': filesystem } });
+
+      await expect(
+        routeAttachmentsToWorkspace({
+          agent: createAgent(workspace),
+          messages: [{ role: 'user', content: [{ type: 'file', data: BASE64, mediaType: XLSX, filename: 'r.xlsx' }] }],
+          requestContext: new RequestContext(),
+        }),
+      ).rejects.toMatchObject({ status: 403, message: 'No writable mount available for spreadsheet attachments' });
+      expect(writeFile).not.toHaveBeenCalled();
     });
   });
 

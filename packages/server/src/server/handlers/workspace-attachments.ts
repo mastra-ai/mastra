@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { CompositeFilesystem } from '@mastra/core/workspace';
 import { HTTPException } from '../http-exception';
 
 export const WORKSPACE_REQUIRED_ERROR_CODE = 'WORKSPACE_REQUIRED_FOR_ATTACHMENT';
@@ -40,6 +41,10 @@ function workspaceRequiredError(mediaType: string): HTTPException {
   return new HTTPException(403, { res, message, cause: { code: WORKSPACE_REQUIRED_ERROR_CODE, mediaType } });
 }
 
+function isCompositeFilesystem(filesystem: unknown): filesystem is CompositeFilesystem {
+  return !!filesystem && typeof filesystem === 'object' && 'mounts' in filesystem && filesystem.mounts instanceof Map;
+}
+
 export async function routeAttachmentsToWorkspace<T>({
   agent,
   messages,
@@ -56,8 +61,22 @@ export async function routeAttachmentsToWorkspace<T>({
   }
 
   const workspace = await agent.getWorkspace({ requestContext });
-  const filesystem = workspace?.filesystem;
-  const sandbox = workspace?.sandbox;
+  const filesystem = workspace?.resolveFilesystem
+    ? await workspace.resolveFilesystem({ requestContext })
+    : workspace?.filesystem;
+  const sandbox = filesystem
+    ? undefined
+    : workspace?.resolveSandbox
+      ? await workspace.resolveSandbox({ requestContext })
+      : workspace?.sandbox;
+  let uploadDirectory = 'uploads';
+  if (isCompositeFilesystem(filesystem)) {
+    const mount = [...filesystem.mounts].find(([, fs]) => !fs.readOnly);
+    if (!mount) {
+      throw new HTTPException(403, { message: 'No writable mount available for spreadsheet attachments' });
+    }
+    uploadDirectory = `${mount[0].replace(/\/$/, '')}/uploads`;
+  }
   const write = filesystem
     ? (path: string, content: Buffer) => filesystem.writeFile(path, content)
     : sandbox?.writeFiles
@@ -75,7 +94,7 @@ export async function routeAttachmentsToWorkspace<T>({
         if (!isWorkspaceRoutedPart(part)) return part;
         const mediaType = mediaTypeOf(part);
         const name = sanitizeFilename(part.filename);
-        const path = `uploads/${randomUUID()}/${name}`;
+        const path = `${uploadDirectory}/${randomUUID()}/${name}`;
         await write(path, decodeData((part as { data?: unknown }).data));
         return {
           type: 'text',
