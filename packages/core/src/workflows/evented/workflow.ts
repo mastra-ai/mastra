@@ -62,6 +62,7 @@ import type { Tool } from '../../tools/tool';
 import { isMastraTool } from '../../tools/toolchecks';
 import type { ToolExecutionContext } from '../../tools/types';
 import type { DynamicArgument } from '../../types';
+import type { WorkflowsStorage } from '../../storage/domains/workflows/base';
 import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
 import type { Step } from '../../workflows/step';
 import type {
@@ -2397,6 +2398,80 @@ export class EventedRun<
     return this.streamOutput;
   }
 
+  async #claimResume(workflowsStore: WorkflowsStorage): Promise<void> {
+    const claimed = await workflowsStore.updateWorkflowState({
+      workflowName: this.workflowId,
+      runId: this.runId,
+      opts: { status: 'running', expectedStatus: 'suspended' },
+    });
+
+    if (claimed) {
+      return;
+    }
+
+    const current = await workflowsStore.loadWorkflowSnapshot({
+      workflowName: this.workflowId,
+      runId: this.runId,
+    });
+
+    if (!current) {
+      throw new Error(`Cannot resume workflow: no snapshot found for runId ${this.runId}`);
+    }
+
+    throw new MastraError({
+      id: 'WORKFLOW_RESUME_ALREADY_CLAIMED',
+      domain: ErrorDomain.MASTRA_WORKFLOW,
+      category: ErrorCategory.USER,
+      text:
+        `This suspended workflow run was already resumed by another caller. Workflow "${this.workflowId}" run "${this.runId}" ` +
+        `moved from "suspended" to "${current.status}" before this resume could claim it. ` +
+        `Only one resume() call may continue a given suspension; re-read the run state before resuming again.`,
+      details: {
+        workflowId: this.workflowId,
+        runId: this.runId,
+        expectedStatus: 'suspended',
+        actualStatus: current.status ?? 'unknown',
+      },
+    });
+  }
+
+  async #releaseResumeClaimIfUnused(
+    workflowsStore: WorkflowsStorage,
+    snapshot: WorkflowRunState,
+    resumedStepId: string,
+  ): Promise<void> {
+    try {
+      const current = await workflowsStore.loadWorkflowSnapshot({
+        workflowName: this.workflowId,
+        runId: this.runId,
+      });
+      const claimedPaths = Object.keys(snapshot.suspendedPaths ?? {});
+      const currentPaths = Object.keys(current?.suspendedPaths ?? {});
+      const claimedStepIds = Object.keys(snapshot.context ?? {});
+      const currentStepIds = Object.keys(current?.context ?? {});
+      const resumedStepResult = current?.context?.[resumedStepId] as { status?: string } | undefined;
+      const engineNeverStarted =
+        current?.status === 'running' &&
+        currentPaths.length === claimedPaths.length &&
+        claimedPaths.every(path => currentPaths.includes(path)) &&
+        currentStepIds.length === claimedStepIds.length &&
+        claimedStepIds.every(stepId => currentStepIds.includes(stepId)) &&
+        resumedStepResult?.status === 'suspended';
+
+      if (engineNeverStarted) {
+        await workflowsStore.updateWorkflowState({
+          workflowName: this.workflowId,
+          runId: this.runId,
+          opts: { status: 'suspended', expectedStatus: 'running' },
+        });
+      }
+    } catch (releaseError) {
+      this.mastra
+        ?.getLogger()
+        ?.warn(`[Workflow ${this.workflowId}] Failed to release resume claim for run ${this.runId}`, releaseError);
+    }
+  }
+
   async resume<TResumeSchema>(params: {
     resumeData?: TResumeSchema;
     step?:
@@ -2548,6 +2623,8 @@ export class EventedRun<
       throw new Error('Mastra instance with pubsub is required for workflow execution');
     }
 
+    await this.#claimResume(workflowsStore);
+
     this.setupAbortHandler();
 
     // Extract state from snapshot - could be in context.__state or in value
@@ -2582,6 +2659,10 @@ export class EventedRun<
         }
 
         return result;
+      })
+      .catch(async error => {
+        await this.#releaseResumeClaimIfUnused(workflowsStore, snapshot, steps[0]!);
+        throw error;
       });
 
     this.executionResults = executionResultPromise;
