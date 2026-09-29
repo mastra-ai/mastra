@@ -2,7 +2,6 @@ import { Children, isValidElement } from 'react';
 import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
 
 import { PageHeaderAction } from './page-header-action';
-import { PageHeaderDescription } from './page-header-description';
 import { PageHeaderEyebrow } from './page-header-eyebrow';
 import { PageHeaderIcon } from './page-header-icon';
 import { PageHeaderMeta } from './page-header-meta';
@@ -10,40 +9,7 @@ import type { PageHeaderMetaProps } from './page-header-meta';
 import { PageHeaderTitle } from './page-header-title';
 import { cn } from '@/lib/utils';
 
-export interface PageHeaderRootProps extends Omit<ComponentPropsWithoutRef<'header'>, 'title'> {
-  title?: React.ReactNode;
-  description?: React.ReactNode;
-  icon?: React.ReactNode;
-  isLoading?: boolean;
-}
-
-type LegacySlotProps = Pick<PageHeaderRootProps, 'title' | 'description' | 'icon' | 'isLoading'> & {
-  hasChildTitle: boolean;
-};
-
-function legacySlots({ title, description, icon, isLoading, hasChildTitle }: LegacySlotProps): ReactNode[] {
-  if (title === undefined) return [];
-
-  const slots: ReactNode[] = [];
-  if (icon !== undefined && !isLoading) {
-    slots.push(<PageHeaderIcon key="icon">{icon}</PageHeaderIcon>);
-  }
-  if (!hasChildTitle) {
-    slots.push(
-      <PageHeaderTitle key="title" isLoading={isLoading}>
-        {title}
-      </PageHeaderTitle>,
-    );
-  }
-  if (description !== undefined) {
-    slots.push(
-      <PageHeaderDescription key="description" isLoading={isLoading}>
-        {description}
-      </PageHeaderDescription>,
-    );
-  }
-  return slots;
-}
+export type PageHeaderRootProps = ComponentPropsWithoutRef<'header'>;
 
 function isSlot(child: ReactNode, type: ElementType) {
   return isValidElement(child) && child.type === type;
@@ -64,18 +30,8 @@ function groupSlots(items: ReactNode[]) {
   return { eyebrows, icons, headline, below, actions };
 }
 
-export function PageHeaderRoot({
-  children,
-  className,
-  title,
-  description,
-  icon,
-  isLoading,
-  ...props
-}: PageHeaderRootProps) {
-  const childItems = Children.toArray(children);
-  const hasChildTitle = childItems.some(child => isSlot(child, PageHeaderTitle));
-  const items = [...legacySlots({ title, description, icon, isLoading, hasChildTitle }), ...childItems];
+export function PageHeaderRoot({ children, className, ...props }: PageHeaderRootProps) {
+  const items = Children.toArray(children);
   const { eyebrows, icons, headline, below, actions } = groupSlots(items);
   const hasControls = icons.length > 0 || actions.length > 0;
 

@@ -17,3 +17,21 @@ Added `PageHeader.Eyebrow` for a back link above the page title, and fixed `Page
   <PageHeader.Title>Create alert</PageHeader.Title>
 </PageHeader>
 ```
+
+**Breaking:** removed the `title`, `description`, `icon`, and `isLoading` props from `PageHeader`. Compose the slots instead:
+
+```tsx
+// Before
+<PageHeader title="Agents" description="Build and test agents." icon={<BotIcon />} />
+
+// After
+<PageHeader>
+  <PageHeader.Icon>
+    <BotIcon />
+  </PageHeader.Icon>
+  <PageHeader.Title>Agents</PageHeader.Title>
+  <PageHeader.Description>Build and test agents.</PageHeader.Description>
+</PageHeader>
+```
+
+For a loading state, pass `isLoading` to `PageHeader.Title` and `PageHeader.Description`.

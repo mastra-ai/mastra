@@ -29,50 +29,6 @@ describe('PageHeader', () => {
     expect(markup).toContain('Edit');
   });
 
-  it('renders the legacy prop API', () => {
-    const markup = renderToStaticMarkup(
-      <PageHeader title="Legacy title" description="Legacy description" icon="Legacy icon" />,
-    );
-
-    expect(markup).toContain('Legacy title');
-    expect(markup).toContain('Legacy description');
-    expect(markup).toContain('Legacy icon');
-  });
-
-  it('hides legacy content while loading', () => {
-    const markup = renderToStaticMarkup(
-      <PageHeader title="Legacy title" description="Legacy description" icon="Legacy icon" isLoading />,
-    );
-
-    expect(markup).not.toContain('Legacy title');
-    expect(markup).not.toContain('Legacy description');
-    expect(markup).not.toContain('Legacy icon');
-  });
-
-  it('lets a Title child replace the legacy title prop', () => {
-    const markup = renderToStaticMarkup(
-      <PageHeader title="Legacy title" description="Legacy description">
-        <PageHeader.Title>Child title</PageHeader.Title>
-      </PageHeader>,
-    );
-
-    expect(markup.match(/<h1/g)).toHaveLength(1);
-    expect(markup).toContain('Child title');
-    expect(markup).not.toContain('Legacy title');
-    expect(markup).toContain('Legacy description');
-  });
-
-  it('keeps the legacy title when an eyebrow is supplied', () => {
-    const markup = renderToStaticMarkup(
-      <PageHeader title="Create alert">
-        <PageHeader.Eyebrow>Alerts</PageHeader.Eyebrow>
-      </PageHeader>,
-    );
-
-    expect(markup).toContain('Alerts');
-    expect(markup).toContain('Create alert');
-  });
-
   it('renders the title before beside metadata regardless of child order', () => {
     const markup = renderToStaticMarkup(
       <PageHeader>
