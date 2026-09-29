@@ -34,12 +34,13 @@ function isApiCallError(value: unknown): value is ApiCallErrorLike {
 function apiCallErrorDetails(error: Error): Record<string, unknown> | undefined {
   const apiError = isApiCallError(error) ? error : isApiCallError(error.cause) ? error.cause : undefined;
   if (!apiError) return undefined;
-  return {
-    statusCode: apiError.statusCode,
-    url: apiError.url,
-    isRetryable: apiError.isRetryable,
-    responseBody: apiError.responseBody,
-  };
+  const details: Record<string, unknown> = {};
+  if (apiError.statusCode !== undefined) details.statusCode = apiError.statusCode;
+  // Keep only origin and path: a custom baseURL may carry a credential in the query string.
+  if (apiError.url !== undefined) details.url = apiError.url.split('?')[0];
+  if (apiError.isRetryable !== undefined) details.isRetryable = apiError.isRetryable;
+  if (apiError.responseBody !== undefined) details.responseBody = apiError.responseBody;
+  return details;
 }
 
 export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {

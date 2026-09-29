@@ -501,25 +501,31 @@ describe('Tracing', () => {
       const span = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent', attributes: { agentId: 'a' } });
       const apiError = new APICallError({
         message: 'Unauthorized',
-        url: 'https://api.example.com/v1/chat',
+        url: 'https://api.example.com/v1/chat?key=sk-live-secret',
         requestBodyValues: {},
         statusCode: 401,
       });
 
       span.error({
         error: new MastraError(
-          { id: 'LLM_FAILED', domain: 'LLM', category: 'THIRD_PARTY', details: { modelId: 'gpt-x' } },
+          {
+            id: 'LLM_FAILED',
+            domain: 'LLM',
+            category: 'THIRD_PARTY',
+            details: { modelId: 'gpt-x', responseBody: 'kept from the wrapper' },
+          },
           apiError,
         ),
       });
 
       expect(span.errorInfo?.id).toBe('LLM_FAILED');
+      // Absent API fields never overwrite wrapper details; the URL query string is dropped.
       expect(span.errorInfo?.details).toEqual({
         modelId: 'gpt-x',
+        responseBody: 'kept from the wrapper',
         statusCode: 401,
         url: 'https://api.example.com/v1/chat',
         isRetryable: false,
-        responseBody: undefined,
       });
     });
 
