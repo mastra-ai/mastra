@@ -12,7 +12,7 @@ Every Mastra application UI is assembled from the `@mastra/playground-ui` design
 - **Look** — colors, typography, radius, shadows, borders, internal padding — belongs to the design system. Consumers never restyle it.
 - **Layout** — positioning, flex/grid placement, `gap-*`, margins, size constraints (`w-*`, `max-w-*`, `min-h-*`, `shrink-0`) — belongs to the consumer, through Tailwind utilities on your own wrappers and, when needed, directly on DS components.
 
-`className` on a DS component is fine for layout (`<DialogContent className="max-w-100">`) and forbidden for look (`<Button className="bg-red-500 text-xs">`). If a component's look doesn't fit, use its variants and props; if none fit, escalate for a new variant instead of overriding.
+`className` on a DS component is fine for layout (`<DialogContent size="xl" className="h-[80vh]">`, where `size` picks the width and the class only pins the height) and forbidden for look (`<Button className="bg-red-500 text-xs">`). If a component's look doesn't fit, use its variants and props; if none fit, escalate for a new variant instead of overriding.
 
 ## Find what exists — never guess, never rebuild
 
