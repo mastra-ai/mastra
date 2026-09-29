@@ -43,11 +43,7 @@ export function ThreadTraceRow({ traceId, className, children, ...props }: Threa
     <ThreadTraceRowContext.Provider value={contextValue}>
       <div
         data-slot="thread-trace-row"
-        className={cn(
-          'group flex flex-col pr-4 pl-14 transition-opacity hover:opacity-100',
-          isActive || isCurrent ? 'opacity-100' : 'opacity-50',
-          className,
-        )}
+        className={cn('flex flex-col pr-4 pl-14', className)}
         data-trace-id={traceId}
         data-active={isActive || undefined}
         ref={isAnchor ? scrollIntoViewOnMount : undefined}

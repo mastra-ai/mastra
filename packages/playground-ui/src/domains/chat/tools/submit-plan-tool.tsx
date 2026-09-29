@@ -23,7 +23,8 @@ import { Skeleton } from '@/ds/components/Skeleton';
 import { Txt } from '@/ds/components/Txt';
 
 export interface SubmitPlanToolProps {
-  agentId: string;
+  /** Omitted for read-only history (e.g. traces): submitted plans still render, pending ones can't be answered. */
+  agentId?: string;
   agentVersionId?: string;
   requestContext?: Record<string, any>;
   toolName: string;
@@ -214,6 +215,7 @@ export function SubmitPlanTool({
   const submittedPlan = getSubmittedPlan(output);
   if (submittedPlan) return <SubmittedPlanCard plan={submittedPlan} />;
 
+  if (!agentId) return null;
   const path = getSuspendedPlanPath(metadata, toolName, toolCallId);
   if (!path) return null;
 

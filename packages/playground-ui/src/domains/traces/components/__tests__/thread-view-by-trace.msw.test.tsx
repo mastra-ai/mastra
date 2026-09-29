@@ -433,22 +433,6 @@ describe('ThreadViewByTrace', () => {
     });
   });
 
-  it('emphasises the first row in view while the others stay dimmed', async () => {
-    const { intersect } = stubIntersectionObserver();
-    installHandlers();
-    const { queryClient } = renderView();
-
-    await screen.findByText('Turn 2');
-    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-
-    expect(rowOf('trace-a').className).toContain('opacity-50');
-    act(() => intersect(rowOf('trace-a')));
-
-    expect(rowOf('trace-a').className).not.toContain('opacity-50');
-    expect(rowOf('trace-b').className).toContain('opacity-50');
-    vi.unstubAllGlobals();
-  });
-
   describe('the trace column tabs', () => {
     it('links the open trace to the traces page', async () => {
       installHandlers();

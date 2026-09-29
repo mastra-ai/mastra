@@ -1,9 +1,9 @@
-import { WaypointsIcon } from 'lucide-react';
 import type { ComponentProps } from 'react';
 
 import { useThreadTraceRow } from './thread-trace-row-context';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
+import { TraceIcon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 
 export type ThreadTraceTurnDividerProps = Omit<ComponentProps<'div'>, 'children'>;
@@ -18,7 +18,7 @@ export function ThreadTraceTurnDivider({ className, ...props }: ThreadTraceTurnD
       <Txt as="span" variant="caption" tone="muted" className="shrink-0">
         Turn {turn}
       </Txt>
-      <div className="h-px flex-1 bg-border" />
+      <div className="h-px flex-1 bg-border/40" />
       <Button
         variant="ghost"
         size="sm"
@@ -27,7 +27,7 @@ export function ThreadTraceTurnDivider({ className, ...props }: ThreadTraceTurnD
         aria-pressed={isActive}
         onClick={toggleTrace}
       >
-        <WaypointsIcon />
+        <TraceIcon />
       </Button>
     </div>
   );

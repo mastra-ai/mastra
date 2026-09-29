@@ -200,17 +200,6 @@ describe('ThreadTrace', () => {
       expect(scrollIntoView).toHaveBeenCalledTimes(1);
       expect(scrollIntoView.mock.instances[0]).toBe(getRow('trace-b'));
     });
-
-    it('emphasises the first row in view and dims the others', async () => {
-      const { intersect } = stubIntersectionObserver();
-      renderView();
-      await screen.findByText('Messages for trace-a');
-
-      expect(getRow('trace-a').className).toContain('opacity-50');
-      act(() => intersect(getRow('trace-b')));
-      expect(getRow('trace-b').className).toContain('opacity-100');
-      expect(getRow('trace-a').className).toContain('opacity-50');
-    });
   });
 
   describe('trace column', () => {
