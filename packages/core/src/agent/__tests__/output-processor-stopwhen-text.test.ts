@@ -83,6 +83,17 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
       expect(text).toBe('Hello there.');
     });
 
+    it(`keeps text on both sides of the tool call in the final step (processor: ${withProcessor})`, async () => {
+      const model = scriptedModel([
+        [...textPart('t1', 'Before. '), askCall('c1'), ...textPart('t2', 'After.'), finish('tool-calls')],
+      ]);
+      const { text, steps } = await run(makeAgent(model, withProcessor));
+
+      expect(steps).toHaveLength(1);
+      expect(steps.at(-1)!.text).toBe('Before. After.');
+      expect(text).toBe('Before. After.');
+    });
+
     it(`does not leak earlier-step text when the final step is tool-only (processor: ${withProcessor})`, async () => {
       const model = scriptedModel([
         [...textPart('t1', 'Let me check.'), { ...askCall('c0'), toolName: 'noop' }, finish('tool-calls')],

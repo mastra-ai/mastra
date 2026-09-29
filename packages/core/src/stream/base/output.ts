@@ -178,10 +178,12 @@ export type FullOutput<OUTPUT = undefined> = {
  * The completionResult metadata only exists on DB-format messages, and the
  * message is converted alone so adjacent assistant messages aren't merged.
  *
- * When the run stopped on a tool call, the converted transcript ends with a
- * `tool` result message that has no text. The final step's processed text is
- * then read from the parts after the last `step-start` of the DB message, so
- * text from earlier steps merged into the same message is not picked up.
+ * Converting to model messages splits an assistant message at every tool
+ * result, so when the current loop iteration called a tool the last converted
+ * message holds only the text after the call, or nothing if the step ended on
+ * it. In that case the text is read from the DB message's parts after the
+ * iteration's boundary instead. The last `step-start` is not that boundary:
+ * one is also inserted inside a single response whenever text follows a tool call.
  *
  * Returns `undefined` only when there is no response message to read text from,
  * so callers can distinguish "no processed output exists" from an output
@@ -194,25 +196,18 @@ function resolveOutputTextSkippingCompletionChecks(messageList: MessageList): st
   const lastRealMessage = hasCompletionCheckMessages
     ? responseDbMessages.findLast(m => !m.content?.metadata?.completionResult)
     : responseDbMessages[responseDbMessages.length - 1];
+  if (!lastRealMessage) return undefined;
+  if (lastRealMessage.role === 'assistant' && lastRealMessage.content?.parts) {
+    const stepParts = messageList.partsSinceStepBoundary(lastRealMessage);
+    if (stepParts.some(p => p.type === 'tool-invocation')) {
+      return stepParts.map(p => (p.type === 'text' ? p.text : '')).join('');
+    }
+  }
   const converted = hasCompletionCheckMessages
-    ? lastRealMessage
-      ? convertMessages([lastRealMessage]).to('AIV4.Core')
-      : []
+    ? convertMessages([lastRealMessage]).to('AIV4.Core')
     : messageList.get.response.aiV4.core();
   const lastConverted = converted[converted.length - 1];
-  if (!lastConverted) return undefined;
-  if (lastConverted.role !== 'tool') return coreContentToString(lastConverted.content);
-  return finalStepText(lastRealMessage);
-}
-
-function finalStepText(message: MastraDBMessage | undefined): string | undefined {
-  const parts = message?.role === 'assistant' ? message.content?.parts : undefined;
-  if (!parts) return undefined;
-  const lastStepStart = parts.findLastIndex(p => p.type === 'step-start');
-  return parts
-    .slice(lastStepStart + 1)
-    .map(p => (p.type === 'text' ? p.text : ''))
-    .join('');
+  return lastConverted ? coreContentToString(lastConverted.content) : undefined;
 }
 
 export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
