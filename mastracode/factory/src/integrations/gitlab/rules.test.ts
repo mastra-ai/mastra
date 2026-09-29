@@ -484,35 +484,119 @@ describe('GitLabRules', () => {
     ]);
   });
 
-  it('records the open merge request on its authoring Work card and clears it on close', async () => {
-    const { seeded, project, service } = await setup();
-    const work = (
-      await seeded.workItems.upsert({
-        orgId: 'org-1',
-        userId: 'user-1',
-        factoryProjectId: project.id,
-        input: {
-          externalSource: { integrationId: 'gitlab', type: 'issue', externalId: 'gitlab-issue:authoring' },
-          title: 'Authoring work',
-          board: 'work',
-          stages: ['execute'],
-          sessions: { work: { sessionId: 'work-session', threadId: 'work-thread', branch: 'feature-17' } },
-          metadata: { authorTrusted: true },
-        },
-      })
-    ).item;
-    await service.ingest(mergeRequestOpened());
-    expect((await seeded.workItems.get({ orgId: 'org-1', id: work.id }))?.metadata?.openPullRequestNumber).toBe(17);
+  describe('open merge request tracking on the authoring Work card', () => {
+    async function seedWork(
+      seeded: Awaited<ReturnType<typeof setup>>['seeded'],
+      projectId: string,
+      metadata: Record<string, unknown> = {},
+      suffix = 'authoring',
+    ) {
+      return (
+        await seeded.workItems.upsert({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: projectId,
+          input: {
+            externalSource: { integrationId: 'gitlab', type: 'issue', externalId: `gitlab-issue:${suffix}` },
+            title: 'Authoring work',
+            board: 'work',
+            stages: ['execute'],
+            sessions: { work: { sessionId: `${suffix}-session`, threadId: `${suffix}-thread`, branch: 'feature-17' } },
+            metadata: { authorTrusted: true, ...metadata },
+          },
+        })
+      ).item;
+    }
 
-    const closed = mergeRequestOpened('delivery-mr-close');
-    await service.ingest({
-      ...closed,
-      payload: {
-        ...closed.payload,
-        object_attributes: { ...closed.payload.object_attributes, action: 'close', state: 'closed' },
-      },
+    function mergeRequestEvent(
+      deliveryId: string,
+      action: 'open' | 'reopen' | 'close' | 'merge',
+      updatedAt: string,
+      iid = 17,
+    ) {
+      const base = mergeRequestOpened(deliveryId);
+      const state = action === 'close' ? 'closed' : action === 'merge' ? 'merged' : 'opened';
+      return {
+        ...base,
+        payload: {
+          ...base.payload,
+          object_attributes: { ...base.payload.object_attributes, iid, action, state, updated_at: updatedAt },
+        },
+      };
+    }
+
+    it('records it on open and clears it on close', async () => {
+      const { seeded, project, service } = await setup();
+      const work = await seedWork(seeded, project.id);
+      const read = async () => (await seeded.workItems.get({ orgId: 'org-1', id: work.id }))?.metadata;
+
+      await service.ingest(mergeRequestEvent('d-open', 'open', '2030-01-01T00:00:00Z'));
+      expect((await read())?.openPullRequestNumber).toBe(17);
+
+      await service.ingest(mergeRequestEvent('d-close', 'close', '2030-01-01T01:00:00Z'));
+      expect((await read())?.openPullRequestNumber).toBeNull();
     });
-    expect((await seeded.workItems.get({ orgId: 'org-1', id: work.id }))?.metadata?.openPullRequestNumber).toBeNull();
+
+    it('records a genuine reopen again but ignores an opening older than the close', async () => {
+      const { seeded, project, service } = await setup();
+      const work = await seedWork(seeded, project.id);
+      const read = async () => (await seeded.workItems.get({ orgId: 'org-1', id: work.id }))?.metadata;
+
+      await service.ingest(mergeRequestEvent('d-open', 'open', '2030-01-01T00:00:00Z'));
+      await service.ingest(mergeRequestEvent('d-close', 'close', '2030-01-01T01:00:00Z'));
+      // A redelivered opening from before the close must not mark it open again.
+      await service.ingest(mergeRequestEvent('d-open-late', 'open', '2030-01-01T00:00:00Z'));
+      expect((await read())?.openPullRequestNumber).toBeNull();
+
+      await service.ingest(mergeRequestEvent('d-reopen', 'reopen', '2030-01-01T02:00:00Z'));
+      expect((await read())?.openPullRequestNumber).toBe(17);
+    });
+
+    it('ignores an opening delivered after the close it precedes', async () => {
+      const { seeded, project, service } = await setup();
+      const work = await seedWork(seeded, project.id);
+
+      await service.ingest(mergeRequestEvent('d-close', 'close', '2030-01-01T01:00:00Z'));
+      await service.ingest(mergeRequestEvent('d-open', 'open', '2030-01-01T00:00:00Z'));
+      expect(
+        (await seeded.workItems.get({ orgId: 'org-1', id: work.id }))?.metadata?.openPullRequestNumber,
+      ).toBeUndefined();
+    });
+
+    it('clears the open merge request and its verdict when that merge request merges', async () => {
+      const { seeded, project, service } = await setup();
+      const work = await seedWork(seeded, project.id);
+      const read = async () => (await seeded.workItems.get({ orgId: 'org-1', id: work.id }))?.metadata;
+
+      await service.ingest(mergeRequestEvent('d-open', 'open', '2030-01-01T00:00:00Z'));
+      const current = await seeded.workItems.get({ orgId: 'org-1', id: work.id });
+      await seeded.workItems.update({
+        orgId: 'org-1',
+        id: work.id,
+        userId: 'user-1',
+        expectedRevision: current!.revision,
+        patch: { metadata: { reviewVerdict: 'request changes' } },
+      });
+
+      await service.ingest(mergeRequestEvent('d-merge-other', 'merge', '2030-01-01T01:00:00Z', 18));
+      expect(await read()).toMatchObject({ openPullRequestNumber: 17, reviewVerdict: 'request changes' });
+
+      await service.ingest(mergeRequestEvent('d-merge', 'merge', '2030-01-01T02:00:00Z'));
+      expect(await read()).toMatchObject({ openPullRequestNumber: null, reviewVerdict: null });
+    });
+
+    it('records nothing when two Work cards share the merge request branch', async () => {
+      const { seeded, project, service } = await setup();
+      const first = await seedWork(seeded, project.id, {}, 'first');
+      const second = await seedWork(seeded, project.id, {}, 'second');
+
+      await service.ingest(mergeRequestEvent('d-open', 'open', '2030-01-01T00:00:00Z'));
+      for (const item of [first, second]) {
+        expect(
+          (await seeded.workItems.get({ orgId: 'org-1', id: item.id }))?.metadata?.openPullRequestNumber,
+        ).toBeUndefined();
+      }
+    });
   });
 
   it('does not route an MR note to an unrelated Work branch', async () => {

@@ -13,6 +13,7 @@ import type {
   ExternalRepositoryProjectTarget,
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
+import { WorkItemUpdateConflictError } from '../../storage/domains/work-items/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
 import type { GitLabEventRules } from './default-rules.js';
@@ -33,6 +34,14 @@ function string(value: unknown): string | undefined {
 
 function number(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+/** GitLab sends `2024-01-02T03:04:05Z` or `2024-01-02 03:04:05 UTC`. */
+function timestamp(value: unknown): number | undefined {
+  const text = string(value);
+  if (!text) return undefined;
+  const parsed = Date.parse(text.replace(' UTC', 'Z').replace(' ', 'T'));
+  return Number.isNaN(parsed) ? undefined : parsed;
 }
 
 function boolean(value: unknown): boolean | undefined {
@@ -363,40 +372,81 @@ export class GitLabRules {
     }
     // The authoring Work item records which merge request it has out, so the
     // Work transition policy keeps an agent from closing the work while it is
-    // open. A replayed opening after the merge request settled must not restore it.
-    if (authoringItem && mergeRequestIid) {
-      const recorded = authoringItem.metadata?.openPullRequestNumber;
-      const settledReview =
-        reviewItem !== undefined &&
-        (reviewItem.metadata?.state === 'closed' ||
-          reviewItem.stages.some(stage => stage === 'done' || stage === 'canceled'));
-      const patch =
-        event === 'mergeRequestOpened'
-          ? string(mergeRequest?.state) === 'opened' && (actorTrusted || mergeRequestAuthorTrusted) && !settledReview
-            ? recorded === mergeRequestIid
-              ? undefined
-              : { openPullRequestNumber: mergeRequestIid }
-            : undefined
-          : (event === 'mergeRequestMerged' || event === 'mergeRequestClosed') && recorded === mergeRequestIid
-            ? {
-                openPullRequestNumber: null,
-                ...(event === 'mergeRequestMerged' && typeof authoringItem.metadata?.reviewVerdict === 'string'
-                  ? { reviewVerdict: null }
-                  : {}),
-              }
-            : undefined;
-      if (patch) {
-        await this.options.storage.update({
-          orgId: authoringItem.orgId,
-          id: authoringItem.id,
-          userId: 'factory-rule-dispatcher',
-          patch: { metadata: patch },
-        });
-      }
+    // open. Sessions carry no repository, so a branch shared by two Work cards
+    // is ambiguous and records nothing.
+    const branchOwners = headBranch
+      ? items.filter(
+          item =>
+            item.externalSource?.type !== 'pull-request' &&
+            Object.values(item.sessions).some(session => session.branch === headBranch),
+        )
+      : [];
+    if (authoringItem && mergeRequestIid && branchOwners.length === 1) {
+      await this.#trackOpenMergeRequest({
+        orgId: authoringItem.orgId,
+        id: authoringItem.id,
+        event,
+        mergeRequestIid,
+        eventAt: timestamp(mergeRequest?.updated_at),
+        opened: string(mergeRequest?.state) === 'opened' && (actorTrusted || mergeRequestAuthorTrusted),
+      });
     }
     if (results.some(result => result.status === 'committed')) return { status: 'committed' };
     if (results.some(result => result.status === 'replayed')) return { status: 'replayed' };
     return results[0] ?? { status: 'ignored' };
+  }
+
+  /**
+   * Records or clears the merge request a Work card has out. Each merge
+   * request's last applied event time is kept on the card, so an opening that
+   * is older than a close already applied (a replay, or a close delivered
+   * first) is ignored, while a genuine reopen is newer and records it again.
+   */
+  async #trackOpenMergeRequest(input: {
+    orgId: string;
+    id: string;
+    event: string;
+    mergeRequestIid: number;
+    eventAt: number | undefined;
+    opened: boolean;
+  }): Promise<void> {
+    const settling = input.event === 'mergeRequestMerged' || input.event === 'mergeRequestClosed';
+    if (input.event !== 'mergeRequestOpened' && !settling) return;
+    const key = String(input.mergeRequestIid);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const item = await this.options.storage.get({ orgId: input.orgId, id: input.id });
+      if (!item) return;
+      const events = object(item.metadata?.mergeRequestEvents) ?? {};
+      const last = object(events[key]);
+      const lastAt = number(last?.at);
+      if (input.eventAt !== undefined && lastAt !== undefined && lastAt >= input.eventAt) return;
+      // Without a timestamp, only an opening that no close has settled is trusted.
+      if (input.eventAt === undefined && !settling && last?.open === false) return;
+      if (!settling && !input.opened) return;
+      const recorded = item.metadata?.openPullRequestNumber;
+      const patch: Record<string, unknown> = {
+        mergeRequestEvents: { ...events, [key]: { at: input.eventAt ?? lastAt ?? null, open: !settling } },
+      };
+      if (!settling) patch.openPullRequestNumber = input.mergeRequestIid;
+      else if (recorded === input.mergeRequestIid) {
+        patch.openPullRequestNumber = null;
+        if (input.event === 'mergeRequestMerged' && typeof item.metadata?.reviewVerdict === 'string') {
+          patch.reviewVerdict = null;
+        }
+      }
+      try {
+        await this.options.storage.update({
+          orgId: item.orgId,
+          id: item.id,
+          userId: 'factory-rule-dispatcher',
+          expectedRevision: item.revision,
+          patch: { metadata: patch },
+        });
+        return;
+      } catch (error) {
+        if (!(error instanceof WorkItemUpdateConflictError)) throw error;
+      }
+    }
   }
 
   async #trusted(connectionIds: string[], projectId: string, username: string): Promise<boolean> {
