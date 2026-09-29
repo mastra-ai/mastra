@@ -265,12 +265,13 @@ export const createKeyboardDispatcher = (): KeyboardDispatcher => {
     // Sequence prefixes win over plain combos on the same key.
     const candidates = bindings.filter(({ steps, layer }) => {
       const [first] = steps;
-      return !event.repeat && steps.length > 1 && first && matchesCombo(event, first) && accepts(layer, event);
+      return steps.length > 1 && first && matchesCombo(event, first) && accepts(layer, event);
     });
     const first = candidates[0]?.steps[0];
     if (first) {
       event.preventDefault();
-      arm([first], candidates, now);
+      // A held prefix keeps the armed sequence instead of restarting it.
+      if (!event.repeat) arm([first], candidates, now);
       return;
     }
 

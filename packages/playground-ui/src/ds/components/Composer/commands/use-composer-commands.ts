@@ -76,10 +76,16 @@ export function useComposerCommands({
     return event.key !== 'Enter' || !submitExactCommand;
   }
 
+  // Holding an arrow keeps moving; holding Enter or Tab must not select repeatedly.
   useKeydown(
     {
       ArrowDown: () => moveSelection(1),
       ArrowUp: () => moveSelection(-1),
+    },
+    { target: inputRef, enabled: items.length > 0, repeat: true },
+  );
+  useKeydown(
+    {
       Escape: returnToCommands,
       Tab: () => selectSuggestion(activeIndex),
       Enter: () => selectSuggestion(activeIndex),
@@ -87,7 +93,6 @@ export function useComposerCommands({
     {
       target: inputRef,
       enabled: items.length > 0,
-      repeat: true,
       shouldHandle: shouldHandleCommandKey,
     },
   );

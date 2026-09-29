@@ -530,6 +530,17 @@ describe('useKeydown sequences', () => {
       expect(onGoAgents).toHaveBeenCalledTimes(1);
     });
 
+    it('when a held prefix repeats without a pending sequence, then its default is still prevented', () => {
+      renderHook(() => useKeydown({ 'g$+a': vi.fn() }));
+
+      pressKey('g');
+      vi.advanceTimersByTime(600);
+      const repeat = new KeyboardEvent('keydown', { key: 'g', repeat: true, cancelable: true });
+      window.dispatchEvent(repeat);
+
+      expect(repeat.defaultPrevented).toBe(true);
+    });
+
     it('given shouldHandle rejects the second key, then the sequence stays armed', () => {
       const onGoAgents = vi.fn();
       const shouldHandle = vi.fn((event: KeyboardEvent) => !event.repeat);
