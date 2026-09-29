@@ -441,13 +441,11 @@ export class SessionRunEngine {
     this.emitMessagePart(state, partIndex);
     // The built-in subagent tool emits its own `subagent_end`; only close `agent-<key>` delegations here.
     if (toolName.startsWith('agent-')) {
-      // A delegation that settles before streaming any output has no entry yet, so open one first.
-      if (!this.#session.displayState.get().activeSubagents.has(toolCallId)) {
-        this.startDelegatedSubagent(state, toolCallId, toolName);
-      }
       const subagent = this.#session.displayState.get().activeSubagents.get(toolCallId);
       if (subagent) {
         this.endDelegatedSubagent(toolCallId, subagent, result, isError);
+      } else {
+        this.startDelegatedSubagent(state, toolCallId, toolName);
       }
     }
     this.#session.emit({
