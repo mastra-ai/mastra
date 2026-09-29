@@ -17,14 +17,16 @@ export function SpanPayloadTool({ value, showLabel = true }: { value: unknown; s
   const output = 'result' in call ? call.result : call.output;
   const error = call.isError === true || call.state === 'output-error';
   const errorText = typeof call.errorText === 'string' ? call.errorText : undefined;
-  const { icon: ToolIcon, label, detail } = presentTool(call.toolName, input);
+  const { icon: ToolIcon, label, detail, description } = presentTool(call.toolName, input);
   const hasBody = input !== undefined || output !== undefined || errorText !== undefined;
   return (
     <div data-slot="span-payload-tool" className="flex flex-col gap-2">
       {showLabel && <SpanPayloadLabel>{value.type === 'tool-result' ? 'Tool result' : 'Tool call'}</SpanPayloadLabel>}
       <BadgeWrapper
         status={error ? 'error' : 'idle'}
-        header={<ActivityHeadline icon={<ToolIcon aria-hidden />} label={label} detail={detail} />}
+        header={
+          <ActivityHeadline icon={<ToolIcon aria-hidden />} label={label} detail={detail} description={description} />
+        }
       >
         {hasBody && (
           <div className="flex flex-col gap-3">
