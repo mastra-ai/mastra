@@ -55,14 +55,22 @@ export function verdictEventMismatch(event: ReviewEvent, body: string | undefine
     .join(' or ')} for this body, or regenerate the body for the verdict you intend.`;
 }
 
-const REVIEWED_HEAD_LINE = /^[\s*_>-]*reviewed head[*_]*:[*_]*\s*(.*)$/im;
+const REVIEWED_HEAD_LINE = /^[\s*_>-]*reviewed head[*_]*:[*_]*\s*(.*)$/gim;
 const FULL_SHA = /^`?([0-9a-f]{40}|[0-9a-f]{64})`?(?:\s|$)/i;
 
-/** Returns the full SHA named by a `Reviewed head:` line, `null` when the line is malformed, or `undefined` when absent. */
+/**
+ * Returns the full SHA named by the body's `Reviewed head:` lines, `null` when any line is malformed or the lines
+ * disagree, or `undefined` when absent.
+ */
 export function reviewedHeadFromBody(body: string | undefined): string | null | undefined {
-  const line = REVIEWED_HEAD_LINE.exec(body ?? '');
-  if (!line) return undefined;
-  return FULL_SHA.exec(line[1]!.trim())?.[1]?.toLowerCase() ?? null;
+  const shas = new Set(
+    [...(body ?? '').matchAll(REVIEWED_HEAD_LINE)].map(
+      line => FULL_SHA.exec(line[1]!.trim())?.[1]?.toLowerCase() ?? null,
+    ),
+  );
+  if (shas.size === 0) return undefined;
+  if (shas.size > 1) return null;
+  return [...shas][0];
 }
 
 function authIdentity(requestContext: RequestContext) {
@@ -506,7 +514,7 @@ export function createSourceControlTools({
             ctx.addIssue({
               code: 'custom',
               path: ['body'],
-              message: '"Reviewed head:" must name the full 40- or 64-character commit SHA.',
+              message: 'Every "Reviewed head:" line must name the same full 40- or 64-character commit SHA.',
             });
           }
         }),
@@ -535,7 +543,11 @@ export function createSourceControlTools({
         const base = {
           ...(await reference(target)),
           pullRequestId: changeRequestId(input.changeRequestId),
-          ...(input.commitId !== undefined ? { commitId: input.commitId } : {}),
+          ...(input.commitId !== undefined
+            ? { commitId: input.commitId }
+            : reviewedHead
+              ? { commitId: reviewedHead }
+              : {}),
         };
         if (input.event === 'approve') {
           return target.provider.versionControl.createReview({

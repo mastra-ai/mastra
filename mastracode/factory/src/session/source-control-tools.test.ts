@@ -444,6 +444,15 @@ describe('createSourceControlTools', () => {
       },
     );
 
+    it('rejects a body whose Reviewed head lines disagree', async () => {
+      expect(
+        await schemaError({
+          event: 'approve',
+          body: `Verdict: approve\nReviewed head: ${head}\n\nReviewed head: ${'c'.repeat(40)}\n`,
+        }),
+      ).toMatch(/same full 40- or 64-character commit SHA/);
+    });
+
     it('accepts consistent verdict and full-SHA bodies in the schema', async () => {
       const { setup } = await submit({});
       const tools = createSourceControlTools({
@@ -455,6 +464,10 @@ describe('createSourceControlTools', () => {
       for (const input of [
         { event: 'approve', body: `Verdict: approve\nReviewed head: ${head}\n` },
         { event: 'approve', body: `Verdict: approve\nReviewed head: ${'a'.repeat(64)}\n` },
+        {
+          event: 'approve',
+          body: `Verdict: approve\nReviewed head: ${head}\n\nReviewed head: ${head.toUpperCase()}\n`,
+        },
         { event: 'comment', body: 'Verdict: request changes\n\nFix it.' },
         { event: 'comment', body: 'Looks fine overall, one question inline.' },
       ]) {
@@ -500,6 +513,12 @@ describe('createSourceControlTools', () => {
       });
       await expect(run).resolves.toEqual({ id: 'review-1' });
       expect(setup.createReview).toHaveBeenCalledOnce();
+    });
+
+    it('pins the review to the checked head when commitId is omitted', async () => {
+      const { setup, run } = await submit({ event: 'approve', body: `Verdict: approve\nReviewed head: ${head}\n` });
+      await expect(run).resolves.toEqual({ id: 'review-1' });
+      expect(setup.createReview).toHaveBeenCalledWith(expect.objectContaining({ commitId: head }));
     });
   });
 });
