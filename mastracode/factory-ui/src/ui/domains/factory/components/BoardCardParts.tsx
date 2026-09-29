@@ -12,6 +12,7 @@ import type { BoardCardStatus } from '../boardCardStatus';
 import { HIDDEN_CARD_LABELS, SOURCE_LABELS } from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
 import type { WorkItemSource } from '../services/workItems';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 export function SourceTitle({ source, title, id }: { source: WorkItemSource; title: string; id?: string }) {
   return (
@@ -70,30 +71,35 @@ export function CardStatus({ status }: { status: BoardCardStatus }) {
 
   if (status.kind === 'busy') {
     return (
-      <span
+      <Txt
+        as="span"
+        variant="meta"
+        tone="muted"
         role="status"
         aria-live="polite"
-        className="text-meta text-muted-foreground flex shrink-0 items-center gap-1.5"
+        className="flex shrink-0 items-center gap-1.5"
       >
         <Spinner size="sm" aria-hidden className="size-3" />
         {status.label}
-      </span>
+      </Txt>
     );
   }
 
   const message = (
-    <span
+    <Txt
+      as="span"
+      variant="meta"
       role="alert"
       tabIndex={status.detail === undefined ? undefined : 0}
       className={cn(
-        'text-meta text-destructive-indicator flex w-full min-w-0 items-start gap-1.5',
+        'text-destructive-indicator flex w-full min-w-0 items-start gap-1.5',
         status.detail !== undefined &&
           'focus-visible:outline-border-focus relative cursor-help underline decoration-dotted underline-offset-2 outline-none focus-visible:outline-2',
       )}
     >
       <TriangleAlert size={11} aria-hidden className="mt-0.5 shrink-0" />
       <span className="min-w-0 wrap-anywhere">{status.label}</span>
-    </span>
+    </Txt>
   );
 
   if (status.detail === undefined) return message;
@@ -131,9 +137,12 @@ export function CardLabels({
     <ScrollArea orientation="horizontal" revealScrollbarOnHover={false} aria-label="Labels">
       <div className="flex items-center gap-1.5">
         {displayLabels.map(label => (
-          <span
+          <Txt
+            as="span"
+            variant="meta"
+            tone="muted"
             key={label}
-            className="border-border text-meta text-muted-foreground inline-flex h-5 max-w-40 shrink-0 items-center gap-1 rounded-full border px-1.5"
+            className="border-border inline-flex h-5 max-w-40 shrink-0 items-center gap-1 rounded-full border px-1.5"
             title={label}
           >
             <span
@@ -142,7 +151,7 @@ export function CardLabels({
               aria-hidden
             />
             <span className="truncate">{label}</span>
-          </span>
+          </Txt>
         ))}
       </div>
     </ScrollArea>

@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { FlaskConicalIcon } from 'lucide-react';
 import { useMaybeExperimentalUI } from './experimental-ui-context';
 
@@ -34,7 +35,9 @@ export function ExperimentalUIManager({ pathname }: { pathname?: string }) {
         <div className="grid gap-4">
           {visibleExperiments.map(experiment => (
             <div key={experiment.key}>
-              <span className="text-body text-muted-foreground">{experiment.name}</span>
+              <Txt as="span" tone="muted">
+                {experiment.name}
+              </Txt>
               <RadioGroup
                 value={getVariant(experiment.key)}
                 onValueChange={(v: string) => setVariant(experiment.key, v)}

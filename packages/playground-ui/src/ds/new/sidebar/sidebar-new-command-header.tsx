@@ -7,7 +7,7 @@ export type SidebarNewCommandHeaderProps = ComponentPropsWithoutRef<'header'>;
 
 export const SidebarNewCommandHeader = forwardRef<HTMLElement, SidebarNewCommandHeaderProps>(
   function SidebarNewCommandHeader({ className, children, ...props }, ref) {
-    const { state } = useMainSidebar();
+    const { state, isMobile } = useMainSidebar();
 
     return (
       <header
@@ -15,7 +15,9 @@ export const SidebarNewCommandHeader = forwardRef<HTMLElement, SidebarNewCommand
         data-slot="sidebar-new-command-header"
         data-state={state}
         className={cn(
-          'flex h-header-default shrink-0 items-center gap-1 overflow-hidden px-3',
+          'flex h-header-default shrink-0 items-center gap-1 overflow-hidden',
+          state === 'collapsed' ? 'px-3' : 'pr-2 pl-3.5',
+          state !== 'collapsed' && !isMobile && 'w-[calc(var(--sidebar-width)-1rem)]',
           state === 'collapsed' && '[&_[data-slot=sidebar-new-search-trigger]]:hidden',
           className,
         )}

@@ -92,10 +92,10 @@ export function WorkflowTimelineRow({
         <span className="min-w-0">
           <span className="block truncate">{label}</span>
           {row.isNestedEntry && (
-            <span className="flex min-w-0 items-center gap-1 text-meta text-muted-foreground">
+            <Txt as="span" variant="meta" tone="muted" className="flex min-w-0 items-center gap-1">
               <CornerDownRight aria-hidden className="size-3 shrink-0" />
               <span className="truncate">{parentPath}</span>
-            </span>
+            </Txt>
           )}
         </span>
       </button>
@@ -113,8 +113,11 @@ export function WorkflowTimelineRow({
           />
         )}
       </div>
-      <span
-        className="text-right text-meta whitespace-nowrap text-muted-foreground"
+      <Txt
+        as="span"
+        variant="meta"
+        tone="muted"
+        className="text-right whitespace-nowrap"
         title={row.timing && row.spansSuspension ? 'Includes time spent suspended waiting for input' : undefined}
       >
         {row.timing ? (
@@ -124,7 +127,7 @@ export function WorkflowTimelineRow({
         ) : (
           <span aria-label="Timing unavailable">—</span>
         )}
-      </span>
+      </Txt>
       <div className="flex items-center">
         <Button
           type="button"

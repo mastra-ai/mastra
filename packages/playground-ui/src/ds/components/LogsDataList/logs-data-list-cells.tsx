@@ -1,6 +1,7 @@
 import { Badge } from '../Badge';
 import type { BadgeVariant } from '../Badge';
 import { DataListCell, DataListTextCell } from '../DataList/data-list-cells';
+import { Txt } from '@/ds/components/Txt';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
@@ -64,7 +65,13 @@ export function LogsDataListEntityCell({ entityType, entityName }: LogsDataListE
   return (
     <DataListCell className="flex min-w-0 items-center gap-2">
       <EntityTypeIcon entityType={type} />
-      {entityName ? <span className="min-w-0 truncate text-body-sm">{entityName}</span> : '-'}
+      {entityName ? (
+        <Txt as="span" variant="body-sm" className="min-w-0 truncate">
+          {entityName}
+        </Txt>
+      ) : (
+        '-'
+      )}
     </DataListCell>
   );
 }

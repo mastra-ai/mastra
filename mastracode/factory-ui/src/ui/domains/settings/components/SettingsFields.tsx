@@ -8,6 +8,7 @@ import { useState } from 'react';
 
 import { DONE_SOUND_OPTIONS } from '../services/doneSound';
 import type { DoneSound } from '../services/doneSound';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 type ThinkingLevel = NonNullable<AgentControllerSessionSettings['thinkingLevel']>;
 
@@ -75,7 +76,9 @@ export function ThinkingLevelPicker({ value, ariaLabel, disabled, inherited, onC
       <span className="flex w-32 shrink-0 justify-end">
         {inherited !== undefined &&
           (inheriting ? (
-            <span className="text-placeholder text-meta">Follows base</span>
+            <Txt as="span" variant="meta" tone="faint">
+              Follows base
+            </Txt>
           ) : (
             <Button variant="ghost" size="sm" disabled={disabled} onClick={() => onChange()}>
               Reset to base
@@ -83,7 +86,9 @@ export function ThinkingLevelPicker({ value, ariaLabel, disabled, inherited, onC
           ))}
       </span>
 
-      <span className="text-caption w-20 shrink-0 text-right">{label}</span>
+      <Txt as="span" variant="caption" className="w-20 shrink-0 text-right">
+        {label}
+      </Txt>
 
       <span className="bg-fill relative flex h-7 w-36 items-center rounded-lg">
         <span

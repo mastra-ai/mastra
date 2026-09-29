@@ -2,6 +2,7 @@ import type { InputTokenDetails, OutputTokenDetails, UsageStats } from '@mastra/
 import { Fragment } from 'react';
 import { getTokenUsageView } from './span-token-usage.utils';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export type TokenUsage = UsageStats;
@@ -45,11 +46,13 @@ export function SpanTokenUsage({ usage, className }: SpanTokenUsageProps) {
       {showSplit && (
         <div className="mb-2">
           <div className="flex items-baseline gap-3 text-placeholder">
-            <span className="text-body">Tokens Used</span>
-            <span className="text-subheading text-muted-foreground">{total.toLocaleString()}</span>
-            <span className="ml-auto text-caption">
+            <Txt as="span">Tokens Used</Txt>
+            <Txt as="span" variant="subheading" tone="muted">
+              {total.toLocaleString()}
+            </Txt>
+            <Txt as="span" variant="caption" className="ml-auto">
               {Math.round(inputPct)}% Input vs {Math.round(outputPct)}% Output
-            </span>
+            </Txt>
           </div>
           <div className="mt-2 rounded-md bg-muted p-1.5">
             <div className="relative h-1.5 w-full overflow-hidden rounded-sm">
@@ -88,10 +91,12 @@ function UsageColumn({
   return (
     <div>
       <div className="mb-2 flex items-baseline gap-3 text-placeholder">
-        <span className="text-body">{label}</span>
+        <Txt as="span">{label}</Txt>
         {value !== undefined && (
           <span className="flex items-baseline gap-1.5">
-            <span className="text-subheading text-muted-foreground">{value.toLocaleString()}</span>
+            <Txt as="span" variant="subheading" tone="muted">
+              {value.toLocaleString()}
+            </Txt>
             <span className="size-2 self-center rounded-full" style={{ backgroundColor: color }} />
           </span>
         )}

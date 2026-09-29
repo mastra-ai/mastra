@@ -10,6 +10,7 @@ import { WorkflowTypeBadge } from '../workflow-type-badge';
 import { ActivityWick } from '@/ds/components/Activity';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { Shimmer } from '@/ds/components/Shimmer';
+import { Txt } from '@/ds/components/Txt';
 import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/utils/cn';
 
@@ -123,17 +124,25 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
             onClick={onSelect}
           >
             <span className="flex items-start justify-between gap-2.5 rounded-(--card-radius) px-3.5 py-3 group-hover:bg-fill-subtle">
-              <span className="min-w-0 text-column wrap-anywhere text-foreground" title={label}>
+              <Txt as="span" variant="column" tone="ink" className="min-w-0 wrap-anywhere" title={label}>
                 <Shimmer active={isRunning}>{label}</Shimmer>
-              </span>
+              </Txt>
               <WorkflowTypeBadge {...props} />
             </span>
             <span className="flex flex-col gap-2 rounded-t-(--card-radius) bg-card px-3.5 py-3 empty:py-1.5">
-              {description && <span className="text-caption wrap-anywhere text-muted-foreground">{description}</span>}
+              {description && (
+                <Txt as="span" variant="caption" tone="muted" className="wrap-anywhere">
+                  {description}
+                </Txt>
+              )}
               <WorkflowTiming duration={props.duration} date={props.date} />
-              {isWaiting && <span className="text-meta text-info-indicator">Next step in debug</span>}
+              {isWaiting && (
+                <Txt as="span" variant="meta" className="text-info-indicator">
+                  Next step in debug
+                </Txt>
+              )}
               {isForEach && foreachProgress && (
-                <span className="flex flex-col gap-2 py-1 text-meta">
+                <Txt as="span" variant="meta" className="flex flex-col gap-2 py-1">
                   <span>
                     <strong>{foreachProgress.completedCount}</strong> of {foreachProgress.totalCount} items complete
                   </span>
@@ -147,10 +156,12 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
                   ) : (
                     <span>No items to process</span>
                   )}
-                </span>
+                </Txt>
               )}
               {capabilities.length > 0 && (
-                <span className="text-meta text-muted-foreground">{capabilities.join(' · ')}</span>
+                <Txt as="span" variant="meta" tone="muted">
+                  {capabilities.join(' · ')}
+                </Txt>
               )}
             </span>
           </Summary>
