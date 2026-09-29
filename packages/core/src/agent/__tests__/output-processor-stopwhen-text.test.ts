@@ -111,4 +111,31 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
       expect(text).toBe('');
     });
   }
+
+  for (const [label, rewrite] of [
+    ['redacts', '[REDACTED]'],
+    ['clears', ''],
+  ] as const) {
+    it(`uses the processed text when a processor ${label} it`, async () => {
+      const model = scriptedModel([[...textPart('t1', 'SECRET'), askCall('c1'), finish('tool-calls')]]);
+      const agent = new Agent({
+        id: 'a',
+        name: 'a',
+        instructions: 'test',
+        model,
+        tools: { ask: askTool },
+        outputProcessors: [
+          {
+            id: 'redact',
+            processOutputStream: async ({ part }) =>
+              part.type === 'text-delta' ? { ...part, payload: { ...part.payload, text: rewrite } } : part,
+          },
+        ],
+      });
+      const { text, steps } = await run(agent);
+
+      expect(steps.at(-1)!.text).toBe(rewrite);
+      expect(text).toBe(rewrite);
+    });
+  }
 });

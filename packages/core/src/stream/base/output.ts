@@ -178,8 +178,12 @@ export type FullOutput<OUTPUT = undefined> = {
  * The completionResult metadata only exists on DB-format messages, and the
  * message is converted alone so adjacent assistant messages aren't merged.
  *
- * Returns `undefined` when there is no response message to read text from, or
- * when the last one is a tool-result message (the run stopped on a tool call),
+ * When the run stopped on a tool call, the converted transcript ends with a
+ * `tool` result message that has no text. The final step's processed text is
+ * then read from the parts after the last `step-start` of the DB message, so
+ * text from earlier steps merged into the same message is not picked up.
+ *
+ * Returns `undefined` only when there is no response message to read text from,
  * so callers can distinguish "no processed output exists" from an output
  * processor deliberately clearing the text to `''`. Never collapse the two with
  * a truthiness check: a redacting processor must be able to produce empty text.
@@ -187,19 +191,28 @@ export type FullOutput<OUTPUT = undefined> = {
 function resolveOutputTextSkippingCompletionChecks(messageList: MessageList): string | undefined {
   const responseDbMessages = messageList.get.response.db();
   const hasCompletionCheckMessages = responseDbMessages.some(m => m.content?.metadata?.completionResult);
-  if (hasCompletionCheckMessages) {
-    const lastRealMessage = responseDbMessages.findLast(m => !m.content?.metadata?.completionResult);
-    const converted = lastRealMessage ? convertMessages([lastRealMessage]).to('AIV4.Core') : [];
-    const lastConverted = converted[converted.length - 1];
-    if (!lastConverted || lastConverted.role === 'tool') return undefined;
-    return coreContentToString(lastConverted.content);
-  }
-  const responseMessages = messageList.get.response.aiV4.core();
-  const lastResponseMessage = responseMessages[responseMessages.length - 1];
-  // A run that stops on a tool call ends with a `tool` result message, which has
-  // no text of its own; the final step's text is not in the processed transcript.
-  if (!lastResponseMessage || lastResponseMessage.role === 'tool') return undefined;
-  return coreContentToString(lastResponseMessage.content);
+  const lastRealMessage = hasCompletionCheckMessages
+    ? responseDbMessages.findLast(m => !m.content?.metadata?.completionResult)
+    : responseDbMessages[responseDbMessages.length - 1];
+  const converted = hasCompletionCheckMessages
+    ? lastRealMessage
+      ? convertMessages([lastRealMessage]).to('AIV4.Core')
+      : []
+    : messageList.get.response.aiV4.core();
+  const lastConverted = converted[converted.length - 1];
+  if (!lastConverted) return undefined;
+  if (lastConverted.role !== 'tool') return coreContentToString(lastConverted.content);
+  return finalStepText(lastRealMessage);
+}
+
+function finalStepText(message: MastraDBMessage | undefined): string | undefined {
+  const parts = message?.role === 'assistant' ? message.content?.parts : undefined;
+  if (!parts) return undefined;
+  const lastStepStart = parts.findLastIndex(p => p.type === 'step-start');
+  return parts
+    .slice(lastStepStart + 1)
+    .map(p => (p.type === 'text' ? p.text : ''))
+    .join('');
 }
 
 export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
