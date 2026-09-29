@@ -92,8 +92,9 @@ export function getMaintenanceLockOwner(): number | null {
   const lockPath = getMaintenanceLockPath();
   if (!fs.existsSync(lockPath)) return null;
   const pid = readPid(lockPath);
-  if (pid === process.pid) return null;
-  if (pid !== null && isProcessAlive(pid)) return pid;
+  // No caller holds the lock while asking, so a lock naming our own PID is a
+  // leftover from a dead process whose PID we reused: reap it.
+  if (pid !== null && pid !== process.pid && isProcessAlive(pid)) return pid;
   if (pid === null && !isMalformedPidFileStale(lockPath)) return UNKNOWN_OWNER;
   try {
     fs.unlinkSync(lockPath);
@@ -123,22 +124,38 @@ export function getLiveSessionPids(): number[] {
   return live;
 }
 
-let sessionRegistered = false;
+// Refcounted: one process may start several sessions (e.g. repeated
+// createMastraCode() calls). The pid file exists while the count is > 0.
+let sessionRefs = 0;
+let exitHookInstalled = false;
 
-/** Register this process as a running session. Released on process exit. */
-export function registerSession(): void {
-  if (sessionRegistered) return;
-  fs.writeFileSync(path.join(getSessionsDir(), `${process.pid}.pid`), String(process.pid), { mode: 0o644 });
-  sessionRegistered = true;
-  process.once('exit', unregisterSession);
+function getSessionPidPath(): string {
+  return path.join(getSessionsDir(), `${process.pid}.pid`);
 }
 
-export function unregisterSession(): void {
-  if (!sessionRegistered) return;
-  sessionRegistered = false;
+function removeSessionPidFile(): void {
   try {
-    fs.unlinkSync(path.join(getSessionsDir(), `${process.pid}.pid`));
+    fs.unlinkSync(getSessionPidPath());
   } catch {}
+}
+
+/** Register one running session in this process. Pair with exactly one unregisterSession(). */
+export function registerSession(): void {
+  if (sessionRefs === 0) {
+    fs.writeFileSync(getSessionPidPath(), String(process.pid), { mode: 0o644 });
+  }
+  sessionRefs++;
+  if (!exitHookInstalled) {
+    exitHookInstalled = true;
+    process.once('exit', removeSessionPidFile);
+  }
+}
+
+/** Release one registration made by registerSession(). */
+export function unregisterSession(): void {
+  if (sessionRefs === 0) return;
+  sessionRefs--;
+  if (sessionRefs === 0) removeSessionPidFile();
 }
 
 /**

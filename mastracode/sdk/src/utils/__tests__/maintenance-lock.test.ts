@@ -12,6 +12,7 @@ import {
   acquireMaintenanceLock,
   getMaintenanceLockOwner,
   getMaintenanceLockPath,
+  registerSession,
   registerSessionAndWaitForMaintenance,
   unregisterSession,
 } from '../maintenance-lock.js';
@@ -175,6 +176,48 @@ describe('pid files that are still being written', () => {
 
     const release = acquireMaintenanceLock();
     expect(fs.existsSync(sessionFile)).toBe(false);
+    release();
+  });
+});
+
+describe('multiple sessions in one process', () => {
+  const ownPidFile = () => path.join(sessionsDir(), `${process.pid}.pid`);
+
+  it('keeps the registration while another session in this process is still open', () => {
+    registerSession(); // session A starts
+    registerSession(); // session B registers...
+    unregisterSession(); // ...then fails in createStorage and releases its own registration
+
+    // What another process (prune) reads when it scans the sessions dir.
+    expect(fs.readFileSync(ownPidFile(), 'utf8')).toBe(String(process.pid));
+
+    unregisterSession(); // A closes
+    expect(fs.existsSync(ownPidFile())).toBe(false);
+  });
+
+  it('keeps the registration when a second session times out waiting for maintenance', async () => {
+    registerSession(); // session A
+    const pruner = spawnLiveProcess();
+    children.push(pruner);
+    fs.writeFileSync(getMaintenanceLockPath(), String(pruner.pid));
+
+    await expect(registerSessionAndWaitForMaintenance({ timeoutMs: 50, pollMs: 10 })).rejects.toThrow(
+      MaintenanceLockError,
+    );
+    expect(fs.readFileSync(ownPidFile(), 'utf8')).toBe(String(process.pid));
+    // afterEach releases A.
+  });
+});
+
+describe('stale maintenance lock naming our own PID', () => {
+  it('reaps it instead of reporting an ownerless running prune', () => {
+    fs.writeFileSync(getMaintenanceLockPath(), String(process.pid));
+    expect(getMaintenanceLockOwner()).toBeNull();
+    expect(fs.existsSync(getMaintenanceLockPath())).toBe(false);
+
+    fs.writeFileSync(getMaintenanceLockPath(), String(process.pid));
+    const release = acquireMaintenanceLock();
+    expect(fs.readFileSync(getMaintenanceLockPath(), 'utf8')).toBe(String(process.pid));
     release();
   });
 });
