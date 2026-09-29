@@ -3353,9 +3353,20 @@ export class Session<TState = unknown> {
     const teardown = this.stream.waitForTeardown(waitersController.signal).then(() => {
       tornDown = true;
     });
+    // Likewise for aborts: an abort already pending here is left over from an
+    // earlier run and must not release this caller, but one arriving while
+    // acceptance is pending belongs to this run.
+    const staleAbort = this.run.isAbortRequested();
+    let aborted = false;
+    const abortRequest = staleAbort
+      ? undefined
+      : this.run.waitForAbortRequest(waitersController.signal).then(() => {
+          aborted = true;
+        });
 
     try {
       const result = await accepted;
+      if (aborted) return;
       if (result.action !== 'wake' && !waitForDelivery) return;
       runId = 'runId' in result ? result.runId : undefined;
       if (!runId || completedRunIds.has(runId)) return;
@@ -3367,8 +3378,8 @@ export class Session<TState = unknown> {
         this.stream.waitForConsumerFailure(waitersController.signal),
         tornDown ? this.stream.waitForTeardown(waitersController.signal) : teardown,
       ];
-      // An abort still pending from an earlier run must not release this caller.
-      if (!this.run.isAbortRequested()) waits.push(this.run.waitForAbortRequest(waitersController.signal));
+      if (abortRequest) waits.push(abortRequest);
+      else if (!this.run.isAbortRequested()) waits.push(this.run.waitForAbortRequest(waitersController.signal));
       await Promise.race(waits);
     } finally {
       waitersController.abort();

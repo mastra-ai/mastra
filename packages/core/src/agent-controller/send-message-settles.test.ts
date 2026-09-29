@@ -131,6 +131,30 @@ describe('Session.sendMessage settles', () => {
     expect(await settleWithin(pending)).toBeUndefined();
   });
 
+  it('resolves when the run is aborted while acceptance is pending', async () => {
+    const { agent, session } = await createController();
+    vi.spyOn(session, 'processSubscribedThreadStream').mockReturnValue(new Promise(() => {}));
+    session.thread.cleanupSubscription();
+
+    let releaseAcceptance!: () => void;
+    const gate = new Promise<void>(resolve => (releaseAcceptance = resolve));
+    const original = agent.sendSignal.bind(agent);
+    let signalSent!: () => void;
+    const sent = new Promise<void>(resolve => (signalSent = resolve));
+    vi.spyOn(agent, 'sendSignal').mockImplementationOnce((...args: Parameters<typeof original>) => {
+      const result = original(...args);
+      signalSent();
+      return { ...result, accepted: gate.then(() => result.accepted) };
+    });
+
+    const pending = session.sendMessage({ content: 'hello' });
+    await sent;
+    session.abort();
+    releaseAcceptance();
+
+    expect(await settleWithin(pending)).toBeUndefined();
+  });
+
   it('resolves when the run is aborted and agent_end never arrives', async () => {
     const { agent, session } = await createController();
     vi.spyOn(session, 'processSubscribedThreadStream').mockReturnValue(new Promise(() => {}));
