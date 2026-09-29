@@ -1,4 +1,4 @@
-import { ChatNotification } from '@mastra/playground-ui/components/ai/chat-event';
+import { NotificationActivity } from '@mastra/playground-ui/components/ai/activity';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Bell, CircleDot } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -56,7 +56,7 @@ export function NotificationCard({ entry }: { entry: NotificationEntry }) {
   const presentation = notificationPresentation(entry);
   const url = notificationUrl(entry);
   return (
-    <ChatNotification
+    <NotificationActivity
       state={presentation.state}
       label={entry.source ?? 'notification'}
       message={entry.message}
@@ -67,7 +67,7 @@ export function NotificationCard({ entry }: { entry: NotificationEntry }) {
 }
 
 export function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry }) {
-  return <ChatNotification state="summary" label="Notification summary" message={entry.message} />;
+  return <NotificationActivity state="summary" label="Notification summary" message={entry.message} />;
 }
 
 export function notificationMetadata(entry: MessageEntry): Array<NotificationEntry | NotificationSummaryEntry> {
