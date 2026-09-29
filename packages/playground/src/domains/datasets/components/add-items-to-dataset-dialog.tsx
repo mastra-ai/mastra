@@ -1,13 +1,21 @@
 'use client';
 
 import type { DatasetItem } from '@mastra/client-js';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
+import {
+  Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@mastra/playground-ui/components/Dialog';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@mastra/playground-ui/components/Select';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useDatasetMutations, useDatasets } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { Plus, X } from 'lucide-react';
 import { useState } from 'react';
 
 export interface AddItemsToDatasetDialogProps {
@@ -75,22 +83,16 @@ export function AddItemsToDatasetDialog({
     }
   };
 
-  const handleCancel = () => {
-    if (isAdding) return;
-    setSelectedDatasetId('');
-    onOpenChange(false);
-  };
-
   const progressPercent = items.length > 0 ? (progress / items.length) * 100 : 0;
 
   return (
-    <Dialog open={open} onOpenChange={isAdding ? undefined : onOpenChange}>
-      <DialogContent className="max-w-md">
+    <Dialog open={open} onOpenChange={onOpenChange} pending={isAdding}>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Add Items to Dataset</DialogTitle>
         </DialogHeader>
-        <DialogBody>
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit}>
+          <DialogBody>
             <div className="space-y-2">
               <Label htmlFor="target-dataset">Target Dataset *</Label>
               <Select
@@ -117,9 +119,9 @@ export function AddItemsToDatasetDialog({
               </Select>
             </div>
 
-            <p className="text-body text-muted-foreground">
+            <Txt tone="muted">
               {items.length} item{items.length !== 1 ? 's' : ''} will be copied to the selected dataset
-            </p>
+            </Txt>
 
             {isAdding && (
               <div className="space-y-2">
@@ -129,27 +131,19 @@ export function AddItemsToDatasetDialog({
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
-                <p className="text-body text-muted-foreground">
+                <Txt tone="muted">
                   Adding items: {progress} / {items.length}
-                </p>
+                </Txt>
               </div>
             )}
-
-            <div className="flex justify-end gap-2 pt-4">
-              <Button icon={<X />} type="button" onClick={handleCancel} disabled={isAdding}>
-                Cancel
-              </Button>
-              <Button
-                icon={<Plus />}
-                type="submit"
-                variant="primary"
-                disabled={isAdding || !selectedDatasetId || availableDatasets.length === 0}
-              >
-                {isAdding ? `Adding... (${progress}/${items.length})` : 'Add Items'}
-              </Button>
-            </div>
-          </form>
-        </DialogBody>
+          </DialogBody>
+          <DialogFooter>
+            <DialogCancel onClick={() => setSelectedDatasetId('')}>Cancel</DialogCancel>
+            <DialogAction type="submit" disabled={!selectedDatasetId || availableDatasets.length === 0}>
+              {isAdding ? `Adding... (${progress}/${items.length})` : 'Add Items'}
+            </DialogAction>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

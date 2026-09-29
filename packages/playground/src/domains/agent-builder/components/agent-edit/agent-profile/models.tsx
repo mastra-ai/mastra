@@ -1,5 +1,6 @@
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ProviderLogo, cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { LockIcon, SearchIcon, TriangleAlertIcon } from 'lucide-react';
@@ -11,7 +12,6 @@ import { FilterableList } from './filterable-list';
 import { TwoPanePickerSkeleton } from './two-pane-picker-skeleton';
 import { useBuilderModelPolicy } from '@/domains/agent-builder';
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
-import { ProviderLogo, cleanProviderId } from '@/domains/llm';
 import type { ModelInfo } from '@/domains/llm/hooks/use-filtered-models';
 
 export interface Modelprops {
@@ -243,7 +243,7 @@ interface StaleWarningProps {
 const StaleWarning = ({ provider, modelId }: StaleWarningProps) => {
   return (
     <div
-      className="mx-4 mb-4 flex items-start gap-2 rounded-md border border-accent6 bg-accent6Dark/40 px-3 py-2 text-accent6"
+      className="mx-4 mb-4 flex items-start gap-2 rounded-md border border-warning-edge bg-warning-subtle px-3 py-2 text-warning-subtle-foreground"
       data-testid="model-detail-stale-warning"
       role="alert"
     >

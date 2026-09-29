@@ -167,6 +167,7 @@ import { reportIssueCommandScenario } from './report-issue-command.js';
 import { requestAccessModalScenario } from './request-access-modal.js';
 import { resourceidDriftPromptAcceptScenario } from './resourceid-drift-prompt-accept.js';
 import { resourceidDriftPromptDeclineScenario } from './resourceid-drift-prompt-decline.js';
+import { schedulesCommandScenario } from './schedules-command.js';
 import { settingsApiKeysNavigationScenario } from './settings-api-keys-navigation.js';
 import { settingsStartupModelRestoreScenario } from './settings-startup-model-restore.js';
 import { setupCompletionPersistenceScenario } from './setup-completion-persistence.js';
@@ -181,6 +182,7 @@ import { shellPassthroughNonpersistentScenario } from './shell-passthrough-nonpe
 import { skillTabAutocompleteScenario } from './skill-tab-autocomplete.js';
 import { skillsCommandActivationScenario } from './skills-command-activation.js';
 import { skillsSymlinkDedupeScenario } from './skills-symlink-dedupe.js';
+import { startupInterruptedScenario } from './startup-interrupted.js';
 import { startupScenario } from './startup.js';
 import { stateCommandsScenario } from './state-commands.js';
 import { stateSignalBrowserProcessorScenario } from './state-signal-browser-processor.js';
@@ -228,6 +230,7 @@ export type { McE2eScenario, McE2eScenarioRuntime, ScenarioName } from './types.
 export const scenarios: Record<ScenarioName, McE2eScenario> = {
   startup: startupScenario,
   'abort-followup': abortFollowupScenario,
+  'startup-interrupted': startupInterruptedScenario,
   'branch-context-long-name': branchContextLongNameScenario,
   'active-signal-followup': activeSignalFollowupScenario,
   'agent-connections-expected-reply-watchdog': agentConnectionsExpectedReplyWatchdogScenario,
@@ -285,6 +288,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'file-autocomplete': fileAutocompleteScenario,
   'first-run-onboarding': firstRunOnboardingScenario,
   'github-signals-command': githubSignalsCommandScenario,
+  'schedules-command': schedulesCommandScenario,
   'github-signals-multi-subscribe': githubSignalsMultiSubscribeScenario,
   'github-signals-legacy-upgrade': githubSignalsLegacyUpgradeScenario,
   'github-signals-tool-multi-subscribe': githubSignalsToolMultiSubscribeScenario,

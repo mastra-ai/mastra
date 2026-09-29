@@ -2,6 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { RuleBuilder } from '@mastra/playground-ui/components/RuleBuilder';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
@@ -46,7 +47,9 @@ export function EntityAccordionItem({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Icon size="xs">{icon}</Icon>
-            <span className="text-column text-foreground">{name}</span>
+            <Txt as="span" variant="column" tone="ink">
+              {name}
+            </Txt>
           </div>
           {onRemove && (
             <Button tooltip={`Remove ${name}`} onClick={onRemove} variant="ghost" size="icon-sm">
@@ -77,13 +80,15 @@ export function EntityAccordionItem({
               />
             </Icon>
             <Icon>
-              <Ruler className="text-accent6" />
+              <Ruler className="text-warning-indicator" />
             </Icon>
-            <span className="text-caption text-foreground">Display Conditions</span>
+            <Txt as="span" variant="caption" tone="ink">
+              Display Conditions
+            </Txt>
             {ruleCount > 0 && (
-              <span className="text-caption text-muted-foreground">
+              <Txt as="span" variant="caption" tone="muted">
                 ({ruleCount} {ruleCount === 1 ? 'rule' : 'rules'})
-              </span>
+              </Txt>
             )}
           </CollapsibleTrigger>
           <CollapsibleContent>

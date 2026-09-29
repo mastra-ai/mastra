@@ -2,11 +2,8 @@ import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import {
-  DataList as EntityList,
-  DataListSkeleton as EntityListSkeleton,
-  useDataListKeyboard,
-} from '@mastra/playground-ui/components/DataList';
+import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
@@ -48,9 +45,9 @@ export type DatasetsSortKey = 'name' | 'updatedAt';
 const COLUMNS = 'auto 1fr auto 5rem 10rem 7rem';
 
 function getExperimentsBadgeVariant(successPct: number | null): BadgeVariant {
-  if (successPct !== null && successPct >= 70) return 'green';
-  if (successPct !== null && successPct >= 40) return 'yellow';
-  return 'red';
+  if (successPct !== null && successPct >= 70) return 'success';
+  if (successPct !== null && successPct >= 40) return 'warning';
+  return 'destructive';
 }
 
 const stopPropagation = (event: SyntheticEvent) => event.stopPropagation();
@@ -63,18 +60,22 @@ function TagsCell({ tags: rawTags }: { tags: DatasetRecord['tags'] }) {
   const tags = Array.isArray(rawTags) ? rawTags.filter(tag => typeof tag === 'string') : [];
 
   return (
-    <EntityList.Cell>
+    <DataList.Cell>
       {tags.length > 0 ? (
         <div className="flex max-w-48 items-center gap-1 overflow-hidden" title={tags.join(', ')}>
           {tags.slice(0, 2).map(tag => (
             <ComputedTag key={tag} value={tag} className="shrink-0" />
           ))}
-          {tags.length > 2 && <span className="shrink-0 text-meta text-placeholder">+{tags.length - 2}</span>}
+          {tags.length > 2 && (
+            <Txt as="span" variant="meta" tone="faint" className="shrink-0">
+              +{tags.length - 2}
+            </Txt>
+          )}
         </div>
       ) : (
         <span className="text-placeholder">—</span>
       )}
-    </EntityList.Cell>
+    </DataList.Cell>
   );
 }
 
@@ -104,17 +105,17 @@ function SelectableDatasetRow({
   trailingCell: ReactNode | null;
 }) {
   return (
-    <EntityList.RowButton {...rowProps} featured={featured} onClick={() => onSelect(ds)}>
-      <EntityList.NameCell>{ds.name}</EntityList.NameCell>
-      <EntityList.DescriptionCell>{ds.description}</EntityList.DescriptionCell>
+    <DataList.RowButton {...rowProps} featured={featured} onClick={() => onSelect(ds)}>
+      <DataList.NameCell>{ds.name}</DataList.NameCell>
+      <DataList.DescriptionCell>{ds.description}</DataList.DescriptionCell>
       <TagsCell tags={ds.tags} />
-      <EntityList.TextCell>v{ds.version ?? 1}</EntityList.TextCell>
-      <EntityList.TextCell>{formatDate(ds.updatedAt, 'date-time') ?? '—'}</EntityList.TextCell>
-      <EntityList.Cell>
+      <DataList.TextCell>v{ds.version ?? 1}</DataList.TextCell>
+      <DataList.TextCell>{formatDate(ds.updatedAt, 'date-time') ?? '—'}</DataList.TextCell>
+      <DataList.Cell>
         {trailingCell ??
           (ds.experimentCount > 0 ? <ExperimentsBadge dataset={ds} /> : <span className="text-placeholder">—</span>)}
-      </EntityList.Cell>
-    </EntityList.RowButton>
+      </DataList.Cell>
+    </DataList.RowButton>
   );
 }
 
@@ -129,8 +130,8 @@ function DatasetRow({ dataset: ds, rowProps }: { dataset: EnrichedDataset; rowPr
   const hasExperimentsAction = ds.experimentCount > 0;
 
   return (
-    <EntityList.RowWrapper {...rowProps} onSelectRow={() => linkRef.current?.click()}>
-      <EntityList.RowLink
+    <DataList.RowWrapper {...rowProps} onSelectRow={() => linkRef.current?.click()}>
+      <DataList.RowLink
         ref={linkRef}
         colEnd={hasExperimentsAction ? -2 : -1}
         to={paths.datasetLink(ds.id)}
@@ -138,13 +139,13 @@ function DatasetRow({ dataset: ds, rowProps }: { dataset: EnrichedDataset; rowPr
         tabIndex={-1}
         onClick={stopPropagation}
       >
-        <EntityList.NameCell>{ds.name}</EntityList.NameCell>
-        <EntityList.DescriptionCell>{ds.description}</EntityList.DescriptionCell>
+        <DataList.NameCell>{ds.name}</DataList.NameCell>
+        <DataList.DescriptionCell>{ds.description}</DataList.DescriptionCell>
         <TagsCell tags={ds.tags} />
-        <EntityList.TextCell>v{ds.version ?? 1}</EntityList.TextCell>
-        <EntityList.TextCell>{formatDate(ds.updatedAt, 'date-time') ?? '—'}</EntityList.TextCell>
-        {hasExperimentsAction ? null : <EntityList.Cell className="justify-center" />}
-      </EntityList.RowLink>
+        <DataList.TextCell>v{ds.version ?? 1}</DataList.TextCell>
+        <DataList.TextCell>{formatDate(ds.updatedAt, 'date-time') ?? '—'}</DataList.TextCell>
+        {hasExperimentsAction ? null : <DataList.Cell className="justify-center" />}
+      </DataList.RowLink>
 
       {hasExperimentsAction ? (
         <Button
@@ -158,7 +159,7 @@ function DatasetRow({ dataset: ds, rowProps }: { dataset: EnrichedDataset; rowPr
           <ExperimentsBadge dataset={ds} />
         </Button>
       ) : null}
-    </EntityList.RowWrapper>
+    </DataList.RowWrapper>
   );
 }
 
@@ -205,39 +206,39 @@ export function DatasetsList({
   const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length, global: keyboardGlobal });
 
   if (isLoading) {
-    return <EntityListSkeleton columns={COLUMNS} />;
+    return <DataListSkeleton columns={COLUMNS} />;
   }
 
   return (
-    <EntityList columns={COLUMNS} scrollRef={containerRef}>
-      <EntityList.Top>
+    <DataList columns={COLUMNS} scrollRef={containerRef}>
+      <DataList.Top>
         {onSortChange ? (
-          <EntityList.SortableTopCell
+          <DataList.SortableTopCell
             sortKey="name"
             sort={sort?.key === 'name' ? sort.direction : undefined}
             onSortChange={onSortChange}
           >
             Name
-          </EntityList.SortableTopCell>
+          </DataList.SortableTopCell>
         ) : (
-          <EntityList.TopCell>Name</EntityList.TopCell>
+          <DataList.TopCell>Name</DataList.TopCell>
         )}
-        <EntityList.TopCell>Description</EntityList.TopCell>
-        <EntityList.TopCell>Tags</EntityList.TopCell>
-        <EntityList.TopCell>Version</EntityList.TopCell>
+        <DataList.TopCell>Description</DataList.TopCell>
+        <DataList.TopCell>Tags</DataList.TopCell>
+        <DataList.TopCell>Version</DataList.TopCell>
         {onSortChange ? (
-          <EntityList.SortableTopCell
+          <DataList.SortableTopCell
             sortKey="updatedAt"
             sort={sort?.key === 'updatedAt' ? sort.direction : undefined}
             onSortChange={onSortChange}
           >
             Last Updated
-          </EntityList.SortableTopCell>
+          </DataList.SortableTopCell>
         ) : (
-          <EntityList.TopCell>Last Updated</EntityList.TopCell>
+          <DataList.TopCell>Last Updated</DataList.TopCell>
         )}
-        <EntityList.TopCell>Experiments</EntityList.TopCell>
-      </EntityList.Top>
+        <DataList.TopCell>Experiments</DataList.TopCell>
+      </DataList.Top>
 
       {filteredData.map((ds, index) =>
         onSelectDataset ? (
@@ -254,11 +255,11 @@ export function DatasetsList({
         ),
       )}
 
-      <EntityList.NextPageLoading
+      <DataList.NextPageLoading
         isLoading={isFetchingNextPage}
         hasMore={hasNextPage}
         setEndOfListElement={setEndOfListElement}
       />
-    </EntityList>
+    </DataList>
   );
 }

@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 1.3.12-alpha.1
+
+### Patch Changes
+
+- Fixed structured output validation failing when optional fields inside `.nullable()` or `.nullish()` objects or arrays were returned as `null`. They are now dropped, matching the behavior for non-nullable parents. ([#25276](https://github.com/mastra-ai/mastra/pull/25276))
+
 ## 1.3.12-alpha.0
 
 ### Patch Changes

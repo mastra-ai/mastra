@@ -16,7 +16,7 @@ export type SettingsRowProps = Omit<ComponentProps<'div'>, 'children'> & {
 };
 
 type SettingsRowLayoutProps = SettingsRowProps & {
-  layout: 'factory' | 'standalone' | 'section';
+  layout: 'factory' | 'section';
 };
 
 export function SettingsRowLayout({
@@ -53,7 +53,6 @@ export function SettingsRowLayout({
         isSectionLayout
           ? 'grid min-w-0 gap-3 group-data-[variant=factory]/section:px-3 group-data-[variant=factory]/section:py-2 group-data-[variant=flat]/section:p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:group-data-[variant=default]/section:gap-4 sm:group-data-[variant=factory]/section:gap-4 sm:group-data-[variant=flat]/section:gap-6'
           : 'flex min-w-0 flex-col',
-        layout === 'standalone' && 'gap-3 sm:flex-row sm:items-center sm:justify-between',
         layout === 'factory' && 'gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4',
         className,
       )}
@@ -65,13 +64,16 @@ export function SettingsRowLayout({
           className={cn(
             'text-label text-foreground',
             viewOnly && 'text-muted-foreground',
-            tone === 'destructive' && 'text-destructive',
+            tone === 'destructive' && 'text-destructive-indicator',
           )}
         >
           {label}
           {required ? (
             <>
-              <span aria-hidden className={cn('ml-0.5', viewOnly ? 'text-muted-foreground' : 'text-destructive')}>
+              <span
+                aria-hidden
+                className={cn('ml-0.5', viewOnly ? 'text-muted-foreground' : 'text-destructive-indicator')}
+              >
                 *
               </span>
               <span className="sr-only"> (required)</span>

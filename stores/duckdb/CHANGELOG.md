@@ -1,5 +1,34 @@
 # @mastra/duckdb
 
+## 1.12.0-alpha.2
+
+### Minor Changes
+
+- Added `runId`, `sessionId`, `userId`, and `organizationId` filters to advanced trace queries at trace scope and inside `spans.some` / `spans.none`. No migration is needed. ([#24935](https://github.com/mastra-ai/mastra/pull/24935))
+
+### Patch Changes
+
+- Updated dependencies [[`93fe2d6`](https://github.com/mastra-ai/mastra/commit/93fe2d6a9e47861d90cc0fd0080aefdb8cabb612), [`561e2a6`](https://github.com/mastra-ai/mastra/commit/561e2a6c8a44dbfd91eae390e14671462497cf85), [`8156816`](https://github.com/mastra-ai/mastra/commit/815681621dd88997608c5b7e8f0f87fe03cd1d18), [`94ba70e`](https://github.com/mastra-ai/mastra/commit/94ba70ea6ba8a53f5e4010392bf3bbaecde7966d), [`a7895fc`](https://github.com/mastra-ai/mastra/commit/a7895fce693e499c08c4784c57d4c4f46c0e1ccb), [`5197f81`](https://github.com/mastra-ai/mastra/commit/5197f81d6a5641f80f0ee6596ac085653b38cca3), [`0c2fe6c`](https://github.com/mastra-ai/mastra/commit/0c2fe6c00909795234270c8ea2c2c53882d63798), [`dd01709`](https://github.com/mastra-ai/mastra/commit/dd01709f780562f9ff8c72d977f3da5ae265970e)]:
+  - @mastra/core@1.72.0-alpha.9
+
+## 1.11.2-alpha.1
+
+### Patch Changes
+
+- Reduced storage use for ended spans in `@mastra/duckdb`. Span data returned by queries is unchanged. Fixes #25240. ([#25268](https://github.com/mastra-ai/mastra/pull/25268))
+
+- Updated dependencies:
+  - @mastra/core@1.72.0-alpha.6
+
+## 1.11.2-alpha.0
+
+### Patch Changes
+
+- Fixed `listTraces`, `listTracesLight`, and `listBranches` scanning the entire `span_events` table when a query matched nothing or requested a page past the end. These calls now return an empty page immediately, so empty filters and out-of-range pages stay fast and use little memory on large stores. ([#25271](https://github.com/mastra-ai/mastra/pull/25271))
+
+- Updated dependencies [[`43fbe75`](https://github.com/mastra-ai/mastra/commit/43fbe75535650345cf61dee00cf3e7b3f5efaf7f), [`ebd03fd`](https://github.com/mastra-ai/mastra/commit/ebd03fd3bc93fe3930747956724252f7c8834826), [`2c57ba8`](https://github.com/mastra-ai/mastra/commit/2c57ba896b04215fface2a8216b88fe59cfdd041), [`f6effda`](https://github.com/mastra-ai/mastra/commit/f6effdabafa9fc6388478b3e281ad4c457d4200b), [`7f4ce21`](https://github.com/mastra-ai/mastra/commit/7f4ce2190029710851d95f7b75a2fb724782483c), [`1ba1588`](https://github.com/mastra-ai/mastra/commit/1ba158873dadf3d290b111981c3bc7ef95ab1d1c), [`b537ab1`](https://github.com/mastra-ai/mastra/commit/b537ab14714870e058775530bc55b37c9115613f), [`d4e350a`](https://github.com/mastra-ai/mastra/commit/d4e350a5c1e29a7da5a22da52ed1f33431403012)]:
+  - @mastra/core@1.72.0-alpha.5
+
 ## 1.11.1
 
 ### Patch Changes

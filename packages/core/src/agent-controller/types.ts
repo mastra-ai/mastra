@@ -617,6 +617,7 @@ export interface ActiveSubagentState {
   toolCalls: Array<{ name: string; isError: boolean }>;
   textDelta: string;
   status: 'running' | 'completed' | 'error';
+  startedAt?: number;
   durationMs?: number;
   result?: string;
 }
@@ -662,12 +663,22 @@ export interface AgentControllerDisplayState {
   toolInputBuffers: Map<string, { text: string; toolName: string }>;
 
   // ── Tool approval ────────────────────────────────────────────────────
-  /** A tool awaiting user approval (null when no approval pending) */
-  pendingApproval: {
-    toolCallId: string;
-    toolName: string;
-    args: unknown;
-  } | null;
+  /**
+   * Tools awaiting user approval, keyed by toolCallId. Each entry carries the
+   * thread that produced the call, so an approval parked on one thread can never
+   * shadow another thread's. More than one can be parked at once (e.g. a
+   * foreground run and a background/sub-agent run on a detached thread).
+   */
+  pendingApprovals: Map<
+    string,
+    {
+      toolCallId: string;
+      toolName: string;
+      args: unknown;
+      /** Thread that produced the gated call, when the producer knew it. */
+      threadId?: string;
+    }
+  >;
 
   // ── Tool suspension ─────────────────────────────────────────────────
   /**
@@ -723,7 +734,7 @@ export function defaultDisplayState(): AgentControllerDisplayState {
     tokenUsage: createEmptyTokenUsage(),
     activeTools: new Map(),
     toolInputBuffers: new Map(),
-    pendingApproval: null,
+    pendingApprovals: new Map(),
     pendingSuspensions: new Map(),
     activeSubagents: new Map(),
     omProgress: defaultOMProgressState(),
@@ -857,6 +868,8 @@ export type AgentControllerEvent =
   | {
       type: 'error';
       error: Error;
+      /** Provider finish reason when a response ended without normal completion. */
+      finishReason?: string;
       errorType?: string;
       retryable?: boolean;
       retryDelay?: number;

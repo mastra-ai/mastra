@@ -142,8 +142,8 @@ export interface EnsureFactorySourceSessionArgs {
   orgId: string;
   factoryProjectId: string;
   branch: string;
-  /** Pick a specific linked repository by slug. Defaults to the first linked repository. */
-  repositorySlug?: string;
+  /** Pick the linked repository that the work item targets. */
+  repositorySlug: string;
   /**
    * Attribute the run to this user instead of the repo connector. Set when the
    * run has an interactive user — e.g. the person who approved a proposed run.
@@ -195,14 +195,24 @@ export type FactorySourceRepositoryResult =
  * The owner is whichever integration owns source control, matched by the
  * handle's own `integrationId` — nothing here is provider-specific.
  */
-export async function resolveFactorySourceRepository(args: {
-  sourceControl: SourceControlStorageHandle;
-  orgId: string;
-  factoryProjectId: string;
-  /** Pick a specific linked repository by slug. Defaults to the first linked repository. */
-  repositorySlug?: string;
-}): Promise<FactorySourceRepositoryResult> {
-  const { sourceControl, orgId, factoryProjectId, repositorySlug } = args;
+export async function resolveFactorySourceRepository(
+  args:
+    | {
+        sourceControl: SourceControlStorageHandle;
+        orgId: string;
+        factoryProjectId: string;
+        repositorySlug: string;
+      }
+    | {
+        sourceControl: SourceControlStorageHandle;
+        orgId: string;
+        factoryProjectId: string;
+        firstLinkedRepository: true;
+      },
+): Promise<FactorySourceRepositoryResult> {
+  const { sourceControl, orgId, factoryProjectId } = args;
+  const repositorySlug = 'repositorySlug' in args ? args.repositorySlug : undefined;
+  const firstLinkedRepository = 'firstLinkedRepository' in args;
 
   const connections = await sourceControl.connections.list({ orgId, factoryProjectId });
   const candidates = connections.filter(candidate => candidate.integrationId === sourceControl.integrationId);
@@ -223,7 +233,7 @@ export async function resolveFactorySourceRepository(args: {
         })),
       );
       resolved = resolvedRepositories.find(
-        candidate => candidate.repository && (!repositorySlug || candidate.repository.slug === repositorySlug),
+        candidate => candidate.repository && (firstLinkedRepository || candidate.repository.slug === repositorySlug),
       );
     } catch (error) {
       // A deleted installation invalidates a stale connection; storage failures must propagate.
@@ -324,6 +334,12 @@ export interface HydrateFactorySessionArgs {
   /** The factory project's default model. Without it the session keeps the SDK's built-in mode default. */
   defaultModelId?: string;
   /**
+   * Model whose provider supplies the observational-memory fallback. Defaults
+   * to the factory model, but channel sessions can use the sender's model so OM
+   * resolves against that sender's credentials.
+   */
+  observationalMemoryModelId?: string;
+  /**
    * When provided, the factory project's stored memory-settings row is
    * applied. When omitted (or no row exists) the session is reset to the
    * built-in memory defaults.
@@ -354,8 +370,11 @@ export async function hydrateFactorySession(session: FactorySession, args: Hydra
     // Without a stored row, fall back to the low-cost OM model of the factory
     // default model's provider — a factory connected only to Anthropic should
     // not observe with the (uncredentialed) built-in Google default.
-    const provider = args.defaultModelId?.split('/')[0];
-    const fallbackOmModelId = provider ? resolveProviderOMDefault(provider, args.defaultModelId).modelId : undefined;
+    const observationalMemoryModelId = args.observationalMemoryModelId ?? args.defaultModelId;
+    const provider = observationalMemoryModelId?.split('/')[0];
+    const fallbackOmModelId = provider
+      ? resolveProviderOMDefault(provider, observationalMemoryModelId).modelId
+      : undefined;
     await applyStoredMemorySettings(session, record, fallbackOmModelId);
   } catch (error) {
     console.warn('[Factory Start] Failed to apply observational-memory settings', {
@@ -370,6 +389,20 @@ export async function hydrateFactorySession(session: FactorySession, args: Hydra
         modelId: args.defaultModelId,
         error: error instanceof Error ? error.message : String(error),
       });
+    }
+    // Subagents otherwise keep the server-wide settings (or the SDK's built-in
+    // default), which may name a provider this factory has no credentials for.
+    // Each role is independent, so one failure doesn't strand the others.
+    for (const agentType of ['explore', 'plan', 'execute']) {
+      try {
+        await session.subagents.model.set({ modelId: args.defaultModelId, agentType });
+      } catch (error) {
+        console.warn('[Factory Start] Failed to apply factory default subagent model', {
+          agentType,
+          modelId: args.defaultModelId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   }
 }

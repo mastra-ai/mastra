@@ -1,5 +1,229 @@
 # @mastra/core
 
+## 1.72.0-alpha.10
+
+### Minor Changes
+
+- Added an optional `sandboxId` to the `WorkspaceSandbox` interface so hosts can read a provider's physical, reattachable sandbox id and persist it for deterministic reattach. ([#24004](https://github.com/mastra-ai/mastra/pull/24004))
+
+  ```ts
+  const id = sandbox.sandboxId ?? sandbox.id; // physical id when the provider exposes one
+  ```
+
+### Patch Changes
+
+- Fixed `foreach` over a nested workflow failing with "already resumed by another caller" when one iteration suspended while others were still starting. Each iteration now starts its own child workflow run, and suspended iterations can be resumed individually with `forEachIndex`. ([#25394](https://github.com/mastra-ai/mastra/pull/25394))
+
+- Fixed cross-agent wakes with `requireClaimedOwner` failing with "No claimed thread owner responded" when the owning agent was alive but slow to answer (for example on a busy host or CI). Owner discovery for wakes now retries with growing timeouts for up to 1 second before giving up, and the error states how long it waited. ([#25488](https://github.com/mastra-ai/mastra/pull/25488))
+
+  Both limits can be tuned with environment variables:
+
+  - `MASTRA_AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS` — per-attempt wait (default `100`)
+  - `MASTRA_AGENT_THREAD_WAKE_OWNER_DISCOVERY_DEADLINE_MS` — total wake discovery budget (default `1000`)
+
+- Fixed `run.restart()` on the default workflow engine after a process crash during a nested workflow resume. Restart no longer fails with "This workflow run was not suspended", and the resumed step keeps its resume data and completes instead of suspending again. Fixes [#25187](https://github.com/mastra-ai/mastra/issues/25187). ([#25234](https://github.com/mastra-ai/mastra/pull/25234))
+
+  Fixed `timeTravel()` ignoring resume values such as `false` or `0`.
+
+- Fixed model fallback logging so recovered failures no longer page as errors. When a model in a `models` chain fails and another model is still available, Mastra now logs a single warning naming the failed and next model instead of two error-level records. Failures of the last model in the chain are still reported as errors. ([#25489](https://github.com/mastra-ai/mastra/pull/25489))
+
+- Fixed `structuredOutput.jsonPromptInjection: false` being ignored when a structuring `model` is set. The main model's prompt no longer receives the full JSON schema on every step when you opt out of injection. ([#25478](https://github.com/mastra-ai/mastra/pull/25478))
+
+- Fixed durable tool payload transforms after cross-process recovery. ([#25387](https://github.com/mastra-ai/mastra/pull/25387))
+
+- A function-form `toolDisplay` on a channel adapter can now render the approval card's final state after a user clicks Approve or Deny. Previously, Mastra always replaced a custom approval card with its own English "Approved" or "Denied" text, which also showed the tool's internal registry key. ([#25486](https://github.com/mastra-ai/mastra/pull/25486))
+
+  The function now receives `approved` and `denied` events (`denied` includes `byUser`). Return `{ kind: 'post', message }` to replace the card:
+
+  ```ts
+  channels: {
+    adapters: {
+      slack: {
+        adapter: createSlackAdapter(),
+        toolDisplay: event => {
+          if (event.kind === 'approved') return { kind: 'post', message: 'Onaylandı' };
+          if (event.kind === 'denied') return { kind: 'post', message: `Reddedildi: ${event.byUser ?? ''}` };
+          return undefined;
+        },
+      },
+    },
+  },
+  ```
+
+  If the function returns nothing, a blank message, or throws, the default card is shown.
+
+  If your function switches exhaustively on `event.kind`, add cases for the two new kinds:
+
+  ```ts
+  case 'approved':
+    return { kind: 'post', message: 'Approved' };
+  case 'denied':
+    return { kind: 'post', message: `Denied${event.byUser ? ` by ${event.byUser}` : ''}` };
+  ```
+
+- Corrected the `ToolSearchProcessor` `search.minScore` documentation. Scores are raw BM25 relevance plus name-match boosts and can exceed 1, rather than falling in a 0-1 range. ([#25498](https://github.com/mastra-ai/mastra/pull/25498))
+
+- `result.text` now keeps the answer when an output processor trips the wire. It matches `result.steps[].text`, `getFullOutput().text` and `result.response.messages`. Check `result.tripwire` to see whether the output was rejected. ([#25483](https://github.com/mastra-ai/mastra/pull/25483))
+
+  ```ts
+  const result = await agent.generate('...');
+  if (result.tripwire) {
+    // result.text still holds the rejected answer for logging or review
+  }
+  ```
+
+## 1.72.0-alpha.9
+
+### Minor Changes
+
+- Added `runId`, `sessionId`, `userId`, and `organizationId` filters to advanced trace queries. Use them at trace scope or inside `spans.some` / `spans.none` with `eq`, `ne`, `in`, `notIn`, `exists`, and `notExists`. Value discovery does not suggest these values, and `organizationId` can only narrow the trusted tenant scope. ([#24935](https://github.com/mastra-ai/mastra/pull/24935))
+
+  ```ts
+  const result = await observability.queryTraces(
+    planTraceQuery(
+      parseTraceQueryRequest({
+        timeRange,
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: 'userId' }, right: { literal: 'user-42' } },
+            { op: 'eq', left: { path: 'sessionId' }, right: { literal: 'session-9' } },
+          ],
+        },
+      }),
+    ),
+  );
+  ```
+
+- Fixed scheduled workflows hanging when started directly on serverless hosts (#18807). Declaring `schedule` on a workflow no longer switches it to the evented engine unless the `MASTRA_WORKERS` environment variable is set. Dev servers, single-process servers, and serverless hosts keep the default engine, so an HTTP-triggered `run.start()` runs in-process like any other workflow instead of waiting for a worker that never starts. ([#25430](https://github.com/mastra-ai/mastra/pull/25430))
+
+  **What changes**
+
+  - Without `MASTRA_WORKERS`, scheduled workflows run on the default engine and no longer need storage with concurrent-update support. Cron fires run in-process on the host that runs the scheduler.
+  - With `MASTRA_WORKERS` set to any value (split-worker deployments), scheduled workflows still run on the evented engine, and Mastra logs a warning to the console when one is created. Set `MASTRA_WORKERS` on every process in a split deployment, including `false` on the API.
+  - `schedule` declared on Inngest workflows is ignored with a warning. Use Inngest's `cron` instead.
+
+  ```typescript
+  import { createWorkflow } from '@mastra/core/workflows';
+
+  const dailyReport = createWorkflow({
+    id: 'daily-report',
+    schedule: { cron: '0 9 * * *' },
+    // ...
+  }).commit();
+
+  // Before: dailyReport.engineType === 'evented', and run.start() hung without workers
+  // After (MASTRA_WORKERS unset): dailyReport.engineType === 'default'
+  const run = await dailyReport.createRun();
+  await run.start({ inputData }); // completes in-process
+  ```
+
+  To keep a scheduled workflow on the evented engine everywhere, import `createWorkflow` from `@mastra/core/workflows/evented`.
+
+### Patch Changes
+
+- Fixed DurableAgent dropping cached-input, cache-write, and reasoning token counts from `model_generation` span usage, so tracing exporters and cache/reasoning token metrics now match the regular Agent. ([#25392](https://github.com/mastra-ai/mastra/pull/25392))
+
+- Fixed durable agent resumes (including `InngestAgent`) running another agent's tool when two agents register tools with the same id. On a cold worker, tool calls now resolve against the run's own agent before falling back to Mastra-wide tools. ([#25393](https://github.com/mastra-ai/mastra/pull/25393))
+
+- Fixed generated thread titles re-creating a thread that was deleted while the title was still being generated. Deleted threads now stay deleted, and the title save no longer overwrites thread metadata that changed during generation. ([#25385](https://github.com/mastra-ai/mastra/pull/25385))
+
+- Fixed `createRunCommandTool` security checks on Windows. `allowedBasePaths` now accepts working directories with backslash paths (previously every subdirectory was rejected), command allow/block lists now recognize Windows paths such as `C:\tools\rm.exe`, and the unsafe-character filter now rejects dangerous input consistently on every call. ([#25383](https://github.com/mastra-ai/mastra/pull/25383))
+
+- `submit_plan` results now record the reviewer's decision. `submittedPlan.action` is `approved` or `rejected`, and `submittedPlan.feedback` holds the reviewer's comments when they asked for changes. UIs can show the outcome from message history without parsing the result text. ([#25413](https://github.com/mastra-ai/mastra/pull/25413))
+
+- Fixed AgentController not showing live progress for subagents delegated through `Agent.agents`. These subagents now appear in `displayState.activeSubagents` while they run, with their tool calls and text streaming in, instead of only showing up once they finish. Fixes #25019. ([#25424](https://github.com/mastra-ai/mastra/pull/25424))
+
+## 1.72.0-alpha.8
+
+### Patch Changes
+
+- Fixed `Session.sendMessage()` hanging forever when its run never produced a completion event, for example when several turns started at once on the same thread. It now rejects if the session's stream processing fails, and resolves if the run is aborted or the session's thread subscription is torn down. See [#25140](https://github.com/mastra-ai/mastra/issues/25140). ([#25375](https://github.com/mastra-ai/mastra/pull/25375))
+
+- Fixed evented workflow snapshots growing quadratically with `.foreach()` input size. Each iteration's progress record no longer stores a copy of the whole input array, so large foreach runs no longer produce huge snapshots that can stall storage. Fixes #24943. ([#25376](https://github.com/mastra-ai/mastra/pull/25376))
+
+## 1.72.0-alpha.7
+
+### Patch Changes
+
+- Fixed cancellation during session startup so cancelled requests do not reach the model or interrupt a newer turn. Added the provider finish reason to AgentController error events so clients can distinguish token limits and refusals from execution failures. ([#24321](https://github.com/mastra-ai/mastra/pull/24321))
+
+  Added a distinct session startup cancellation error so clients can handle interruptions without hiding provider or transport failures.
+
+  ```ts
+  import { isSessionStartupCancelledError } from '@mastra/core/agent-controller';
+
+  try {
+    await session.sendMessage({ content: 'Hello' });
+  } catch (error) {
+    if (!isSessionStartupCancelledError(error)) throw error;
+    console.log('Interrupted');
+  }
+  ```
+
+- Fixed an unhandled EPIPE error that crashed processes using UnixSocketPubSub when the broker process exited before stream teardown. Unsubscribing after the broker is gone now completes cleanly, and a publish that races `close()` now rejects with a clear "UnixSocketPubSub is closed" error instead of a raw socket error. ([#25126](https://github.com/mastra-ai/mastra/pull/25126))
+
+- Fixed a claimed thread owner running an idle wake twice when a sender retried the same cross-agent message after its acceptance acknowledgement was lost. Such a retry now resolves to the outcome the first attempt already accepted — its run, or the reason it failed or was cancelled before it ran — instead of starting a second turn that repeats the turn's tool side effects. ([#24774](https://github.com/mastra-ai/mastra/pull/24774))
+
+- Fixed durable agents to reject invalid fallback timeout settings before preparation side effects. ([#25188](https://github.com/mastra-ai/mastra/pull/25188))
+
+- Fixed tool result objects with a `value` key dropping sibling fields. ([#25191](https://github.com/mastra-ai/mastra/pull/25191))
+
+- Fixed `<PROVIDER>_BASE_URL` being ignored for providers such as Google, xAI, Perplexity, Cerebras, DeepInfra, Together AI, and Vercel. Setting `GOOGLE_BASE_URL` (or the equivalent for other providers) now routes requests and API keys through your proxy or gateway instead of the public provider host. ([#25354](https://github.com/mastra-ai/mastra/pull/25354))
+
+- **Approval prompts are now independent per thread and run.** Concurrent and detached approvals stop overwriting, stranding, or answering each other's gates: gates are keyed by tool call and tagged with the thread and run that opened them, abort and user-message interjection release only the current thread's gates, detached-thread approvals no longer fire notifications or permission hooks, and an approved run resumes against the thread, run, resource, agent, and cancellation signal that actually parked it — so a mode switch, resource re-scope, or a successor run cannot redirect or cancel the parked continuation. ([#24776](https://github.com/mastra-ai/mastra/pull/24776))
+
+  **Approval responses now require the gate's `toolCallId`.** Without the id, a response could release whichever gate happened to be parked — another thread's or another run's — so an id-less response is rejected instead of silently applied. Every caller inside the repo already passes the id; this only affects external callers of the session API.
+
+  Before:
+
+  ```ts
+  session.respondToToolApproval({ decision: 'approve' });
+  ```
+
+  After:
+
+  ```ts
+  session.respondToToolApproval({ decision: 'approve', toolCallId });
+  ```
+
+  Similarly, `SessionApproval.arm()` now requires a `toolCallId`, and `getToolCallId()` is replaced by `getToolCallIds()` (which accepts an optional thread/run filter).
+
+  **"Always allow" grants are now scoped to the gate's thread.** Approving with `always_allow_category` grants the tool's category to the thread that owns the gate rather than the whole session, so a background thread's approval cannot widen what the current thread may run without prompting. `grantCategory`, `grantTool`, `hasCategoryGrant`, `hasToolGrant`, and `getGrants` accept an optional `threadId`; passing one scopes the grant to that thread, omitting it keeps the existing session-wide behavior for embedders that grant explicitly.
+
+- Fixed channel handler logs to preserve serialized error details and correlation. ([#25349](https://github.com/mastra-ai/mastra/pull/25349))
+
+## 1.72.0-alpha.6
+
+## 1.72.0-alpha.5
+
+### Patch Changes
+
+- Fixed `textStream` and `elementStream` returning incomplete array elements when streaming structured output with an array schema. Previously, if an element arrived across several tokens, the streams could keep an early partial version (for example `{"a":1}` instead of `{"a":1,"b":2}`) that didn't match the final `object`. Each element is now emitted only once it is complete, so the streamed elements always match the final result. ([#25278](https://github.com/mastra-ai/mastra/pull/25278))
+
+- Fixed workspace `grep` and `list_files` failing with "No mount for path: .gitignore" when a `CompositeFilesystem` has no root (`/`) mount. Reads of unmounted paths now report a not-found (`ENOENT`) error, so a missing root `.gitignore` is treated as absent. ([#25263](https://github.com/mastra-ai/mastra/pull/25263))
+
+- Fixed `createDurableAgent` dropping non-transient `data-*` parts that tools write with `context.writer.custom()`. These parts are now saved to memory, just like with a regular `Agent`. Transient parts still only go to the stream. ([#25283](https://github.com/mastra-ai/mastra/pull/25283))
+
+- Fixed evented workflows failing the entire run when a `.branch()` condition throws. A throwing condition is now logged and treated as false, so the remaining branches still run — matching the default workflow engine. ([#25279](https://github.com/mastra-ai/mastra/pull/25279))
+
+- Added an `outputEncoding` option to `LocalSandbox` so command output in non-UTF-8 encodings is decoded correctly. On Windows systems using a legacy code page, such as Chinese (GBK / code page 936), native commands previously returned garbled text. ([#25266](https://github.com/mastra-ai/mastra/pull/25266))
+
+  ```ts
+  const sandbox = new LocalSandbox({ outputEncoding: 'gbk' });
+  ```
+
+  UTF-8 remains the default. Fixes #25249.
+
+- Fixed threads getting stuck on Anthropic and Bedrock after a step failed mid-reasoning. Prompts now leave out reasoning that the provider cannot accept, so later turns no longer fail. ([#24928](https://github.com/mastra-ai/mastra/pull/24928))
+
+- Fixed subagents without memory failing immediately when their workspace has a browser. These subagents now complete their tasks and still see browser context in their prompt. ([#25291](https://github.com/mastra-ai/mastra/pull/25291))
+
+- Fixed trajectory scorers in dataset experiments receiving an empty trajectory for workflow targets when no trace is stored. They now receive the workflow's executed steps, matching `runEvals`. ([#25269](https://github.com/mastra-ai/mastra/pull/25269))
+
+- Updated dependencies [[`3f50f2a`](https://github.com/mastra-ai/mastra/commit/3f50f2a59068fc91ef7ccc513e5d93845faa298e)]:
+  - @mastra/schema-compat@1.3.12-alpha.1
+
 ## 1.72.0-alpha.4
 
 ### Patch Changes

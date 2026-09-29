@@ -2,6 +2,7 @@ import { Loader2, Pause, PlayIcon, StepForwardIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
+import { Txt } from '@/ds/components/Txt';
 
 export interface WorkflowDebugControlsProps {
   isStreaming?: boolean;
@@ -29,8 +30,10 @@ export function WorkflowDebugControls({
     <div className="flex min-w-0 flex-col gap-3" data-testid="workflow-debug-step-controls">
       <div className="rounded-xl border border-border/50 bg-background p-3">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <span className="text-meta text-muted-foreground">Next step</span>
-          <Badge size="sm" icon={<Pause />} emphasis="muted">
+          <Txt as="span" variant="meta" tone="muted">
+            Next step
+          </Txt>
+          <Badge size="sm" icon={<Pause />} emphasis="subtle">
             Step by step
           </Badge>
         </div>

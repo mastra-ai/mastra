@@ -1,0 +1,62 @@
+{
+  "name": "template-organization-intelligence",
+  "description": "Answer company questions from local, Google Drive, and S3 documents with citations and source freshness.",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24.19.0 <25"
+  },
+  "packageManager": "npm@11.17.0",
+  "scripts": {
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "lint:oxlint": "oxlint --deny-warnings .",
+    "lint:eslint": "eslint --max-warnings 0 .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:integration:deterministic": "vitest run --project integration",
+    "build": "mastra build",
+    "check:env": "node --env-file-if-exists=.env scripts/check-env.mjs",
+    "dev": "node --env-file-if-exists=.env scripts/check-env.mjs && mastra dev",
+    "dev:experiments": "node scripts/evaluation-studio.mjs",
+    "dev:local": "node scripts/bootstrap.mjs",
+    "check": "npm run format:check && npm run lint:oxlint && npm run lint:eslint && npm run typecheck && npm test && npm run build",
+    "test:integration": "node --env-file-if-exists=.env node_modules/vitest/vitest.mjs run --config vitest.live.config.ts",
+    "test:s3-r2:smoke": "node --env-file-if-exists=.env node_modules/vitest/vitest.mjs run --config vitest.s3-r2.config.ts",
+    "eval": "tsc -p tsconfig.eval.json && node --env-file-if-exists=.env build/eval/mastra/evaluation/eval-runner.js",
+    "eval:conversations": "tsc -p tsconfig.eval.json && node --env-file-if-exists=.env build/eval/mastra/evaluation/conversation-query-runner.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1095.0",
+    "@aws-sdk/types": "3.974.5",
+    "@libsql/client": "0.18.0",
+    "@mastra/core": "latest",
+    "@mastra/google-drive": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/mcp": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/s3": "latest",
+    "fast-xml-parser": "5.11.1",
+    "google-auth-library": "11.1.0",
+    "pdfjs-dist": "6.3.289",
+    "yauzl": "3.4.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.4",
+    "@vitest/eslint-plugin": "1.6.27",
+    "eslint": "10.10.0",
+    "eslint-plugin-import-x": "4.17.1",
+    "eslint-plugin-oxlint": "1.83.0",
+    "globals": "17.12.0",
+    "mastra": "latest",
+    "oxfmt": "0.68.0",
+    "oxlint": "1.83.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.70.0",
+    "vitest": "5.0.1"
+  }
+}

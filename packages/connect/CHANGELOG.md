@@ -1,5 +1,109 @@
 # @mastra/connect
 
+## 0.5.0-alpha.3
+
+### Minor Changes
+
+- Added multi-connection support and a string-array shorthand to `@mastra/connect`. ([#24864](https://github.com/mastra-ai/mastra/pull/24864))
+
+  **Multi-connection support:** when a provider has more than one active connection, tools are wrapped with a required `connection_name` input and a new `<provider>__list_connections` tool is exposed so agents can discover and select which connection to use. Single-connection behavior and explicit `connectionId` pins are unchanged. The wrapper preserves each inner tool's approval contract (`requireApproval` and, when the MCP server-level policy is a function, `needsApprovalFn`) so approval prompts still fire for multi-connection MCP tools; missing or unknown `connection_name` fails closed and requires approval.
+
+  The helper key uses a double underscore (`<integrationId>__list_connections`) so it cannot collide with a real provider tool of the form `<integrationId>_<toolName>` (for example, WorkOS ships a real `workos_list_connections` tool that lists SSO connections).
+
+  Previously, multi-active provider connections were skipped with a warning.
+
+  ```ts
+  // connect() returns a resolver; call it to load tools.
+  const tools = await connect({ integrations: ['linear'] })();
+
+  // Agent lists available connections.
+  await tools.linear__list_connections.execute({}, {});
+  // => { connections: [
+  //      { name: 'Work', accountLabel: 'Work' },
+  //      { name: 'Personal', accountLabel: 'Personal' },
+  //    ] }
+
+  // Agent calls tools with the chosen connection.
+  await tools.linear_get_issue.execute({ connection_name: 'Work', id: 'LIN-123' }, {});
+  ```
+
+  **String-array shorthand for `integrations`:** you can now pass a plain array of integration ids when no per-provider overrides are needed. The object form still works whenever you need `allowTools`, `disallowTools`, `autoApproveTools`, `connectionId`, or `disabled`.
+
+  ```ts
+  // Shorthand
+  connect({ integrations: ['linear', 'github'] });
+
+  // Object form (unchanged)
+  connect({
+    integrations: {
+      linear: { allowTools: ['linear_get_issue'] },
+      github: {},
+    },
+  });
+  ```
+
+  **`disallowTools` per provider:** each provider now accepts either `allowTools` or `disallowTools` — `ConnectIntegrationOptions` is a mutually exclusive union, so setting both is a compile-time and runtime error. Use `disallowTools` when you want the whole toolset minus a few keys instead of an explicit allowlist.
+
+  ```ts
+  connect({
+    integrations: {
+      // Everything except the delete tool
+      linear: { disallowTools: ['linear_delete_issue'] },
+      // Explicit allowlist still works
+      github: { allowTools: ['github_get_repo'] },
+    },
+  });
+  ```
+
+- Added 25 Microsoft Teams tools. Areas covered: ([#25361](https://github.com/mastra-ai/mastra/pull/25361))
+
+  - **Teams** — create, get, list joined teams, list members, add and remove members
+  - **Channels** — create, get, list, update, delete
+  - **Channel messages** — send, get, list, reply, list replies
+  - **Channel tabs** — create, list
+  - **Chats** — create, get, list, send messages, get message, list messages, list members
+
+  One `microsoft-teams` connection powers both these tools and the Teams channel — no extra bot token or app registration to wire up.
+
+  ```ts
+  import { createMicrosoftTeamsTools } from '@mastra/connect';
+
+  const tools = createMicrosoftTeamsTools({ connectionId: 'conn_...' });
+  ```
+
+### Patch Changes
+
+- Telegram channels now run in delegated credential mode: the provider receives a platform-backed `tokenResolver` instead of a static bot token, so a token re-pasted or rotated on the platform takes effect on the very next Bot API call without a snapshot refresh, and the bot token is never persisted in provider storage. ([#25272](https://github.com/mastra-ai/mastra/pull/25272))
+
+  ```ts
+  import { channels } from '@mastra/connect';
+
+  // Telegram is wired automatically — the resolver reads the current
+  // connection's api-key credential per Bot API call. No app-side config.
+  const registrations = await channels({ projectId: process.env.MASTRA_PROJECT_ID! });
+  ```
+
+- Updated dependencies [[`ed67acc`](https://github.com/mastra-ai/mastra/commit/ed67acc3213d469ed69610c304c604693cfec383), [`5f1efad`](https://github.com/mastra-ai/mastra/commit/5f1efad5c2230a4de715cad3f01859b4ff9d255b), [`75c2ee1`](https://github.com/mastra-ai/mastra/commit/75c2ee1280a5441eb66c31f23a53a52b42244686), [`9a35897`](https://github.com/mastra-ai/mastra/commit/9a3589783a40157759f939f5c63bba3c8aef1c1c), [`d3a22a7`](https://github.com/mastra-ai/mastra/commit/d3a22a78f12e094118ce80ec35b63987009644e2), [`e4e0f90`](https://github.com/mastra-ai/mastra/commit/e4e0f9000d73396609ae2f2b6c31259ade43078c), [`1eccabc`](https://github.com/mastra-ai/mastra/commit/1eccabc1b95daec65ed84f1179157b1ca0305448), [`caf94f9`](https://github.com/mastra-ai/mastra/commit/caf94f9c1927f737370b6118264bd16c7210a765), [`6c9f7ab`](https://github.com/mastra-ai/mastra/commit/6c9f7abf9bdce0a52450398b31d497519465bb80), [`91196d5`](https://github.com/mastra-ai/mastra/commit/91196d5a6d582c0f494622d0378f33e22d881659), [`f36019c`](https://github.com/mastra-ai/mastra/commit/f36019c24193e0d29f920663851198bf45e3d12f)]:
+  - @mastra/core@1.72.0-alpha.10
+  - @mastra/telegram@0.2.0-alpha.0
+
+## 0.5.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`9ce3444`](https://github.com/mastra-ai/mastra/commit/9ce3444d1a6b17e72b0a20c74603abaf252a843e), [`3b77788`](https://github.com/mastra-ai/mastra/commit/3b77788a08df1e754282d39c42823e6e1c5f2742), [`987257a`](https://github.com/mastra-ai/mastra/commit/987257a34cda8a153fe592c31d75fbb1dee55202), [`65a93a2`](https://github.com/mastra-ai/mastra/commit/65a93a2a3b1434d605a6a417cb83d2d58e16bfc0), [`fd92729`](https://github.com/mastra-ai/mastra/commit/fd92729380a29f2a0ec822e39f3c09eb9aaa5ac5), [`79c3b1f`](https://github.com/mastra-ai/mastra/commit/79c3b1fa4d470585a00558b317ed47db9b1decd4), [`4092ef2`](https://github.com/mastra-ai/mastra/commit/4092ef29aad09f2ba5f90c92a4d4d3bd444eae67), [`e62e372`](https://github.com/mastra-ai/mastra/commit/e62e3721356955f0a9fd3d723cee9fa0c160652b), [`5026973`](https://github.com/mastra-ai/mastra/commit/50269736f432cee1170627b2b6f88ba1431e837f)]:
+  - @mastra/core@1.72.0-alpha.7
+  - @mastra/mcp@2.1.1-alpha.0
+
+## 0.5.0-alpha.1
+
+### Patch Changes
+
+- Fixed Discord channel connections failing with `Discord rejected the bot token: 401: Unauthorized`. The Discord bot token is now read from the connection's metadata (`botToken`, following Nango's Discord convention) instead of the OAuth credential — Discord's OAuth exchange only yields a user Bearer token, which can never authenticate as a bot. A Discord connection without `botToken` metadata is skipped with a warning telling you to store the token on the connection. ([#25260](https://github.com/mastra-ai/mastra/pull/25260))
+
+- Updated dependencies [[`43fbe75`](https://github.com/mastra-ai/mastra/commit/43fbe75535650345cf61dee00cf3e7b3f5efaf7f), [`ebd03fd`](https://github.com/mastra-ai/mastra/commit/ebd03fd3bc93fe3930747956724252f7c8834826), [`2c57ba8`](https://github.com/mastra-ai/mastra/commit/2c57ba896b04215fface2a8216b88fe59cfdd041), [`f6effda`](https://github.com/mastra-ai/mastra/commit/f6effdabafa9fc6388478b3e281ad4c457d4200b), [`7f4ce21`](https://github.com/mastra-ai/mastra/commit/7f4ce2190029710851d95f7b75a2fb724782483c), [`1ba1588`](https://github.com/mastra-ai/mastra/commit/1ba158873dadf3d290b111981c3bc7ef95ab1d1c), [`b537ab1`](https://github.com/mastra-ai/mastra/commit/b537ab14714870e058775530bc55b37c9115613f), [`d4e350a`](https://github.com/mastra-ai/mastra/commit/d4e350a5c1e29a7da5a22da52ed1f33431403012)]:
+  - @mastra/core@1.72.0-alpha.5
+
 ## 0.5.0-alpha.0
 
 ### Minor Changes

@@ -253,6 +253,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'trace-query-context-ids',
       ] as const;
     }
 
@@ -272,6 +273,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
       'thread-query',
       'trace-query-tenant-scope',
       'feedback',
+      'trace-query-context-ids',
     ] as const;
   }
 

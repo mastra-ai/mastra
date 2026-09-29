@@ -54,6 +54,19 @@ describe('createDynamicTools', () => {
     expect(tools.web_extract).toBe(parallelExtract);
   });
 
+  it('exposes opt-in built-in tools, still subject to disabledTools', () => {
+    const scheduleList = { description: 'list schedules' };
+    const scheduleCreate = { description: 'create schedule' };
+    const getDynamicTools = createDynamicTools(undefined, undefined, ['schedule_create'], undefined, undefined, false, {
+      schedule_list: scheduleList,
+      schedule_create: scheduleCreate,
+    } as any);
+    const tools = getDynamicTools({ requestContext: createRequestContext({}) }) as Record<string, unknown>;
+
+    expect(tools.schedule_list).toBe(scheduleList);
+    expect(tools.schedule_create).toBeUndefined();
+  });
+
   it('merges extra tools into the exposed tool map', async () => {
     const customTool = {
       description: 'custom',
