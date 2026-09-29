@@ -43,9 +43,16 @@ export function SignalActivity({ kind, label, message, detail, mode, defaultOpen
       aria-label={`Signal: ${label}`}
     >
       {message && !lineHoldsMessage && (
-        <Txt {...body} className="break-words whitespace-pre-wrap">
-          {message}
-        </Txt>
+        <>
+          {detail && (
+            <Txt variant="meta" font="mono" tone="muted" className="break-all">
+              {detail}
+            </Txt>
+          )}
+          <Txt {...body} className="break-words whitespace-pre-wrap">
+            {message}
+          </Txt>
+        </>
       )}
     </ActivityItem>
   );

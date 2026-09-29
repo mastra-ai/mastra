@@ -49,6 +49,7 @@ describe('SystemReminderBadge', () => {
     fireEvent.click(screen.getByRole('button', { name: /system reminder/i }));
 
     expect(screen.getByText('Remember nested instructions')).toBeTruthy();
+    expect(screen.getAllByText('/repo/packages/core/AGENTS.md')).toHaveLength(2);
   });
 
   it('names the reminder by its type when its path is empty', () => {
