@@ -41,6 +41,7 @@ import { TemporalGapComponent } from './components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
 import { PendingUserMessageComponent, UserMessageComponent } from './components/user-message.js';
 import {
+  collectCommandExits,
   getAssistantRenderParts,
   getBackgroundCompletionView,
   getBackgroundWorkLifecycleView,
@@ -611,6 +612,8 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
       kind: notification.kind,
       priority: notification.priority,
       status: notification.status,
+      quietDisplayMode: state.quietMode ? 'quiet' : 'normal',
+      quietPreviewLineLimit: state.quietModeMaxToolPreviewLines,
       backgroundCompletion,
     });
     if (backgroundCompletion) {
@@ -631,6 +634,7 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
       message: summary.message,
       pending: summary.pending,
       bySource: summary.bySource,
+      quietDisplayMode: state.quietMode ? 'quiet' : 'normal',
     });
     addChildBeforeFollowUps(state, component);
     state.messageComponentsById.set(message.id, component);
@@ -943,6 +947,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
   state.pendingSignalMessageComponentsById.clear();
   state.allShellComponents = [];
 
+  const commandExits = collectCommandExits(messages);
   const backgroundTasksByToolCallId = new Map<string, string>();
   const cancelledBackgroundToolCalls = new Set<string>();
   for (const message of messages) {
@@ -974,6 +979,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
         if (accumulatedParts.length === 0 && !(isFinal && hasTerminalMetadata(message))) return;
         const textMessage = buildAssistantSlice(message, accumulatedParts, { includeTerminalMetadata: isFinal });
         const textComponent = new AssistantMessageComponent(textMessage, state.hideThinkingBlock, getMarkdownTheme());
+        textComponent.setQuietModeDisplay(state.quietMode ? 'quiet' : 'normal');
         state.chatContainer.addChild(textComponent);
         accumulatedParts = [];
       };
@@ -1103,6 +1109,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
             {
               showImages: false,
               collapsedByDefault: !state.toolOutputExpanded,
+              projectRoot: state.projectInfo?.rootPath,
             },
             state.ui,
           );
@@ -1127,6 +1134,21 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
               },
               isBackgroundPlaceholder,
             );
+            if (!isBackgroundPlaceholder) {
+              const exit = commandExits.get(part.toolCallId);
+              if (exit) toolComponent.setCommandExit(exit);
+              const runMs = exit?.executionTimeMs;
+              if (runMs !== undefined) {
+                const endedAt = part.endedAt ?? (part.startedAt ?? 0) + runMs;
+                toolComponent.setRecordedTiming(endedAt - runMs, endedAt);
+              } else {
+                toolComponent.setRecordedTiming(part.startedAt, part.endedAt);
+              }
+            }
+          } else {
+            // Nothing will deliver this call's result to a reloaded row, so show it stopped rather
+            // than running forever.
+            toolComponent.stopLiveUpdates();
           }
 
           if (cancelledBackgroundToolCalls.has(part.toolCallId)) {

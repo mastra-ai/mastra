@@ -2,6 +2,7 @@ import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import type { NavLink } from '@mastra/playground-ui/components/MainSidebar';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Blocks, LibraryIcon, ServerCogIcon, StarIcon } from 'lucide-react';
 import { useMemo } from 'react';
@@ -13,7 +14,6 @@ import { ImpersonationBanner } from '@/domains/auth/components/impersonation-ban
 import { useAuthCapabilities } from '@/domains/auth/hooks';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { isAuthenticated } from '@/domains/auth/types';
-import { useLinkComponent } from '@/lib/framework';
 
 const agentsLink: NavLink = {
   name: 'My agents',

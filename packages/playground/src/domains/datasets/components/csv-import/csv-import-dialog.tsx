@@ -11,6 +11,7 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { useDatasetMutations, useDataset } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { Check, Upload, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useCallback, useState } from 'react';
@@ -18,8 +19,6 @@ import type { ColumnMapping, FieldType } from '../../hooks/use-column-mapping';
 import { useColumnMapping } from '../../hooks/use-column-mapping';
 import type { ParsedCSV } from '../../hooks/use-csv-parser';
 import { useCSVParser } from '../../hooks/use-csv-parser';
-import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
-import { useDataset } from '../../hooks/use-datasets';
 import type { CsvValidationResult } from '../../utils/csv-validation';
 import { validateCsvRows } from '../../utils/csv-validation';
 import { ColumnMappingStep } from './column-mapping-step';

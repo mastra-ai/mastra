@@ -4,18 +4,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { useAgentVersions } from '../hooks/use-agent-versions';
-
-function formatTimestamp(isoString: string): string {
-  const date = new Date(isoString);
-  return date.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 export interface AgentVersionPanelProps {
   agentId: string;
@@ -84,7 +74,7 @@ export function AgentVersionPanel({
                       {isDraft && <Badge variant="blue">Draft</Badge>}
                     </div>
                     <Txt variant="meta" tone="faint" className="mt-0.5">
-                      {formatTimestamp(version.createdAt)}
+                      {formatDate(version.createdAt, 'date-time') ?? ''}
                     </Txt>
                   </button>
                 </li>

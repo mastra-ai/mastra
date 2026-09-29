@@ -1,7 +1,8 @@
 import type { BoardTransitionPolicy } from './transition-policy.js';
 
 export const workTransitionPolicy: BoardTransitionPolicy = context => {
-  const { item, requestedTriageType, actor, fromStage, toStage, isHumanTransition, plansAutoApproved } = context;
+  const { item, requestedTriageType, actor, fromStage, toStage, isHumanTransition, plansAutoApproved, planApproved } =
+    context;
   const triageAgent = actor.type === 'agent' && actor.role === 'triage';
   if (triageAgent && requestedTriageType === undefined) {
     return {
@@ -17,18 +18,38 @@ export const workTransitionPolicy: BoardTransitionPolicy = context => {
       reason: 'The persisted triage classification cannot be changed by a later transition.',
     };
   }
-  // The stock planning handoff has a plan agent drive planning -> execute directly,
-  // which queues the build. With plans not auto-approved (no per-item preapproval and
-  // the project's Auto-approve plans off), that agent move must not stand in for the
-  // human review: the item rests in Planning with the produced plan as the handoff
-  // until a maintainer moves it into Building from the Factory UI.
-  const planAgent = actor.type === 'agent' && actor.role === 'plan';
-  if (planAgent && fromStage === 'planning' && toStage === 'execute' && !plansAutoApproved) {
+  // Planning is the approval boundary. When project auto-approval is off, only a
+  // person or a successfully approved `submit_plan` result may move the card into Building.
+  if (
+    fromStage === 'planning' &&
+    toStage === 'execute' &&
+    actor.type !== 'human' &&
+    !plansAutoApproved &&
+    !planApproved
+  ) {
     return {
       type: 'reject',
       code: 'approval_required',
       reason:
-        'Auto-approve plans is off: a maintainer must review the plan and move this work item into Building from the Factory UI.',
+        'Auto-approve plans is off: a maintainer must approve the plan or move this work item into Building from the Factory UI.',
+    };
+  }
+  // A Factory review requested changes on this item's pull request. Closing the
+  // work now would bury the finding; the next push re-reviews and updates it.
+  if (toStage === 'done' && actor.type === 'agent' && item.metadata?.reviewVerdict === 'request changes') {
+    return {
+      type: 'reject',
+      code: 'invalid_transition',
+      reason:
+        'The latest Factory review requested changes on this pull request. Address them and push; the re-review updates the verdict. A merge or a maintainer can still close the work.',
+    };
+  }
+  // The work ships when its pull request merges, and the merge closes the card.
+  if (toStage === 'done' && actor.type === 'agent' && typeof item.metadata?.openPullRequestNumber === 'number') {
+    return {
+      type: 'reject',
+      code: 'invalid_transition',
+      reason: `Pull request #${item.metadata.openPullRequestNumber} is still open. The card moves to Done when it merges; a maintainer can still close the work.`,
     };
   }
   const triageType = item.triageType ?? requestedTriageType;

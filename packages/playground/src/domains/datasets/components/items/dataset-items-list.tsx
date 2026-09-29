@@ -3,7 +3,7 @@ import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
 import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
-import { format, isThisYear, isToday } from 'date-fns';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { ExternalLinkIcon, FileJson, Upload } from 'lucide-react';
 import { z } from 'zod';
 
@@ -59,13 +59,6 @@ const expectedTrajectorySchema = z.object({ steps: z.array(z.unknown()) });
 function formatExpectedTrajectory(value: DatasetItem['expectedTrajectory']): string {
   const result = expectedTrajectorySchema.safeParse(value);
   return result.success ? `${result.data.steps.length} steps` : 'Yes';
-}
-
-function formatDate(date: Date): string {
-  const dayMonth = isToday(date) ? 'Today' : format(date, 'MMM dd');
-  const year = !isThisYear(date) ? format(date, 'yyyy') : '';
-  const time = format(date, "'at' h:mm aaa");
-  return `${dayMonth} ${year} ${time}`.replace(/\s+/g, ' ').trim();
 }
 
 export function DatasetItemsList({
@@ -191,7 +184,9 @@ export function DatasetItemsList({
                   )}
                 </DataList.Cell>
                 <DataList.Cell className="min-w-0">
-                  <span className="block truncate text-body-sm text-placeholder">{formatDate(createdAtDate)}</span>
+                  <span className="block truncate text-body-sm text-placeholder">
+                    {formatDate(createdAtDate, 'date-time')}
+                  </span>
                 </DataList.Cell>
               </>
             );

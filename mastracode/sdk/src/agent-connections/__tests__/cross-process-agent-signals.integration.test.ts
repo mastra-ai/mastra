@@ -174,6 +174,9 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     const delayedSend = await owner.waitFor('delayed-send');
     const delayedReply = await sender.waitFor('delayed-reply');
 
+    owner.child.stdin.write('prepare-close\n');
+    sender.child.stdin.write('prepare-close\n');
+    await Promise.all([owner.waitFor('close-ready'), sender.waitFor('close-ready')]);
     owner.child.stdin.write('close\n');
     sender.child.stdin.write('close\n');
     owner.child.stdin.end();
@@ -238,6 +241,294 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     expect(contenderCode).toBe(0);
   }, 30_000);
 
+  it('yields a thread to another process once its owner has moved on, but never the current one', async () => {
+    const owner = startChild('owner', resourceId, 'yield-on-demand');
+    expect(await owner.waitFor('claim-result')).toMatchObject({ threadId: 'owner-thread', claimed: true });
+
+    // The owner is still looking at owner-thread: the contender must lose and
+    // keep retrying instead of taking the thread.
+    const contender = startChild('sender', resourceId, 'yield-on-demand');
+    contender.child.stdin.write('claim\n');
+    expect(await contender.waitFor('claim-result')).toMatchObject({ threadId: 'owner-thread', claimed: false });
+    await new Promise(resolve => setTimeout(resolve, 600));
+    expect(owner.events.filter(event => event.event === 'yielded')).toEqual([]);
+    const contenderAttempts = () => contender.events.filter(event => event.event === 'claim-attempt');
+    expect(contenderAttempts().length).toBeGreaterThan(1);
+    expect(contenderAttempts().every(event => event.claimed === false)).toBe(true);
+
+    // The owner moves to another thread while keeping owner-thread claimed. The
+    // contender's retry loop now asks again and the owner yields.
+    owner.child.stdin.write('switch\n');
+    await owner.waitFor('switched');
+    const yielded = await owner.waitFor('yielded');
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline && !contenderAttempts().some(event => event.claimed === true)) {
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    const attemptOutcomes = contenderAttempts().map(event => event.claimed);
+
+    owner.child.stdin.write('probe\n');
+    const discovery = await owner.waitFor('discovered');
+
+    owner.child.stdin.write('close\n');
+    contender.child.stdin.write('close\n');
+    owner.child.stdin.end();
+    contender.child.stdin.end();
+    const [ownerCode, contenderCode] = await Promise.all([owner.result, contender.result]);
+
+    expect(yielded).toMatchObject({ threadId: 'owner-thread' });
+    // Every attempt lost until the owner yielded; the retry after that won.
+    expect(attemptOutcomes.at(-1)).toBe(true);
+    expect(attemptOutcomes.slice(0, -1).every(claimed => claimed === false)).toBe(true);
+    // From the owner's side owner-thread now belongs to the contender while
+    // owner-thread-2 (its current thread) is still its own.
+    expect(discovery.threads).toEqual([
+      { threadId: 'owner-thread', label: 'sender:owner-thread', selfAdvertised: false },
+      { threadId: 'owner-thread-2', label: 'owner:owner-thread-2', selfAdvertised: true },
+    ]);
+    expect(owner.stderr).toBe('');
+    expect(contender.stderr).toBe('');
+    expect(ownerCode).toBe(0);
+    expect(contenderCode).toBe(0);
+  }, 30_000);
+
+  it('uses the live session thread to keep, yield, and reclaim an advertised thread across processes', async () => {
+    const owner = startChild('owner', resourceId, 'session-advertisement-yield');
+    await owner.waitFor('thread-owned');
+
+    const contender = startChild('sender', resourceId, 'session-advertisement-yield');
+    contender.child.stdin.write('claim\n');
+    await contender.waitFor('claim-started');
+
+    const probe = async (child: ReturnType<typeof startChild>) => {
+      const previousCount = child.events.filter(event => event.event === 'discovered').length;
+      child.child.stdin.write('probe\n');
+      const deadline = Date.now() + 10_000;
+      while (Date.now() < deadline) {
+        const discoveries = child.events.filter(event => event.event === 'discovered');
+        if (discoveries.length > previousCount) return discoveries.at(-1)!;
+        await new Promise(resolve => setTimeout(resolve, 25));
+      }
+      throw new Error(`Timed out probing session advertisement. Events: ${JSON.stringify(child.events)}`);
+    };
+
+    // The current owner refuses to yield, so the contender still discovers it
+    // as a remote peer instead of hiding the thread as its own claim.
+    const initialDiscovery = await probe(contender);
+    expect(
+      initialDiscovery,
+      JSON.stringify({ initialDiscovery, ownerEvents: owner.events, contenderEvents: contender.events }),
+    ).toMatchObject({
+      hasPeer: true,
+      selfAdvertised: false,
+    });
+
+    // Re-claiming the current thread replaces its advertisement without first
+    // dropping the live lease, so the waiting contender cannot slip in.
+    owner.child.stdin.write('reclaim\n');
+    await owner.waitFor('reclaimed');
+    expect(await probe(contender)).toMatchObject({ hasPeer: true, selfAdvertised: false });
+
+    // Once the owner moves away, the contender's retry atomically receives the
+    // claim. The original owner now sees the shared thread as remote.
+    owner.child.stdin.write('switch-away\n');
+    await owner.waitFor('switched');
+    await expect
+      .poll(() => probe(owner), { timeout: 10_000, interval: 250 })
+      .toMatchObject({
+        hasPeer: true,
+        selfAdvertised: false,
+        label: 'sender:session-advertisement',
+      });
+
+    // Switching back cannot steal a current claim from the contender.
+    owner.child.stdin.write('switch-back\n');
+    await owner.waitFor('switched');
+    expect(await probe(owner)).toMatchObject({ hasPeer: true, selfAdvertised: false });
+
+    // After the contender moves on, the original session's retry reclaims the
+    // shared thread and discovery hides it as self-advertised again.
+    contender.child.stdin.write('switch-away\n');
+    await contender.waitFor('switched');
+    await expect
+      .poll(() => probe(owner), { timeout: 10_000, interval: 250 })
+      .toMatchObject({
+        hasPeer: true,
+        selfAdvertised: true,
+        label: 'owner:session-advertisement',
+      });
+
+    owner.child.stdin.write('close\n');
+    contender.child.stdin.write('close\n');
+    owner.child.stdin.end();
+    contender.child.stdin.end();
+    const [ownerCode, contenderCode] = await Promise.all([owner.result, contender.result]);
+
+    expect(owner.stderr).toBe('');
+    expect(contender.stderr).toBe('');
+    expect(ownerCode).toBe(0);
+    expect(contenderCode).toBe(0);
+  }, 40_000);
+
+  it('keeps exactly one claim when an owner yields and switches back 300 ms later', async () => {
+    const owner = startChild('owner', resourceId, 'session-advertisement-yield');
+    await owner.waitFor('thread-owned');
+    const contender = startChild('sender', resourceId, 'session-advertisement-yield');
+    contender.child.stdin.write('claim\n');
+    await contender.waitFor('claim-started');
+
+    const probe = async (child: ReturnType<typeof startChild>) => {
+      const previousCount = child.events.filter(event => event.event === 'discovered').length;
+      child.child.stdin.write('probe\n');
+      const deadline = Date.now() + 10_000;
+      while (Date.now() < deadline) {
+        const discoveries = child.events.filter(event => event.event === 'discovered');
+        if (discoveries.length > previousCount) return discoveries.at(-1)!;
+        await new Promise(resolve => setTimeout(resolve, 25));
+      }
+      throw new Error(`Timed out probing ownership race. Events: ${JSON.stringify(child.events)}`);
+    };
+
+    owner.child.stdin.write('switch-away-and-back\n');
+    await owner.waitFor('switched-away');
+    await owner.waitFor('switched-back');
+    const [ownerDiscovery, contenderDiscovery] = await Promise.all([probe(owner), probe(contender)]);
+
+    expect(ownerDiscovery.leaseOwner).toBe(contenderDiscovery.leaseOwner);
+    expect([ownerDiscovery.selfAdvertised, contenderDiscovery.selfAdvertised].filter(Boolean)).toHaveLength(1);
+
+    owner.child.stdin.write('close\n');
+    contender.child.stdin.write('close\n');
+    owner.child.stdin.end();
+    contender.child.stdin.end();
+    const [ownerCode, contenderCode] = await Promise.all([owner.result, contender.result]);
+    expect(owner.stderr).toBe('');
+    expect(contender.stderr).toBe('');
+    expect(ownerCode).toBe(0);
+    expect(contenderCode).toBe(0);
+  }, 30_000);
+
+  it('never lets a contender take a thread from a live owner that is merely slow to answer', async () => {
+    const owner = startChild('owner', resourceId, 'yield-on-demand');
+    expect(await owner.waitFor('claim-result')).toMatchObject({ threadId: 'owner-thread', claimed: true });
+
+    const contender = startChild('sender', resourceId, 'yield-on-demand');
+    contender.child.stdin.write('claim\n');
+    expect(await contender.waitFor('claim-result')).toMatchObject({ threadId: 'owner-thread', claimed: false });
+
+    // The owner never leaves owner-thread; its event loop just hitches in
+    // bursts longer than the discovery window while the contender keeps
+    // retrying. Silence from a live owner must not read as "no owner".
+    owner.child.stdin.write('stall\n');
+    await owner.waitFor('stalled', 15_000);
+    // Let a couple more retries land against a responsive owner too.
+    await new Promise(resolve => setTimeout(resolve, 1_500));
+
+    contender.child.stdin.write('probe\n');
+    const discovery = await contender.waitFor('discovered');
+
+    owner.child.stdin.write('close\n');
+    contender.child.stdin.write('close\n');
+    owner.child.stdin.end();
+    contender.child.stdin.end();
+    const [ownerCode, contenderCode] = await Promise.all([owner.result, contender.result]);
+
+    const attempts = contender.events.filter(event => event.event === 'claim-attempt');
+    // The retry loop stops on the first win, so a `true` here means the
+    // contender took the thread from a live owner that never left it.
+    expect(attempts.map(event => event.claimed)).toEqual(attempts.map(() => false));
+    expect(attempts.length).toBeGreaterThan(2);
+    expect(owner.events.filter(event => event.event === 'yielded')).toEqual([]);
+    // From the contender's side owner-thread is still somebody else's, so it
+    // is listed as a real peer rather than hidden as its own claim.
+    expect(discovery.threads).toEqual([
+      { threadId: 'owner-thread', label: 'owner:owner-thread', selfAdvertised: false },
+    ]);
+    expect(owner.stderr).toBe('');
+    expect(contender.stderr).toBe('');
+    expect(ownerCode).toBe(0);
+    expect(contenderCode).toBe(0);
+  }, 40_000);
+
+  it('lets a contender take a thread once its owner has died', async () => {
+    const owner = startChild('owner', resourceId, 'yield-on-demand');
+    expect(await owner.waitFor('claim-result')).toMatchObject({ threadId: 'owner-thread', claimed: true });
+
+    const contender = startChild('sender', resourceId, 'yield-on-demand');
+    contender.child.stdin.write('claim\n');
+    expect(await contender.waitFor('claim-result')).toMatchObject({ threadId: 'owner-thread', claimed: false });
+
+    owner.child.kill('SIGKILL');
+    await owner.result;
+
+    const contenderAttempts = () => contender.events.filter(event => event.event === 'claim-attempt');
+    const deadline = Date.now() + 20_000;
+    while (Date.now() < deadline && !contenderAttempts().some(event => event.claimed === true)) {
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    contender.child.stdin.write('probe\n');
+    const discovery = await contender.waitFor('discovered');
+
+    contender.child.stdin.write('close\n');
+    contender.child.stdin.end();
+    const contenderCode = await contender.result;
+
+    expect(contenderAttempts().at(-1)).toMatchObject({ claimed: true });
+    expect(discovery.threads).toEqual([
+      { threadId: 'owner-thread', label: 'sender:owner-thread', selfAdvertised: true },
+    ]);
+    expect(contender.stderr).toBe('');
+    expect(contenderCode).toBe(0);
+  }, 40_000);
+
+  it('lets exactly one contender reclaim a filesystem lease from a killed holder', async () => {
+    const holder = startChild('owner', resourceId, 'stale-lease-takeover');
+    expect(await holder.waitFor('lease-result')).toMatchObject({ acquired: true });
+    holder.child.kill('SIGKILL');
+    await holder.result;
+
+    const startAt = String(Date.now() + 2_000);
+    const first = startChild('sender', resourceId, 'stale-lease-takeover', [startAt]);
+    const second = startChild('sender', resourceId, 'stale-lease-takeover', [startAt]);
+    const [firstResult, secondResult] = await Promise.all([
+      first.waitFor('lease-result'),
+      second.waitFor('lease-result'),
+    ]);
+
+    first.child.stdin.write('close\n');
+    second.child.stdin.write('close\n');
+    first.child.stdin.end();
+    second.child.stdin.end();
+    const [firstCode, secondCode] = await Promise.all([first.result, second.result]);
+
+    expect([firstResult.acquired, secondResult.acquired].filter(Boolean)).toHaveLength(1);
+    const winner = firstResult.acquired ? firstResult.owner : secondResult.owner;
+    const loser = firstResult.acquired ? secondResult : firstResult;
+    expect(loser).toMatchObject({ acquired: false, owner: winner });
+    expect(first.stderr).toBe('');
+    expect(second.stderr).toBe('');
+    expect(firstCode).toBe(0);
+    expect(secondCode).toBe(0);
+  }, 30_000);
+
+  it('serializes repeated cross-process lease release and reacquisition', async () => {
+    const startAt = String(Date.now() + 2_000);
+    const first = startChild('owner', resourceId, 'lease-mutation-hammer', [startAt]);
+    const second = startChild('sender', resourceId, 'lease-mutation-hammer', [startAt]);
+    const [firstResult, secondResult] = await Promise.all([
+      first.waitFor('hammer-result', 30_000),
+      second.waitFor('hammer-result', 30_000),
+    ]);
+    const [firstCode, secondCode] = await Promise.all([first.result, second.result]);
+
+    expect(firstResult).toMatchObject({ acquisitions: 100, overlaps: 0 });
+    expect(secondResult).toMatchObject({ acquisitions: 100, overlaps: 0 });
+    expect(first.stderr).toBe('');
+    expect(second.stderr).toBe('');
+    expect(firstCode).toBe(0);
+    expect(secondCode).toBe(0);
+  }, 40_000);
+
   it('fences simultaneous process claims so exactly one owner accepts an idle wake', async () => {
     const startAt = String(Date.now() + 3_000);
     const firstOwner = startChild('owner', resourceId, 'simultaneous-owner-wake', [startAt]);
@@ -264,8 +555,7 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
       wakeSender.result,
     ]);
 
-    expect(firstClaim.claimed).toBe(true);
-    expect(secondClaim.claimed).toBe(true);
+    expect([firstClaim.claimed, secondClaim.claimed].filter(Boolean)).toHaveLength(1);
     expect(sendResult.action).toBe('deliver');
     if (modelStreams.length !== 1) {
       throw new Error(

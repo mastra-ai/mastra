@@ -1,5 +1,6 @@
 import { LockKeyholeIcon } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
+import { FieldBlockErrorMsg } from '@/ds/components/FormFieldBlocks/block/field-block-error-msg';
 import { Label } from '@/ds/components/Label/label';
 import { cn } from '@/lib/utils';
 
@@ -10,10 +11,12 @@ export type SettingsRowProps = Omit<ComponentProps<'div'>, 'children'> & {
   children?: ReactNode;
   tone?: 'default' | 'destructive';
   viewOnly?: boolean;
+  required?: boolean;
+  errorMsg?: ReactNode;
 };
 
 type SettingsRowLayoutProps = SettingsRowProps & {
-  layout: 'factory' | 'standalone' | 'section';
+  layout: 'factory' | 'section';
 };
 
 export function SettingsRowLayout({
@@ -25,6 +28,8 @@ export function SettingsRowLayout({
   layout,
   tone = 'default',
   viewOnly = false,
+  required = false,
+  errorMsg,
   ...props
 }: SettingsRowLayoutProps) {
   const isSectionLayout = layout === 'section';
@@ -48,7 +53,6 @@ export function SettingsRowLayout({
         isSectionLayout
           ? 'grid min-w-0 gap-3 group-data-[variant=factory]/section:px-3 group-data-[variant=factory]/section:py-2 group-data-[variant=flat]/section:p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:group-data-[variant=default]/section:gap-4 sm:group-data-[variant=factory]/section:gap-4 sm:group-data-[variant=flat]/section:gap-6'
           : 'flex min-w-0 flex-col',
-        layout === 'standalone' && 'gap-3 sm:flex-row sm:items-center sm:justify-between',
         layout === 'factory' && 'gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4',
         className,
       )}
@@ -64,6 +68,14 @@ export function SettingsRowLayout({
           )}
         >
           {label}
+          {required ? (
+            <>
+              <span aria-hidden className={cn('ml-0.5', viewOnly ? 'text-muted-foreground' : 'text-destructive')}>
+                *
+              </span>
+              <span className="sr-only"> (required)</span>
+            </>
+          ) : null}
         </LabelElement>
         {description != null && (
           <DescriptionElement
@@ -75,6 +87,11 @@ export function SettingsRowLayout({
             {description}
           </DescriptionElement>
         )}
+        {errorMsg ? (
+          <FieldBlockErrorMsg name={htmlFor} className={cn(isSectionLayout && 'mt-1')}>
+            {errorMsg}
+          </FieldBlockErrorMsg>
+        ) : null}
       </div>
       {children != null &&
         (isSectionLayout || viewOnly ? (

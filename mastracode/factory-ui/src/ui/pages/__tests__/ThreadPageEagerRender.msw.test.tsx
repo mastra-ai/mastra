@@ -186,7 +186,7 @@ describe('ThreadPage eager render', () => {
     const image = new File(['png'], 'diagram.png', { type: 'image/png' });
     fireEvent.drop(composerRegion.querySelector('form') ?? composerRegion, { dataTransfer: { files: [image] } });
     fireEvent.paste(textarea, { clipboardData: { files: [image] } });
-    expect(screen.queryByRole('button', { name: 'Remove image' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Remove diagram.png' })).not.toBeInTheDocument();
 
     // User types a draft while messages load.
     const user = userEvent.setup();
@@ -205,7 +205,7 @@ describe('ThreadPage eager render', () => {
 
     // Attachments now work.
     fireEvent.drop(composerRegion.querySelector('form') ?? composerRegion, { dataTransfer: { files: [image] } });
-    expect(await screen.findByRole('button', { name: 'Remove image' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Remove diagram.png' })).toBeInTheDocument();
 
     await waitForMutationsIdle(client);
   });

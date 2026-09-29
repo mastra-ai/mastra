@@ -269,14 +269,13 @@ describe('Scores Handlers', () => {
     it('should handle score with all optional fields', async () => {
       const score = createSampleScore({ scorerId: 'test-1-scorer' });
 
-      const savedScore = { score };
-
       const result = await SAVE_SCORE_ROUTE.handler({
         ...createTestServerContext({ mastra }),
         score,
       });
 
-      expect(result).toEqual(savedScore);
+      // The store stamps its own updatedAt on save.
+      expect(result).toEqual({ score: { ...score, updatedAt: expect.any(Date) } });
     });
   });
 });

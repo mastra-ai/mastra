@@ -6,6 +6,8 @@ import type { Highlighted } from './use-highlight';
 export interface CodeProps extends React.HTMLAttributes<HTMLPreElement> {
   code: string;
   lang?: string;
+  /** Per-line class, e.g. for diff or search highlighting. When set, every line is wrapped in a `[data-line]` span. */
+  lineClassName?: (lineIndex: number, lineText: string) => string | undefined;
 }
 
 /** Colors from an earlier pass still hold when the new code only appends to the old. */
@@ -27,12 +29,25 @@ function usableHighlight(highlighted: Highlighted | null, code: string, lang?: s
  * between colored and plain, so the settled prefix keeps its colors and only
  * the newly arrived tail waits, uncolored, for the next pass.
  */
-export const Code = React.memo(function Code({ code, lang, ...props }: CodeProps) {
+export const Code = React.memo(function Code({ code, lang, lineClassName, ...props }: CodeProps) {
   const highlighted = useHighlight(code, lang);
 
   const usable = usableHighlight(highlighted, code, lang);
   if (!usable) {
-    return <pre {...props}>{code}</pre>;
+    if (!lineClassName) return <pre {...props}>{code}</pre>;
+    const lines = code.split('\n');
+    return (
+      <pre {...props}>
+        {lines.map((text, i) => (
+          <React.Fragment key={i}>
+            <span data-line={i} className={lineClassName(i, text)}>
+              {text}
+            </span>
+            {i !== lines.length - 1 && '\n'}
+          </React.Fragment>
+        ))}
+      </pre>
+    );
   }
 
   const tail = code.slice(usable.code.length);
@@ -59,7 +74,16 @@ export const Code = React.memo(function Code({ code, lang, ...props }: CodeProps
 
           return (
             <React.Fragment key={lineOffset}>
-              <span>{tokenSpans}</span>
+              {lineClassName ? (
+                <span
+                  data-line={lineIndex}
+                  className={lineClassName(lineIndex, line.map(token => token.content).join(''))}
+                >
+                  {tokenSpans}
+                </span>
+              ) : (
+                <span>{tokenSpans}</span>
+              )}
               {lineIndex !== usable.tokens.length - 1 && '\n'}
             </React.Fragment>
           );

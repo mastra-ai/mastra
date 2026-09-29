@@ -114,7 +114,8 @@ By default, Mastra routes mount under `/api`. Use `prefix` to change it.
   {
     name: 'customRouteAuthConfig',
     type: 'Map<string, boolean>',
-    description: 'Per-route auth overrides. Keys are `METHOD:PATH`.',
+    description:
+      'Per-route auth overrides. Keys are `METHOD:PATH`. Custom routes from `server.apiRoutes` (`registerApiRoute()`) are added automatically based on their `requiresAuth` setting.',
     isOptional: true,
   },
   {
@@ -139,9 +140,8 @@ By default, Mastra routes mount under `/api`. Use `prefix` to change it.
     name: 'auth',
     type: '{ enabled?: boolean; allowQueryApiKey?: boolean }',
     description:
-      'Enable Mastra token auth. Disabled by default — most NestJS apps use their own auth guards. Query-string `apiKey` auth is opt-in for backward compatibility.',
+      'Controls Mastra auth for Mastra routes. When `server.auth` is configured on your `Mastra` instance, it runs automatically (the same pipeline as other adapters: bearer tokens, cookie sessions, session refresh, and `mapUserToResourceId`). Set `enabled: false` to rely only on your own NestJS guards. Query-string `apiKey` auth is opt-in for backward compatibility.',
     isOptional: true,
-    defaultValue: '`{ enabled: false }`',
   },
 ]}
 />

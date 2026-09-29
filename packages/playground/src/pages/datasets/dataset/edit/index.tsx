@@ -4,13 +4,13 @@ import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { useDataset } from '@mastra/playground-ui/domains/datasets';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { DatabaseIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { EditDatasetForm } from '@/domains/datasets/components/edit-dataset-form';
-import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 import { datasetCrumb, navCrumb } from '@/domains/navigation/crumbs';
 
 const crumbs = [navCrumb('/datasets'), datasetCrumb, { id: 'dataset-edit', label: 'Edit dataset' }];

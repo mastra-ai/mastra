@@ -1,8 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
@@ -23,7 +25,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
     useWorkingMemory();
 
   // Get memory config to check if working memory is enabled
-  const { data, isLoading: isConfigLoading } = useMemoryConfig(agentId);
+  const { data, isLoading: isConfigLoading } = useMemoryConfig(agentId, useEntityRequestContext('agent', agentId)[0]);
   const config = data?.config;
   // Check if working memory is enabled
   const isWorkingMemoryEnabled = Boolean(config?.workingMemory?.enabled);
@@ -88,7 +90,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                       content={workingMemoryData || ''}
                       isCopied={isCopied}
                       onCopy={handleCopy}
-                      className={cn(raisedSurfaceStyle, 'min-h-[150px] rounded-lg font-mono text-body')}
+                      className={cn(raisedSurfaceStyle, 'min-h-[150px] rounded-lg text-body')}
                     />
                   ) : (
                     <>
@@ -119,22 +121,22 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                   )}
                 </>
               ) : (
-                <div className="font-mono text-body text-muted-foreground">
+                <div className="text-body text-muted-foreground">
                   No working memory content yet. Click "Edit Working Memory" to add content.
                 </div>
               )}
             </>
           ) : (
-            <textarea
-              className={cn(
-                raisedSurfaceStyle,
-                'min-h-[150px] w-full resize-none rounded-lg p-3 font-mono text-body text-foreground',
-              )}
-              value={editState.value}
-              onChange={e => setEditState(state => ({ ...state, value: e.target.value }))}
-              disabled={isUpdating}
+            <CodeEditor
               aria-label="Working memory content"
+              language={editState.value.trim().startsWith('{') ? 'json' : 'markdown'}
+              lineNumbers={false}
+              showCopyButton={false}
               placeholder="Enter working memory content..."
+              value={editState.value}
+              onChange={value => setEditState(state => ({ ...state, value }))}
+              editable={!isUpdating}
+              className="min-h-[150px] w-full"
             />
           )}
           <div className="flex gap-2">

@@ -8,6 +8,7 @@ import { asCoreSpan } from './span-payload-registry';
 import { Card, CardContent } from '@/ds/components/Card';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { Notice } from '@/ds/components/Notice';
+import { Txt } from '@/ds/components/Txt/Txt';
 import { formatDuration } from '@/utils/duration';
 
 /** Mutation kinds as actions a reader recognises. */
@@ -103,7 +104,11 @@ export function SpanProcessorAttributes({ span }: SpanProcessorAttributesProps) 
             {hookDuration && (
               <>
                 <DataKeysAndValues.Key>Hook duration</DataKeysAndValues.Key>
-                <DataKeysAndValues.Value>{hookDuration}</DataKeysAndValues.Value>
+                <DataKeysAndValues.Value>
+                  <Txt as="span" variant="body-sm" font="mono">
+                    {hookDuration}
+                  </Txt>
+                </DataKeysAndValues.Value>
               </>
             )}
           </DataKeysAndValues>

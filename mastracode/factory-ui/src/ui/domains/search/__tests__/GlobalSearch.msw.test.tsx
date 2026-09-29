@@ -11,6 +11,7 @@ import { queryKeys } from '../../../../api/keys';
 import { workspacesQueryOptions } from '../../../../hooks/useWorkspaces';
 import { createQueryClient } from '../../../../query-client';
 import { listWorkItems } from '../../factory/services/workItems';
+import type { WorkItem } from '../../factory/services/workItems';
 import { createAppRoutes } from '../../../router';
 import {
   ACTIVE_FACTORY_ID,
@@ -52,6 +53,7 @@ interface StubSearchOptions {
   secondRepositoryGate?: Promise<void>;
   onSecondRepositoryAbort?: () => void;
   running?: boolean;
+  workItems?: WorkItem[];
 }
 
 function resourceIdFromRequestBody(body: unknown): string {
@@ -101,7 +103,7 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
       if (options.failWorkItems) return HttpResponse.json({ error: 'work items unavailable' }, { status: 500 });
       const factoryProjectId = String(params.factoryProjectId);
       return HttpResponse.json({
-        workItems: factoryProjectId === ACTIVE_FACTORY_ID ? workItems.map(toWireWorkItem) : [],
+        workItems: factoryProjectId === ACTIVE_FACTORY_ID ? (options.workItems ?? workItems).map(toWireWorkItem) : [],
       });
     }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/decisions`, () =>
@@ -455,6 +457,40 @@ describe('Global search', () => {
     expect(requests.sessionRequests[FIRST_REPOSITORY_ID]).toBe(1);
     expect(requests.sessionRequests[SECOND_REPOSITORY_ID]).toBe(1);
     expect(requests.workItemRequests).toBe(1);
+  });
+
+  it('keeps search open while choosing a repository for an unattributed work item', async () => {
+    const item = {
+      ...workItems[3]!,
+      board: 'custom',
+      metadata: { number: 777 },
+    };
+    const requests = stubSearchApi({ workItems: [item] });
+    const patches: unknown[] = [];
+    const starts: unknown[] = [];
+    server.use(
+      http.patch(`${TEST_BASE_URL}/web/factory/work-items/${item.id}`, async ({ request }) => {
+        patches.push(await request.json());
+        return HttpResponse.json({ workItem: toWireWorkItem(item) });
+      }),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/runs/start`, async ({ request }) => {
+        starts.push(await request.json());
+        return HttpResponse.json({ threadId: 'thread-search' });
+      }),
+    );
+    const user = userEvent.setup();
+    renderSearchRoute();
+    const search = await openFromSidebar();
+    await user.click(await within(search).findByText(item.title));
+
+    const picker = await screen.findByRole('dialog', { name: 'Choose a repository' });
+    expect(search).toBeInTheDocument();
+    expect(requests.createSessionRequests).toBe(0);
+    expect(patches).toHaveLength(0);
+    await user.click(within(picker).getByRole('button', { name: /mastra-ai\/docs/ }));
+    await waitFor(() => expect(patches).toEqual([{ metadata: { number: 777, repository: 'mastra-ai/docs' } }]));
+    await waitFor(() => expect(starts).toHaveLength(1));
+    await waitFor(() => expect(search).not.toBeInTheDocument());
   });
 
   it('keeps successful results when one repository fails and retries only the failed source', async () => {

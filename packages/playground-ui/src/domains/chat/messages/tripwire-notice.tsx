@@ -57,7 +57,7 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
                 {tripwire.metadata !== undefined && tripwire.metadata !== null && (
                   <div className="flex flex-col gap-1.5">
                     <span className="opacity-70">Metadata</span>
-                    <pre className="overflow-x-auto rounded-lg bg-current/10 p-2 font-mono">
+                    <pre className="overflow-x-auto rounded-lg bg-current/10 p-2">
                       {JSON.stringify(tripwire.metadata, null, 2)}
                     </pre>
                   </div>

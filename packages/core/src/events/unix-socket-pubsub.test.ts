@@ -1,4 +1,5 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { link, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -926,6 +927,217 @@ describe('UnixSocketPubSub', () => {
     expect(cb).not.toHaveBeenCalled();
   });
 
+  describe('broker loss', () => {
+    async function startAckingBroker(path: string) {
+      const sockets = new Set<net.Socket>();
+      const server = net.createServer((socket: net.Socket) => {
+        sockets.add(socket);
+        socket.on('close', () => sockets.delete(socket));
+        socket.on('error', () => {});
+        socket.setEncoding('utf8');
+        let pending = '';
+        socket.on('data', (chunk: string) => {
+          pending += chunk;
+          const lines = pending.split('\n');
+          pending = lines.pop() ?? '';
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            const frame = JSON.parse(line);
+            if (frame.type === 'subscribe' || frame.type === 'unsubscribe') {
+              const type = frame.type === 'subscribe' ? 'subscribed' : 'unsubscribed';
+              socket.write(`${JSON.stringify({ type, topic: frame.topic, group: frame.group })}\n`);
+            }
+          }
+        });
+      });
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(path, () => resolve());
+      });
+      return {
+        dropClients: () => {
+          for (const socket of sockets) socket.destroy();
+        },
+        stop: async () => {
+          for (const socket of sockets) socket.destroy();
+          await new Promise<void>(resolve => server.close(() => resolve()));
+        },
+      };
+    }
+
+    async function collectUnhandledRejections<T>(run: () => Promise<T>): Promise<{ result: T; unhandled: unknown[] }> {
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        const result = await run();
+        // Give socket error events and orphaned promise rejections time to surface.
+        await new Promise(resolve => setTimeout(resolve, 50));
+        return { result, unhandled };
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+      }
+    }
+
+    it('resolves unsubscribe when the broker exits mid-write', async () => {
+      const path = await socketPath();
+      const broker = await startAckingBroker(path);
+      const pubsub = new UnixSocketPubSub(path);
+      pubsubs.push(pubsub);
+      const cb = vi.fn();
+      await pubsub.subscribe('topic-a', cb);
+
+      const { result, unhandled } = await collectUnhandledRejections(async () => {
+        await broker.stop();
+        return pubsub.unsubscribe('topic-a', cb).then(
+          () => 'resolved',
+          error => error,
+        );
+      });
+
+      expect(result).toBe('resolved');
+      expect(unhandled).toEqual([]);
+    });
+
+    it('resolves unsubscribe and close when close races an unsubscribe after the broker exits', async () => {
+      const path = await socketPath();
+      const broker = await startAckingBroker(path);
+      const pubsub = new UnixSocketPubSub(path);
+      pubsubs.push(pubsub);
+      const cb = vi.fn();
+      await pubsub.subscribe('topic-a', cb);
+
+      const { result, unhandled } = await collectUnhandledRejections(async () => {
+        await broker.stop();
+        const unsubscribe = pubsub.unsubscribe('topic-a', cb).then(
+          () => 'resolved',
+          error => error,
+        );
+        await new Promise(resolve => setImmediate(resolve));
+        const close = pubsub.close().then(
+          () => 'resolved',
+          error => error,
+        );
+        return Promise.all([unsubscribe, close]);
+      });
+
+      expect(result).toEqual(['resolved', 'resolved']);
+      expect(unhandled).toEqual([]);
+    });
+
+    it('does not reject a membership change with a stale write error once the retry is acknowledged', async () => {
+      const path = await socketPath();
+      const broker = await startAckingBroker(path);
+      const pubsub = new UnixSocketPubSub(path);
+      pubsubs.push(pubsub);
+      await pubsub.subscribe('topic-a', vi.fn());
+
+      try {
+        const { result, unhandled } = await collectUnhandledRejections(async () => {
+          // The broker keeps listening, so the retry reconnects to it after the
+          // first write fails against the dropped connection.
+          broker.dropClients();
+          return pubsub.subscribe('topic-b', vi.fn()).then(
+            () => 'resolved',
+            error => error,
+          );
+        });
+
+        expect(result).toBe('resolved');
+        expect(unhandled).toEqual([]);
+      } finally {
+        await pubsub.close();
+        await broker.stop();
+      }
+    });
+
+    it('does not restore broker membership for a group callback that is unsubscribing during reconnect', async () => {
+      const path = await socketPath();
+      const members = new Map<net.Socket, Set<string>>();
+      const deferredAcks: Array<() => void> = [];
+      let deferAcks = false;
+      const server = net.createServer((socket: net.Socket) => {
+        members.set(socket, new Set());
+        socket.on('close', () => members.delete(socket));
+        socket.on('error', () => {});
+        socket.setEncoding('utf8');
+        let pending = '';
+        socket.on('data', (chunk: string) => {
+          pending += chunk;
+          const lines = pending.split('\n');
+          pending = lines.pop() ?? '';
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            const frame = JSON.parse(line);
+            if (frame.type !== 'subscribe' && frame.type !== 'unsubscribe') continue;
+            const key = `${frame.topic}:${frame.group}`;
+            if (frame.type === 'subscribe') members.get(socket)?.add(key);
+            else members.get(socket)?.delete(key);
+            const type = frame.type === 'subscribe' ? 'subscribed' : 'unsubscribed';
+            const ack = () => socket.write(`${JSON.stringify({ type, topic: frame.topic, group: frame.group })}\n`);
+            if (deferAcks) deferredAcks.push(ack);
+            else ack();
+          }
+        });
+      });
+      await new Promise<void>(resolve => server.listen(path, () => resolve()));
+      const pubsub = new UnixSocketPubSub(path);
+      pubsubs.push(pubsub);
+      const leaving = vi.fn();
+      await pubsub.subscribe('topic-a', vi.fn(), { group: 'workers' });
+      await pubsub.subscribe('topic-b', leaving, { group: 'workers' });
+
+      try {
+        // Drop the client and hold acks so the reconnect's resubscribe pauses on
+        // topic-a while topic-b is being unsubscribed.
+        deferAcks = true;
+        for (const socket of members.keys()) socket.destroy();
+        await waitFor(() => expect(deferredAcks).toHaveLength(1));
+
+        const unsubscribe = pubsub.unsubscribe('topic-b', leaving);
+        await waitFor(() => expect(deferredAcks).toHaveLength(2));
+
+        deferAcks = false;
+        deferredAcks[0]!();
+        // Let the resubscribe loop move on to topic-b before the unsubscribe is acknowledged.
+        await new Promise(resolve => setTimeout(resolve, 50));
+        deferredAcks[1]!();
+        await unsubscribe;
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        const liveMembership = [...members.values()].some(keys => keys.has('topic-b:workers'));
+        expect(liveMembership).toBe(false);
+      } finally {
+        await pubsub.close();
+        for (const socket of members.keys()) socket.destroy();
+        await new Promise<void>(resolve => server.close(() => resolve()));
+      }
+    });
+
+    it('rejects publish with a closed-transport error when close races broker loss', async () => {
+      const path = await socketPath();
+      const broker = await startAckingBroker(path);
+      const pubsub = new UnixSocketPubSub(path);
+      pubsubs.push(pubsub);
+      await pubsub.subscribe('topic-a', vi.fn());
+
+      const { result, unhandled } = await collectUnhandledRejections(async () => {
+        await broker.stop();
+        const publish = pubsub.publish('topic-a', makeEvent()).then(
+          () => 'resolved',
+          error => error,
+        );
+        await Promise.resolve();
+        await pubsub.close();
+        return publish;
+      });
+
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toBe('UnixSocketPubSub is closed');
+      expect(unhandled).toEqual([]);
+    });
+  });
+
   it('does not re-send duplicate callback subscriptions to the broker', async () => {
     const path = await socketPath();
     let subscribeCount = 0;
@@ -1027,6 +1239,193 @@ describe('UnixSocketPubSub', () => {
 
     expect(pubsub.isBroker).toBe(true);
     expect(cb).toHaveBeenCalledTimes(1);
+  });
+
+  describe('filesystem leases', () => {
+    it('allows exactly one process-local instance to acquire a shared key', async () => {
+      const first = new UnixSocketPubSub(await socketPath('first.sock'));
+      const second = new UnixSocketPubSub(await socketPath('second.sock'));
+      pubsubs.push(first, second);
+
+      const results = await Promise.all([
+        first.acquireLease('thread-key', 'first-owner', 10_000),
+        second.acquireLease('thread-key', 'second-owner', 10_000),
+      ]);
+
+      expect(results.filter(result => result.acquired)).toHaveLength(1);
+      const winner = results.find(result => result.acquired)!.owner;
+      const loser = results.find(result => !result.acquired)!;
+      expect(loser.owner).toBe(winner);
+      await expect(first.getLeaseOwner('thread-key')).resolves.toBe(winner);
+      await expect(second.getLeaseOwner('thread-key')).resolves.toBe(winner);
+    });
+
+    it('does not reap a live mutation lock written before lock tokens were added', async () => {
+      const first = new UnixSocketPubSub(await socketPath('first.sock'));
+      const second = new UnixSocketPubSub(await socketPath('second.sock'));
+      pubsubs.push(first, second);
+      await first.acquireLease('setup-key', 'setup-owner', 10_000);
+      await first.releaseLease('setup-key', 'setup-owner');
+
+      const key = 'legacy-lock-key';
+      const fileName = createHash('sha256').update(key).digest('hex');
+      const lockPath = join(tempDir!, 'leases', 'mutations', `${fileName}.lock`);
+      const processMarker = JSON.parse(
+        await readFile(join(tempDir!, 'leases', 'processes', `${process.pid}.json`), 'utf8'),
+      );
+      await writeFile(lockPath, JSON.stringify(processMarker));
+
+      let settled = false;
+      const acquisition = second.acquireLease(key, 'second-owner', 10_000).then(result => {
+        settled = true;
+        return result;
+      });
+      await new Promise(resolve => setTimeout(resolve, 30));
+      expect(settled).toBe(false);
+
+      await rm(lockPath);
+      await expect(acquisition).resolves.toEqual({ acquired: true, owner: 'second-owner' });
+    });
+
+    it('does not let a stale recovery marker remove a replacement lock', async () => {
+      const first = new UnixSocketPubSub(await socketPath('first.sock'));
+      const second = new UnixSocketPubSub(await socketPath('second.sock'));
+      pubsubs.push(first, second);
+      await first.acquireLease('setup-key', 'setup-owner', 10_000);
+      await first.releaseLease('setup-key', 'setup-owner');
+
+      const key = 'replacement-lock-key';
+      const fileName = createHash('sha256').update(key).digest('hex');
+      const lockPath = join(tempDir!, 'leases', 'mutations', `${fileName}.lock`);
+      const recoveryDirectory = `${lockPath}.recoveries`;
+      const recoveryPath = join(recoveryDirectory, 'stale-token.marker');
+      await mkdir(recoveryDirectory, { recursive: true });
+      await writeFile(
+        lockPath,
+        JSON.stringify({ pid: 2_147_483_647, processNonce: 'dead-process', token: 'stale-token' }),
+      );
+      await link(lockPath, recoveryPath);
+      await rm(lockPath);
+
+      const processMarker = JSON.parse(
+        await readFile(join(tempDir!, 'leases', 'processes', `${process.pid}.json`), 'utf8'),
+      );
+      await writeFile(lockPath, JSON.stringify({ ...processMarker, token: 'replacement-token' }));
+
+      let settled = false;
+      const acquisition = second.acquireLease(key, 'second-owner', 10_000).then(result => {
+        settled = true;
+        return result;
+      });
+      await new Promise(resolve => setTimeout(resolve, 30));
+      expect(settled).toBe(false);
+
+      await rm(lockPath);
+      await expect(acquisition).resolves.toEqual({ acquired: true, owner: 'second-owner' });
+    });
+
+    it('completes an abandoned stale-lock recovery before admitting a new mutation', async () => {
+      const firstPath = await socketPath('first.sock');
+      const secondPath = await socketPath('second.sock');
+      const key = 'recovery-key';
+      const fileName = createHash('sha256').update(key).digest('hex');
+      const mutationDirectory = join(tempDir!, 'leases', 'mutations');
+      const lockPath = join(mutationDirectory, `${fileName}.lock`);
+      const recoveryDirectory = `${lockPath}.recoveries`;
+      const recoveryPath = join(recoveryDirectory, 'stale-token.marker');
+      await mkdir(recoveryDirectory, { recursive: true });
+      await writeFile(
+        lockPath,
+        JSON.stringify({ pid: 2_147_483_647, processNonce: 'dead-process', token: 'stale-token' }),
+      );
+      await link(lockPath, recoveryPath);
+      await writeFile(
+        `${recoveryPath}.owner`,
+        JSON.stringify({ pid: 2_147_483_647, processNonce: 'dead-recovery-owner', token: 'dead-owner-token' }),
+      );
+
+      const first = new UnixSocketPubSub(firstPath);
+      const second = new UnixSocketPubSub(secondPath);
+      pubsubs.push(first, second);
+      const results = await Promise.all([
+        first.acquireLease(key, 'first-owner', 10_000),
+        second.acquireLease(key, 'second-owner', 10_000),
+      ]);
+
+      expect(results.filter(result => result.acquired)).toHaveLength(1);
+      const winner = results.find(result => result.acquired)!.owner;
+      await expect(first.getLeaseOwner(key)).resolves.toBe(winner);
+      await expect(second.getLeaseOwner(key)).resolves.toBe(winner);
+    });
+
+    it('lets close interrupt a lease operation waiting on a held mutation lock', async () => {
+      const first = new UnixSocketPubSub(await socketPath('first.sock'));
+      const second = new UnixSocketPubSub(await socketPath('second.sock'));
+      pubsubs.push(first, second);
+      await first.acquireLease('setup-key', 'setup-owner', 10_000);
+      await first.releaseLease('setup-key', 'setup-owner');
+
+      const key = 'held-lock-key';
+      const fileName = createHash('sha256').update(key).digest('hex');
+      const lockPath = join(tempDir!, 'leases', 'mutations', `${fileName}.lock`);
+      const processMarker = JSON.parse(
+        await readFile(join(tempDir!, 'leases', 'processes', `${process.pid}.json`), 'utf8'),
+      );
+      await writeFile(lockPath, JSON.stringify({ ...processMarker, token: 'held-token' }));
+
+      const acquisitionResult = Promise.allSettled([second.acquireLease(key, 'second-owner', 10_000)]);
+      await new Promise(resolve => setTimeout(resolve, 30));
+      const closeResult = await Promise.race([
+        second.close().then(() => 'closed'),
+        new Promise<'timed-out'>(resolve => setTimeout(() => resolve('timed-out'), 50)),
+      ]);
+
+      await rm(lockPath);
+      const [acquisition] = await acquisitionResult;
+      expect(closeResult).toBe('closed');
+      expect(acquisition).toMatchObject({
+        status: 'rejected',
+        reason: new Error('UnixSocketPubSub is closed'),
+      });
+    });
+
+    it('renews, transfers, and owner-guards release without an unowned gap', async () => {
+      const first = new UnixSocketPubSub(await socketPath('first.sock'));
+      const second = new UnixSocketPubSub(await socketPath('second.sock'));
+      pubsubs.push(first, second);
+
+      await expect(first.acquireLease('thread-key', 'first-owner', 10_000)).resolves.toEqual({
+        acquired: true,
+        owner: 'first-owner',
+      });
+      await expect(second.renewLease('thread-key', 'second-owner', 10_000)).resolves.toBe(false);
+      await expect(first.transferLease('thread-key', 'first-owner', 'second-owner', 10_000)).resolves.toBe(true);
+      await expect(first.renewLease('thread-key', 'first-owner', 10_000)).resolves.toBe(false);
+
+      await first.releaseLease('thread-key', 'first-owner');
+      await expect(second.getLeaseOwner('thread-key')).resolves.toBe('second-owner');
+      await second.releaseLease('thread-key', 'second-owner');
+      await expect(first.getLeaseOwner('thread-key')).resolves.toBeUndefined();
+    });
+
+    it('reclaims an expired lease', async () => {
+      vi.useFakeTimers();
+      try {
+        const first = new UnixSocketPubSub(await socketPath('first.sock'));
+        const second = new UnixSocketPubSub(await socketPath('second.sock'));
+        pubsubs.push(first, second);
+
+        await first.acquireLease('thread-key', 'first-owner', 100);
+        await vi.advanceTimersByTimeAsync(101);
+
+        await expect(second.acquireLease('thread-key', 'second-owner', 100)).resolves.toEqual({
+          acquired: true,
+          owner: 'second-owner',
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe('local nack redelivery', () => {

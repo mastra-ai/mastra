@@ -1,7 +1,7 @@
+import { useBrowserToolCalls } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronDown } from 'lucide-react';
 import { useRef, useEffect, useState } from 'react';
-import { useBrowserToolCalls } from '../../context/browser-tool-calls-context';
 import { BrowserToolCallItem } from './browser-tool-call-item';
 
 interface BrowserToolCallHistoryProps {

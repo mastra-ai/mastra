@@ -1,3 +1,4 @@
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import type { KeyValueListItemData } from '@mastra/playground-ui/components/KeyValueList';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
@@ -64,8 +65,7 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
                 </div>
                 <div className="space-y-1 text-caption text-muted-foreground">
                   <div>
-                    <span className="font-medium">Branch name:</span>{' '}
-                    <code className="rounded bg-card px-1.5 py-0.5 font-mono text-caption">{branchName}</code>
+                    <span className="font-medium">Branch name:</span> <InlineCode>{branchName}</InlineCode>
                   </div>
                   <div>
                     This ensures safe installation with easy rollback if needed. Your main branch remains unchanged.

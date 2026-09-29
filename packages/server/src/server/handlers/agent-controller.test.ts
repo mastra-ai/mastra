@@ -400,6 +400,7 @@ describe('agent-controller routes', () => {
 
     it('forwards requestContext to session.respondToToolApproval', async () => {
       const session = await getRouteSession('user-rc');
+      vi.spyOn(session.approval, 'isArmed').mockReturnValue(true);
       const spy = vi.spyOn(session, 'respondToToolApproval').mockReturnValue(undefined);
       const requestContext = makeRequestContext();
 
@@ -413,6 +414,25 @@ describe('agent-controller routes', () => {
       } as any);
 
       expect(spy).toHaveBeenCalledWith({ toolCallId: 'call-1', decision: 'approve', requestContext });
+    });
+
+    it('answers an approval with no parked gate through the stored suspended run', async () => {
+      const session = await getRouteSession('user-rc');
+      const gate = vi.spyOn(session, 'respondToToolApproval');
+      const persisted = vi.spyOn(session, 'respondToPersistedToolApproval').mockResolvedValue(undefined);
+      const requestContext = makeRequestContext();
+
+      await AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        toolCallId: 'restored-call',
+        approved: false,
+        requestContext,
+      } as any);
+
+      expect(gate).not.toHaveBeenCalled();
+      expect(persisted).toHaveBeenCalledWith({ toolCallId: 'restored-call', approved: false, requestContext });
     });
 
     it('forwards requestContext to session.respondToToolSuspension', async () => {
@@ -606,19 +626,41 @@ describe('agent-controller routes', () => {
       await controller.init();
       const session = await controller.createSession({ resourceId: 'user-ds', id: 'user-ds', ownerId: 'code' });
       session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'read', args: { path: 'a.ts' } });
+      session.emit({
+        type: 'tool_approval_required',
+        toolCallId: 'call-2',
+        toolName: 'edit_file',
+        args: { path: 'b.ts' },
+      });
 
-      let received: unknown;
-      for (let i = 0; i < 10 && received === undefined; i++) {
+      type WireDisplay = {
+        displayState: {
+          activeTools: Record<string, unknown>;
+          pendingApprovals: Record<string, unknown>;
+        };
+      };
+      let received: WireDisplay | undefined;
+      for (let i = 0; i < 20 && received === undefined; i++) {
         const { value } = await reader.read();
-        if (value && typeof value === 'object' && 'type' in value && value.type === 'display_state_changed') {
-          received = value;
+        if (
+          value &&
+          typeof value === 'object' &&
+          'type' in value &&
+          value.type === 'display_state_changed' &&
+          typeof (value as WireDisplay).displayState.pendingApprovals?.['call-2'] === 'object'
+        ) {
+          received = value as WireDisplay;
         }
       }
       await reader.cancel();
 
       expect(received).toBeDefined();
-      const wire = JSON.parse(JSON.stringify(received));
+      const wire = JSON.parse(JSON.stringify(received)) as WireDisplay;
       expect(wire.displayState.activeTools['call-1']).toMatchObject({ name: 'read', status: 'running' });
+      expect(wire.displayState.pendingApprovals['call-2']).toMatchObject({
+        toolName: 'edit_file',
+        args: { path: 'b.ts' },
+      });
     });
   });
 

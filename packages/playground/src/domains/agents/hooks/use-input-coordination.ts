@@ -1,5 +1,5 @@
+import { useBrowserToolCalls } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { useMemo } from 'react';
-import { useBrowserToolCalls } from '../context/browser-tool-calls-context';
 
 export interface InputCoordinationState {
   /** Whether any browser tool call is currently pending */

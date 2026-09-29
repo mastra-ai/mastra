@@ -65,7 +65,7 @@ function renderItemPage(results: DatasetExperimentResult[]) {
               results={results}
               isLoadingResults={false}
             >
-              <ExperimentItemPanel />
+              <ExperimentItemPanel withQueryTrace withFeedback />
             </ExperimentItemPanelProvider>
           }
         />

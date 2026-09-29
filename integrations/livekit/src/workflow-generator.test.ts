@@ -242,6 +242,51 @@ describe('createWorkflowReplyGenerator', () => {
     await expect(readAll(result!)).rejects.toThrow('boom');
   });
 
+  describe('failed workflow runs', () => {
+    const stepError = new Error('step boom');
+    const failedResult = { status: 'failed', error: stepError };
+    const failedStep: FakeChunk = {
+      type: 'workflow-step-result',
+      payload: { id: 'generateResponse', status: 'failed', error: stepError },
+    };
+    const failedFinish: FakeChunk = { type: 'workflow-finish', payload: { workflowStatus: 'failed' } };
+
+    async function expectFailedTurn(chunks: FakeChunk[], result: unknown, message: string) {
+      const onTurnComplete = vi.fn();
+      const { workflow } = fakeWorkflow(chunks, { result });
+      const generate = createWorkflowReplyGenerator({ workflow, workflowInput: () => ({}), onTurnComplete });
+      await expect(readAll((await generate(turnContext()))!)).rejects.toThrow(message);
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(onTurnComplete).not.toHaveBeenCalled();
+    }
+
+    it('errors the stream when the run fails before the reply streams', async () => {
+      await expectFailedTurn([failedStep, { type: 'workflow-finish', payload: {} }], failedResult, 'step boom');
+    });
+
+    it('errors the stream when the run fails mid-reply', async () => {
+      await expectFailedTurn([stepOutput('partial '), failedFinish], failedResult, 'step boom');
+    });
+
+    it('errors the stream when the run fails after the reply streamed', async () => {
+      await expectFailedTurn([stepOutput('Full reply.'), failedStep], failedResult, 'step boom');
+    });
+
+    it('errors the stream when only the result reports failure', async () => {
+      await expectFailedTurn([], failedResult, 'step boom');
+    });
+
+    it('still completes a successful run once with interrupted=false', async () => {
+      const onTurnComplete = vi.fn();
+      const { workflow } = fakeWorkflow([stepOutput('ok')], { result: { status: 'success', result: {} } });
+      const generate = createWorkflowReplyGenerator({ workflow, workflowInput: () => ({}), onTurnComplete });
+      expect(await readAll((await generate(turnContext()))!)).toEqual(['ok']);
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(onTurnComplete).toHaveBeenCalledTimes(1);
+      expect(onTurnComplete.mock.calls[0]![0].result).toMatchObject({ text: 'ok', interrupted: false });
+    });
+  });
+
   it('threads requestContext into run.stream when present', async () => {
     const { workflow, stream } = fakeWorkflow([stepOutput('ok')]);
     const requestContext = { get: () => undefined } as unknown as VoiceTurnContext['requestContext'];

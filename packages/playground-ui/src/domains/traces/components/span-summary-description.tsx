@@ -1,7 +1,9 @@
 import { CalendarClockIcon, HashIcon, TimerIcon } from 'lucide-react';
-import { formatSpanDurationSeconds, formatSpanTimestamp, formatSpanTimestampExact } from '../utils/span-utils';
+import { getSpanDurationMs } from '../utils/span-utils';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { truncateString } from '@/lib/truncate-string';
+import { formatDate, formatTimestampPrecise } from '@/utils/date-format';
+import { formatDurationPrecise } from '@/utils/duration';
 
 export interface SpanSummaryDescriptionProps {
   span: {
@@ -13,9 +15,9 @@ export interface SpanSummaryDescriptionProps {
 
 /** Compact span timing + run metadata shown under the span side-panel heading. */
 export function SpanSummaryDescription({ span }: SpanSummaryDescriptionProps) {
-  const startedAt = formatSpanTimestamp(span.startedAt);
-  const exactStartedAt = formatSpanTimestampExact(span.startedAt);
-  const duration = formatSpanDurationSeconds(span.startedAt, span.endedAt);
+  const startedAt = formatDate(span.startedAt, 'time');
+  const exactStartedAt = formatTimestampPrecise(span.startedAt);
+  const duration = formatDurationPrecise(getSpanDurationMs(span.startedAt, span.endedAt));
 
   return (
     <DataPanel.Metadata>

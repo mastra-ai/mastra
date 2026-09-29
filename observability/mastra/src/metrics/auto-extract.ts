@@ -18,6 +18,10 @@ import { getTokenMetricSamples } from './usage-metrics';
 
 /** Emit duration metrics for a live span. */
 export function emitDurationMetrics(span: AnySpan, metrics: MetricsContext): void {
+  // Event spans are point-in-time; a zero-duration sample would skew the metric.
+  if (span.isEvent) {
+    return;
+  }
   const durationMetricName = getDurationMetricName(span);
   if (!durationMetricName || !span.startTime || !span.endTime) {
     return;

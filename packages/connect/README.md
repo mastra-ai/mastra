@@ -62,6 +62,28 @@ Resend requires a verified sending domain and a key authorized for the operation
 
 List tools return one provider page and preserve its response envelope. When `next_cursor` is present, pass it as `after` for Resend and incident.io. Preserve filters and sort options between pages.
 
+### Sandbox environment
+
+Some agents run inside a sandbox that shells out to CLIs (git, `gh`) or needs provider tokens in the process environment. `environment()` materializes those credentials from the same project connections `connect()` uses, so an agent that already has GitHub attached needs no separate credential wiring.
+
+```ts
+import { environment } from '@mastra/connect';
+
+const env = environment({
+  projectId: process.env.MASTRA_PROJECT_ID,
+  client: { accessToken: process.env.MASTRA_PLATFORM_ACCESS_TOKEN },
+});
+
+const { env: envVars, onStart } = await env();
+
+await sandbox.start({
+  env: envVars, // GH_TOKEN, GITHUB_TOKEN, …
+  onStart, // runs `git config --global credential.https://github.com.helper …`
+});
+```
+
+`environment()` mirrors `connect()`: same `projectId`, `client`, and per-provider `integrations` overrides (`connectionId` to pin, `disabled: true` to exclude). GitHub is the first provider with an env contributor — its OAuth token is exported as `GH_TOKEN`/`GITHUB_TOKEN` so both `gh` and `git` HTTPS operations authenticate as the connected user, and `onStart` wires a git credential helper that reads the token from the environment rather than baking it into git config.
+
 ### Template provenance
 
 Resend and incident.io are generated from integration-template contributions [#667](https://github.com/NangoHQ/integration-templates/pull/667) and [#668](https://github.com/NangoHQ/integration-templates/pull/668). Slack, GitHub, Google Mail, Google Calendar, Fireflies, PostHog, Stripe, Discord, Twitter/X, and HubSpot are generated from contribution [#677](https://github.com/NangoHQ/integration-templates/pull/677), which adds agent-focused actions (PostHog HogQL queries, Stripe balance/dispute/coupon/account reads, GitHub tags and trees, Slack Connect invites, Twitter search and following, HubSpot form submission) on top of upstream main. Until they land upstream, each provider manifest pins the contributing repository and exact commit and records generated file checksums.

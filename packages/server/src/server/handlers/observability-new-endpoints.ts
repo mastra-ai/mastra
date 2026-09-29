@@ -80,6 +80,7 @@ import {
 } from '../constants';
 import { HTTPException } from '../http-exception';
 import { listFeedbackResponseSchema } from '../schemas/feedback';
+import { observabilityStorageCapabilitiesSchema } from '../schemas/system';
 import type { InferParams, ServerContext, ServerRouteHandler } from '../server-adapter/routes';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
 import { prepareAuthorEnrichment } from './author-enrichment';
@@ -96,11 +97,14 @@ import {
   assertObservabilityTraceQueryRootDurationSupported,
   assertObservabilityTraceQuerySupported,
   createObservabilityListQuerySchema,
+  getObservabilityStorageCapabilities,
   getObservabilityStore,
   NEW_ROUTE_DEFS,
+  NO_OBSERVABILITY_STORAGE_CAPABILITIES,
   OBSERVABILITY_LIST_ENDPOINTS,
   supportsObservabilityTraceQueryRootDuration,
   supportsTraceQueryDiscoveryCore,
+  withDiscoveryFallback,
 } from './observability-shared';
 import type { RouteDetails } from './observability-shared';
 
@@ -935,7 +939,7 @@ export const GET_METRIC_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_NAMES, 
   handler: async ({ mastra, ...params }) => {
     const args = getMetricNamesArgsSchema.parse(pickParams(getMetricNamesArgsSchema, params));
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getMetricNames(args);
+    return await withDiscoveryFallback(() => observabilityStore.getMetricNames(args), { names: [] });
   },
 });
 
@@ -945,7 +949,7 @@ export const GET_METRIC_LABEL_KEYS = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_LA
   handler: async ({ mastra, ...params }) => {
     const args = getMetricLabelKeysArgsSchema.parse(pickParams(getMetricLabelKeysArgsSchema, params));
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getMetricLabelKeys(args);
+    return await withDiscoveryFallback(() => observabilityStore.getMetricLabelKeys(args), { keys: [] });
   },
 });
 
@@ -955,7 +959,7 @@ export const GET_METRIC_LABEL_VALUES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_
   handler: async ({ mastra, ...params }) => {
     const args = getMetricLabelValuesArgsSchema.parse(pickParams(getMetricLabelValuesArgsSchema, params));
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getMetricLabelValues(args);
+    return await withDiscoveryFallback(() => observabilityStore.getMetricLabelValues(args), { values: [] });
   },
 });
 
@@ -963,7 +967,7 @@ export const GET_ENTITY_TYPES = createNewRoute(NEW_ROUTE_DEFS.GET_ENTITY_TYPES, 
   responseSchema: getEntityTypesResponseSchema,
   handler: async ({ mastra }) => {
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getEntityTypes({});
+    return await withDiscoveryFallback(() => observabilityStore.getEntityTypes({}), { entityTypes: [] });
   },
 });
 
@@ -973,7 +977,7 @@ export const GET_ENTITY_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_ENTITY_NAMES, 
   handler: async ({ mastra, ...params }) => {
     const args = getEntityNamesArgsSchema.parse(pickParams(getEntityNamesArgsSchema, params));
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getEntityNames(args);
+    return await withDiscoveryFallback(() => observabilityStore.getEntityNames(args), { names: [] });
   },
 });
 
@@ -981,7 +985,7 @@ export const GET_SERVICE_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_SERVICE_NAMES
   responseSchema: getServiceNamesResponseSchema,
   handler: async ({ mastra }) => {
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getServiceNames({});
+    return await withDiscoveryFallback(() => observabilityStore.getServiceNames({}), { serviceNames: [] });
   },
 });
 
@@ -989,7 +993,7 @@ export const GET_ENVIRONMENTS = createNewRoute(NEW_ROUTE_DEFS.GET_ENVIRONMENTS, 
   responseSchema: getEnvironmentsResponseSchema,
   handler: async ({ mastra }) => {
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getEnvironments({});
+    return await withDiscoveryFallback(() => observabilityStore.getEnvironments({}), { environments: [] });
   },
 });
 
@@ -999,14 +1003,42 @@ export const GET_TAGS = createNewRoute(NEW_ROUTE_DEFS.GET_TAGS, {
   handler: async ({ mastra, ...params }) => {
     const args = getTagsArgsSchema.parse(pickParams(getTagsArgsSchema, params));
     const observabilityStore = await getObservabilityStore(mastra);
+    return await withDiscoveryFallback(() => observabilityStore.getTags(args), { tags: [] });
+  },
+});
+
+// ============================================================================
+// Capabilities Route
+// ============================================================================
+
+const getObservabilityCapabilitiesResponseSchema = z.object({
+  observabilityStorageType: z
+    .string()
+    .nullable()
+    .describe('Class name of the configured observability storage, or null when none is configured'),
+  capabilities: observabilityStorageCapabilitiesSchema,
+});
+
+// Uses createRoute (not createNewRoute) so clients can ask what is supported
+// even on an @mastra/core too old for the newer observability endpoints.
+export const GET_CAPABILITIES = createRoute({
+  ...NEW_ROUTE_DEFS.GET_CAPABILITIES,
+  responseType: 'json',
+  responseSchema: getObservabilityCapabilitiesResponseSchema,
+  tags: ['Observability'],
+  requiresAuth: true,
+  handler: async ({ mastra }) => {
     try {
-      return await observabilityStore.getTags(args);
-    } catch (error) {
-      // Some storage providers (e.g. LibSQL) don't support tag discovery
-      if (error instanceof Error && error.message.includes('does not support tag discovery')) {
-        return { tags: [] };
+      const observabilityStore = await mastra.getStorage()?.getStore('observability');
+      if (!observabilityStore) {
+        return { observabilityStorageType: null, capabilities: NO_OBSERVABILITY_STORAGE_CAPABILITIES };
       }
-      throw error;
+      return {
+        observabilityStorageType: observabilityStore.constructor.name,
+        capabilities: getObservabilityStorageCapabilities(observabilityStore),
+      };
+    } catch (error) {
+      return handleError(error, "Error calling: 'get observability capabilities'");
     }
   },
 });
@@ -1044,4 +1076,5 @@ export const NEW_ROUTES = {
   GET_SERVICE_NAMES,
   GET_ENVIRONMENTS,
   GET_TAGS,
+  GET_CAPABILITIES,
 };

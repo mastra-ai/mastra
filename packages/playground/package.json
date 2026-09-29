@@ -1,7 +1,7 @@
 {
   "name": "@internal/playground",
   "private": true,
-  "version": "1.31.2-alpha.2",
+  "version": "1.31.4-alpha.8",
   "type": "module",
   "main": "./src/exports.ts",
   "types": "./src/exports.ts",
@@ -60,7 +60,6 @@
     "@mastra/playground-ui": "workspace:^",
     "@mastra/react": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
-    "@mcp-ui/client": "^7.1.0",
     "@posthog/react": "^1.10.3",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
@@ -93,13 +92,11 @@
     "superjson": "^2.2.6",
     "use-debounce": "^10.1.0",
     "zod": "^3.25.0",
-    "zod-v4": "npm:zod@^4.6.4",
-    "zustand": "^5.0.12"
+    "zod-v4": "npm:zod@^4.6.4"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@mastra/memory": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.29.0",
     "@playwright/test": "^1.61.1",
     "@stryker-mutator/core": "catalog:",
     "@stryker-mutator/vitest-runner": "catalog:",

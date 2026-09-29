@@ -62,6 +62,11 @@ export interface LoopScenarioResult {
  *
  * - `'normal'` — default direct engine (regular `new Agent(...)`).
  * - `'durable'` — durable execution via `createDurableAgent` wrapper.
+ * - `'evented'` — durable execution on the evented engine via
+ *   `createEventedAgent` wrapper (fire-and-forget run driven by events on the
+ *   Mastra host's pubsub). Behaves like `'durable'` from the caller's
+ *   perspective — same stream shape, same option restrictions — so scenarios
+ *   that skip `'durable'` should skip `'evented'` too.
  * - `'fs'` — agent assembled from file-system routing (`assembleAgentFromFsEntry`,
  *   `instructions.md` body + discovered `tools/*`) and registered through
  *   `Mastra.__registerFsAgents`, then run on the normal engine. `agents`
@@ -71,10 +76,20 @@ export interface LoopScenarioResult {
  *   instructions, `sharedAgent`, `workflows`-as-tool, durable resume/suspension)
  *   skip this variant via `{ skip: ['fs'] }`.
  */
-export type EngineVariant = 'normal' | 'durable' | 'fs';
+export type EngineVariant = 'normal' | 'durable' | 'evented' | 'fs';
 
 /** All supported engine variants for parameterised test runs. */
-export const ALL_ENGINE_VARIANTS: readonly EngineVariant[] = ['normal', 'durable', 'fs'] as const;
+export const ALL_ENGINE_VARIANTS: readonly EngineVariant[] = ['normal', 'durable', 'evented', 'fs'] as const;
+
+/**
+ * `true` for variants that run through the durable execution path
+ * (`createDurableAgent` / `createEventedAgent`). Use this instead of
+ * `engine === 'durable'` in scenarios so durable-conditional behavior
+ * automatically covers the evented variant too.
+ */
+export function isDurableEngineVariant(engine: EngineVariant | undefined): boolean {
+  return engine === 'durable' || engine === 'evented';
+}
 
 export interface RunLoopScenarioOptions {
   /** Active AIMock handle for the current suite (from {@link useLoopScenarioAimock}). */
@@ -157,6 +172,11 @@ export interface RunLoopScenarioOptions {
    */
   modelSettings?: any;
   /**
+   * Agent-level model-call retry count set on the Agent constructor. An explicit
+   * value (including 0) takes precedence over call-time `modelSettings.maxRetries`.
+   */
+  maxRetries?: number;
+  /**
    * Client-side tools to merge with agent-level tools. Forwarded to `agent.stream({ clientTools })`.
    * Useful for testing tool merging scenarios where tools are defined at the call site rather than
    * at agent construction time.
@@ -233,6 +253,13 @@ export interface RunLoopScenarioOptions {
    * stream open until background tasks complete and re-invoke the agent.
    */
   backgroundTasks?: any;
+  /**
+   * Whether to start the Mastra background workers when `backgroundTasks` is
+   * enabled (default: true). Set to `false` to keep dispatched tasks pending —
+   * e.g. to deterministically pin the placeholder tool-result content a
+   * backgrounded delegation hands to the supervisor's continuation turn.
+   */
+  startWorkers?: boolean;
   /**
    * When set, uses `agent.streamUntilIdle()` instead of `agent.stream()`. The
    * stream stays open until all background tasks complete, and the agent is

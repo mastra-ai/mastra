@@ -44,7 +44,7 @@ export function BarListContent({
                   {d.name}
                 </span>
               </div>
-              <span className="shrink-0 font-mono text-caption text-foreground tabular-nums">{fmt(d.value)}</span>
+              <span className="shrink-0 text-caption text-foreground tabular-nums">{fmt(d.value)}</span>
             </div>
           );
         })}
@@ -90,9 +90,7 @@ export function StackedRunsBars({ data }: { data: Array<{ name: string; complete
                       style={{ width: `${completedWidth}%`, backgroundColor: CHART_COLORS.blue }}
                     />
                   </TooltipTrigger>
-                  <TooltipContent side="top" className="font-mono">
-                    {d.completed.toLocaleString()} completed
-                  </TooltipContent>
+                  <TooltipContent side="top">{d.completed.toLocaleString()} completed</TooltipContent>
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -108,15 +106,13 @@ export function StackedRunsBars({ data }: { data: Array<{ name: string; complete
                       }}
                     />
                   </TooltipTrigger>
-                  <TooltipContent side="top" className="font-mono">
-                    {d.errors.toLocaleString()} errors
-                  </TooltipContent>
+                  <TooltipContent side="top">{d.errors.toLocaleString()} errors</TooltipContent>
                 </Tooltip>
                 <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-caption whitespace-nowrap text-white">
                   {d.name}
                 </span>
               </div>
-              <span className="shrink-0 font-mono text-caption text-foreground tabular-nums">
+              <span className="shrink-0 text-caption text-foreground tabular-nums">
                 {total.toLocaleString()} ({successPct}%)
               </span>
             </div>
