@@ -1732,6 +1732,7 @@ export function createDurableToolCallStep() {
               },
               {
                 policy: registryEntry?.toolPayloadTransform,
+                toolTransform: (tool as { transform?: any })?.transform,
                 tools: registryEntry?.tools,
                 logger: logger as any,
               },
@@ -1791,6 +1792,7 @@ export function createDurableToolCallStep() {
               },
               {
                 policy: registryEntry?.toolPayloadTransform,
+                toolTransform: (tool as { transform?: any })?.transform,
                 tools: registryEntry?.tools,
                 logger: logger as any,
               },
