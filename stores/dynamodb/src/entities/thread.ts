@@ -25,6 +25,10 @@ export const threadEntity = new Entity({
       type: 'string',
       required: true,
     },
+    archivedAt: {
+      type: 'string',
+      required: false,
+    },
     metadata: {
       type: 'string',
       required: false,

@@ -103,6 +103,11 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
+    await this.#db.alterTable({
+      tableName: TABLE_THREADS,
+      schema: TABLE_SCHEMAS[TABLE_THREADS],
+      ifNotExists: ['archivedAt'],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -758,6 +763,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             metadata: serializeMetadata(thread.metadata),
             createdAt: thread.createdAt,
             updatedAt: new Date().toISOString(),
+            archivedAt: thread.archivedAt ? thread.archivedAt.toISOString() : null,
           })),
           clickhouse_settings: {
             date_time_input_format: 'best_effort',
@@ -797,7 +803,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           title,
           metadata,
           toDateTime64(createdAt, 3) as createdAt,
-          toDateTime64(updatedAt, 3) as updatedAt
+          toDateTime64(updatedAt, 3) as updatedAt,
+          archivedAt
         FROM "${TABLE_THREADS}"
         WHERE id = {var_id:String}
         ORDER BY updatedAt DESC
@@ -824,6 +831,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         metadata: parseMetadata(thread.metadata),
         createdAt: thread.createdAt,
         updatedAt: thread.updatedAt,
+        archivedAt: toArchivedAt((thread as { archivedAt?: unknown }).archivedAt),
       };
     } catch (error: any) {
       throw new MastraError(
@@ -850,6 +858,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             metadata: serializeMetadata(thread.metadata),
             createdAt: thread.createdAt.toISOString(),
             updatedAt: thread.updatedAt.toISOString(),
+            archivedAt: thread.archivedAt ? thread.archivedAt.toISOString() : null,
           },
         ],
         format: 'JSONEachRow',
@@ -879,16 +888,31 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     id,
     title,
     metadata,
+    archivedAt,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    archivedAt?: Date | null;
   }): Promise<StorageThreadType> {
     try {
       // First get the existing thread to merge metadata
       const existingThread = await this.getThreadById({ threadId: id });
       if (!existingThread) {
         throw new Error(`Thread ${id} not found`);
+      }
+
+      if (title === undefined && metadata === undefined) {
+        // Archive-only change: mutate in place instead of inserting a new version, so
+        // updatedAt (the version column) stays untouched and no duplicate version appears.
+        if (archivedAt !== undefined) {
+          await this.client.command({
+            query: `ALTER TABLE ${TABLE_THREADS} UPDATE archivedAt = {archivedAt:Nullable(DateTime64(3))} WHERE id = {id:String}`,
+            query_params: { id, archivedAt: archivedAt ? archivedAt.toISOString().replace('Z', '') : null },
+            clickhouse_settings: { mutations_sync: '1' },
+          });
+        }
+        return { ...existingThread, ...(archivedAt !== undefined ? { archivedAt } : {}) };
       }
 
       // Merge the existing metadata with the new metadata
@@ -902,6 +926,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         title: title ?? existingThread.title,
         metadata: mergedMetadata,
         updatedAt: new Date(),
+        archivedAt: archivedAt !== undefined ? archivedAt : (existingThread.archivedAt ?? null),
       };
 
       await this.client.insert({
@@ -915,6 +940,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             metadata: serializeMetadata(updatedThread.metadata),
             createdAt: updatedThread.createdAt,
             updatedAt: updatedThread.updatedAt.toISOString(),
+            archivedAt: updatedThread.archivedAt ? updatedThread.archivedAt.toISOString() : null,
           },
         ],
         clickhouse_settings: {
@@ -1019,6 +1045,10 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         queryParams.resourceId = filter.resourceId;
       }
 
+      if (filter?.archived !== undefined) {
+        whereClauses.push(filter.archived ? 'archivedAt IS NOT NULL' : 'archivedAt IS NULL');
+      }
+
       // Keys are validated above to prevent SQL injection
       if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
         let metadataIndex = 0;
@@ -1039,6 +1069,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
               id,
               resourceId,
               metadata,
+              archivedAt,
               ROW_NUMBER() OVER (PARTITION BY id ORDER BY updatedAt DESC) as row_num
             FROM ${TABLE_THREADS}
           )
@@ -1079,6 +1110,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                   metadata,
                   toDateTime64(createdAt, 3) as createdAt,
                   toDateTime64(updatedAt, 3) as updatedAt,
+                  archivedAt,
                   ROW_NUMBER() OVER (PARTITION BY id ORDER BY updatedAt DESC) as row_num
                 FROM ${TABLE_THREADS}
               )
@@ -1088,7 +1120,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                 title,
                 metadata,
                 createdAt,
-                updatedAt
+                updatedAt,
+                archivedAt
               FROM ranked_threads
               WHERE row_num = 1 ${whereClauses.length > 0 ? `AND ${whereClauses.join(' AND ')}` : ''}
               ORDER BY "${field}" ${direction === 'DESC' ? 'DESC' : 'ASC'}
@@ -1111,6 +1144,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       const threads = transformRows<StorageThreadType>(rows.data).map(thread => ({
         ...thread,
         metadata: parseMetadata(thread.metadata),
+        archivedAt: toArchivedAt((thread as { archivedAt?: unknown }).archivedAt),
       }));
 
       return {
@@ -1400,7 +1434,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         const threadUpdatePromises = Array.from(threadIdsToUpdate).map(async threadId => {
           // Get existing thread data - get newest version by updatedAt
           const threadResult = await this.client.query({
-            query: `SELECT id, resourceId, title, metadata, createdAt FROM ${TABLE_THREADS} WHERE id = {threadId:String} ORDER BY updatedAt DESC LIMIT 1`,
+            query: `SELECT id, resourceId, title, metadata, createdAt, archivedAt FROM ${TABLE_THREADS} WHERE id = {threadId:String} ORDER BY updatedAt DESC LIMIT 1`,
             query_params: { threadId },
             clickhouse_settings: {
               date_time_input_format: 'best_effort',
@@ -1440,6 +1474,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                       : serializeMetadata(existingThread.metadata as Record<string, unknown>),
                   createdAt: existingThread.createdAt,
                   updatedAt: now,
+                  archivedAt: existingThread.archivedAt ?? null,
                 },
               ],
               clickhouse_settings: {
@@ -1660,4 +1695,11 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       );
     }
   }
+}
+
+function toArchivedAt(value: unknown): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  const str = String(value);
+  return new Date(/[zZ]|[+-]\d{2}:?\d{2}$/.test(str) ? str : `${str.replace(' ', 'T')}Z`);
 }

@@ -86,6 +86,11 @@ export class MemoryDSQL extends MemoryStorage {
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
+    await this.#db.alterTable({
+      tableName: TABLE_THREADS,
+      schema: TABLE_SCHEMAS[TABLE_THREADS],
+      ifNotExists: ['archivedAt'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -187,6 +192,7 @@ export class MemoryDSQL extends MemoryStorage {
         metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
         createdAt: thread.createdAtZ || thread.createdAt,
         updatedAt: thread.updatedAtZ || thread.updatedAt,
+        archivedAt: readArchivedAt(thread),
       };
     } catch (error) {
       throw new MastraError(
@@ -247,6 +253,10 @@ export class MemoryDSQL extends MemoryStorage {
         paramIndex++;
       }
 
+      if (filter?.archived !== undefined) {
+        whereClauses.push(filter.archived ? `"archivedAt" IS NOT NULL` : `"archivedAt" IS NULL`);
+      }
+
       // Aurora DSQL stores JSONB as TEXT, so cast to jsonb for containment operator
       if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
         for (const [key, value] of Object.entries(filter.metadata)) {
@@ -274,7 +284,7 @@ export class MemoryDSQL extends MemoryStorage {
       }
 
       const limitValue = perPageInput === false ? total : perPage;
-      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ", "archivedAt", "archivedAtZ" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
       const rows = await this.#db.client.manyOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
         dataQuery,
         [...queryParams, limitValue, offset],
@@ -287,6 +297,7 @@ export class MemoryDSQL extends MemoryStorage {
         metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
         createdAt: thread.createdAtZ || thread.createdAt,
         updatedAt: thread.updatedAtZ || thread.updatedAt,
+        archivedAt: readArchivedAt(thread),
       }));
 
       return {
@@ -384,10 +395,12 @@ export class MemoryDSQL extends MemoryStorage {
     id,
     title,
     metadata,
+    archivedAt,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    archivedAt?: Date | null;
   }): Promise<StorageThreadType> {
     const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
 
@@ -414,18 +427,29 @@ export class MemoryDSQL extends MemoryStorage {
           ...metadata,
         };
 
-        const now = new Date().toISOString();
+        const setClauses = ['title = COALESCE($1, title)', 'metadata = $2'];
+        const params: unknown[] = [title ?? null, JSON.stringify(mergedMetadata)];
+        // Archiving alone must not reorder thread lists, so updatedAt only moves on content changes.
+        if (title !== undefined || metadata !== undefined) {
+          const now = new Date().toISOString();
+          params.push(now, now);
+          setClauses.push(
+            `"updatedAt" = $${params.length - 1}::timestamp`,
+            `"updatedAtZ" = $${params.length}::timestamptz`,
+          );
+        }
+        if (archivedAt !== undefined) {
+          const archivedAtValue = archivedAt ? toUtcISOString(archivedAt) : null;
+          params.push(archivedAtValue, archivedAtValue);
+          setClauses.push(
+            `"archivedAt" = $${params.length - 1}::timestamp`,
+            `"archivedAtZ" = $${params.length}::timestamptz`,
+          );
+        }
+        params.push(id);
         const thread = await this.#db.client.one<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
-          `UPDATE ${threadTableName}
-                      SET 
-                          title = COALESCE($1, title),
-                          metadata = $2,
-                          "updatedAt" = $3::timestamp,
-                          "updatedAtZ" = $4::timestamptz
-                      WHERE id = $5
-                      RETURNING *
-                  `,
-          [title ?? null, JSON.stringify(mergedMetadata), now, now, id],
+          `UPDATE ${threadTableName} SET ${setClauses.join(', ')} WHERE id = $${params.length} RETURNING *`,
+          params,
         );
 
         return {
@@ -435,6 +459,7 @@ export class MemoryDSQL extends MemoryStorage {
           metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
           createdAt: thread.createdAtZ || thread.createdAt,
           updatedAt: thread.updatedAtZ || thread.updatedAt,
+          archivedAt: readArchivedAt(thread),
         };
       },
       {
@@ -1336,4 +1361,11 @@ export class MemoryDSQL extends MemoryStorage {
 
     return result;
   }
+}
+
+function readArchivedAt(row: Record<string, any>): Date | null {
+  // The nullable archivedAt column is the source of truth; archivedAtZ carries the timezone-aware value.
+  if (!row.archivedAt) return null;
+  const value = row.archivedAtZ ?? row.archivedAt;
+  return value instanceof Date ? value : new Date(value);
 }

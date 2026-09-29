@@ -184,6 +184,7 @@ const threadSchema = z.object({
   resourceId: z.string(),
   createdAt: z.date(),
   updatedAt: z.date(),
+  archivedAt: z.date().nullable().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
@@ -245,6 +246,10 @@ const listThreadsQueryInnerSchema = createPagePaginationSchema(100).extend({
     )
     .optional(),
   orderBy: storageOrderBySchema,
+  archived: z
+    .enum(['true', 'false'])
+    .transform(v => v === 'true')
+    .optional(),
 });
 
 /**
@@ -252,6 +257,7 @@ const listThreadsQueryInnerSchema = createPagePaginationSchema(100).extend({
  * agentId is optional - can use storage fallback when not provided
  * resourceId is optional - when omitted, returns all threads
  * metadata is optional - filters threads by metadata key-value pairs (AND logic)
+ * archived is optional - `true` only archived threads, `false` only active ones, omitted returns both
  *
  * Accepts both the current shape (`orderBy[field]=...&orderBy[direction]=...`)
  * and the legacy shape used by `@mastra/client-js` < 1.18

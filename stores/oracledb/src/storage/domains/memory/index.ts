@@ -166,6 +166,7 @@ export class MemoryOracle extends MemoryStorage {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    archivedAt?: Date | null;
   }): Promise<StorageThreadType> {
     return updateThread(this.ctx, args);
   }

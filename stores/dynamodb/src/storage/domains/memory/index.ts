@@ -121,6 +121,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         // Convert date strings back to Date objects for consistency
         createdAt: typeof data.createdAt === 'string' ? new Date(data.createdAt) : data.createdAt,
         updatedAt: typeof data.updatedAt === 'string' ? new Date(data.updatedAt) : data.updatedAt,
+        archivedAt: data.archivedAt ? new Date(data.archivedAt) : null,
       }))
       .sort((a: StorageThreadType, b: StorageThreadType) => {
         const fieldA = field === 'createdAt' ? a.createdAt : a.updatedAt;
@@ -153,6 +154,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         // Convert date strings back to Date objects for consistency
         createdAt: typeof data.createdAt === 'string' ? new Date(data.createdAt) : data.createdAt,
         updatedAt: typeof data.updatedAt === 'string' ? new Date(data.updatedAt) : data.updatedAt,
+        archivedAt: data.archivedAt ? new Date(data.archivedAt) : null,
         // metadata: data.metadata ? JSON.parse(data.metadata) : undefined, // REMOVED by AI
         // metadata is already transformed by the entity's getter
       } as StorageThreadType;
@@ -213,10 +215,12 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     id,
     title,
     metadata,
+    archivedAt,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    archivedAt?: Date | null;
   }): Promise<StorageThreadType> {
     this.logger.debug('Updating thread', { threadId: id });
 
@@ -233,13 +237,16 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       // Prepare the update
       // Define type for only the fields we are actually updating
       type ThreadUpdatePayload = {
-        updatedAt: string; // ISO String for DDB
+        updatedAt?: string; // ISO String for DDB
         title?: string;
+        archivedAt?: string;
         metadata?: string; // Stringified JSON for DDB
       };
-      const updateData: ThreadUpdatePayload = {
-        updatedAt: now.toISOString(),
-      };
+      const bumpUpdatedAt = title !== undefined || metadata !== undefined;
+      const updateData: ThreadUpdatePayload = bumpUpdatedAt ? { updatedAt: now.toISOString() } : {};
+      if (archivedAt) {
+        updateData.archivedAt = archivedAt.toISOString();
+      }
 
       if (title) {
         updateData.title = title;
@@ -257,14 +264,20 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       }
 
       // Update the thread using the primary key
-      await this.service.entities.thread.update({ entity: 'thread', id }).set(updateData).go();
+      if (Object.keys(updateData).length > 0) {
+        await this.service.entities.thread.update({ entity: 'thread', id }).set(updateData).go();
+      }
+      if (archivedAt === null) {
+        await this.service.entities.thread.update({ entity: 'thread', id }).remove(['archivedAt']).go();
+      }
 
       // Return the potentially updated thread object
       return {
         ...existingThread,
         title: title || existingThread.title,
         metadata: metadata ? { ...existingThread.metadata, ...metadata } : existingThread.metadata,
-        updatedAt: now,
+        updatedAt: bumpUpdatedAt ? now : existingThread.updatedAt,
+        ...(archivedAt !== undefined ? { archivedAt } : {}),
       };
     } catch (error) {
       throw new MastraError(
@@ -735,6 +748,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       // Transform threads
       let allThreads = this.transformAndSortThreads(rawThreads, field, direction);
 
+      if (filter?.archived !== undefined) {
+        allThreads = allThreads.filter(thread => Boolean(thread.archivedAt) === filter.archived);
+      }
+
       // Apply metadata filters if provided (AND logic)
       if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
         allThreads = allThreads.filter(thread => {
@@ -1024,6 +1041,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         // Convert date strings back to Date objects for consistency
         createdAt: typeof data.createdAt === 'string' ? new Date(data.createdAt) : data.createdAt,
         updatedAt: typeof data.updatedAt === 'string' ? new Date(data.updatedAt) : data.updatedAt,
+        archivedAt: data.archivedAt ? new Date(data.archivedAt) : null,
         // Ensure workingMemory is always returned as a string, regardless of automatic parsing
         workingMemory: typeof data.workingMemory === 'object' ? JSON.stringify(data.workingMemory) : data.workingMemory,
         // metadata is already transformed by the entity's getter

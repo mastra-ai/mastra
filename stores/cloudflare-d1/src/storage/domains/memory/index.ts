@@ -97,6 +97,11 @@ export class MemoryStorageD1 extends MemoryStorage {
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
+    await this.#db.alterTable({
+      tableName: TABLE_THREADS,
+      schema: TABLE_SCHEMAS[TABLE_THREADS],
+      ifNotExists: ['archivedAt'],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -267,6 +272,7 @@ export class MemoryStorageD1 extends MemoryStorage {
         ...thread,
         createdAt: ensureDate(thread.createdAt) as Date,
         updatedAt: ensureDate(thread.updatedAt) as Date,
+        archivedAt: thread.archivedAt ? (ensureDate(thread.archivedAt) as Date) : null,
         metadata:
           typeof thread.metadata === 'string'
             ? (JSON.parse(thread.metadata || '{}') as Record<string, any>)
@@ -333,6 +339,7 @@ export class MemoryStorageD1 extends MemoryStorage {
       ...(row as StorageThreadType),
       createdAt: ensureDate(row.createdAt) as Date,
       updatedAt: ensureDate(row.updatedAt) as Date,
+      archivedAt: row.archivedAt ? (ensureDate(row.archivedAt) as Date) : null,
       metadata:
         typeof row.metadata === 'string'
           ? (JSON.parse(row.metadata || '{}') as Record<string, any>)
@@ -347,6 +354,12 @@ export class MemoryStorageD1 extends MemoryStorage {
       if (filter?.resourceId) {
         countQuery = countQuery.whereAnd('resourceId = ?', filter.resourceId);
         selectQuery = selectQuery.whereAnd('resourceId = ?', filter.resourceId);
+      }
+
+      if (filter?.archived !== undefined) {
+        const condition = filter.archived ? 'archivedAt IS NOT NULL' : 'archivedAt IS NULL';
+        countQuery = countQuery.whereAnd(condition);
+        selectQuery = selectQuery.whereAnd(condition);
       }
 
       // Add metadata filters if provided (AND logic)
@@ -491,10 +504,12 @@ export class MemoryStorageD1 extends MemoryStorage {
     id,
     title,
     metadata,
+    archivedAt,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    archivedAt?: Date | null;
   }): Promise<StorageThreadType> {
     const thread = await this.getThreadById({ threadId: id });
     try {
@@ -508,9 +523,18 @@ export class MemoryStorageD1 extends MemoryStorage {
         ...(metadata as Record<string, any>),
       };
 
-      const updatedAt = new Date();
-      const columns = ['title', 'metadata', 'updatedAt'];
-      const values = [title ?? thread.title, JSON.stringify(mergedMetadata), updatedAt.toISOString()];
+      const columns = ['title', 'metadata'];
+      const values: (string | null)[] = [title ?? thread.title ?? null, JSON.stringify(mergedMetadata)];
+      // Archiving alone must not reorder thread lists, so updatedAt only moves on content changes.
+      const updatedAt = title !== undefined || metadata !== undefined ? new Date() : thread.updatedAt;
+      if (updatedAt !== thread.updatedAt) {
+        columns.push('updatedAt');
+        values.push(updatedAt.toISOString());
+      }
+      if (archivedAt !== undefined) {
+        columns.push('archivedAt');
+        values.push(archivedAt ? archivedAt.toISOString() : null);
+      }
 
       const query = createSqlBuilder().update(fullTableName, columns, values).where('id = ?', id);
 
@@ -526,6 +550,7 @@ export class MemoryStorageD1 extends MemoryStorage {
           ...(metadata as Record<string, any>),
         },
         updatedAt,
+        ...(archivedAt !== undefined ? { archivedAt } : {}),
       };
     } catch (error) {
       throw new MastraError(

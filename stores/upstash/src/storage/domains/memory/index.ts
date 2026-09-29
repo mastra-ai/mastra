@@ -82,6 +82,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
         ...thread,
         createdAt: ensureDate(thread.createdAt)!,
         updatedAt: ensureDate(thread.updatedAt)!,
+        archivedAt: thread.archivedAt ? ensureDate(thread.archivedAt)! : null,
         metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
       };
     } catch (error) {
@@ -167,6 +168,10 @@ export class StoreMemoryUpstash extends MemoryStorage {
           continue;
         }
 
+        if (filter?.archived !== undefined && Boolean(thread.archivedAt) !== filter.archived) {
+          continue;
+        }
+
         // Apply metadata filters if provided (AND logic)
         if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
           const threadMetadata = typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata;
@@ -178,6 +183,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
           ...thread,
           createdAt: ensureDate(thread.createdAt)!,
           updatedAt: ensureDate(thread.updatedAt)!,
+          archivedAt: thread.archivedAt ? ensureDate(thread.archivedAt)! : null,
           metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
         });
       }
@@ -252,10 +258,12 @@ export class StoreMemoryUpstash extends MemoryStorage {
     id,
     title,
     metadata,
+    archivedAt,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    archivedAt?: Date | null;
   }): Promise<StorageThreadType> {
     const thread = await this.getThreadById({ threadId: id });
     if (!thread) {
@@ -278,7 +286,8 @@ export class StoreMemoryUpstash extends MemoryStorage {
         ...thread.metadata,
         ...metadata,
       },
-      updatedAt: now,
+      updatedAt: title !== undefined || metadata !== undefined ? now : thread.updatedAt,
+      ...(archivedAt !== undefined ? { archivedAt } : {}),
     };
 
     try {

@@ -570,9 +570,15 @@ export async function handleTypedOperation(
       // patch() is a partial update, so leaving a key out preserves the stored
       // value. Writing back the title read a moment ago would clobber one
       // generated in between; same for metadata on a title-only update.
-      const patchRecord: { title?: string; metadata?: Record<string, any>; updatedAt: string } = {
-        updatedAt: request.updatedAt,
-      };
+      const patchRecord: { title?: string; metadata?: Record<string, any>; updatedAt?: string; archivedAt?: string } =
+        {};
+      if (request.updatedAt !== undefined) {
+        patchRecord.updatedAt = request.updatedAt;
+      }
+      if (request.archivedAt !== undefined) {
+        // Convex removes a field patched to undefined, which is how threads are unarchived
+        patchRecord.archivedAt = request.archivedAt ?? undefined;
+      }
       if (request.title !== undefined) {
         patchRecord.title = request.title;
       }

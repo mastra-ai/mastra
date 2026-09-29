@@ -742,6 +742,36 @@ describe('mastraStorage memory atomic updates', () => {
     expect(memoryCtx.patches).toHaveLength(2);
   });
 
+  it('archives and unarchives a thread without touching updatedAt', async () => {
+    const memoryCtx = createMemoryCtx({
+      _id: asConvexId('thread-doc'),
+      id: 'thread-1',
+      resourceId: 'resource-1',
+      title: 'title',
+      metadata: {},
+      createdAt: '2026-05-29T00:00:00.000Z',
+      updatedAt: '2026-05-29T00:00:00.000Z',
+    });
+
+    await handleTypedOperation(memoryCtx.ctx, 'mastra_threads', {
+      op: 'updateThread',
+      tableName: TABLE_THREADS,
+      id: 'thread-1',
+      archivedAt: '2026-05-30T00:00:00.000Z',
+    });
+    expect(memoryCtx.patches.at(-1)).toMatchObject({ data: { archivedAt: '2026-05-30T00:00:00.000Z' } });
+    expect(memoryCtx.patches.at(-1)?.data).not.toHaveProperty('updatedAt');
+
+    await handleTypedOperation(memoryCtx.ctx, 'mastra_threads', {
+      op: 'updateThread',
+      tableName: TABLE_THREADS,
+      id: 'thread-1',
+      archivedAt: null,
+    });
+    const unarchive = memoryCtx.patches.at(-1)?.data as Record<string, unknown>;
+    expect('archivedAt' in unarchive && unarchive.archivedAt === undefined).toBe(true);
+  });
+
   it('preserves the adapter shallow-merge contract for nested metadata objects', async () => {
     const memoryCtx = createMemoryCtx({
       _id: asConvexId('thread-doc'),

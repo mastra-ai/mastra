@@ -362,6 +362,7 @@ export class MastraClient extends BaseResource {
       queryParams.set('metadata', JSON.stringify(params.metadata));
     }
 
+    if (params.archived !== undefined) queryParams.set('archived', String(params.archived));
     if (params.agentId) queryParams.set('agentId', params.agentId);
     if (params.page !== undefined) queryParams.set('page', params.page.toString());
     if (params.perPage !== undefined) queryParams.set('perPage', params.perPage.toString());

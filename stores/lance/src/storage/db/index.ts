@@ -295,7 +295,7 @@ export class LanceDB extends MastraBase {
         text: 'string',
         integer: 'int',
         bigint: 'bigint',
-        timestamp: 'timestamp',
+        timestamp: 'double',
         jsonb: 'string',
         uuid: 'string',
       };

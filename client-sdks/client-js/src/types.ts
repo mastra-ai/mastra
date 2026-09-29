@@ -545,7 +545,11 @@ export type CreateMemoryThreadParams = GeneratedRequest<
 
 export type CreateMemoryThreadResponse = GeneratedResponse<'POST /memory/threads'>;
 
-export type ListMemoryThreadsParams = GeneratedRequest<QueryParams<'GET /memory/threads'>> & RequestContextOptions;
+export type ListMemoryThreadsParams = Omit<GeneratedRequest<QueryParams<'GET /memory/threads'>>, 'archived'> &
+  RequestContextOptions & {
+    /** `true` returns only archived threads, `false` only active ones. Omit to return both. */
+    archived?: boolean;
+  };
 
 export type ListMemoryThreadsResponse = GeneratedResponse<'GET /memory/threads'>;
 

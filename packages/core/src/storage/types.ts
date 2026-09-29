@@ -221,6 +221,12 @@ export type StorageListThreadsInput = {
      * All specified key-value pairs must match (AND logic).
      */
     metadata?: Record<string, unknown>;
+    /**
+     * Filter threads by archive state.
+     * `true` returns only archived threads, `false` only non-archived ones.
+     * Omit to return both.
+     */
+    archived?: boolean;
   };
 };
 

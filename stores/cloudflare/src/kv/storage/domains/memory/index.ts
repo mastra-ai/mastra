@@ -77,6 +77,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         ...thread,
         createdAt: ensureDate(thread.createdAt)!,
         updatedAt: ensureDate(thread.updatedAt)!,
+        archivedAt: thread.archivedAt ? ensureDate(thread.archivedAt)! : null,
         metadata: this.ensureMetadata(thread.metadata),
       };
     } catch (error: any) {
@@ -137,6 +138,10 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           continue;
         }
 
+        if (filter?.archived !== undefined && Boolean(data.archivedAt) !== filter.archived) {
+          continue;
+        }
+
         // Apply metadata filters if provided (AND logic)
         if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
           const metadata = this.ensureMetadata(data.metadata);
@@ -145,7 +150,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           if (!matches) continue;
         }
 
-        threads.push(data);
+        threads.push({ ...data, archivedAt: data.archivedAt ? ensureDate(data.archivedAt)! : null });
       }
 
       // Apply dynamic sorting
@@ -201,10 +206,12 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     id,
     title,
     metadata,
+    archivedAt,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    archivedAt?: Date | null;
   }): Promise<StorageThreadType> {
     try {
       const thread = await this.getThreadById({ threadId: id });
@@ -219,7 +226,8 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           ...(thread.metadata ?? {}),
           ...metadata,
         }),
-        updatedAt: new Date(),
+        updatedAt: title !== undefined || metadata !== undefined ? new Date() : thread.updatedAt,
+        ...(archivedAt !== undefined ? { archivedAt } : {}),
       };
 
       // Insert with proper metadata handling

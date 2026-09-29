@@ -724,6 +724,14 @@ describe('real route scenarios', () => {
       expect(derivePermission({ path: '/memory/threads', method: 'POST' })).toBe('memory:write');
     });
 
+    it('POST /memory/threads/:threadId/archive → memory:write', () => {
+      expect(derivePermission({ path: '/memory/threads/:threadId/archive', method: 'POST' })).toBe('memory:write');
+    });
+
+    it('POST /memory/threads/:threadId/unarchive → memory:write', () => {
+      expect(derivePermission({ path: '/memory/threads/:threadId/unarchive', method: 'POST' })).toBe('memory:write');
+    });
+
     it('DELETE /memory/threads/:threadId → memory:delete', () => {
       expect(derivePermission({ path: '/memory/threads/:threadId', method: 'DELETE' })).toBe('memory:delete');
     });

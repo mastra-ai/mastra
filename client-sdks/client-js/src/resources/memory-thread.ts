@@ -127,6 +127,38 @@ export class MemoryThread extends BaseResource {
   }
 
   /**
+   * Archives (soft-deletes) the memory thread by setting its `archivedAt` timestamp
+   * @param opts - Optional `agentId` (required by the server when not supplied on the constructor)
+   *               and request context.
+   * @returns Promise containing the archived thread
+   */
+  archive(
+    opts: { agentId?: string; requestContext?: RequestContext | Record<string, any> } = {},
+  ): Promise<RouteResponse<'POST /memory/threads/:threadId/archive'>> {
+    const agentId = this.requireAgentId(opts.agentId, 'archive');
+    const contextParam = requestContextQueryString(opts.requestContext, '&');
+    return this.request(`/memory/threads/${this.threadId}/archive?agentId=${agentId}${contextParam}`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Restores an archived memory thread by clearing its `archivedAt` timestamp
+   * @param opts - Optional `agentId` (required by the server when not supplied on the constructor)
+   *               and request context.
+   * @returns Promise containing the restored thread
+   */
+  unarchive(
+    opts: { agentId?: string; requestContext?: RequestContext | Record<string, any> } = {},
+  ): Promise<RouteResponse<'POST /memory/threads/:threadId/unarchive'>> {
+    const agentId = this.requireAgentId(opts.agentId, 'unarchive');
+    const contextParam = requestContextQueryString(opts.requestContext, '&');
+    return this.request(`/memory/threads/${this.threadId}/unarchive?agentId=${agentId}${contextParam}`, {
+      method: 'POST',
+    });
+  }
+
+  /**
    * Retrieves paginated messages associated with the thread with filtering and ordering options
    * @param params - Pagination parameters including page, perPage, orderBy, filter, include options, and request context
    * @returns Promise containing paginated thread messages with pagination metadata (total, page, perPage, hasMore)

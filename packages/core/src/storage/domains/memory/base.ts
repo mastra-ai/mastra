@@ -87,10 +87,13 @@ export abstract class MemoryStorage extends StorageDomain {
     id,
     title,
     metadata,
+    archivedAt,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    /** `Date` archives the thread, `null` unarchives it, omitted leaves it untouched. */
+    archivedAt?: Date | null;
   }): Promise<StorageThreadType>;
 
   /**
@@ -111,10 +114,12 @@ export abstract class MemoryStorage extends StorageDomain {
     id,
     title,
     metadata,
+    archivedAt,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    archivedAt?: Date | null;
   }): Promise<StorageThreadType> {
     if (!this.supportsPartialThreadUpdate && (title === undefined || metadata === undefined)) {
       const existing = await this.getThreadById({ threadId: id });
@@ -127,6 +132,7 @@ export abstract class MemoryStorage extends StorageDomain {
       id,
       ...(title !== undefined ? { title } : {}),
       ...(metadata !== undefined ? { metadata } : {}),
+      ...(archivedAt !== undefined ? { archivedAt } : {}),
     });
   }
 

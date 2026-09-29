@@ -1136,6 +1136,123 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       expect(getTimestamp(threadFromList!.updatedAt)).toBe(getTimestamp(threadById!.updatedAt));
     });
   });
+
+  describe('thread archiving', () => {
+    const toTime = (value: Date | string | null | undefined) => (value ? new Date(value).getTime() : value);
+
+    async function givenThread(resourceId = `resource-${randomUUID()}`, metadata?: Record<string, unknown>) {
+      const thread = {
+        ...createSampleThreadWithParams(`thread-${randomUUID()}`, resourceId, new Date(), new Date()),
+        ...(metadata ? { metadata } : {}),
+      };
+      await memoryStorage.saveThread({ thread });
+      return thread;
+    }
+
+    it('given a newly saved thread, when it is read back, then it is not archived', async () => {
+      const thread = await givenThread();
+
+      const retrieved = await memoryStorage.getThreadById({ threadId: thread.id });
+
+      expect(retrieved?.archivedAt ?? null).toBeNull();
+    });
+
+    it('given a thread, when archivedAt is set, then getThreadById returns that date', async () => {
+      const thread = await givenThread();
+      const archivedAt = new Date('2026-01-02T03:04:05.000Z');
+
+      const updated = await memoryStorage.updateThread({ id: thread.id, archivedAt });
+      const retrieved = await memoryStorage.getThreadById({ threadId: thread.id });
+
+      expect(toTime(updated.archivedAt)).toBe(archivedAt.getTime());
+      expect(retrieved?.archivedAt).toBeInstanceOf(Date);
+      expect(toTime(retrieved?.archivedAt)).toBe(archivedAt.getTime());
+    });
+
+    it('given an archived thread, when archivedAt is set to null, then it is unarchived', async () => {
+      const thread = await givenThread();
+      await memoryStorage.updateThread({ id: thread.id, archivedAt: new Date() });
+
+      await memoryStorage.updateThread({ id: thread.id, archivedAt: null });
+      const retrieved = await memoryStorage.getThreadById({ threadId: thread.id });
+
+      expect(retrieved?.archivedAt ?? null).toBeNull();
+    });
+
+    it('given an archived thread, when only title or metadata change, then archivedAt is preserved', async () => {
+      const thread = await givenThread();
+      const archivedAt = new Date('2026-02-03T04:05:06.000Z');
+      await memoryStorage.updateThread({ id: thread.id, archivedAt });
+
+      await memoryStorage.updateThread({ id: thread.id, title: 'Renamed' });
+      await memoryStorage.updateThread({ id: thread.id, metadata: { touched: true } });
+      const retrieved = await memoryStorage.getThreadById({ threadId: thread.id });
+
+      expect(retrieved?.title).toBe('Renamed');
+      expect(toTime(retrieved?.archivedAt)).toBe(archivedAt.getTime());
+    });
+
+    describe('listThreads archived filter', () => {
+      let resourceId: string;
+      let archivedIds: string[];
+      let activeIds: string[];
+
+      beforeEach(async () => {
+        resourceId = `resource-archive-${randomUUID()}`;
+        const threads = [];
+        for (let i = 0; i < 5; i++) {
+          threads.push(await givenThread(resourceId, { group: i % 2 === 0 ? 'even' : 'odd' }));
+        }
+        archivedIds = [threads[0]!.id, threads[1]!.id];
+        activeIds = threads.slice(2).map(t => t.id);
+        for (const id of archivedIds) {
+          await memoryStorage.updateThread({ id, archivedAt: new Date() });
+        }
+      });
+
+      it('when archived is true, then only archived threads are returned', async () => {
+        const result = await memoryStorage.listThreads({ filter: { resourceId, archived: true }, perPage: false });
+
+        expect(result.threads.map(t => t.id).sort()).toEqual([...archivedIds].sort());
+        expect(result.total).toBe(2);
+      });
+
+      it('when archived is false, then only non-archived threads are returned', async () => {
+        const result = await memoryStorage.listThreads({ filter: { resourceId, archived: false }, perPage: false });
+
+        expect(result.threads.map(t => t.id).sort()).toEqual([...activeIds].sort());
+        expect(result.total).toBe(3);
+      });
+
+      it('when archived is omitted, then all threads are returned', async () => {
+        const result = await memoryStorage.listThreads({ filter: { resourceId }, perPage: false });
+
+        expect(result.total).toBe(5);
+      });
+
+      it('when archived is combined with a metadata filter, then both apply', async () => {
+        const result = await memoryStorage.listThreads({
+          filter: { resourceId, archived: false, metadata: { group: 'even' } },
+          perPage: false,
+        });
+
+        // threads 2 and 4 are active and even
+        expect(result.threads.map(t => t.id).sort()).toEqual([activeIds[0]!, activeIds[2]!].sort());
+      });
+
+      it('when paginating with the filter, then total and hasMore reflect the filtered set', async () => {
+        const page0 = await memoryStorage.listThreads({ filter: { resourceId, archived: false }, page: 0, perPage: 2 });
+        const page1 = await memoryStorage.listThreads({ filter: { resourceId, archived: false }, page: 1, perPage: 2 });
+
+        expect(page0.total).toBe(3);
+        expect(page0.hasMore).toBe(true);
+        expect(page0.threads).toHaveLength(2);
+        expect(page1.hasMore).toBe(false);
+        expect(page1.threads).toHaveLength(1);
+        expect([...page0.threads, ...page1.threads].every(t => !t.archivedAt)).toBe(true);
+      });
+    });
+  });
 }
 
 function isStorageSupportsSort(storage: MastraStorage): boolean {

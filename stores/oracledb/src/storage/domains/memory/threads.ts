@@ -2,13 +2,20 @@ import { ErrorCategory, MastraError } from '@mastra/core/error';
 import type { StorageThreadType } from '@mastra/core/memory';
 import { calculatePagination, normalizePerPage, TABLE_MESSAGES, TABLE_THREADS } from '@mastra/core/storage';
 import type { StorageListThreadsInput, StorageListThreadsOutput } from '@mastra/core/storage';
+import oracledb from 'oracledb';
 
 import { asBindParameters, executeOptions, jsonBind, rows } from '../../../shared/connection';
 import type { ObjectRow } from '../../../shared/connection';
 import { assertJsonPath } from '../../../vector/identifiers';
 import type { OracleTxClient } from '../../db';
 import { toDate } from '../../domain-utils';
-import { MESSAGE_RESOURCE_ID, THREAD_CREATED_AT, THREAD_RESOURCE_ID, THREAD_UPDATED_AT } from './schema';
+import {
+  MESSAGE_RESOURCE_ID,
+  THREAD_ARCHIVED_AT,
+  THREAD_CREATED_AT,
+  THREAD_RESOURCE_ID,
+  THREAD_UPDATED_AT,
+} from './schema';
 import {
   deleteSemanticRecallVectors,
   optionalStringBind,
@@ -30,6 +37,7 @@ type ThreadRow = {
   metadata?: unknown;
   createdAt: Date | string;
   updatedAt: Date | string;
+  archivedAt?: Date | string | null;
 };
 
 export async function getThreadById(
@@ -175,10 +183,12 @@ export async function updateThread(
     id,
     title,
     metadata,
+    archivedAt,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    archivedAt?: Date | null;
   },
 ): Promise<StorageThreadType> {
   const existingThread = await ctx.getThreadById({ threadId: id });
@@ -193,23 +203,24 @@ export async function updateThread(
   }
 
   const mergedMetadata = { ...(existingThread.metadata ?? {}), ...metadata };
-  const updatedAt = new Date();
+  const bumpUpdatedAt = title !== undefined || metadata !== undefined;
 
   try {
-    await ctx.db.none(
-      `
-          UPDATE ${table(ctx, TABLE_THREADS)}
-          SET title = COALESCE(:title, title),
-              metadata = :metadata,
-              ${THREAD_UPDATED_AT} = :updatedAt
-          WHERE id = :id`,
-      {
-        id,
-        title: optionalStringBind(title),
-        metadata: jsonBind(mergedMetadata),
-        updatedAt,
-      },
-    );
+    const sets = ['title = COALESCE(:title, title)', 'metadata = :metadata'];
+    const binds: Record<string, unknown> = {
+      id,
+      title: optionalStringBind(title),
+      metadata: jsonBind(mergedMetadata),
+    };
+    if (bumpUpdatedAt) {
+      sets.push(`${THREAD_UPDATED_AT} = :updatedAt`);
+      binds.updatedAt = new Date();
+    }
+    if (archivedAt !== undefined) {
+      sets.push(`${THREAD_ARCHIVED_AT} = :archivedAt`);
+      binds.archivedAt = { val: archivedAt, type: oracledb.DB_TYPE_TIMESTAMP_TZ };
+    }
+    await ctx.db.none(`UPDATE ${table(ctx, TABLE_THREADS)} SET ${sets.join(', ')} WHERE id = :id`, binds);
 
     const updatedThread = await ctx.getThreadById({ threadId: id });
     if (!updatedThread) {
@@ -347,6 +358,9 @@ function threadWhereClause(filter?: StorageListThreadsInput['filter']): {
     conditions.push(`${THREAD_RESOURCE_ID} = :resourceId`);
     binds.resourceId = filter.resourceId;
   }
+  if (filter?.archived !== undefined) {
+    conditions.push(`${THREAD_ARCHIVED_AT} IS ${filter.archived ? 'NOT NULL' : 'NULL'}`);
+  }
   if (filter?.metadata) {
     let index = 0;
     for (const [key, value] of Object.entries(filter.metadata)) {
@@ -380,11 +394,12 @@ function parseThread(row: ThreadRow): StorageThreadType {
     metadata: parseJson(row.metadata),
     createdAt: toDate(row.createdAt),
     updatedAt: toDate(row.updatedAt),
+    archivedAt: row.archivedAt ? toDate(row.archivedAt) : null,
   };
 }
 
 function threadSelect(): string {
-  return `SELECT id AS "id", ${THREAD_RESOURCE_ID} AS "resourceId", title AS "title", metadata AS "metadata", ${THREAD_CREATED_AT} AS "createdAt", ${THREAD_UPDATED_AT} AS "updatedAt"`;
+  return `SELECT id AS "id", ${THREAD_RESOURCE_ID} AS "resourceId", title AS "title", metadata AS "metadata", ${THREAD_CREATED_AT} AS "createdAt", ${THREAD_UPDATED_AT} AS "updatedAt", ${THREAD_ARCHIVED_AT} AS "archivedAt"`;
 }
 
 function threadOrderColumn(field: string): string {

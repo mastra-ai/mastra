@@ -1041,11 +1041,13 @@ export class Memory extends MastraMemory {
     id,
     title,
     metadata,
+    archivedAt,
     memoryConfig,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    archivedAt?: Date | null;
     memoryConfig?: MemoryConfigInternal;
   }): Promise<StorageThreadType> {
     const memoryStore = await this.getMemoryStore();
@@ -1053,6 +1055,7 @@ export class Memory extends MastraMemory {
       id,
       title,
       metadata,
+      archivedAt,
     });
 
     // Check if metadata contains workingMemory and working memory is enabled

@@ -91,7 +91,9 @@ export type StorageRequest =
       id: string;
       title?: string;
       metadata?: Record<string, any>;
-      updatedAt: string;
+      /** ISO string archives, `null` unarchives, omitted leaves it untouched. */
+      archivedAt?: string | null;
+      updatedAt?: string;
     }
   | {
       op: 'updateResource';

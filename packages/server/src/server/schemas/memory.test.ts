@@ -279,6 +279,13 @@ describe('Memory Schema Query Parsing', () => {
   });
 
   describe('listThreadsQuerySchema', () => {
+    it('parses the archived query param into a boolean and rejects other values', () => {
+      expect(listThreadsQuerySchema.parse({ archived: 'true' }).archived).toBe(true);
+      expect(listThreadsQuerySchema.parse({ archived: 'false' }).archived).toBe(false);
+      expect(listThreadsQuerySchema.parse({}).archived).toBeUndefined();
+      expect(listThreadsQuerySchema.safeParse({ archived: 'yes' }).success).toBe(false);
+    });
+
     it('should allow omitted optional query params', () => {
       const result = listThreadsQuerySchema.safeParse({
         page: 0,

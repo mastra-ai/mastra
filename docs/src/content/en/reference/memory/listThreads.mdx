@@ -70,15 +70,25 @@ const result = await memory.listThreads({
 })
 ```
 
+### Filter by archive state
+
+Pass `archived: false` to hide threads archived with [`.archiveThread()`](/reference/memory/archiveThread), or `archived: true` to list only archived threads. Omit it to return both.
+
+```typescript
+const result = await memory.listThreads({
+  filter: { resourceId: 'user-123', archived: false },
+})
+```
+
 ## Parameters
 
 <PropertiesTable
   content={[
   {
     name: 'filter',
-    type: '{ resourceId?: string; metadata?: Record<string, unknown> }',
+    type: '{ resourceId?: string; metadata?: Record<string, unknown>; archived?: boolean }',
     description:
-      'Optional filter object. resourceId filters threads by resource ID. metadata filters threads by metadata key-value pairs (AND logic - all must match)',
+      'Optional filter object. resourceId filters threads by resource ID. metadata filters threads by metadata key-value pairs (AND logic - all must match). archived set to true returns only archived threads, false only active threads; omit it to return both',
     isOptional: true,
   },
   {

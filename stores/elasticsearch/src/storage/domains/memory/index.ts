@@ -72,6 +72,7 @@ export class MemoryElasticSearch extends MemoryStorage {
         createdAt: ensureDate(thread.createdAt)!,
         updatedAt: ensureDate(thread.updatedAt)!,
         metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
+        archivedAt: thread.archivedAt ? ensureDate(thread.archivedAt)! : null,
       };
     } catch (error) {
       throw new MastraError(
@@ -137,6 +138,10 @@ export class MemoryElasticSearch extends MemoryStorage {
           continue;
         }
 
+        if (filter?.archived !== undefined && Boolean(thread.archivedAt) !== filter.archived) {
+          continue;
+        }
+
         if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
           const threadMetadata = typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata;
           const matches = Object.entries(filter.metadata).every(([key, value]) =>
@@ -152,6 +157,7 @@ export class MemoryElasticSearch extends MemoryStorage {
           createdAt: ensureDate(thread.createdAt)!,
           updatedAt: ensureDate(thread.updatedAt)!,
           metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
+          archivedAt: thread.archivedAt ? ensureDate(thread.archivedAt)! : null,
         });
       }
 
@@ -222,10 +228,12 @@ export class MemoryElasticSearch extends MemoryStorage {
     id,
     title,
     metadata,
+    archivedAt,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    archivedAt?: Date | null;
   }): Promise<StorageThreadType> {
     const thread = await this.getThreadById({ threadId: id });
     if (!thread) {
@@ -247,7 +255,8 @@ export class MemoryElasticSearch extends MemoryStorage {
         ...thread.metadata,
         ...metadata,
       },
-      updatedAt: new Date(),
+      updatedAt: title !== undefined || metadata !== undefined ? new Date() : thread.updatedAt,
+      ...(archivedAt !== undefined ? { archivedAt } : {}),
     };
 
     try {

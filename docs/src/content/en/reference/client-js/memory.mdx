@@ -22,6 +22,15 @@ const threads = await mastraClient.listMemoryThreads({
 
 When `agentId` is omitted and storage is configured on the server, threads will be retrieved using storage directly. This is useful when multiple agents share the same threads (e.g., in workflows with multiple agent steps).
 
+Pass `archived: false` to exclude archived threads, or `archived: true` to list only archived threads. Omit it to return both:
+
+```typescript
+const activeThreads = await mastraClient.listMemoryThreads({
+  resourceId: 'resource-1',
+  archived: false,
+})
+```
+
 ## Create a new thread
 
 Create a new memory thread:
@@ -71,6 +80,18 @@ Delete a thread and its messages:
 
 ```typescript
 await thread.delete()
+```
+
+### Archive Thread
+
+Archive a thread without deleting it. The thread and its messages are kept and can be restored:
+
+```typescript
+const archived = await thread.archive()
+// archived.archivedAt is set
+
+const restored = await thread.unarchive()
+// restored.archivedAt is null
 ```
 
 ### Clone Thread

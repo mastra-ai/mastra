@@ -93,6 +93,11 @@ export class MemorySpanner extends MemoryStorage {
   /** Creates the threads/messages/resources tables and any indexes. */
   async init(): Promise<void> {
     await this.db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+    await this.db.alterTable({
+      tableName: TABLE_THREADS,
+      schema: TABLE_SCHEMAS[TABLE_THREADS],
+      ifNotExists: ['archivedAt'],
+    });
     await this.db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
     await this.createDefaultIndexes();
@@ -157,7 +162,7 @@ export class MemorySpanner extends MemoryStorage {
         params.resourceId = resourceId;
       }
       const [rows] = await this.database.run({
-        sql: `SELECT id, ${quoteIdent('resourceId', 'column name')}, title, metadata, ${quoteIdent('createdAt', 'column name')}, ${quoteIdent('updatedAt', 'column name')}
+        sql: `SELECT id, ${quoteIdent('resourceId', 'column name')}, title, metadata, ${quoteIdent('createdAt', 'column name')}, ${quoteIdent('updatedAt', 'column name')}, ${quoteIdent('archivedAt', 'column name')}
               FROM ${quoteIdent(TABLE_THREADS, 'table name')}
               WHERE ${where}`,
         params,
@@ -188,6 +193,7 @@ export class MemorySpanner extends MemoryStorage {
       metadata: transformed.metadata ?? {},
       createdAt: transformed.createdAt,
       updatedAt: transformed.updatedAt,
+      archivedAt: transformed.archivedAt ? new Date(transformed.archivedAt) : null,
     };
   }
 
@@ -230,6 +236,10 @@ export class MemorySpanner extends MemoryStorage {
       if (filter?.resourceId) {
         whereClauses.push(`${quoteIdent('resourceId', 'column name')} = @resourceId`);
         params.resourceId = filter.resourceId;
+      }
+
+      if (filter?.archived !== undefined) {
+        whereClauses.push(`${quoteIdent('archivedAt', 'column name')} IS ${filter.archived ? 'NOT NULL' : 'NULL'}`);
       }
 
       if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
@@ -276,7 +286,7 @@ export class MemorySpanner extends MemoryStorage {
       const orderField = field === 'createdAt' ? 'createdAt' : 'updatedAt';
       const dir = (direction || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
       const limit = perPageInput === false ? total : perPage;
-      const dataSql = `SELECT id, ${quoteIdent('resourceId', 'column name')}, title, metadata, ${quoteIdent('createdAt', 'column name')}, ${quoteIdent('updatedAt', 'column name')}
+      const dataSql = `SELECT id, ${quoteIdent('resourceId', 'column name')}, title, metadata, ${quoteIdent('createdAt', 'column name')}, ${quoteIdent('updatedAt', 'column name')}, ${quoteIdent('archivedAt', 'column name')}
                        FROM ${tableName} ${whereSql}
                        ORDER BY ${quoteIdent(orderField, 'column name')} ${dir}, id ${dir}
                        LIMIT @limit OFFSET @offset`;
@@ -347,11 +357,14 @@ export class MemorySpanner extends MemoryStorage {
     id,
     title,
     metadata,
+    archivedAt,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    archivedAt?: Date | null;
   }): Promise<StorageThreadType> {
+    const bumpUpdatedAt = title !== undefined || metadata !== undefined;
     const tableThreads = quoteIdent(TABLE_THREADS, 'table name');
     const now = new Date();
     let merged: Record<string, unknown> = {};
@@ -386,7 +399,8 @@ export class MemorySpanner extends MemoryStorage {
               data: {
                 title: title ?? existingThread.title,
                 metadata: merged,
-                updatedAt: now,
+                ...(bumpUpdatedAt ? { updatedAt: now } : {}),
+                ...(archivedAt !== undefined ? { archivedAt } : {}),
               },
               transaction: tx,
             });
@@ -401,9 +415,10 @@ export class MemorySpanner extends MemoryStorage {
       );
       return {
         ...(existingThread as unknown as StorageThreadType),
-        title,
+        title: title ?? (existingThread as unknown as StorageThreadType).title,
         metadata: merged,
-        updatedAt: now,
+        updatedAt: bumpUpdatedAt ? now : (existingThread as unknown as StorageThreadType).updatedAt,
+        ...(archivedAt !== undefined ? { archivedAt } : {}),
       };
     } catch (error) {
       if (error instanceof MastraError) throw error;

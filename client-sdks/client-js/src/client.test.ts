@@ -507,6 +507,20 @@ describe('MastraClient', () => {
         expect(result).toEqual(mockThreads);
       });
 
+      it.each([true, false])('should forward archived=%s as a query param', async archived => {
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => ({ threads: [], total: 0, page: 0, perPage: 100, hasMore: false }),
+        });
+
+        await client.listMemoryThreads({ resourceId: 'resource-1', archived });
+
+        const fetchCall = (global.fetch as any).mock.calls[0][0];
+        expect(fetchCall).toContain(`archived=${archived}`);
+      });
+
       it('should list all threads without resourceId filter', async () => {
         const mockThreads = {
           threads: [

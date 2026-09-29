@@ -236,6 +236,11 @@ export class MemoryPG extends MemoryStorage {
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
+    await this.#db.alterTable({
+      tableName: TABLE_THREADS,
+      schema: TABLE_SCHEMAS[TABLE_THREADS],
+      ifNotExists: ['archivedAt'],
+    });
     if (omSchema) {
       // Create index on lookupKey for efficient OM queries
       const omTableName = getTableName({
@@ -524,6 +529,7 @@ export class MemoryPG extends MemoryStorage {
         metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
         createdAt: thread.createdAtZ || thread.createdAt,
         updatedAt: thread.updatedAtZ || thread.updatedAt,
+        archivedAt: readArchivedAt(thread),
       };
     } catch (error) {
       throw new MastraError(
@@ -579,6 +585,7 @@ export class MemoryPG extends MemoryStorage {
           metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
           createdAt: thread.createdAtZ || thread.createdAt,
           updatedAt: thread.updatedAtZ || thread.updatedAt,
+          archivedAt: readArchivedAt(thread),
         };
 
         if (thread.resourceId === resourceId) {
@@ -654,6 +661,10 @@ export class MemoryPG extends MemoryStorage {
         paramIndex++;
       }
 
+      if (filter?.archived !== undefined) {
+        whereClauses.push(filter.archived ? `"archivedAt" IS NOT NULL` : `"archivedAt" IS NULL`);
+      }
+
       // Add metadata filters if provided (AND logic)
       // Uses JSONB containment (@>) to avoid SQL injection and correctly match all value types including null
       // metadata column is TEXT type storing JSON, so we need to cast to jsonb first
@@ -686,7 +697,7 @@ export class MemoryPG extends MemoryStorage {
 
       const limitValue = perPageInput === false ? total : perPage;
       // Select both standard and timezone-aware columns (*Z) for proper UTC timestamp handling
-      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY COALESCE("${field}Z", "${field}") ${direction}, "id" ${direction} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ", "archivedAt", "archivedAtZ" ${baseQuery} ORDER BY COALESCE("${field}Z", "${field}") ${direction}, "id" ${direction} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
       const rows = await this.#db.readClient.manyOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
         dataQuery,
         [...queryParams, limitValue, offset],
@@ -700,6 +711,7 @@ export class MemoryPG extends MemoryStorage {
         // Use timezone-aware columns (*Z) for correct UTC timestamps, with fallback for legacy data
         createdAt: thread.createdAtZ || thread.createdAt,
         updatedAt: thread.updatedAtZ || thread.updatedAt,
+        archivedAt: readArchivedAt(thread),
       }));
 
       return {
@@ -781,10 +793,12 @@ export class MemoryPG extends MemoryStorage {
     id,
     title,
     metadata,
+    archivedAt,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    archivedAt?: Date | null;
   }): Promise<StorageThreadType> {
     const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
     const existingThread = await this.#getThreadById(this.#db.client, { threadId: id });
@@ -807,19 +821,22 @@ export class MemoryPG extends MemoryStorage {
     };
 
     try {
-      const now = new Date();
-      const nowStr = toUtcISOString(now);
+      const sets = ['title = COALESCE($1, title)', 'metadata = $2'];
+      const params: unknown[] = [title ?? null, mergedMetadata];
+      if (title !== undefined || metadata !== undefined) {
+        const nowStr = toUtcISOString(new Date());
+        params.push(nowStr, nowStr);
+        sets.push(`"updatedAt" = $${params.length - 1}`, `"updatedAtZ" = $${params.length}`);
+      }
+      if (archivedAt !== undefined) {
+        const archivedAtStr = archivedAt ? toUtcISOString(archivedAt) : null;
+        params.push(archivedAtStr, archivedAtStr);
+        sets.push(`"archivedAt" = $${params.length - 1}`, `"archivedAtZ" = $${params.length}`);
+      }
+      params.push(id);
       const thread = await this.#db.client.one<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
-        `UPDATE ${threadTableName}
-                    SET
-                        title = COALESCE($1, title),
-                        metadata = $2,
-                        "updatedAt" = $3,
-                        "updatedAtZ" = $4
-                    WHERE id = $5
-                    RETURNING *
-                `,
-        [title ?? null, mergedMetadata, nowStr, nowStr, id],
+        `UPDATE ${threadTableName} SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING *`,
+        params,
       );
 
       return {
@@ -829,6 +846,7 @@ export class MemoryPG extends MemoryStorage {
         metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
         createdAt: thread.createdAtZ || thread.createdAt,
         updatedAt: thread.updatedAtZ || thread.updatedAt,
+        archivedAt: readArchivedAt(thread),
       };
     } catch (error) {
       throw new MastraError(
@@ -3389,4 +3407,11 @@ export class MemoryPG extends MemoryStorage {
       );
     }
   }
+}
+
+function readArchivedAt(row: Record<string, any>): Date | null {
+  // archivedAtZ defaults to NOW() on insert, so the nullable archivedAt column is the source of truth.
+  if (!row.archivedAt) return null;
+  const value = row.archivedAtZ ?? row.archivedAt;
+  return value instanceof Date ? value : new Date(value);
 }

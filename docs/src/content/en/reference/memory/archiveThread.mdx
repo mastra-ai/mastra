@@ -1,0 +1,50 @@
+---
+title: "Reference: Memory.archiveThread() | Memory"
+description: "Use Memory.archiveThread() to archive a conversation thread without deleting it, hiding it from active thread listings.""
+packages:
+  - "@mastra/memory"
+---
+
+# Memory.archiveThread()
+
+The `.archiveThread()` method archives a thread by setting its `archivedAt` timestamp. The thread and its messages are kept, and it can be restored with [`.unarchiveThread()`](/reference/memory/unarchiveThread). Archiving doesn't change the thread's `updatedAt`, so thread ordering stays the same.
+
+Use the `archived` filter on [`.listThreads()`](/reference/memory/listThreads) to include or exclude archived threads.
+
+## Usage example
+
+```typescript
+await memory.archiveThread({ threadId: 'thread-123' })
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'The ID of the thread to archive.',
+    isOptional: false,
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'thread',
+    type: 'Promise<StorageThreadType>',
+    description:
+      'A promise that resolves to the updated thread, with `archivedAt` set to the time it was archived. Rejects if the thread does not exist.',
+  },
+]}
+/>
+
+### Related
+
+- [unarchiveThread](/reference/memory/unarchiveThread)
+- [listThreads](/reference/memory/listThreads)
+- [Memory Class Reference](/reference/memory/memory-class)

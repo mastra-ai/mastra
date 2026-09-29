@@ -399,7 +399,8 @@ describe('ClickHouse Domain with URL/credentials config', () => {
         password: TEST_CONFIG.password || '',
       });
 
-      // Don't call init() - we want to use the manually created table
+      // init() keeps the manually created table (CREATE IF NOT EXISTS) and only migrates missing columns
+      await memoryDomain.init();
       const threadId = `thread-old-table-${Date.now()}`;
       const resourceId = 'test-resource-old-table';
 
@@ -428,6 +429,10 @@ describe('ClickHouse Domain with URL/credentials config', () => {
       const thread = await memoryDomain.getThreadById({ threadId });
       expect(thread).toBeDefined();
       expect(thread?.metadata).toEqual({});
+      // Legacy rows (no archivedAt column before migration) read as non-archived
+      expect(thread?.archivedAt ?? null).toBeNull();
+      const { threads: active } = await memoryDomain.listThreads({ filter: { resourceId, archived: false } });
+      expect(active.map(t => t.id)).toContain(threadId);
 
       // saveMessages should also work
       const message = {

@@ -1010,6 +1010,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       return {
         ...result,
         metadata: typeof result.metadata === 'string' ? safelyParseJSON(result.metadata) : result.metadata,
+        archivedAt: result.archivedAt ? new Date(result.archivedAt) : null,
       };
     } catch (error) {
       throw new MastraError(
@@ -1073,6 +1074,11 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         query.resourceId = filter.resourceId;
       }
 
+      // `{ archivedAt: null }` also matches legacy documents without the field
+      if (filter?.archived !== undefined) {
+        query.archivedAt = filter.archived ? { $ne: null } : null;
+      }
+
       // Add metadata filters if provided (AND logic)
       // MongoDB properly escapes dot notation keys in the driver
       if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
@@ -1113,6 +1119,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           createdAt: formatDateForMongoDB(thread.createdAt),
           updatedAt: formatDateForMongoDB(thread.updatedAt),
           metadata: thread.metadata || {},
+          archivedAt: thread.archivedAt ? new Date(thread.archivedAt) : null,
         })),
         total,
         page,
@@ -1145,12 +1152,14 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
       const collection = await this.getCollection(TABLE_THREADS);
+      const { archivedAt, ...rest } = thread;
       await collection.updateOne(
         { id: thread.id },
         {
           $set: {
-            ...thread,
+            ...rest,
             metadata: thread.metadata,
+            ...(archivedAt !== undefined ? { archivedAt } : {}),
           },
         },
         { upsert: true },
@@ -1173,10 +1182,12 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     id,
     title,
     metadata,
+    archivedAt,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    archivedAt?: Date | null;
   }): Promise<StorageThreadType> {
     const thread = await this.getThreadById({ threadId: id });
     if (!thread) {
@@ -1189,7 +1200,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       });
     }
 
-    const now = new Date();
+    const bumpUpdatedAt = title !== undefined || metadata !== undefined;
+    const updatedAt = bumpUpdatedAt ? new Date() : thread.updatedAt;
     const updatedThread = {
       ...thread,
       title: title ?? thread.title,
@@ -1197,7 +1209,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         ...thread.metadata,
         ...metadata,
       },
-      updatedAt: now,
+      updatedAt,
+      ...(archivedAt !== undefined ? { archivedAt } : {}),
     };
 
     try {
@@ -1208,7 +1221,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           $set: {
             title: updatedThread.title,
             metadata: updatedThread.metadata,
-            updatedAt: now,
+            updatedAt,
+            ...(archivedAt !== undefined ? { archivedAt } : {}),
           },
         },
       );

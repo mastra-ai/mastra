@@ -52,7 +52,8 @@ type StoredMessage = {
 };
 
 type StoredMetadata = Record<string, unknown> | string | null | undefined;
-type StoredThread = Omit<StorageThreadType, 'createdAt' | 'updatedAt' | 'metadata'> & {
+type StoredThread = Omit<StorageThreadType, 'createdAt' | 'updatedAt' | 'metadata' | 'archivedAt'> & {
+  archivedAt?: string | null;
   createdAt: string;
   updatedAt: string;
   metadata?: StoredMetadata;
@@ -69,6 +70,7 @@ function parseStoredThread(row: StoredThread): StorageThreadType {
     metadata: typeof row.metadata === 'string' ? safelyParseJSON(row.metadata) : row.metadata,
     createdAt: new Date(row.createdAt),
     updatedAt: new Date(row.updatedAt),
+    archivedAt: row.archivedAt ? new Date(row.archivedAt) : null,
   };
 }
 
@@ -234,11 +236,13 @@ export class MemoryConvex extends MemoryStorage {
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
+    const { archivedAt, ...rest } = thread;
     await this.#db.insert({
       tableName: TABLE_THREADS,
       record: {
-        ...thread,
+        ...rest,
         metadata: thread.metadata ?? {},
+        ...(archivedAt ? { archivedAt } : {}),
       },
     });
     return thread;
@@ -248,16 +252,19 @@ export class MemoryConvex extends MemoryStorage {
     id,
     title,
     metadata,
+    archivedAt,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    archivedAt?: Date | null;
   }): Promise<StorageThreadType> {
     const updated = await this.#db.updateThread({
       id,
       title,
       metadata,
-      updatedAt: new Date(),
+      archivedAt,
+      ...(title !== undefined || metadata !== undefined ? { updatedAt: new Date() } : {}),
     });
 
     if (!updated) {
@@ -331,6 +338,10 @@ export class MemoryConvex extends MemoryStorage {
     const rows = await this.#db.queryTable<StoredThread>(TABLE_THREADS, queryFilters);
 
     let threads = rows.map(row => parseStoredThread(row));
+
+    if (filter?.archived !== undefined) {
+      threads = threads.filter(thread => Boolean(thread.archivedAt) === filter.archived);
+    }
 
     // Apply metadata filters if provided (AND logic)
     if (filter?.metadata && Object.keys(filter.metadata).length > 0) {

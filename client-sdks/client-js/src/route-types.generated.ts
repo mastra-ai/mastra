@@ -3167,6 +3167,7 @@ type Shared_Type_50 = {
   resourceId: string;
   createdAt: Date;
   updatedAt: Date;
+  archivedAt?: (Date | null) | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -8530,6 +8531,7 @@ export type GetMemoryThreads_QueryParams = {
         | undefined
       )
     | undefined;
+  archived?: ('true' | 'false') | undefined;
 };
 
 export type GetMemoryThreads_Response = {
@@ -8850,6 +8852,66 @@ export interface DeleteMemoryThreadsThreadId_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /memory/threads/:threadId/archive
+// ============================================================================
+export type PostMemoryThreadsThreadIdArchive_PathParams = GetMemoryThreadsThreadId_PathParams;
+
+export type PostMemoryThreadsThreadIdArchive_QueryParams = DeleteMemoryThreadsThreadId_QueryParams;
+
+export type PostMemoryThreadsThreadIdArchive_Response = GetMemoryThreadsThreadId_Response;
+
+export type PostMemoryThreadsThreadIdArchive_Request = Simplify<
+  (PostMemoryThreadsThreadIdArchive_PathParams extends never
+    ? {}
+    : { params: PostMemoryThreadsThreadIdArchive_PathParams }) &
+    (PostMemoryThreadsThreadIdArchive_QueryParams extends never
+      ? {}
+      : {} extends PostMemoryThreadsThreadIdArchive_QueryParams
+        ? { query?: PostMemoryThreadsThreadIdArchive_QueryParams }
+        : { query: PostMemoryThreadsThreadIdArchive_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostMemoryThreadsThreadIdArchive_RouteContract {
+  pathParams: PostMemoryThreadsThreadIdArchive_PathParams;
+  queryParams: PostMemoryThreadsThreadIdArchive_QueryParams;
+  body: never;
+  request: PostMemoryThreadsThreadIdArchive_Request;
+  response: PostMemoryThreadsThreadIdArchive_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /memory/threads/:threadId/unarchive
+// ============================================================================
+export type PostMemoryThreadsThreadIdUnarchive_PathParams = GetMemoryThreadsThreadId_PathParams;
+
+export type PostMemoryThreadsThreadIdUnarchive_QueryParams = DeleteMemoryThreadsThreadId_QueryParams;
+
+export type PostMemoryThreadsThreadIdUnarchive_Response = GetMemoryThreadsThreadId_Response;
+
+export type PostMemoryThreadsThreadIdUnarchive_Request = Simplify<
+  (PostMemoryThreadsThreadIdUnarchive_PathParams extends never
+    ? {}
+    : { params: PostMemoryThreadsThreadIdUnarchive_PathParams }) &
+    (PostMemoryThreadsThreadIdUnarchive_QueryParams extends never
+      ? {}
+      : {} extends PostMemoryThreadsThreadIdUnarchive_QueryParams
+        ? { query?: PostMemoryThreadsThreadIdUnarchive_QueryParams }
+        : { query: PostMemoryThreadsThreadIdUnarchive_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostMemoryThreadsThreadIdUnarchive_RouteContract {
+  pathParams: PostMemoryThreadsThreadIdUnarchive_PathParams;
+  queryParams: PostMemoryThreadsThreadIdUnarchive_QueryParams;
+  body: never;
+  request: PostMemoryThreadsThreadIdUnarchive_Request;
+  response: PostMemoryThreadsThreadIdUnarchive_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /memory/threads/:threadId/clone
 // ============================================================================
 export type PostMemoryThreadsThreadIdClone_PathParams = GetMemoryThreadsThreadId_PathParams;
@@ -9110,7 +9172,26 @@ export interface GetMemoryNetworkStatus_RouteContract {
 // ============================================================================
 // Route: GET /memory/network/threads
 // ============================================================================
-export type GetMemoryNetworkThreads_QueryParams = GetMemoryThreads_QueryParams;
+export type GetMemoryNetworkThreads_QueryParams = {
+  page?: number | undefined;
+  perPage?: number | undefined;
+  agentId?: string | undefined;
+  resourceId?: string | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  orderBy?:
+    | (
+        | {
+            field?: ('createdAt' | 'updatedAt') | undefined;
+            direction?: ('ASC' | 'DESC') | undefined;
+          }
+        | undefined
+      )
+    | undefined;
+};
 
 export type GetMemoryNetworkThreads_Response = GetMemoryThreads_Response;
 
@@ -23709,6 +23790,8 @@ export interface RouteTypes {
   'POST /memory/threads': PostMemoryThreads_RouteContract;
   'PATCH /memory/threads/:threadId': PatchMemoryThreadsThreadId_RouteContract;
   'DELETE /memory/threads/:threadId': DeleteMemoryThreadsThreadId_RouteContract;
+  'POST /memory/threads/:threadId/archive': PostMemoryThreadsThreadIdArchive_RouteContract;
+  'POST /memory/threads/:threadId/unarchive': PostMemoryThreadsThreadIdUnarchive_RouteContract;
   'POST /memory/threads/:threadId/clone': PostMemoryThreadsThreadIdClone_RouteContract;
   'POST /memory/threads/:threadId/transfer': PostMemoryThreadsThreadIdTransfer_RouteContract;
   'POST /memory/threads/:threadId/working-memory': PostMemoryThreadsThreadIdWorkingMemory_RouteContract;
@@ -24578,6 +24661,9 @@ export interface Client {
     GET: GetMemoryThreadsThreadId_RouteContract;
     PATCH: PatchMemoryThreadsThreadId_RouteContract;
   };
+  '/memory/threads/:threadId/archive': {
+    POST: PostMemoryThreadsThreadIdArchive_RouteContract;
+  };
   '/memory/threads/:threadId/clone': {
     POST: PostMemoryThreadsThreadIdClone_RouteContract;
   };
@@ -24586,6 +24672,9 @@ export interface Client {
   };
   '/memory/threads/:threadId/transfer': {
     POST: PostMemoryThreadsThreadIdTransfer_RouteContract;
+  };
+  '/memory/threads/:threadId/unarchive': {
+    POST: PostMemoryThreadsThreadIdUnarchive_RouteContract;
   };
   '/memory/threads/:threadId/working-memory': {
     GET: GetMemoryThreadsThreadIdWorkingMemory_RouteContract;

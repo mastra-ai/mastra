@@ -19,6 +19,8 @@ import {
   DELETE_THREAD_ROUTE,
   UPDATE_THREAD_ROUTE,
   CLONE_THREAD_ROUTE,
+  ARCHIVE_THREAD_ROUTE,
+  UNARCHIVE_THREAD_ROUTE,
   TRANSFER_THREAD_ROUTE,
   SEARCH_MEMORY_ROUTE,
   getTextContent,
@@ -315,6 +317,132 @@ describe('Memory Handlers', () => {
           resourceId: 'test-resource',
         }),
       });
+    });
+  });
+
+  describe('thread archiving routes', () => {
+    describe('with a gateway agent', () => {
+      const createGatewayMastra = () => {
+        vi.stubEnv('MASTRA_GATEWAY_API_KEY', 'test-gateway-key');
+        vi.stubEnv('MASTRA_GATEWAY_URL', 'https://gateway.example.test');
+        const gatewayAgent = new Agent({
+          id: 'gateway-agent',
+          name: 'gateway-agent',
+          instructions: 'test-instructions',
+          model: 'mastra/openai/gpt-5-mini' as any,
+        });
+        return new Mastra({ logger: false, agents: { 'gateway-agent': gatewayAgent } });
+      };
+
+      it('rejects archive and unarchive with 501 without calling the gateway', async () => {
+        const mastra = createGatewayMastra();
+        const fetchMock = vi.spyOn(globalThis, 'fetch');
+        try {
+          for (const route of [ARCHIVE_THREAD_ROUTE, UNARCHIVE_THREAD_ROUTE]) {
+            await expect(
+              route.handler({
+                ...createTestServerContext({ mastra }),
+                threadId: 'gateway-thread',
+                agentId: 'gateway-agent',
+                resourceId: 'res-1',
+              }),
+            ).rejects.toMatchObject({ status: 501 });
+          }
+          expect(fetchMock).not.toHaveBeenCalled();
+        } finally {
+          fetchMock.mockRestore();
+          vi.unstubAllEnvs();
+        }
+      });
+
+      it('returns no threads for archived: true without calling the gateway', async () => {
+        const mastra = createGatewayMastra();
+        const fetchMock = vi.spyOn(globalThis, 'fetch');
+        try {
+          const result = await LIST_THREADS_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            agentId: 'gateway-agent',
+            resourceId: 'res-1',
+            page: 0,
+            perPage: 10,
+            archived: true,
+          });
+          expect(result.threads).toEqual([]);
+          expect(result.total).toBe(0);
+          expect(fetchMock).not.toHaveBeenCalled();
+        } finally {
+          fetchMock.mockRestore();
+          vi.unstubAllEnvs();
+        }
+      });
+    });
+
+    const createMastra = () => new Mastra({ logger: false, agents: { 'test-agent': mockAgent } });
+
+    const listIds = async (mastra: Mastra, archived?: boolean) => {
+      const result = await LIST_THREADS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'test-agent',
+        page: 0,
+        perPage: 10,
+        resourceId: 'res-1',
+        archived,
+      });
+      return result.threads.map(t => t.id).sort();
+    };
+
+    it('given an active thread, when archived, then it only appears in archived listings', async () => {
+      const mastra = createMastra();
+      await mockMemory.createThread({ threadId: 'a', resourceId: 'res-1' });
+      await mockMemory.createThread({ threadId: 'b', resourceId: 'res-1' });
+
+      const result = await ARCHIVE_THREAD_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'test-agent',
+        threadId: 'a',
+      });
+
+      expect(result.archivedAt).toBeInstanceOf(Date);
+      expect(await listIds(mastra, true)).toEqual(['a']);
+      expect(await listIds(mastra, false)).toEqual(['b']);
+      expect(await listIds(mastra)).toEqual(['a', 'b']);
+    });
+
+    it('given an archived thread, when unarchived, then it is active again', async () => {
+      const mastra = createMastra();
+      await mockMemory.createThread({ threadId: 'a', resourceId: 'res-1' });
+      await mockMemory.archiveThread({ threadId: 'a' });
+
+      const result = await UNARCHIVE_THREAD_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'test-agent',
+        threadId: 'a',
+      });
+
+      expect(result.archivedAt).toBeNull();
+      expect(await listIds(mastra, false)).toEqual(['a']);
+    });
+
+    it('given an unknown thread, when archived, then it returns 404', async () => {
+      await expect(
+        ARCHIVE_THREAD_ROUTE.handler({
+          ...createTestServerContext({ mastra: createMastra() }),
+          agentId: 'test-agent',
+          threadId: 'missing',
+        }),
+      ).rejects.toThrow(new HTTPException(404, { message: 'Thread not found' }));
+    });
+
+    it('given a thread owned by another resource, when archived, then it returns 403', async () => {
+      await mockMemory.createThread({ threadId: 'b', resourceId: 'user-b' });
+
+      await expect(
+        ARCHIVE_THREAD_ROUTE.handler({
+          ...createTestContextWithReservedKeys({ mastra: createMastra(), resourceId: 'user-a' }),
+          agentId: 'test-agent',
+          threadId: 'b',
+        }),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
     });
   });
 

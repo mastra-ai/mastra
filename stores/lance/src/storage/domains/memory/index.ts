@@ -50,6 +50,11 @@ export class StoreMemoryLance extends MemoryStorage {
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
+    await this.#db.alterTable({
+      tableName: TABLE_THREADS,
+      schema: TABLE_SCHEMAS[TABLE_THREADS],
+      ifNotExists: ['archivedAt'],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -135,6 +140,7 @@ export class StoreMemoryLance extends MemoryStorage {
         ...thread,
         createdAt: new Date(thread.createdAt),
         updatedAt: new Date(thread.updatedAt),
+        archivedAt: thread.archivedAt != null ? new Date(thread.archivedAt) : null,
       };
     } catch (error: any) {
       throw new MastraError(
@@ -176,10 +182,12 @@ export class StoreMemoryLance extends MemoryStorage {
     id,
     title,
     metadata,
+    archivedAt,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    archivedAt?: Date | null;
   }): Promise<StorageThreadType> {
     const maxRetries = 5;
 
@@ -199,7 +207,8 @@ export class StoreMemoryLance extends MemoryStorage {
           id,
           title: title ?? current.title,
           metadata: JSON.stringify(mergedMetadata),
-          updatedAt: new Date().getTime(),
+          updatedAt: title !== undefined || metadata !== undefined ? new Date().getTime() : current.updatedAt.getTime(),
+          ...(archivedAt !== undefined ? { archivedAt: archivedAt ? archivedAt.getTime() : null } : {}),
         };
 
         const table = await this.client.openTable(TABLE_THREADS);
@@ -621,6 +630,10 @@ export class StoreMemoryLance extends MemoryStorage {
         whereClauses.push(`\`resourceId\` = '${this.escapeSql(filter.resourceId)}'`);
       }
 
+      if (filter?.archived !== undefined) {
+        whereClauses.push(filter.archived ? '`archivedAt` IS NOT NULL' : '`archivedAt` IS NULL');
+      }
+
       const whereClause = whereClauses.length > 0 ? whereClauses.join(' AND ') : '';
 
       // Get ALL matching records (no limit/offset yet - need to filter metadata + sort)
@@ -673,9 +686,10 @@ export class StoreMemoryLance extends MemoryStorage {
       const paginatedRecords = records.slice(offset, offset + perPage);
 
       const schema = await getTableSchema({ tableName: TABLE_THREADS, client: this.client });
-      const threads = paginatedRecords.map(record =>
-        processResultWithTypeConversion(record, schema),
-      ) as StorageThreadType[];
+      const threads = paginatedRecords.map(record => {
+        const thread = processResultWithTypeConversion(record, schema) as StorageThreadType;
+        return { ...thread, archivedAt: record.archivedAt != null ? new Date(record.archivedAt) : null };
+      });
 
       return {
         threads,

@@ -111,6 +111,21 @@ describe('MemoryThread', () => {
     });
   });
 
+  describe('archive / unarchive', () => {
+    it.each(['archive', 'unarchive'] as const)('should POST to the %s endpoint', async action => {
+      const mockResponse = { id: threadId, archivedAt: action === 'archive' ? new Date().toISOString() : null };
+      mockFetchResponse(mockResponse);
+
+      const result = await thread[action]();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `http://localhost:4111/api/memory/threads/${threadId}/${action}?agentId=${agentId}`,
+        expect.objectContaining({ method: 'POST' }),
+      );
+      expect(result).toEqual(mockResponse);
+    });
+  });
+
   describe('listMessages', () => {
     it('should retrieve thread messages', async () => {
       const mockMessages = {

@@ -98,6 +98,11 @@ export class MemoryStorageDO extends MemoryStorage {
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
+    await this.#db.alterTable({
+      tableName: TABLE_THREADS,
+      schema: TABLE_SCHEMAS[TABLE_THREADS],
+      ifNotExists: ['archivedAt'],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -274,6 +279,7 @@ export class MemoryStorageDO extends MemoryStorage {
         ...thread,
         createdAt: ensureDate(thread.createdAt) as Date,
         updatedAt: ensureDate(thread.updatedAt) as Date,
+        archivedAt: thread.archivedAt ? (ensureDate(thread.archivedAt) as Date) : null,
         metadata:
           typeof thread.metadata === 'string'
             ? (JSON.parse(thread.metadata || '{}') as Record<string, unknown>)
@@ -337,6 +343,7 @@ export class MemoryStorageDO extends MemoryStorage {
       ...row,
       createdAt: ensureDate(row.createdAt) as Date,
       updatedAt: ensureDate(row.updatedAt) as Date,
+      archivedAt: row.archivedAt ? (ensureDate(row.archivedAt) as Date) : null,
       metadata:
         typeof row.metadata === 'string'
           ? (JSON.parse(row.metadata || '{}') as Record<string, unknown>)
@@ -350,6 +357,12 @@ export class MemoryStorageDO extends MemoryStorage {
       if (filter?.resourceId) {
         countQuery = countQuery.whereAnd('resourceId = ?', filter.resourceId);
         selectQuery = selectQuery.whereAnd('resourceId = ?', filter.resourceId);
+      }
+
+      if (filter?.archived !== undefined) {
+        const condition = filter.archived ? 'archivedAt IS NOT NULL' : 'archivedAt IS NULL';
+        countQuery = countQuery.whereAnd(condition);
+        selectQuery = selectQuery.whereAnd(condition);
       }
 
       if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
@@ -497,10 +510,12 @@ export class MemoryStorageDO extends MemoryStorage {
     id,
     title,
     metadata,
+    archivedAt,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    archivedAt?: Date | null;
   }): Promise<StorageThreadType> {
     const thread = await this.getThreadById({ threadId: id });
     try {
@@ -515,7 +530,8 @@ export class MemoryStorageDO extends MemoryStorage {
       };
 
       const updatedTitle = title !== undefined ? title : thread.title;
-      const updatedAt = new Date();
+      const bumpUpdatedAt = title !== undefined || metadata !== undefined;
+      const updatedAt = bumpUpdatedAt ? new Date() : thread.updatedAt;
 
       // Only write the columns the caller supplied. Writing a title read moments
       // ago would clobber one generated in between, and the same applies to
@@ -531,8 +547,17 @@ export class MemoryStorageDO extends MemoryStorage {
         columns.push('metadata');
         values.push(JSON.stringify(mergedMetadata));
       }
-      columns.push('updatedAt');
-      values.push(updatedAt.toISOString());
+      if (archivedAt !== undefined) {
+        columns.push('archivedAt');
+        values.push(archivedAt ? archivedAt.toISOString() : null);
+      }
+      if (bumpUpdatedAt) {
+        columns.push('updatedAt');
+        values.push(updatedAt.toISOString());
+      }
+      if (columns.length === 0) {
+        return thread;
+      }
 
       const query = createSqlBuilder().update(fullTableName, columns, values).where('id = ?', id);
 
@@ -545,6 +570,7 @@ export class MemoryStorageDO extends MemoryStorage {
         title: updatedTitle,
         metadata: mergedMetadata,
         updatedAt,
+        ...(archivedAt !== undefined ? { archivedAt } : {}),
       };
     } catch (error) {
       throw new MastraError(

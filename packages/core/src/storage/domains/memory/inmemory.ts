@@ -76,10 +76,12 @@ export class InMemoryMemory extends MemoryStorage {
     id,
     title,
     metadata,
+    archivedAt,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    archivedAt?: Date | null;
   }): Promise<StorageThreadType> {
     const thread = this.db.threads.get(id);
 
@@ -87,12 +89,13 @@ export class InMemoryMemory extends MemoryStorage {
       throw new Error(`Thread with id ${id} not found`);
     }
 
-    if (thread) {
+    if (archivedAt !== undefined) thread.archivedAt = archivedAt;
+    if (title !== undefined || metadata !== undefined) {
       if (title !== undefined) thread.title = title;
       thread.metadata = { ...thread.metadata, ...metadata };
       thread.updatedAt = new Date();
     }
-    return thread;
+    return { ...thread, metadata: thread.metadata ? { ...thread.metadata } : thread.metadata };
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
@@ -571,6 +574,10 @@ export class InMemoryMemory extends MemoryStorage {
     // Apply resourceId filter if provided
     if (filter?.resourceId) {
       threads = threads.filter((t: any) => t.resourceId === filter.resourceId);
+    }
+
+    if (filter?.archived !== undefined) {
+      threads = threads.filter(t => Boolean(t.archivedAt) === filter.archived);
     }
 
     // Validate metadata keys before filtering

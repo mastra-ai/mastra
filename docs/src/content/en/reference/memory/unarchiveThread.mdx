@@ -1,0 +1,48 @@
+---
+title: "Reference: Memory.unarchiveThread() | Memory"
+description: "Use Memory.unarchiveThread() to restore an archived conversation thread so it appears in active thread listings again.""
+packages:
+  - "@mastra/memory"
+---
+
+# Memory.unarchiveThread()
+
+The `.unarchiveThread()` method restores a thread archived with [`.archiveThread()`](/reference/memory/archiveThread) by clearing its `archivedAt` timestamp. Unarchiving doesn't change the thread's `updatedAt`.
+
+## Usage example
+
+```typescript
+await memory.unarchiveThread({ threadId: 'thread-123' })
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'The ID of the thread to restore.',
+    isOptional: false,
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'thread',
+    type: 'Promise<StorageThreadType>',
+    description:
+      'A promise that resolves to the updated thread, with `archivedAt` set to `null`. Rejects if the thread does not exist.',
+  },
+]}
+/>
+
+### Related
+
+- [archiveThread](/reference/memory/archiveThread)
+- [listThreads](/reference/memory/listThreads)
+- [Memory Class Reference](/reference/memory/memory-class)

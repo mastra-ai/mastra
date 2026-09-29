@@ -16,6 +16,7 @@ import type { MemoryContext } from './utils';
 export const THREAD_RESOURCE_ID = '"resourceId"';
 export const THREAD_CREATED_AT = '"createdAt"';
 export const THREAD_UPDATED_AT = '"updatedAt"';
+export const THREAD_ARCHIVED_AT = '"archivedAt"';
 export const MESSAGE_RESOURCE_ID = '"resourceId"';
 export const MESSAGE_CREATED_AT = '"createdAt"';
 export const RESOURCE_WORKING_MEMORY = '"workingMemory"';
@@ -102,6 +103,11 @@ async function createTables(ctx: MemoryContext, connection: Connection): Promise
   );
 
   await relaxThreadTitleNullability(ctx, connection);
+  await executeDdl(
+    connection,
+    `ALTER TABLE ${table(ctx, TABLE_THREADS)} ADD (${THREAD_ARCHIVED_AT} TIMESTAMP WITH TIME ZONE)`,
+    [-1430],
+  );
 
   await executeDdl(
     connection,

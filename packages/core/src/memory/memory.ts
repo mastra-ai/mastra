@@ -575,8 +575,26 @@ https://mastra.ai/en/docs/memory/overview`,
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    /** `Date` archives the thread, `null` unarchives it, omitted leaves it untouched. */
+    archivedAt?: Date | null;
     memoryConfig?: MemoryConfigInternal;
   }): Promise<StorageThreadType>;
+
+  /**
+   * Archive (soft-delete) a thread by setting `archivedAt` to now.
+   * Throws if the thread does not exist.
+   */
+  archiveThread({ threadId }: { threadId: string }): Promise<StorageThreadType> {
+    return this.updateThread({ id: threadId, archivedAt: new Date() });
+  }
+
+  /**
+   * Unarchive a thread by clearing `archivedAt`.
+   * Throws if the thread does not exist.
+   */
+  unarchiveThread({ threadId }: { threadId: string }): Promise<StorageThreadType> {
+    return this.updateThread({ id: threadId, archivedAt: null });
+  }
 
   /**
    * Helper method to delete a thread

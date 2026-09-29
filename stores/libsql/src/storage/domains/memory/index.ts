@@ -186,6 +186,11 @@ export class MemoryLibSQL extends MemoryStorage {
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
+    await this.#db.alterTable({
+      tableName: TABLE_THREADS,
+      schema: TABLE_SCHEMAS[TABLE_THREADS],
+      ifNotExists: ['archivedAt'],
+    });
 
     await this.#client.batch(
       [
@@ -1121,6 +1126,7 @@ export class MemoryLibSQL extends MemoryStorage {
         metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
         createdAt: new Date(result.createdAt),
         updatedAt: new Date(result.updatedAt),
+        archivedAt: toArchivedAt(result.archivedAt),
       };
     } catch (error) {
       throw new MastraError(
@@ -1173,6 +1179,7 @@ export class MemoryLibSQL extends MemoryStorage {
           metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata as any),
           createdAt: new Date(row.createdAt),
           updatedAt: new Date(row.updatedAt),
+          archivedAt: toArchivedAt(row.archivedAt),
         };
 
         if (currentResourceId === resourceId) {
@@ -1258,6 +1265,10 @@ export class MemoryLibSQL extends MemoryStorage {
         queryParams.push(filter.resourceId);
       }
 
+      if (filter?.archived !== undefined) {
+        whereClauses.push(filter.archived ? 'archivedAt IS NOT NULL' : 'archivedAt IS NULL');
+      }
+
       // Add metadata filters if provided (AND logic)
       // Keys are validated above to prevent SQL injection
       if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
@@ -1300,6 +1311,7 @@ export class MemoryLibSQL extends MemoryStorage {
         title: row.title as string,
         createdAt: new Date(row.createdAt as string),
         updatedAt: new Date(row.updatedAt as string),
+        archivedAt: toArchivedAt(row.archivedAt),
         metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
       });
 
@@ -1388,10 +1400,12 @@ export class MemoryLibSQL extends MemoryStorage {
     id,
     title,
     metadata,
+    archivedAt,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    archivedAt?: Date | null;
   }): Promise<StorageThreadType> {
     const thread = await this.getThreadById({ threadId: id });
     if (!thread) {
@@ -1407,22 +1421,35 @@ export class MemoryLibSQL extends MemoryStorage {
       });
     }
 
-    const now = new Date();
-    const updatedThread = {
+    const bumpUpdatedAt = title !== undefined || metadata !== undefined;
+    const updatedThread: StorageThreadType = {
       ...thread,
       title: title ?? thread.title,
       metadata: {
         ...thread.metadata,
         ...metadata,
       },
-      updatedAt: now,
+      updatedAt: bumpUpdatedAt ? new Date() : thread.updatedAt,
+      ...(archivedAt !== undefined ? { archivedAt } : {}),
     };
+
+    // COALESCE so an omitted title leaves the stored one alone.
+    const sets = ['title = COALESCE(?, title)', 'metadata = jsonb(?)'];
+    const args: InValue[] = [title ?? null, JSON.stringify(updatedThread.metadata)];
+    if (bumpUpdatedAt) {
+      sets.push('updatedAt = ?');
+      args.push(updatedThread.updatedAt.toISOString());
+    }
+    if (archivedAt !== undefined) {
+      sets.push('archivedAt = ?');
+      args.push(archivedAt ? archivedAt.toISOString() : null);
+    }
+    args.push(id);
 
     try {
       await this.#client.execute({
-        // COALESCE so an omitted title leaves the stored one alone.
-        sql: `UPDATE ${TABLE_THREADS} SET title = COALESCE(?, title), metadata = jsonb(?), updatedAt = ? WHERE id = ?`,
-        args: [title ?? null, JSON.stringify(updatedThread.metadata), now.toISOString(), id],
+        sql: `UPDATE ${TABLE_THREADS} SET ${sets.join(', ')} WHERE id = ?`,
+        args,
       });
 
       return updatedThread;
@@ -2806,4 +2833,8 @@ export class MemoryLibSQL extends MemoryStorage {
       );
     }
   }
+}
+
+function toArchivedAt(value: unknown): Date | null {
+  return value ? new Date(value as string) : null;
 }

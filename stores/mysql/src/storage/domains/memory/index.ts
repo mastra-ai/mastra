@@ -116,6 +116,7 @@ interface ThreadRow {
   metadata: string | Record<string, unknown> | null;
   createdAt: Date | string;
   updatedAt: Date | string;
+  archivedAt?: Date | string | null;
 }
 
 interface MessageRow {
@@ -247,6 +248,11 @@ export class MemoryMySQL extends MemoryStorage {
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
+    await this.operations.alterTable({
+      tableName: TABLE_THREADS,
+      schema: TABLE_SCHEMAS[TABLE_THREADS],
+      ifNotExists: ['archivedAt'],
+    });
 
     if (omSchema) {
       // Create index on lookupKey for efficient OM queries. Consult the
@@ -347,6 +353,7 @@ export class MemoryMySQL extends MemoryStorage {
       metadata: parseJSON<Record<string, unknown>>(row.metadata) ?? undefined,
       createdAt: parseDateTime(row.createdAt) ?? new Date(),
       updatedAt: parseDateTime(row.updatedAt) ?? new Date(),
+      archivedAt: row.archivedAt ? parseDateTime(row.archivedAt) : null,
     } satisfies StorageThreadType;
   }
 
@@ -723,6 +730,10 @@ export class MemoryMySQL extends MemoryStorage {
       params.push(filter.resourceId);
     }
 
+    if (filter?.archived !== undefined) {
+      conditions.push(`${quoteIdentifier('archivedAt', 'column name')} IS ${filter.archived ? 'NOT NULL' : 'NULL'}`);
+    }
+
     if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
       for (const [key, value] of Object.entries(filter.metadata)) {
         conditions.push(`JSON_EXTRACT(\`metadata\`, ?) = CAST(? AS JSON)`);
@@ -822,10 +833,12 @@ export class MemoryMySQL extends MemoryStorage {
     id,
     title,
     metadata,
+    archivedAt,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    archivedAt?: Date | null;
   }): Promise<StorageThreadType> {
     try {
       const existing = await this.getThreadById({ threadId: id });
@@ -844,7 +857,7 @@ export class MemoryMySQL extends MemoryStorage {
         ...(metadata ?? {}),
       } as Record<string, unknown>;
 
-      const updatedAt = new Date();
+      const updatedAt = title !== undefined || metadata !== undefined ? new Date() : existing.updatedAt;
       await this.operations.update({
         tableName: TABLE_THREADS,
         keys: { id },
@@ -852,6 +865,7 @@ export class MemoryMySQL extends MemoryStorage {
           title: title ?? existing.title,
           metadata: JSON.stringify(mergedMetadata),
           updatedAt,
+          ...(archivedAt !== undefined ? { archivedAt } : {}),
         },
       });
 
@@ -860,6 +874,7 @@ export class MemoryMySQL extends MemoryStorage {
         title: title ?? existing.title,
         metadata: mergedMetadata,
         updatedAt,
+        ...(archivedAt !== undefined ? { archivedAt } : {}),
       } satisfies StorageThreadType;
     } catch (error) {
       if (error instanceof MastraError) {

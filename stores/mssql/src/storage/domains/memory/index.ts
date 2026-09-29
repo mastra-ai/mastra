@@ -115,6 +115,11 @@ export class MemoryMSSQL extends MemoryStorage {
       this.needsConnect = false;
     }
     await this.db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+    await this.db.alterTable({
+      tableName: TABLE_THREADS,
+      schema: TABLE_SCHEMAS[TABLE_THREADS],
+      ifNotExists: ['archivedAt'],
+    });
     await this.db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
     await this.createDefaultIndexes();
@@ -197,7 +202,8 @@ export class MemoryMSSQL extends MemoryStorage {
         title,
         metadata,
         [createdAt],
-        [updatedAt]
+        [updatedAt],
+        [archivedAt]
       FROM ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) })}
       WHERE id = @threadId`;
       const request = this.pool.request();
@@ -212,6 +218,7 @@ export class MemoryMSSQL extends MemoryStorage {
         metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
         createdAt: thread.createdAt,
         updatedAt: thread.updatedAt,
+        archivedAt: thread.archivedAt ?? null,
       };
     } catch (error) {
       throw new MastraError(
@@ -272,6 +279,10 @@ export class MemoryMSSQL extends MemoryStorage {
       if (filter?.resourceId) {
         whereClauses.push('[resourceId] = @resourceId');
         params.resourceId = filter.resourceId;
+      }
+
+      if (filter?.archived !== undefined) {
+        whereClauses.push(filter.archived ? '[archivedAt] IS NOT NULL' : '[archivedAt] IS NULL');
       }
 
       // Add metadata filters if provided (AND logic)
@@ -335,7 +346,7 @@ export class MemoryMSSQL extends MemoryStorage {
       const orderByField = field === 'createdAt' ? '[createdAt]' : '[updatedAt]';
       const dir = (direction || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
       const limitValue = perPageInput === false ? total : perPage;
-      const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt] ${baseQuery} ORDER BY ${orderByField} ${dir} OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
+      const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt], [archivedAt] ${baseQuery} ORDER BY ${orderByField} ${dir} OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
       const dataRequest = this.pool.request();
 
       for (const [key, value] of Object.entries(params)) {
@@ -356,6 +367,7 @@ export class MemoryMSSQL extends MemoryStorage {
         metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
         createdAt: thread.createdAt,
         updatedAt: thread.updatedAt,
+        archivedAt: thread.archivedAt ?? null,
       }));
 
       return {
@@ -441,10 +453,12 @@ export class MemoryMSSQL extends MemoryStorage {
     id,
     title,
     metadata,
+    archivedAt,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    archivedAt?: Date | null;
   }): Promise<StorageThreadType> {
     const existingThread = await this.getThreadById({ threadId: id });
     if (!existingThread) {
@@ -467,18 +481,25 @@ export class MemoryMSSQL extends MemoryStorage {
 
     try {
       const table = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
-      const sql = `UPDATE ${table}
-        SET title = @title,
-            metadata = @metadata,
-            [updatedAt] = @updatedAt
-        OUTPUT INSERTED.*
-        WHERE id = @id`;
+      const setClauses = ['title = @title', 'metadata = @metadata'];
       const req = this.pool.request();
       req.input('id', id);
       req.input('title', title ?? existingThread.title);
       req.input('metadata', JSON.stringify(mergedMetadata));
-      req.input('updatedAt', new Date());
-      const result = await req.query(sql);
+      // Archiving alone must not reorder thread lists, so updatedAt only moves on content changes.
+      if (title !== undefined || metadata !== undefined) {
+        setClauses.push('[updatedAt] = @updatedAt');
+        req.input('updatedAt', new Date());
+      }
+      if (archivedAt !== undefined) {
+        setClauses.push('[archivedAt] = @archivedAt');
+        req.input('archivedAt', sql.DateTime2, archivedAt);
+      }
+      const updateSql = `UPDATE ${table}
+        SET ${setClauses.join(', ')}
+        OUTPUT INSERTED.*
+        WHERE id = @id`;
+      const result = await req.query(updateSql);
       let thread = result.recordset && result.recordset[0];
       if (thread && 'seq_id' in thread) {
         const { seq_id, ...rest } = thread;
@@ -501,6 +522,7 @@ export class MemoryMSSQL extends MemoryStorage {
         metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
         createdAt: thread.createdAt,
         updatedAt: thread.updatedAt,
+        archivedAt: thread.archivedAt ?? null,
       };
     } catch (error) {
       throw new MastraError(

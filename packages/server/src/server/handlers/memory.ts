@@ -842,7 +842,7 @@ export const LIST_THREADS_ROUTE = createRoute({
     'Returns a paginated list of conversation threads with optional filtering by resource ID and/or metadata',
   tags: ['Memory'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, resourceId, metadata, requestContext, page, perPage, orderBy }) => {
+  handler: async ({ mastra, agentId, resourceId, metadata, archived, requestContext, page, perPage, orderBy }) => {
     try {
       // Use effective resourceId (context key takes precedence over client-provided value)
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
@@ -853,6 +853,10 @@ export const LIST_THREADS_ROUTE = createRoute({
       if (agent && isGateway) {
         const gwClient = getGatewayClient();
         if (gwClient) {
+          // The gateway API has no archive state, so its threads are never archived.
+          if (archived === true) {
+            return paginateThreads({ threads: [], page, perPage });
+          }
           if (shouldFilterThreadsWithFGA(mastra, requestContext)) {
             const initialResult = await gwClient.listThreads({
               resourceId: effectiveResourceId,
@@ -900,14 +904,17 @@ export const LIST_THREADS_ROUTE = createRoute({
       }
 
       // Build filter object dynamically based on provided parameters
-      const filter: { resourceId?: string; metadata?: Record<string, unknown> } | undefined =
-        effectiveResourceId || metadata ? {} : undefined;
+      const filter: { resourceId?: string; metadata?: Record<string, unknown>; archived?: boolean } | undefined =
+        effectiveResourceId || metadata || archived !== undefined ? {} : undefined;
 
       if (effectiveResourceId) {
         filter!.resourceId = effectiveResourceId;
       }
       if (metadata) {
         filter!.metadata = metadata;
+      }
+      if (archived !== undefined) {
+        filter!.archived = archived;
       }
 
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
@@ -1605,6 +1612,66 @@ export const DELETE_THREAD_ROUTE = createRoute({
     }
   },
 });
+
+function createSetThreadArchivedRoute(action: 'archive' | 'unarchive') {
+  const archiving = action === 'archive';
+  return createRoute({
+    method: 'POST',
+    path: `/memory/threads/:threadId/${action}`,
+    responseType: 'json',
+    pathParamSchema: threadIdPathParams,
+    queryParamSchema: deleteThreadQuerySchema,
+    responseSchema: getThreadByIdResponseSchema,
+    summary: archiving ? 'Archive thread' : 'Unarchive thread',
+    description: archiving
+      ? 'Soft-deletes a conversation thread by setting its archivedAt timestamp'
+      : 'Restores an archived conversation thread by clearing its archivedAt timestamp',
+    tags: ['Memory'],
+    requiresAuth: true,
+    handler: async ({ mastra, agentId, threadId, resourceId, requestContext }) => {
+      try {
+        const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
+        const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+        validateBody({ threadId: effectiveThreadId });
+
+        const agent = await getAgentFromContext({ mastra, agentId, requestContext });
+        // The gateway thread API only accepts title/metadata updates and has no archive state.
+        if (agent && (await isGatewayAgentAsync(agent)) && getGatewayClient()) {
+          throw new HTTPException(501, { message: 'Thread archiving is not supported for gateway agents' });
+        }
+
+        const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
+        if (!memory) {
+          throw new HTTPException(400, { message: 'Memory is not initialized' });
+        }
+
+        const thread = await memory.getThreadById({ threadId: effectiveThreadId! });
+        if (!thread) {
+          throw new HTTPException(404, { message: 'Thread not found' });
+        }
+        await enforceThreadAccess({
+          mastra,
+          requestContext,
+          threadId: effectiveThreadId!,
+          thread,
+          effectiveResourceId,
+          permission: MastraFGAPermissions.MEMORY_WRITE,
+        });
+
+        const result = archiving
+          ? await memory.archiveThread({ threadId: effectiveThreadId! })
+          : await memory.unarchiveThread({ threadId: effectiveThreadId! });
+        return { ...result, resourceId: result.resourceId ?? null };
+      } catch (error) {
+        return handleError(error, `Error ${archiving ? 'archiving' : 'unarchiving'} thread`);
+      }
+    },
+  });
+}
+
+export const ARCHIVE_THREAD_ROUTE = createSetThreadArchivedRoute('archive');
+
+export const UNARCHIVE_THREAD_ROUTE = createSetThreadArchivedRoute('unarchive');
 
 export const CLONE_THREAD_ROUTE = createRoute({
   method: 'POST',

@@ -44,6 +44,8 @@ export type StorageThreadType = {
   createdAt: Date;
   updatedAt: Date;
   metadata?: Record<string, unknown>;
+  /** When the thread was archived (soft-deleted). `null`/`undefined` means active. */
+  archivedAt?: Date | null;
 };
 
 /**

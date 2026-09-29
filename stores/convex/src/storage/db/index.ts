@@ -168,12 +168,14 @@ export class ConvexDB extends MastraBase {
     id,
     title,
     metadata,
+    archivedAt,
     updatedAt,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, any>;
-    updatedAt: Date;
+    archivedAt?: Date | null;
+    updatedAt?: Date;
   }): Promise<(Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }) | null> {
     return this.client.callStorage({
       op: 'updateThread',
@@ -181,7 +183,8 @@ export class ConvexDB extends MastraBase {
       id,
       title,
       metadata,
-      updatedAt: updatedAt.toISOString(),
+      ...(archivedAt !== undefined ? { archivedAt: archivedAt ? archivedAt.toISOString() : null } : {}),
+      ...(updatedAt ? { updatedAt: updatedAt.toISOString() } : {}),
     });
   }
 
