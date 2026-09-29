@@ -1,5 +1,4 @@
 import { AlertDialog as AlertDialogPrimitive } from '@base-ui/react/alert-dialog';
-import * as React from 'react';
 
 import { Button } from '@/ds/components/Button';
 import {
@@ -8,59 +7,28 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogOverlay,
+  DialogPortal,
   DialogTitle,
 } from '@/ds/components/Dialog';
-import { dialogActionLayoutClasses, dialogActionSizeClasses } from '@/ds/components/Dialog/dialog-context';
 import {
-  dialogContentSizeClasses,
-  dialogOverlayClassName,
-  dialogPopupClassName,
-} from '@/ds/components/Dialog/dialog-shell';
+  DialogContext,
+  dialogActionLayoutClasses,
+  dialogActionSizeClasses,
+} from '@/ds/components/Dialog/dialog-context';
+import type { DialogContextValue } from '@/ds/components/Dialog/dialog-context';
+import { dialogContentSizeClasses, dialogPopupClassName } from '@/ds/components/Dialog/dialog-shell';
 import type { DialogSize } from '@/ds/components/Dialog/dialog-shell';
-import { asChildRenderProps } from '@/lib/as-child';
 import { cn } from '@/lib/utils';
 
-import '@/ds/components/Dialog/dialog.css';
+const alertDialogContext: DialogContextValue = { intent: 'default', pending: false };
 
-const AlertDialogRoot = AlertDialogPrimitive.Root;
-
-function AlertDialog({
-  open,
-  onOpenChange,
-  children,
-}: {
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
-  children: React.ReactNode;
-}) {
+function AlertDialog(props: AlertDialogPrimitive.Root.Props) {
   return (
-    <AlertDialogRoot open={open} onOpenChange={onOpenChange}>
-      {children}
-    </AlertDialogRoot>
+    <DialogContext.Provider value={alertDialogContext}>
+      <AlertDialogPrimitive.Root {...props} />
+    </DialogContext.Provider>
   );
-}
-
-type AlertDialogTriggerProps = AlertDialogPrimitive.Trigger.Props & {
-  /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
-  asChild?: boolean;
-};
-
-function AlertDialogTrigger({ asChild, children, ...props }: AlertDialogTriggerProps) {
-  return (
-    <AlertDialogPrimitive.Trigger {...asChildRenderProps(asChild, children)} {...props}>
-      {asChild ? undefined : children}
-    </AlertDialogPrimitive.Trigger>
-  );
-}
-
-const AlertDialogPortal = AlertDialogPrimitive.Portal;
-
-type AlertDialogOverlayProps = Omit<AlertDialogPrimitive.Backdrop.Props, 'className'> & {
-  className?: string;
-};
-
-function AlertDialogOverlay({ className, ...props }: AlertDialogOverlayProps) {
-  return <AlertDialogPrimitive.Backdrop className={cn(dialogOverlayClassName, className)} {...props} />;
 }
 
 type AlertDialogContentProps = Omit<AlertDialogPrimitive.Popup.Props, 'className'> & {
@@ -70,15 +38,15 @@ type AlertDialogContentProps = Omit<AlertDialogPrimitive.Popup.Props, 'className
 
 function AlertDialogContent({ className, size = 'sm', ...props }: AlertDialogContentProps) {
   return (
-    <AlertDialogPortal>
-      <AlertDialogOverlay />
+    <DialogPortal>
+      <DialogOverlay />
       <AlertDialogPrimitive.Popup
         data-slot="alert-dialog-content"
         data-size={size}
         className={cn(dialogPopupClassName, dialogContentSizeClasses[size], className)}
         {...props}
       />
-    </AlertDialogPortal>
+    </DialogPortal>
   );
 }
 
@@ -98,9 +66,7 @@ function AlertDialogAction({ children, ...props }: AlertDialogPrimitive.Close.Pr
   );
 }
 
-AlertDialog.Trigger = AlertDialogTrigger;
-AlertDialog.Portal = AlertDialogPortal;
-AlertDialog.Overlay = AlertDialogOverlay;
+AlertDialog.Trigger = AlertDialogPrimitive.Trigger;
 AlertDialog.Content = AlertDialogContent;
 AlertDialog.Header = DialogHeader;
 AlertDialog.Footer = DialogFooter;

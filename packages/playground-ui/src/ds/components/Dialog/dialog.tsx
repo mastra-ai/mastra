@@ -5,7 +5,7 @@ import * as React from 'react';
 import { DialogAction } from './dialog-action';
 import { DialogContext, dialogActionLayoutClasses, dialogActionSizeClasses, useDialogContext } from './dialog-context';
 import type { DialogIntent } from './dialog-context';
-import { dialogContentSizeClasses, dialogOverlayClassName, dialogPopupClassName } from './dialog-shell';
+import { dialogContentSizeClasses, dialogPopupClassName } from './dialog-shell';
 import type { DialogSize } from './dialog-shell';
 import { Button } from '@/ds/components/Button';
 import type { TextButtonSize } from '@/ds/components/Button';
@@ -49,7 +49,11 @@ type DialogOverlayProps = Omit<DialogPrimitive.Backdrop.Props, 'className'> & {
 
 function DialogOverlay({ className, ...props }: DialogOverlayProps) {
   return (
-    <DialogPrimitive.Backdrop data-slot="dialog-overlay" className={cn(dialogOverlayClassName, className)} {...props} />
+    <DialogPrimitive.Backdrop
+      data-slot="dialog-overlay"
+      className={cn('dialog-backdrop-motion fixed inset-0 z-50 bg-scrim backdrop-blur-xs', className)}
+      {...props}
+    />
   );
 }
 

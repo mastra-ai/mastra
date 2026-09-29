@@ -47,5 +47,7 @@
 **Removed**
 
 - The `variant` prop on `Dialog` and the `DialogVariant` type. Every dialog now uses the modern shell.
-- `asChild` on `DialogTrigger` and `DialogClose`. Use `render` instead: `<DialogTrigger render={<Button>Open</Button>} />`.
+- `asChild` on `DialogTrigger`, `DialogClose` and `AlertDialog.Trigger`. Use `render` instead: `<DialogTrigger render={<Button>Open</Button>} />`.
+- `AlertDialog.Portal` and `AlertDialog.Overlay`. `AlertDialog.Content` renders both.
+- The `@mastra/playground-ui/lib/as-child` helper.
 - The `dialog-overlay-anim` and `dialog-content-anim` classes. To find the overlay in a test, query `[data-slot="dialog-overlay"]`.
