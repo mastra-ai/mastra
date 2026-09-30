@@ -9,7 +9,7 @@ packages:
 
 The `.unarchiveThread()` method restores a thread archived with [`.archiveThread()`](/reference/memory/archiveThread) by clearing its `archivedAt` timestamp. Unarchiving doesn't change the thread's `updatedAt`, except on ClickHouse, where it writes a new version of the thread row.
 
-Unarchiving is idempotent: calling it on an active thread returns the thread unchanged. If the storage adapter doesn't persist `archivedAt`, the method throws a `MastraError` with the ID `MASTRA_MEMORY_THREAD_ARCHIVING_UNSUPPORTED`. See [`.archiveThread()`](/reference/memory/archiveThread#storage-adapter-notes) for adapter-specific behavior.
+Calling `.unarchiveThread()` on an active thread returns the thread unchanged. If the storage adapter doesn't persist `archivedAt`, the method throws a `MastraError` with the ID `MASTRA_MEMORY_THREAD_ARCHIVING_UNSUPPORTED`. See [`.archiveThread()`](/reference/memory/archiveThread#storage-adapter-notes) for adapter-specific behavior.
 
 ## Usage example
 
