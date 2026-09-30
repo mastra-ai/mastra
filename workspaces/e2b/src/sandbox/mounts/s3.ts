@@ -114,6 +114,14 @@ export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: 
     );
   }
 
+  const removeSessionCredentials = async () => {
+    try {
+      await sandbox.commands.run(`sudo rm -f ${credentialsPath}`);
+    } catch {
+      logger.warn(`${LOG_PREFIX} Failed to remove S3 session credentials file`);
+    }
+  };
+
   if (hasCredentials) {
     // Write credentials file (remove old one first to avoid permission issues)
     // s3fs's colon-delimited passwd_file format cannot carry a session token, so temporary
@@ -129,8 +137,13 @@ export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: 
         ].join('\n')
       : `${config.accessKeyId}:${config.secretAccessKey}`;
     await sandbox.commands.run(`sudo rm -f ${credentialsPath}`);
-    await sandbox.files.write(credentialsPath, credentialsContent);
-    await sandbox.commands.run(`chmod 600 ${credentialsPath}`);
+    try {
+      await sandbox.files.write(credentialsPath, credentialsContent);
+      await sandbox.commands.run(`chmod 600 ${credentialsPath}`);
+    } catch (error) {
+      if (useSessionToken) await removeSessionCredentials();
+      throw error;
+    }
   }
 
   // Build mount options
@@ -201,13 +214,7 @@ export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: 
     throw new Error(`Failed to mount S3 bucket: ${stderr || stdout || error}`);
   } finally {
     // The s3fs daemon keeps the exported credentials in its environment; the staging file is no longer needed.
-    if (useSessionToken) {
-      try {
-        await sandbox.commands.run(`sudo rm -f ${credentialsPath}`);
-      } catch {
-        logger.warn(`${LOG_PREFIX} Failed to remove S3 session credentials file`);
-      }
-    }
+    if (useSessionToken) await removeSessionCredentials();
   }
 
   // s3fs daemonizes before running its FUSE init, where the bucket check happens.
