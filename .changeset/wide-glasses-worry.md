@@ -1,5 +1,5 @@
 ---
-'@mastra/playground-ui': major
+'@mastra/playground-ui': minor
 ---
 
 Improved warning and error colors so alerts, status dots, badges, buttons, charts, and usage values read as one family in light and dark mode.
