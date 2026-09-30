@@ -142,6 +142,33 @@ describe('computeInitialFire / computeNextFire', () => {
     ).toEqual({ nextFireAt, completed: true });
   });
 
+  it('respects the timezone before completing a year-pinned cron', () => {
+    const previousFireAt = new Date('2026-09-22T14:00:00Z').getTime();
+    const finalFireAt = new Date('2026-09-23T14:00:00Z').getTime();
+    const schedule = {
+      cron: '0 0 10 23 9 * 2026',
+      timezone: 'America/New_York',
+      nextFireAt: previousFireAt,
+    };
+
+    expect(computeNextFire(schedule, previousFireAt)).toEqual({
+      nextFireAt: finalFireAt,
+      completed: false,
+    });
+    expect(computeNextFire({ ...schedule, nextFireAt: finalFireAt }, finalFireAt)).toEqual({
+      nextFireAt: finalFireAt,
+      completed: true,
+    });
+  });
+
+  it('keeps a year-pinned cron active while occurrences remain', () => {
+    const nextFireAt = new Date('2026-09-23T10:00:00Z').getTime();
+    expect(computeNextFire({ cron: '0 0 10 * * * 2026', timezone: 'UTC', nextFireAt }, nextFireAt)).toEqual({
+      nextFireAt: new Date('2026-09-24T10:00:00Z').getTime(),
+      completed: false,
+    });
+  });
+
   it('still throws when the cron expression is malformed', () => {
     expect(() => computeNextFire({ cron: 'not a cron', nextFireAt: 0 }, Date.now())).toThrow();
   });
