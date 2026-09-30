@@ -706,6 +706,7 @@ export type ProviderModelsMap = {
     'inclusionai/ling-3.0-flash',
     'inclusionai/ling-3.0-flash-vl',
     'inclusionai/ling-3.0-flash:thinking',
+    'inclusionai/ling-3.1-flash',
     'inference-net/schematron-v2-small',
     'inference-net/schematron-v2-turbo',
     'inflatebot/MN-12B-Mag-Mell-R1',
