@@ -1090,6 +1090,15 @@ describe('built-in board and integration handlers', () => {
       ).toBeUndefined();
     }
     expect(await defaultGithubRules.pullRequestOpened?.({ ...authored, board: 'review' })).toBeUndefined();
+    // A branch-matched PR from an untrusted actor is not proof of authorship.
+    const untrusted = { ...authored, actor: { ...authored.actor, trusted: false } };
+    expect(await defaultGithubRules.pullRequestOpened?.(untrusted)).toBeUndefined();
+    expect(
+      await defaultGithubRules.pullRequestOpened?.({
+        ...untrusted,
+        pullRequest: { ...untrusted.pullRequest!, factoryAuthored: true },
+      }),
+    ).toMatchObject({ type: 'transition', stage: 'review' });
     expect(await defaultGithubRules.pullRequestOpened?.({ ...authored, pullRequestIntake: true })).toMatchObject({
       type: 'upsertLinkedWorkItem',
       source: 'github-pr',

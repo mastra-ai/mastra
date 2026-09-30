@@ -141,9 +141,11 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
   // files the pull request's own Review card, which is the arrival — the
   // evaluation carrying `pullRequestIntake`. The authoring Work item's own
   // evaluation files nothing; a Work item still Building moves to Review, since
-  // its build has produced the pull request.
+  // its build has produced the pull request. Branch-name linking alone is not
+  // proof of authorship, so only trusted or Factory-authored PRs move it.
   if (context.item && context.pullRequestIntake !== true) {
     if (context.board !== 'work') return;
+    if (!(trustedGithubActor(context) || context.pullRequest.factoryAuthored)) return;
     if (!(context.item.stages.length === 1 && context.item.stages[0] === 'execute')) return;
     return {
       type: 'transition',

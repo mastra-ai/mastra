@@ -2255,29 +2255,18 @@ describe('GithubRules', () => {
 
     await service.ingest(pullRequest('opened', 'delivery-branch-link'));
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
-    expect(decisions).toHaveLength(2);
-    expect(decisions).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          workItemId: work.item.id,
-          decision: expect.objectContaining({
-            type: 'upsertLinkedWorkItem',
-            source: 'github-pr',
-            metadata: expect.objectContaining({ headBranch: 'feature' }),
-          }),
+    // An untrusted, non-Factory PR only links by branch; it does not move the
+    // Building Work item to Review.
+    expect(decisions).toEqual([
+      expect.objectContaining({
+        workItemId: work.item.id,
+        decision: expect.objectContaining({
+          type: 'upsertLinkedWorkItem',
+          source: 'github-pr',
+          metadata: expect.objectContaining({ headBranch: 'feature' }),
         }),
-        // The Building Work item that authored the PR moves to Review.
-        expect.objectContaining({
-          workItemId: work.item.id,
-          decision: expect.objectContaining({
-            type: 'transition',
-            board: 'work',
-            stage: 'review',
-            idempotencyKey: `7:delivery-branch-link:${work.item.id}:work-pull-request-opened`,
-          }),
-        }),
-      ]),
-    );
+      }),
+    ]);
   });
 
   it('answers a pull request opening for the pull request card and the item it was authored from', async () => {
