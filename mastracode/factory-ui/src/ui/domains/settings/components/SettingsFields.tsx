@@ -2,6 +2,7 @@ import type { AgentControllerSessionSettings } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Volume2Icon, VolumeXIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -116,8 +117,8 @@ export function ThinkingLevelPicker({ value, ariaLabel, disabled, inherited, onC
           aria-valuetext={valueText}
           disabled={disabled}
           className={cn(
-            'focus-visible:ring-current/60 relative h-7 w-full cursor-pointer appearance-none rounded-lg',
-            'bg-transparent outline-none focus-visible:ring-2',
+            'relative h-7 w-full cursor-pointer appearance-none rounded-lg bg-transparent',
+            focusRing,
             '[&::-webkit-slider-runnable-track]:h-7 [&::-webkit-slider-runnable-track]:bg-transparent',
             '[&::-webkit-slider-thumb]:h-7 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none',
             '[&::-webkit-slider-thumb]:bg-transparent',
@@ -155,7 +156,8 @@ export function SoundPicker({ value, onChange }: { value: DoneSound; onChange: (
         className={cn(
           'bg-fill text-muted-foreground -mr-6 flex h-7 items-center rounded-full py-1 pr-8 pl-2.5',
           'transition-colors duration-150 motion-reduce:transition-none',
-          'hover:text-foreground focus-visible:ring-border-focus focus-visible:ring-2 focus-visible:outline-none',
+          'hover:text-foreground',
+          focusRing,
         )}
         onClick={() => onChange(muted ? lastAudible : 'none')}
       >

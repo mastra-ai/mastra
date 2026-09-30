@@ -1186,12 +1186,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // aggregate stream text because pre-approval text is part of the resumed run.
                   // Durable agents set resolveFinalPromises to force resolution even when
                   // isLLMExecutionStep is true (single MastraModelOutput for the entire run).
-                  const lastStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
-                  const hasToolStep = self.#bufferedSteps.some(
-                    step => step.toolCalls.length > 0 || step.toolResults.length > 0,
-                  );
                   this.resolvePromises({
-                    text: hasToolStep && !self.#wasSuspended && lastStep ? lastStep.text : self.#bufferedText.join(''),
+                    text: self.#producedText(),
                     finishReason: self.#finishReason,
                   });
                 }
@@ -1205,9 +1201,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     metadata: error.options?.metadata,
                     processorId: error.processorId,
                   };
+                  // A tripwire rejects the output without erasing it; keep `text` in sync with
+                  // steps/response messages and report the rejection via `tripwire`.
                   self.resolvePromises({
                     finishReason: 'other',
-                    text: '',
+                    text: self.#producedText(),
                   });
                 } else {
                   self.#error = getErrorFromUnknown(error, {
@@ -1743,7 +1741,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     const textFromSteps = steps.map((step: any) => step.text || '').join('');
 
     const fullOutput: FullOutput<OUTPUT> = {
-      text: textFromSteps,
+      // After a tripwire, `text` already holds the resolved output (and a processOutputStream
+      // tripwire can end the run before any step completes), so reuse it to stay in sync.
+      text: this.tripwire || steps.length === 0 ? await this.text : textFromSteps,
       usage: await this.usage,
       steps,
       finishReason: await this.finishReason,
@@ -2075,6 +2075,17 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     if (getChunkProducedAt(chunk) === undefined) stampChunkProducedAt(chunk, Date.now());
     this.#bufferedChunks.push(chunk); // add to bufferedChunks for replay in new streams
     this.#emitter.emit('chunk', chunk); // emit chunk for existing listener streams
+  }
+
+  /**
+   * Text produced by the run: the last step's text for tool-driven multi-step runs (excluding
+   * pre-tool narration), otherwise the aggregate stream text. Suspended/resumed runs keep the
+   * aggregate because pre-approval text is part of the resumed run.
+   */
+  #producedText(): string {
+    const lastStep = this.#bufferedSteps[this.#bufferedSteps.length - 1];
+    const hasToolStep = this.#bufferedSteps.some(step => step.toolCalls.length > 0 || step.toolResults.length > 0);
+    return hasToolStep && !this.#wasSuspended && lastStep ? lastStep.text : this.#bufferedText.join('');
   }
 
   /**

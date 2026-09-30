@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import type { MessageEntry, NotificationEntry, NotificationSummaryEntry } from '../services/transcript';
-import { parseSkillActivation } from './SkillMessage';
+import { parseSkillActivation } from '@mastra/playground-ui/domains/chat/messages/skill-activation';
 import { isRecord } from './transcript-shared';
 import { signalPartsText } from './TranscriptSignals';
 

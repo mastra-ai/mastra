@@ -2,6 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
+import { inputSurfaceAndFocusStyle } from '@mastra/playground-ui/primitives/form-element';
 import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Search, Loader2, Sparkles, FileText, Zap, FolderOpen } from 'lucide-react';
@@ -252,8 +253,8 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
               onChange={e => setQuery(e.target.value)}
               placeholder="Search across skills..."
               className={cn(
-                raisedSurfaceStyle,
-                'w-full rounded-lg py-2 pr-4 pl-10 text-body text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-border-focus focus:outline-hidden',
+                inputSurfaceAndFocusStyle,
+                'w-full rounded-lg py-2 pr-4 pl-10 text-body placeholder:text-muted-foreground',
               )}
             />
           </div>

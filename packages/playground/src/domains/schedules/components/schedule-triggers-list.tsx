@@ -73,13 +73,7 @@ export function ScheduleTriggersList({
         const isLinked = isTriggerLinked(t);
         if (isLinked) interactiveIndex += 1;
         const runIdLabel = (
-          <Txt
-            as="span"
-            variant="caption"
-            font="mono"
-            tone={isLinked ? undefined : 'muted'}
-            className={isLinked ? 'whitespace-nowrap text-success-indicator' : 'whitespace-nowrap'}
-          >
+          <Txt as="span" variant="caption" font="mono" tone={isLinked ? 'ink' : 'muted'} className="whitespace-nowrap">
             {t.runId}
           </Txt>
         );

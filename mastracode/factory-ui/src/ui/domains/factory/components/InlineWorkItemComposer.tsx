@@ -52,7 +52,7 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
       aria-busy={submitting}
       className={cn(
         'relative flex flex-col gap-3 rounded-card border border-border/50 bg-fill-subtle p-2 outline-none transition-colors focus-within:border-border-focus motion-reduce:transition-none',
-        error !== undefined && 'border-destructive-edge',
+        error !== undefined && 'border-destructive-indicator',
       )}
       onSubmit={event => void submit(event)}
     >

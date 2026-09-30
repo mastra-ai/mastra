@@ -3,6 +3,8 @@ import { Button, buttonVariants } from '@mastra/playground-ui/components/Button'
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Hand, Maximize2, Sparkles, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -12,7 +14,6 @@ import type { BoardCardStatus } from '../boardCardStatus';
 import { HIDDEN_CARD_LABELS, SOURCE_LABELS } from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
 import type { WorkItemSource } from '../services/workItems';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 
 export function SourceTitle({ source, title, id }: { source: WorkItemSource; title: string; id?: string }) {
   return (
@@ -93,8 +94,10 @@ export function CardStatus({ status }: { status: BoardCardStatus }) {
       tabIndex={status.detail === undefined ? undefined : 0}
       className={cn(
         'text-destructive-indicator flex w-full min-w-0 items-start gap-1.5',
-        status.detail !== undefined &&
-          'focus-visible:outline-border-focus relative cursor-help underline decoration-dotted underline-offset-2 outline-none focus-visible:outline-2',
+        status.detail !== undefined && [
+          'relative cursor-help underline decoration-dotted underline-offset-2',
+          focusRing,
+        ],
       )}
     >
       <TriangleAlert size={11} aria-hidden className="mt-0.5 shrink-0" />

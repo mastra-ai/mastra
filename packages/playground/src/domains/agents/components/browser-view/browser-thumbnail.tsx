@@ -3,7 +3,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useBrowserToolCalls } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { controlStateColorTransition, focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Monitor, ChevronUp, ChevronDown, Maximize2, X } from 'lucide-react';
@@ -102,11 +102,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
       <button
         type="button"
         onClick={handleToggleExpand}
-        className={cn(
-          'group flex w-full items-center gap-3 px-4 py-3',
-          'hover:bg-fill-subtle',
-          'focus:ring-2 focus:ring-border-focus focus:outline-none focus:ring-inset',
-        )}
+        className={cn('group flex w-full items-center gap-3 px-4 py-3', 'hover:bg-fill-subtle', focusRingInset)}
       >
         {/* Thumbnail preview */}
         <div className={cn(raisedSurfaceStyle, 'relative h-14 w-24 shrink-0 overflow-hidden rounded-md')}>

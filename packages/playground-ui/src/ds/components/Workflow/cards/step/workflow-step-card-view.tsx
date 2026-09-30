@@ -96,10 +96,10 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
           'relative rounded-xl border border-transparent text-foreground transition-[border-color,background-color,box-shadow] [--card-radius:calc(var(--radius-xl)-2px)] motion-reduce:transition-none',
           'after:pointer-events-none after:absolute after:inset-x-4 after:-top-px after:h-px after:mask-x-from-76%',
           displayStatus && statusLineClasses[displayStatus],
-          'has-focus-visible:outline-2 has-focus-visible:outline-offset-4 has-focus-visible:outline-border-focus',
+          'has-focus-visible:outline-1 has-focus-visible:outline-offset-4 has-focus-visible:outline-border-focus',
           isSelected && 'outline-1 outline-offset-4 outline-border-focus',
           isBodyExpanded && 'border-dashed border-muted-foreground/40 shadow-none',
-          isWaiting && 'border-info-edge',
+          isWaiting && 'border-info-indicator',
           isHovered && !isSelected && 'bg-muted',
         )}
         data-workflow-node
@@ -192,7 +192,7 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
               <CollapsibleTrigger
                 className={cn(
                   surfaceStateLayerStyle,
-                  'nodrag nopan flex min-h-11 w-full items-center justify-between border-t border-border bg-card px-3.5 py-2.5 text-caption focus-visible:shadow-none focus-visible:ring-0',
+                  'nodrag nopan flex min-h-11 w-full items-center justify-between border-t border-border bg-card px-3.5 py-2.5 text-caption focus-visible:outline-hidden',
                 )}
               >
                 <span>

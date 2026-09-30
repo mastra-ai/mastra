@@ -1,4 +1,5 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { ChevronRight, InfoIcon } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
@@ -95,7 +96,7 @@ export function ConnectedAccountsSection() {
       {slackAccounts.length > 0 && factoryId ? (
         <Link
           to={`/factories/${factoryId}/settings/connections/slack`}
-          className="group hover:bg-fill focus-visible:ring-border-focus block cursor-pointer rounded-xl outline-hidden transition-colors focus-visible:ring-2"
+          className={`group hover:bg-fill block cursor-pointer rounded-xl transition-colors ${focusRing}`}
         >
           <SettingsRow label={slackLabel}>
             <Txt
@@ -114,7 +115,7 @@ export function ConnectedAccountsSection() {
           type="button"
           disabled={!canConnect}
           onClick={connectSlack}
-          className="group hover:bg-fill focus-visible:ring-border-focus block w-full cursor-pointer rounded-xl text-left outline-hidden transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+          className={`group hover:bg-fill block w-full cursor-pointer rounded-xl text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
         >
           <SettingsRow label={slackLabel}>
             <Txt

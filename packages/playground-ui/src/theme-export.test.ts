@@ -43,7 +43,7 @@ const semanticTokens = [
   'muted-foreground',
   'placeholder',
   'border',
-  'ring',
+  'border-focus',
 ] as const;
 
 const deferredSemanticTokens = [
@@ -64,6 +64,7 @@ const deferredSemanticTokens = [
   'sidebar-ring',
   'sidebar-divider',
   'selected',
+  'ring',
 ] as const;
 
 const semanticAliases = {
@@ -75,7 +76,6 @@ const semanticAliases = {
   foreground: 'gray-10',
   'muted-foreground': 'gray-8',
   placeholder: 'gray-7',
-  ring: 'border-focus',
 } as const;
 
 const parseVariables = (css: string) => {
@@ -380,7 +380,6 @@ describe('theme.css export', () => {
     // surfaces needs less than a line drawn inside one.
     for (const theme of [darkTheme, lightTheme]) {
       expect(theme).toMatch(/--surface-rim:/);
-      expect(theme).toMatch(/--surface-rim-focus:/);
       expect(theme).toMatch(/--elevation-lip:/);
     }
   });
@@ -454,7 +453,7 @@ describe('theme.css export', () => {
     const { darkVariables, lightVariables } = getThemeVariables(themeCss);
 
     for (const variables of [darkVariables, lightVariables]) {
-      const ring = resolveToken('ring', variables);
+      const ring = resolveToken('border-focus', variables);
       for (const background of ['sidebar', 'background', 'card', 'muted']) {
         const backgroundLightness = oklchLightness(resolveToken(background, variables));
         const ringLightness = compositeLightness(ring, backgroundLightness);
@@ -592,6 +591,18 @@ describe('theme.css export', () => {
     }
     expect(resolveToken('success-subtle', darkVariables)).not.toBe(resolveToken('success-subtle', lightVariables));
     expect(resolveToken('chart-blue', darkVariables)).not.toBe(resolveToken('chart-blue', lightVariables));
+  });
+
+  it('keeps the brand green indicator readable as text on light surfaces', () => {
+    const { lightVariables } = getThemeVariables(themeCss);
+    const brandGreen = resolveToken('brand-green-indicator', lightVariables);
+    const brandLightness = Number(brandGreen.match(/^oklch\(([\d.]+)\s/)?.[1]);
+
+    expect(oklchAlpha(brandGreen)).toBe(1);
+    for (const background of ['background', 'card']) {
+      const backgroundLightness = oklchLightness(resolveToken(background, lightVariables));
+      expect(wcagContrast(brandLightness, backgroundLightness)).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   it('registers every @theme color with tailwind-merge, so cn() can resolve a conflict between two of them', () => {
