@@ -50,7 +50,7 @@ export function ModelCombobox({
       emptyText="No matching model."
       allowCustomValue
       disabled={disabled}
-      className={cn(fixedWidth && 'w-64 shrink-0', className)}
+      className={cn(fixedWidth && 'w-64 max-w-full shrink-0', className)}
     />
   );
 }
