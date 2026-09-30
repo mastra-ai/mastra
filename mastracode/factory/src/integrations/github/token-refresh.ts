@@ -3,10 +3,12 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { GithubPatKind } from './pat.js';
 
 const GITHUB_TOKEN_INJECTOR_CONTEXT_KEY = 'factoryGithubTokenInjector';
+const GITHUB_TOKEN_INJECTOR_RESOLVER_CONTEXT_KEY = 'factoryGithubTokenInjectorResolver';
 const GITHUB_PAT_KIND_CONTEXT_KEY = 'factoryGithubPatKind';
 const GITHUB_REFRESH_TARGET_CONTEXT_KEY = 'factoryGithubRefreshTarget';
 
 type GithubTokenInjector = (token: string) => void;
+type GithubTokenInjectorResolver = () => GithubTokenInjector;
 
 /** The authorized GitHub repository behind the request's Factory session. */
 export interface GithubRefreshTarget {
@@ -26,7 +28,16 @@ export function getGithubRefreshTarget(requestContext: RequestContext): GithubRe
 }
 
 export function registerGithubTokenInjector(requestContext: RequestContext, injector: GithubTokenInjector): void {
+  requestContext.set(GITHUB_TOKEN_INJECTOR_RESOLVER_CONTEXT_KEY, undefined);
   requestContext.set(GITHUB_TOKEN_INJECTOR_CONTEXT_KEY, injector);
+}
+
+export function registerGithubTokenInjectorResolver(
+  requestContext: RequestContext,
+  resolver: GithubTokenInjectorResolver,
+): void {
+  requestContext.set(GITHUB_TOKEN_INJECTOR_CONTEXT_KEY, undefined);
+  requestContext.set(GITHUB_TOKEN_INJECTOR_RESOLVER_CONTEXT_KEY, resolver);
 }
 
 /** Record which PAT kind the active sandbox was provisioned with, so token
@@ -42,6 +53,10 @@ export function getRegisteredGithubPatKind(requestContext: RequestContext): Gith
 }
 
 export function requireGithubTokenInjector(requestContext: RequestContext): GithubTokenInjector {
+  const resolver = requestContext.get(GITHUB_TOKEN_INJECTOR_RESOLVER_CONTEXT_KEY) as
+    GithubTokenInjectorResolver | undefined;
+  if (resolver) return resolver();
+
   const injector = requestContext.get(GITHUB_TOKEN_INJECTOR_CONTEXT_KEY) as GithubTokenInjector | undefined;
   if (!injector) {
     throw new Error('GitHub token refresh requires an active Factory sandbox workspace.');

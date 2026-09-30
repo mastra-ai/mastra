@@ -2311,6 +2311,31 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.setEnv).not.toHaveBeenCalled();
   });
 
+  it('registers refresh access for the request that starts a reused pending workspace', async () => {
+    mocks.githubPat = 'ghp_original';
+    const { resolver, github } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const firstContext = createGithubRequestContext('project-1', 'session-a');
+    const startingContext = createGithubRequestContext('project-1', 'session-a');
+    const integration = github as unknown as Parameters<typeof createGithubSubscriptionTools>[1];
+
+    const pendingWorkspace = await resolver({ requestContext: firstContext });
+    const reusedWorkspace = await resolver({ requestContext: startingContext });
+    expect(reusedWorkspace).toBe(pendingWorkspace);
+
+    await reusedWorkspace.sandbox.getInfo();
+    mocks.githubPat = 'ghp_replaced';
+    const tool = createGithubSubscriptionTools(startingContext, integration).github_refresh_token!;
+    expect(await tool.execute!({}, {} as never)).toEqual({ refreshed: true });
+    expect(lastGhToken()).toBe('ghp_replaced');
+
+    mocks.runBindingRole = 'review';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    await expect(tool.execute!({}, {} as never)).rejects.toThrow(/no longer matches/);
+  });
+
   it('does not offer refresh to a chat-only session', async () => {
     const { resolver, github } = await createLocalFactory();
     const requestContext = createGithubRequestContext('project-1', 'chat-only');

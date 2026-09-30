@@ -33,6 +33,7 @@ import {
   registerGithubPatKind,
   registerGithubRefreshTarget,
   registerGithubTokenInjector,
+  registerGithubTokenInjectorResolver,
 } from './integrations/github/token-refresh.js';
 import { requireExec } from './sandbox/materialization.js';
 import type { ExecutableSandbox } from './sandbox/materialization.js';
@@ -563,8 +564,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         await publishStartSideEffects();
         return;
       }
-      // First start: resolve the credential and authorize the constructing
-      // request context. The `gh` CLI needs a PAT when the org configured one
+      // First start: resolve the credential and authorize every request that
+      // resolved this pending workspace. The `gh` CLI needs a PAT when the org configured one
       // (installation tokens 403 on integration-restricted endpoints); git
       // clone/checkout keep using the minted installation token. Resolved per
       // start so the installed credential never outlives rotation.
@@ -697,16 +698,31 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         return fallback;
       }
     };
+    const githubTokenInjector = (registered: GithubTokenRegistration, generation: number) => (token: string) => {
+      if (githubTokenInjectors.get(workspaceId) !== registered || registered.generation !== generation) {
+        throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
+      }
+      registered.inject(token);
+    };
     const registerGithubTokenContext = (registered: GithubTokenRegistration): void => {
-      const generation = registered.generation;
-      registerGithubTokenInjector(requestContext, token => {
-        if (githubTokenInjectors.get(workspaceId) !== registered || registered.generation !== generation) {
-          throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
-        }
-        registered.inject(token);
-      });
+      registerGithubTokenInjector(requestContext, githubTokenInjector(registered, registered.generation));
       registerGithubPatKind(requestContext, registered.patKind);
     };
+    if (githubProvider) {
+      const registered = githubTokenInjectors.get(workspaceId);
+      if (registered) {
+        registerGithubTokenContext(registered);
+      } else {
+        registerGithubTokenInjectorResolver(requestContext, () => {
+          const active = githubTokenInjectors.get(workspaceId);
+          if (!active) {
+            throw new Error('GitHub token refresh requires an active Factory sandbox workspace.');
+          }
+          registerGithubPatKind(requestContext, active.patKind);
+          return githubTokenInjector(active, 0);
+        });
+      }
+    }
     const reconcileGithubToken = async (): Promise<void> => {
       if (!githubProvider) return;
       const previous = githubTokenReconciliations.get(workspaceId) ?? Promise.resolve();
