@@ -2096,9 +2096,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #producedText(): string {
     const lastStep = this.#bufferedSteps[this.#bufferedSteps.length - 1];
     const hasToolStep = this.#bufferedSteps.some(step => step.toolCalls.length > 0 || step.toolResults.length > 0);
-    // Durable reads its final text from the steps, where a retried attempt's text is empty.
+    // Durable reads its final text from the steps, where a retried attempt's text is empty,
+    // plus the text of a step that never finished (an aborted run).
     if (!hasToolStep && !this.#wasSuspended && this.#options.resolveFinalPromises) {
-      return this.#bufferedSteps.map(step => step.text).join('');
+      return this.#bufferedSteps.map(step => step.text).join('') + this.#bufferedByStep.text;
     }
     return hasToolStep && !this.#wasSuspended && lastStep ? lastStep.text : this.#bufferedText.join('');
   }
