@@ -3,7 +3,7 @@ import { MessageList } from '@mastra/core/agent/message-list';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ChunkType } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
-import { accumulateChunk, finishStreamingAssistantMessage } from './accumulator';
+import { accumulateChunk, finishStreamingAssistantMessage, mapWorkflowStreamChunkToWatchResult } from './accumulator';
 import { CLIENT_MESSAGE_ID_KEY } from './types';
 import type { BackgroundTaskEntry, MastraDBMessageMetadata, MastraReasoningPart, MastraTextPart } from './types';
 
@@ -2116,6 +2116,35 @@ describe('accumulateChunk - workflow tool finish', () => {
     expect(result.status).toBe('success');
     // Terminal scalar payload is still surfaced for downstream renderers
     expect(result.output).toEqual({ result: 'suh', runId: RUN_ID });
+  });
+
+  it('rebuilds workflow steps when chunks are replayed onto a finished tool result', () => {
+    const run = () =>
+      reduce([
+        startChunk(),
+        toolCallChunk('wf-1', 'workflow-myWorkflow', { foo: 'bar' }),
+        toolResultChunk('wf-1', { result: 'suh', runId: RUN_ID }),
+        workflowOutputChunk('wf-1', 'workflow-start', { runId: RUN_ID }),
+        workflowOutputChunk('wf-1', 'workflow-step-start', { id: 'step-a' }),
+        workflowOutputChunk('wf-1', 'workflow-step-result', { id: 'step-a', status: 'success', output: { value: 1 } }),
+        workflowOutputChunk('wf-1', 'workflow-finish', { runId: RUN_ID, workflowStatus: 'success' }),
+      ]);
+
+    expect(run).not.toThrow();
+    const toolPart = run()
+      .flatMap(m => m.content.parts)
+      .find(p => p.type === 'tool-invocation') as MastraToolInvocationPart;
+    const result = (toolPart.toolInvocation as { result: Record<string, any> }).result;
+    expect(result.steps['step-a'].status).toBe('success');
+    expect(result.status).toBe('success');
+  });
+
+  it('mapWorkflowStreamChunkToWatchResult ignores a previous value without steps', () => {
+    const chunk = { type: 'workflow-step-start', runId: RUN_ID, from: 'WORKFLOW', payload: { id: 'step-a' } } as any;
+    for (const prev of [{ result: 'suh', runId: RUN_ID }, {}]) {
+      const next = mapWorkflowStreamChunkToWatchResult(prev as any, chunk);
+      expect(next.steps['step-a']).toEqual({ id: 'step-a' });
+    }
   });
 
   it('detects workflow tools by toolName prefix even with no prior tool-output', () => {

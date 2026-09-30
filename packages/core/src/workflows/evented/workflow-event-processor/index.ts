@@ -2,6 +2,8 @@ import EventEmitter from 'node:events';
 import type { ActorSignal } from '../../../auth/ee';
 import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../../error';
 import { EventProcessor } from '../../../events/processor';
+import { NoopLeaseProvider, isLeaseProvider } from '../../../events/pubsub';
+import type { LeaseProvider } from '../../../events/pubsub';
 import type { Event } from '../../../events/types';
 import type { Mastra } from '../../../mastra';
 import type { TracingContext } from '../../../observability';
@@ -149,6 +151,8 @@ export class WorkflowEventProcessor extends EventProcessor {
   // so 3 transport-level redeliveries is enough headroom for transient
   // failures without keeping a poisoned event in flight for minutes.
   private static readonly MAX_DELIVERY_ATTEMPTS = 3;
+  /** TTL of the lease fencing a running `workflow.step.run`; renewed every ttl/3. */
+  static STEP_FENCE_TTL_MS = 30_000;
   // Sentinel value stored in deliveryAttempts to mark an event whose terminal
   // workflow.fail has already been published. Any subsequent redelivery of
   // the same logical event short-circuits as terminal and does NOT re-run
@@ -682,11 +686,11 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     if (shouldPersist) {
       const runningSnapshot: WorkflowRunState = {
-        activePaths: [],
+        activePaths: restart ? (executionPath ?? restart.activePaths) : [],
         suspendedPaths: {},
         resumeLabels: {},
         waitingPaths: {},
-        activeStepsPath: {},
+        activeStepsPath: restart?.activeStepsPath ?? {},
         serializedStepGraph: workflow.serializedStepGraph,
         timestamp: Date.now(),
         runId,
@@ -752,7 +756,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         requestContext,
         actor,
         resumeData,
-        activeStepsPath: {},
+        activeStepsPath: restart?.activeStepsPath ?? {},
         perStep,
         state: initialState,
         outputOptions,
@@ -1816,9 +1820,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           })) ?? ({ context: {} } as WorkflowRunState);
 
         const restartParams = createRestartExecutionParams({ snapshot, graph: nestedWorkflow.buildExecutionGraph() });
-
-        const nestedPrevStepId = getStepId(nestedWorkflow, snapshot.activePaths);
-        const nestedPrevResult = restartParams.stepResults[nestedPrevStepId ?? 'input'];
+        const nestedPrevStepId = getStepId(nestedWorkflow, restartParams.activePaths);
+        const nestedPrevResult =
+          restartParams.stepResults[restartParams.isPreFirstStepRestart ? 'input' : (nestedPrevStepId ?? 'input')];
 
         await this.mastra.pubsub.publish('workflows', {
           type: 'workflow.start',
@@ -1842,7 +1846,10 @@ export class WorkflowEventProcessor extends EventProcessor {
             executionPath: restartParams.activePaths,
             runId: nestedRunId,
             stepResults: restartParams.stepResults,
-            prevResult: { status: 'success', output: nestedPrevResult?.payload },
+            prevResult: {
+              status: 'success',
+              output: restartParams.isPreFirstStepRestart ? nestedPrevResult : nestedPrevResult?.payload,
+            },
             restart: restartParams,
             activeStepsPath: restartParams.activeStepsPath,
             requestContext,
@@ -3216,6 +3223,74 @@ export class WorkflowEventProcessor extends EventProcessor {
    *   should drop the event (or return 4xx for HTTP push).
    */
   async handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
+    // Fence step execution so a broker redelivery of a still-running
+    // `workflow.step.run` (e.g. its ack deadline elapsed) is dropped instead of
+    // running the step concurrently (#24589). Redeliveries keep the same event
+    // id, so the id identifies the logical delivery; genuinely new executions
+    // (loop iterations, retries, foreach items) are published as new events.
+    if (event.type !== 'workflow.step.run' || !event.id) {
+      return this.#handle(event);
+    }
+
+    const leaseProvider = this.#getLeaseProvider();
+    const key = `workflow-step-run:${event.runId}:${event.id}`;
+    const owner = globalThis.crypto.randomUUID();
+    const ttl = WorkflowEventProcessor.STEP_FENCE_TTL_MS;
+
+    let acquired: boolean;
+    try {
+      ({ acquired } = await leaseProvider.acquireLease(key, owner, ttl));
+    } catch (err) {
+      // Fencing is best-effort; never block execution on a lease backend error.
+      this.mastra.getLogger()?.warn('WorkflowEventProcessor.handle: failed to acquire step fence', { key, error: err });
+      return this.#handle(event);
+    }
+
+    if (!acquired) {
+      this.mastra.getLogger()?.debug('WorkflowEventProcessor.handle: dropping duplicate delivery of running step', {
+        runId: event.runId,
+        eventId: event.id,
+        deliveryAttempt: event.deliveryAttempt,
+      });
+      return { ok: true };
+    }
+
+    const renewal = setInterval(
+      () => {
+        leaseProvider.renewLease(key, owner, ttl).catch(err => {
+          this.mastra
+            .getLogger()
+            ?.warn('WorkflowEventProcessor.handle: failed to renew step fence', { key, error: err });
+        });
+      },
+      Math.max(1, Math.floor(ttl / 3)),
+    );
+
+    let result: { ok: true } | { ok: false; retry: boolean } | undefined;
+    try {
+      result = await this.#handle(event);
+      return result;
+    } finally {
+      clearInterval(renewal);
+      // On success keep the lease until it expires so a late duplicate of the
+      // completed delivery is still dropped. On failure release it so the
+      // transport's retry can run the step.
+      if (!result?.ok) {
+        await leaseProvider.releaseLease(key, owner).catch(() => {});
+      }
+    }
+  }
+
+  #getLeaseProvider(): LeaseProvider {
+    const pubsub = this.mastra.pubsub as unknown;
+    const unwrap = (pubsub as { getLeaseProvider?: () => LeaseProvider | undefined } | undefined)?.getLeaseProvider;
+    if (typeof unwrap === 'function') {
+      return unwrap.call(pubsub) ?? NoopLeaseProvider;
+    }
+    return isLeaseProvider(pubsub) ? pubsub : NoopLeaseProvider;
+  }
+
+  async #handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
     // Build a stable retry key once per call. If event.id is missing we fall
     // back to a deterministic composite of type/runId/workflowId/executionPath
     // so the same logical event lands in the same bucket on each redelivery

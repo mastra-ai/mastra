@@ -83,7 +83,7 @@ function PasteCodeDialog({ provider, session, onClose, onComplete }: ProviderOAu
             }}
           />
           {completeMutation.error instanceof Error && (
-            <Txt as="p" variant="caption" className="text-destructive-indicator">
+            <Txt as="p" variant="caption" className="text-destructive-foreground">
               {completeMutation.error.message}
             </Txt>
           )}
@@ -170,7 +170,7 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOA
         </DialogBody>
         <DialogFooter>
           {flowError ? (
-            <Txt as="p" variant="caption" className="text-destructive-indicator mr-auto min-w-0 break-words">
+            <Txt as="p" variant="caption" className="text-destructive-foreground mr-auto min-w-0 break-words">
               {flowError}
             </Txt>
           ) : (

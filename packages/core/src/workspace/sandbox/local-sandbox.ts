@@ -9,7 +9,6 @@
  * - Linux: Uses bubblewrap (bwrap) for namespace isolation
  */
 
-import * as crypto from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -394,11 +393,13 @@ export class LocalSandbox extends MastraSandbox<string> {
 
         // Generate a deterministic hash from workspace path and config
         // This allows identical sandboxes to share profiles while preventing collisions
-        const configHash = crypto
-          .createHash('sha256')
-          .update(this.workingDirectory)
-          .update(JSON.stringify(this._nativeSandboxConfig))
-          .digest('hex')
+        const configHash = Buffer.from(
+          await globalThis.crypto.subtle.digest(
+            'SHA-256',
+            new TextEncoder().encode(this.workingDirectory + JSON.stringify(this._nativeSandboxConfig)),
+          ),
+        )
+          .toString('hex')
           .slice(0, 8);
 
         // Write profile to .sandbox-profiles/ in cwd (outside working directory)
@@ -443,9 +444,9 @@ export class LocalSandbox extends MastraSandbox<string> {
     const candidates = [this._checkpointName, this._seedCheckpointName].filter(
       (name): name is string => name !== undefined,
     );
-    for (const name of candidates) {
+    candidates: for (const name of candidates) {
       const checkpointDir = this._checkpointPath(name);
-      if (!(await this._checkpointReadable(checkpointDir))) {
+      if (!(await this._checkpointIdentity(checkpointDir))) {
         // Missing checkpoint → try the next candidate (same contract as provider 404).
         continue;
       }
@@ -454,39 +455,45 @@ export class LocalSandbox extends MastraSandbox<string> {
         checkpointName: name,
         checkpointDir,
       });
-      try {
-        await fs.cp(checkpointDir, this.workingDirectory, { recursive: true });
-      } catch (error) {
-        // The checkpoint was swapped away mid-copy by a concurrent
-        // `_captureCheckpoint`. Wait for the replacement and copy that instead.
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-        await fs.rm(this.workingDirectory, { recursive: true, force: true }).catch(() => {});
+      // `fs.cp` is not a point-in-time copy: a concurrent `_captureCheckpoint`
+      // can swap the checkpoint directory mid-copy, mixing one version's entry
+      // list with another's file contents. Pin the directory's identity and
+      // retry the whole copy until it stays unchanged across it.
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const before = await this._checkpointIdentity(checkpointDir);
+        if (!before) continue candidates;
+        try {
+          await fs.cp(checkpointDir, this.workingDirectory, { recursive: true });
+          if ((await this._checkpointIdentity(checkpointDir)) === before) return;
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        }
+        // A failed wipe must throw: copying over leftovers would pass the identity check with mixed contents.
+        await fs.rm(this.workingDirectory, { recursive: true, force: true });
         await fs.mkdir(this.workingDirectory, { recursive: true });
-        if (!(await this._checkpointReadable(checkpointDir))) continue;
-        await fs.cp(checkpointDir, this.workingDirectory, { recursive: true });
       }
-      return;
+      throw new Error(`Checkpoint "${name}" kept changing while seeding the working directory`);
     }
   }
 
   /**
-   * Check that a checkpoint directory exists, retrying briefly to cover the
-   * instant in `_captureCheckpoint` where the old checkpoint has been renamed
-   * away but the replacement has not yet been renamed into place. The window
-   * is two atomic renames, so a couple of short retries close it.
+   * Identity of the directory currently at `checkpointDir`, or undefined if no
+   * directory is there. Retries briefly to cover the instant in
+   * `_captureCheckpoint` where the old checkpoint has been renamed away but the
+   * replacement has not yet been renamed into place. The window is two atomic
+   * renames, so a couple of short retries close it.
    */
-  private async _checkpointReadable(checkpointDir: string): Promise<boolean> {
+  private async _checkpointIdentity(checkpointDir: string): Promise<string | undefined> {
     for (let attempt = 0; attempt < 3; attempt++) {
       if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 25));
       try {
-        const stat = await fs.stat(checkpointDir);
-        if (stat.isDirectory()) return true;
-        return false;
+        const stat = await fs.stat(checkpointDir, { bigint: true });
+        return stat.isDirectory() ? `${stat.dev}:${stat.ino}:${stat.ctimeNs}` : undefined;
       } catch {
         // Missing right now — may be mid-swap; retry.
       }
     }
-    return false;
+    return undefined;
   }
 
   /**

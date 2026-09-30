@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { embedMany } from '@internal/ai-sdk-v4';
 import type { TextPart } from '@internal/ai-sdk-v4';
 import { embedMany as embedManyV5 } from '@internal/ai-sdk-v5';
@@ -2530,15 +2529,19 @@ Notes:
     const { indexName } = await this.createObservationEmbeddingIndex(embedResult.dimension);
     // Stable UUIDv8 IDs make retries safe even when a write succeeds but its acknowledgement is lost.
     // UUID formatting also supports vector stores that reject arbitrary string IDs.
-    const ids = embedResult.chunks.map((_, chunkIndex) => {
-      const hash = createHash('sha256')
-        .update(JSON.stringify([resourceId, threadId, groupId, chunkIndex]))
-        .digest();
+    const ids: string[] = [];
+    for (const [chunkIndex] of embedResult.chunks.entries()) {
+      const hash = Buffer.from(
+        await globalThis.crypto.subtle.digest(
+          'SHA-256',
+          new TextEncoder().encode(JSON.stringify([resourceId, threadId, groupId, chunkIndex])),
+        ),
+      );
       hash[6] = (hash[6]! & 0x0f) | 0x80;
       hash[8] = (hash[8]! & 0x3f) | 0x80;
       const hex = hash.toString('hex', 0, 16);
-      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-    });
+      ids.push(`${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`);
+    }
 
     await this.vector.upsert({
       indexName,

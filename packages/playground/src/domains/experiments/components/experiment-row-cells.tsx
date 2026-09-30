@@ -45,7 +45,7 @@ export function ExperimentRowCells({ experiment: exp, datasetName, review }: Exp
       <DataList.TextCell className="text-center">{total}</DataList.TextCell>
       <DataList.TextCell className="text-center">{succeeded}</DataList.TextCell>
       <DataList.TextCell className="text-center">
-        <span className={failed > 0 ? 'text-destructive-indicator' : ''}>{failed}</span>
+        <span className={failed > 0 ? 'text-destructive-foreground' : ''}>{failed}</span>
       </DataList.TextCell>
       <DataList.Cell className="text-center">
         <ExperimentReviewCell review={review} />

@@ -43,7 +43,7 @@ export function NotificationActivity({
       label={label}
       detail={messagePreview(message)}
       detailFont="sans"
-      icon={icon ?? <Bell className="text-warning-indicator" aria-hidden />}
+      icon={icon ?? <Bell className="text-warning-foreground" aria-hidden />}
       badges={
         hasBadges && (
           <>

@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { ChannelSessionRejectedError } from '@mastra/core/channels';
 import type {
   ChannelHandler,
@@ -40,6 +38,7 @@ import type { FactoryProjectsStorage } from '../../storage/domains/projects/base
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { ExternalWorkItemSource, WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { FactoryChannelsConfig } from '../base.js';
+import { prepareSessionRunContext } from '../subscription-session.js';
 
 import { resolveEmojiShortcodes } from './emoji.js';
 import { slackCommentSource } from './feed-publisher.js';
@@ -454,7 +453,7 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
       });
       if (existing) return existing.sessionId;
       const session = await sourceControl.sessions.create({
-        sessionId: randomUUID(),
+        sessionId: globalThis.crypto.randomUUID(),
         projectRepositoryId: repo.projectRepositoryId,
         orgId,
         userId: link.userId,
@@ -749,6 +748,40 @@ async function findInternalThread(mastra: Mastra | undefined, thread: HandlerThr
   return threads[0];
 }
 
+async function prepareExistingSessionOwnerContext(
+  thread: HandlerThread,
+  deps: SlackChannelDeps,
+  ctx: ChannelHandlerContext,
+  options: { expectedOrgId?: string; requireInternalThread: boolean },
+): Promise<'ready' | 'organization-mismatch'> {
+  const sourceControls = configuredSourceControls(deps);
+  if (sourceControls.length === 0 && !options.requireInternalThread) return 'ready';
+
+  const internalThread = await findInternalThread(ctx.mastra, thread);
+  if (!internalThread) {
+    if (options.requireInternalThread) {
+      throw new Error(`Could not resolve the internal Slack thread for ${thread.id}.`);
+    }
+    return 'ready';
+  }
+  if (sourceControls.length === 0 || internalThread.resourceId.startsWith('channel:')) return 'ready';
+  if (!options.expectedOrgId) {
+    throw new Error(`Could not authorize the owner of Slack Factory session ${internalThread.resourceId}.`);
+  }
+
+  const preparation = await prepareSessionRunContext(
+    ctx.requestContext,
+    internalThread.resourceId,
+    { sessions: createSourceControlSessionLookup(sourceControls) },
+    { expectedOrgId: options.expectedOrgId },
+  );
+  if (preparation === 'organization-mismatch') return preparation;
+  if (preparation === 'unavailable') {
+    throw new Error(`Could not authorize the owner of Slack Factory session ${internalThread.resourceId}.`);
+  }
+  return 'ready';
+}
+
 /**
  * Build the "new session" handler for mention / direct-message events. A mention or
  * DM on a not-yet-subscribed thread starts a NEW session; once subscribed, later
@@ -763,11 +796,13 @@ async function findInternalThread(mastra: Mastra | undefined, thread: HandlerThr
 async function gateDispatch(
   thread: HandlerThread,
   message: HandlerMessage,
-  { accountLinks, projects }: SlackChannelDeps,
+  deps: SlackChannelDeps,
   ctx: ChannelHandlerContext,
+  options: { requireInternalThread: boolean } = { requireInternalThread: false },
 ): Promise<{
   routed?: { link: ChannelAccountLink; factoryProjectId: string; slackWorkItemsEnabled: boolean };
 } | null> {
+  const { accountLinks, projects } = deps;
   const sender = await resolveLinkedSender({ thread, message, accountLinks });
   if (sender.status === 'blocked') return null;
   // Linked senders must also route to a Factory project before a run starts.
@@ -779,6 +814,14 @@ async function gateDispatch(
     // stamping only in the routed branch would silently run them on default
     // credentials.
     ctx.requestContext.set('user', { id: sender.link.userId, organizationId: sender.link.orgId });
+    const ownerContext = await prepareExistingSessionOwnerContext(thread, deps, ctx, {
+      expectedOrgId: sender.link.orgId,
+      requireInternalThread: options.requireInternalThread,
+    });
+    if (ownerContext === 'organization-mismatch') {
+      await thread.post('This thread belongs to a Factory session in another organization.');
+      return null;
+    }
 
     const route = await resolveFactoryForLink({ thread, ...sender, accountLinks, projects });
     if (route.status === 'blocked') return null;
@@ -912,7 +955,7 @@ async function reportPreDispatchError(
     messageId: message.id,
     authorId: message.author.userId,
   };
-  const logger = ctx.mastra?.getLogger();
+  const logger = typeof ctx.mastra?.getLogger === 'function' ? ctx.mastra.getLogger() : undefined;
   const logError = (line: string) => (logger ? logger.error(line) : console.error(line));
   logError(`[slack] Pre-dispatch failure ${JSON.stringify({ ...correlation, error: preDispatchErrorDetails(error) })}`);
   try {
@@ -1097,7 +1140,7 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       // resolve a factory (e.g. the default was cleared or its factory
       // deleted mid-conversation).
       try {
-        const gate = await gateDispatch(thread, message, deps, ctx);
+        const gate = await gateDispatch(thread, message, deps, ctx, { requireInternalThread: true });
         if (!gate) return;
       } catch (error) {
         await reportPreDispatchError(thread, message, ctx, error);

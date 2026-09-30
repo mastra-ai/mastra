@@ -80,7 +80,7 @@ export function EntityAccordionItem({
               />
             </Icon>
             <Icon>
-              <Ruler className="text-warning-indicator" />
+              <Ruler className="text-warning-foreground" />
             </Icon>
             <Txt as="span" variant="caption" tone="ink">
               Display Conditions

@@ -58,11 +58,11 @@ const badgeTokenHue: Partial<Record<BadgeVariant, string>> = {
   success: 'green',
   destructive: 'red',
   info: 'blue',
-  warning: 'yellow',
+  warning: 'amber',
 };
 
 const statusRoles = ['success', 'destructive', 'warning', 'info'];
-const statusParts = ['subtle', 'edge', 'indicator', 'subtle-foreground'];
+const statusParts = ['subtle', 'edge', 'indicator', 'bright', 'subtle-foreground'];
 const badgeParts = ['strong', 'subtle', 'edge', 'indicator', 'foreground'];
 
 const StatusSwatch = ({ token }: { token: string }) => (
@@ -89,7 +89,7 @@ export const StatusFoundations: Story = {
         </Txt>
       }
       note="Light is not the dark value dimmed: the base keeps its saturation while the foreground flips to a deep tint, because ink has to darken when the surface turns white."
-      noteAside="Utilities: bg-{status}-subtle, border-{status}-edge, text-{status}-subtle-foreground, bg-badge-{hue}-strong, text-badge-{hue}-foreground."
+      noteAside="Utilities: bg-{status}-subtle, border-{status}-edge, text-{status}-subtle-foreground, text-destructive-foreground, text-warning-foreground, bg-badge-{hue}-strong, text-badge-{hue}-foreground."
     >
       <FoundationSection
         label="Notice"
@@ -143,7 +143,7 @@ export const StatusFoundations: Story = {
 
       <FoundationSection
         label="Status roles"
-        description="Each notice has a fill, edge, indicator, and foreground. Destructive controls also have a pressed subtle fill."
+        description="Each notice has a fill, edge, indicator, and foreground. Bright is a lighter indicator for small live marks such as progress dots and activity belts. Warning and destructive also have a foreground for colored text and icons on the page, because their indicator fills are too light to read as text in light mode. Destructive controls also have a pressed subtle fill."
       >
         {statusRoles.map(role => (
           <SpecimenGroup key={role} label={role}>
@@ -151,10 +151,16 @@ export const StatusFoundations: Story = {
               {statusParts.map(part => (
                 <StatusSwatch key={part} token={`${role}-${part}`} />
               ))}
+              {(role === 'destructive' || role === 'warning') && <StatusSwatch token={`${role}-foreground`} />}
               {role === 'destructive' && <StatusSwatch token="destructive-subtle-active" />}
             </div>
           </SpecimenGroup>
         ))}
+        <SpecimenGroup label="session">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+            <StatusSwatch token="session-initializing" />
+          </div>
+        </SpecimenGroup>
       </FoundationSection>
 
       <FoundationSection

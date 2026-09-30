@@ -361,6 +361,31 @@ export async function updateFactoryDefaultModel(
   return project;
 }
 
+export interface ApplyFactoryDefaultModelResult {
+  modelId: string;
+  applied: string[];
+  skipped: Array<{
+    threadId: string;
+    reason: 'not-running' | 'work-item-missing' | 'stage-inactive' | 'thread-missing' | 'mode-unknown' | 'apply-failed';
+  }>;
+}
+
+/** Apply the Factory default model to currently running work and review sessions. */
+export async function applyFactoryDefaultModelToSessions(
+  baseUrl: string,
+  factoryProjectId: string,
+): Promise<ApplyFactoryDefaultModelResult> {
+  const res = await fetch(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/apply-default-model`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    },
+  );
+  return readJsonOrThrow<ApplyFactoryDefaultModelResult>(res, 'Failed to switch running sessions');
+}
+
 /** Toggle a Factory's automation settings: rule-started runs, plan approval. */
 export async function updateFactoryAutomation(
   baseUrl: string,

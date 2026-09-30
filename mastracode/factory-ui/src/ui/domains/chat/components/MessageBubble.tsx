@@ -96,7 +96,7 @@ export function MessageBubble({
                 as="span"
                 variant="meta"
                 tone="muted"
-                className={cn(steeringFailed && 'text-destructive-indicator')}
+                className={cn(steeringFailed && 'text-destructive-foreground')}
                 aria-live="polite"
               >
                 {steeringStatus}

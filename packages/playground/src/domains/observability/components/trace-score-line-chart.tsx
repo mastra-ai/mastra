@@ -10,7 +10,7 @@ const SERIES_COLORS = [
   'var(--chart-purple)',
   'var(--chart-orange)',
   'var(--chart-pink)',
-  'var(--chart-yellow)',
+  'var(--chart-amber)',
 ];
 
 export function TraceScoreLineChart({
