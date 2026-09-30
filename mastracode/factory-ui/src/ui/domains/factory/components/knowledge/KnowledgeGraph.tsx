@@ -131,11 +131,11 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
           // A selected record (open in the flyout) lights its edge up.
           data?.focused
             ? {
-                stroke: pinned ? 'var(--badge-yellow-indicator)' : 'var(--foreground)',
+                stroke: pinned ? 'var(--badge-amber-indicator)' : 'var(--foreground)',
                 strokeWidth: 2.5,
               }
             : pinned
-              ? { stroke: 'var(--badge-yellow-indicator)', strokeWidth: 2 }
+              ? { stroke: 'var(--badge-amber-indicator)', strokeWidth: 2 }
               : source.startsWith('record:') || target.startsWith('record:')
                 ? { stroke: 'var(--muted-foreground)', strokeWidth: 1.2 }
                 : { stroke: 'var(--badge-purple-edge)', strokeWidth: 1.4 }
@@ -145,7 +145,7 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
         <EdgeLabelRenderer>
           <span
             // Nodes always render above lines and their badges — no z lift.
-            className="shadow-raised absolute rounded-full bg-yellow-400 p-1 text-yellow-950"
+            className="shadow-raised absolute rounded-full bg-amber-400 p-1 text-amber-950"
             style={{
               zIndex: 0,
               // Quadratic bezier midpoint: B(0.5) = 0.25·start + 0.5·control + 0.25·end
@@ -180,10 +180,10 @@ function RecordNodeComponent({ data }: NodeProps<RecordFlowNode>) {
         // read as knowledge points, distinct from nodes (purple) and pins
         // (amber).
         record.pinned
-          ? 'border-yellow-300 bg-yellow-400 text-yellow-950 shadow-raised'
+          ? 'border-amber-300 bg-amber-400 text-amber-950 shadow-raised'
           : 'border-foreground bg-foreground',
         // The selected record (open in the flyout) glows hard.
-        focused ? (record.pinned ? 'ring-badge-yellow-indicator ring-2' : 'ring-2 ring-foreground') : '',
+        focused ? (record.pinned ? 'ring-badge-amber-indicator ring-2' : 'ring-2 ring-foreground') : '',
       ].join(' ')}
       style={{ width: size, height: size }}
     >
@@ -261,7 +261,7 @@ function FilterChip({
         'flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors',
         active
           ? accent
-            ? 'border-badge-yellow-edge bg-badge-yellow-strong text-badge-yellow-foreground'
+            ? 'border-badge-amber-edge bg-badge-amber-strong text-badge-amber-foreground'
             : 'border-badge-purple-edge bg-badge-purple-strong text-badge-purple-foreground'
           : 'border-border bg-card text-muted-foreground hover:text-foreground',
       ].join(' ')}
@@ -643,7 +643,7 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
       >
         <div className="text-foreground mb-1 flex items-center gap-1.5">
           Record
-          {record.pinned ? <Pin size={11} className="text-badge-yellow-indicator" aria-label="Pinned" /> : null}
+          {record.pinned ? <Pin size={11} className="text-badge-amber-indicator" aria-label="Pinned" /> : null}
         </div>
         <div className="text-muted-foreground leading-relaxed">{record.text}</div>
       </div>

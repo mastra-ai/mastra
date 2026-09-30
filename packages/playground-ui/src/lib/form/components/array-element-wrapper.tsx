@@ -53,7 +53,7 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
             </span>
           )}
           {invalid && (
-            <Txt as="span" variant="meta" className="ml-auto shrink-0 text-destructive-indicator">
+            <Txt as="span" variant="meta" className="ml-auto shrink-0 text-destructive-foreground">
               Needs input
             </Txt>
           )}

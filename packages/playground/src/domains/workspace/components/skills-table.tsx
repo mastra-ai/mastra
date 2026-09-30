@@ -105,7 +105,7 @@ export function SkillsTable({
 
       {hasUndiscoveredAgentSkills && (
         <div className="flex items-start gap-3 rounded-lg border border-warning-edge bg-warning-subtle p-3">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning-indicator" />
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning-foreground" />
           <div className="text-body">
             <p className="font-medium text-warning-subtle-foreground">Skills installed but not discovered</p>
             <p className="mt-1 text-muted-foreground">

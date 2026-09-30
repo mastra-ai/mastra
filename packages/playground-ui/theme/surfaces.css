@@ -56,8 +56,9 @@
   --fill-destructive: var(--red-600);
   --fill-destructive-hover: var(--red-700);
   --fill-destructive-active: var(--red-800);
-  --fill-destructive-disabled: var(--red-900);
+  --fill-destructive-disabled: var(--red-soft-900);
   --fill-destructive-foreground: var(--red-50);
+  --fill-destructive-disabled-foreground: var(--red-soft-300);
 
   /*
    * Boundary ladder — the four states of a control's 1px edge, as alphas of
@@ -151,6 +152,7 @@ html.light {
    * ladder re-resolves from here. */
   --fill-tint: 20.5%;
   --fill-destructive-disabled: var(--red-300);
+  --fill-destructive-disabled-foreground: var(--red-50);
   /* Shade carries less weight than light at equal alpha, so focus needs a
    * higher one here to hold its 3:1 floor against the fill it sits on. */
   --border-focus: oklch(var(--fill-tint) 0 0 / 50%);
@@ -201,6 +203,7 @@ html.light {
   --color-fill-destructive-active: var(--fill-destructive-active);
   --color-fill-destructive-disabled: var(--fill-destructive-disabled);
   --color-fill-destructive-foreground: var(--fill-destructive-foreground);
+  --color-fill-destructive-disabled-foreground: var(--fill-destructive-disabled-foreground);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
   --color-border-hover: var(--border-hover);

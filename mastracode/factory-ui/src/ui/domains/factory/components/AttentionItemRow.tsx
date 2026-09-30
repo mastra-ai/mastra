@@ -36,20 +36,20 @@ const KIND = {
   'automation-failed': {
     glyph: TriangleAlert,
     label: 'failed',
-    tone: 'text-destructive-indicator',
+    tone: 'text-destructive-foreground',
     badge: 'destructive',
   },
   'automation-proposed': {
     glyph: Sparkles,
     label: 'suggested',
-    tone: 'text-warning-indicator',
+    tone: 'text-warning-foreground',
     badge: 'orange',
   },
   'supervisor-finding': { glyph: Brain, label: 'finding', tone: 'text-badge-green-indicator', badge: 'blue' },
   'agent-waiting': {
     glyph: Hourglass,
     label: 'waiting',
-    tone: 'text-warning-indicator',
+    tone: 'text-warning-foreground',
     badge: 'orange',
   },
 } satisfies Record<

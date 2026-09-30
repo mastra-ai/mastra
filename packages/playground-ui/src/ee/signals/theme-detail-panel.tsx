@@ -129,7 +129,7 @@ export function ThemeDetailPanel({
           {insightTraceId === undefined && (
             <>
               {detailQuery.isPending && <Txt tone="muted">Loading theme details…</Txt>}
-              {detailQuery.isError && <Txt className="text-destructive-indicator">Unable to load theme details.</Txt>}
+              {detailQuery.isError && <Txt className="text-destructive-foreground">Unable to load theme details.</Txt>}
               {detailQuery.data && !detailQuery.data.theme && (
                 <section>
                   <Txt as="h2" variant="subheading" tone="ink">
@@ -181,7 +181,7 @@ export function ThemeDetailPanel({
                       </Txt>
                     )}
                     {examplesQuery.isError && (
-                      <Txt className="mt-3 text-destructive-indicator">Unable to load examples.</Txt>
+                      <Txt className="mt-3 text-destructive-foreground">Unable to load examples.</Txt>
                     )}
                     {examplesQuery.data && (
                       <>
@@ -235,7 +235,7 @@ export function ThemeDetailPanel({
                         </Txt>
                       )}
                       {historyQuery.isError && (
-                        <Txt className="mt-3 text-destructive-indicator">Unable to load the trend.</Txt>
+                        <Txt className="mt-3 text-destructive-foreground">Unable to load the trend.</Txt>
                       )}
                       {oldestHistoryPoint !== undefined && (
                         <>

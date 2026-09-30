@@ -68,7 +68,7 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
               settings below — your personal defaults don&apos;t apply to them.
             </span>
             {error && (
-              <Txt as="span" variant="meta" className="text-destructive-indicator">
+              <Txt as="span" variant="meta" className="text-destructive-foreground">
                 {error instanceof Error ? error.message : String(error)}
               </Txt>
             )}
