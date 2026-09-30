@@ -292,7 +292,7 @@ describe('AgentController: ask_user native suspension', () => {
     const { session } = await buildController('approval-abort', JSON.stringify({ question: 'Pick?' }));
 
     const approval = session.approval;
-    const parked = approval.arm({ toolName: 'edit_file' });
+    const parked = approval.arm({ toolName: 'edit_file', toolCallId: 'call-1' });
     expect(approval.isArmed()).toBe(true);
 
     session.abort();
@@ -309,18 +309,18 @@ describe('AgentController: ask_user native suspension', () => {
     const approval = new SessionApproval();
     const parked = approval.arm({ toolName: 'edit_file', toolCallId: 'call-current' });
     expect(approval.isArmed()).toBe(true);
-    expect(approval.getToolCallId()).toBe('call-current');
+    expect(approval.getToolCallIds()).toEqual(['call-current']);
 
     // Wrong id: ignored, gate remains armed.
     approval.respond({ decision: 'approve', toolCallId: 'call-stale' });
     expect(approval.isArmed()).toBe(true);
 
-    // Correct id resolves it. Omitting toolCallId is also accepted (backwards compatible).
+    // The matching id resolves it.
     approval.respond({ decision: 'approve', toolCallId: 'call-current' });
     const decision = await parked;
     expect(decision.decision).toBe('approve');
     expect(approval.isArmed()).toBe(false);
-    expect(approval.getToolCallId()).toBeNull();
+    expect(approval.getToolCallIds()).toEqual([]);
   });
 
   it('surfaces three ask_user questions one at a time across resumes (#13642 serialized flow)', async () => {
@@ -481,4 +481,19 @@ describe('AgentController: Stop on a parked question frees the thread', () => {
     expect(session.displayState.get().isRunning).toBe(false);
     expect(controller.listActiveThreadRuns()).toHaveLength(0);
   }, 20_000);
+});
+
+describe('resume boundary waiter', () => {
+  it('settles when the stream is torn down before any terminal event', async () => {
+    const { session } = await buildController('teardown', JSON.stringify({ question: 'Color?' }));
+    const waiter = (session as any).createSubscribedResumeBoundaryWaiter({ toolCallId: 'call-1' });
+    let settled = false;
+    void waiter.promise.then(() => {
+      settled = true;
+    });
+
+    session.stream.cleanup();
+
+    await vi.waitFor(() => expect(settled).toBe(true));
+  });
 });

@@ -1,9 +1,9 @@
 import type { SignalCatalogEntry } from '@mastra/client-js';
 import { Info } from 'lucide-react';
-import { getSignalHue } from './signal-colors';
+import { getSignalColor } from './signal-colors';
 import { orderedSignals, signalDescription, signalLabel } from './signal-formatting';
-import { nodeColor } from '@/ds/components/SankeyChart';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
@@ -35,12 +35,15 @@ export function TraceIntelligenceExplainer({ signalCatalog }: { signalCatalog: r
         <ul className="space-y-1.5">
           {enabledSignals.map(signalName => (
             <li key={signalName} className="text-muted-foreground">
-              <span
-                className="font-mono text-meta tracking-widest uppercase"
-                style={{ color: nodeColor(getSignalHue(signalName)) }}
+              <Txt
+                as="span"
+                variant="meta"
+                font="mono"
+                className="tracking-widest uppercase"
+                style={{ color: getSignalColor(signalName) }}
               >
                 {signalLabel(signalCatalog, signalName)}
-              </span>{' '}
+              </Txt>{' '}
               — {signalDescription(signalCatalog, signalName)}
             </li>
           ))}

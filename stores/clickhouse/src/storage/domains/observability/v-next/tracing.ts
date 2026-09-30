@@ -10,8 +10,6 @@
  * over the trace data -- since branches are conceptually a subset of traces.
  */
 
-import { randomUUID } from 'node:crypto';
-
 import type { ClickHouseClient } from '@clickhouse/client';
 import { BRANCH_SPAN_TYPES, listBranchesArgsSchema, toTraceSpans, TraceStatus } from '@mastra/core/storage';
 import type {
@@ -43,7 +41,7 @@ import {
   TABLE_TRACE_BRANCHES_DELTA,
   TABLE_TRACE_ROOTS,
 } from './ddl';
-import { recordDeletionRequest } from './deletion-requests';
+import { markDeletionRequestApplied, recordDeletionRequest } from './deletion-requests';
 import { CH_SETTINGS, CH_INSERT_SETTINGS, spanRecordToRow, rowToSpanRecord } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
@@ -222,7 +220,9 @@ export async function getTraceLight(
  * so span deletes never propagate to it. Delta tables self-expire via TTL and
  * discovery tables self-heal, so neither needs explicit deletes.
  *
- * Records the predicate before using lightweight DELETE FROM on every table.
+ * Records the predicate before using lightweight DELETE FROM on every table
+ * and marks the request applied once every delete succeeds. If any delete
+ * fails, the request stays unapplied; retry by calling this function again.
  * Lightweight deletes hide rows through ClickHouse's delete mask; physical
  * removal depends on the deployment's configured retention and merge policy.
  *
@@ -236,8 +236,8 @@ export async function batchDeleteTraces(
 ): Promise<void> {
   if (args.traceIds.length === 0) return;
 
-  await recordDeletionRequest(client, {
-    requestId: randomUUID(),
+  const request = await recordDeletionRequest(client, {
+    requestId: globalThis.crypto.randomUUID(),
     organizationId: args.organizationId,
     resourceId: args.resourceId,
     signal: 'traces',
@@ -301,6 +301,8 @@ export async function batchDeleteTraces(
       }),
     ),
   ]);
+
+  await markDeletionRequestApplied(client, request, replication);
 }
 
 /** Truncate all tracing tables (span_events + trace_roots). */

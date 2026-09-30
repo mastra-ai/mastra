@@ -74,7 +74,7 @@ export const Tab = ({
           attention && 'relative',
           'flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap outline-none',
           controlStateColorTransition,
-          focusRing.visible,
+          focusRing,
           'data-[active]:text-foreground',
           'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-muted-foreground',
           'aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:text-muted-foreground',

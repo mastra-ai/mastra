@@ -1,3 +1,4 @@
+import type { ActorSignal } from '../../auth/ee';
 import type { RequestContext } from '../../di';
 import type { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
@@ -76,6 +77,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
     };
     pubsub?: PubSub; // Not used - evented engine uses this.mastra.pubsub directly
     requestContext: RequestContext;
+    actor?: ActorSignal;
     retryConfig?: {
       attempts?: number;
       delay?: number;
@@ -155,6 +157,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
             prevResult: { status: 'success', output: prevResult?.payload },
             resumeData: params.resume.resumePayload,
             requestContext: params.requestContext.toJSON(),
+            actor: params.actor,
             format: params.format,
             perStep: params.perStep,
             initialState: resumeState,
@@ -180,6 +183,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
             timeTravel: params.timeTravel,
             prevResult: { status: 'success', output: prevResult?.payload },
             requestContext: params.requestContext.toJSON(),
+            actor: params.actor,
             format: params.format,
             perStep: params.perStep,
             state: params.timeTravel.state,
@@ -187,7 +191,8 @@ export class EventedExecutionEngine extends ExecutionEngine {
         });
       } else if (params.restart) {
         const prevStepId = getStepId(this.resolveWorkflow(params.workflowId, params.runId), params.restart.activePaths);
-        const prevResult = params.restart.stepResults[prevStepId ?? 'input'];
+        const prevResult =
+          params.restart.stepResults[params.restart.isPreFirstStepRestart ? 'input' : (prevStepId ?? 'input')];
         await pubsub.publish('workflows', {
           type: 'workflow.start',
           runId: params.runId,
@@ -197,8 +202,12 @@ export class EventedExecutionEngine extends ExecutionEngine {
             executionPath: params.restart.activePaths,
             stepResults: params.restart.stepResults,
             restart: params.restart,
-            prevResult: { status: 'success', output: prevResult?.payload },
+            prevResult: {
+              status: 'success',
+              output: params.restart.isPreFirstStepRestart ? prevResult : prevResult?.payload,
+            },
             requestContext: params.requestContext.toJSON(),
+            actor: params.actor,
             format: params.format,
             perStep: params.perStep,
             state: params.restart.state,
@@ -213,6 +222,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
             runId: params.runId,
             prevResult: { status: 'success', output: params.input },
             requestContext: params.requestContext.toJSON(),
+            actor: params.actor,
             format: params.format,
             perStep: params.perStep,
             initialState: params.initialState,

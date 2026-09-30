@@ -1,3 +1,4 @@
+import { APICallError } from '@internal/ai-sdk-v5';
 import { RequestContext } from '@mastra/core/di';
 import { MastraError } from '@mastra/core/error';
 import {
@@ -462,6 +463,108 @@ describe('Tracing', () => {
       expect(testExporter.events[1].type).toBe(TracingEventType.SPAN_UPDATED);
     });
 
+    it('records HTTP status, URL and response body from an AI SDK APICallError', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+      const span = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent', attributes: { agentId: 'a' } });
+
+      span.error({
+        error: new APICallError({
+          message: 'Service Unavailable',
+          url: 'https://openrouter.ai/api/v1/chat/completions',
+          requestBodyValues: { messages: ['secret prompt'] },
+          statusCode: 503,
+          responseBody: '{"error":"upstream overloaded"}',
+        }),
+      });
+
+      expect(span.errorInfo?.name).toBe('AI_APICallError');
+      expect(span.errorInfo?.details).toEqual({
+        statusCode: 503,
+        url: 'https://openrouter.ai/api/v1/chat/completions',
+        isRetryable: true,
+        responseBody: { error: 'upstream overloaded' },
+      });
+    });
+
+    it('keeps a non-JSON provider response body as text', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+      const span = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent', attributes: { agentId: 'a' } });
+
+      span.error({
+        error: new APICallError({
+          message: 'Bad Gateway',
+          url: 'https://api.example.com/v1/chat',
+          requestBodyValues: {},
+          statusCode: 502,
+          responseBody: '<html>502 Bad Gateway</html>',
+        }),
+      });
+
+      expect(span.errorInfo?.details?.responseBody).toBe('<html>502 Bad Gateway</html>');
+    });
+
+    it('keeps APICallError details when a MastraError wraps it', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+      const span = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent', attributes: { agentId: 'a' } });
+      const apiError = new APICallError({
+        message: 'Unauthorized',
+        url: 'https://api.example.com/v1/chat?key=sk-live-secret',
+        requestBodyValues: {},
+        statusCode: 401,
+      });
+
+      span.error({
+        error: new MastraError(
+          {
+            id: 'LLM_FAILED',
+            domain: 'LLM',
+            category: 'THIRD_PARTY',
+            details: { modelId: 'gpt-x', responseBody: 'kept from the wrapper' },
+          },
+          apiError,
+        ),
+      });
+
+      expect(span.errorInfo?.id).toBe('LLM_FAILED');
+      // Absent API fields never overwrite wrapper details; the URL query string is dropped.
+      expect(span.errorInfo?.details).toEqual({
+        modelId: 'gpt-x',
+        responseBody: 'kept from the wrapper',
+        statusCode: 401,
+        url: 'https://api.example.com/v1/chat',
+        isRetryable: false,
+      });
+    });
+
+    it('leaves details off a plain Error', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+      const span = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent', attributes: { agentId: 'a' } });
+
+      span.error({ error: new Error('boom') });
+
+      expect(span.errorInfo).toEqual({ message: 'boom', name: 'Error', stack: expect.any(String) });
+    });
+
     it('should prefer original cause stack when error is a MastraError wrapper', () => {
       const tracing = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
@@ -850,7 +953,7 @@ describe('Tracing', () => {
       rootSpan.end();
     });
 
-    it('should have endTime undefined for event spans', () => {
+    it('should have endTime equal to startTime for event spans', () => {
       const rootSpan = observability.startSpan({
         type: SpanType.AGENT_RUN,
         name: 'test-agent',
@@ -868,9 +971,9 @@ describe('Tracing', () => {
         },
       });
 
-      // Event spans should not have endTime (event occurs at startTime)
-      expect(eventSpan.endTime).toBeUndefined();
+      // Event spans are point-in-time: they end at the instant they start
       expect(eventSpan.startTime).toBeDefined();
+      expect(eventSpan.endTime).toEqual(eventSpan.startTime);
 
       rootSpan.end();
     });
@@ -1093,7 +1196,7 @@ describe('Tracing', () => {
       expect(exportedSpan.name).toBe('exported event span');
       expect(exportedSpan.output).toEqual({ text: 'Hello', chunkSize: 5 });
       expect(exportedSpan.input).toBeUndefined();
-      expect(exportedSpan.endTime).toBeUndefined();
+      expect(exportedSpan.endTime).toEqual(exportedSpan.startTime);
       expect(exportedSpan.attributes?.chunkType).toBe('text-delta');
       expect(exportedSpan.attributes?.sequenceNumber).toBe(42);
       expect(exportedSpan.metadata?.model).toBe('gpt-4');

@@ -92,7 +92,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
           </div>
 
           {error && (
-            <Txt as="p" variant="caption" className="text-notice-destructive-fg px-4 pb-2">
+            <Txt as="p" variant="caption" className="text-destructive-foreground px-4 pb-2">
               {error.message}
             </Txt>
           )}
@@ -103,18 +103,18 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
               {visibleLinked.map(repo => (
                 <div key={repo.projectRepositoryId} className="flex w-full items-center gap-3 rounded-md px-2 py-2">
                   <span className="min-w-0 flex-1">
-                    <span className="text-body text-foreground flex items-center gap-1.5">
+                    <Txt as="span" tone="ink" className="flex items-center gap-1.5">
                       {repo.provider === 'gitlab' ? (
                         <GitLabIcon className="text-foreground size-3.5 shrink-0" />
                       ) : (
                         <GithubIcon className="text-foreground size-3.5 shrink-0" />
                       )}
                       <span className="min-w-0 truncate">{repo.slug}</span>
-                    </span>
+                    </Txt>
                     {repo.gitBranch && (
-                      <span className="text-caption text-muted-foreground block truncate">
+                      <Txt as="span" variant="caption" tone="muted" className="block truncate">
                         Default branch: {repo.gitBranch}
-                      </span>
+                      </Txt>
                     )}
                   </span>
                   <Button
@@ -155,20 +155,24 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
                         onClick={() => linkRepository.mutate({ factoryProjectId, repo })}
                       >
                         <span className="min-w-0 flex-1">
-                          <span className="text-body text-foreground flex items-center gap-1.5">
+                          <Txt as="span" tone="ink" className="flex items-center gap-1.5">
                             {gitlab ? (
                               <GitLabIcon className="text-muted-foreground size-3.5 shrink-0" />
                             ) : (
                               <FolderIcon size={14} className="text-muted-foreground shrink-0" />
                             )}
                             <span className="min-w-0 truncate">{repo.fullName}</span>
-                          </span>
-                          <span className="text-caption text-muted-foreground block truncate">
+                          </Txt>
+                          <Txt as="span" variant="caption" tone="muted" className="block truncate">
                             {gitlab ? 'GitLab' : repo.private ? 'private' : 'public'} · Default branch:{' '}
                             {repo.defaultBranch}
-                          </span>
+                          </Txt>
                         </span>
-                        {busyRepoId === repo.id && <span className="text-caption text-muted-foreground">Linking…</span>}
+                        {busyRepoId === repo.id && (
+                          <Txt as="span" variant="caption" tone="muted">
+                            Linking…
+                          </Txt>
+                        )}
                       </button>
                     );
                   })}

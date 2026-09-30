@@ -4,7 +4,6 @@
  */
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
 import type { Component } from '@earendil-works/pi-tui';
 import type { BackgroundCompletionEvent } from '@mastra/code-sdk/agents/background-completion-events';
 import { PACK_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
@@ -55,7 +54,6 @@ import { promptAuthMode } from './components/login-mode-selector.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
 import type { ModelItem } from './components/model-selector.js';
 import { GradientAnimator } from './components/obi-loader.js';
-import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import { showError, showInfo, showFormattedError, notify } from './display.js';
 import { dispatchEvent, getThreadLifecycleGeneration } from './event-dispatch.js';
 import { renderStatusAnimationFrame } from './footer-animation-renderer.js';
@@ -68,6 +66,7 @@ import { OnboardingInlineComponent } from './onboarding-inline.js';
 import { showModalOverlay } from './overlay.js';
 import { promptForApiKeyIfNeeded } from './prompt-api-key.js';
 
+import { applyQuietModeToRenderedComponents } from './quiet-mode.js';
 import {
   addPendingUserMessage,
   addUserMessage,
@@ -78,6 +77,7 @@ import {
   renderTaskDeltaInline,
 } from './render-messages.js';
 import { flushRender, requestRender } from './render-scheduler.js';
+import { showSessionError } from './session-errors.js';
 import {
   setupKeyboardShortcuts,
   buildLayout,
@@ -475,7 +475,7 @@ export class MastraTUI {
 
       this.sendOptimisticSignal(content, images, optimisticMessageId, pendingNewThread);
     } catch (error) {
-      showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+      showSessionError(this.state, error);
     }
   }
 
@@ -487,7 +487,7 @@ export class MastraTUI {
     this.clearStatusTimingTicker();
     const files = images?.map(img => ({ data: img.data, mediaType: img.mimeType }));
     this.state.session.sendMessage({ content, files }).catch(error => {
-      showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+      showSessionError(this.state, error);
     });
   }
 
@@ -574,7 +574,7 @@ export class MastraTUI {
       this.remapOptimisticUserMessage(optimisticMessageId, signal.id);
       signal.accepted.catch((error: unknown) => {
         this.removeOptimisticUserMessage(signal.id);
-        showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+        showSessionError(this.state, error);
       });
     };
 
@@ -586,7 +586,7 @@ export class MastraTUI {
 
     pendingThread.then(send).catch((error: unknown) => {
       this.removeOptimisticUserMessage(optimisticMessageId);
-      showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+      showSessionError(this.state, error);
     });
   }
 
@@ -615,7 +615,7 @@ export class MastraTUI {
         } else {
           this.removeOptimisticUserMessage(signal.id);
         }
-        showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+        showSessionError(this.state, error);
       });
     };
 
@@ -626,7 +626,7 @@ export class MastraTUI {
     }
 
     pendingThread.then(send).catch((error: unknown) => {
-      showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+      showSessionError(this.state, error);
     });
   }
 
@@ -1171,7 +1171,7 @@ export class MastraTUI {
     // PermissionRequest hook fired before the queued agent_start carries the
     // same id as subsequent hooks in this run.
     if (!hookMgr.getRunId()) {
-      hookMgr.setRunId(randomUUID());
+      hookMgr.setRunId(globalThis.crypto.randomUUID());
     }
     hookMgr.runAgentStart().catch(() => {});
   }
@@ -1369,6 +1369,7 @@ export class MastraTUI {
       authStorage: this.state.authStorage,
       processMemoryDiagnostics: this.state.options.processMemoryDiagnostics,
       knowledgeInspector: this.state.options.knowledgeInspector,
+      threadScheduler: this.state.options.threadScheduler,
       customSlashCommands: this.state.customSlashCommands,
       showInfo: msg => showInfo(this.state, msg),
       showError: msg => showError(this.state, msg),
@@ -1711,16 +1712,9 @@ export class MastraTUI {
     this.state.quietModeMaxToolPreviewLines = previewLineLimit;
     this.state.taskProgress?.setQuietMode(enabled);
 
-    const tools = this.state.allToolComponents.filter(
-      (tool): tool is IToolExecutionComponent => typeof tool.setQuietModeDisplay === 'function',
-    );
     const color = this.state.session?.mode.resolve().metadata?.color;
     const modeColor = typeof color === 'string' ? color : undefined;
-    for (const tool of tools) {
-      tool.setCompactToolModeColor?.(modeColor);
-      tool.setQuietModeDisplay?.(enabled ? 'quiet' : 'normal');
-      tool.setQuietPreviewLineLimit?.(previewLineLimit);
-    }
+    applyQuietModeToRenderedComponents(this.state, enabled, previewLineLimit, modeColor);
     flushRender(this.state);
   }
 
@@ -1754,7 +1748,7 @@ export class MastraTUI {
     const previewLineAnswer = await askModalQuestion(this.state.ui, {
       question: 'How many quiet-mode tool preview lines should be shown?\n\nYou can change this later in /settings.',
       options: [
-        { label: 'None', description: 'Hide compact tool detail previews' },
+        { label: 'None', description: 'Hide tool previews and shell output' },
         { label: '1 line', description: 'Show the latest preview line' },
         { label: '2 lines', description: 'Default' },
         { label: '4 lines', description: 'Show more streaming detail' },

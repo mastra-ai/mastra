@@ -54,6 +54,7 @@ import {
 import type { ProcessorStepOutput } from '../../processors/step-schema';
 import { toStandardSchema } from '../../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../../schema';
+import type { WorkflowsStorage } from '../../storage/domains/workflows/base';
 
 import { WorkflowRunOutput } from '../../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../../stream/types';
@@ -82,8 +83,6 @@ import type {
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import type { ClassifierStepOutput } from '../entry-executors';
-import { validateCron } from '../scheduler/cron';
-import type { WorkflowScheduleConfig } from '../scheduler/types';
 import { createStepFromClassifier } from '../step-factories';
 import type { ClassifierStepOptions } from '../step-factories';
 import { forwardAgentStreamChunk } from '../stream-utils';
@@ -1715,26 +1714,6 @@ export function createWorkflow<
   >[],
   TRequestContextSchema extends PublicSchema<any> | undefined = undefined,
 >(params: CreateWorkflowParams<TWorkflowId, TStateSchema, TInputSchema, TOutputSchema, TSteps, TRequestContextSchema>) {
-  if (params.schedule) {
-    const schedules = Array.isArray(params.schedule) ? params.schedule : [params.schedule];
-    if (Array.isArray(params.schedule)) {
-      const seenIds = new Set<string>();
-      for (const entry of schedules) {
-        if (!entry.id) {
-          throw new Error(
-            `Workflow "${params.id}" declares an array of schedules but one entry is missing the required \`id\` field. Every entry in a schedule array must have a unique stable id.`,
-          );
-        }
-        if (seenIds.has(entry.id)) {
-          throw new Error(`Workflow "${params.id}" declares duplicate schedule id "${entry.id}".`);
-        }
-        seenIds.add(entry.id);
-      }
-    }
-    for (const entry of schedules) {
-      validateCron(entry.cron, entry.timezone);
-    }
-  }
   const eventProcessor = new WorkflowEventProcessor({ mastra: params.mastra! });
   const executionEngine = new EventedExecutionEngine({
     mastra: params.mastra!,
@@ -1772,27 +1751,9 @@ export class EventedWorkflow<
   TOutput = unknown,
   TPrevSchema = TInput,
 > extends Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
-  #schedules: WorkflowScheduleConfig[];
-
   constructor(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
     super(params);
     this.engineType = 'evented';
-    if (!params.schedule) {
-      this.#schedules = [];
-    } else if (Array.isArray(params.schedule)) {
-      this.#schedules = params.schedule.map(cfg => ({ ...cfg }));
-    } else {
-      this.#schedules = [{ ...params.schedule }];
-    }
-  }
-
-  /**
-   * Returns the cron schedule configurations declared on this workflow as a
-   * normalized array. Used by the Mastra scheduler to register declarative
-   * schedules at boot. Returns an empty array when no schedule is declared.
-   */
-  getScheduleConfigs(): WorkflowScheduleConfig[] {
-    return this.#schedules.map(cfg => ({ ...cfg }));
   }
 
   __registerMastra(mastra: Mastra) {
@@ -1814,21 +1775,41 @@ export class EventedWorkflow<
       throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
     }
 
+    // The evented engine cannot function without a Mastra host — it is the
+    // source of the pubsub transport, snapshot storage, and agent/workflow
+    // resolution. Construction legitimately precedes registration (builders
+    // create workflows first; `__registerMastra` wires the host later), so
+    // enforce the precondition here rather than in the constructor. Without
+    // this guard the run would start and then hang or fail deep inside the
+    // event processor, far from the actual mistake.
+    if (!this.mastra) {
+      throw new MastraError({
+        id: 'EVENTED_WORKFLOW_MASTRA_HOST_REQUIRED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text:
+          `Workflow "${this.id}" runs on the evented execution engine, which requires a Mastra host. ` +
+          `Register this workflow on a Mastra instance (e.g. \`new Mastra({ workflows: { ${this.id}: workflow } })\`) before calling createRun().`,
+        details: { workflowId: this.id },
+      });
+    }
+
     const runIdToUse = options?.runId || globalThis.crypto.randomUUID();
 
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
 
     const supportsConcurrentUpdates = workflowsStore?.supportsConcurrentUpdates?.() ?? false;
     if (workflowsStore && !supportsConcurrentUpdates) {
+      const storageName = this.mastra?.getStorage()?.name ?? 'The configured storage';
       throw new MastraError({
         id: 'ATOMIC_STORAGE_OPERATIONS_NOT_SUPPORTED',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.USER,
         text:
-          `Workflow "${this.id}" runs on the evented execution engine, which requires a storage adapter that supports concurrent updates. ` +
-          `Your current workflow storage adapter does not. Switch to an adapter that does (for example @mastra/libsql), or, if you do not need scheduled execution, ` +
-          `remove the \`schedule\` field from this workflow's definition to use the default execution engine.`,
-        details: { workflowId: this.id },
+          `Workflow "${this.id}" runs on the evented execution engine, which advances steps from concurrent workers and therefore requires a storage adapter whose workflows domain applies concurrent updates atomically (\`supportsConcurrentUpdates()\`). ${storageName} storage reports that it does not. ` +
+          `Storage adapters that do: @mastra/libsql, @mastra/pg, @mastra/mysql, @mastra/mssql, @mastra/oracledb, @mastra/mongodb, @mastra/dynamodb, @mastra/spanner, @mastra/dsql, @mastra/upstash and @mastra/convex. ` +
+          `Workflows created with \`createWorkflow\` from \`@mastra/core/workflows/evented\` run on this engine, as do workflows that declare \`schedule\` while \`MASTRA_WORKERS\` is set. Durable agents on such a store fall back to the in-process engine with a warning instead of failing here.`,
+        details: { workflowId: this.id, storage: storageName },
       });
     }
 
@@ -1968,6 +1949,7 @@ export class EventedRun<
     perStep,
     outputOptions,
     tracingContext,
+    actor,
   }: {
     inputData?: TInput;
     requestContext?: RequestContext;
@@ -1978,6 +1960,7 @@ export class EventedRun<
       includeResumeLabels?: boolean;
     };
     tracingContext?: TracingContext;
+    actor?: ActorSignal;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     // Add validation checks
     if (this.serializedStepGraph.length === 0) {
@@ -2073,6 +2056,7 @@ export class EventedRun<
         pubsub: this.mastra.pubsub,
         retryConfig: this.retryConfig,
         requestContext,
+        actor,
         abortController: this.abortController,
         perStep,
         outputOptions,
@@ -2107,11 +2091,13 @@ export class EventedRun<
     initialState,
     requestContext,
     perStep,
+    actor,
   }: {
     inputData?: TInput;
     requestContext?: RequestContext;
     initialState?: TState;
     perStep?: boolean;
+    actor?: ActorSignal;
   }): Promise<{ runId: string }> {
     // Add validation checks
     if (this.serializedStepGraph.length === 0) {
@@ -2179,6 +2165,7 @@ export class EventedRun<
         runId: this.runId,
         prevResult: { status: 'success', output: inputDataToUse },
         requestContext: requestContext.toJSON(),
+        actor,
         initialState: initialStateToUse,
         perStep,
       },
@@ -2199,6 +2186,7 @@ export class EventedRun<
     closeOnSuspend = true,
     perStep,
     outputOptions,
+    actor,
   }: (TInput extends unknown ? { inputData?: TInput } : { inputData: TInput }) &
     (TState extends unknown ? { initialState?: TState } : { initialState: TState }) & {
       requestContext?: RequestContext;
@@ -2208,6 +2196,7 @@ export class EventedRun<
         includeState?: boolean;
         includeResumeLabels?: boolean;
       };
+      actor?: ActorSignal;
     }): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     if (this.closeStreamAction && this.streamOutput) {
       return this.streamOutput;
@@ -2249,6 +2238,7 @@ export class EventedRun<
             initialState: initialState as TState,
             perStep,
             outputOptions,
+            actor,
           });
 
           if (self.streamOutput) {
@@ -2366,6 +2356,42 @@ export class EventedRun<
     });
 
     return this.streamOutput;
+  }
+
+  async #claimResume(workflowsStore: WorkflowsStorage): Promise<void> {
+    const claimed = await workflowsStore.updateWorkflowState({
+      workflowName: this.workflowId,
+      runId: this.runId,
+      opts: { status: 'running', expectedStatus: 'suspended' },
+    });
+
+    if (claimed) {
+      return;
+    }
+
+    const current = await workflowsStore.loadWorkflowSnapshot({
+      workflowName: this.workflowId,
+      runId: this.runId,
+    });
+
+    if (!current) {
+      throw new Error(`Cannot resume workflow: no snapshot found for runId ${this.runId}`);
+    }
+
+    throw new MastraError({
+      id: 'WORKFLOW_RESUME_ALREADY_CLAIMED',
+      domain: ErrorDomain.MASTRA_WORKFLOW,
+      category: ErrorCategory.USER,
+      text:
+        `This suspended workflow run was already resumed by another caller. Workflow "${this.workflowId}" run "${this.runId}" ` +
+        `moved from "suspended" to "${current.status}" before this resume could claim it.`,
+      details: {
+        workflowId: this.workflowId,
+        runId: this.runId,
+        expectedStatus: 'suspended',
+        actualStatus: current.status ?? 'unknown',
+      },
+    });
   }
 
   async resume<TResumeSchema>(params: {
@@ -2520,6 +2546,43 @@ export class EventedRun<
     }
 
     this.setupAbortHandler();
+    await this.#claimResume(workflowsStore);
+
+    const releaseClaimIfUnused = async () => {
+      try {
+        const current = await workflowsStore.loadWorkflowSnapshot({
+          workflowName: this.workflowId,
+          runId: this.runId,
+        });
+
+        const claimedPaths = Object.keys(snapshot.suspendedPaths ?? {});
+        const currentPaths = Object.keys(current?.suspendedPaths ?? {});
+        const claimedStepIds = Object.keys(snapshot.context ?? {});
+        const currentStepIds = Object.keys(current?.context ?? {});
+        const resumedStepResult = current?.context?.[steps?.[0] ?? ''] as { status?: string } | undefined;
+        const engineNeverStarted =
+          current?.status === 'running' &&
+          currentPaths.length === claimedPaths.length &&
+          claimedPaths.every(path => currentPaths.includes(path)) &&
+          currentStepIds.length === claimedStepIds.length &&
+          claimedStepIds.every(stepId => currentStepIds.includes(stepId)) &&
+          resumedStepResult?.status === 'suspended';
+
+        if (!engineNeverStarted) {
+          return;
+        }
+
+        await workflowsStore.updateWorkflowState({
+          workflowName: this.workflowId,
+          runId: this.runId,
+          opts: { status: 'suspended', expectedStatus: 'running' },
+        });
+      } catch (releaseError) {
+        this.mastra
+          ?.getLogger()
+          ?.warn(`[Workflow ${this.workflowId}] Failed to release resume claim for run ${this.runId}`, releaseError);
+      }
+    };
 
     // Extract state from snapshot - could be in context.__state or in value
     const resumeState = (snapshot?.context as any)?.__state ?? snapshot?.value ?? {};
@@ -2541,6 +2604,7 @@ export class EventedRun<
         },
         pubsub: this.mastra.pubsub,
         requestContext,
+        actor: params.actor,
         abortController: this.abortController,
         perStep: params.perStep,
         outputOptions: params.outputOptions,
@@ -2552,6 +2616,10 @@ export class EventedRun<
         }
 
         return result;
+      })
+      .catch(async error => {
+        await releaseClaimIfUnused();
+        throw error;
       });
 
     this.executionResults = executionResultPromise;

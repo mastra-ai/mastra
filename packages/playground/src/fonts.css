@@ -51,4 +51,5 @@
     'Noto Color Emoji';
   --font-mono:
     'CommitMono', ui-monospace, sfmono-regular, menlo, monaco, consolas, 'Liberation Mono', 'Courier New', monospace;
+  --font-mono-size-adjust: ex-height 0.508;
 }

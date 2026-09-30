@@ -1,6 +1,6 @@
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
-import { coreAuthMiddleware } from '@mastra/server/auth';
+import { coreAuthMiddleware, isCustomRoutePublic } from '@mastra/server/auth';
 import type { Context, Middleware, Next } from 'koa';
 
 export interface KoaAuthMiddlewareOptions {
@@ -48,7 +48,10 @@ export function createAuthMiddleware({ mastra, requiresAuth = true }: KoaAuthMid
     const path = String(ctx.path || '/');
     const method = String(ctx.method || 'GET');
     const customRouteAuthConfig = new Map<string, boolean>(ctx.state.customRouteAuthConfig ?? []);
-    customRouteAuthConfig.set(`${method}:${path}`, true);
+    // Don't reclassify a custom route the app declared public (requiresAuth: false).
+    if (!isCustomRoutePublic(path, method, customRouteAuthConfig)) {
+      customRouteAuthConfig.set(`${method}:${path}`, true);
+    }
 
     const authHeader = ctx.headers.authorization;
     let token: string | null = authHeader ? authHeader.replace('Bearer ', '') : null;
@@ -68,6 +71,14 @@ export function createAuthMiddleware({ mastra, requiresAuth = true }: KoaAuthMid
       token,
       buildAuthorizeContext: () => toWebRequest(ctx),
     });
+
+    for (const [key, value] of Object.entries(result.headers ?? {})) {
+      if (key.toLowerCase() === 'set-cookie') {
+        ctx.append(key, value);
+      } else {
+        ctx.set(key, value);
+      }
+    }
 
     if (result.action === 'next') {
       await next();

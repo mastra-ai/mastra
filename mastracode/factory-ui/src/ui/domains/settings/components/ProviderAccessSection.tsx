@@ -58,17 +58,21 @@ function credentialAt(provider: ProviderInfo, scope: CredentialScope): Credentia
 interface RowScope {
   scope: CredentialScope;
   authEnabled: boolean;
+  showOrgCoverage: boolean;
 }
 
-function orgCoverage(provider: ProviderInfo, { scope, authEnabled }: RowScope): Credential | undefined {
-  return authEnabled && scope === 'user' ? credentialAt(provider, 'org') : undefined;
+function orgCoverage(
+  provider: ProviderInfo,
+  { scope, authEnabled, showOrgCoverage }: RowScope,
+): Credential | undefined {
+  return authEnabled && scope === 'user' && showOrgCoverage ? credentialAt(provider, 'org') : undefined;
 }
 
 function StatusBadge({ provider, rowScope }: { provider: ProviderInfo; rowScope: RowScope }) {
   const own = credentialAt(provider, rowScope.scope);
   if (own) {
     return (
-      <Badge size="sm" variant="green">
+      <Badge size="sm" variant="success">
         {CREDENTIAL_LABEL[own]}
       </Badge>
     );
@@ -94,7 +98,13 @@ function StatusBadge({ provider, rowScope }: { provider: ProviderInfo; rowScope:
   );
 }
 
-export function ProviderAccessSection({ description }: { description?: string }) {
+export function ProviderAccessSection({
+  description,
+  fixedScope,
+}: {
+  description?: string;
+  fixedScope?: CredentialScope;
+}) {
   const providersQuery = useProvidersQuery();
   const authQuery = useFactoryAuth();
   const startOAuthMutation = useStartProviderOAuth();
@@ -110,10 +120,16 @@ export function ProviderAccessSection({ description }: { description?: string })
   const providers = providersQuery.data ?? [];
   const authEnabled = authQuery.data?.authEnabled === true;
   const canWriteOrgKey = !authEnabled || (orgKeyAdminQuery.data ?? true);
-  const scopeOptions: SettingsScope[] = authEnabled ? ['personal', 'org'] : ['personal'];
+  const fixedSettingsScope: SettingsScope | undefined =
+    fixedScope === 'org' ? 'org' : fixedScope ? 'personal' : undefined;
+  const scopeOptions: SettingsScope[] = fixedSettingsScope
+    ? [fixedSettingsScope]
+    : authEnabled
+      ? ['personal', 'org']
+      : ['personal'];
   const scopeControl = useScopeControl(scopeOptions, canWriteOrgKey ? undefined : { org: ORG_SCOPE_MEMBER_REASON });
-  const scope: CredentialScope = scopeControl.shown === 'org' ? 'org' : 'user';
-  const rowScope: RowScope = { scope, authEnabled };
+  const scope: CredentialScope = fixedScope ?? (scopeControl.shown === 'org' ? 'org' : 'user');
+  const rowScope: RowScope = { scope, authEnabled, showOrgCoverage: fixedScope === undefined };
   const scopeArg = authEnabled ? { scope } : {};
 
   const oauthProviders = providers
@@ -193,7 +209,7 @@ export function ProviderAccessSection({ description }: { description?: string })
       >
         <div className="flex flex-col gap-3">
           {error && (
-            <Txt as="p" variant="caption" className="text-notice-destructive-fg">
+            <Txt as="p" variant="caption" className="text-destructive-foreground">
               {error}
             </Txt>
           )}

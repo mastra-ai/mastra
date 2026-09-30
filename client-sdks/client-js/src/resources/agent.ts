@@ -648,11 +648,11 @@ export class Agent extends BaseResource {
       unsubscribe: () => void;
     }
   > {
-    const { resourceId, threadId } = params;
+    const { resourceId, threadId, withInitialHistory } = params;
     const requestSubscription = () =>
       this.request(`/agents/${this.agentId}/threads/subscribe`, {
         method: 'POST',
-        body: { resourceId, threadId },
+        body: { resourceId, threadId, ...(withInitialHistory ? { withInitialHistory } : {}) },
         stream: true,
       }) as Promise<Response>;
 

@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { ArrowUpIcon } from 'lucide-react';
 import { nanoid } from 'nanoid';
@@ -80,9 +81,14 @@ export const AgentBuilderStarter = () => {
   return (
     <div className="starter-aurora flex min-h-full flex-col items-center justify-center bg-sidebar px-4 py-16">
       <div className="relative z-10 flex w-full max-w-3xl flex-col gap-6">
-        <h1 className="starter-heading text-center font-display text-title tracking-tight text-foreground md:text-display">
+        <Txt
+          as="h1"
+          variant="title"
+          tone="ink"
+          className="starter-heading text-center font-display tracking-tight md:text-display"
+        >
           What should we build today?
-        </h1>
+        </Txt>
 
         <form
           onSubmit={handleSubmit}

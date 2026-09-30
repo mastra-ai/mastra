@@ -8,7 +8,12 @@ import { createMastraCode } from '@mastra/code-sdk';
 import { createMastraCodeAnalytics } from '@mastra/code-sdk/analytics';
 import { isStreamDestroyedError } from '@mastra/code-sdk/error-classification';
 import { hasHeadlessFlag, runMCCli } from '@mastra/code-sdk/headless/index';
-import { createBrowserFromSettings, loadSettings } from '@mastra/code-sdk/onboarding/settings';
+import {
+  createBrowserFromSettings,
+  loadSettings,
+  resolveStagehandModel,
+  toActiveBrowserSettings,
+} from '@mastra/code-sdk/onboarding/settings';
 import { formatScaffoldSuccess, scaffoldPlugin } from '@mastra/code-sdk/plugins/scaffold';
 import {
   stopProcessMemoryDiagnosticsWithTimeout,
@@ -37,6 +42,7 @@ let authStorage: Awaited<ReturnType<typeof createMastraCode>>['authStorage'];
 let signalsPubSub: Awaited<ReturnType<typeof createMastraCode>>['signalsPubSub'];
 let storageMaintenance: Awaited<ReturnType<typeof createMastraCode>>['storageMaintenance'];
 let stopPluginSignalProviders: Awaited<ReturnType<typeof createMastraCode>>['stopPluginSignalProviders'] | undefined;
+let threadScheduler: Awaited<ReturnType<typeof createMastraCode>>['threadScheduler'] | undefined;
 let analytics: ReturnType<typeof createMastraCodeAnalytics> | undefined;
 let tui: MastraTUI | undefined;
 let processMemoryDiagnostics: ProcessMemoryDiagnostics | undefined;
@@ -75,8 +81,8 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
     console.info(`⚠ ${warning}`);
   });
   let browserPromise: ReturnType<typeof createBrowserFromSettings> | undefined;
-  const loadBrowser = () => {
-    browserPromise ??= createBrowserFromSettings(settings.browser);
+  const loadBrowser = (chatModelId: string | undefined) => {
+    browserPromise ??= createBrowserFromSettings(settings.browser, { chatModelId });
     return browserPromise;
   };
 
@@ -97,6 +103,7 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
   signalsPubSub = result.signalsPubSub;
   storageMaintenance = result.storageMaintenance;
   stopPluginSignalProviders = result.stopPluginSignalProviders;
+  threadScheduler = result.threadScheduler;
 
   if (result.storageWarning) {
     console.info(`⚠ ${result.storageWarning}`);
@@ -155,6 +162,7 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
     storageMaintenance: result.storageMaintenance,
     processMemoryDiagnostics,
     knowledgeInspector: result.knowledgeInspector,
+    threadScheduler: result.threadScheduler,
     appName: 'Mastra Code',
     version: getCurrentVersion(),
     inlineQuestions: true,
@@ -169,11 +177,18 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
   });
 
   if (settings.browser.enabled) {
-    void loadBrowser()
+    // Captured once: the Stagehand instance is fixed at launch and shared by every thread.
+    const chatModelId = session.model.get();
+    void loadBrowser(chatModelId)
       .then(browser => {
         if (!browser) return;
         controller.setBrowser(browser);
-        void session.state.set({ activeBrowserSettings: settings.browser } as any).catch(() => {});
+        void session.state
+          .set({
+            activeBrowserSettings: toActiveBrowserSettings(settings.browser),
+            activeBrowserModel: resolveStagehandModel(settings.browser, { chatModelId }),
+          } as any)
+          .catch(() => {});
       })
       .catch(() => {});
   }
@@ -193,6 +208,8 @@ const asyncCleanup = (): Promise<void> => {
     const diagnosticsShutdown = processMemoryDiagnostics
       ? stopProcessMemoryDiagnosticsWithTimeout(processMemoryDiagnostics, message => console.warn(message))
       : undefined;
+    // Schedules live only in this process; stop their timers so none fires mid-shutdown.
+    threadScheduler?.stop();
     const closeSignalsPubSub = (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
     await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals(), closeSignalsPubSub?.()]);
     // Mastra owns the workspaces and must destroy them to stop retained language
@@ -353,6 +370,14 @@ const handleFatalError = createOneShotFatalErrorHandler((error: unknown): void =
 async function main() {
   if (process.argv[2] === 'plugin') {
     return pluginMain(process.argv.slice(3));
+  }
+
+  // Storage maintenance without the TUI, so a database can still be pruned and
+  // compacted when the interactive session won't start. Checked before the
+  // headless branch below, which would otherwise claim `prune --help`.
+  if (process.argv[2] === 'prune') {
+    const { runPruneCommand } = await import('@mastra/code-sdk/utils/prune-cli');
+    return process.exit(await runPruneCommand(process.argv.slice(3)));
   }
 
   const initialPrompt = takeInitialPrompt(process.argv, process.env);

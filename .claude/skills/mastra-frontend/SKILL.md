@@ -12,7 +12,7 @@ Every Mastra application UI is assembled from the `@mastra/playground-ui` design
 - **Look** — colors, typography, radius, shadows, borders, internal padding — belongs to the design system. Consumers never restyle it.
 - **Layout** — positioning, flex/grid placement, `gap-*`, margins, size constraints (`w-*`, `max-w-*`, `min-h-*`, `shrink-0`) — belongs to the consumer, through Tailwind utilities on your own wrappers and, when needed, directly on DS components.
 
-`className` on a DS component is fine for layout (`<DialogContent className="max-w-100">`) and forbidden for look (`<Button className="bg-red-500 text-xs">`). If a component's look doesn't fit, use its variants and props; if none fit, escalate for a new variant instead of overriding.
+`className` on a DS component is fine for layout (`<DialogContent size="xl" className="h-[80vh]">`, where `size` picks the width and the class only pins the height) and forbidden for look (`<Button className="bg-red-500 text-xs">`). If a component's look doesn't fit, use its variants and props; if none fit, escalate for a new variant instead of overriding.
 
 ## Find what exists — never guess, never rebuild
 
@@ -55,3 +55,6 @@ Pick the highest rung that fits; each step down needs a reason:
 - `dark:` color overrides on semantic tokens — the palette already flips via `html.light`
 - `twMerge` imported from `tailwind-merge` or manual string concatenation instead of `cn()`
 - Decorative animation without `motion-safe:`/`motion-reduce:`
+- A `font-mono` class anywhere outside `packages/playground-ui/src/ds` (lint rejects it): use `<Txt font="mono">` for identifiers, timestamps, and durations, `InlineCode` or `CodeBlock` for code, `tabular-nums` for numbers. `<pre>` and `<code>` are already mono
+- Mono on text a person wrote or reads as language (labels, headings, status, prose): mono is for machine identifiers (IDs, hashes, log lines) and time (timestamps and durations). Other numbers, such as counts, costs, and scores, use the body face with `tabular-nums`. KPI values, chart axes, and chart tooltips stay in the body face even for time, so dashboards read in one face. See the Typography section of `packages/playground-ui/README.md`
+- Code as plain or mono text, or a hand-styled `<code className="rounded bg-…">`: use `InlineCode` in a sentence and a highlighted `CodeBlock` (with `lang`) for anything longer

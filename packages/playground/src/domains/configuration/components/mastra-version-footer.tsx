@@ -83,36 +83,38 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
   return (
     <Dialog>
       <div className="flex px-3 py-1.5">
-        <DialogTrigger asChild>
-          <button type="button" className={cn('flex rounded-lg p-1 hover:bg-fill-subtle', focusRing.visible)}>
-            <span className="relative inline-flex">
-              {(isLoadingUpdates || outdatedCount > 0 || deprecatedCount > 0) && (
-                <span className="absolute -top-1.5 -right-1.5 flex items-center gap-1">
-                  {isLoadingUpdates && <Spinner className="size-3 text-muted-foreground" />}
-                  {outdatedCount > 0 && (
-                    <Badge
-                      variant="yellow"
-                      size="xs"
-                      aria-label={`${outdatedCount} outdated package${outdatedCount === 1 ? '' : 's'}`}
-                    >
-                      {outdatedCount}
-                    </Badge>
-                  )}
-                  {deprecatedCount > 0 && (
-                    <Badge
-                      variant="red"
-                      size="xs"
-                      aria-label={`${deprecatedCount} deprecated package${deprecatedCount === 1 ? '' : 's'}`}
-                    >
-                      {deprecatedCount}
-                    </Badge>
-                  )}
-                </span>
-              )}
-              <span className={versionBadgeClassName}>v{mainVersion}</span>
-            </span>
-          </button>
-        </DialogTrigger>
+        <DialogTrigger
+          render={
+            <button type="button" className={cn('flex rounded-lg p-1 hover:bg-fill-subtle', focusRing)}>
+              <span className="relative inline-flex">
+                {(isLoadingUpdates || outdatedCount > 0 || deprecatedCount > 0) && (
+                  <span className="absolute -top-1.5 -right-1.5 flex items-center gap-1">
+                    {isLoadingUpdates && <Spinner className="size-3 text-muted-foreground" />}
+                    {outdatedCount > 0 && (
+                      <Badge
+                        variant="warning"
+                        size="xs"
+                        aria-label={`${outdatedCount} outdated package${outdatedCount === 1 ? '' : 's'}`}
+                      >
+                        {outdatedCount}
+                      </Badge>
+                    )}
+                    {deprecatedCount > 0 && (
+                      <Badge
+                        variant="destructive"
+                        size="xs"
+                        aria-label={`${deprecatedCount} deprecated package${deprecatedCount === 1 ? '' : 's'}`}
+                      >
+                        {deprecatedCount}
+                      </Badge>
+                    )}
+                  </span>
+                )}
+                <span className={versionBadgeClassName}>v{mainVersion}</span>
+              </span>
+            </button>
+          }
+        />
       </div>
       <PackagesModalContent
         packages={packageUpdates}
@@ -132,7 +134,6 @@ function generateUpdateCommand(packages: PackageUpdateInfo[], packageManager: Pa
   if (outdatedPackages.length === 0) return null;
 
   const command = packageManagerCommands[packageManager];
-  // Use the target's prerelease tag to ensure the command installs the version shown in the UI
   const packageArgs = outdatedPackages.map(p => `${p.name}@${p.targetPrereleaseTag ?? 'latest'}`).join(' ');
 
   return `${command} ${packageArgs}`;
@@ -162,23 +163,23 @@ const PackagesModalContent = ({
   const packagesText = packages.map(pkg => `${pkg.name}@${pkg.version}`).join('\n');
 
   return (
-    <DialogContent className="max-w-2xl">
+    <DialogContent size="lg">
       <DialogHeader>
         <DialogTitle>Installed Mastra Packages</DialogTitle>
         <DialogDescription>View and update installed Mastra packages</DialogDescription>
       </DialogHeader>
 
       <DialogBody>
-        <div className="flex items-center justify-between gap-3 py-2 text-body text-muted-foreground">
+        <div className="flex items-center justify-between gap-3">
           {isLoadingUpdates ? (
             <span className="text-muted-foreground">Checking for updates...</span>
           ) : !hasUpdates ? (
-            <span className="text-accent1">✓ All packages are up to date</span>
+            <span className="text-success-indicator">✓ All packages are up to date</span>
           ) : (
             <div className="flex items-center gap-3">
               {outdatedCount > 0 && (
                 <span className="flex items-center gap-1.5">
-                  <Badge variant="yellow" size="sm">
+                  <Badge variant="warning" size="sm">
                     {outdatedCount}
                   </Badge>
                   <span>package{outdatedCount !== 1 ? 's' : ''} outdated</span>
@@ -186,7 +187,7 @@ const PackagesModalContent = ({
               )}
               {deprecatedCount > 0 && (
                 <span className="flex items-center gap-1.5">
-                  <Badge variant="red" size="sm">
+                  <Badge variant="destructive" size="sm">
                     {deprecatedCount}
                   </Badge>
                   <span>package{deprecatedCount !== 1 ? 's' : ''} deprecated</span>
@@ -206,29 +207,38 @@ const PackagesModalContent = ({
           <div className="grid grid-cols-[1fr_auto_auto] text-body">
             {packages.map((pkg, index) => (
               <div key={pkg.name} className={cn('contents', index > 0 && '[&>div]:border-t [&>div]:border-border')}>
-                <div className="min-w-0 truncate px-3 py-2 font-mono text-foreground">
+                <div className="min-w-0 truncate px-3 py-2 text-foreground">
                   <a
                     href={`https://www.npmjs.com/package/${pkg.name}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="group inline-flex items-center gap-1 hover:text-accent1 hover:underline"
+                    className="group inline-flex items-center gap-1 hover:underline"
                   >
-                    {pkg.name}
+                    <Txt as="span" variant="body" font="mono">
+                      {pkg.name}
+                    </Txt>
                     <ExternalLink className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" />
                   </a>
                 </div>
-                <div className="flex items-center gap-1.5 px-3 py-2 font-mono text-muted-foreground">
+                <div className="flex items-center gap-1.5 px-3 py-2 text-muted-foreground">
                   {pkg.isOutdated || pkg.isDeprecated ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <span
+                        <Txt
+                          as="span"
+                          variant="body"
+                          font="mono"
                           className={cn(
                             'cursor-help',
-                            pkg.isDeprecated ? 'text-red-500' : pkg.isOutdated ? 'text-yellow-500' : '',
+                            pkg.isDeprecated
+                              ? 'text-destructive-foreground'
+                              : pkg.isOutdated
+                                ? 'text-warning-foreground'
+                                : '',
                           )}
                         >
                           {pkg.version}
-                        </span>
+                        </Txt>
                       </TooltipTrigger>
                       <TooltipContent>
                         {pkg.isDeprecated
@@ -237,14 +247,18 @@ const PackagesModalContent = ({
                       </TooltipContent>
                     </Tooltip>
                   ) : (
-                    <span>{pkg.version}</span>
+                    <Txt as="span" variant="body" font="mono">
+                      {pkg.version}
+                    </Txt>
                   )}
                 </div>
-                <div className="flex items-center px-3 py-2 font-mono text-muted-foreground">
+                <div className="flex items-center px-3 py-2 text-muted-foreground">
                   {(pkg.isOutdated || pkg.isDeprecated) && pkg.latestVersion && (
                     <>
                       <MoveRight className="mx-2 h-4 w-4 text-muted-foreground" />
-                      <span className="text-accent1">{pkg.latestVersion}</span>
+                      <Txt as="span" variant="body" font="mono" className="text-success-indicator">
+                        {pkg.latestVersion}
+                      </Txt>
                     </>
                   )}
                 </div>
@@ -283,5 +297,4 @@ const PackagesModalContent = ({
   );
 };
 
-// Kept for backwards compatibility with the old export name.
 export const MastraPackagesInfo = MastraVersionFooter;

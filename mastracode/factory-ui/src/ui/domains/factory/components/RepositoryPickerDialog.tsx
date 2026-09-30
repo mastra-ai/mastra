@@ -1,0 +1,85 @@
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@mastra/playground-ui/components/Dialog';
+import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
+import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
+import { useState } from 'react';
+
+import { GitLabIcon } from '../../../ui/icons';
+import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
+
+export function RepositoryPickerDialog({
+  repositories,
+  onClose,
+  onSelect,
+}: {
+  repositories: LinkedRepositoryPayload[];
+  onClose: () => void;
+  onSelect: (repository: LinkedRepositoryPayload) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleRepositories = normalizedQuery
+    ? repositories.filter(repository => repository.slug.toLowerCase().includes(normalizedQuery))
+    : repositories;
+
+  return (
+    <Dialog open onOpenChange={open => !open && onClose()}>
+      <DialogContent aria-label="Choose repository">
+        <DialogHeader>
+          <DialogTitle>Choose a repository</DialogTitle>
+          <DialogDescription>Choose a linked repository for this task.</DialogDescription>
+          <ListSearch
+            label="Search repositories"
+            placeholder="Search…"
+            size="sm"
+            onSearch={setQuery}
+            debounceMs={0}
+            shortcutDisabled
+          />
+        </DialogHeader>
+        <DialogBody>
+          <div className="flex min-w-0 flex-col gap-px">
+            {visibleRepositories.map(repository => (
+              <button
+                type="button"
+                key={repository.projectRepositoryId}
+                className={`hover:bg-surface-overlay-soft flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-left ${focusRingInset}`}
+                title={repository.slug}
+                onClick={() => onSelect(repository)}
+              >
+                <span className="min-w-0 flex-1">
+                  <Txt as="span" tone="ink" className="flex items-center gap-1.5">
+                    {repository.provider === 'gitlab' ? (
+                      <GitLabIcon className="text-muted-foreground size-3.5 shrink-0" />
+                    ) : (
+                      <GithubIcon className="text-muted-foreground size-3.5 shrink-0" />
+                    )}
+                    <span className="min-w-0 truncate">{repository.slug}</span>
+                  </Txt>
+                  {repository.gitBranch && (
+                    <Txt as="span" variant="caption" tone="muted" className="block truncate">
+                      Default branch: {repository.gitBranch}
+                    </Txt>
+                  )}
+                </span>
+              </button>
+            ))}
+            {visibleRepositories.length === 0 && (
+              <Txt as="p" variant="caption" tone="muted" className="px-2 py-2">
+                {repositories.length === 0 ? 'No linked repositories' : 'No matching repositories'}
+              </Txt>
+            )}
+          </div>
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
+  );
+}

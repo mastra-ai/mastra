@@ -291,6 +291,13 @@ interface RawPayload {
   [key: string]: unknown;
 }
 
+export interface ThreadHistoryPayload {
+  /** Stored thread messages, oldest first. */
+  messages: MastraDBMessage[];
+  /** Whether older messages exist beyond this page. */
+  hasMore: boolean;
+}
+
 interface StartPayload {
   [key: string]: unknown;
 }
@@ -814,6 +821,8 @@ interface ToolCallApprovalPayload {
   toolName: string;
   args: Record<string, any>;
   resumeSchema: string;
+  /** Epoch ms when approval was requested; matches the tool part's `updatedAt`. */
+  updatedAt?: number;
 }
 
 interface ToolCallSuspendedPayload {
@@ -822,6 +831,16 @@ interface ToolCallSuspendedPayload {
   suspendPayload: any;
   args: Record<string, any>;
   resumeSchema: string;
+}
+
+interface ToolCallResumedPayload {
+  toolCallId: string;
+  toolName: string;
+  /** Whether the resumed pause was a `suspend()` call or a tool approval request. */
+  kind: 'suspension' | 'approval';
+  args?: Record<string, any>;
+  suspendPayload?: any;
+  resumeSchema?: string;
 }
 
 export type DataChunkType = {
@@ -862,6 +881,9 @@ export type NetworkChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'network-object-result'; payload: { object: OUTPUT } });
 
 // Strongly typed chunk type (currently only OUTPUT is strongly typed, tools use dynamic types)
+/** Emitted only by `subscribeToThread({ withInitialHistory })`, before any other chunk. */
+export type ThreadHistoryChunk = BaseChunkType & { type: 'thread-history'; payload: ThreadHistoryPayload };
+
 export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'response-metadata'; payload: ResponseMetadataPayload })
   | (BaseChunkType & { type: 'text-start'; payload: TextStartPayload })
@@ -879,6 +901,7 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload })
   | (BaseChunkType & { type: 'tool-call-approval'; payload: ToolCallApprovalPayload })
   | (BaseChunkType & { type: 'tool-call-suspended'; payload: ToolCallSuspendedPayload })
+  | (BaseChunkType & { type: 'tool-call-resumed'; payload: ToolCallResumedPayload })
   | (BaseChunkType & { type: 'tool-result'; payload: ToolResultPayload })
   | (BaseChunkType & { type: 'tool-call-input-streaming-start'; payload: ToolCallInputStreamingStartPayload })
   | (BaseChunkType & { type: 'tool-call-delta'; payload: ToolCallDeltaPayload })

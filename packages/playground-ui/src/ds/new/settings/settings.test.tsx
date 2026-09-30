@@ -10,6 +10,7 @@ import {
   SettingsRow,
   SettingsTitle,
 } from './index';
+import { fieldErrorId } from '@/ds/components/FormFieldBlocks/block/field-error-id';
 
 afterEach(cleanup);
 
@@ -80,6 +81,44 @@ describe('Settings', () => {
       expect(
         new FormData(screen.getByRole<HTMLFormElement>('form', { name: 'Connection settings' })).get('apiPrefix'),
       ).toBe('/custom-api');
+    });
+  });
+
+  describe('when a setting is required', () => {
+    it('announces the requirement in the control name', () => {
+      render(
+        <SettingsRow label="Model" htmlFor="model" required>
+          <input id="model" />
+        </SettingsRow>,
+      );
+
+      expect(screen.getByText('*', { selector: '[aria-hidden]' })).toBeTruthy();
+      expect(screen.getByRole('textbox', { name: /^Model\s*\(required\)$/ })).toBeTruthy();
+    });
+  });
+
+  describe('when a setting has an error', () => {
+    it('shows the message as an alert the control can describe itself with', () => {
+      render(
+        <SettingsRow label="Model" htmlFor="model" errorMsg="Choose the model this agent runs on.">
+          <input id="model" aria-describedby={fieldErrorId('model')} />
+        </SettingsRow>,
+      );
+
+      expect(screen.getByRole('alert').textContent).toBe('Choose the model this agent runs on.');
+      expect(screen.getByRole('textbox', { name: 'Model' }).getAttribute('aria-describedby')).toBe(
+        screen.getByRole('alert').id,
+      );
+    });
+
+    it.each([false, ''])('renders no alert when the message is %j', errorMsg => {
+      render(
+        <SettingsRow label="Model" htmlFor="model" errorMsg={errorMsg}>
+          <input id="model" />
+        </SettingsRow>,
+      );
+
+      expect(screen.queryByRole('alert')).toBeNull();
     });
   });
 

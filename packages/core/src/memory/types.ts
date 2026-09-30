@@ -462,6 +462,12 @@ export interface ObservationalMemoryObservationConfig {
    */
   model?: AgentConfig['model'];
 
+  /** Number of retries after the initial Observer model call. @default 8 */
+  maxRetries?: number;
+
+  /** Terminal policy after Observer model retries are exhausted. @default 'abort' */
+  failurePolicy?: 'abort' | 'continue';
+
   /**
    * Manage working memory through Observational Memory extraction.
    * When enabled alongside `workingMemory.enabled`, Memory supplies defaults that
@@ -681,6 +687,12 @@ export interface ObservationalMemoryReflectionConfig {
    */
   model?: AgentConfig['model'];
 
+  /** Number of retries after the initial Reflector model call. @default 8 */
+  maxRetries?: number;
+
+  /** Terminal policy after Reflector model retries are exhausted. @default 'abort' */
+  failurePolicy?: 'abort' | 'continue';
+
   /**
    * Token count of observations that triggers reflection.
    * When observation tokens exceed this, the Reflector is called to condense them.
@@ -798,7 +810,6 @@ export interface ObservationalMemoryReflectionConfig {
  *
  * // Custom configuration
  * observationalMemory: {
- *   scope: 'resource',
  *   model: 'google/gemini-2.5-flash',
  *   observation: {
  *     messageTokens: 20_000,
@@ -844,6 +855,11 @@ export interface ObservationalMemoryOptions {
    * - 'thread': Observations are per-thread (default)
    *
    * @default 'thread'
+   * @deprecated The `scope` option is deprecated. `'resource'` will be removed in a future release because it
+   * works much worse than thread scope for prompt caching and agent understanding, leaving `'thread'` (already
+   * the default) as the only scope. Omit this option to use thread scope. For cross-thread recall, enable
+   * `retrieval`; for durable facts across threads, use resource-scoped working memory. A new knowledge and
+   * subconscious memory primitive will replace resource scope.
    */
   scope?: 'resource' | 'thread';
 
@@ -1143,7 +1159,8 @@ type BaseMemoryConfig = {
    * keeps the parent's message prefix.
    *
    * This controls trimming only. When a memory-sourced message and an input message share
-   * an id, the stored copy still occupies the slot and the input's parts are layered on top.
+   * an id, the stored copy stays authoritative: only tool outcomes for calls it still has
+   * pending are taken from the input. Input text, reasoning, and metadata are ignored.
    *
    * @default false
    * @example
@@ -1404,7 +1421,11 @@ export type SerializedObservationalMemoryConfig = {
   /** Model ID for both Observer and Reflector (e.g., "google/gemini-2.5-flash") */
   model?: string;
 
-  /** Memory scope: 'resource' or 'thread' */
+  /**
+   * Memory scope: 'resource' or 'thread'
+   * @deprecated The `scope` option is deprecated. `'resource'` will be removed in a future release, leaving
+   * `'thread'` (already the default) as the only scope. Omit this option to use thread scope.
+   */
   scope?: 'resource' | 'thread';
 
   /** Inactivity TTL before forcing buffered observation activation */
@@ -1435,6 +1456,10 @@ export type SerializedObservationalMemoryConfig = {
 export type SerializedObservationalMemoryObservationConfig = {
   /** Observer model ID */
   model?: string;
+  /** Number of retries after the initial Observer model call */
+  maxRetries?: number;
+  /** Terminal policy after Observer model retries are exhausted */
+  failurePolicy?: 'abort' | 'continue';
   /** Manage working memory through Observational Memory extraction. */
   manageWorkingMemory?: boolean;
 
@@ -1468,6 +1493,10 @@ export type SerializedObservationalMemoryObservationConfig = {
 export type SerializedObservationalMemoryReflectionConfig = {
   /** Reflector model ID */
   model?: string;
+  /** Number of retries after the initial Reflector model call */
+  maxRetries?: number;
+  /** Terminal policy after Reflector model retries are exhausted */
+  failurePolicy?: 'abort' | 'continue';
   /** Token count threshold that triggers reflection */
   observationTokens?: number;
   /** Model settings (temperature, maxOutputTokens, etc.) */

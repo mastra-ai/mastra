@@ -98,7 +98,7 @@ Trailing user messages are treated as new messages and kept as sent. When they c
 
 ### Stored messages as the base layer
 
-Loaders add stored messages with a `memory` source. When a stored message and an input message share an ID, the stored copy takes the slot with its reasoning, provider metadata, and `createdAt`, and the input's parts are layered on top. That preserves the original assistant turn while still persisting new contributions such as tool results. A tool outcome from the input only fills in a call that's still pending in the stored copy, so an echo can't overwrite a stored result.
+Loaders add stored messages with a `memory` source. When a stored message and an input message share an ID, the stored copy keeps its text, reasoning, provider metadata, and `createdAt`. The only thing taken from the input is a tool outcome for a call that's still pending in the stored copy, such as a client tool result or an approval answer. Text and metadata from the input are ignored, so a client can't change a stored message by sending a different copy of it. To change a stored message, update it in storage. This also applies with `retainFullInput`.
 
 ## Related
 

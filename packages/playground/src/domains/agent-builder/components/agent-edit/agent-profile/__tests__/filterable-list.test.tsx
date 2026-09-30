@@ -87,8 +87,8 @@ describe('FilterableList', () => {
     const { getByTestId } = renderList({ isChecked: id => id === 'alpha' });
 
     const checked = getByTestId('list-filter-checkbox-alpha') as HTMLButtonElement;
-    expect(checked.style.backgroundColor).toMatch(/^(rgb|hsl)\(/);
-    expect(checked.style.borderColor).toMatch(/^(rgb|hsl)\(/);
+    expect(checked.getAttribute('style')).toMatch(/background-color: var\(--badge-[a-z]+-indicator\)/);
+    expect(checked.getAttribute('style')).toMatch(/border-color: var\(--badge-[a-z]+-indicator\)/);
 
     const unchecked = getByTestId('list-filter-checkbox-beta') as HTMLButtonElement;
     expect(unchecked.getAttribute('style')).toBeNull();

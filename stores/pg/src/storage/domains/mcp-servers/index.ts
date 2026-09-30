@@ -22,7 +22,7 @@ import type {
   ListMCPServerVersionsInput,
   ListMCPServerVersionsOutput,
 } from '@mastra/core/storage/domains/mcp-servers';
-import { parseSqlIdentifier } from '@mastra/core/utils';
+import { schemaNamePrefix } from '../../../shared/schema-name';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
 import { toPgJson } from '../../db/sanitize-json';
@@ -72,7 +72,7 @@ export class MCPServersPG extends MCPServersStorage {
 
   static getExportDDL(schemaName?: string): string[] {
     const statements: string[] = [];
-    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const parsedSchema = schemaName ? schemaNamePrefix(schemaName) : '';
     const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
 
     for (const tableName of MCPServersPG.MANAGED_TABLES) {
@@ -94,7 +94,7 @@ export class MCPServersPG extends MCPServersStorage {
   }
 
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const schemaPrefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     return MCPServersPG.getDefaultIndexDefs(schemaPrefix);
   }
 

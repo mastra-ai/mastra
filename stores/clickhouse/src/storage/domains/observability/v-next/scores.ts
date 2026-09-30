@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import type { ClickHouseClient } from '@clickhouse/client';
 import { listScoresArgsSchema } from '@mastra/core/storage';
 import type {
@@ -25,7 +23,7 @@ import { parseFieldKey } from '@mastra/core/utils';
 import { isReplicationConfigured } from '../../../db/replication';
 import type { ClickhouseReplicationConfig } from '../../../db/replication';
 import { TABLE_SCORE_EVENTS, TABLE_SCORE_EVENTS_CURRENT, TABLE_SCORE_EVENTS_DELTA } from './ddl';
-import { recordDeletionRequest } from './deletion-requests';
+import { markDeletionRequestApplied, recordDeletionRequest } from './deletion-requests';
 import { buildPaginationClause, buildScoresFilterConditions, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, rowToScoreRecord, scoreRecordToRow } from './helpers';
@@ -224,9 +222,11 @@ export async function batchCreateScores(client: ClickHouseClient, args: BatchCre
  * `organizationId` and `resourceId` values are ANDed into the predicate to
  * restrict deletion to records with matching scope fields.
  *
- * A durable deletion request is recorded before the lightweight delete. The
- * delete is immediately visible to subsequent reads; physical purge depends on
- * the table's configured retention TTL. The delta table is intentionally not
+ * A durable deletion request is recorded before the lightweight delete and
+ * marked applied once the delete succeeds. If the delete fails, the request
+ * stays unapplied; retry by calling this function again. The delete is
+ * immediately visible to subsequent reads; physical purge depends on the
+ * table's configured retention TTL. The delta table is intentionally not
  * touched and expires through its fixed two-day TTL.
  */
 export async function deleteScores(
@@ -236,8 +236,8 @@ export async function deleteScores(
 ): Promise<void> {
   if (args.scoreIds.length === 0) return;
 
-  await recordDeletionRequest(client, {
-    requestId: randomUUID(),
+  const request = await recordDeletionRequest(client, {
+    requestId: globalThis.crypto.randomUUID(),
     organizationId: args.organizationId,
     resourceId: args.resourceId,
     signal: 'scores',
@@ -273,6 +273,8 @@ export async function deleteScores(
       clickhouse_settings,
     });
   }
+
+  await markDeletionRequestApplied(client, request, replication);
 }
 
 // ============================================================================

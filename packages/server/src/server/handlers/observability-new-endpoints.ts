@@ -80,6 +80,7 @@ import {
 } from '../constants';
 import { HTTPException } from '../http-exception';
 import { listFeedbackResponseSchema } from '../schemas/feedback';
+import { observabilityStorageCapabilitiesSchema } from '../schemas/system';
 import type { InferParams, ServerContext, ServerRouteHandler } from '../server-adapter/routes';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
 import { prepareAuthorEnrichment } from './author-enrichment';
@@ -89,18 +90,26 @@ import { paginationArgsSchema } from './observability-list-query-schemas';
 import {
   assertObservabilityDeltaSupported,
   assertObservabilityThreadQuerySupported,
+  assertObservabilityTraceAggregateSupported,
   assertObservabilityTraceQueryTenantScopeSupported,
   OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_CORE_FEATURE,
   OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_UPGRADE_MESSAGE,
   assertObservabilityTraceQueryDiscoverySupported,
+  assertObservabilityTraceQueryContextIdsSupported,
   assertObservabilityTraceQueryRootDurationSupported,
+  isTraceQueryContextIdField,
   assertObservabilityTraceQuerySupported,
   createObservabilityListQuerySchema,
+  getObservabilityStorageCapabilities,
   getObservabilityStore,
   NEW_ROUTE_DEFS,
+  NO_OBSERVABILITY_STORAGE_CAPABILITIES,
   OBSERVABILITY_LIST_ENDPOINTS,
+  supportsObservabilityTraceQueryContextIds,
   supportsObservabilityTraceQueryRootDuration,
+  supportsTraceAggregateCore,
   supportsTraceQueryDiscoveryCore,
+  withDiscoveryFallback,
 } from './observability-shared';
 import type { RouteDetails } from './observability-shared';
 
@@ -265,7 +274,10 @@ const throwTraceQueryDiscoveryCoreUnsupported = () =>
  */
 function resolveTraceQueryScope(
   requestContext: { get(key: string): unknown },
-  unsupportedCode: 'TRACE_QUERY_UNSUPPORTED' | 'TRACE_QUERY_DISCOVERY_UNSUPPORTED' = 'TRACE_QUERY_UNSUPPORTED',
+  unsupportedCode:
+    | 'TRACE_QUERY_UNSUPPORTED'
+    | 'TRACE_QUERY_DISCOVERY_UNSUPPORTED'
+    | 'TRACE_AGGREGATE_UNSUPPORTED' = 'TRACE_QUERY_UNSUPPORTED',
 ): coreStorage.TraceQueryTenantScope | undefined {
   const organizationId = requestContext.get('organizationId');
   if (typeof organizationId !== 'string' || organizationId.length === 0) return undefined;
@@ -339,6 +351,7 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilityTraceQuerySupported(observabilityStore);
       assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
+      assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
       if (plan.paginationMode === 'delta' && !observabilityStore.getFeatures()?.includes('delta-polling')) {
         throw new HTTPException(501, { message: 'This storage provider does not support observability delta polling' });
@@ -398,6 +411,122 @@ if (QUERY_TRACES.openapi) {
   };
 }
 
+// ============================================================================
+// Trace aggregate route
+// ============================================================================
+
+const traceAggregateUnsupportedErrorSchema = z
+  .object({
+    code: z.literal('TRACE_AGGREGATE_UNSUPPORTED'),
+    message: z.string(),
+  })
+  .strict();
+
+/** Never echoes caller input: only the predicate-complexity issue keeps its own fixed message. */
+const traceAggregateValidationError: ValidationErrorHook = error => ({
+  status: 422,
+  body: {
+    code: 'TRACE_QUERY_INVALID',
+    message: 'The trace aggregate query is invalid',
+    issues: error.issues.map(issue => {
+      const predicateTooComplex =
+        issue.code === 'custom' && issue.message === coreStorage.TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE;
+      return {
+        code: predicateTooComplex ? 'predicate_too_complex' : 'invalid_request',
+        path: issue.path.map(part => (typeof part === 'symbol' ? String(part) : part)),
+        message: predicateTooComplex
+          ? coreStorage.TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE
+          : 'The value does not match the trace-aggregate request contract',
+      };
+    }),
+  },
+});
+
+export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, {
+  bodySchema: coreStorage.traceAggregateRequestSchema,
+  responseSchema: coreStorage.traceAggregateResponseSchema,
+  onValidationError: traceAggregateValidationError,
+  maxBodySize: 256 * 1024,
+  preserveHttpExceptions: true,
+  isCoreSupported: supportsTraceAggregateCore,
+  onUnsupportedCore: () =>
+    throwTraceQueryError(501, {
+      code: 'TRACE_AGGREGATE_UNSUPPORTED',
+      message: 'Trace aggregation requires a newer @mastra/core. Please upgrade.',
+    }),
+  handler: async ({
+    mastra,
+    requestContext,
+    timeRange,
+    where,
+    groupBy,
+    interval,
+    measures,
+    having,
+    orderBy,
+    limit,
+  }) => {
+    let plan;
+    try {
+      plan = coreStorage.planTraceAggregate(
+        { timeRange, where, groupBy, interval, measures, having, orderBy, limit },
+        { scope: resolveTraceQueryScope(requestContext, 'TRACE_AGGREGATE_UNSUPPORTED') },
+      );
+    } catch (error) {
+      if (error instanceof coreStorage.TraceQueryValidationError) {
+        throwTraceQueryError(422, { code: error.code, message: error.message, issues: error.issues });
+      }
+      throw error;
+    }
+
+    let observabilityStore: Awaited<ReturnType<typeof getObservabilityStore>>;
+    try {
+      observabilityStore = await getObservabilityStore(mastra);
+      assertObservabilityTraceAggregateSupported(observabilityStore);
+      assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
+      assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
+      assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
+    } catch (error) {
+      if (error instanceof HTTPException && error.status === 501) {
+        throwTraceQueryError(501, { code: 'TRACE_AGGREGATE_UNSUPPORTED', message: error.message });
+      }
+      throw error;
+    }
+
+    try {
+      return await observabilityStore.aggregateTraces(plan);
+    } catch (error) {
+      if (error instanceof coreStorage.TraceQueryExecutionError) {
+        throwTraceQueryError(504, { code: error.code, message: error.message });
+      }
+      throw error;
+    }
+  },
+});
+
+if (AGGREGATE_TRACES.openapi) {
+  AGGREGATE_TRACES.openapi.responses[400] = {
+    description: 'Malformed JSON',
+    content: { 'application/json': { schema: traceQueryMalformedBodyErrorSchema } },
+  };
+  AGGREGATE_TRACES.openapi.responses[413] = {
+    description: 'Request body exceeds 256 KiB',
+    content: { 'application/json': { schema: traceQueryBodyTooLargeErrorSchema } },
+  };
+  AGGREGATE_TRACES.openapi.responses[422] = {
+    description: 'Structurally or semantically invalid trace aggregate query',
+    content: { 'application/json': { schema: traceQueryValidationResponseSchema } },
+  };
+  AGGREGATE_TRACES.openapi.responses[501] = {
+    description: 'The configured observability store does not support trace aggregation',
+    content: { 'application/json': { schema: traceAggregateUnsupportedErrorSchema } },
+  };
+  AGGREGATE_TRACES.openapi.responses[504] = {
+    description: 'Trace aggregate query exceeded the configured database execution timeout',
+    content: { 'application/json': { schema: traceQueryTimeoutErrorSchema } },
+  };
+}
+
 export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QUERY_FIELDS, {
   bodySchema: coreStorage.getTraceQueryFieldsArgsSchema,
   responseSchema: coreStorage.getTraceQueryFieldsResponseSchema,
@@ -432,6 +561,10 @@ export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
             predicateScope !== 'trace' ||
             field.path !== 'durationMs' ||
             supportsObservabilityTraceQueryRootDuration(observabilityStore),
+        )
+        .filter(
+          field =>
+            !isTraceQueryContextIdField(field.path) || supportsObservabilityTraceQueryContextIds(observabilityStore),
         );
       return { canonicalFields, ...observed };
     } catch (error) {
@@ -542,7 +675,9 @@ export const QUERY_THREADS = createNewRoute(NEW_ROUTE_DEFS.QUERY_THREADS, {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilityThreadQuerySupported(observabilityStore);
       assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.traces.where);
+      assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.traces.where);
       assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
+      assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
       if (error instanceof HTTPException && error.status === 501) {
@@ -935,7 +1070,7 @@ export const GET_METRIC_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_NAMES, 
   handler: async ({ mastra, ...params }) => {
     const args = getMetricNamesArgsSchema.parse(pickParams(getMetricNamesArgsSchema, params));
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getMetricNames(args);
+    return await withDiscoveryFallback(() => observabilityStore.getMetricNames(args), { names: [] });
   },
 });
 
@@ -945,7 +1080,7 @@ export const GET_METRIC_LABEL_KEYS = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_LA
   handler: async ({ mastra, ...params }) => {
     const args = getMetricLabelKeysArgsSchema.parse(pickParams(getMetricLabelKeysArgsSchema, params));
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getMetricLabelKeys(args);
+    return await withDiscoveryFallback(() => observabilityStore.getMetricLabelKeys(args), { keys: [] });
   },
 });
 
@@ -955,7 +1090,7 @@ export const GET_METRIC_LABEL_VALUES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_
   handler: async ({ mastra, ...params }) => {
     const args = getMetricLabelValuesArgsSchema.parse(pickParams(getMetricLabelValuesArgsSchema, params));
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getMetricLabelValues(args);
+    return await withDiscoveryFallback(() => observabilityStore.getMetricLabelValues(args), { values: [] });
   },
 });
 
@@ -963,7 +1098,7 @@ export const GET_ENTITY_TYPES = createNewRoute(NEW_ROUTE_DEFS.GET_ENTITY_TYPES, 
   responseSchema: getEntityTypesResponseSchema,
   handler: async ({ mastra }) => {
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getEntityTypes({});
+    return await withDiscoveryFallback(() => observabilityStore.getEntityTypes({}), { entityTypes: [] });
   },
 });
 
@@ -973,7 +1108,7 @@ export const GET_ENTITY_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_ENTITY_NAMES, 
   handler: async ({ mastra, ...params }) => {
     const args = getEntityNamesArgsSchema.parse(pickParams(getEntityNamesArgsSchema, params));
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getEntityNames(args);
+    return await withDiscoveryFallback(() => observabilityStore.getEntityNames(args), { names: [] });
   },
 });
 
@@ -981,7 +1116,7 @@ export const GET_SERVICE_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_SERVICE_NAMES
   responseSchema: getServiceNamesResponseSchema,
   handler: async ({ mastra }) => {
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getServiceNames({});
+    return await withDiscoveryFallback(() => observabilityStore.getServiceNames({}), { serviceNames: [] });
   },
 });
 
@@ -989,7 +1124,7 @@ export const GET_ENVIRONMENTS = createNewRoute(NEW_ROUTE_DEFS.GET_ENVIRONMENTS, 
   responseSchema: getEnvironmentsResponseSchema,
   handler: async ({ mastra }) => {
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getEnvironments({});
+    return await withDiscoveryFallback(() => observabilityStore.getEnvironments({}), { environments: [] });
   },
 });
 
@@ -999,14 +1134,42 @@ export const GET_TAGS = createNewRoute(NEW_ROUTE_DEFS.GET_TAGS, {
   handler: async ({ mastra, ...params }) => {
     const args = getTagsArgsSchema.parse(pickParams(getTagsArgsSchema, params));
     const observabilityStore = await getObservabilityStore(mastra);
+    return await withDiscoveryFallback(() => observabilityStore.getTags(args), { tags: [] });
+  },
+});
+
+// ============================================================================
+// Capabilities Route
+// ============================================================================
+
+const getObservabilityCapabilitiesResponseSchema = z.object({
+  observabilityStorageType: z
+    .string()
+    .nullable()
+    .describe('Class name of the configured observability storage, or null when none is configured'),
+  capabilities: observabilityStorageCapabilitiesSchema,
+});
+
+// Uses createRoute (not createNewRoute) so clients can ask what is supported
+// even on an @mastra/core too old for the newer observability endpoints.
+export const GET_CAPABILITIES = createRoute({
+  ...NEW_ROUTE_DEFS.GET_CAPABILITIES,
+  responseType: 'json',
+  responseSchema: getObservabilityCapabilitiesResponseSchema,
+  tags: ['Observability'],
+  requiresAuth: true,
+  handler: async ({ mastra }) => {
     try {
-      return await observabilityStore.getTags(args);
-    } catch (error) {
-      // Some storage providers (e.g. LibSQL) don't support tag discovery
-      if (error instanceof Error && error.message.includes('does not support tag discovery')) {
-        return { tags: [] };
+      const observabilityStore = await mastra.getStorage()?.getStore('observability');
+      if (!observabilityStore) {
+        return { observabilityStorageType: null, capabilities: NO_OBSERVABILITY_STORAGE_CAPABILITIES };
       }
-      throw error;
+      return {
+        observabilityStorageType: observabilityStore.constructor.name,
+        capabilities: getObservabilityStorageCapabilities(observabilityStore),
+      };
+    } catch (error) {
+      return handleError(error, "Error calling: 'get observability capabilities'");
     }
   },
 });
@@ -1044,4 +1207,5 @@ export const NEW_ROUTES = {
   GET_SERVICE_NAMES,
   GET_ENVIRONMENTS,
   GET_TAGS,
+  GET_CAPABILITIES,
 };

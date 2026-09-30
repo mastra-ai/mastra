@@ -64,10 +64,11 @@
  * ## What happens after this runs
  *
  * Loaders add stored rows as `memory`. `MessageList.add` treats a memory-sourced message that
- * collides by id with input as the base layer — the stored copy takes the slot with its
- * reasoning, provider metadata, and `createdAt`, the input's parts layer on top, and the merged
- * message stays tagged `input` so the client's contribution is still persisted. See the
- * base-layer branch in `packages/core/src/agent/message-list/message-list.ts`.
+ * collides by id with input as authoritative — the stored copy keeps its text, reasoning,
+ * provider metadata, and `createdAt`, and the only thing taken from the input is a tool outcome
+ * for a call the stored copy still has pending. The merged message stays tagged `input` so that
+ * outcome is still persisted. See `clientToolOutcomes` in
+ * `packages/core/src/agent/message-list/message-list.ts`.
  */
 import type { Processor } from '..';
 import type { MastraDBMessage, MastraMessagePart, MessageList } from '../../agent';

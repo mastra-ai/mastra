@@ -1,6 +1,7 @@
 import type { Server } from 'node:http';
 import { serve } from '@hono/node-server';
 import { Mastra } from '@mastra/core';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { registerApiRoute } from '@mastra/core/server';
 import {
   TraceQueryExecutionError,
@@ -8,8 +9,8 @@ import {
   parseTraceQueryRequest,
   planTraceQuery,
 } from '@mastra/core/storage';
-import { QUERY_TRACES } from '@mastra/server/handlers/observability-new-endpoints';
-import { MASTRA_IS_STUDIO_KEY, createRoute } from '@mastra/server/server-adapter';
+import { AGGREGATE_TRACES, QUERY_TRACES } from '@mastra/server/handlers/observability-new-endpoints';
+import { HTTPException as MastraHTTPException, MASTRA_IS_STUDIO_KEY, createRoute } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import {
   createRouteAdapterTestSuite,
@@ -312,6 +313,95 @@ describe('Hono Server Adapter', () => {
     expect(response.headers.get('content-type')).toContain('application/json');
     await expect(response.json()).resolves.toEqual({ error: 'Request body too large' });
     expect(getStorage).not.toHaveBeenCalled();
+  });
+
+  describe('Trace aggregate error responses over HTTP', () => {
+    async function requestTraceAggregate(mastra: Mastra, body: string) {
+      const app = new Hono();
+      const adapter = new MastraServer({ app, mastra });
+      await adapter.init();
+      return app.request('/api/observability/traces/aggregate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      });
+    }
+
+    async function expectDeclaredError(response: Response, status: 400 | 413 | 422 | 501) {
+      expect(response.status).toBe(status);
+      expect(response.headers.get('content-type')).toContain('application/json');
+      const schema = AGGREGATE_TRACES.openapi?.responses[status]?.content?.['application/json']?.schema;
+      if (!schema) throw new Error(`Missing trace-aggregate error schema for ${status}`);
+      const body = await response.json();
+      expect(schema.safeParse(body).success).toBe(true);
+      return body;
+    }
+
+    it('returns the documented malformed-body response', async () => {
+      const body = await expectDeclaredError(
+        await requestTraceAggregate(new Mastra({ logger: false }), '{"timeRange":'),
+        400,
+      );
+      expect(body).toEqual({ error: 'Invalid request body', issues: [{ field: 'body', message: expect.any(String) }] });
+    });
+
+    it('rejects an oversized body before storage access', async () => {
+      const mastra = new Mastra({ logger: false });
+      const getStorage = vi.spyOn(mastra, 'getStorage');
+      const response = await requestTraceAggregate(mastra, JSON.stringify({ padding: 'x'.repeat(256 * 1024) }));
+
+      expect(await expectDeclaredError(response, 413)).toEqual({ error: 'Request body too large' });
+      expect(getStorage).not.toHaveBeenCalled();
+    });
+
+    it('returns structured 422s for schema and planner failures without echoing values', async () => {
+      const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+      const schemaFailure = await expectDeclaredError(
+        await requestTraceAggregate(
+          new Mastra({ logger: false }),
+          JSON.stringify({ timeRange, measures: ['count'], sql: 'sensitive-sql' }),
+        ),
+        422,
+      );
+      expect(schemaFailure).toMatchObject({ code: 'TRACE_QUERY_INVALID', issues: [{ code: 'invalid_request' }] });
+      expect(JSON.stringify(schemaFailure)).not.toContain('sensitive-sql');
+
+      const plannerFailure = await expectDeclaredError(
+        await requestTraceAggregate(
+          new Mastra({ logger: false }),
+          JSON.stringify({ timeRange, interval: '1m', measures: ['count'] }),
+        ),
+        422,
+      );
+      expect(plannerFailure).toMatchObject({
+        code: 'TRACE_QUERY_INVALID',
+        issues: [{ code: 'too_many_buckets', path: ['interval'] }],
+      });
+    });
+
+    it('returns a structured 501 for stores without trace-aggregate', async () => {
+      const mastra = new Mastra({ logger: false });
+      const aggregateTraces = vi.fn();
+      vi.spyOn(mastra, 'getStorage').mockReturnValue({
+        getStore: vi.fn().mockResolvedValue({ getFeatures: () => ['trace-query'], aggregateTraces }),
+      } as unknown as NonNullable<ReturnType<Mastra['getStorage']>>);
+      const body = await expectDeclaredError(
+        await requestTraceAggregate(
+          mastra,
+          JSON.stringify({
+            timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+            measures: ['count'],
+          }),
+        ),
+        501,
+      );
+
+      expect(body).toEqual({
+        code: 'TRACE_AGGREGATE_UNSUPPORTED',
+        message: 'Trace aggregation is not supported by the configured observability store',
+      });
+      expect(aggregateTraces).not.toHaveBeenCalled();
+    });
   });
 
   it('registers createRoute routes from server.apiRoutes with runtime validation', async () => {
@@ -1628,5 +1718,78 @@ describe('Hono Server Adapter', () => {
       const response = await app.request(request);
       return { status: response.status };
     },
+  });
+});
+
+describe('Handler error logging', () => {
+  let context: AdapterTestContext;
+
+  beforeEach(async () => {
+    context = await createDefaultTestContext();
+  });
+
+  const requestFailingRoute = async (error: Error) => {
+    const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() };
+    vi.spyOn(context.mastra, 'getLogger').mockReturnValue(logger as any);
+
+    const app = new Hono();
+    const adapter = new MastraServer({ app, mastra: context.mastra });
+    const failingRoute: ServerRoute<any, any, any> = {
+      method: 'GET',
+      path: '/test/failing',
+      responseType: 'json',
+      handler: async () => {
+        throw error;
+      },
+    };
+
+    app.use('*', adapter.createContextMiddleware());
+    await adapter.registerRoute(app, failingRoute, { prefix: '' });
+
+    const response = await app.request(new Request('http://localhost/test/failing'));
+    return { response, logger };
+  };
+
+  it('logs 501 Not Implemented at warn level', async () => {
+    const { response, logger } = await requestFailingRoute(
+      new MastraHTTPException(501, { message: 'Not supported by the configured observability store' }),
+    );
+
+    expect(response.status).toBe(501);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Error calling handler',
+      expect.objectContaining({ path: '/test/failing' }),
+    );
+    expect(logger.error).not.toHaveBeenCalledWith('Error calling handler', expect.anything());
+  });
+
+  it('logs errors carrying a 501 in details at warn level', async () => {
+    const { response, logger } = await requestFailingRoute(
+      new MastraError({
+        id: 'TEST_NOT_IMPLEMENTED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Not supported by the configured storage',
+        details: { status: 501 },
+      }),
+    );
+
+    expect(response.status).toBe(501);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Error calling handler',
+      expect.objectContaining({ path: '/test/failing' }),
+    );
+    expect(logger.error).not.toHaveBeenCalledWith('Error calling handler', expect.anything());
+  });
+
+  it('still logs server errors at error level', async () => {
+    const { response, logger } = await requestFailingRoute(new Error('boom'));
+
+    expect(response.status).toBe(500);
+    expect(logger.error).toHaveBeenCalledWith(
+      'Error calling handler',
+      expect.objectContaining({ path: '/test/failing' }),
+    );
+    expect(logger.warn).not.toHaveBeenCalledWith('Error calling handler', expect.anything());
   });
 });

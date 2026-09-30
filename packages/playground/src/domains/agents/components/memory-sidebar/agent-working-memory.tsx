@@ -1,11 +1,14 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { controlStateColorTransition, focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { RefreshCcwIcon, ExternalLink, X, Pencil } from 'lucide-react';
@@ -23,7 +26,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
     useWorkingMemory();
 
   // Get memory config to check if working memory is enabled
-  const { data, isLoading: isConfigLoading } = useMemoryConfig(agentId);
+  const { data, isLoading: isConfigLoading } = useMemoryConfig(agentId, useEntityRequestContext('agent', agentId)[0]);
   const config = data?.config;
   // Check if working memory is enabled
   const isWorkingMemoryEnabled = Boolean(config?.workingMemory?.enabled);
@@ -53,14 +56,18 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
     <div className="flex flex-col gap-4 p-4">
       <div>
         <div className="mb-2 flex items-center gap-2">
-          <h3 className="text-subheading text-foreground">Working Memory</h3>
+          <Txt as="h3" variant="subheading" tone="ink">
+            Working Memory
+          </Txt>
           {isWorkingMemoryEnabled && workingMemorySource && (
-            <span
+            <Txt
+              as="span"
+              variant="column"
               className={cn(
-                'rounded px-2 py-0.5 text-column',
+                'rounded px-2 py-0.5',
                 workingMemorySource === 'resource'
-                  ? 'bg-purple-500/20 text-purple-400'
-                  : 'bg-blue-500/20 text-blue-400',
+                  ? 'bg-badge-purple-strong text-badge-purple-foreground'
+                  : 'bg-badge-blue-strong text-badge-blue-foreground',
               )}
               title={
                 workingMemorySource === 'resource'
@@ -69,11 +76,13 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
               }
             >
               {workingMemorySource}
-            </span>
+            </Txt>
           )}
         </div>
         {isWorkingMemoryEnabled && !threadExists && (
-          <p className="text-caption text-muted-foreground">Send a message to the agent to enable working memory.</p>
+          <Txt variant="caption" tone="muted">
+            Send a message to the agent to enable working memory.
+          </Txt>
         )}
       </div>
 
@@ -88,7 +97,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                       content={workingMemoryData || ''}
                       isCopied={isCopied}
                       onCopy={handleCopy}
-                      className={cn(raisedSurfaceStyle, 'min-h-[150px] rounded-lg font-mono text-body')}
+                      className={cn(raisedSurfaceStyle, 'min-h-[150px] rounded-lg text-body')}
                     />
                   ) : (
                     <>
@@ -99,19 +108,28 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                               type="button"
                               onClick={handleCopy}
                               aria-label="Copy working memory"
-                              className="absolute inset-0 z-10 rounded-lg focus-visible:ring-2 focus-visible:ring-accent1 focus-visible:outline-hidden"
+                              className={cn('absolute inset-0 z-10 rounded-lg', focusRingInset)}
                             />
                             <div className="pointer-events-none">
                               <MarkdownRenderer>{workingMemoryData}</MarkdownRenderer>
                             </div>
                             {isCopied && (
-                              <span className="pointer-events-none absolute top-2 right-2 z-20 rounded-full bg-green-500/20 px-1.5 py-0.5 text-meta text-green-500">
+                              <Txt
+                                as="span"
+                                variant="meta"
+                                className="pointer-events-none absolute top-2 right-2 z-20 rounded-full bg-success-subtle px-1.5 py-0.5 text-success-subtle-foreground"
+                              >
                                 Copied!
-                              </span>
+                              </Txt>
                             )}
-                            <span className="pointer-events-none absolute top-2 right-2 z-20 rounded-full bg-card px-1.5 py-0.5 text-meta text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+                            <Txt
+                              as="span"
+                              variant="meta"
+                              tone="muted"
+                              className="pointer-events-none absolute top-2 right-2 z-20 rounded-full bg-card px-1.5 py-0.5 opacity-0 transition-opacity group-hover:opacity-100"
+                            >
                               Click to copy
-                            </span>
+                            </Txt>
                           </div>
                         </ScrollArea>
                       </div>
@@ -119,22 +137,22 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                   )}
                 </>
               ) : (
-                <div className="font-mono text-body text-muted-foreground">
+                <div className="text-body text-muted-foreground">
                   No working memory content yet. Click "Edit Working Memory" to add content.
                 </div>
               )}
             </>
           ) : (
-            <textarea
-              className={cn(
-                raisedSurfaceStyle,
-                'min-h-[150px] w-full resize-none rounded-lg p-3 font-mono text-body text-foreground',
-              )}
-              value={editState.value}
-              onChange={e => setEditState(state => ({ ...state, value: e.target.value }))}
-              disabled={isUpdating}
+            <CodeEditor
               aria-label="Working memory content"
+              language={editState.value.trim().startsWith('{') ? 'json' : 'markdown'}
+              lineNumbers={false}
+              showCopyButton={false}
               placeholder="Enter working memory content..."
+              value={editState.value}
+              onChange={value => setEditState(state => ({ ...state, value }))}
+              editable={!isUpdating}
+              className="min-h-[150px] w-full"
             />
           )}
           <div className="flex gap-2">
@@ -202,15 +220,15 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
         </>
       ) : (
         <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
-          <p className="mb-3 text-body text-muted-foreground">
+          <Txt tone="muted" className="mb-3">
             Working memory is not enabled for this agent. Enable it to maintain context across conversations.
-          </p>
+          </Txt>
           <a
             href="https://mastra.ai/en/docs/memory/working-memory"
             target="_blank"
             rel="noopener noreferrer"
             className={cn(
-              'inline-flex items-center gap-2 text-body text-blue-400 hover:text-blue-300',
+              'inline-flex items-center gap-2 text-body text-info-indicator hover:underline',
               controlStateColorTransition,
             )}
           >

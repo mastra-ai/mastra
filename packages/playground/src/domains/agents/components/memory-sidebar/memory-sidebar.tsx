@@ -5,6 +5,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -38,9 +39,9 @@ export interface MemorySidebarProps {
 }
 
 const barColor = (percent: number): string => {
-  if (percent >= 85) return 'bg-orange-400';
-  if (percent >= 60) return 'bg-blue-500';
-  return 'bg-green-500';
+  if (percent >= 85) return 'bg-warning-indicator';
+  if (percent >= 60) return 'bg-info-indicator';
+  return 'bg-success-indicator';
 };
 
 type ConfigBadgeProps = {
@@ -110,7 +111,7 @@ export function MemorySidebarBody({
 }: MemorySidebarProps) {
   // Derive memory state from the shared (React Query deduped) hook instead of
   // accepting it as props — see structure-derive-dont-duplicate.
-  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
+  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId, useEntityRequestContext('agent', agentId)[0]);
   const hasMemory = Boolean(memory?.result);
   const memoryType = memory?.memoryType;
 
@@ -133,8 +134,8 @@ export function MemorySidebarBody({
   // Status parts are streamed but not persisted, so on a fresh load there is no live
   // progress yet. Fall back to the durable OM record the same way the expanded OM
   // section and the timeline panel do, otherwise the bar stays empty after a reload.
-  const { data: thread } = useThread({ threadId, agentId });
-  const { data: memoryConfigData } = useMemoryConfig(agentId);
+  const { data: thread } = useThread({ threadId, agentId }, useEntityRequestContext('agent', agentId)[0]);
+  const { data: memoryConfigData } = useMemoryConfig(agentId, useEntityRequestContext('agent', agentId)[0]);
   const { data: omData } = useObservationalMemory(
     observationalOn ? agentId : undefined,
     observationalOn ? threadId : undefined,
@@ -225,6 +226,7 @@ export function MemorySidebarBody({
               threadsSlot
             ) : hasMemory ? (
               <ChatThreads
+                key={agentId}
                 resourceId={agentId}
                 resourceType="agent"
                 threads={threads ?? []}

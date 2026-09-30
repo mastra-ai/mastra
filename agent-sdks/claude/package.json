@@ -1,6 +1,6 @@
 {
   "name": "@mastra/claude",
-  "version": "0.3.1",
+  "version": "0.3.2-alpha.0",
   "description": "Claude SDK package for Mastra",
   "type": "module",
   "main": "dist/index.js",

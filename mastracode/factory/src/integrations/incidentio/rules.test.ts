@@ -43,12 +43,12 @@ async function setup(overrides?: IncidentioRuleOverrides, boards = createBoardRe
 describe('IncidentioRules', () => {
   it.each([
     { name: 'the bound custom board initial phase', sourceId: 'src-1', board: 'release', stage: 'queued' },
-    { name: 'Work triage when the source is unbound', sourceId: 'src-2', board: 'work', stage: 'triage' },
+    { name: 'Work Intake when the source is unbound', sourceId: 'src-2', board: 'work', stage: 'intake' },
     {
-      name: 'Work triage when the bound board is not installed',
+      name: 'Work Intake when the bound board is not installed',
       sourceId: 'src-3',
       board: 'work',
-      stage: 'triage',
+      stage: 'intake',
     },
   ])('routes an observed follow-up to $name', async ({ sourceId, board, stage }) => {
     const { project, service, workItems } = await setup(
