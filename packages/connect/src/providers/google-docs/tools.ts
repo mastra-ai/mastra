@@ -17,6 +17,7 @@ import { deleteNamedRangeTool } from './tools/delete-named-range.js';
 import { deleteParagraphBulletsTool } from './tools/delete-paragraph-bullets.js';
 import { deleteTableColumnTool } from './tools/delete-table-column.js';
 import { deleteTableRowTool } from './tools/delete-table-row.js';
+import { exportDocumentTool } from './tools/export-document.js';
 import { insertInlineImageTool } from './tools/insert-inline-image.js';
 import { insertPageBreakTool } from './tools/insert-page-break.js';
 import { insertSectionBreakTool } from './tools/insert-section-break.js';
@@ -57,6 +58,7 @@ export function createGoogleDocsTools(options?: ProviderToolsOptions) {
     google_docs_delete_paragraph_bullets: deleteParagraphBulletsTool(platformProxy),
     google_docs_delete_table_column: deleteTableColumnTool(platformProxy),
     google_docs_delete_table_row: deleteTableRowTool(platformProxy),
+    google_docs_export_document: exportDocumentTool(platformProxy),
     google_docs_insert_inline_image: insertInlineImageTool(platformProxy),
     google_docs_insert_page_break: insertPageBreakTool(platformProxy),
     google_docs_insert_section_break: insertSectionBreakTool(platformProxy),
