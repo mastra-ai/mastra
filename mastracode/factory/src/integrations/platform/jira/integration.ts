@@ -118,10 +118,16 @@ export class PlatformJiraIntegration implements FactoryIntegration {
       // One broken connection (missing cloudId, invalid accountLabel) must
       // not drop the roster for every healthy site — keep the fulfilled
       // contexts and skip the rejected ones.
-      const settled = await Promise.allSettled(connections.map(connection => this.#connectionContext(connection)));
+      const settled = await Promise.allSettled(
+        connections.map(async connection => ({ connectionId: connection.id, context: await this.#connectionContext(connection) })),
+      );
       return settled
         .filter(entry => entry.status === 'fulfilled')
-        .map(entry => ({ api: entry.value.api, siteUrl: entry.value.siteUrl }));
+        .map(entry => ({
+          connectionId: entry.value.connectionId,
+          api: entry.value.context.api,
+          siteUrl: entry.value.context.siteUrl,
+        }));
     },
   });
   readonly #clientConfig: PlatformApiClientConfig;

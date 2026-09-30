@@ -34,7 +34,12 @@ interface Calls {
   deletes: Array<{ integrationId: string; externalUserId: string }>;
 }
 
-function setClaimed(index: IdentityIndex, integrationId: string, externalUserId: string, claimed: boolean): IdentityIndex {
+function setClaimed(
+  index: IdentityIndex,
+  integrationId: string,
+  externalUserId: string,
+  claimed: boolean,
+): IdentityIndex {
   return {
     ...index,
     identities: index.identities.map(row =>

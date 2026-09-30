@@ -1,22 +1,31 @@
 /**
  * Platform Jira identity capability.
  *
- * Iterates every active platform Jira connection for the org and calls the
- * same `GET /rest/api/3/users/search` endpoint the standalone integration
- * uses — but this time through the Mastra Platform connection proxy, which
- * transparently swaps the caller's bearer token for the Nango-brokered
- * Atlassian OAuth token.
+ * Discovery is scoped to the requesting `orgId`: platform Jira connections
+ * are deployment-wide, so a shared deployment could otherwise expose
+ * members from Jira sites connected by a different tenant. We intersect
+ * the active platform connections with the ones the org has actually
+ * bound as intake sources in Factory storage and only walk that
+ * intersection. Fresh platform Jira installs surface no members until the
+ * org has bound at least one project through intake — a UX trade-off to
+ * prevent cross-tenant leaks.
  *
- * Each connection's site host is tagged as `installation` so operators
- * with multiple Jira sites can tell same-named accounts apart in the
- * settings dropdown.
+ * With the intersection in hand we call the same
+ * `GET /rest/api/3/users/search` endpoint the standalone integration uses,
+ * but through the Mastra Platform connection proxy which transparently
+ * swaps the caller's bearer token for the Nango-brokered Atlassian OAuth
+ * token. Each connection's site host is tagged as `installation` so
+ * operators with multiple Jira sites can tell same-named accounts apart
+ * in the settings dropdown.
  */
 
 import type { IntegrationCandidateAccount, IntegrationIdentityCapability } from '../../base.js';
 import type { JiraApiClient, JiraUserRecord } from '../../jira/api.js';
+import { decodeSourceId } from './integration.js';
 
 export interface PlatformJiraIdentityHost {
-  activeContexts(): Promise<Array<{ api: JiraApiClient; siteUrl: string }>>;
+  /** Every active platform connection this deployment has. Filter by org before use. */
+  activeContexts(): Promise<Array<{ connectionId: string; api: JiraApiClient; siteUrl: string }>>;
 }
 
 function matchesQuery(account: IntegrationCandidateAccount, query: string | undefined): boolean {
@@ -55,13 +64,32 @@ function siteHost(siteUrl: string): string | undefined {
 
 export function buildPlatformJiraIdentity(host: PlatformJiraIdentityHost): IntegrationIdentityCapability {
   return {
-    async listCandidateAccounts(_ctx, { orgId: _orgId, query }) {
-      let contexts;
+    async listCandidateAccounts(ctx, { orgId, query }) {
+      // Read the org's bound Jira intake sources first: if it hasn't wired
+      // any connections through intake, there's nothing to list — and
+      // skipping the platform call prevents a shared deployment from
+      // surfacing another tenant's connections at all.
+      const orgConnectionIds = new Set<string>();
       try {
-        contexts = await host.activeContexts();
+        const bindings = await ctx.storage.intake.listBindings({ orgId, integrationId: 'jira' });
+        for (const binding of bindings) {
+          const decoded = decodeSourceId(binding.sourceId);
+          if (decoded) orgConnectionIds.add(decoded.connectionId);
+        }
       } catch {
         return [];
       }
+      if (orgConnectionIds.size === 0) return [];
+      let allContexts;
+      try {
+        allContexts = await host.activeContexts();
+      } catch {
+        return [];
+      }
+      // Intersect the deployment-scoped active-connection list with the
+      // connections the org has bound. Anything the org has not bound is
+      // skipped — its members are not this org's business.
+      const contexts = allContexts.filter(entry => orgConnectionIds.has(entry.connectionId));
       const collected = new Map<string, IntegrationCandidateAccount>();
       for (const ctx of contexts) {
         const installation = siteHost(ctx.siteUrl);

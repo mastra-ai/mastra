@@ -74,7 +74,8 @@ export function IdentityClaimsSection() {
     const meta = integrationMeta(row.integrationId);
     return {
       value: keyOf(row.integrationId, row.externalUserId),
-      label: row.label && row.label !== row.externalUserId ? `${row.label} · ${row.externalUserId}` : row.externalUserId,
+      label:
+        row.label && row.label !== row.externalUserId ? `${row.label} · ${row.externalUserId}` : row.externalUserId,
       description: row.email ?? undefined,
       start: (
         <span className="mr-1 flex shrink-0 items-center gap-1.5">
@@ -156,9 +157,7 @@ export function IdentityClaimsSection() {
         placeholder={identityQuery.isPending ? 'Loading accounts…' : 'Add your accounts across integrations…'}
         searchPlaceholder="Search by name, id, or email…"
         emptyText={
-          identityQuery.isPending
-            ? 'Loading accounts…'
-            : 'No accounts found. Type to search across every integration.'
+          identityQuery.isPending ? 'Loading accounts…' : 'No accounts found. Type to search across every integration.'
         }
         aria-label="Your external accounts"
         clearLabel="Clear all"
@@ -178,7 +177,7 @@ export function IdentityClaimsSection() {
                 return (
                   <li
                     key={`${integrationId}:${row.externalUserId}`}
-                    className="flex items-center gap-1.5 rounded-full border border-border bg-fill px-1.5 py-0.5"
+                    className="border-border bg-fill flex items-center gap-1.5 rounded-full border px-1.5 py-0.5"
                   >
                     <Avatar src={row.avatarUrl} name={display} size="sm" />
                     <Badge variant={meta.tone} emphasis="muted" size="sm">
