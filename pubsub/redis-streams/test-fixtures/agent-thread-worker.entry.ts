@@ -308,14 +308,22 @@ async function main() {
     }
 
     if (cmd.cmd === 'abort-active') {
-      const subscription = requireDefaultSubscription();
-      const runId = subscription.activeRunId();
-      emit({ type: 'abort-result', runId, aborted: subscription.abort() });
+      try {
+        const subscription = requireDefaultSubscription();
+        const runId = subscription.activeRunId();
+        emit({ type: 'abort-result', runId, aborted: subscription.abort() });
+      } catch (err) {
+        emit({ type: 'command-error', cmd: cmd.cmd, error: String(err) });
+      }
       return;
     }
 
     if (cmd.cmd === 'active-run') {
-      emit({ type: 'active-run', runId: requireDefaultSubscription().activeRunId() });
+      try {
+        emit({ type: 'active-run', runId: requireDefaultSubscription().activeRunId() });
+      } catch (err) {
+        emit({ type: 'command-error', cmd: cmd.cmd, error: String(err) });
+      }
       return;
     }
 
