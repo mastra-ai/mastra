@@ -3639,6 +3639,14 @@ export class Workflow<
   }
 }
 
+const TERMINAL_WORKFLOW_RUN_STATUSES = new Set<WorkflowRunStatus>([
+  'success',
+  'failed',
+  'canceled',
+  'tripwire',
+  'bailed',
+]);
+
 /**
  * Represents a workflow run that can be executed
  */
@@ -3805,10 +3813,33 @@ export class Run<
   }
 
   /**
+   * Whether the run has already finished, according to either its in-memory status or its persisted snapshot.
+   * The snapshot covers runs finished by another Run instance; the in-memory status covers runs without storage
+   * or whose terminal snapshot was not persisted.
+   */
+  protected async hasReachedTerminalStatus(): Promise<boolean> {
+    if (TERMINAL_WORKFLOW_RUN_STATUSES.has(this.workflowRunStatus)) return true;
+    try {
+      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: this.workflowId,
+        runId: this.runId,
+      });
+      return !!snapshot && TERMINAL_WORKFLOW_RUN_STATUSES.has(snapshot.status);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Cancels the workflow execution.
    * This aborts any running execution and updates the workflow status to 'canceled' in storage.
+   * Runs that already finished (success, failed, canceled, tripwire, bailed) are left unchanged.
    */
   async cancel() {
+    // Canceling a finished run is a no-op so its final status is preserved
+    if (await this.hasReachedTerminalStatus()) return;
+
     // Abort any running execution and update in-memory status
     this.abortController.abort();
     this.workflowRunStatus = 'canceled';
@@ -4059,6 +4090,7 @@ export class Run<
       perStep,
     });
 
+    this.workflowRunStatus = result.status;
     if (result.status !== 'suspended') {
       this.cleanup?.();
     }
@@ -5108,6 +5140,7 @@ export class Run<
         if (!params.isVNext && result.status !== 'suspended') {
           this.closeStreamAction?.().catch(() => {});
         }
+        this.workflowRunStatus = result.status;
         if (result.status !== 'suspended') {
           this.cleanup?.();
         }
@@ -5254,6 +5287,7 @@ export class Run<
       workflowSpan,
     });
 
+    this.workflowRunStatus = result.status;
     if (result.status !== 'suspended') {
       this.cleanup?.();
     }
@@ -5395,6 +5429,7 @@ export class Run<
       perStep,
     });
 
+    this.workflowRunStatus = result.status;
     if (result.status !== 'suspended') {
       this.cleanup?.();
     }

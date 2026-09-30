@@ -2067,6 +2067,7 @@ export class EventedRun<
       throw error;
     }
 
+    this.workflowRunStatus = result.status;
     if (result.status !== 'suspended') {
       if (result.status === 'failed') {
         const err = (result as { error?: unknown }).error;
@@ -2610,6 +2611,7 @@ export class EventedRun<
         outputOptions: params.outputOptions,
       })
       .then(result => {
+        this.workflowRunStatus = result.status;
         if (result.status !== 'suspended') {
           this.closeStreamAction?.().catch(() => {});
           this.cleanup?.();
@@ -2662,6 +2664,8 @@ export class EventedRun<
   }
 
   async cancel() {
+    if (await this.hasReachedTerminalStatus()) return;
+
     // Update storage directly for immediate status update (same pattern as Inngest)
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
     await workflowsStore?.updateWorkflowState({

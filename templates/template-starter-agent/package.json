@@ -1,7 +1,7 @@
 {
   "name": "template-starter-agent",
   "version": "1.0.0",
-  "description": "A durable, general-purpose Mastra agent harness whose tools and chat channels come from your Mastra platform integration connections via @mastra/connect, with a platform-backed workspace, Studio editing (agents and workflows), Postgres storage, and Redis-backed resumable streams.",
+  "description": "A general-purpose Mastra agent harness whose tools and chat channels come from your Mastra platform integration connections via @mastra/connect, with a platform-backed workspace, Studio editing (agents and workflows), Postgres storage, and a Redis-backed event cache.",
   "main": "index.js",
   "private": true,
   "scripts": {

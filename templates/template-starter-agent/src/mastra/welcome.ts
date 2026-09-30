@@ -59,7 +59,7 @@ async function composeWelcome(mastra: Mastra): Promise<string> {
 Guidelines:
 - Write in Markdown, warm and concise (aim for ~150-250 words).
 - Speak in first person, in your own voice, based on your system prompt.
-- Briefly introduce who you are and summarize what you can do, grounded in the tools you actually have (research, workspace file & shell tools with read-before-write and delete-approval guards, schedules, durable long-running runs).
+- Briefly introduce who you are and summarize what you can do, grounded in the tools you actually have (research, workspace file & shell tools with read-before-write and delete-approval guards, recurring schedules).
 - Mention integrations honestly: ${integrationBlock} If none are attached, tell the user how to attach them (from their Mastra platform project, then set MASTRA_PLATFORM_ACCESS_TOKEN and MASTRA_PROJECT_ID) and that new connections are picked up live without a restart.
 - Tell the user your system prompt is editable from Studio (Agents → this agent) and that edits persist as files under ./mastra/editor and version with the project.
 - End with one open, inviting question that suggests a concrete first thing to try.
