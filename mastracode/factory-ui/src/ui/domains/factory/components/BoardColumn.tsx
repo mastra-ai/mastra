@@ -79,6 +79,7 @@ export function BoardColumnHeader({
   collapsed,
   headerAction,
   headerExtras,
+  headerDetails,
 }: {
   stage: BoardStageId;
   label: string;
@@ -90,6 +91,7 @@ export function BoardColumnHeader({
   collapsed: boolean;
   headerAction?: React.ReactNode;
   headerExtras?: React.ReactNode;
+  headerDetails?: React.ReactNode;
 }) {
   if (collapsed) {
     return (
@@ -134,26 +136,29 @@ export function BoardColumnHeader({
   }
 
   return (
-    <div className={cn(columnWidthClass(false), 'group/column flex min-h-8 items-start justify-between gap-2')}>
-      <div className="flex h-8 min-w-0 items-center gap-2">
-        <BoardStageIcon stage={stage} kind={phaseKind} />
-        <Txt as="h2" variant="label" className="text-muted-foreground m-0 truncate font-semibold">
-          {label}
-        </Txt>
-        {loading ? (
-          <Skeleton className="h-6 w-12 shrink-0 rounded-full" />
-        ) : totalTaskCount > 0 ? (
-          <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />
-        ) : null}
-      </div>
-      {headerExtras || headerAction ? (
-        <div className="flex h-8 shrink-0 items-center gap-1">
-          {headerExtras}
-          {headerAction ? (
-            <div className={cn('flex items-center', COLUMN_ACTION_REVEAL_CLASS)}>{headerAction}</div>
+    <div className={cn(columnWidthClass(false), 'group/column flex flex-col gap-1')}>
+      <div className="flex min-h-8 items-start justify-between gap-2">
+        <div className="flex h-8 min-w-0 items-center gap-2">
+          <BoardStageIcon stage={stage} kind={phaseKind} />
+          <Txt as="h2" variant="label" className="text-muted-foreground m-0 truncate font-semibold">
+            {label}
+          </Txt>
+          {loading ? (
+            <Skeleton className="h-6 w-12 shrink-0 rounded-full" />
+          ) : totalTaskCount > 0 ? (
+            <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />
           ) : null}
         </div>
-      ) : null}
+        {headerExtras || headerAction ? (
+          <div className="flex h-8 shrink-0 items-center gap-1">
+            {headerExtras}
+            {headerAction ? (
+              <div className={cn('flex items-center', COLUMN_ACTION_REVEAL_CLASS)}>{headerAction}</div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+      {headerDetails}
     </div>
   );
 }

@@ -21,6 +21,7 @@ import {
   runButton,
   sessionLink,
 } from '../cardPrimaryAction';
+import { useStoryRunAction } from '../../storyboard/useStoryRunAction';
 import { useCardMorph } from '../hooks/useCardMorph';
 import type { AuditEventPage } from '../services/audit';
 import type { FactoryDecisionSummary } from '../services/decisions';
@@ -146,6 +147,7 @@ export function WorkItemCard({
     heldAs: awaitsTriageDecision(item, columnStage) ? (item.triageType ?? undefined) : undefined,
   });
   const retryDecisionId = status.kind === 'error' ? status.retryDecisionId : undefined;
+  const storyRunGate = useStoryRunAction(item.id, primaryMove?.stage ?? columnStage);
   const primaryAction = cardPrimaryAction({
     item,
     columnStage,
@@ -220,11 +222,13 @@ export function WorkItemCard({
     waiting: status.kind === 'waiting' || status.kind === 'held',
     session: sessionLink(sessionHref),
     retry: retryButton({ decisionId: retryDecisionId, retryingDecisionId, onRetry: onRetryDecision }),
-    run: runButton({
-      action: primaryAction,
-      pending: busyLabel !== undefined,
-      suggestion: status.kind === 'waiting' ? status.label : undefined,
-    }),
+    run: storyRunGate(
+      runButton({
+        action: primaryAction,
+        pending: busyLabel !== undefined,
+        suggestion: status.kind === 'waiting' ? status.label : undefined,
+      }),
+    ),
   });
 
   return (

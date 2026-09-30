@@ -21,6 +21,8 @@ import { Link, useLocation, useParams } from 'react-router';
 import { useCloseSettings } from '../hooks/useCloseSettings';
 import { useSettingsSection } from '../hooks/useSettingsSection';
 import { SETTINGS_SECTION_LABELS, settingsSectionPath, type SettingsSection } from '../settingsSections';
+import { useStorySettingsScope } from '../../storyboard/StorySettingsScope';
+import { scopedSectionPath, sectionInScope } from '../../storyboard/storyScopePaths';
 
 type SettingsNavItem = {
   id: SettingsSection;
@@ -130,10 +132,15 @@ export function SettingsNavigation() {
   const closeSettings = useCloseSettings();
   const { state } = useMainSidebar();
   const [query, setQuery] = useState('');
+  const storyScope = useStorySettingsScope();
   const normalizedQuery = query.trim().toLowerCase();
   const filteredGroups = SETTINGS_GROUPS.map(group => ({
     ...group,
-    items: normalizedQuery ? group.items.filter(({ searchText }) => searchText.includes(normalizedQuery)) : group.items,
+    items: group.items.filter(
+      ({ id, searchText }) =>
+        (!normalizedQuery || searchText.includes(normalizedQuery)) &&
+        (storyScope === null || sectionInScope(id, storyScope)),
+    ),
   })).filter(group => group.items.length > 0);
 
   if (!factoryId) return null;
@@ -185,7 +192,9 @@ export function SettingsNavigation() {
                       link={{ name: label, url: '#', icon: <Icon /> }}
                     >
                       <Link
-                        to={settingsSectionPath(factoryId, id)}
+                        to={
+                          storyScope ? scopedSectionPath(factoryId, id, storyScope) : settingsSectionPath(factoryId, id)
+                        }
                         state={location.state}
                         aria-label={label}
                         aria-current={isActive ? 'page' : undefined}

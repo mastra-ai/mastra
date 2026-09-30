@@ -28,6 +28,7 @@ import { OverviewPage } from './pages/OverviewPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SlackConnectionPage } from './pages/SlackConnectionPage';
 import { RulesPage } from './pages/RulesPage';
+import { ProblemMapPage } from './domains/storyboard/ProblemMapPage';
 import { SignInPage } from './pages/SignInPage';
 import { SupervisorPage } from './pages/SupervisorPage';
 import { ThreadPage } from './pages/ThreadPage';
@@ -162,6 +163,7 @@ export function createAppRoutes(): RouteObject[] {
                 { path: 'activity', element: <ActivityPage /> },
                 { path: 'metrics', element: <MetricsRedirect /> },
                 { path: 'rules', element: <RulesPage /> },
+                { path: 'problem-map', element: <ProblemMapPage /> },
                 { path: 'audit', element: <AuditPage /> },
                 { path: 'knowledge', element: <KnowledgeRoute /> },
                 {

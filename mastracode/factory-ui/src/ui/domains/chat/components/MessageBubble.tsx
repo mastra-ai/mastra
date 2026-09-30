@@ -12,6 +12,7 @@ import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvoc
 
 import { channelOrigin, messageAuthor } from '../services/message-author';
 import type { MessageEntry, SuspensionPrompt } from '../services/transcript';
+import { useStoryReplyRanOn } from '../../storyboard/StoryReplyProvenance';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import { Message, MessageActions, MessageCopyButton, MessageTimestamp } from '@mastra/playground-ui/components/Message';
 import { ChannelOriginBadge, SenderAvatar } from './MessageSender';
@@ -52,6 +53,7 @@ export function MessageBubble({
   entry,
   suspensions,
   reply,
+  ranOnReplyId,
   isSubmitting,
   onRespond,
   viewerId,
@@ -59,6 +61,7 @@ export function MessageBubble({
   entry: MessageEntry;
   suspensions: ReadonlyMap<string, SuspensionPrompt>;
   reply?: string;
+  ranOnReplyId?: string;
   isSubmitting: boolean;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
   viewerId?: string;
@@ -83,6 +86,15 @@ export function MessageBubble({
       <MessageTimestamp value={entry.message.createdAt} />
     </MessageActions>
   ) : undefined;
+  const ranOn = useStoryReplyRanOn(ranOnReplyId);
+  const replyFooter = ranOn ? (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      {ranOn}
+      {messageActions}
+    </div>
+  ) : (
+    messageActions
+  );
   const roles: MessageRoleRenderers = {
     User: ({ children }) => (
       <Message
@@ -111,7 +123,7 @@ export function MessageBubble({
       </Message>
     ),
     Assistant: ({ children }) => (
-      <Message from="assistant" footer={messageActions}>
+      <Message from="assistant" footer={replyFooter}>
         {children}
       </Message>
     ),

@@ -6,6 +6,8 @@ import { Outlet } from 'react-router';
 import { ChatSessionRouteProvider } from '../domains/chat/Chat';
 import { ChatOverlays } from '../domains/chat/components/ChatOverlays';
 import { GlobalSearchButton } from '../domains/search/components/GlobalSearchButton';
+import { StoryboardPanel } from '../domains/storyboard/StoryboardPanel';
+import { StoryboardProvider } from '../domains/storyboard/StoryboardProvider';
 import { OverlaysProvider } from '../lib/overlays';
 import { Sidebar } from '../Sidebar';
 
@@ -37,14 +39,17 @@ export function AppLayout() {
     <div className="bg-sidebar h-dvh">
       <SidebarNew.Provider storageKey="mastracode-web" collapsedWidth={0}>
         <OverlaysProvider>
-          <ChatSessionRouteProvider>
-            <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
-              <MainCard className="flex flex-col">
-                <Outlet />
-              </MainCard>
-            </AppShell>
-            <ChatOverlays />
-          </ChatSessionRouteProvider>
+          <StoryboardProvider>
+            <ChatSessionRouteProvider>
+              <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
+                <MainCard className="flex flex-col">
+                  <Outlet />
+                </MainCard>
+              </AppShell>
+              <ChatOverlays />
+            </ChatSessionRouteProvider>
+            <StoryboardPanel />
+          </StoryboardProvider>
         </OverlaysProvider>
       </SidebarNew.Provider>
     </div>

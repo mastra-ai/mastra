@@ -61,6 +61,10 @@ import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspa
 import { SkeletonRows } from '../ui/SkeletonRows';
 import { settingsSectionPath } from '../domains/settings/settingsSections';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { StoryBoardStatus } from '../domains/storyboard/StoryBoardStatus';
+import { useStoryLaneDetails } from '../domains/storyboard/StoryLaneModel';
+import { StorySetupCard } from '../domains/storyboard/StorySetupCard';
+import { useStoryboard, useStorySeededItems } from '../domains/storyboard/StoryboardProvider';
 
 /**
  * Factory › Board: an org-wide kanban over the repository's work items. The
@@ -184,7 +188,11 @@ function BoardContent({
 
   const auth = useFactoryAuth();
   const sort = boardSortFromParams(searchParams, auth.data?.user?.userId);
-  const items = useBoardItems({ factoryProjectId, kind, currentUserId: auth.data?.user?.userId });
+  const items = useStorySeededItems(
+    useBoardItems({ factoryProjectId, kind, currentUserId: auth.data?.user?.userId }),
+    factoryProjectId,
+    kind,
+  );
   const intakeConfig = useIntakeConfigQuery();
   const [repositoryAction, setRepositoryAction] = useState<((slug: string) => void) | null>(null);
   const chooseRepository = (
@@ -238,6 +246,8 @@ function BoardContent({
       () => items.handleDrop(payload, stage, cause),
     );
   };
+  const storyLaneDetails = useStoryLaneDetails(kind);
+  const storyboard = useStoryboard();
   const intake = useBoardIntake({
     factoryProjectId,
     repository,
@@ -422,7 +432,8 @@ function BoardContent({
                 />
                 <BoardSortControl value={sort} currentUserId={auth.data?.user?.userId} onChange={setSort} />
               </div>
-              {builtin && (
+              {builtin && <StoryBoardStatus board={kind} />}
+              {builtin && !storyboard && (
                 <div className="ml-auto shrink-0">
                   <BoardAutomationSettings
                     factoryProjectId={factoryProjectId}
@@ -472,6 +483,7 @@ function BoardContent({
                       />
                     ) : undefined
                   }
+                  headerDetails={storyLaneDetails(stage.id)}
                 />
               ))}
             </div>
@@ -497,6 +509,7 @@ function BoardContent({
                     collapsed={collapsed}
                     onDrop={dropWithRepository}
                   >
+                    {stage.id === definition.initialPhase && <StorySetupCard />}
                     {composerOpen ? (
                       <InlineWorkItemComposer
                         stage={stage.id}

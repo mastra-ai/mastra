@@ -18,6 +18,10 @@ import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 import { WorkItemActivity } from './WorkItemActivity';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { StoryCardFacts, StoryLastActivity } from '../../storyboard/StoryCardFacts';
+import { useStoryCard } from '../../storyboard/StoryboardProvider';
+import { StoryRuleBadge } from '../../storyboard/StoryLaneRules';
+import { REVIEW_RULE } from '../../storyboard/storyRules';
 
 // The card and its open copy render these same rows, so opening moves none of them.
 export function WorkItemCardRows({
@@ -48,6 +52,8 @@ export function WorkItemCardRows({
   /** The copy: its labelled source link and two controls to clear. */
   open: boolean;
 }) {
+  const storyCard = useStoryCard(item.id);
+  const storyHeldLabel = storyCard !== null && status.kind === 'held' ? status.label : null;
   const labels = metadataLabels(item.metadata);
   const labelColors = metadataLabelColors(item.metadata);
   const otherStages = item.stages.filter(stage => stage !== columnStage);
@@ -103,13 +109,20 @@ export function WorkItemCardRows({
           ))}
         </div>
       )}
+      <StoryCardFacts itemId={item.id} columnStage={columnStage} heldLabel={storyHeldLabel} />
       {(status.kind !== 'idle' || external || verdict) && (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-          <CardStatus status={status} />
+          {storyHeldLabel === null && <CardStatus status={status} />}
           {verdict && (
-            <Badge size="xs" variant={verdict.approved ? 'green' : 'orange'}>
-              {verdict.label}
-            </Badge>
+            <StoryRuleBadge
+              itemId={item.id}
+              ruleId={REVIEW_RULE}
+              reason={`The review agent ${verdict.approved ? 'approved' : 'requested changes on'} the last commit it saw.`}
+            >
+              <Badge size="xs" variant={verdict.approved ? 'green' : 'orange'}>
+                {verdict.label}
+              </Badge>
+            </StoryRuleBadge>
           )}
           {external && (
             <Tooltip>
@@ -130,7 +143,9 @@ export function WorkItemCardRows({
       <CardActions
         actions={actions}
         beforeStart={beforeStart}
-        trailing={<WorkItemActivity activity={activity} actors={actors} />}
+        trailing={
+          <StoryLastActivity itemId={item.id} fallback={<WorkItemActivity activity={activity} actors={actors} />} />
+        }
       />
     </>
   );

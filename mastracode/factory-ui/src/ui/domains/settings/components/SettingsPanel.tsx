@@ -37,6 +37,8 @@ import { OMSection } from './OMSection';
 import { BaseThinkingSection, ModeThinkingDefaultsSection } from './ThinkingDefaultsSection';
 import { ProviderAccessSection } from './ProviderAccessSection';
 import { BehaviorSettings, GeneralSettings, ModelSettings } from './SettingsPanel.parts';
+import { StoryBillingSettings } from '../../storyboard/StoryBillingSettings';
+import { useStoryboard } from '../../storyboard/StoryboardProvider';
 
 function getSettingsUpdateErrorMessage(error: unknown): string {
   if (error instanceof SettingsUpdateVerificationError) return error.message;
@@ -64,6 +66,7 @@ export function SettingsPanel() {
     enabled: resourceEnabled,
   };
 
+  const storyboard = useStoryboard();
   const modelsQuery = useAvailableModelsQuery();
   const settingsQuery = useAgentControllerSettings(hookArgs);
   const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
@@ -95,7 +98,8 @@ export function SettingsPanel() {
       )}
       {section === 'repositories' && <RepositoriesSection />}
       {section === 'intake' && <IntakeSection />}
-      {section === 'models' && (
+      {section === 'models' && <StoryBillingSettings />}
+      {section === 'models' && storyboard === null && (
         <ModelsSettingsSection models={models} settings={settings} onBehaviorChange={onBehaviorChange} />
       )}
       {section === 'memory' && (

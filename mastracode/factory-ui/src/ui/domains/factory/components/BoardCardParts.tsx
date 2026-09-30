@@ -188,7 +188,7 @@ export function CardActions({
 }
 
 function pillVariant(action: CardAction, main: boolean) {
-  return main && action.urgent && !action.disabled ? 'primary' : 'default';
+  return main && action.urgent && !action.disabled && !action.blocked ? 'primary' : 'default';
 }
 
 function CardActionButton({
@@ -226,7 +226,8 @@ function CardActionButton({
       size="sm"
       aria-label={action.ariaLabel}
       disabled={action.disabled}
-      className={width}
+      aria-disabled={action.blocked || undefined}
+      className={cn(width, action.blocked && 'opacity-50')}
       onClick={() => {
         beforeStart?.();
         action.start();

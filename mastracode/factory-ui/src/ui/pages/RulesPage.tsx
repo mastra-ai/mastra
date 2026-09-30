@@ -32,6 +32,8 @@ import { TIMESTAMP } from '../domains/factory/components/panel';
 import { DayHeading, RailRow, RAIL_LIST, RAIL_MARK_TONE, RAIL_ROW_BODY } from '../domains/factory/components/Timeline';
 import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../domains/factory/services/decisions';
 import { SkeletonRows } from '../ui/SkeletonRows';
+import { StoryRulesNotice } from '../domains/storyboard/StoryRulesNotice';
+import { StoryWorkflowsSection } from '../domains/storyboard/workflows/WorkflowsSection';
 
 const DECISION_GROUPS: ReadonlyArray<{
   key: string;
@@ -67,6 +69,8 @@ export function RulesPage() {
   return (
     <PageLayout variant="fit" {...slots}>
       <div className="flex min-h-0 flex-col p-4">
+        <StoryRulesNotice />
+        <StoryWorkflowsSection />
         <RulesContent factoryProjectId={factory.id} />
       </div>
     </PageLayout>

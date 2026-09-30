@@ -5,6 +5,8 @@ import { useWorkItemsQuery } from '../../../../../hooks/useWorkItems';
 import { isPullRequestSource } from '../../../factory/services/workItems';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { PullRequestLinks } from '../PullRequestLinks';
+import { useStoryMemorySlots } from '../../../storyboard/StoryMemoryPill';
+import { StoryModelChip } from '../../../storyboard/StoryModelChip';
 import { ModelPicker } from './ModelPicker';
 import { ConnectionActivity } from './ConnectionActivity';
 import { GoalStatus } from './GoalStatus';
@@ -33,6 +35,7 @@ export function StatusLine() {
     ),
   );
   const workItemsPending = Boolean(factoryProjectKey) && workItems.isPending;
+  const storyMemory = useStoryMemorySlots();
 
   return (
     <div
@@ -40,8 +43,10 @@ export function StatusLine() {
       className="text-caption text-muted-foreground flex h-fit shrink-0 flex-wrap items-center gap-x-1.5 gap-y-1"
     >
       <ModesSelection />
-      <ModelPicker />
-      <OperationalMemoryStatus />
+      <StoryModelChip>
+        <ModelPicker />
+      </StoryModelChip>
+      <OperationalMemoryStatus {...storyMemory} />
       <RuntimeActivity />
       <ConnectionActivity />
       <QueuedFollowUps />

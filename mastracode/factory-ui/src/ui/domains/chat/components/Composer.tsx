@@ -38,6 +38,7 @@ import { commandRequiresReadySession } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { getComposerTone } from './composer-tone';
 import { StatusLine } from './StatusLine';
+import { StoryComposerFooter, StoryComposerTopTray, useStoryComposerLocked } from '../../storyboard/StoryComposerBar';
 import { ComposerImageAttachments } from './ComposerImageAttachments';
 import { useComposerImages } from './useComposerImages';
 import type { PendingImage } from './useComposerImages';
@@ -90,9 +91,10 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     disabled: chatPreparing || planFeedback.pending,
   });
   const modeSwitchPendingRef = useRef(false);
+  const storyLocked = useStoryComposerLocked();
   const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
-  const sendDisabled = composerDisabled || draftConfigNotReady || chatPreparing || planFeedback.loading;
-  const textareaDisabled = composerDisabled && !chatPreparing;
+  const sendDisabled = composerDisabled || draftConfigNotReady || chatPreparing || planFeedback.loading || storyLocked;
+  const textareaDisabled = (composerDisabled && !chatPreparing) || storyLocked;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
   const normalPlaceholder = planFeedback.pending
     ? 'Give feedback on this plan…'
@@ -262,6 +264,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
+      <StoryComposerTopTray />
       <ComposerRing busy={busy || chatPreparing} tone={getComposerTone(activeModeId ?? modes[0]?.id)}>
         <ComposerBox>
           <ComposerSuggestions {...commandMenu.suggestionsProps} />
@@ -323,6 +326,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
           </ComposerActions>
         </ComposerBox>
       </ComposerRing>
+      <StoryComposerFooter />
     </ComposerRoot>
   );
 }

@@ -3,6 +3,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/c
 import { formatCompactTokens, TokenBudget, TokenBudgetDetail } from '@mastra/playground-ui/components/TokenBudget';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Brain, MessageSquare } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import { useChatRuntime } from '../../context/useChatRuntime';
 import type { OMWork } from '../../services/om';
@@ -24,7 +25,7 @@ function reading(tokens: number, threshold: number) {
   return `${formatCompactTokens(tokens)} of ${formatCompactTokens(threshold)}k`;
 }
 
-export function OperationalMemoryStatus() {
+export function OperationalMemoryStatus({ badge, detail }: { badge?: ReactNode; detail?: ReactNode }) {
   const runtime = useChatRuntime();
   const om = runtime.omProgress;
   const work = omWork(runtime);
@@ -47,6 +48,7 @@ export function OperationalMemoryStatus() {
         aria-label={`Memory budgets: ${spoken.join('. ')}`}
         className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'gap-3')}
       >
+        {badge}
         {showMsg && (
           <TokenBudget
             label={messageLabel[work.messages]}
@@ -87,6 +89,7 @@ export function OperationalMemoryStatus() {
             tone={observationTone}
           />
         )}
+        {detail}
       </PopoverContent>
     </Popover>
   );

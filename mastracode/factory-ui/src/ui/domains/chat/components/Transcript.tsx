@@ -6,7 +6,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { groupTurns, startsUserTurn } from '@mastra/playground-ui/components/ThreadRail';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
-import { memo, useCallback, useMemo, useState } from 'react';
+import { Fragment, memo, useCallback, useMemo, useState } from 'react';
 
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
@@ -17,6 +17,8 @@ import {
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { replySteps } from '../services/turns';
 import { ArrivalScope, useArriving } from '@mastra/playground-ui/components/Arrival';
+import { StoryReplyProvenance } from '../../storyboard/StoryReplyProvenance';
+import { useStoryTranscript } from '../../storyboard/storyTranscript';
 import { MessageBubble } from './MessageBubble';
 import { draws, messageText, renderableParts } from './transcript-parts';
 import { isRecord } from './transcript-shared';
@@ -29,7 +31,7 @@ import type { MessageEntry, NoticeEntry, SuspensionPrompt, TimelineEntry } from 
 export function Transcript({ tail }: { tail?: ReactNode }) {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { transcript, resolvePrompt, busy, viewerId } = useChatTranscript();
-  const { entries } = transcript;
+  const entries = useStoryTranscript(transcript.entries);
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -153,22 +155,28 @@ export function TranscriptEntries({
             restored={group.key === restoredTurnKey}
           >
             {group.entries.map(entry => (
-              <TranscriptItem key={entry.id} entry={entry} scrollAnchor={opensTurn(entry) && !steers(entry)}>
-                <TranscriptEntryContent
-                  entry={entry}
-                  suspensions={suspensions}
-                  reply={entry === replyEnd ? reply : undefined}
-                  redundantSuspension={
-                    entry.kind === 'suspension' &&
-                    entry.toolName !== 'request_access' &&
-                    canonicalToolCallIds.has(entry.toolCallId)
-                  }
-                  isSubmitting={isSubmitting}
-                  viewerId={viewerId}
-                  onApprove={onApprove}
-                  onRespond={onRespond}
-                />
-              </TranscriptItem>
+              <Fragment key={entry.id}>
+                <TranscriptItem entry={entry} scrollAnchor={opensTurn(entry) && !steers(entry)}>
+                  <TranscriptEntryContent
+                    entry={entry}
+                    suspensions={suspensions}
+                    reply={entry === replyEnd ? reply : undefined}
+                    ranOnReplyId={entry === replyEnd && !runningTurn ? entry.id : undefined}
+                    redundantSuspension={
+                      entry.kind === 'suspension' &&
+                      entry.toolName !== 'request_access' &&
+                      canonicalToolCallIds.has(entry.toolCallId)
+                    }
+                    isSubmitting={isSubmitting}
+                    viewerId={viewerId}
+                    onApprove={onApprove}
+                    onRespond={onRespond}
+                  />
+                </TranscriptItem>
+                {entry === replyEnd && (
+                  <StoryReplyProvenance replyId={replyEnd.id} settled={!runningTurn && entry.kind !== 'message'} />
+                )}
+              </Fragment>
             ))}
             {isLiveTurn && tail}
           </ChatShell.Turn>
@@ -192,6 +200,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
   entry,
   suspensions,
   reply,
+  ranOnReplyId,
   redundantSuspension,
   isSubmitting,
   viewerId,
@@ -201,6 +210,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
   entry: TimelineEntry;
   suspensions: ReadonlyMap<string, SuspensionPrompt>;
   reply?: string;
+  ranOnReplyId?: string;
   redundantSuspension: boolean;
   isSubmitting: boolean;
   viewerId?: string;
@@ -214,6 +224,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
           entry={entry}
           suspensions={suspensions}
           reply={reply}
+          ranOnReplyId={ranOnReplyId}
           isSubmitting={isSubmitting}
           viewerId={viewerId}
           onRespond={onRespond}

@@ -10,6 +10,7 @@ import { GlobalSearchButton } from '../domains/search/components/GlobalSearchBut
 import { SettingsHeader } from '../domains/settings/components/SettingsHeader';
 import { SettingsPanel } from '../domains/settings/components/SettingsPanel';
 import { SETTINGS_SECTION_LABELS, isSettingsSection } from '../domains/settings/settingsSections';
+import { StorySettingsScopeSwitch, useStorySettingsScope } from '../domains/storyboard/StorySettingsScope';
 
 /**
  * Routed settings page (`/settings/:section`). Sections are URL-addressable;
@@ -19,12 +20,14 @@ import { SETTINGS_SECTION_LABELS, isSettingsSection } from '../domains/settings/
 export function SettingsPage() {
   const { section } = useParams();
   const location = useLocation();
+  const storyScope = useStorySettingsScope();
 
   if (!isSettingsSection(section)) {
     return <Navigate to="../preferences" replace state={location.state} />;
   }
   return (
     <SettingsPageLayout
+      actionRow={storyScope && <StorySettingsScopeSwitch scope={storyScope} />}
       header={
         <PageHeader>
           <FocusedTitle key={section}>{SETTINGS_SECTION_LABELS[section]}</FocusedTitle>
@@ -59,10 +62,12 @@ export function SettingsPageLayout({
   children,
   header,
   breadcrumbs,
+  actionRow,
 }: {
   children: ReactNode;
   header: ReactNode;
   breadcrumbs?: ReactNode;
+  actionRow?: ReactNode;
 }) {
   const { isMobile, desktopState } = useMainSidebar();
   const sidebarCollapsed = !isMobile && desktopState === 'collapsed';
@@ -71,6 +76,7 @@ export function SettingsPageLayout({
     <PageLayout
       variant="narrow"
       header={header}
+      actionRow={actionRow}
       breadcrumbs={
         breadcrumbs ??
         (isMobile ? <SettingsHeader autoFocus /> : sidebarCollapsed ? <ChatHeaderSidebarTrigger /> : undefined)
