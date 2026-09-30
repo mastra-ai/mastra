@@ -758,6 +758,27 @@ export function createDurableToolCallStep() {
         }
         // Live counterpart of the persisted `resumed: true` marker (mirrors the base tool-call step).
         if (matchedEntry && pubsub) {
+          // Re-run the original approval/suspension display transform so the ack never re-exposes redacted payloads.
+          const displayed = await applyToolPayloadTransformToChunk(
+            {
+              type: type === 'approval' ? ('tool-call-approval' as const) : ('tool-call-suspended' as const),
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: {
+                toolCallId,
+                toolName,
+                args: matchedEntry.args,
+                ...(type === 'suspension' ? { suspendPayload: matchedEntry.suspendPayload } : {}),
+                resumeSchema: matchedEntry.resumeSchema,
+              },
+              metadata: undefined as Record<string, any> | undefined,
+            },
+            {
+              policy: registryEntry?.toolPayloadTransform,
+              tools: registryEntry?.tools,
+              logger: logger as any,
+            },
+          );
           await emitChunkEvent(pubsub, runId, {
             type: 'tool-call-resumed',
             runId,
@@ -766,11 +787,11 @@ export function createDurableToolCallStep() {
               toolCallId,
               toolName,
               kind: type,
-              args: matchedEntry.args,
-              ...(type === 'suspension' ? { suspendPayload: matchedEntry.suspendPayload } : {}),
-              resumeSchema: matchedEntry.resumeSchema,
+              args: displayed.payload.args,
+              ...(type === 'suspension' ? { suspendPayload: (displayed.payload as any).suspendPayload } : {}),
+              resumeSchema: displayed.payload.resumeSchema,
             },
-            ...(matchedEntry.metadata ? { metadata: matchedEntry.metadata } : {}),
+            ...(displayed.metadata ? { metadata: displayed.metadata } : {}),
           });
         }
       };

@@ -141,4 +141,40 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
     expect(acks, chunks.map(c => c.type).join(',')).toHaveLength(1);
     expect(acks[0].payload).toMatchObject({ toolCallId: 'tc-1', kind: 'approval' });
   }, 30000);
+
+  it('applies the display transform to the approval tool-call-resumed payload', async () => {
+    const memory = { thread: 'durable-resumed-redacted', resource: 'r' };
+    const agent = new Agent({
+      id: 'redacted-approver',
+      name: 'redacted-approver',
+      instructions: 'do',
+      model: makeModel('doThing', { value: 'hunter2' }) as LanguageModelV2,
+      memory: new MockMemory(),
+      tools: {
+        doThing: createTool({
+          id: 'do-thing',
+          description: 'Does a thing.',
+          inputSchema: z.object({ value: z.string() }),
+          requireApproval: true,
+          execute: async (input: { value: string }) => ({ done: input.value }),
+        }),
+      },
+    });
+    const durableAgent = createDurableAgent({ agent, pubsub });
+    new Mastra({ agents: { durableAgent }, storage: new InMemoryStore(), logger: false });
+
+    const stream = await durableAgent.stream('go', {
+      memory,
+      maxSteps: 3,
+      transform: { targets: ['display'], transformToolPayload: ctx => `[redacted ${ctx.phase}]` },
+    } as any);
+    await runUntil(stream, 'tool-call-approval');
+
+    const chunks = await drain(await durableAgent.approveToolCall({ runId: stream.runId, toolCallId: 'tc-1', memory }));
+    const ack = chunks.find(c => c.type === 'tool-call-resumed');
+    expect(ack, chunks.map(c => c.type).join(',')).toBeDefined();
+    const display = ack.metadata?.mastra?.toolPayloadTransform?.display;
+    expect(display, JSON.stringify(ack.metadata)).toBeDefined();
+    expect(JSON.stringify(display)).toContain('[redacted');
+  }, 30000);
 });

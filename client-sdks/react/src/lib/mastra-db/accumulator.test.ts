@@ -1176,6 +1176,22 @@ describe('accumulateChunk - tool calls', () => {
     expect(Object.keys(suspendedTools)).toEqual(['other']);
   });
 
+  it('tool-call-resumed clears a live approval from requireApprovalMetadata (#24280)', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('tc-1', 'deploy', { env: 'prod' }),
+      toolCallApprovalChunk('tc-1', 'deploy', { env: 'prod' }),
+      {
+        type: 'tool-call-resumed',
+        runId: RUN_ID,
+        from: 'AGENT',
+        payload: { toolCallId: 'tc-1', toolName: 'deploy', kind: 'approval' },
+      } as unknown as ChunkType,
+    ]);
+    const meta = out[0].content.metadata as { requireApprovalMetadata?: Record<string, unknown> };
+    expect(meta.requireApprovalMetadata).toEqual({});
+  });
+
   it('tool-output appends non-workflow output onto a partial-call result array', () => {
     const out = reduce([
       startChunk(),

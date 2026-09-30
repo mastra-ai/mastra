@@ -1557,13 +1557,21 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
         const message = result[i];
         if (!message || message.role !== 'assistant') continue;
         const meta = message.content.metadata as MastraDBMessageMetadata | undefined;
-        const metadataKey = chunk.payload.kind === 'approval' ? 'pendingToolApprovals' : 'suspendedTools';
-        const entries = meta?.[metadataKey] as Record<string, { toolCallId?: string }> | undefined;
-        if (!entries) continue;
-        const key = Object.keys(entries).find(k => (entries[k]?.toolCallId ?? k) === resumedToolCallId);
-        if (!key) continue;
-        const { [key]: _removed, ...remaining } = entries;
-        return replaceAt(result, i, withMetadata(message, { ...meta, [metadataKey]: remaining }));
+        // Hydrated messages carry `pendingToolApprovals`; live ones carry `requireApprovalMetadata`.
+        const metadataKeys =
+          chunk.payload.kind === 'approval'
+            ? (['pendingToolApprovals', 'requireApprovalMetadata'] as const)
+            : (['suspendedTools'] as const);
+        let nextMeta: Record<string, any> | undefined;
+        for (const metadataKey of metadataKeys) {
+          const entries = meta?.[metadataKey] as Record<string, { toolCallId?: string }> | undefined;
+          if (!entries) continue;
+          const key = Object.keys(entries).find(k => (entries[k]?.toolCallId ?? k) === resumedToolCallId);
+          if (!key) continue;
+          const { [key]: _removed, ...remaining } = entries;
+          nextMeta = { ...(nextMeta ?? meta), [metadataKey]: remaining };
+        }
+        if (nextMeta) return replaceAt(result, i, withMetadata(message, nextMeta as MastraDBMessageMetadata));
       }
       return result;
     }

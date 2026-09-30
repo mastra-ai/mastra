@@ -566,7 +566,8 @@ export const useChat = ({
       if (chunk.type === 'tool-call-resumed') {
         const toolCallId = chunk.payload?.toolCallId;
         if (typeof toolCallId === 'string') {
-          liveApprovalIds.current.delete(toolCallId);
+          // Keep it as a live decision so stale hydrated history can't re-mark it pending.
+          liveApprovalIds.current.add(toolCallId);
           pendingToolApprovalIdsRef.current.delete(toolCallId);
           setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
         }
