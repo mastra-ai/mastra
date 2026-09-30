@@ -442,6 +442,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private readonly requireToolApproval: RequireToolApproval | undefined;
   private readonly onToolError: 'throw' | 'return';
   private jsonSchemaValidator?: jsonSchemaValidator;
+  private readonly usesConfiguredJsonSchemaValidator: boolean;
   private readonly inputSchemaValidators = new Map<string, ReturnType<jsonSchemaValidator['getValidator']>>();
 
   /** Provides access to resource operations (list, read, notifications) */
@@ -466,6 +467,7 @@ export class InternalMastraMCPClient extends MastraBase {
     this.requireToolApproval = server.requireToolApproval;
     this.onToolError = server.onToolError ?? 'throw';
     this.jsonSchemaValidator = server.jsonSchemaValidator;
+    this.usesConfiguredJsonSchemaValidator = !!server.jsonSchemaValidator;
 
     const configured = server.capabilities ?? {};
     if (configured.elicitation !== undefined && !server.inputRequests) {
@@ -1260,15 +1262,17 @@ export class InternalMastraMCPClient extends MastraBase {
     });
   }
 
+  private createDefaultJsonSchemaValidator(): jsonSchemaValidator {
+    const validators = jsonSchemaValidatorModule as unknown as {
+      AjvJsonSchemaValidator?: new () => jsonSchemaValidator;
+      CfWorkerJsonSchemaValidator?: new () => jsonSchemaValidator;
+    };
+    const ValidatorClass = (validators.AjvJsonSchemaValidator ?? validators.CfWorkerJsonSchemaValidator)!;
+    return new ValidatorClass();
+  }
+
   private getJsonSchemaValidator(): jsonSchemaValidator {
-    if (!this.jsonSchemaValidator) {
-      const validators = jsonSchemaValidatorModule as unknown as {
-        AjvJsonSchemaValidator?: new () => jsonSchemaValidator;
-        CfWorkerJsonSchemaValidator?: new () => jsonSchemaValidator;
-      };
-      const ValidatorClass = (validators.AjvJsonSchemaValidator ?? validators.CfWorkerJsonSchemaValidator)!;
-      this.jsonSchemaValidator = new ValidatorClass();
-    }
+    this.jsonSchemaValidator ??= this.createDefaultJsonSchemaValidator();
     return this.jsonSchemaValidator;
   }
 
@@ -1277,7 +1281,10 @@ export class InternalMastraMCPClient extends MastraBase {
     const cachedValidator = this.inputSchemaValidators.get(cacheKey);
     if (cachedValidator) return cachedValidator;
 
-    const validator = this.getJsonSchemaValidator().getValidator(schema);
+    const validatorProvider = this.usesConfiguredJsonSchemaValidator
+      ? this.getJsonSchemaValidator()
+      : this.createDefaultJsonSchemaValidator();
+    const validator = validatorProvider.getValidator(schema);
     this.inputSchemaValidators.set(cacheKey, validator);
     return validator;
   }
@@ -1285,6 +1292,15 @@ export class InternalMastraMCPClient extends MastraBase {
   private convertInputSchema(inputSchema: MCPToolListEntry['inputSchema']): StandardSchemaWithJSON {
     const schema = withDefaultDialect(('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7);
     const standardSchema = toStandardSchema(schema);
+    if ((schema as JSONSchema7 & { $async?: boolean }).$async === true) {
+      return {
+        '~standard': {
+          ...standardSchema['~standard'],
+          validate: () => ({ issues: [{ message: 'Asynchronous JSON Schema validation is not supported' }] }),
+        },
+      };
+    }
+
     const complexityError = getJsonSchemaComplexityError(schema);
     if (complexityError) {
       return {

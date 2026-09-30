@@ -354,6 +354,70 @@ describe('InternalMastraMCPClient - jsonSchemaValidator pass-through', () => {
     expect(customValidator.getValidator).toHaveBeenCalledOnce();
   });
 
+  it('should isolate distinct default validators for schemas that share an id', async () => {
+    const client = new InternalMastraMCPClient({
+      name: 'shared-schema-id-client',
+      server: { url: new URL('http://127.0.0.1:0/mcp') },
+    });
+    const createTool = (name: string, cityType: 'string' | 'number') =>
+      client.toolFromDefinition({
+        definition: {
+          name,
+          inputSchema: {
+            $id: 'https://example.com/weather-input',
+            type: 'object',
+            properties: { city: { type: cityType } },
+            required: ['city'],
+            additionalProperties: false,
+          },
+          server: { name: 'shared-schema-id-client' },
+        },
+      });
+
+    const stringTool = createTool('string-weather', 'string');
+    const numberTool = createTool('number-weather', 'number');
+
+    await expect(Promise.resolve(stringTool.inputSchema?.['~standard'].validate({ city: 'Utrecht' }))).resolves.toEqual({
+      value: { city: 'Utrecht' },
+    });
+    await expect(Promise.resolve(numberTool.inputSchema?.['~standard'].validate({ city: 42 }))).resolves.toEqual({
+      value: { city: 42 },
+    });
+    await expect(Promise.resolve(numberTool.inputSchema?.['~standard'].validate({ city: 'Utrecht' }))).resolves.toMatchObject({
+      issues: expect.any(Array),
+    });
+  });
+
+  it('should reject asynchronous input schemas before invoking the synchronous validator', async () => {
+    const customValidator = {
+      getValidator: vi.fn(() => (input: unknown) => ({ valid: true as const, data: input })),
+    };
+    const client = new InternalMastraMCPClient({
+      name: 'async-input-schema-client',
+      server: {
+        url: new URL('http://127.0.0.1:0/mcp'),
+        jsonSchemaValidator: customValidator,
+      },
+    });
+    const tool = client.toolFromDefinition({
+      definition: {
+        name: 'async-schema',
+        inputSchema: {
+          $async: true,
+          type: 'object',
+          properties: { city: { type: 'string' } },
+          required: ['city'],
+        },
+        server: { name: 'async-input-schema-client' },
+      },
+    });
+
+    await expect(Promise.resolve(tool.inputSchema?.['~standard'].validate({ city: 42 }))).resolves.toEqual({
+      issues: [{ message: 'Asynchronous JSON Schema validation is not supported' }],
+    });
+    expect(customValidator.getValidator).not.toHaveBeenCalled();
+  });
+
   it('should use the configured validator for hydrated tool output', async () => {
     const validate = vi.fn((input: unknown) => ({
       valid: input === 'valid',
