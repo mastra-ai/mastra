@@ -1740,6 +1740,59 @@ describe('Agent Routes Authorization', () => {
       );
       expect(execution).not.toHaveBeenCalled();
     });
+
+    it('waits for the suspended snapshot to be persisted before authorizing', async () => {
+      const execution = vi.spyOn(mockAgent as any, 'approveToolCall').mockResolvedValue({
+        fullStream: new ReadableStream(),
+      });
+      setTimeout(() => void persistSuspendedDurableRun({ resourceId: 'user-a' }), 100);
+
+      await (APPROVE_TOOL_CALL_ROUTE.handler as any)({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+        abortSignal: new AbortController().signal,
+        runId: 'durable-run-1',
+        toolCallId: 'tool-call-1',
+      });
+      expect(execution).toHaveBeenCalled();
+    });
+
+    it('waits for the snapshot to move to the next suspended tool call', async () => {
+      await persistSuspendedDurableRun({ resourceId: 'user-a', toolCallId: 'tool-call-1' });
+      const execution = vi.spyOn(mockAgent as any, 'approveToolCall').mockResolvedValue({
+        fullStream: new ReadableStream(),
+      });
+      setTimeout(() => void persistSuspendedDurableRun({ resourceId: 'user-a', toolCallId: 'tool-call-2' }), 100);
+
+      await (APPROVE_TOOL_CALL_ROUTE.handler as any)({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+        abortSignal: new AbortController().signal,
+        runId: 'durable-run-1',
+        toolCallId: 'tool-call-2',
+      });
+      expect(execution).toHaveBeenCalled();
+    });
+
+    it('rejects a missing durable run after the wait times out', async () => {
+      const execution = vi.spyOn(mockAgent as any, 'approveToolCall');
+      await expect(
+        (APPROVE_TOOL_CALL_ROUTE.handler as any)({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          abortSignal: new AbortController().signal,
+          runId: 'durable-run-1',
+          toolCallId: 'tool-call-1',
+        }),
+      ).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
+      );
+      expect(execution).not.toHaveBeenCalled();
+    });
+
     const resumeRoutes = [
       { name: 'resume-stream', route: RESUME_STREAM_ROUTE, method: 'resumeStream' },
       { name: 'resume-stream-until-idle', route: RESUME_STREAM_UNTIL_IDLE_ROUTE, method: 'resumeStreamUntilIdle' },

@@ -178,6 +178,9 @@ function hasSuspendedToolCall(snapshot: Record<string, any>, toolCallId: string)
   return visit(snapshot.context);
 }
 
+const DURABLE_SNAPSHOT_WAIT_TIMEOUT_MS = 2000;
+const DURABLE_SNAPSHOT_WAIT_INTERVAL_MS = 25;
+
 function getDurableLoopWorkflowName(agent: DurableAgentLike): string {
   return agent.durableLoopWorkflowName ?? DurableStepIds.AGENTIC_LOOP;
 }
@@ -200,54 +203,65 @@ async function validateDurableToolCallAccess({
   if (!isDurableAgentLike(agent)) return;
 
   const workflowsStore = await mastra.getStorage()?.getStore('workflows');
-  const workflowRun = await workflowsStore?.getWorkflowRunById({
-    workflowName: getDurableLoopWorkflowName(agent),
-    runId,
-  });
-  if (!workflowRun) {
-    throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
-  }
-
-  let snapshot = workflowRun.snapshot as Record<string, any> | string | undefined;
-  if (typeof snapshot === 'string') {
-    try {
-      snapshot = JSON.parse(snapshot) as Record<string, any>;
-    } catch {
-      snapshot = undefined;
-    }
-  }
-
-  const input = snapshot?.context?.input;
-  const persistedResourceIds = new Set(
-    [
-      workflowRun.resourceId,
-      input?.state?.resourceId,
-      input?.messageListState?.memoryInfo?.resourceId,
-      input?.requestContextEntries?.[MASTRA_RESOURCE_ID_KEY],
-    ].filter((resourceId): resourceId is string => typeof resourceId === 'string' && resourceId.length > 0),
-  );
-  // No server-side identity means a privileged/service caller, matching validateRunOwnership.
+  const workflowName = getDurableLoopWorkflowName(agent);
   const contextResourceId = getContextResourceId(requestContext);
-  const [persistedResourceId] = persistedResourceIds;
-  if (
-    persistedResourceIds.size > 1 ||
-    (contextResourceId && persistedResourceId && persistedResourceId !== contextResourceId)
-  ) {
-    throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
-  }
 
-  const persistedThreadId = input?.state?.threadId ?? input?.messageListState?.memoryInfo?.threadId;
-  if (threadId && persistedThreadId !== threadId) {
-    throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' });
-  }
+  // The approval chunk can reach the client before the suspended snapshot is persisted,
+  // so wait (bounded) for storage to catch up before denying.
+  const deadline = Date.now() + DURABLE_SNAPSHOT_WAIT_TIMEOUT_MS;
+  while (true) {
+    const workflowRun = await workflowsStore?.getWorkflowRunById({ workflowName, runId });
 
-  if (
-    !snapshot ||
-    snapshot.status !== 'suspended' ||
-    input?.agentId !== agent.id ||
-    (toolCallId !== undefined && !hasSuspendedToolCall(snapshot, toolCallId))
-  ) {
-    throw new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' });
+    let snapshot = workflowRun?.snapshot as Record<string, any> | string | undefined;
+    if (typeof snapshot === 'string') {
+      try {
+        snapshot = JSON.parse(snapshot) as Record<string, any>;
+      } catch {
+        snapshot = undefined;
+      }
+    }
+
+    const input = snapshot?.context?.input;
+    const persistedResourceIds = new Set(
+      [
+        workflowRun?.resourceId,
+        input?.state?.resourceId,
+        input?.messageListState?.memoryInfo?.resourceId,
+        input?.requestContextEntries?.[MASTRA_RESOURCE_ID_KEY],
+      ].filter((resourceId): resourceId is string => typeof resourceId === 'string' && resourceId.length > 0),
+    );
+    // No server-side identity means a privileged/service caller, matching validateRunOwnership.
+    const [persistedResourceId] = persistedResourceIds;
+    if (
+      persistedResourceIds.size > 1 ||
+      (contextResourceId && persistedResourceId && persistedResourceId !== contextResourceId)
+    ) {
+      throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
+    }
+
+    const ready =
+      !!workflowRun &&
+      !!snapshot &&
+      snapshot.status === 'suspended' &&
+      (toolCallId === undefined || hasSuspendedToolCall(snapshot, toolCallId));
+
+    if (ready || Date.now() >= deadline) {
+      if (!workflowRun) {
+        throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
+      }
+
+      const persistedThreadId = input?.state?.threadId ?? input?.messageListState?.memoryInfo?.threadId;
+      if (threadId && persistedThreadId !== threadId) {
+        throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' });
+      }
+
+      if (!ready || input?.agentId !== agent.id) {
+        throw new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' });
+      }
+      return;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, DURABLE_SNAPSHOT_WAIT_INTERVAL_MS));
   }
 }
 
