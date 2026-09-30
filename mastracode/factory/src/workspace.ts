@@ -29,7 +29,11 @@ import {
   runTeardownCommand,
   SetupCommandError,
 } from './integrations/github/sandbox.js';
-import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
+import {
+  registerGithubPatKind,
+  registerGithubRefreshTarget,
+  registerGithubTokenInjector,
+} from './integrations/github/token-refresh.js';
 import { requireExec } from './sandbox/materialization.js';
 import type { ExecutableSandbox } from './sandbox/materialization.js';
 import {
@@ -468,6 +472,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       throw new Error(`${sourceControl.id} installation ${connection.installationId} was not found`);
     }
     const repoFullName = repository.slug;
+    if (githubProvider)
+      registerGithubRefreshTarget(requestContext, { orgId: session.orgId, repositoryId: repository.id });
 
     // Construct (or fetch) the session's memoized sandbox instance.
     // Construction is cheap and side-effect-free by the callback contract —

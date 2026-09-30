@@ -458,7 +458,7 @@ A delivery that concerns two cards is evaluated once per card, each under its ow
 
 ### GitHub CLI authentication in Factory sessions
 
-Factory offers `github_refresh_token` to authenticated sessions when the GitHub integration is available, including repository-backed Slack sessions that have no repository ID in controller state. The tool is visible before the sandbox starts, but it only works for a session backed by an authorized GitHub repository with an active sandbox. Chat-only and GitLab-backed sessions cannot use it to obtain GitHub credentials.
+Factory offers `github_refresh_token` to sessions backed by an authorized GitHub repository, including Slack sessions that have no repository ID in controller state. The tool is visible before the sandbox starts, but it only works once the sandbox is running. Chat-only and GitLab-backed sessions do not get the tool.
 
 If a sandbox `gh` command fails authentication, run `github_refresh_token` and retry the failed command. It reloads the organization's stored GitHub credential into that sandbox (or obtains repository access when no personal access token is configured); it does not rotate or renew an expired or revoked personal access token. Replace an invalid token in Factory's GitHub integration settings before retrying. The tool does not refresh GitLab credentials or return the GitHub token.
 

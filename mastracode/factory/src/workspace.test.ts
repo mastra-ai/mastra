@@ -120,7 +120,7 @@ vi.mock('./integrations/github/sandbox', async importOriginal => ({
 
 import { MaterializeError, SetupCommandError } from './integrations/github/sandbox.js';
 import { createGithubSubscriptionTools } from './integrations/github/session-subscriptions.js';
-import { injectGithubToken } from './integrations/github/token-refresh.js';
+import { requireGithubTokenInjector } from './integrations/github/token-refresh.js';
 import {
   __clearSessionSandboxesForTests,
   evictSessionSandbox,
@@ -2037,7 +2037,7 @@ describe('GitHub session workspace preparation', () => {
     });
 
     expect(lastGhToken()).toBe('ghp_worker');
-    expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
+    expect(() => requireGithubTokenInjector(reviewerContext)('stale-reviewer-token')).toThrow(/no longer matches/);
   });
 
   it('keeps refresh authority with the current context across a sandbox reconnect', async () => {
@@ -2069,8 +2069,8 @@ describe('GitHub session workspace preparation', () => {
     const sandbox = mocks.createSandbox.mock.results[0]!.value;
     await sandbox.start();
 
-    expect(() => injectGithubToken(reviewerContext, 'fresh-reviewer-token')).not.toThrow();
-    expect(() => injectGithubToken(workerContext, 'stale-worker-token')).toThrow(/no longer matches/);
+    expect(() => requireGithubTokenInjector(reviewerContext)('fresh-reviewer-token')).not.toThrow();
+    expect(() => requireGithubTokenInjector(workerContext)('stale-worker-token')).toThrow(/no longer matches/);
   });
 
   it('keeps a same-role context usable across a sandbox reconnect', async () => {
@@ -2086,7 +2086,7 @@ describe('GitHub session workspace preparation', () => {
     const sandbox = mocks.createSandbox.mock.results[0]!.value;
     await sandbox.start();
 
-    expect(() => injectGithubToken(workerContext, 'rotated-worker-token')).not.toThrow();
+    expect(() => requireGithubTokenInjector(workerContext)('rotated-worker-token')).not.toThrow();
   });
 
   it('replaces reviewer credentials with repository access when no worker PAT is configured', async () => {
@@ -2137,7 +2137,7 @@ describe('GitHub session workspace preparation', () => {
 
     expect(removeWorkspace).toHaveBeenCalledWith('mfw-project-1-session-a-web-factory');
     expect(destroy).toHaveBeenCalled();
-    expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
+    expect(() => requireGithubTokenInjector(reviewerContext)('stale-reviewer-token')).toThrow(/no longer matches/);
   });
 
   it('keeps an unsafe reviewer workspace quarantined when eviction fails', async () => {
@@ -2171,7 +2171,7 @@ describe('GitHub session workspace preparation', () => {
     await expect(
       workspace({ requestContext: createGithubRequestContext('project-1', 'session-a'), mastra: mastra as any }),
     ).rejects.toThrow('runtime injection failed');
-    expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
+    expect(() => requireGithubTokenInjector(reviewerContext)('stale-reviewer-token')).toThrow(/no longer matches/);
 
     mocks.setEnv.mockClear();
     await expect(
@@ -2292,25 +2292,47 @@ describe('GitHub session workspace preparation', () => {
     expect(lastGhToken()).toBe('ghp_worker');
   });
 
-  it('refreshes a Slack-shaped GitHub session through lazy startup, later reuse, and role changes', async () => {
+  it('offers refresh to a Slack-shaped GitHub session before its sandbox starts', async () => {
     mocks.githubPat = 'ghp_original';
-    mocks.githubReviewerPat = 'ghp_reviewer';
+    const { resolver, github } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    const integration = github as unknown as Parameters<typeof createGithubSubscriptionTools>[1];
+
+    const workspace = await resolver({ requestContext });
+    const tools = createGithubSubscriptionTools(requestContext, integration);
+
+    expect(Object.keys(tools)).toEqual(['github_refresh_token']);
+    await expect(tools.github_refresh_token!.execute!({}, {} as never)).rejects.toThrow(
+      'active Factory sandbox workspace',
+    );
+    expect(workspace.sandbox.status).toBe('pending');
+    expect(mocks.setEnv).not.toHaveBeenCalled();
+  });
+
+  it('does not offer refresh to a chat-only session', async () => {
+    const { resolver, github } = await createLocalFactory();
+    const requestContext = createGithubRequestContext('project-1', 'chat-only');
+    const integration = github as unknown as Parameters<typeof createGithubSubscriptionTools>[1];
+
+    expect(await resolver({ requestContext })).toBeUndefined();
+    expect(createGithubSubscriptionTools(requestContext, integration)).toEqual({});
+  });
+
+  it('refreshes a Slack-shaped GitHub session after lazy startup and on later reuse', async () => {
+    mocks.githubPat = 'ghp_original';
     const { workspace, github } = await createLocalFactory();
     addProject();
     addSession({ id: 'session-a' });
-    const workerContext = createGithubRequestContext('project-1', 'session-a');
     const integration = github as unknown as Parameters<typeof createGithubSubscriptionTools>[1];
-    const workerTool = createGithubSubscriptionTools(workerContext, integration).github_refresh_token!;
+    const firstContext = createGithubRequestContext('project-1', 'session-a');
 
-    expect(Object.keys(createGithubSubscriptionTools(workerContext, integration))).toEqual(['github_refresh_token']);
-    expect(mocks.createSandbox).not.toHaveBeenCalled();
-    await expect(workerTool.execute!({}, {} as never)).rejects.toThrow('active Factory sandbox workspace');
-    expect(mocks.createSandbox).not.toHaveBeenCalled();
-
-    await workspace({ requestContext: workerContext });
+    await workspace({ requestContext: firstContext });
     expect(lastGhToken()).toBe('ghp_original');
     mocks.githubPat = 'ghp_replaced';
-    expect(await workerTool.execute!({}, {} as never)).toEqual({ refreshed: true });
+    const firstTool = createGithubSubscriptionTools(firstContext, integration).github_refresh_token!;
+    expect(await firstTool.execute!({}, {} as never)).toEqual({ refreshed: true });
     expect(lastGhToken()).toBe('ghp_replaced');
 
     const laterContext = createGithubRequestContext('project-1', 'session-a');
@@ -2318,9 +2340,22 @@ describe('GitHub session workspace preparation', () => {
       requestContext: laterContext,
       mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
     });
+    mocks.githubPat = 'ghp_rotated';
     const laterTool = createGithubSubscriptionTools(laterContext, integration).github_refresh_token!;
     expect(await laterTool.execute!({}, {} as never)).toEqual({ refreshed: true });
-    expect(lastGhToken()).toBe('ghp_replaced');
+    expect(lastGhToken()).toBe('ghp_rotated');
+  });
+
+  it('rejects a Slack-shaped refresh tool left over from before a role change', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    const { workspace, github } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const integration = github as unknown as Parameters<typeof createGithubSubscriptionTools>[1];
+    const workerContext = createGithubRequestContext('project-1', 'session-a');
+    await workspace({ requestContext: workerContext });
+    const workerTool = createGithubSubscriptionTools(workerContext, integration).github_refresh_token!;
 
     mocks.runBindingRole = 'review';
     const reviewerContext = createGithubRequestContext('project-1', 'session-a');
@@ -2329,9 +2364,10 @@ describe('GitHub session workspace preparation', () => {
       mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
     });
     const reviewerTool = createGithubSubscriptionTools(reviewerContext, integration).github_refresh_token!;
+
     expect(await reviewerTool.execute!({}, {} as never)).toEqual({ refreshed: true });
     expect(lastGhToken()).toBe('ghp_reviewer');
-    await expect(laterTool.execute!({}, {} as never)).rejects.toThrow(/no longer matches/);
+    await expect(workerTool.execute!({}, {} as never)).rejects.toThrow(/no longer matches/);
     expect(lastGhToken()).toBe('ghp_reviewer');
   });
 
@@ -2342,7 +2378,7 @@ describe('GitHub session workspace preparation', () => {
     const requestContext = createGithubRequestContext('project-1', 'session-a');
 
     await workspace({ requestContext });
-    injectGithubToken(requestContext, 'fresh-token');
+    requireGithubTokenInjector(requestContext)('fresh-token');
 
     expect(lastGhToken()).toBe('fresh-token');
   });
@@ -2358,7 +2394,7 @@ describe('GitHub session workspace preparation', () => {
       requestContext,
       mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
     });
-    injectGithubToken(requestContext, 'later-token');
+    requireGithubTokenInjector(requestContext)('later-token');
 
     expect(lastGhToken()).toBe('later-token');
   });
