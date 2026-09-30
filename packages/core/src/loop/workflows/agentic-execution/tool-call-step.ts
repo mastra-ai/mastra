@@ -765,6 +765,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           messages: isAgentTool
             ? (readScoped(scopeCtx, STEP_MODEL_MESSAGES_KEY, 'stepModelMessages') ?? messageList.get.all.aiV5.model())
             : messageList.get.input.aiV5.model(),
+          getMessages: () => messageList.get.all.db(),
           outputWriter,
           // Pass current step span as parent for tool call spans
           tracingContext: modelSpanTracker?.getTracingContext(),
