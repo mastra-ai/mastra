@@ -3,13 +3,9 @@
   "localId": "google-docs",
   "templateSha": "bb789a55bfcf744b3c83aa9132e4ffa562106aa3",
   "templateRepo": "NangoHQ/integration-templates",
-  "generatedAt": "2026-09-30T14:05:36.312Z",
-  "toolCount": 36,
+  "generatedAt": "2026-09-30T14:20:01.751Z",
+  "toolCount": 37,
   "skippedActions": [
-    {
-      "action": "export-document",
-      "reason": "exec uses unsupported proxy options: responseType"
-    },
     {
       "action": "update-table-column-properties",
       "reason": "exec uses unsupported template SDK helpers: proxy"
@@ -17,7 +13,7 @@
   ],
   "files": {
     "index.ts": "820dfcacb833c819af78883391c3be3571f394833bcb61e6902f502752749d44",
-    "tools.ts": "db9844a7fab5f8f52c5d88aaa5c89334c4250fdccc3795f93ab5bbe980c9d3f6",
+    "tools.ts": "0316bccae36430fbee38a7c4047be9725dbb0c179b79b4d53d9a01d4ec711c9b",
     "tools/add-document-tab.ts": "ef493a7d33c7171605924123eb75f21c79350f92a6d8f37dc9afb73db2434382",
     "tools/create-document.ts": "1c4f001211ddf4553609f3ab6d5c3d01a2fe4f72d27029b5c0c2fd48075ba7c7",
     "tools/create-footer.ts": "ef257ae58ec44f0a087d290813e10fa18a1e47b83b79d95b779e1395c28f8d54",
@@ -33,6 +29,7 @@
     "tools/delete-paragraph-bullets.ts": "426a77d24a01d615fe8f31d611f6026b1a19f74a73fe3b9f6bd67dca4126ff2b",
     "tools/delete-table-column.ts": "edf535f68c1bbac67f61cb94a04a9bd1556b24dc8f1ffd67bc5ac684ae7e7c75",
     "tools/delete-table-row.ts": "6ee879b864e690e17241328696063d1f615206f89ce05dfb863a8d7583b1f838",
+    "tools/export-document.ts": "1f8d3b43f351396926da0c8cec0a4f0e4816bf1f430c69dead778900f21d6513",
     "tools/insert-inline-image.ts": "8ed51acd84a861f623b1b0cf15aa2cfea07b54ed0cf9ce0f70fd12837e2f83ba",
     "tools/insert-page-break.ts": "2ff613d8c405b7cd8b970120c61477737018e0aacda2f02c94f6461e2e013de3",
     "tools/insert-section-break.ts": "8e33bf0f0b8cc2ef7fc6103c1eb5e0acde970a4c22ff3278db3e52788e2eb869",

@@ -58,7 +58,14 @@ const PROXY_CONTEXT_METHODS = new Set([
   'ActionError',
   'log',
 ]);
-const UNSUPPORTED_PROXY_OPTIONS = ['responseType'] as const;
+/**
+ * Proxy config keys that shipped templates use but the platform proxy cannot
+ * honor. If a template sets any of these, the action is skipped rather than
+ * silently ignoring the option. `responseType` is not listed because the
+ * platform proxy handles `'arraybuffer'` (the only value templates actually
+ * pass).
+ */
+const UNSUPPORTED_PROXY_OPTIONS: readonly string[] = [];
 const ALLOWED_TEMPLATE_SDK_IMPORTS = new Set(['createAction', 'ProxyConfiguration']);
 
 interface ActionCandidate {
