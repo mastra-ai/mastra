@@ -15,4 +15,6 @@ const active = await memory.listThreads({
 await memory.unarchiveThread({ threadId: 'thread-123' });
 ```
 
-Omitting `archived` returns all threads, as before.
+Omitting `archived` returns all threads, as before, so pass `archived: false` wherever you list active conversations.
+
+Archiving is idempotent: archiving an archived thread keeps its original `archivedAt`. If a storage adapter doesn't persist `archivedAt`, `archiveThread` and `unarchiveThread` throw `MASTRA_MEMORY_THREAD_ARCHIVING_UNSUPPORTED` instead of reporting success.

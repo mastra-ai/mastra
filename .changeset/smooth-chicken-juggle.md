@@ -29,3 +29,5 @@ const active = await memoryStore?.listThreads({
   filter: { resourceId: 'user-123', archived: false },
 });
 ```
+
+On ClickHouse, archiving inserts a new version of the thread row instead of running an `ALTER TABLE ... UPDATE` mutation, so it also updates the thread's `updatedAt`.
