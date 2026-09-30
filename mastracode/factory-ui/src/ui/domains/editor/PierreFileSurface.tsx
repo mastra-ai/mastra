@@ -2,6 +2,7 @@ import { File, EditProvider } from '@pierre/diffs/react';
 import type { FileContents, FileOptions, LineAnnotation } from '@pierre/diffs/react';
 import {
   Editor,
+  type EditorChange,
   type EditorChangeEvent,
   type EditorFactory,
   type EditorOptions,
@@ -52,6 +53,11 @@ interface PierreFileSurfaceProps {
   lspQuery?: EditorLspQueryFn;
   /** Fires with the attached Pierre editor for external bindings (collab, …). */
   onEditor?: (editor: Editor<'file', SurfaceAnnotation, undefined> | null) => void;
+  /**
+   * Fires with the resolved edit changes on every buffer mutation so external
+   * bindings (Yjs text CRDT sync) can forward them without owning the surface.
+   */
+  onDocumentChange?: (changes: readonly EditorChange[]) => void;
   collab?: CollabBinding | null;
   codeLenses?: CodeLensEntry[];
   onCodeLensAction?: CodeLensActionHandler;
@@ -138,6 +144,28 @@ function buildLineAnnotations(
   return annotations;
 }
 
+/**
+ * Screen-space rect for the browser's live caret, so we can anchor floating
+ * overlays (autocomplete, hover) next to the cursor. Falls back to the
+ * container's upper-left when the selection is missing or outside the editor.
+ */
+function readCaretRect(container: HTMLElement | null): { x: number; y: number } {
+  if (typeof window === 'undefined') return { x: 0, y: 0 };
+  const selection = window.getSelection();
+  if (container && selection && selection.rangeCount > 0) {
+    const range = selection.getRangeAt(0);
+    if (container.contains(range.startContainer)) {
+      const rect = range.getBoundingClientRect();
+      // Zero-width caret ranges: nudge below by the line height.
+      if (rect.width || rect.height) {
+        return { x: rect.left, y: rect.bottom + 4 };
+      }
+    }
+  }
+  const fallback = container?.getBoundingClientRect();
+  return fallback ? { x: fallback.left + 16, y: fallback.top + 40 } : { x: 0, y: 0 };
+}
+
 function renderSurfaceAnnotation(annotation: LineAnnotation<SurfaceAnnotation>): HTMLElement | undefined {
   const metadata = annotation.metadata;
   if (!metadata) return undefined;
@@ -200,13 +228,16 @@ export function PierreFileSurface({
   settings = DEFAULT_EDITOR_SETTINGS,
   lspQuery,
   onEditor,
+  onDocumentChange,
 }: PierreFileSurfaceProps) {
   const lspQueryRef = useRef(lspQuery);
   const onEditorRef = useRef(onEditor);
+  const onDocumentChangeRef = useRef(onDocumentChange);
   useEffect(() => {
     lspQueryRef.current = lspQuery;
     onEditorRef.current = onEditor;
-  }, [lspQuery, onEditor]);
+    onDocumentChangeRef.current = onDocumentChange;
+  }, [lspQuery, onEditor, onDocumentChange]);
   const editorRef = useRef<Editor<'file', SurfaceAnnotation, undefined> | null>(null);
   const onChangeRef = useRef(onChange);
   const onSaveRef = useRef(onSaveShortcut);
@@ -376,6 +407,7 @@ export function PierreFileSurface({
   const handleEditChange = useCallback(
     (event: EditorChangeEvent<'file', SurfaceAnnotation, undefined>) => {
       onChangeRef.current?.(event.file.contents);
+      onDocumentChangeRef.current?.(event.changes);
       const editor = event.editor;
       const selection = editor.getViewState()?.selections?.[0];
       if (selection) {
@@ -404,12 +436,12 @@ export function PierreFileSurface({
         setAutocomplete(null);
         return;
       }
-      // Pinned to the container's upper-right for now (caret-rect measurement
-      // via a Pierre API is a follow-up).
-      const rect = containerRef.current?.getBoundingClientRect();
-      const x = rect ? rect.right - 260 : 0;
-      const y = rect ? rect.top + 8 : 0;
-      setAutocomplete({ items, selected: 0, x, y, prefix });
+      // Anchor to the browser's live caret rect. `getSelection()` works with
+      // Pierre's contenteditable surface just like any other; the range's
+      // bounding rect gives us screen pixel coords for the caret. Fall back
+      // to the container's upper-left when the selection is missing.
+      const rect = readCaretRect(containerRef.current);
+      setAutocomplete({ items, selected: 0, x: rect.x, y: rect.y, prefix });
     },
     [],
   );

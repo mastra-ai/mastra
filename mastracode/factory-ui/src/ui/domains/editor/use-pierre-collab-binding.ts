@@ -1,30 +1,90 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
-import type { Editor, EditorCaret } from '@pierre/diffs/edit';
+import type { Editor, EditorCaret, EditorChange, TextEdit } from '@pierre/diffs/edit';
+import type { YTextEvent } from 'yjs';
 
 import type { CollabBinding } from './use-editor-collab';
 import type { SurfaceAnnotation } from './PierreFileSurface';
 
+// Origin token attached to Y.Text transactions our own edits emit, so the
+// observer can tell "this update came from us; do not echo it back into
+// Pierre" apart from "this update came from a peer; apply to Pierre".
+const LOCAL_ORIGIN = Symbol('pierre-local');
+
+interface YjsDelta {
+  retain?: number;
+  insert?: string;
+  delete?: number;
+}
+
 /**
- * Cursor-only Pierre ↔ Yjs collab bridge:
+ * Full Pierre ↔ Yjs bridge:
  *
- * - Watches `awareness` for other participants and mirrors their carets into
- *   `Editor.setCarets()`, colored by the participant's user color.
- * - Publishes this client's caret through the same awareness channel on every
- *   Pierre selection change so peers see us the same way.
+ * - **Presence**: mirrors remote awareness carets into `Editor.setCarets()`
+ *   and publishes this client's caret through awareness on every selection
+ *   change.
+ * - **Text sync**: forwards Pierre document changes as `Y.Text` deltas and
+ *   applies remote deltas back through `Editor.applyEdits(edits, false)`.
+ *   `LOCAL_ORIGIN` gates the observer so local edits don't loop back into
+ *   Pierre.
  *
- * Text-sync CRDT wiring is intentionally deferred (v1 keeps the write path on
- * the local Pierre editor). Presence + remote cursors still land now because
- * they're the visible half of collaboration.
+ * On first bind, the shared `Y.Text` is authoritative (server-synced), so the
+ * editor is reconciled with `ytext.toString()` before the two streams begin
+ * echoing to each other.
  */
 export function usePierreCollabBinding(
   editor: Editor<'file', SurfaceAnnotation, undefined> | null,
   collab: CollabBinding | null,
 ) {
+  // Track whether we're currently applying a remote Y.Text update so the
+  // corresponding Pierre change event doesn't emit right back to Yjs.
+  const applyingRemoteRef = useRef(false);
+
+  const forwardLocalChanges = useCallback(
+    (changes: readonly EditorChange[]) => {
+      if (!collab || applyingRemoteRef.current) return;
+      const { ytext } = collab;
+      ytext.doc?.transact(() => {
+        // Reverse-order application: later edits first so earlier offsets
+        // stay valid inside the transaction.
+        for (let i = changes.length - 1; i >= 0; i--) {
+          const change = changes[i];
+          const start = change.start;
+          const deleteLength = change.end - change.start;
+          if (deleteLength > 0) ytext.delete(start, deleteLength);
+          if (change.text) ytext.insert(start, change.text);
+        }
+      }, LOCAL_ORIGIN);
+    },
+    [collab],
+  );
+
   useEffect(() => {
     if (!editor || !collab) return;
     const { awareness, ytext } = collab;
     const localClientId = awareness.clientID;
+
+    // Reconcile with the shared document on bind. The server-synced Y.Text is
+    // authoritative — any local baseline mismatch is erased before the two
+    // streams begin echoing.
+    const currentText = editor.getEditState()?.document?.getText();
+    const sharedText = ytext.toString();
+    if (currentText !== undefined && currentText !== sharedText) {
+      const doc = editor.getEditState()?.document;
+      if (doc) {
+        applyingRemoteRef.current = true;
+        editor.applyEdits(
+          [
+            {
+              range: { start: { line: 0, character: 0 }, end: doc.positionAt(currentText.length) },
+              newText: sharedText,
+            },
+          ],
+          false,
+        );
+        applyingRemoteRef.current = false;
+      }
+    }
 
     const pushRemoteCarets = () => {
       const carets: EditorCaret<undefined>[] = [];
@@ -59,24 +119,65 @@ export function usePierreCollabBinding(
     };
 
     awareness.on('change', pushRemoteCarets);
-    // Publish once on mount so a peer joining after us sees our caret.
     publishLocalCursor();
     pushRemoteCarets();
 
-    // Poll editor selection at 100ms — Pierre doesn't expose a selection-only
-    // subscription, so this keeps presence responsive without an event.
+    // Selection poll — Pierre doesn't expose a selection-only subscription.
     const selectionTimer = setInterval(publishLocalCursor, 100);
 
-    // Re-mirror when the shared document changes (offsets shifted).
-    const onDocChange = () => pushRemoteCarets();
-    ytext.observe(onDocChange);
+    // Y.Text observer: apply peer deltas into Pierre unless the update
+    // originated locally (guarded by LOCAL_ORIGIN transaction tag).
+    const onYtextChange = (event: YTextEvent) => {
+      if (event.transaction.origin === LOCAL_ORIGIN) {
+        pushRemoteCarets();
+        return;
+      }
+      const delta = event.delta as YjsDelta[] | undefined;
+      if (!delta) return;
+      const doc = editor.getEditState()?.document;
+      if (!doc) return;
+      const edits: TextEdit[] = [];
+      let cursor = 0;
+      for (const op of delta) {
+        if (typeof op.retain === 'number') {
+          cursor += op.retain;
+          continue;
+        }
+        if (typeof op.delete === 'number') {
+          edits.push({
+            range: { start: doc.positionAt(cursor), end: doc.positionAt(cursor + op.delete) },
+            newText: '',
+          });
+          continue;
+        }
+        if (typeof op.insert === 'string') {
+          edits.push({
+            range: { start: doc.positionAt(cursor), end: doc.positionAt(cursor) },
+            newText: op.insert,
+          });
+          cursor += op.insert.length;
+          continue;
+        }
+      }
+      if (!edits.length) {
+        pushRemoteCarets();
+        return;
+      }
+      applyingRemoteRef.current = true;
+      editor.applyEdits(edits, false);
+      applyingRemoteRef.current = false;
+      pushRemoteCarets();
+    };
+    ytext.observe(onYtextChange);
 
     return () => {
       awareness.off('change', pushRemoteCarets);
-      ytext.unobserve(onDocChange);
+      ytext.unobserve(onYtextChange);
       clearInterval(selectionTimer);
       editor.setCarets([]);
       awareness.setLocalStateField('cursor', null);
     };
   }, [editor, collab]);
+
+  return { forwardLocalChanges };
 }

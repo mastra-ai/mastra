@@ -367,7 +367,7 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
 
   // Pierre editor reference used by the cursor-only collab binding.
   const [pierreEditor, setPierreEditor] = useState<PierreEditor<'file', SurfaceAnnotation, undefined> | null>(null);
-  usePierreCollabBinding(usePierreEditor ? pierreEditor : null, collab.binding);
+  const pierreCollab = usePierreCollabBinding(usePierreEditor ? pierreEditor : null, collab.binding);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; line: number; character: number } | null>(
     null,
   );
@@ -1050,6 +1050,7 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
                     settings={settings}
                     lspQuery={activeIsExternal ? undefined : lspQuery}
                     onEditor={setPierreEditor}
+                    onDocumentChange={pierreCollab.forwardLocalChanges}
                   />
                 ) : (
                   <CodeMirrorSurface
