@@ -12,6 +12,7 @@ import {
   AGENT_STREAM_TOPIC,
   AgentControlEventTypes,
   AgentStreamEventTypes,
+  agentThreadStreamRuntime,
   globalRunRegistry,
 } from '@mastra/core/agent/durable';
 import { InMemoryServerCache } from '@mastra/core/cache';
@@ -2005,6 +2006,26 @@ describe('InngestAgent fork and resume overrides (#24736)', () => {
       durableAgent.sendToolApproval({ threadId: 'th', resourceId: 'res', toolCallId: 't1', approved: true }),
     ).rejects.toMatchObject({ id: 'AGENT_SEND_TOOL_APPROVAL_NO_ACTIVE_THREAD_RUN' });
     listSpy.mockRestore();
+  });
+
+  it('sendToolApproval with messages continues through the durable stream()', async () => {
+    const durableAgent = makeDurable('send-tool-approval-messages');
+    const continueSpy = vi
+      .spyOn(agentThreadStreamRuntime, 'continueWithMessages')
+      .mockReturnValue({ accepted: true, runId: 'cont' });
+
+    const result = await durableAgent.sendToolApproval({
+      threadId: 'th',
+      resourceId: 'res',
+      toolCallId: 't1',
+      approved: true,
+      messages: 'follow up',
+    });
+
+    expect(result).toEqual({ accepted: true, runId: 'cont', toolCallId: 't1' });
+    expect(continueSpy.mock.calls[0]![0]).toBe(durableAgent);
+    expect(continueSpy.mock.calls[0]![2]).toMatchObject({ threadId: 'th', resourceId: 'res' });
+    continueSpy.mockRestore();
   });
 
   it('sendToolApproval deep-merges streamOptions with execution options', async () => {

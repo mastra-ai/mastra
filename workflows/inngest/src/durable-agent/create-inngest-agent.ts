@@ -1633,10 +1633,24 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         ...executionOptions
       } = options;
 
-      // Message continuations start a new turn through the thread runtime,
-      // which already dispatches to this agent's durable stream().
+      // Message continuations start a new turn; pass the durable wrapper so
+      // the runtime calls its stream() and tracks the turn under proxyRef.
       if (messages && approved) {
-        return agent.sendToolApproval(options);
+        const continuation = agentThreadStreamRuntime.continueWithMessages(
+          proxyRef as unknown as Agent<any, any, any, any>,
+          messages,
+          {
+            resourceId,
+            threadId,
+            runId: executionOptions.runId,
+            streamOptions: deepMerge(
+              (streamOptions ?? {}) as Record<string, any>,
+              executionOptions as Record<string, any>,
+            ) as AgentExecutionOptions<any>,
+          },
+          agent.getPubSub(),
+        );
+        return { accepted: continuation.accepted, runId: continuation.runId, toolCallId: options.toolCallId };
       }
 
       let runId = executionOptions.runId ?? agent.getActiveThreadRunId({ threadId, resourceId });
