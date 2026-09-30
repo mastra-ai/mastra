@@ -146,11 +146,16 @@ async function main() {
 
   // Keep a thread subscription open so this worker receives signal-enqueued
   // events from other workers and updates its local activeThreadRunIds map.
-  const defaultSubscription = await runtime.subscribeToThread(
-    agent as any,
-    { resourceId: RESOURCE_ID, threadId: THREAD_ID },
-    pubsub,
-  );
+  // NO_DEFAULT_SUBSCRIPTION=1 models a pod that owns runs without any
+  // client subscription, so the owner must drain follow-ups on its own.
+  const defaultSubscription =
+    process.env.NO_DEFAULT_SUBSCRIPTION === '1'
+      ? undefined
+      : await runtime.subscribeToThread(agent as any, { resourceId: RESOURCE_ID, threadId: THREAD_ID }, pubsub);
+  function requireDefaultSubscription() {
+    if (!defaultSubscription) throw new Error('worker started with NO_DEFAULT_SUBSCRIPTION=1');
+    return defaultSubscription;
+  }
 
   emit({ type: 'ready' });
 
@@ -202,7 +207,7 @@ async function main() {
     }
 
     if (cmd.cmd === 'exit') {
-      defaultSubscription.unsubscribe();
+      defaultSubscription?.unsubscribe();
       try {
         await pubsub.close();
       } catch {}
@@ -233,9 +238,15 @@ async function main() {
 
     if (cmd.cmd === 'collect-default' || cmd.cmd === 'collect-fresh') {
       const fresh = cmd.cmd === 'collect-fresh';
-      const subscription = fresh
-        ? await runtime.subscribeToThread(agent as any, { resourceId: RESOURCE_ID, threadId: THREAD_ID }, pubsub)
-        : defaultSubscription;
+      let subscription;
+      try {
+        subscription = fresh
+          ? await runtime.subscribeToThread(agent as any, { resourceId: RESOURCE_ID, threadId: THREAD_ID }, pubsub)
+          : requireDefaultSubscription();
+      } catch (err) {
+        emit({ type: 'command-error', cmd: cmd.cmd, error: String(err) });
+        return;
+      }
       if (fresh) emit({ type: 'fresh-subscription-created' });
       try {
         const parts = await collectRun(subscription, cmd.mode === 'converted');
@@ -297,13 +308,14 @@ async function main() {
     }
 
     if (cmd.cmd === 'abort-active') {
-      const runId = defaultSubscription.activeRunId();
-      emit({ type: 'abort-result', runId, aborted: defaultSubscription.abort() });
+      const subscription = requireDefaultSubscription();
+      const runId = subscription.activeRunId();
+      emit({ type: 'abort-result', runId, aborted: subscription.abort() });
       return;
     }
 
     if (cmd.cmd === 'active-run') {
-      emit({ type: 'active-run', runId: defaultSubscription.activeRunId() });
+      emit({ type: 'active-run', runId: requireDefaultSubscription().activeRunId() });
       return;
     }
 
