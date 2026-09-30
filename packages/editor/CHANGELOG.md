@@ -1,5 +1,26 @@
 # @mastra/editor
 
+## 0.15.5-alpha.0
+
+### Patch Changes
+
+- Fixed `editor.scorer.clearCache()` leaving stored scorers registered on Mastra after they were loaded with a specific version (`getById(id, { versionId })` or `{ versionNumber }`). Clearing the whole cache now unregisters them, so a later default `getById` registers the latest scorer instead of staying stuck on the historical one. ([#25544](https://github.com/mastra-ai/mastra/pull/25544))
+
+- Builder agents keep their stability error processors on every supported `@mastra/core` version, including cores that predate the framework defaults. Adding a processor never costs the builder its recovery: ([#24473](https://github.com/mastra-ai/mastra/pull/24473))
+
+  ```ts
+  createBuilderAgent({ errorProcessors: [myProcessor] });
+  // resolved: provider-history-compat, prefill-error-handler,
+  // stream-error-retry-processor, myProcessor
+  ```
+
+  A caller's array merges with the builder's list, which runs in repair-first order. A caller instance with a default's `id` takes that default's slot. Other caller processors run after the defaults. An empty array keeps the defaults. `errorProcessorDefaults: false` opts out and runs the caller's list as given. A function-valued override passes through unchanged, so a callback must return every processor it needs. `DEFAULT_BUILDER_ERROR_PROCESSORS` is still exported.
+
+- Updated dependencies [[`42b8761`](https://github.com/mastra-ai/mastra/commit/42b8761d917453cfe9b0b189c51442a5398fbf27), [`c260e42`](https://github.com/mastra-ai/mastra/commit/c260e429ff30cc19859555985cacd5b70cfd63d9), [`d777c00`](https://github.com/mastra-ai/mastra/commit/d777c0041c127f3223ecb69e479f0fde6453a085), [`9a30e77`](https://github.com/mastra-ai/mastra/commit/9a30e7768d3ac704e3940bae24b7aafc7eb6cf23), [`4e9f39b`](https://github.com/mastra-ai/mastra/commit/4e9f39b0be3b49e9df4586c08d4eec1b6ab5c37c), [`9762b12`](https://github.com/mastra-ai/mastra/commit/9762b125c480ee8bdb887145f4044a69eb18e27f), [`279d4a7`](https://github.com/mastra-ai/mastra/commit/279d4a7acba086eac37f49471ed30734eecec490), [`bc826e8`](https://github.com/mastra-ai/mastra/commit/bc826e8fb1c0d0311b4675fcfcf5c4f6bc43efe6), [`3da569c`](https://github.com/mastra-ai/mastra/commit/3da569c2032b3ec32a818f47f942151926c8fd6a), [`c4b52a2`](https://github.com/mastra-ai/mastra/commit/c4b52a20b533b92cab1a0478e8bab66231cefb86), [`63b8630`](https://github.com/mastra-ai/mastra/commit/63b8630cf4f7f3b330c872a21ae0cfedf0b4978a), [`2f8cb4d`](https://github.com/mastra-ai/mastra/commit/2f8cb4d7237372a7dff899bf3b4cbf4060b007db), [`c260e42`](https://github.com/mastra-ai/mastra/commit/c260e429ff30cc19859555985cacd5b70cfd63d9), [`9d304f4`](https://github.com/mastra-ai/mastra/commit/9d304f452c761403a726a9a518d6678019af23ca), [`bc826e8`](https://github.com/mastra-ai/mastra/commit/bc826e8fb1c0d0311b4675fcfcf5c4f6bc43efe6), [`e9276f4`](https://github.com/mastra-ai/mastra/commit/e9276f45c6c1a222890334209d24e8917e4f6ad1), [`0b9e7bc`](https://github.com/mastra-ai/mastra/commit/0b9e7bc0839bcec59f9eaa014c759ae935454c45), [`270e05f`](https://github.com/mastra-ai/mastra/commit/270e05fec0ec934c564527e33d0f51768712ad79), [`ab42292`](https://github.com/mastra-ai/mastra/commit/ab42292369c62b847ae4039e4dcf07b0a1116966), [`bc826e8`](https://github.com/mastra-ai/mastra/commit/bc826e8fb1c0d0311b4675fcfcf5c4f6bc43efe6), [`d777c00`](https://github.com/mastra-ai/mastra/commit/d777c0041c127f3223ecb69e479f0fde6453a085), [`5d8b27d`](https://github.com/mastra-ai/mastra/commit/5d8b27df7306759b7d065f8a968d4e250ceae7d4), [`9762b12`](https://github.com/mastra-ai/mastra/commit/9762b125c480ee8bdb887145f4044a69eb18e27f)]:
+  - @mastra/core@1.73.0-alpha.0
+  - @mastra/memory@1.34.0-alpha.0
+  - @mastra/mcp@2.1.2-alpha.0
+
 ## 0.15.4
 
 ### Patch Changes

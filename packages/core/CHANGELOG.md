@@ -1,5 +1,83 @@
 # @mastra/core
 
+## 1.73.0-alpha.0
+
+### Minor Changes
+
+- Every agent now recovers from transient provider failures, assistant-prefill rejections, and provider history incompatibilities with no configuration. Three error processors — `ProviderHistoryCompat`, `PrefillErrorHandler`, and `StreamErrorRetryProcessor` — are on by default, in the order that repairs history before anything retries. A `ProviderHistoryCompat` in `errorProcessors` now also repairs the outbound prompt before the provider sees it, instead of only reacting to a rejection. ([#24473](https://github.com/mastra-ai/mastra/pull/24473))
+
+  You stay in control of the list:
+
+  ```ts
+  // Replace one default: your instance with the same id takes its slot.
+  // Retries above 3 also need maxProcessorRetries.
+  new Agent({ ..., errorProcessors: [new StreamErrorRetryProcessor({ maxRetries: 5 })], maxProcessorRetries: 5 })
+
+  // Run only your own processors — none of the defaults are merged in.
+  new Agent({ ..., errorProcessors: [myProcessor], errorProcessorDefaults: false })
+
+  // Run with no error processors at all.
+  new Agent({ ..., errorProcessorDefaults: false })
+  ```
+
+  `errorProcessorDefaults: false` is the only opt-out: an empty `errorProcessors` list merges like any other and still gets the defaults.
+
+  The default retry processor retries transient failures only. Transient failures recover through provider `isRetryable` metadata, the built-in OpenAI stream-error matcher, or the connection-reset matcher, while deterministic failures — a rejected structured-output attempt, a validation error, or any HTTP 400 the repair processors cannot fix — surface immediately instead of being replayed unchanged. Pass `StreamErrorRetryProcessor({ retryUnknownErrors: true })` in `errorProcessors` to retry unmatched errors. `createCodingAgent` keeps its shipped behavior, retrying both unmatched errors and bad-request responses, as it always has.
+
+  Error-processor retries are bounded by a safety cap of `3` per turn when you don't set `maxProcessorRetries`; the defaults stop well below it on their own. The "errorProcessors are configured without an explicit maxProcessorRetries" warning now fires only when you configured error processors yourself, not for the framework defaults.
+
+- Export `findGatewayForModel` and `getGatewayId` from `@mastra/core/llm` so callers can check which registered gateway the model router would pick for a model ID. Like the router, `findGatewayForModel` skips disabled gateways. ([#25482](https://github.com/mastra-ai/mastra/pull/25482))
+
+  ```ts
+  import { findGatewayForModel, getGatewayId } from '@mastra/core/llm';
+
+  const gateway = findGatewayForModel('acme/fast-1', Object.values(mastra.listGateways() ?? {}));
+  console.log(getGatewayId(gateway));
+  ```
+
+- Invalid tool-call IDs on Anthropic models are now rewritten in the outbound request, so they no longer reach Anthropic and no longer require a failed call to recover. Persisted history keeps its original IDs. The rule's reactive repair (`errorPatterns` and `fix`) stays as the fallback for Claude served through a provider the preemptive check doesn't recognize, such as Vertex-hosted Claude, and for placements outside the agent's prompt path. ([#24505](https://github.com/mastra-ai/mastra/pull/24505))
+
+- Added an optional `resolveSubagentModel(modelId, { requestContext })` option to `AgentControllerConfig`. Subagent models can now resolve with the calling run's request context, so custom providers and tenant credentials work for subagents the same way they do for the main agent. The context passed in doesn't include the parent run's thread or resource IDs. ([#25482](https://github.com/mastra-ai/mastra/pull/25482))
+
+  ```ts
+  const controller = new AgentController({
+    // ...
+    resolveSubagentModel: (modelId, { requestContext }) => resolveTenantModel(modelId, requestContext),
+  });
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`42b8761`](https://github.com/mastra-ai/mastra/commit/42b8761d917453cfe9b0b189c51442a5398fbf27))
+
+- Fixed saving builder workflows with classifier steps when the model sends `null` for `maxRetries` or `providerOptions`. These values are now treated as omitted, the same as `retries` and `metadata`, instead of failing validation. ([#25531](https://github.com/mastra-ai/mastra/pull/25531))
+
+- Fixed startAsync so it returns only after workflow execution is durably recoverable. Fixes #24585. ([#24673](https://github.com/mastra-ai/mastra/pull/24673))
+
+- Fixed long-running evented workflow steps running twice when the broker redelivers the step event before the step finishes. Workers now send a heartbeat while a step runs, so the broker does not hand the event to another worker. Each step run is also fenced with a lease, so a redelivered copy is dropped while the original is still running. Redis Streams and Valkey Streams support the heartbeat. Steps should still be idempotent, because a worker crash can still cause a step to run again. ([#24769](https://github.com/mastra-ai/mastra/pull/24769))
+
+- Use Web Crypto for portable identifiers, random secrets, and asynchronous sandbox profile hashing ([#25462](https://github.com/mastra-ai/mastra/pull/25462))
+
+- Fixed slow loading of long conversation histories. Loading stored messages took time that grew with the square of the thread length, so a thread with 10,000 messages could block the server for several seconds on every load. Loading now grows linearly with the thread length. Fixes [#24143](https://github.com/mastra-ai/mastra/issues/24143). ([#25061](https://github.com/mastra-ai/mastra/pull/25061))
+
+- Fixed evented workflows so concurrent resume calls continue a suspension only once. ([#25458](https://github.com/mastra-ai/mastra/pull/25458))
+
+- Fixed `DurableAgent` construction to preserve dynamic model resolution until request context is available. Wrapping an agent with a request-dependent model no longer resolves the model eagerly during startup. ([#25359](https://github.com/mastra-ai/mastra/pull/25359))
+
+- Include `threadId` and `resourceId` on lightweight trace list rows so the Thread ID and Resource ID columns render when the trace query API is unavailable. ([#25433](https://github.com/mastra-ai/mastra/pull/25433))
+
+- Fixed durable agents rebuilding a run on another worker, or after a restart, with the wrong request processors. The rebuilt run now uses the processors configured on the wrapped agent, so processors that rewrite the outbound model request keep running, and a per-call `errorProcessors: []` still turns error processors off. ([#24473](https://github.com/mastra-ai/mastra/pull/24473))
+
+- Fixed evented workflow restarts that occur before the first step is saved. ([#25389](https://github.com/mastra-ai/mastra/pull/25389))
+
+- Fixed `stream.text` and the last step's `text` resolving to an empty string when an agent has an output processor and the run stops via `stopWhen` on a step that contains both text and a tool call. Output processors that intentionally clear text still work as before. ([#25381](https://github.com/mastra-ai/mastra/pull/25381))
+
+- Fixed `ToolCallFilter` stripping a resumed run's own tool calls. When a tool suspended the agent (for example `askUserTool`) and the run was continued with `resumeStream()`, the filter treated the suspended tool call and its result as prior history and removed them from the model prompt. The model never saw its question or the user's answer, so it asked again and the run suspended forever. Tool calls made in the current run, including everything before a suspension, now stay in the prompt after resume. Fixes https://github.com/mastra-ai/mastra/issues/24382 ([#25566](https://github.com/mastra-ai/mastra/pull/25566))
+
+- Fixed durable agents dropping custom `resumeData` on tool approval. When a caller approves a tool call with extra keys, for example `sendToolApproval({ approved: true, resumeData: { approved: true, note: 'hello' } })`, the durable agent now forwards that payload to the tool's `execute` through `context.agent.resumeData`, matching the non-durable agent. A bare `{ approved: true }` is still not forwarded. Fixes https://github.com/mastra-ai/mastra/issues/24561 ([#25562](https://github.com/mastra-ai/mastra/pull/25562))
+
+- Fixed `LocalSandbox` seeding a working directory with a mix of two checkpoint versions when `snapshot()` replaced the checkpoint during `start()`. The seed now retries until it copies one complete checkpoint. ([#25528](https://github.com/mastra-ai/mastra/pull/25528))
+
 ## 1.72.0
 
 ### Minor Changes
