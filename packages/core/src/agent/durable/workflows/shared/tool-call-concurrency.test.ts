@@ -15,6 +15,17 @@ function call(toolName: string, activeTools?: string[] | null): Pick<DurableTool
   return activeTools !== undefined ? { toolName, activeTools } : { toolName };
 }
 
+/**
+ * A tool call emitted by the LLM step for a processor-injected tool. The step stamps
+ * approval/suspension capability from its effective tool set (issue #24377).
+ */
+function stampedCall(
+  toolName: string,
+  flags: Pick<DurableToolCallInput, 'requireApproval' | 'hasSuspendSchema'> = {},
+): Pick<DurableToolCallInput, 'toolName' | 'requireApproval' | 'hasSuspendSchema'> {
+  return { toolName, ...flags };
+}
+
 describe('resolveDurableToolCallConcurrency', () => {
   it('returns the default concurrency when nothing is configured', () => {
     expect(resolveDurableToolCallConcurrency({})).toBe(DurableAgentDefaults.TOOL_CALL_CONCURRENCY);
@@ -146,6 +157,60 @@ describe('resolveDurableToolCallConcurrency', () => {
         toolCalls: [call('a')],
       }),
     ).toBe(4);
+  });
+
+  describe('step-stamped capability flags (issue #24377)', () => {
+    it('forces sequential execution for a stamped approval tool absent from run metadata', () => {
+      expect(
+        resolveDurableToolCallConcurrency({
+          options: { toolCallConcurrency: 10 },
+          toolsMetadata: [tool({ name: 'plain' })],
+          toolCalls: [stampedCall('processor_injected', { requireApproval: true })],
+        }),
+      ).toBe(1);
+    });
+
+    it('forces sequential execution for a stamped suspend-capable tool', () => {
+      expect(
+        resolveDurableToolCallConcurrency({
+          options: { toolCallConcurrency: 10 },
+          toolsMetadata: [],
+          toolCalls: [stampedCall('processor_injected', { hasSuspendSchema: true })],
+        }),
+      ).toBe(1);
+    });
+
+    it('still parallelizes a batch with no stamped capability flags', () => {
+      expect(
+        resolveDurableToolCallConcurrency({
+          options: { toolCallConcurrency: 10 },
+          toolsMetadata: [tool({ name: 'a' })],
+          toolCalls: [stampedCall('a')],
+        }),
+      ).toBe(10);
+    });
+
+    it('overrides the called strategy when a called tool is stamped approval-capable', () => {
+      // `strategy: 'called'` only narrows which tools are considered; an approval tool
+      // that WAS called still has to serialize.
+      expect(
+        resolveDurableToolCallConcurrency({
+          options: { toolCallConcurrency: { limit: 5, strategy: 'called' } },
+          toolsMetadata: [],
+          toolCalls: [stampedCall('a'), stampedCall('approval', { requireApproval: true })],
+        }),
+      ).toBe(1);
+    });
+
+    it('ignores stamps on sibling calls the model did not make', () => {
+      expect(
+        resolveDurableToolCallConcurrency({
+          options: { toolCallConcurrency: { limit: 4, strategy: 'called' } },
+          toolsMetadata: [],
+          toolCalls: [stampedCall('a'), stampedCall('b')],
+        }),
+      ).toBe(4);
+    });
   });
 
   describe("strategy: 'called'", () => {
