@@ -256,6 +256,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/bee',
+          label: 'Bee by HEOSSI',
+        },
+        {
+          type: 'doc',
           id: 'providers/berget',
           label: 'Berget.AI',
         },
@@ -791,6 +796,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/pareto',
+          label: 'Pareto Inference',
+        },
+        {
+          type: 'doc',
           id: 'providers/pendra',
           label: 'Pendra',
         },
@@ -952,7 +962,7 @@ const sidebars = {
         {
           type: 'doc',
           id: 'providers/tempr',
-          label: 'Tempr',
+          label: 'Tempr Gateway',
         },
         {
           type: 'doc',

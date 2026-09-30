@@ -1,10 +1,11 @@
 import { getSignalRecordNodeId, getSignalRecordNodeLabel, getSignalRecordNodeValue } from './sankey-signals-data';
-import { getSignalHue } from './signal-colors';
+import { getSignalColor } from './signal-colors';
 import { SortableSignalHeaders } from './sortable-signal-headers';
 import type { ThemeFlowResponse, TraceSignalName } from './types';
 import { Card, CardContent } from '@/ds/components/Card';
 import { Sankey, SankeyChart } from '@/ds/components/SankeyChart';
 import type { SankeyChartColumn, SankeyChartNodeSelection, SankeyChartRecord } from '@/ds/components/SankeyChart';
+import { Txt } from '@/ds/components/Txt';
 
 export function FlowCard({
   columns,
@@ -50,12 +51,16 @@ export function FlowCard({
       elevation="raised"
       title={drillInDisabledReason}
     >
-      <span
+      <Txt
+        as="span"
+        variant="meta"
+        tone="muted"
+        font="mono"
         aria-hidden="true"
-        className="absolute top-0 left-5 -translate-y-1/2 bg-background px-2 font-mono text-meta tracking-[0.18em] text-muted-foreground"
+        className="absolute top-0 left-5 -translate-y-1/2 bg-background px-2 tracking-[0.18em]"
       >
         SIGNALS
-      </span>
+      </Txt>
       <CardContent className="px-0 pt-4 pb-2 sm:pt-5 sm:pb-3">
         <SortableSignalHeaders
           signalNames={headerSignalNames}
@@ -76,7 +81,7 @@ export function FlowCard({
             data={records}
             columns={chartColumns}
             columnOrder={chartColumns.map(column => column.id)}
-            getColumnHue={column => getSignalHue(column.id)}
+            getColumnColor={column => getSignalColor(column.id)}
             getRecordNodeId={getSignalRecordNodeId}
             getRecordNodeLabel={getSignalRecordNodeLabel}
             getRecordNodeValue={getSignalRecordNodeValue}

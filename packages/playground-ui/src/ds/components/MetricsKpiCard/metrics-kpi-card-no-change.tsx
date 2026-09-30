@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils';
+import { Txt } from '@/ds/components/Txt';
 
 export function MetricsKpiCardNoChange({
   message = 'No previous value to compare',
@@ -7,5 +7,9 @@ export function MetricsKpiCardNoChange({
   message?: string;
   className?: string;
 }) {
-  return <span className={cn('text-meta text-placeholder', className)}>{message}</span>;
+  return (
+    <Txt as="span" variant="meta" tone="faint" className={className}>
+      {message}
+    </Txt>
+  );
 }

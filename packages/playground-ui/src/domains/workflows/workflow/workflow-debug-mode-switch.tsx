@@ -1,6 +1,7 @@
 import { useContext, useId } from 'react';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { Switch } from '@/ds/components/Switch';
+import { Txt } from '@/ds/components/Txt';
 
 export function WorkflowDebugModeSwitch() {
   const { debugMode, setDebugMode } = useContext(WorkflowRunContext);
@@ -14,12 +15,12 @@ export function WorkflowDebugModeSwitch() {
         aria-label="Step by step"
         aria-describedby={descriptionId}
       />
-      <span className="flex min-w-0 flex-col gap-0.5 text-meta">
+      <Txt as="span" variant="meta" className="flex min-w-0 flex-col gap-0.5">
         <span className="text-foreground">Step by step</span>
         <span id={descriptionId} className="text-muted-foreground">
           Pause to inspect outputs
         </span>
-      </span>
+      </Txt>
     </label>
   );
 }

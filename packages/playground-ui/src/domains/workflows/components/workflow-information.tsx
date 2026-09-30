@@ -9,12 +9,13 @@ import { WorkflowRunDetail } from '../runs/workflow-run-details';
 import { WorkflowRecentRuns } from '../runs/workflow-run-list';
 import { WorkflowRunStatusBadge } from '../workflow/workflow-run-header';
 import { WorkflowTrigger } from '../workflow/workflow-trigger';
+import type { WorkflowRunActionsContext } from '../workflow/workflow-trigger';
 import { panelSurfaceStyle, WorkflowPanelResizeHandle } from './workflow-layout';
 
 import { useWorkflow } from '@/domains/workflows/hooks/use-workflow';
 import { Button } from '@/ds/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
-import { ScrollArea } from '@/ds/components/ScrollArea';
+import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/utils/cn';
 import { toast } from '@/utils/toast';
@@ -23,7 +24,7 @@ export interface WorkflowInformationProps {
   workflowId: string;
   initialRunId?: string;
   requestContext: Record<string, any>;
-  onRequestContextChange: (values: Record<string, any>) => void;
+  runActionsSlot?: (ctx: WorkflowRunActionsContext) => ReactNode;
   canExecute: boolean;
   canDelete: boolean;
 }
@@ -41,7 +42,7 @@ type WorkflowActionProps = Pick<
 type InitialWorkflowSidebarProps = WorkflowActionProps & {
   workflowId: string;
   requestContext: Record<string, any>;
-  onRequestContextChange: (values: Record<string, any>) => void;
+  runActionsSlot?: (ctx: WorkflowRunActionsContext) => ReactNode;
   canExecute: boolean;
   workflow?: GetWorkflowResponse;
   isLoading: boolean;
@@ -122,10 +123,9 @@ function WorkflowInformationTopSection({
           <ScrollArea
             data-testid="workflow-information-top-scroll-area"
             className="min-h-0 flex-1 border-t border-border/50"
-            viewPortClassName="h-full"
             mask={{ top: false, bottom: false }}
           >
-            {children}
+            <ScrollAreaViewport className="h-full">{children}</ScrollAreaViewport>
           </ScrollArea>
         </CollapsibleContent>
       </Collapsible>
@@ -163,7 +163,7 @@ export function WorkflowInformation({
   workflowId,
   initialRunId,
   requestContext,
-  onRequestContextChange,
+  runActionsSlot,
   canExecute,
   canDelete,
 }: WorkflowInformationProps) {
@@ -196,7 +196,7 @@ export function WorkflowInformation({
     isCancellingWorkflowRun,
     cancelWorkflowRun,
     requestContext,
-    onRequestContextChange,
+    runActionsSlot,
     canExecute,
   };
 

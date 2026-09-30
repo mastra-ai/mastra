@@ -27,11 +27,10 @@
  * classes come after these.
  */
 const fieldsOnSurface =
-  '[--field:var(--field-on-surface)] [--field-disabled:var(--field-on-surface)] [--field-rim:var(--field-rim-on-surface)] [--field-rim-focus:var(--field-rim-focus-on-surface)]';
+  '[--field:var(--field-on-surface)] [--field-disabled:var(--field-on-surface)] [--field-rim:var(--field-rim-on-surface)]';
 const fieldsOnDialog =
-  '[--field:var(--field-on-surface)] [--field-disabled:var(--field-on-surface)] [--field-rim:var(--surface-rim)] [--field-rim-focus:var(--surface-rim-focus)]';
-const fieldsOnPage =
-  '[--field:var(--card)] [--field-disabled:var(--fill-subtle)] [--field-rim:var(--surface-rim)] [--field-rim-focus:var(--surface-rim-focus)]';
+  '[--field:var(--field-on-surface)] [--field-disabled:var(--field-on-surface)] [--field-rim:var(--surface-rim)]';
+const fieldsOnPage = '[--field:var(--card)] [--field-disabled:var(--fill-subtle)] [--field-rim:var(--surface-rim)]';
 
 export const raisedSurfaceStyle = 'bg-card hover:bg-card active:bg-card shadow-raised ' + fieldsOnSurface;
 

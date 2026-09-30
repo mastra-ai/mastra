@@ -1,5 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
@@ -13,7 +14,6 @@ import {
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { ModelCombobox } from './ModelCombobox';
-import { Segmented } from './SettingsFields';
 
 type AttachmentChoice = 'auto' | 'on' | 'off';
 
@@ -22,12 +22,6 @@ function attachmentToChoice(value: 'auto' | boolean): AttachmentChoice {
   if (value === false) return 'off';
   return 'auto';
 }
-
-const ATTACHMENT_OPTIONS: { value: AttachmentChoice; label: string }[] = [
-  { value: 'auto', label: 'Auto' },
-  { value: 'on', label: 'On' },
-  { value: 'off', label: 'Off' },
-];
 
 function choiceToAttachment(choice: AttachmentChoice): 'auto' | boolean {
   if (choice === 'on') return true;
@@ -125,14 +119,14 @@ export function OMSection({
   return (
     <>
       {error && (
-        <Txt as="p" variant="caption" className="text-notice-destructive-fg px-4 py-3">
+        <Txt as="p" variant="caption" className="text-destructive-indicator px-4 py-3">
           {error}
         </Txt>
       )}
 
       {config && !modelsAvailable && (
         <div className="flex items-center gap-2 px-4 py-3">
-          <Badge size="md" variant="yellow">
+          <Badge size="md" variant="warning">
             Model credentials required
           </Badge>
           <Txt as="p" variant="meta" className="text-muted-foreground">
@@ -199,13 +193,16 @@ export function OMSection({
       </SettingsRow>
 
       <SettingsRow label="Observe attachments" description="Whether attached files are included in observations">
-        <Segmented
-          ariaLabel="Observe attachments"
+        <SegmentedControl
+          aria-label="Observe attachments"
           value={attachmentChoice}
-          options={ATTACHMENT_OPTIONS}
           disabled={busy || !config}
-          onChange={choice => attachmentsMutation.mutate({ value: choiceToAttachment(choice) })}
-        />
+          onValueChange={choice => attachmentsMutation.mutate({ value: choiceToAttachment(choice) })}
+        >
+          <SegmentedControlItem value="auto">Auto</SegmentedControlItem>
+          <SegmentedControlItem value="on">On</SegmentedControlItem>
+          <SegmentedControlItem value="off">Off</SegmentedControlItem>
+        </SegmentedControl>
       </SettingsRow>
     </>
   );

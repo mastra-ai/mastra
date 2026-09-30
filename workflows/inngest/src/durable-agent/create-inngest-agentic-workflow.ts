@@ -182,6 +182,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           modelSpanData: state.modelSpanData,
           // Pass step index for continuation (step: 0, 1, 2, ...)
           stepIndex: state.stepIndex,
+          accumulatedSteps: state.accumulatedSteps,
         };
       },
       { id: 'map-to-llm-input' },

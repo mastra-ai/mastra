@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -116,7 +115,9 @@ class SignalsPubSub extends PubSub {
     // conservative bound. When the path is too long, replace the key with
     // a short hash so the socket can still be created.
     if (Buffer.byteLength(candidate) > 104) {
-      key = createHash('sha256').update(key).digest('hex').slice(0, 16);
+      key = Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(key)))
+        .toString('hex')
+        .slice(0, 16);
       return join(dir, `${key}.sock`);
     }
     return candidate;

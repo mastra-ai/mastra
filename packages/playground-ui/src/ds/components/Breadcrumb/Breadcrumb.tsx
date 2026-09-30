@@ -36,20 +36,43 @@ export interface CrumbProps {
   isLoading?: boolean;
   /**
    * Sibling control rendered next to the label (never inside it). Expected to be a
-   * `size="icon-sm"` ghost control: an icon-only Combobox switcher, a CopyButton, …
+   * `size="icon-sm"` ghost control, e.g. a CopyButton. Entity switchers go in `switcher`.
    */
   action?: React.ReactNode;
+  /**
+   * Entity switcher rendered next to the label; spread `crumbSwitcherTriggerProps` on it.
+   * On the current crumb there is nowhere to navigate, so its hit area covers the whole crumb.
+   */
+  switcher?: React.ReactNode;
   'data-testid'?: string;
 }
 
 export const CrumbSkeleton = (props: { 'data-testid'?: string }) => <Skeleton className="h-3 w-24" {...props} />;
 
-export const Crumb = ({ className, as, isCurrent, action, icon, isLoading, children, ...props }: CrumbProps) => {
+export const Crumb = ({
+  className,
+  as,
+  isCurrent,
+  action,
+  switcher,
+  icon,
+  isLoading,
+  children,
+  ...props
+}: CrumbProps) => {
   const Root = as || 'span';
+  const switcherCoversCrumb = Boolean(isCurrent && switcher);
 
   return (
     <>
-      <li className={cn('group flex h-control-sm min-w-0 items-center', isCurrent ? 'shrink' : 'shrink-0')}>
+      <li
+        className={cn(
+          'group flex h-control-sm min-w-0 items-center',
+          isCurrent ? 'shrink' : 'shrink-0',
+          switcherCoversCrumb &&
+            'relative rounded-full has-[[data-slot=crumb-switcher]_[data-popup-open]]:bg-fill-subtle has-[[data-slot=crumb-switcher]_button:enabled]:hover:bg-fill-subtle has-[[data-slot=crumb-switcher]_button:enabled]:active:bg-fill',
+        )}
+      >
         <Root
           aria-current={isCurrent ? 'page' : undefined}
           className={cn(
@@ -85,6 +108,18 @@ export const Crumb = ({ className, as, isCurrent, action, icon, isLoading, child
             <span className="min-w-0 flex-1 truncate">{children}</span>
           )}
         </Root>
+        {switcher && (
+          <span
+            data-slot="crumb-switcher"
+            className={cn(
+              '-ml-1 flex h-control-sm shrink-0 items-center',
+              switcherCoversCrumb &&
+                '[&_button]:bg-transparent! [&_button:enabled]:after:absolute [&_button:enabled]:after:inset-0 [&_button:enabled]:after:rounded-full',
+            )}
+          >
+            {switcher}
+          </span>
+        )}
         {action && <span className="-ml-1 flex h-control-sm shrink-0 items-center">{action}</span>}
       </li>
       {!isCurrent && (

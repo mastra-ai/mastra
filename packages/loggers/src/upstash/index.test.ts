@@ -91,6 +91,18 @@ describe('UpstashTransport', () => {
     });
   });
 
+  it('should send LPUSH and LTRIM as separate pipeline commands', async () => {
+    transport.logBuffer.push({ msg: 'hello', time: 1 } as any);
+
+    await transport._flush();
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body).toEqual([
+      ['LPUSH', 'test-logs', JSON.stringify({ msg: 'hello', time: 1 })],
+      ['LTRIM', 'test-logs', 0, 999],
+    ]);
+  });
+
   it('should properly clean up resources on destroy', () => {
     const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
     const flushSpy = vi.spyOn(transport, '_flush').mockImplementation(() => Promise.resolve());

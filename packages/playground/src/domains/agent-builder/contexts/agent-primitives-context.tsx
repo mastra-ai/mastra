@@ -13,7 +13,6 @@ import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { useStoredWorkspaces } from '@/domains/workspace/hooks/use-stored-workspaces';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 type ToolsData = NonNullable<ReturnType<typeof useTools>['data']>;
 type AgentsData = NonNullable<ReturnType<typeof useAgents>['data']>;
@@ -55,7 +54,6 @@ export const AgentPrimitivesProvider = ({ agentId, children }: AgentPrimitivesPr
   const { data: toolsData, isPending: isToolsPending } = useTools({ enabled: features.tools });
   const { data: agentsData, isPending: isAgentsPending } = useAgents({ enabled: features.agents });
   const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows({
-    requestContext: usePlaygroundStore().requestContext,
     enabled: features.workflows,
   });
   const { data: storedSkillsResponse, isPending: isSkillsPending } = useStoredSkills({

@@ -27,6 +27,9 @@ const BASE_SPAN: Omit<RawTraceQuerySpan, 'cursorId' | 'traceId' | 'spanId'> = {
   rootEntityVersionId: 'agent-v1',
   environment: 'production',
   organizationId: null,
+  runId: null,
+  sessionId: null,
+  userId: null,
   tags: null,
 };
 

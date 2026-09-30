@@ -57,7 +57,7 @@ export function ScoreDialog({
   const isCodeBased = isCodeBasedScorer(score);
   const scorerDetailHref =
     score?.scorerId && score?.entityId
-      ? `${paths.scorerLink(score.scorerId)}?entity=${encodeURIComponent(score.entityId)}&scoreId=${encodeURIComponent(score.id)}`
+      ? paths.scorerLink(score.scorerId, { entity: score.entityId, scoreId: score.id })
       : undefined;
 
   return (

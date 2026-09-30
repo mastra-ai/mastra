@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createBaseIterationStateUpdate } from './iteration-state';
+import { calculateAccumulatedUsage, createBaseIterationStateUpdate } from './iteration-state';
 
 const providerRequest = {
   body: {
@@ -56,5 +56,40 @@ describe('createBaseIterationStateUpdate', () => {
       totalUsage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
     });
     expect(JSON.stringify(update)).not.toContain('tool-19');
+  });
+});
+
+describe('calculateAccumulatedUsage', () => {
+  const base = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+
+  it('sums cache and reasoning token details across steps', () => {
+    const first = calculateAccumulatedUsage(base, {
+      inputTokens: 100,
+      outputTokens: 10,
+      totalTokens: 110,
+      cachedInputTokens: 80,
+      cacheCreationInputTokens: 5,
+      reasoningTokens: 4,
+    });
+    const second = calculateAccumulatedUsage(first, {
+      inputTokens: 50,
+      outputTokens: 20,
+      totalTokens: 70,
+      cachedInputTokens: 40,
+      reasoningTokens: 6,
+    });
+    expect(second).toEqual({
+      inputTokens: 150,
+      outputTokens: 30,
+      totalTokens: 180,
+      cachedInputTokens: 120,
+      cacheCreationInputTokens: 5,
+      reasoningTokens: 10,
+    });
+  });
+
+  it('leaves detail fields undefined when no step reports them', () => {
+    const result = calculateAccumulatedUsage(base, { inputTokens: 1, outputTokens: 2, totalTokens: 3 });
+    expect(result).toEqual({ inputTokens: 1, outputTokens: 2, totalTokens: 3 });
   });
 });
