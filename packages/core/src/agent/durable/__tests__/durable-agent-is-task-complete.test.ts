@@ -11,7 +11,7 @@
  *   either stops (passed) or continues with feedback (failed).
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -259,6 +259,69 @@ describe('DurableAgent isTaskComplete', () => {
     // attempt because the scorer rejected it).
     const textEndChunks = chunks.filter(c => c.type === 'text-end');
     expect(textEndChunks.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('guards Claude 4.6+ continuation feedback without persisting the synthetic user turn', async () => {
+    const memory = new MockMemory();
+    const prompts: LanguageModelV2Prompt[] = [];
+    let call = 0;
+    const model = new MockLanguageModelV2({
+      provider: 'anthropic.messages',
+      modelId: 'claude-opus-4-6',
+      doStream: async options => {
+        prompts.push(options.prompt);
+        call++;
+        const text = call === 1 ? 'first try' : 'second try';
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: `id-${call}`, modelId: 'claude-opus-4-6', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: text },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+    const durableAgent = createDurableAgent({
+      agent: new Agent({
+        id: 'task-complete-anthropic-guard-agent',
+        name: 'Task Complete Anthropic Guard Agent',
+        instructions: 'noop',
+        model,
+        memory,
+      }),
+      pubsub,
+    });
+
+    const { output, cleanup } = await durableAgent.stream('go', {
+      isTaskComplete: { scorers: [failingScorer(0, 'incomplete') as any] } as any,
+      maxSteps: 2,
+      memory: { thread: 'thread-anthropic-feedback', resource: 'resource-anthropic-feedback' },
+    });
+
+    await drain(output.fullStream as unknown as ReadableStream<any>);
+    await cleanup();
+
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1]?.at(-1)).toMatchObject({
+      role: 'user',
+      content: [{ type: 'text', text: 'Continue.' }],
+    });
+    expect(prompts[1]?.at(-2)).toMatchObject({ role: 'assistant' });
+
+    const { messages } = await memory.recall({
+      threadId: 'thread-anthropic-feedback',
+      resourceId: 'resource-anthropic-feedback',
+    });
+    expect(JSON.stringify(messages)).not.toContain('Continue.');
   });
 
   it('forwards requestContext entries as customContext to isTaskComplete scorers', async () => {

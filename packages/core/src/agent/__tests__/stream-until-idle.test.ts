@@ -1,3 +1,4 @@
+import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildContinuationOpts } from '../../loop/shared/stream-until-idle-helpers';
@@ -204,6 +205,73 @@ describe('Agent.streamUntilIdle', () => {
       expect(getCallCount()).toBe(2);
     },
   );
+
+  it('guards Claude 4.6+ wake-up continuations without persisting the synthetic user turn', async () => {
+    const memory = new MockMemory();
+    const prompts: LanguageModelV2Prompt[] = [];
+    const scripts = [textResponse('first response'), textResponse('continuation response')];
+    let calls = 0;
+    const model = new MockLanguageModelV2({
+      provider: 'anthropic.messages',
+      modelId: 'claude-opus-4-6',
+      doStream: async options => {
+        prompts.push(options.prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: scripts[calls++]!(),
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'anthropic-until-idle-guard',
+      name: 'Anthropic Until Idle Guard',
+      instructions: 'test',
+      model,
+      memory,
+    });
+    mastra.addAgent(agent, 'anthropic-until-idle-guard');
+
+    const bgManager = mastra.backgroundTaskManager!;
+    const publishEvent = (type: 'task.running' | 'task.completed') =>
+      (bgManager as any).publishLifecycleEvent(type, {
+        id: 'task-anthropic-guard',
+        toolName: 'dummy',
+        toolCallId: 'call-anthropic-guard',
+        runId: 'run-anthropic-guard',
+        agentId: 'anthropic-until-idle-guard',
+        threadId: 'thread-anthropic-guard',
+        resourceId: 'resource-anthropic-guard',
+        status: type === 'task.running' ? 'running' : 'completed',
+        result: type === 'task.completed' ? {} : undefined,
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 1000,
+        createdAt: new Date(),
+        args: {},
+      });
+
+    const outer = await agent.streamUntilIdle('hi', {
+      memory: { thread: 'thread-anthropic-guard', resource: 'resource-anthropic-guard' },
+    });
+    await publishEvent('task.running');
+    await new Promise(resolve => setTimeout(resolve, 50));
+    await publishEvent('task.completed');
+    await drain(outer.fullStream as ReadableStream<any>);
+
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1]?.at(-1)).toMatchObject({
+      role: 'user',
+      content: [{ type: 'text', text: 'Continue.' }],
+    });
+    expect(prompts[1]?.at(-2)).toMatchObject({ role: 'assistant' });
+
+    const { messages } = await memory.recall({
+      threadId: 'thread-anthropic-guard',
+      resourceId: 'resource-anthropic-guard',
+    });
+    expect(JSON.stringify(messages)).not.toContain('Continue.');
+  });
 
   it('serializes continuations (only one inner stream at a time)', async () => {
     const memory = new MockMemory();
