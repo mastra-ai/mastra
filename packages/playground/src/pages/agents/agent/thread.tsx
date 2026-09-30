@@ -91,6 +91,7 @@ function AgentThread() {
         ...thread,
         createdAt: new Date(thread.createdAt),
         updatedAt: new Date(thread.updatedAt),
+        archivedAt: thread.archivedAt ? new Date(thread.archivedAt) : null,
       })),
     [threads],
   );
