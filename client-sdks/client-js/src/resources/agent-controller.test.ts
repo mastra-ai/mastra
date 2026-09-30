@@ -150,6 +150,14 @@ describe('AgentController Resource', () => {
     expect(JSON.parse(init.body as string)).toEqual({ toolCallId: 'call-7', approved: true });
   });
 
+  it.each(['approveTool', 'respondToToolSuspension'] as const)('does not replay %s after a server error', async method => {
+    (global.fetch as any).mockResolvedValue(new Response('boom', { status: 500 }));
+    const session = client.getAgentController('code').session('user-1');
+    const call = method === 'approveTool' ? session.approveTool('call-7', true) : session.respondToToolSuspension('call-7', 'yes');
+    await expect(call).rejects.toThrow();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
   it('responds to a suspended tool (ask_user)', async () => {
     mockJson({ ok: true });
     await client.getAgentController('code').session('user-1').respondToToolSuspension('call-9', 'my answer');

@@ -632,6 +632,9 @@ export class AgentControllerSession extends BaseResource {
     const requestContext = parseClientRequestContext(options?.requestContext);
     return this.request<AgentControllerCommandAck>(this.url(`${this.base()}/tool-approval`), {
       method: 'POST',
+      // Not idempotent: a replay after a lost response would be rejected as not_pending
+      // and misreport an applied decision as ignored.
+      retries: 0,
       body: { toolCallId, approved, ...(requestContext ? { requestContext } : {}) },
     });
   }
@@ -649,6 +652,9 @@ export class AgentControllerSession extends BaseResource {
     const requestContext = parseClientRequestContext(options?.requestContext);
     return this.request<AgentControllerCommandAck>(this.url(`${this.base()}/tool-suspension`), {
       method: 'POST',
+      // Not idempotent: a replay after a lost response would be rejected as not_pending
+      // and misreport an applied decision as ignored.
+      retries: 0,
       body: { toolCallId, resumeData, ...(requestContext ? { requestContext } : {}) },
     });
   }

@@ -10,3 +10,5 @@ Tool approval and tool suspension requests now report whether they were actually
 const ack = await session.approveTool(toolCallId, true);
 if (!ack.ok) console.warn(`Approval not applied: ${ack.reason}`);
 ```
+
+`approveTool()` and `respondToToolSuspension()` no longer retry automatically. A retried decision would be rejected as already handled, so an applied decision could be reported as ignored.
