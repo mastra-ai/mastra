@@ -24,7 +24,7 @@ if (!databaseUrl) {
 
 const redisUrl = process.env.REDIS_URL;
 if (!redisUrl) {
-  throw new Error('REDIS_URL is not set. The durable agent needs Redis so streams survive disconnects and restarts.');
+  throw new Error('REDIS_URL is not set. Redis backs the event cache so streams survive client disconnects.');
 }
 
 export const mastra = new Mastra({
@@ -39,11 +39,9 @@ export const mastra = new Mastra({
     id: 'mastra-storage',
     connectionString: databaseUrl,
   }),
-  // Redis-backed event cache: durable agent runs record their chunks here so
-  // late subscribers and reconnecting clients can replay missed events.
+  // Redis-backed event cache: agent runs record their chunks here so late
+  // subscribers and reconnecting clients can replay missed events.
   cache: new RedisServerCache({ client: new Redis(redisUrl) }),
-  // Re-drive orphaned RUNNING durable agent runs on boot.
-  recovery: { durableAgents: 'auto' },
   // Studio editing: agent overrides and workflow definitions persist as files
   // under ./mastra/editor (source: 'code'), the workflow builder authors
   // workflows from Studio, and the platform workspace providers let Studio
