@@ -2067,6 +2067,7 @@ export class EventedRun<
       throw error;
     }
 
+    this.workflowRunStatus = result.status;
     if (result.status !== 'suspended') {
       if (result.status === 'failed') {
         const err = (result as { error?: unknown }).error;
@@ -2610,6 +2611,7 @@ export class EventedRun<
         outputOptions: params.outputOptions,
       })
       .then(result => {
+        this.workflowRunStatus = result.status;
         if (result.status !== 'suspended') {
           this.closeStreamAction?.().catch(() => {});
           this.cleanup?.();
