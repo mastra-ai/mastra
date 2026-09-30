@@ -181,6 +181,51 @@ describe('formatTraceThreadMessages', () => {
     });
   });
 
+  describe('when observational memory runs inside a processor', () => {
+    const withOmProcessor = (rootOutput: unknown) => {
+      const root = agentTraceWithTools.spans.find(span => span.spanId === 'agent-root');
+      if (!root) throw new Error('fixture missing agent-root span');
+      const startedAt = root.endedAt ?? root.startedAt;
+      return [
+        ...agentTraceWithTools.spans.map(span => (span === root ? { ...span, output: rootOutput } : span)),
+        {
+          ...root,
+          spanId: 'om-processor',
+          parentSpanId: 'agent-root',
+          spanType: SpanType.PROCESSOR_RUN,
+          name: 'input step processor: observational-memory',
+          entityId: 'observational-memory',
+          startedAt,
+          input: null,
+          output: null,
+        },
+        {
+          ...root,
+          spanId: 'om-capture-run',
+          parentSpanId: 'om-processor',
+          entityId: 'observational-memory-observer',
+          entityName: 'observational-memory-observer',
+          startedAt,
+          output: { object: { capture: { nodes: [{ kind: 'issue', name: 'Issue 22014', records: [] }] } } },
+        },
+      ];
+    };
+
+    it('never renders the observer output as the reply', () => {
+      const messages = formatTraceThreadMessages(withOmProcessor({}));
+
+      expect(JSON.stringify(messages)).not.toContain('capture');
+      expect(messages.some(message => message.traceSpanIds.includes('om-processor'))).toBe(false);
+    });
+
+    it('still renders the root agent text response', () => {
+      const messages = formatTraceThreadMessages(withOmProcessor({ text: 'Issue re-triaged.' }));
+
+      expect(messages.at(-1)?.content.parts).toEqual([{ type: 'text', text: 'Issue re-triaged.' }]);
+      expect(JSON.stringify(messages)).not.toContain('capture');
+    });
+  });
+
   describe('when the user input contains persisted message parts', () => {
     it('preserves text and file parts for the chat renderer', () => {
       const spans = basicAgentTrace.spans.map(span => ({

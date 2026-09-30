@@ -152,6 +152,24 @@ interface ToolCallPart {
   startedAt: SpanRecord['startedAt'];
 }
 
+const OM_PROCESSOR_ID = 'observational-memory';
+const OM_AGENT_IDS = new Set([
+  'observational-memory-observer',
+  'observational-memory-reflector',
+  'multi-thread-observer',
+]);
+
+/** Observational memory machinery (its processor run or its observer/reflector agents) is never part of the chat. */
+const isObservationalMemoryInternalSpan = (span: SpanRecord) => {
+  if (span.spanType === SpanType.PROCESSOR_RUN) {
+    return span.entityId === OM_PROCESSOR_ID || span.name.endsWith(`: ${OM_PROCESSOR_ID}`);
+  }
+  if (span.spanType === SpanType.AGENT_RUN) {
+    return OM_AGENT_IDS.has(span.entityId ?? '') || OM_AGENT_IDS.has(span.entityName ?? '');
+  }
+  return false;
+};
+
 /**
  * Walks the span tree collecting each tool call (with the spans behind it) in visit order,
  * plus the ids of the model chunks that produced the response text.
@@ -201,6 +219,7 @@ const collectAssistantSpans = (
         });
         continue;
       }
+      if (isObservationalMemoryInternalSpan(span)) continue;
       if (isResponseChunkSpan(span)) textSpanIds.push(span.spanId);
       // A suspended run resumes as a nested agent run (outside any tool call) that carries the final response.
       if (span.spanType === SpanType.AGENT_RUN) resumedOutput = span.output;
