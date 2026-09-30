@@ -17,7 +17,7 @@ import type {
 } from '@internal/ai-v6';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from '@mastra/core/stream';
 import type { DataChunkType, ChunkType, MastraFinishReason } from '@mastra/core/stream';
-import { isDataChunkType } from './utils';
+import { isDataChunkType, toUIDataChunk } from './utils';
 
 /**
  * Separator used to encode both runId and toolCallId into a single approvalId string.
@@ -896,8 +896,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(part)}`,
           );
         }
-        const { type, data, id } = output;
-        return { type, data, ...(id !== undefined && { id }) } as InferUIMessageChunk<UI_MESSAGE>;
+        return toUIDataChunk(output) as InferUIMessageChunk<UI_MESSAGE>;
       }
       return;
     }
@@ -973,8 +972,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
       if (typeof partType === 'string' && partType.startsWith('background-task-')) {
         const backgroundTaskChunk = convertBackgroundTaskChunkToDataChunk(part as unknown as ChunkType);
         if (!backgroundTaskChunk) return;
-        const { type, data, id } = backgroundTaskChunk;
-        return { type, data, ...(id !== undefined && { id }) } as InferUIMessageChunk<UI_MESSAGE>;
+        return toUIDataChunk(backgroundTaskChunk) as InferUIMessageChunk<UI_MESSAGE>;
       }
 
       // return the chunk as is if it's not a known type
@@ -984,8 +982,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(part)}`,
           );
         }
-        const { type, data, id } = part;
-        return { type, data, ...(id !== undefined && { id }) } as InferUIMessageChunk<UI_MESSAGE>;
+        return toUIDataChunk(part) as InferUIMessageChunk<UI_MESSAGE>;
       }
 
       return;
