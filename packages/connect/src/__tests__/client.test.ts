@@ -471,4 +471,23 @@ describe('proxyRequest', () => {
       status: 204,
     });
   });
+
+  it('returns the raw ArrayBuffer body without parsing when responseType is arraybuffer', async () => {
+    const binary = new Uint8Array([0x89, 0x50, 0x4e, 0x47]); // PNG magic bytes
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(binary, {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      }),
+    );
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    const response = await proxyRequestWithResponse(client, 'c_1', {
+      method: 'GET',
+      path: 'files/x',
+      responseType: 'arraybuffer',
+    });
+    expect(response.status).toBe(200);
+    expect(response.data).toBeInstanceOf(ArrayBuffer);
+    expect(new Uint8Array(response.data as ArrayBuffer)).toEqual(binary);
+  });
 });
