@@ -89,6 +89,11 @@ export interface WorkItemStageEntry {
  * as the Factory's and pins any such ratio near 100%.
  */
 /** When the card entered the stage it currently sits in, from its open history entry. */
+/** When the decision was actually queued; `createdAt` is offset by its effect ordinal for ordering. */
+export function decisionQueuedAt(record: { createdAt: Date; effectOrdinal: number }): number {
+  return record.createdAt.getTime() - record.effectOrdinal;
+}
+
 export function currentStageEnteredAt(item: {
   stages: WorkItemStage[];
   stageHistory: WorkItemStageEntry[];
@@ -2529,7 +2534,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       if (
         input.createdBefore &&
         decision.status === 'proposed' &&
-        decision.createdAt.getTime() >= input.createdBefore.getTime()
+        decisionQueuedAt(decision) >= input.createdBefore.getTime()
       )
         continue;
       const record =

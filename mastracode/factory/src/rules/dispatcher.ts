@@ -31,6 +31,7 @@ import {
   FACTORY_RULE_MATERIALIZATION_KEY,
   WorkItemClaimConflictError,
   currentStageEnteredAt,
+  decisionQueuedAt,
 } from '../storage/domains/work-items/base.js';
 import type {
   FactoryDeferredDecisionRecord,
@@ -1331,10 +1332,7 @@ export class FactoryDecisionDispatcher {
     if (!record.workItemId) return false;
     const bindings = await this.#storage.listRunBindings(record.orgId, record.factoryProjectId, record.workItemId);
     const own = bindings.filter(candidate => candidate.role === role);
-    // An active seat for this role still runs — a terminal card can legitimately
-    // hold one (e.g. a close-out skill dispatched on `done`).
-    if (own.some(candidate => candidate.status === 'active')) return false;
-    // With no active seat left on a terminal card, work queued before the card
+    // On a terminal card, work queued before the card
     // got there is stale: terminal-stage cleanup revoked its bindings out from
     // under the run. Treat it as superseded so it stops retrying to
     // MAX_ATTEMPTS as `session_unavailable`. The terminal stage's own onEnter
@@ -1343,8 +1341,11 @@ export class FactoryDecisionDispatcher {
     const item = await this.#storage.get({ orgId: record.orgId, id: record.workItemId }).catch(() => null);
     if (item && workItemPhaseSemantics(this.#boards, item)?.kind === 'terminal') {
       const enteredAt = currentStageEnteredAt(item);
-      return !enteredAt || record.createdAt.getTime() < enteredAt.getTime();
+      if (!enteredAt || decisionQueuedAt(record) < enteredAt.getTime()) return true;
     }
+    // An active seat for this role still runs — a terminal card can legitimately
+    // hold one (e.g. a close-out skill dispatched on `done`).
+    if (own.some(candidate => candidate.status === 'active')) return false;
     return own.some(
       revoked =>
         revoked.revokedAt !== null &&
