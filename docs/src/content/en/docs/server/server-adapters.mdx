@@ -333,8 +333,13 @@ app.use(express.json())
 const server = new MastraServer({ app, mastra })
 await server.init()
 
-app.listen(4111, async () => {
-  await mastra.startWorkers()
+const httpServer = app.listen(4111, async () => {
+  try {
+    await mastra.startWorkers()
+  } catch (error) {
+    console.error('Failed to start background workers', error)
+    httpServer.close(() => process.exit(1))
+  }
 })
 
 process.on('SIGTERM', async () => {
