@@ -3734,12 +3734,6 @@ export class Session<TState = unknown> {
   }
 
   /**
-   * Answer an approval that is stored with a suspended run but not parked on this
-   * session's gate, e.g. a card rebuilt from thread history after a restart.
-   * Resolves the run that owns `toolCallId` and resumes it by run id. Throws when
-   * no suspended run on the current thread is waiting on that tool call.
-   */
-  /**
    * Whether a suspended run on the current thread is waiting on an approval for
    * `toolCallId`. Lets callers reject stale answers before scheduling the resume.
    */
@@ -3751,6 +3745,12 @@ export class Session<TState = unknown> {
     return runs.some(run => run.toolCalls.some(call => call.requiresApproval && call.toolCallId === toolCallId));
   }
 
+  /**
+   * Answer an approval that is stored with a suspended run but not parked on this
+   * session's gate, e.g. a card rebuilt from thread history after a restart.
+   * Resolves the run that owns `toolCallId` and resumes it by run id. Throws when
+   * no suspended run on the current thread is waiting on that tool call.
+   */
   async respondToPersistedToolApproval({
     toolCallId,
     approved,

@@ -22544,7 +22544,6 @@ export type DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Q
 
 export type DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response = {
   ok: boolean;
-  reason?: ('not_pending' | 'stale_tool_call' | 'aborting' | 'no_pending_suspension') | undefined;
 };
 
 export type DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Request = Simplify<
@@ -22947,8 +22946,10 @@ export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_Body =
     | undefined;
 };
 
-export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_Response =
-  DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response;
+export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_Response = {
+  ok: boolean;
+  reason?: ('not_pending' | 'stale_tool_call' | 'aborting' | 'no_pending_suspension') | undefined;
+};
 
 export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_Request = Simplify<
   (PostAgentControllerControllerIdSessionsResourceIdToolApproval_PathParams extends never
@@ -22995,7 +22996,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Body
 };
 
 export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Response =
-  DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response;
+  PostAgentControllerControllerIdSessionsResourceIdToolApproval_Response;
 
 export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Request = Simplify<
   (PostAgentControllerControllerIdSessionsResourceIdToolSuspension_PathParams extends never
