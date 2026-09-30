@@ -1,4 +1,5 @@
 import { WorkspaceFilePath } from './workspace-active-file';
+import { WorkspaceCreateDirectory } from './workspace-create-directory';
 import {
   WorkspaceActiveFile,
   WorkspaceActiveFileContent,
@@ -8,7 +9,7 @@ import {
   WorkspaceRoot,
   WorkspaceTree,
 } from './workspace-parts';
-import { WorkspaceSearch } from './workspace-search';
+import { WorkspaceSearch, WorkspaceSearchToggle } from './workspace-search';
 
 export type { WorkspaceRootProps } from './workspace-parts';
 
@@ -17,6 +18,8 @@ export const Workspace = {
   Aside: WorkspaceAside,
   AsideHeader: WorkspaceAsideHeader,
   Search: WorkspaceSearch,
+  SearchToggle: WorkspaceSearchToggle,
+  CreateDirectory: WorkspaceCreateDirectory,
   Tree: WorkspaceTree,
   ActiveFile: WorkspaceActiveFile,
   ActiveFileHeader: WorkspaceActiveFileHeader,

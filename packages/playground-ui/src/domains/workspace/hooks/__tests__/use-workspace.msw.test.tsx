@@ -15,6 +15,7 @@ import {
   readHandler,
   rootListing,
   skillSearchResponse,
+  readResponse,
 } from '../../__tests__/fixtures/workspace';
 import { useWorkspaceDirectory } from '../use-workspace-directory';
 import { useWorkspaceFileContent } from '../use-workspace-file-content';
@@ -49,7 +50,7 @@ describe('useWorkspaceDirectory', () => {
         }),
       );
 
-      const { result } = renderHook(() => useWorkspaceDirectory(WORKSPACE_ID, '/'), { wrapper: makeWrapper() });
+      const { result } = renderHook(() => useWorkspaceDirectory(WORKSPACE_ID, '.'), { wrapper: makeWrapper() });
 
       await waitFor(() => expect(result.current.data).toEqual(rootListing.entries));
       expect(new Set(recursiveParams)).toEqual(new Set(['false']));
@@ -58,7 +59,7 @@ describe('useWorkspaceDirectory', () => {
 
   describe('when disabled', () => {
     it('does not request the directory', () => {
-      const { result } = renderHook(() => useWorkspaceDirectory(WORKSPACE_ID, '/', { enabled: false }), {
+      const { result } = renderHook(() => useWorkspaceDirectory(WORKSPACE_ID, '.', { enabled: false }), {
         wrapper: makeWrapper(),
       });
 
@@ -72,11 +73,30 @@ describe('useWorkspaceFileContent', () => {
     it('returns the file content', async () => {
       server.use(readHandler());
 
-      const { result } = renderHook(() => useWorkspaceFileContent(WORKSPACE_ID, '/src/index.ts'), {
+      const { result } = renderHook(() => useWorkspaceFileContent(WORKSPACE_ID, 'src/index.ts'), {
         wrapper: makeWrapper(),
       });
 
-      await waitFor(() => expect(result.current.data).toBe('const answer = 42;'));
+      await waitFor(() => expect(result.current.data?.content).toBe('const answer = 42;'));
+    });
+  });
+
+  describe('when the path is an image', () => {
+    it('requests base64 content', async () => {
+      const encodings: (string | null)[] = [];
+      server.use(
+        http.get(`${WORKSPACE_URL}/fs/read`, ({ request }) => {
+          encodings.push(new URL(request.url).searchParams.get('encoding'));
+          return HttpResponse.json(readResponse('logo.png'));
+        }),
+      );
+
+      const { result } = renderHook(() => useWorkspaceFileContent(WORKSPACE_ID, 'logo.png'), {
+        wrapper: makeWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.data?.mimeType).toBe('image/png'));
+      expect(new Set(encodings)).toEqual(new Set(['base64']));
     });
   });
 
@@ -90,6 +110,18 @@ describe('useWorkspaceFileContent', () => {
 });
 
 describe('useWorkspaceSearch', () => {
+  describe('when file search is disabled', () => {
+    it('only queries skills', async () => {
+      server.use(http.get(`${WORKSPACE_URL}/skills/search`, () => HttpResponse.json(skillSearchResponse)));
+
+      const { result } = renderHook(() => useWorkspaceSearch(WORKSPACE_ID, 'hello', { files: false }), {
+        wrapper: makeWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.data?.map(hit => hit.kind)).toEqual(['skill']));
+    });
+  });
+
   describe('when both files and skills match', () => {
     it('merges both result sets sorted by score', async () => {
       server.use(
@@ -101,8 +133,15 @@ describe('useWorkspaceSearch', () => {
 
       await waitFor(() =>
         expect(result.current.data).toEqual([
-          { kind: 'skill', path: '/skills/review/SKILL.md', label: 'review', score: 0.9 },
-          { kind: 'file', path: '/README.md', label: 'README.md', score: 0.4 },
+          {
+            kind: 'skill',
+            path: 'skills/review/SKILL.md',
+            label: 'review',
+            score: 0.9,
+            skillName: 'review',
+            skillPath: 'skills/review',
+          },
+          { kind: 'file', path: 'README.md', label: 'README.md', score: 0.4 },
         ]),
       );
     });

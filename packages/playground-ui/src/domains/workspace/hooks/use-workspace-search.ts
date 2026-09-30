@@ -7,6 +7,9 @@ export interface WorkspaceSearchHit {
   path: string;
   label: string;
   score: number;
+  /** Set on skill hits. */
+  skillName?: string;
+  skillPath?: string;
 }
 
 // Chunked files are indexed as `<path>#chunk-<n>`.
@@ -19,20 +22,26 @@ const skillFilePath = (result: SkillSearchResult & { skillPath?: string }) =>
   result.skillPath ? `${result.skillPath.replace(/\/$/, '')}/SKILL.md` : result.source;
 
 /** Searches files and skills in parallel; one failing source (e.g. 501 not configured) keeps the other's hits. */
-export function useWorkspaceSearch(workspaceId: string, query: string) {
+export function useWorkspaceSearch(
+  workspaceId: string,
+  query: string,
+  { files: searchFiles = true, skills: searchSkills = true }: { files?: boolean; skills?: boolean } = {},
+) {
   const client = useMastraClient();
   const trimmed = query.trim();
 
   return useQuery({
-    queryKey: ['workspace', workspaceId, 'search', trimmed],
+    queryKey: ['workspace', workspaceId, 'search', trimmed, searchFiles, searchSkills],
     queryFn: async () => {
       const workspace = client.getWorkspace(workspaceId);
       const [files, skills] = await Promise.allSettled([
-        workspace.search({ query: trimmed }),
-        workspace.searchSkills({ query: trimmed }),
+        searchFiles ? workspace.search({ query: trimmed }) : Promise.reject(new Error('File search disabled')),
+        searchSkills ? workspace.searchSkills({ query: trimmed }) : Promise.reject(new Error('Skill search disabled')),
       ]);
 
-      if (files.status === 'rejected' && skills.status === 'rejected') throw files.reason;
+      if (files.status === 'rejected' && skills.status === 'rejected') {
+        throw (searchFiles ? files : skills).reason;
+      }
 
       const hits = new Map<string, WorkspaceSearchHit>();
       const add = (hit: WorkspaceSearchHit) => {
@@ -48,12 +57,19 @@ export function useWorkspaceSearch(workspaceId: string, query: string) {
       }
       if (skills.status === 'fulfilled') {
         for (const result of skills.value.results) {
-          add({ kind: 'skill', path: skillFilePath(result), label: result.skillName, score: result.score });
+          add({
+            kind: 'skill',
+            path: skillFilePath(result),
+            label: result.skillName,
+            score: result.score,
+            skillName: result.skillName,
+            skillPath: (result as SkillSearchResult & { skillPath?: string }).skillPath ?? result.source,
+          });
         }
       }
 
       return [...hits.values()].sort((a, b) => b.score - a.score);
     },
-    enabled: trimmed.length > 0,
+    enabled: trimmed.length > 0 && (searchFiles || searchSkills),
   });
 }

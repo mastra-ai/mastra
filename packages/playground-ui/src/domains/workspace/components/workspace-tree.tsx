@@ -1,135 +1,267 @@
 import type { WorkspaceFileEntry } from '@mastra/client-js';
+import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import type { KeyboardEvent, MouseEvent } from 'react';
+import type { ReactNode } from 'react';
 import { useWorkspaceDirectory } from '../hooks/use-workspace-directory';
+import { ROOT_PATH, joinPath, parentOf } from '../path';
 import { useWorkspaceContext } from './use-workspace-context';
-import { EmptyState } from '@/ds/components/EmptyState';
+import type { WorkspaceEntryRef } from './use-workspace-context';
+import { WorkspaceError } from './workspace-error';
+import { AlertDialog } from '@/ds/components/AlertDialog';
+import { Button } from '@/ds/components/Button';
 import { Skeleton } from '@/ds/components/Skeleton';
+import { Tree } from '@/ds/components/Tree';
 import { Txt } from '@/ds/components/Txt';
-import { ChevronIcon, FileIcon, FolderIcon, Icon } from '@/ds/icons';
-import { cn } from '@/lib/utils';
+import { FileIcon, FolderIcon, FolderPlusIcon, TrashIcon } from '@/ds/icons';
 
-const joinPath = (parent: string, name: string) => `${parent.replace(/\/$/, '')}/${name}`;
+const formatBytes = (bytes: number) => {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = bytes > 0 ? Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1) : 0;
+  return `${parseFloat((bytes / 1024 ** i).toFixed(1))} ${units[i]}`;
+};
 
-// Each level indents by one step; kept as a style since depth is unbounded.
-const indent = (depth: number) => ({ paddingLeft: `${depth * 12 + 8}px` });
+// Skeleton rows line up with tree rows; kept as a style since depth is unbounded.
+const indent = (depth: number) => ({ paddingLeft: `${depth * 12 + 18}px` });
 
-const rowClass =
-  'flex items-center gap-1.5 rounded-md py-1 pr-2 text-body-sm text-muted-foreground hover:bg-fill-subtle';
+type RequestDelete = (entry: WorkspaceEntryRef) => void;
 
 export function WorkspaceTree() {
-  const { workspaceId } = useWorkspaceContext();
-  const { data, isLoading, isError } = useWorkspaceDirectory(workspaceId, '/');
+  const { workspaceId, activeFilePath, setActiveFilePath } = useWorkspaceContext();
+  const { data, isLoading, error } = useWorkspaceDirectory(workspaceId, ROOT_PATH);
+  const [pendingDelete, setPendingDelete] = useState<WorkspaceEntryRef | null>(null);
 
   if (isLoading) return <TreeSkeleton depth={0} testId="workspace-tree-skeleton" />;
-  if (isError) return <EmptyState tone="error" titleSlot="Could not load files" />;
-  if (!data?.length) return <EmptyState titleSlot="This workspace is empty" />;
+  // A failed background refetch keeps showing the last listing.
+  if (!data) return <WorkspaceError error={error} fallback="Could not load files." className="m-2" />;
 
   return (
-    <ul role="tree" aria-label="Workspace files" className="flex flex-col py-1">
-      {data.map(entry => (
-        <TreeNode key={entry.name} entry={entry} path={joinPath('/', entry.name)} depth={0} />
-      ))}
-    </ul>
+    <>
+      <Tree
+        aria-label="Workspace files"
+        selectedId={activeFilePath ?? undefined}
+        onSelect={setActiveFilePath}
+        className="py-1"
+      >
+        <Entries entries={data} parent={ROOT_PATH} onRequestDelete={setPendingDelete} />
+      </Tree>
+      <DeleteDialog entry={pendingDelete} onClose={() => setPendingDelete(null)} />
+    </>
   );
 }
 
-interface TreeNodeProps {
-  entry: WorkspaceFileEntry;
-  path: string;
-  depth: number;
-}
-
-function TreeNode({ entry, path, depth }: TreeNodeProps) {
-  return entry.type === 'directory' ? (
-    <FolderNode name={entry.name} path={path} depth={depth} />
-  ) : (
-    <FileNode name={entry.name} path={path} depth={depth} />
-  );
-}
-
-const activate = (handler: () => void) => ({
-  onClick: (event: MouseEvent) => {
-    event.stopPropagation();
-    handler();
-  },
-  onKeyDown: (event: KeyboardEvent) => {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    event.preventDefault();
-    event.stopPropagation();
-    handler();
-  },
-});
-
-function FolderNode({ name, path, depth }: { name: string; path: string; depth: number }) {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <li
-      role="treeitem"
-      aria-label={name}
-      aria-expanded={expanded}
-      tabIndex={0}
-      className="cursor-pointer outline-none focus-visible:[&>div]:ring-1 focus-visible:[&>div]:ring-border-focus"
-      {...activate(() => setExpanded(open => !open))}
-    >
-      <div className={rowClass} style={indent(depth)}>
-        <Icon size="sm">
-          <ChevronIcon className={cn('transition-transform', !expanded && '-rotate-90')} />
-        </Icon>
-        <Icon size="sm">
-          <FolderIcon />
-        </Icon>
-        <span className="truncate">{name}</span>
-      </div>
-      {expanded ? <FolderChildren path={path} depth={depth + 1} /> : null}
-    </li>
-  );
-}
-
-/** Mounted only once its folder is expanded, so unexpanded folders are never listed. */
-function FolderChildren({ path, depth }: { path: string; depth: number }) {
-  const { workspaceId } = useWorkspaceContext();
-  const { data, isLoading, isError } = useWorkspaceDirectory(workspaceId, path);
-
-  if (isLoading) return <TreeSkeleton depth={depth} />;
-  if (isError) {
-    return (
-      <Txt variant="body-sm" tone="muted" className="py-1" style={indent(depth)}>
-        Could not load folder
-      </Txt>
+function Entries({
+  entries,
+  parent,
+  onRequestDelete,
+}: {
+  entries: WorkspaceFileEntry[];
+  parent: string;
+  onRequestDelete: RequestDelete;
+}) {
+  return entries.map(entry => {
+    const path = joinPath(parent, entry.name);
+    return entry.type === 'directory' ? (
+      <FolderNode key={entry.name} name={entry.name} path={path} onRequestDelete={onRequestDelete} />
+    ) : (
+      <FileNode key={entry.name} name={entry.name} size={entry.size} path={path} onRequestDelete={onRequestDelete} />
     );
+  });
+}
+
+/** Trailing row details, revealed on hover or keyboard focus. */
+function RowActions({ children }: { children: ReactNode }) {
+  return (
+    <span className="ml-auto flex shrink-0 items-center gap-1 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
+      {children}
+    </span>
+  );
+}
+
+function DeleteButton({ name, onClick }: { name: string; onClick: () => void }) {
+  return (
+    <Button
+      variant="destructive-ghost"
+      size="icon-sm"
+      aria-label={`Delete ${name}`}
+      onClick={event => {
+        event.stopPropagation();
+        onClick();
+      }}
+      onKeyDown={event => event.stopPropagation()}
+    >
+      <TrashIcon />
+    </Button>
+  );
+}
+
+interface NodeProps {
+  name: string;
+  path: string;
+  onRequestDelete: RequestDelete;
+}
+
+function FolderNode({ name, path, onRequestDelete }: NodeProps) {
+  const { onDelete, onCreateDirectory, isReadOnly } = useWorkspaceContext();
+  const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const canDelete = onDelete && !isReadOnly(path);
+  const canCreate = onCreateDirectory && !isReadOnly(path);
+
+  return (
+    <Tree.Folder id={path} open={open} onOpenChange={setOpen}>
+      <Tree.FolderTrigger
+        actions={
+          canDelete || canCreate ? (
+            <RowActions>
+              {canCreate ? (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`New folder in ${name}`}
+                  onClick={event => {
+                    event.stopPropagation();
+                    setOpen(true);
+                    setCreating(true);
+                  }}
+                  onKeyDown={event => event.stopPropagation()}
+                >
+                  <FolderPlusIcon />
+                </Button>
+              ) : null}
+              {canDelete ? (
+                <DeleteButton name={name} onClick={() => onRequestDelete({ path, type: 'directory' })} />
+              ) : null}
+            </RowActions>
+          ) : undefined
+        }
+      >
+        <Tree.Icon>
+          <FolderIcon />
+        </Tree.Icon>
+        <Tree.Label>{name}</Tree.Label>
+      </Tree.FolderTrigger>
+      <Tree.FolderContent>
+        {open ? (
+          <FolderChildren
+            path={path}
+            creating={creating}
+            onCreated={() => setCreating(false)}
+            onRequestDelete={onRequestDelete}
+          />
+        ) : null}
+      </Tree.FolderContent>
+    </Tree.Folder>
+  );
+}
+
+/** Mounted only once its folder is opened, so unopened folders are never listed. */
+function FolderChildren({
+  path,
+  creating,
+  onCreated,
+  onRequestDelete,
+}: {
+  path: string;
+  creating: boolean;
+  onCreated: () => void;
+  onRequestDelete: RequestDelete;
+}) {
+  const { workspaceId, onCreateDirectory } = useWorkspaceContext();
+  const queryClient = useQueryClient();
+  const { data, isLoading, error } = useWorkspaceDirectory(workspaceId, path);
+
+  const create = async (name: string) => {
+    onCreated();
+    await onCreateDirectory?.(joinPath(path, name.replace(/^\/+|\/+$/g, '')));
+    await queryClient.invalidateQueries({ queryKey: ['workspace', workspaceId, 'fs', 'list', path] });
+  };
+
+  return (
+    <>
+      {creating ? (
+        <Tree.Input type="folder" placeholder="Folder name" onSubmit={name => void create(name)} onCancel={onCreated} />
+      ) : null}
+      {isLoading ? (
+        <TreeSkeleton depth={1} />
+      ) : data ? (
+        <Entries entries={data} parent={path} onRequestDelete={onRequestDelete} />
+      ) : (
+        <WorkspaceError error={error} fallback="Could not load folder." className="my-1 mr-1" />
+      )}
+    </>
+  );
+}
+
+function FileNode({ name, size, path, onRequestDelete }: NodeProps & { size?: number }) {
+  const { onDelete, isReadOnly } = useWorkspaceContext();
+  const canDelete = onDelete && !isReadOnly(path);
+
+  return (
+    <Tree.File id={path}>
+      <Tree.Icon>
+        <FileIcon />
+      </Tree.Icon>
+      <Tree.Label>{name}</Tree.Label>
+      <RowActions>
+        {size !== undefined ? (
+          <Txt as="span" variant="caption" tone="faint" font="mono">
+            {formatBytes(size)}
+          </Txt>
+        ) : null}
+        {canDelete ? <DeleteButton name={name} onClick={() => onRequestDelete({ path, type: 'file' })} /> : null}
+      </RowActions>
+    </Tree.File>
+  );
+}
+
+function DeleteDialog({ entry, onClose }: { entry: WorkspaceEntryRef | null; onClose: () => void }) {
+  const { workspaceId, activeFilePath, setActiveFilePath, onDelete } = useWorkspaceContext();
+  const queryClient = useQueryClient();
+  const [isDeleting, setIsDeleting] = useState(false);
+  const name = entry?.path.split('/').pop();
+
+  const confirm = async () => {
+    if (!entry || !onDelete) return;
+    setIsDeleting(true);
+    try {
+      await onDelete(entry);
+    } finally {
+      setIsDeleting(false);
+    }
+    if (activeFilePath === entry.path || activeFilePath?.startsWith(`${entry.path}/`)) setActiveFilePath(null);
+    queryClient.removeQueries({ queryKey: ['workspace', workspaceId, 'fs', 'list', entry.path] });
+    await queryClient.invalidateQueries({ queryKey: ['workspace', workspaceId, 'fs', 'list', parentOf(entry.path)] });
+    onClose();
+  };
+
+  let description: ReactNode = null;
+  if (entry) {
+    description =
+      entry.type === 'directory'
+        ? `This permanently deletes the folder "${name}" and everything inside it.`
+        : `This permanently deletes "${name}".`;
   }
 
   return (
-    <ul role="group">
-      {data?.map(entry => (
-        <TreeNode key={entry.name} entry={entry} path={joinPath(path, entry.name)} depth={depth} />
-      ))}
-    </ul>
-  );
-}
-
-function FileNode({ name, path, depth }: { name: string; path: string; depth: number }) {
-  const { activeFilePath, setActiveFilePath } = useWorkspaceContext();
-  const isActive = activeFilePath === path;
-
-  return (
-    <li
-      role="treeitem"
-      aria-label={name}
-      aria-selected={isActive}
-      tabIndex={0}
-      className="cursor-pointer outline-none focus-visible:[&>div]:ring-1 focus-visible:[&>div]:ring-border-focus"
-      {...activate(() => setActiveFilePath(path))}
+    <AlertDialog
+      open={entry !== null}
+      onOpenChange={open => {
+        if (!open && !isDeleting) onClose();
+      }}
     >
-      <div className={cn(rowClass, isActive && 'bg-fill text-foreground')} style={indent(depth)}>
-        <Icon size="sm" className="ml-5">
-          <FileIcon />
-        </Icon>
-        <span className="truncate">{name}</span>
-      </div>
-    </li>
+      <AlertDialog.Content>
+        <AlertDialog.Header>
+          <AlertDialog.Title>Delete {entry?.type === 'directory' ? 'folder' : 'file'}?</AlertDialog.Title>
+          <AlertDialog.Description>{description} This action cannot be undone.</AlertDialog.Description>
+        </AlertDialog.Header>
+        <AlertDialog.Footer>
+          <AlertDialog.Cancel disabled={isDeleting}>Cancel</AlertDialog.Cancel>
+          <Button variant="destructive" disabled={isDeleting} onClick={() => void confirm()}>
+            {isDeleting ? 'Deleting…' : 'Delete'}
+          </Button>
+        </AlertDialog.Footer>
+      </AlertDialog.Content>
+    </AlertDialog>
   );
 }
 

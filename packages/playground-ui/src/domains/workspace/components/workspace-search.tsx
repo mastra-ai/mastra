@@ -1,39 +1,83 @@
-import { useEffect, useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useWorkspaceSearch } from '../hooks/use-workspace-search';
 import { useWorkspaceContext } from './use-workspace-context';
+import { WorkspaceError } from './workspace-error';
+import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { Input } from '@/ds/components/Input';
 import { Skeleton } from '@/ds/components/Skeleton';
-import { FileIcon, Icon, SkillIcon } from '@/ds/icons';
+import { Txt } from '@/ds/components/Txt';
+import { FileIcon, Icon, SearchIcon, SkillIcon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 
-const SEARCH_DEBOUNCE_MS = 300;
+/** Icon button that swaps the tree for the search panel, like VS Code's search view. */
+export function WorkspaceSearchToggle() {
+  const { isSearching, setSearching, searchFiles, searchSkills } = useWorkspaceContext();
+  if (!searchFiles && !searchSkills) return null;
 
+  return (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      aria-label="Search files and skills"
+      aria-pressed={isSearching}
+      onClick={() => setSearching(!isSearching)}
+    >
+      <SearchIcon />
+    </Button>
+  );
+}
+
+/** The search input while searching, the aside title otherwise. */
 export function WorkspaceSearch() {
-  const { setQuery } = useWorkspaceContext();
-  const [value, setValue] = useState('');
+  const { isSearching } = useWorkspaceContext();
 
-  useEffect(() => {
-    const timeout = setTimeout(() => setQuery(value), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timeout);
-  }, [value, setQuery]);
+  return isSearching ? (
+    <SearchInput />
+  ) : (
+    <Txt as="span" variant="label" tone="muted">
+      Files
+    </Txt>
+  );
+}
+
+// Mounted only while searching, so reopening the search starts from an empty input.
+function SearchInput() {
+  const { setSearching, setQuery } = useWorkspaceContext();
+  const [value, setValue] = useState('');
+  const [, startTransition] = useTransition();
 
   return (
     <Input
       type="search"
       size="sm"
-      aria-label="Search files and skills"
+      autoFocus
+      aria-label="Search query"
       placeholder="Search files and skills"
       value={value}
-      onChange={event => setValue(event.target.value)}
+      onChange={event => {
+        const next = event.target.value;
+        setValue(next);
+        startTransition(() => setQuery(next));
+      }}
+      onKeyDown={event => {
+        if (event.key === 'Escape') setSearching(false);
+      }}
     />
   );
 }
 
 export function WorkspaceSearchResults() {
-  const { workspaceId, query, activeFilePath, setActiveFilePath } = useWorkspaceContext();
-  const { data, isLoading, isError } = useWorkspaceSearch(workspaceId, query);
+  const { workspaceId, query, activeFilePath, setActiveFilePath, onSkillSelect, searchFiles, searchSkills } =
+    useWorkspaceContext();
+  const { data, isLoading, isError, error } = useWorkspaceSearch(workspaceId, query, {
+    files: searchFiles,
+    skills: searchSkills,
+  });
 
+  if (!query.trim()) {
+    return <EmptyState titleSlot="Search files and skills" descriptionSlot="Type to find matching content." />;
+  }
   if (isLoading) {
     return (
       <div aria-busy="true" className="flex flex-col gap-2 p-2">
@@ -42,7 +86,7 @@ export function WorkspaceSearchResults() {
       </div>
     );
   }
-  if (isError) return <EmptyState tone="error" titleSlot="Search failed" />;
+  if (isError) return <WorkspaceError error={error} fallback="Search failed." className="m-2" />;
   if (!data?.length) return <EmptyState titleSlot="No results" />;
 
   return (
@@ -52,7 +96,13 @@ export function WorkspaceSearchResults() {
           <button
             type="button"
             title={hit.path}
-            onClick={() => setActiveFilePath(hit.path)}
+            onClick={() => {
+              if (hit.kind === 'skill' && onSkillSelect && hit.skillName && hit.skillPath) {
+                onSkillSelect({ skillName: hit.skillName, skillPath: hit.skillPath });
+              } else {
+                setActiveFilePath(hit.path);
+              }
+            }}
             className={cn(
               'flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-body-sm text-muted-foreground hover:bg-fill-subtle',
               activeFilePath === hit.path && 'bg-fill text-foreground',

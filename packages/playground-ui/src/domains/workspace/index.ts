@@ -6,3 +6,10 @@ export { useWorkspaceContext } from './components/use-workspace-context';
 export { useWorkspaceDirectory } from './hooks/use-workspace-directory';
 export { useWorkspaceFileContent } from './hooks/use-workspace-file-content';
 export { useWorkspaceSearch } from './hooks/use-workspace-search';
+export type {
+  WorkspaceCreateDirectoryHandler,
+  WorkspaceDeleteHandler,
+  WorkspaceEntryRef,
+  WorkspaceSkillRef,
+} from './components/use-workspace-context';
+export type { WorkspaceFilePreview, WorkspacePreviewFactory } from './components/workspace-active-file';
