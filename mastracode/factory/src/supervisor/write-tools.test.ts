@@ -83,6 +83,7 @@ async function setup() {
   const tools = createFactorySupervisorWriteTools({
     scope: SCOPE,
     userId: 'user-supervisor',
+    initiator: { userId: 'user-supervisor', displayName: 'Ada Lovelace' },
     workItems: seed.workItems,
     boards: createBoardRegistry(),
     audit: seed.audit,
@@ -195,6 +196,13 @@ describe('createFactorySupervisorWriteTools', () => {
         resolution: 'approve',
       }),
     ).resolves.toMatchObject({ status: 'pending', resolution: 'approve' });
+    expect(
+      await approvedContext.workItems.getDeferredDecision('org-1', PROJECT_ID, approved.decision.id),
+    ).toMatchObject({
+      actor: {
+        approvedByProfile: { userId: 'user-supervisor', displayName: 'Ada Lovelace' },
+      },
+    });
     expect(await latestAudit(approvedContext.audit)).toMatchObject({
       actorId: 'user-supervisor',
       actorType: 'human',
@@ -255,6 +263,9 @@ describe('createFactorySupervisorWriteTools', () => {
     ).resolves.toMatchObject({ status: 'accepted', stage: 'planning' });
     const moved = await context.workItems.get({ orgId: 'org-1', id: item.id });
     expect(moved?.acceptedAt).toBeInstanceOf(Date);
+    expect((await context.workItems.listDeferredDecisions('org-1', PROJECT_ID))[0]?.actor).toMatchObject({
+      initiator: { userId: 'user-supervisor', displayName: 'Ada Lovelace' },
+    });
     await vi.waitFor(() =>
       expect(context.onAccepted).toHaveBeenCalledWith(
         expect.objectContaining({

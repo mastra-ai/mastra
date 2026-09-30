@@ -2479,7 +2479,7 @@ describe('push route', () => {
     expect(addCommitCoAuthorBeforePush).toHaveBeenCalledWith(
       expect.anything(),
       '/workspace/worktrees/feat-x',
-      { name: 'Ada Lovelace', email: 'ada@example.com' },
+      undefined,
     );
     expect(pushBranch).toHaveBeenCalledOnce();
     // pushBranch(sandbox, workdir, branch, token, repoFullName)

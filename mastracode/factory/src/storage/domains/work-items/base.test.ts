@@ -345,6 +345,29 @@ describe('WorkItemsStorage', () => {
     expect(adopted.item).toMatchObject({ id: legacy.item.id, claimKey: 'linear:issue:2' });
   });
 
+  it('does not persist an embedded email as the session owner display name', async () => {
+    const storage = await makeStorage();
+    const started = await storage.prepareRunStart({
+      orgId: 'org1',
+      userId: 'user1',
+      factoryProjectId: 'project1',
+      workItem: { input: { ...input } },
+      role: 'work',
+      session: { sessionId: 'session-private-name', branch: 'factory/42', threadId: 'thread-private-name' },
+      resourceId: 'resource-1',
+      kickoffKey: 'kickoff-private-name',
+      kickoffMessage: null,
+      initiator: { userId: 'user1', displayName: 'Ada <ada@example.com>' },
+    });
+
+    expect(started.item.sessions.work).toEqual({
+      sessionId: 'session-private-name',
+      branch: 'factory/42',
+      threadId: 'thread-private-name',
+      startedBy: 'user1',
+    });
+  });
+
   it('mints a fresh binding when re-entered after the prior binding is revoked', async () => {
     const storage = await makeStorage();
     const start = (kickoffKey: string) =>

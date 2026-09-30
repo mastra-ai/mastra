@@ -2,6 +2,7 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 
+import { factoryInitiatorProfile, getFactoryAuthUserFromContext } from '../auth.js';
 import { boardForWorkItem } from '../boards/index.js';
 import { hydrateFactorySession } from '../session/factory-session.js';
 import { resolveWorkItemRepository } from '../session/work-item-repository.js';
@@ -184,6 +185,9 @@ export class FactoryStartCoordinator {
       );
     }
     const requestContext = request.requestContext ?? new RequestContext();
+    const authenticatedUser = getFactoryAuthUserFromContext(requestContext);
+    const resolvedInitiator = factoryInitiatorProfile(authenticatedUser);
+    const initiator = resolvedInitiator?.userId === request.userId ? resolvedInitiator : undefined;
     // Factory runs resolve model credentials org > user: the org's shared keys
     // win, with the acting user's personal credentials as a fallback — a board
     // run should never silently prefer whoever kicked it off. The flag rides
@@ -267,6 +271,7 @@ export class FactoryStartCoordinator {
       resourceId: sourceSession.sessionId,
       kickoffKey: request.kickoffKey,
       kickoffMessage: null,
+      ...(initiator ? { initiator } : {}),
     });
     await session.thread.setSetting({ key: 'factoryWorkItemId', value: prepared.item.id });
 
@@ -282,6 +287,7 @@ export class FactoryStartCoordinator {
         stage: destinationStage,
         expectedRevision: prepared.item.revision,
         actor: { type: 'human', id: request.userId },
+        ...(initiator ? { initiator } : {}),
         ingress: { type: 'human', identity: `start:${request.kickoffKey}:transition` },
         cause: 'run_start',
       });

@@ -1,3 +1,5 @@
+import { parseFactoryInitiatorProfile } from '../auth.js';
+import type { FactoryInitiatorProfile } from '../auth.js';
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { boardTransitionPolicyResultSchema, immutablePolicySnapshot } from '../boards/transition-policy.js';
@@ -48,6 +50,10 @@ export interface FactoryTransitionRequest {
   expectedRevision: number;
   actor: FactoryRuleActor;
   actorProfile?: AuditActorProfileInput;
+  /** Server-authenticated human who initiated the lifecycle run, when one exists. */
+  initiator?: FactoryInitiatorProfile;
+  /** Server-authenticated human who approved this deferred action, when distinct from the initiator. */
+  approvedByProfile?: FactoryInitiatorProfile;
   /** Where a browser request came from; rules and agents carry none. */
   context?: AuditContext;
   ingress: { type: 'human' | 'agent' | 'toolResult' | 'github' | 'rule'; identity: string; transitionId?: string };
@@ -570,6 +576,8 @@ export class FactoryTransitionService {
       | { outcome: 'rejected'; code: string; reason: string },
     options: TransitionConsentOptions = {},
   ): Promise<FactoryTransitionResult> {
+    const initiator = parseFactoryInitiatorProfile(request.initiator);
+    const approvedByProfile = parseFactoryInitiatorProfile(request.approvedByProfile);
     const committed = await this.#storage.commitTransition({
       autonomy: options.autonomy,
       consentedBy: options.consentedBy,
@@ -580,6 +588,15 @@ export class FactoryTransitionService {
       expectedRevision: request.expectedRevision,
       destinationStage: request.stage,
       actorId: actorId(request.actor),
+      decisionActor:
+        initiator || approvedByProfile
+          ? {
+              type: 'system',
+              id: 'factory-rule-dispatcher',
+              ...(initiator ? { initiator } : {}),
+              ...(approvedByProfile ? { approvedByProfile } : {}),
+            }
+          : null,
       ingress: { identity: request.ingress.identity, triggerType: request.ingress.type, transitionId },
       configVersion: this.#configVersion,
       causalChain: [...(request.causalChain ?? [])],

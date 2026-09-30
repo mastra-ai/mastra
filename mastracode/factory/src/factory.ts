@@ -40,6 +40,7 @@ import {
   buildAuthRoutes,
   createFactoryAuthGate,
   createFactoryRouteAuth,
+  factoryInitiatorProfile,
   getFactoryAuthOrgId,
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
@@ -1097,7 +1098,10 @@ export class MastraFactory {
                     projects: factoryProjectsStorage,
                   });
                   if (supervisorScope) {
-                    const userId = getFactoryAuthUserId(getFactoryAuthUserFromContext(requestContext));
+                    const authenticatedUser = getFactoryAuthUserFromContext(requestContext);
+                    const userId = getFactoryAuthUserId(authenticatedUser);
+                    const resolvedInitiator = factoryInitiatorProfile(authenticatedUser);
+                    const initiator = resolvedInitiator?.userId === userId ? resolvedInitiator : undefined;
                     mergeTools(
                       'factory-supervisor',
                       createFactorySupervisorReadTools({
@@ -1120,6 +1124,7 @@ export class MastraFactory {
                         createFactorySupervisorWriteTools({
                           scope: supervisorScope,
                           userId,
+                          ...(initiator ? { initiator } : {}),
                           workItems: workItemsStorage,
                           boards: this.#boards,
                           audit: auditDomain,
@@ -1252,22 +1257,27 @@ export class MastraFactory {
                   }),
                 feedReader: new FactoryFeedReader(workItemCommentsStorage),
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
-                ...(auth && isUserProvider(auth)
-                  ? {
-                      resolveUser: async ({ userId, orgId }: { userId: string; orgId: string }) => {
-                        const user = await auth.getUser(userId);
-                        return user
-                          ? {
-                              ...(user.id ? { id: user.id } : {}),
-                              ...(user.email ? { email: user.email } : {}),
-                              ...(user.name ? { name: user.name } : {}),
-                              ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
-                              organizationId: orgId,
-                            }
-                          : undefined;
-                      },
-                    }
-                  : {}),
+                resolveUser: async ({ userId, orgId }: { userId: string; orgId: string }) => {
+                  let user = null;
+                  try {
+                    user = auth && isUserProvider(auth) ? await auth.getUser(userId) : null;
+                  } catch (error) {
+                    console.warn('[Factory dispatch] Auth provider could not resolve the initiating user', {
+                      userId,
+                      error: error instanceof Error ? error.message : String(error),
+                    });
+                  }
+                  if (user) {
+                    return {
+                      ...(user.id ? { id: user.id } : {}),
+                      ...(user.email ? { email: user.email } : {}),
+                      ...(user.name ? { name: user.name } : {}),
+                      ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
+                      organizationId: orgId,
+                    };
+                  }
+                  return undefined;
+                },
                 resolveLinkedWorkItemParentId: async ({ orgId, factoryProjectId, decision }) => {
                   if (decision.source !== 'github-pr') return null;
                   const repositoryId = decision.metadata?.githubRepositoryId;

@@ -299,6 +299,47 @@ describe('FactoryStartCoordinator', () => {
     });
   });
 
+  it('passes only the authenticated human display name into the governed start transition', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const transition = vi.fn(async () => ({
+      status: 'accepted' as const,
+      transitionId: 'transition-1',
+      itemId: 'item-1',
+      revision: 2,
+      stage: 'execute' as const,
+      decisions: [],
+    }));
+    const { controller } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      { transition },
+      makeSourceControl() as never,
+    );
+    const requestContext = new RequestContext();
+    requestContext.set('user', {
+      workosId: 'user-1',
+      organizationId: 'org-1',
+      name: 'Ada Lovelace',
+      email: 'private@example.com',
+    });
+
+    await coordinator.prepare({ ...startRequest(), destinationStage: 'execute', requestContext });
+
+    expect(transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor: { type: 'human', id: 'user-1' },
+        initiator: { userId: 'user-1', displayName: 'Ada Lovelace' },
+      }),
+    );
+    expect(JSON.stringify(transition.mock.calls[0]?.[0])).not.toContain('private@example.com');
+    const item = await storage.get({ orgId: 'org-1', id: transition.mock.calls[0]?.[0].workItemId });
+    expect(item?.sessions.work).toMatchObject({
+      startedBy: 'user-1',
+      startedByDisplayName: 'Ada Lovelace',
+    });
+  });
+
   it('applies the Factory default model before preparing a board run', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { controller, session } = makeController();

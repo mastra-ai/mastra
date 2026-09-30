@@ -1,10 +1,12 @@
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
+import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 
+import { parseFactoryInitiatorProfile } from '../auth.js';
 import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { FactoryIntegration, IntegrationContext } from '../integrations/base.js';
@@ -368,6 +370,37 @@ export async function prepareFactoryRuleBinding(
         // them, not the repo connector. An agent's pre-approval names no person.
         attributeToUserId: isAgentActor(approver) ? undefined : approver,
       }));
+    const initiator = parseFactoryInitiatorProfile(input.record.actor?.initiator);
+    const approvedByProfile = parseFactoryInitiatorProfile(input.record.actor?.approvedByProfile);
+    const sessionRef = input.item.sessions[input.role];
+    const sessionProfile = parseFactoryInitiatorProfile(
+      sessionRef ? { userId: sessionRef.startedBy, displayName: sessionRef.startedByDisplayName } : undefined,
+    );
+    const actorProfile =
+      approvedByProfile &&
+      approvedByProfile.userId === input.record.approvedBy &&
+      approvedByProfile.userId === preparedSession.userId
+        ? approvedByProfile
+        : initiator?.userId === preparedSession.userId
+          ? initiator
+          : undefined;
+    const matchingSessionProfile = sessionProfile?.userId === preparedSession.userId ? sessionProfile : undefined;
+    const persistedProfile = actorProfile
+      ? {
+          ...actorProfile,
+          ...(actorProfile.displayName || !matchingSessionProfile?.displayName
+            ? {}
+            : { displayName: matchingSessionProfile.displayName }),
+        }
+      : matchingSessionProfile;
+    const requestContext = persistedProfile ? new RequestContext() : undefined;
+    if (requestContext) {
+      requestContext.set('user', {
+        workosId: persistedProfile!.userId,
+        organizationId: input.record.orgId,
+        ...(persistedProfile!.displayName ? { name: persistedProfile!.displayName } : {}),
+      });
+    }
 
     await coordinator.prepare({
       orgId: input.record.orgId,
@@ -377,6 +410,7 @@ export async function prepareFactoryRuleBinding(
       defaultModelId: await resolveFactoryDefaultModelId(projects, input.record.factoryProjectId),
       threadTitle: workItemThreadTitle({ source, title: input.item.title, metadata: input.item.metadata }),
       kickoffKey: input.record.id,
+      ...(requestContext ? { requestContext } : {}),
       destinationStage,
       workItem: {
         id: input.item.id,

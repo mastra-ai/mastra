@@ -98,6 +98,8 @@ export interface WorkItemSessionRef {
   branch: string;
   threadId: string;
   startedBy: string;
+  /** Safe provider display name captured server-side when the run was prepared. */
+  startedByDisplayName?: string;
 }
 
 export interface FactoryRuleIngressRecord {
@@ -457,6 +459,8 @@ export interface CommitFactoryTransitionInput {
   expectedRevision: number;
   destinationStage: string;
   actorId: string;
+  /** Durable actor/initiator snapshot copied atomically onto every queued decision. */
+  decisionActor?: Record<string, unknown> | null;
   ingress: { identity: string; triggerType: string; transitionId: string };
   configVersion: string;
   causalChain: Array<{ ingressId: string; decisionType: string }>;
@@ -488,6 +492,7 @@ export interface PrepareFactoryRunStartInput {
   resourceId: string;
   kickoffKey: string;
   kickoffMessage: string | null;
+  initiator?: { userId: string; displayName?: string };
 }
 
 export interface PrepareFactoryRunStartResult {
@@ -812,18 +817,35 @@ export function applyStageTransition(
   return next;
 }
 
-export function stampSessions(sessions: Record<string, WorkItemSessionInput>, by: string): WorkItemSessions {
-  return Object.fromEntries(Object.entries(sessions).map(([role, session]) => [role, { ...session, startedBy: by }]));
+export function stampSessions(
+  sessions: Record<string, WorkItemSessionInput>,
+  by: string,
+  startedByDisplayName?: string,
+): WorkItemSessions {
+  return Object.fromEntries(
+    Object.entries(sessions).map(([role, session]) => [
+      role,
+      {
+        sessionId: session.sessionId,
+        branch: session.branch,
+        threadId: session.threadId,
+        startedBy: by,
+        ...(startedByDisplayName ? { startedByDisplayName } : {}),
+      },
+    ]),
+  );
 }
 
 function applyUpdate({
   current,
   userId,
   input,
+  startedByDisplayName,
 }: {
   current: WorkItemDbRow;
   userId: string;
   input: UpdateWorkItemInput;
+  startedByDisplayName?: string;
 }): Partial<WorkItemDbRow> {
   const now = new Date();
   return {
@@ -837,7 +859,7 @@ function applyUpdate({
         }
       : {}),
     ...(input.sessions !== undefined
-      ? { sessions: { ...current.sessions, ...stampSessions(input.sessions, userId) } }
+      ? { sessions: { ...current.sessions, ...stampSessions(input.sessions, userId, startedByDisplayName) } }
       : {}),
     ...(input.metadata !== undefined
       ? { metadata: input.metadata === null ? null : { ...(current.metadata ?? {}), ...input.metadata } }
@@ -1877,7 +1899,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 effect_ordinal: index,
                 effect_hash: factoryDecisionHash(decision),
                 causal_chain: input.causalChain,
-                actor: null,
+                actor: input.decisionActor ?? null,
                 decision,
                 status: 'pending',
                 attempts: 0,
@@ -2521,7 +2543,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     decisionId: string,
     now: Date,
     approvedBy?: string,
+    approvedByProfile?: { userId: string; displayName?: string },
   ): Promise<FactoryDeferredDecisionRecord | null> {
+    const candidateDisplayName = approvedByProfile?.displayName?.trim();
+    const safeDisplayName =
+      candidateDisplayName && !/[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+/u.test(candidateDisplayName)
+        ? candidateDisplayName
+        : undefined;
+    const verifiedProfile =
+      approvedByProfile && approvedByProfile.userId === approvedBy
+        ? { userId: approvedByProfile.userId, ...(safeDisplayName ? { displayName: safeDisplayName } : {}) }
+        : undefined;
     const approved = await this.storage.withTransaction(async ops => {
       let settled = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
@@ -2530,12 +2562,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         current => {
           if (current.status !== 'proposed') return null;
           settled = true;
+          const actor =
+            current.actor && typeof current.actor === 'object'
+              ? (current.actor as Record<string, unknown>)
+              : { type: 'system', id: 'factory-rule-dispatcher' };
           return {
             status: 'pending',
             attempts: 0,
             available_at: now,
             approved_at: now,
             approved_by: approvedBy ?? null,
+            ...(verifiedProfile ? { actor: { ...actor, approvedByProfile: verifiedProfile } } : {}),
             updated_at: now,
           };
         },
@@ -3022,6 +3059,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           });
         }
         const now = new Date();
+        const candidateDisplayName =
+          input.initiator?.userId === input.userId ? input.initiator.displayName?.trim() || undefined : undefined;
+        const startedByDisplayName =
+          candidateDisplayName && !/[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+/u.test(candidateDisplayName)
+            ? candidateDisplayName
+            : undefined;
         const create = input.workItem.input;
         let row = input.workItem.id
           ? await ops.findOne<WorkItemDbRow>('work_items', {
@@ -3045,6 +3088,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               current,
               userId: input.userId,
               input: { sessions: { [input.role]: input.session } },
+              startedByDisplayName,
             });
             const adopt = this.#claimToAdopt(current, next, create);
             return adopt ? { ...next, claim_key: adopt } : next;
@@ -3074,7 +3118,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             title: create.title,
             stages: create.stages ?? [],
             stage_history: applyStageTransition([], [], create.stages ?? [], input.userId, now),
-            sessions: stampSessions({ [input.role]: input.session }, input.userId),
+            sessions: stampSessions({ [input.role]: input.session }, input.userId, startedByDisplayName),
             metadata: create.metadata ?? null,
             revision: 1,
             created_at: now,

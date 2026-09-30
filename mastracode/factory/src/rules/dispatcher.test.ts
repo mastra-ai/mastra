@@ -244,7 +244,11 @@ function createSession(
 async function queueDecision(
   storage: WorkItemsStorage,
   decision: FactoryCommitDecision,
-  options?: { sourceKey?: string; ingress?: string },
+  options?: {
+    sourceKey?: string;
+    ingress?: string;
+    initiator?: { userId: string; displayName?: string };
+  },
 ) {
   const item = await createItem(storage, options?.sourceKey);
   const configVersion = 'rules-v1';
@@ -258,6 +262,7 @@ async function queueDecision(
     stage: 'execute',
     expectedRevision: item.revision,
     actor: { type: 'system', id: 'factory-rule-dispatcher' },
+    ...(options?.initiator ? { initiator: options.initiator } : {}),
     ingress: { type: 'rule', identity: options?.ingress ?? 'move-1' },
     cause: 'rule_decision',
   });
@@ -983,6 +988,68 @@ describe('FactoryDecisionDispatcher', () => {
     expect(resolveUser).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
     expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
     expect(consumeStream).toHaveBeenCalledOnce();
+  });
+
+  it('uses the atomic initiator snapshot when the auth provider cannot resolve the user', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(
+      storage,
+      {
+        type: 'sendMessage',
+        role: 'plan',
+        message: 'Continue with the plan.',
+        priority: 'urgent',
+        idleBehavior: 'wake',
+        prepareBinding: true,
+        idempotencyKey: 'snapshot-stage-transition-1',
+      },
+      { initiator: { userId: 'user-1', displayName: 'Ada Lovelace' } },
+    );
+    const { controller, sendNotificationSignal } = createSession();
+    const resolveUser = vi.fn(async () => {
+      throw new Error('directory unavailable');
+    });
+    const prepareBinding = vi.fn(async () => {
+      await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: item.externalSource,
+            title: item.title,
+            stages: ['execute'],
+            sessions: {},
+            metadata: item.metadata,
+          },
+        },
+        role: 'plan',
+        session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'snapshot-stage-transition-1',
+        kickoffMessage: null,
+      });
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      prepareBinding,
+      resolveUser,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const requestContext = sendNotificationSignal.mock.calls[0]?.[1]?.requestContext;
+    expect(resolveUser).not.toHaveBeenCalled();
+    expect(requestContext?.get('user')).toEqual({
+      workosId: 'user-1',
+      name: 'Ada Lovelace',
+      organizationId: 'org-1',
+    });
   });
 
   it('renews the lease while an external delivery remains in flight', async () => {
@@ -3325,7 +3392,13 @@ describe('FactoryDecisionDispatcher', () => {
       ingress: { identity: 'push-3', triggerType: 'github' },
       configVersion: 'rules-v1',
       expectedRevision: item.revision,
-      actor: { type: 'github', login: 'author', trusted: false, factoryAuthored: false },
+      actor: {
+        type: 'github',
+        login: 'author',
+        trusted: false,
+        factoryAuthored: false,
+        initiator: { userId: 'user-1', displayName: 'Original Initiator' },
+      },
       outcome: { status: 'accepted' },
       decisions: [{ type: 'transition', board: 'review', stage: 'review', idempotencyKey: 're-review-3' }],
       causalChain: [],
@@ -3350,7 +3423,8 @@ describe('FactoryDecisionDispatcher', () => {
       PROJECT_ID,
       parked?.id ?? '',
       new Date('2030-01-01T00:02:00Z'),
-      'user-1',
+      'user-2',
+      { userId: 'user-2', displayName: 'Ada Lovelace' },
     );
     await dispatcher.runOnce(new Date('2030-01-01T00:03:00Z'));
 
@@ -3359,7 +3433,11 @@ describe('FactoryDecisionDispatcher', () => {
       row => row.decision.type === 'invokeSkill',
     );
     expect(queued).toHaveLength(1);
-    expect(queued[0]?.approvedBy).toBe('user-1');
+    expect(queued[0]?.approvedBy).toBe('user-2');
+    expect(queued[0]?.actor).toMatchObject({
+      initiator: { userId: 'user-1', displayName: 'Original Initiator' },
+      approvedByProfile: { userId: 'user-2', displayName: 'Ada Lovelace' },
+    });
     expect(queued[0]?.status).not.toBe('proposed');
   });
 

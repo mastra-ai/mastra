@@ -1,3 +1,4 @@
+import { getFactoryAuthUserDisplayName } from '../auth.js';
 import type { FactoryAuthUser } from '../auth.js';
 
 export interface FactoryArtifactSession {
@@ -64,7 +65,7 @@ export function resolveFactoryArtifactAttribution(input: {
     userId: input.userId,
     // Email is deliberately not a visible-name fallback. The stable user id is
     // preferable to leaking an address when a provider supplies no name.
-    displayName: nonEmpty(input.user?.name) ?? input.userId,
+    displayName: getFactoryAuthUserDisplayName(input.user) ?? input.userId,
     ...(nonEmpty(input.user?.email) ? { email: nonEmpty(input.user?.email) } : {}),
     session: input.session,
   };
@@ -118,5 +119,9 @@ export function appendArtifactAttributionFooter(
 
 export function commitCoAuthor(attribution: FactoryArtifactAttribution): { name: string; email: string } | undefined {
   if (attribution.kind !== 'human' || !attribution.email) return undefined;
+  // WorkOS and other auth providers commonly expose a private account email.
+  // A commit trailer is public provider metadata, so only an address explicitly
+  // shaped as a GitHub noreply identity is safe to publish there.
+  if (!/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@users\.noreply\.github\.com$/iu.test(attribution.email)) return undefined;
   return { name: attribution.displayName, email: attribution.email };
 }

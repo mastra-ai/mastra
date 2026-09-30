@@ -11,6 +11,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import { factoryInitiatorProfile, getFactoryAuthUser } from '../auth.js';
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { overtakenDecisionIds } from '../rules/decision-applicability.js';
@@ -279,6 +280,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
       decisionId: string,
       now: Date,
       userId: string,
+      approvedByProfile?: { userId: string; displayName?: string },
     ) => Promise<FactoryDeferredDecisionRecord | null>;
   }): ApiRoute {
     const { audit, workItems } = this.deps;
@@ -299,7 +301,16 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         const { decisionId } = parsedPath.data;
         await workItems.ensureReady();
         const now = new Date();
-        const decision = await settle(resolved.orgId, resolved.factoryProjectId, decisionId, now, resolved.userId);
+        const resolvedApprover = factoryInitiatorProfile(getFactoryAuthUser(context));
+        const approvedByProfile = resolvedApprover?.userId === resolved.userId ? resolvedApprover : undefined;
+        const decision = await settle(
+          resolved.orgId,
+          resolved.factoryProjectId,
+          decisionId,
+          now,
+          resolved.userId,
+          verb === 'approve' ? approvedByProfile : undefined,
+        );
         if (!decision) return c.json({ error: 'decision_not_proposed' }, 409);
         // Releasing a proposal is a person taking the item on. Approval arms the
         // item's autonomy inside the same storage transaction (see

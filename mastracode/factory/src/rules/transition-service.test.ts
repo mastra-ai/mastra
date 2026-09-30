@@ -1200,13 +1200,22 @@ describe('FactoryTransitionService', () => {
     const result = await service.transition({
       ...request(item, { stage: 'planning' }),
       actor: { type: 'agent', bindingId: 'binding-1', role: 'triage' },
+      initiator: { userId: 'user-1', displayName: 'Ada Lovelace' },
       ingress: { type: 'agent', identity: 'triage-verdict' },
       triageType: 'bug',
     });
 
     expect(result.status).toBe('accepted');
     const [plan] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(plan).toMatchObject({ decision: { type: 'invokeSkill', role: 'plan' }, approvedBy: 'agent:binding-1' });
+    expect(plan).toMatchObject({
+      actor: {
+        type: 'system',
+        id: 'factory-rule-dispatcher',
+        initiator: { userId: 'user-1', displayName: 'Ada Lovelace' },
+      },
+      decision: { type: 'invokeSkill', role: 'plan' },
+      approvedBy: 'agent:binding-1',
+    });
     expect(plan?.approvedAt).not.toBeNull();
   });
 

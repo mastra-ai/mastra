@@ -3,7 +3,8 @@ import type { AgentController, AgentControllerEventListener, Session } from '@ma
 import { RequestContext } from '@mastra/core/request-context';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
-import type { FactoryAuthUser } from '../auth.js';
+import { parseFactoryInitiatorProfile } from '../auth.js';
+import type { FactoryAuthUser, FactoryInitiatorProfile } from '../auth.js';
 import {
   boardForWorkItem,
   createBoardRegistry,
@@ -431,6 +432,41 @@ function deferredActor(record: FactoryDeferredDecisionRecord): FactoryRuleActor 
   return { type: 'system', id: 'factory-rule-dispatcher' };
 }
 
+function deferredHumanProfile(
+  record: FactoryDeferredDecisionRecord,
+  key: 'initiator' | 'approvedByProfile',
+): FactoryInitiatorProfile | undefined {
+  return parseFactoryInitiatorProfile(record.actor?.[key]);
+}
+
+function deferredResponsibleHuman(record: FactoryDeferredDecisionRecord): FactoryInitiatorProfile | undefined {
+  const approver = deferredHumanProfile(record, 'approvedByProfile');
+  if (record.approvedBy && isHumanActorId(record.approvedBy)) {
+    return approver?.userId === record.approvedBy ? approver : undefined;
+  }
+  return deferredHumanProfile(record, 'initiator');
+}
+
+function deferredHumanUser(record: FactoryDeferredDecisionRecord, userId: string): FactoryAuthUser | undefined {
+  const profile = deferredResponsibleHuman(record);
+  if (!profile?.displayName || profile.userId !== userId) return undefined;
+  return {
+    workosId: userId,
+    name: profile.displayName,
+  };
+}
+
+function workItemSessionUser(
+  item: WorkItemRow | null | undefined,
+  role: string,
+  userId: string,
+): FactoryAuthUser | undefined {
+  const ref = item?.sessions[role];
+  if (!ref || ref.startedBy !== userId) return undefined;
+  const profile = parseFactoryInitiatorProfile({ userId, displayName: ref.startedByDisplayName });
+  return profile?.displayName ? { workosId: profile.userId, name: profile.displayName } : undefined;
+}
+
 function externalActor(actor: FactoryDeferredDecisionRecord['actor']): boolean {
   return actor !== null && actor.type !== 'human' && actor.type !== 'agent' && actor.type !== 'system';
 }
@@ -578,9 +614,10 @@ export class FactoryDecisionDispatcher {
     binding: FactoryRunBindingRecord;
     userId: string;
     orgId: string;
+    persistedUser?: FactoryAuthUser;
   }): Promise<RequestContext> {
-    let user: FactoryAuthUser | null | undefined;
-    if (input.userId !== 'factory-rule-dispatcher') {
+    let user: FactoryAuthUser | null | undefined = input.persistedUser;
+    if (!user && input.userId !== 'factory-rule-dispatcher') {
       try {
         user = await this.#resolveUser?.({ orgId: input.orgId, userId: input.userId });
       } catch (error) {
@@ -867,6 +904,12 @@ export class FactoryDecisionDispatcher {
           actor: record.approvedBy
             ? { type: 'human', id: record.approvedBy }
             : { type: 'system', id: 'factory-rule-dispatcher' },
+          ...(deferredHumanProfile(record, 'initiator')
+            ? { initiator: deferredHumanProfile(record, 'initiator') }
+            : {}),
+          ...(deferredHumanProfile(record, 'approvedByProfile')
+            ? { approvedByProfile: deferredHumanProfile(record, 'approvedByProfile') }
+            : {}),
           ingress: { type: 'rule', identity: `decision:${record.idempotencyKey}` },
           cause: 'rule_decision',
           causalChain: nextChain,
@@ -941,6 +984,7 @@ export class FactoryDecisionDispatcher {
             binding,
             userId: startedBy,
             orgId: record.orgId,
+            persistedUser: deferredHumanUser(record, startedBy) ?? workItemSessionUser(item, binding.role, startedBy),
           });
           const resolved =
             decision.skillName === undefined
@@ -1153,6 +1197,7 @@ export class FactoryDecisionDispatcher {
           binding,
           userId: startedBy,
           orgId: record.orgId,
+          persistedUser: deferredHumanUser(record, startedBy) ?? workItemSessionUser(item, binding.role, startedBy),
         });
         await awaitNotification(
           () =>
@@ -1637,6 +1682,7 @@ export class FactoryDecisionDispatcher {
             binding,
             userId: startedBy,
             orgId: record.orgId,
+            persistedUser: workItemSessionUser(item, binding.role, startedBy),
           });
           // The run's own verdict, not the delivery's: a kickoff delivered
           // into a run that is already terminating is consumed without

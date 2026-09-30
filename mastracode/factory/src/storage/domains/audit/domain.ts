@@ -4,7 +4,7 @@ import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { getFactoryAuthUser } from '../../../auth.js';
+import { factoryInitiatorProfile, getFactoryAuthUser } from '../../../auth.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../projects/base.js';
 import { auditActionsInNamespaces, isAuditNamespace } from './actions.js';
@@ -134,9 +134,16 @@ export function auditRequestContext(c: Context): AuditContext {
 /** Who a browser request is and where it came from: the pair every funnel row carries. */
 export function auditRequestOrigin(c: Context): {
   actorProfile: AuditActorProfileInput | undefined;
+  initiator?: ReturnType<typeof factoryInitiatorProfile>;
   context: AuditContext;
 } {
-  return { actorProfile: auditActorProfile(getFactoryAuthUser(c)), context: auditRequestContext(c) };
+  const user = getFactoryAuthUser(c);
+  const initiator = factoryInitiatorProfile(user);
+  return {
+    actorProfile: auditActorProfile(user),
+    ...(initiator ? { initiator } : {}),
+    context: auditRequestContext(c),
+  };
 }
 
 /** Factory-owned audit behavior backed by the audit storage domain. */

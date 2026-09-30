@@ -68,7 +68,7 @@ import { parseCreateWorkItem, parseUpdateWorkItem, WorkItemRoutes } from './work
 const PARKED_RUN = { toolName: 'ask_user', suspendedAt: 0 };
 
 function buildApp(
-  user: { workosId: string; organizationId?: string } | null,
+  user: { workosId: string; organizationId?: string; name?: string; email?: string } | null,
   startCoordinator?: { prepare: (input: any) => Promise<any> },
   requestContext?: RequestContext,
   running: ReadonlySet<string> = new Set(),
@@ -108,7 +108,12 @@ function buildApp(
   return app;
 }
 
-const orgUser = { workosId: 'u1', organizationId: 'org1' };
+const orgUser = {
+  workosId: 'u1',
+  organizationId: 'org1',
+  name: 'Ada Lovelace',
+  email: 'private@example.com',
+};
 let PROJECT_ID = '';
 
 async function seedProject(orgId = 'org1') {
@@ -1486,6 +1491,12 @@ describe('GET /web/factory/projects/:id/attention', () => {
 
     const decision = await seed.workItems.getDeferredDecision('org1', PROJECT_ID, claimed.id);
     expect(decision?.approvedBy).toBe('u1');
+    expect(decision?.actor).toMatchObject({
+      type: 'system',
+      id: 'rules',
+      approvedByProfile: { userId: 'u1', displayName: 'Ada Lovelace' },
+    });
+    expect(JSON.stringify(decision?.actor)).not.toContain('private@example.com');
   });
 
   it('orders a re-failed old decision by its latest failure occurrence', async () => {

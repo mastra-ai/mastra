@@ -32,7 +32,7 @@ describe('factory artifact attribution', () => {
       'Looks good\n\n— via Mastra Factory · actor: Ada Lovelace',
     );
     expect(appendPullRequestAttribution('', attribution)).not.toContain('ada@example.com');
-    expect(commitCoAuthor(attribution)).toEqual({ name: 'Ada Lovelace', email: 'ada@example.com' });
+    expect(commitCoAuthor(attribution)).toBeUndefined();
   });
 
   it('renders an automation trigger instead of an actor', () => {
@@ -54,12 +54,35 @@ describe('factory artifact attribution', () => {
 
   it('uses the stable id rather than raw email when no display name exists', () => {
     const attribution = resolveFactoryArtifactAttribution({
-      user: { workosId: 'user-1', email: 'private@example.com' },
+      user: { workosId: 'user-1', name: 'Ada <private@example.com>' },
       userId: 'user-1',
       session,
     });
 
     expect(appendArtifactAttributionFooter('', attribution)).toBe('— via Mastra Factory · actor: user-1');
+  });
+
+  it('uses an explicit GitHub noreply address for optional commit co-authorship', () => {
+    const attribution = resolveFactoryArtifactAttribution({
+      user: {
+        workosId: 'user-1',
+        name: 'Ada Lovelace',
+        email: '12345+ada@users.noreply.github.com',
+      },
+      userId: 'user-1',
+      session,
+    });
+
+    expect(commitCoAuthor(attribution)).toEqual({
+      name: 'Ada Lovelace',
+      email: '12345+ada@users.noreply.github.com',
+    });
+    expect(
+      commitCoAuthor({
+        ...attribution,
+        email: 'private@example.com@users.noreply.github.com',
+      }),
+    ).toBeUndefined();
   });
 
   it('replaces existing Factory provenance when an artifact is updated', () => {

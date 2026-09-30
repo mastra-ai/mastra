@@ -2,6 +2,8 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
+import { factoryInitiatorProfile, getFactoryAuthUserFromContext, parseFactoryInitiatorProfile } from '../auth.js';
+import type { FactoryInitiatorProfile } from '../auth.js';
 import { boardForWorkItem, workItemPhaseSemantics } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntegrationTools } from '../integrations/base.js';
@@ -110,6 +112,20 @@ export async function createFactoryTransitionTools(options: {
         const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
         if (!item) throw new Error('Bound Factory work item not found.');
         const board = boardForWorkItem(item);
+        const authenticatedInitiator = factoryInitiatorProfile(getFactoryAuthUserFromContext(execution.requestContext));
+        const sessionRef = item.sessions[binding.role];
+        const storedInitiator = parseFactoryInitiatorProfile(
+          sessionRef ? { userId: sessionRef.startedBy, displayName: sessionRef.startedByDisplayName } : undefined,
+        );
+        let initiator: FactoryInitiatorProfile | undefined = storedInitiator;
+        if (authenticatedInitiator && authenticatedInitiator.userId === sessionRef?.startedBy) {
+          initiator = {
+            ...authenticatedInitiator,
+            ...(authenticatedInitiator.displayName || !storedInitiator?.displayName
+              ? {}
+              : { displayName: storedInitiator.displayName }),
+          };
+        }
         // Only a Work triage binding may classify; other roles can echo the key from history.
         const triageType = board === 'work' && binding.role === 'triage' ? requestedTriageType : undefined;
 
@@ -121,6 +137,7 @@ export async function createFactoryTransitionTools(options: {
           stage,
           expectedRevision,
           actor: { type: 'agent', bindingId: binding.id, role: binding.role },
+          ...(initiator ? { initiator } : {}),
           ingress: { type: 'agent', identity: `${binding.id}:${toolCallId}` },
           cause: rationale,
           ...(triageType ? { triageType } : {}),

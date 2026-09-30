@@ -1,6 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
+import type { FactoryInitiatorProfile } from '../auth.js';
 import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntegrationTools } from '../integrations/base.js';
@@ -16,6 +17,7 @@ import type { WorkerMessageResult } from './session-messaging.js';
 interface SupervisorWriteDependencies {
   scope: SupervisorScope;
   userId: string;
+  initiator?: FactoryInitiatorProfile;
   workItems: WorkItemsStorage;
   boards: BoardRegistry;
   audit: AuditRecorder;
@@ -114,6 +116,7 @@ export function createFactorySupervisorWriteTools(deps: SupervisorWriteDependenc
                 decisionId,
                 now(),
                 deps.userId,
+                deps.initiator,
               )
             : await deps.workItems.dismissDeferredDecision(
                 deps.scope.orgId,
@@ -154,6 +157,7 @@ export function createFactorySupervisorWriteTools(deps: SupervisorWriteDependenc
           stage,
           expectedRevision: item.revision,
           actor: { type: 'human', id: deps.userId },
+          ...(deps.initiator ? { initiator: deps.initiator } : {}),
           ingress: { type: 'human', identity: `supervisor:${deps.userId}:${workItemId}:${item.revision}:${stage}` },
           cause: 'supervisor',
         });

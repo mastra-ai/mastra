@@ -41,6 +41,7 @@ async function prepare(
   role = 'work',
   sourceType: 'issue' | 'pull-request' = 'issue',
   board?: { id: string; stage: string },
+  initiator?: { userId: string; displayName?: string },
 ) {
   return storage.prepareRunStart({
     orgId: 'org-1',
@@ -66,6 +67,7 @@ async function prepare(
     resourceId: 'resource-1',
     kickoffKey: 'kickoff-1',
     kickoffMessage: null,
+    ...(initiator ? { initiator } : {}),
   });
 }
 
@@ -272,6 +274,28 @@ describe('FactoryPhaseStateProcessor', () => {
         await processor.processInputStep(inputArgs(requestContext(), [c.message]));
         expect(await stageOf(storage, prepared.item.id)).toEqual(c.stages);
       }
+    });
+
+    it('propagates the authenticated run initiator through tool-result transitions', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      await prepare(storage, 'plan', 'issue', undefined, {
+        userId: 'user-1',
+        displayName: 'Ada Lovelace',
+      });
+      const boards = createBoardRegistry();
+      const processor = new FactoryPhaseStateProcessor({
+        configVersion: 'rules-v1',
+        boards,
+        storage,
+        transitionService: new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage }),
+      });
+      const context = requestContext();
+
+      await processor.processInputStep(inputArgs(context, [approved()]));
+
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.actor).toMatchObject({
+        initiator: { userId: 'user-1', displayName: 'Ada Lovelace' },
+      });
     });
 
     it('gives Review and custom boards none of Work’s submit_plan behaviour', async () => {

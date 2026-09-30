@@ -10,6 +10,8 @@ import type {
   Processor,
 } from '@mastra/core/processors';
 
+import { factoryInitiatorProfile, getFactoryAuthUserFromContext, parseFactoryInitiatorProfile } from '../auth.js';
+import type { FactoryInitiatorProfile } from '../auth.js';
 import { boardForWorkItem, resolveBoardToolRule, workItemPhaseSemantics } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { FactoryRunBindingRecord, WorkItemsStorage, WorkItemRow } from '../storage/domains/work-items/base.js';
@@ -257,7 +259,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const completedToolCallIds = completedStepToolCallIds(args.steps);
     const completedMessage = currentCompletedToolMessage(args.messages, completedToolCallIds);
     if (completedMessage) {
-      await this.ingestMessages(binding, [completedMessage], completedToolCallIds);
+      await this.ingestMessages(binding, [completedMessage], completedToolCallIds, undefined, args.requestContext);
     }
   }
 
@@ -396,6 +398,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     messages: MastraDBMessage[],
     toolCallIds?: ReadonlySet<string>,
     preloadedItem?: WorkItemRow,
+    requestContext?: ProcessInputStepArgs['requestContext'],
   ): Promise<void> {
     const item = preloadedItem ?? (await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId }));
     if (!itemInRuleStage(this.options.boards, item)) return;
@@ -416,7 +419,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         } catch {
           // Provenance is supporting evidence and must not block authoritative rule ingress.
         }
-        await this.ingestToolResult(binding, item, toolResult);
+        await this.ingestToolResult(binding, item, toolResult, requestContext);
       }
     }
   }
@@ -425,6 +428,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     binding: FactoryRunBindingRecord,
     item: WorkItemRow,
     toolResult: CompletedToolResult,
+    requestContext?: ProcessInputStepArgs['requestContext'],
   ): Promise<void> {
     const board = boardForWorkItem(item);
     const rule = resolveBoardToolRule(this.options.boards, board, toolResult.toolName);
@@ -441,6 +445,22 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       ingressId,
     );
     if (prior) return;
+    const authenticatedInitiator = requestContext
+      ? factoryInitiatorProfile(getFactoryAuthUserFromContext(requestContext))
+      : undefined;
+    const sessionRef = item.sessions[binding.role];
+    const storedInitiator = parseFactoryInitiatorProfile(
+      sessionRef ? { userId: sessionRef.startedBy, displayName: sessionRef.startedByDisplayName } : undefined,
+    );
+    let initiator: FactoryInitiatorProfile | undefined = storedInitiator;
+    if (authenticatedInitiator && authenticatedInitiator.userId === sessionRef?.startedBy) {
+      initiator = {
+        ...authenticatedInitiator,
+        ...(authenticatedInitiator.displayName || !storedInitiator?.displayName
+          ? {}
+          : { displayName: storedInitiator.displayName }),
+      };
+    }
     const context: FactoryToolResultRuleContext = {
       tenant: { orgId: binding.orgId, projectId: binding.factoryProjectId },
       actor: { type: 'agent', bindingId: binding.id, role: binding.role },
@@ -499,7 +519,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       ingress: { identity: ingressId, triggerType: 'tool.result' },
       configVersion: this.options.configVersion,
       expectedRevision: item.revision,
-      actor: { ...context.actor },
+      actor: { ...context.actor, ...(initiator ? { initiator } : {}) },
       outcome,
       decisions: decisions.map(entry => ({ ...entry })),
       causalChain: [],
@@ -516,6 +536,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         stage: entry.stage,
         expectedRevision: item.revision,
         actor: { type: 'system', id: 'factory-tool-result-rule' },
+        ...(initiator ? { initiator } : {}),
         ingress: { type: 'rule', identity: `decision:${entry.idempotencyKey}` },
         cause: 'tool_result_rule',
         causalChain: [{ ingressId, decisionType: entry.type }],

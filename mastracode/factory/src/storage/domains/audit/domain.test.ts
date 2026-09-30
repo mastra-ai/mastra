@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.js';
 import { createFactoryStorageForTests } from '../../test-utils.js';
 import type { AuditDomainOptions } from './domain.js';
-import { AuditDomain } from './domain.js';
+import { AuditDomain, auditRequestOrigin } from './domain.js';
 
 function auditDomain(
   seed: Awaited<ReturnType<typeof createFactoryStorageForTests>>,
@@ -298,6 +298,41 @@ describe('AuditDomain', () => {
     expect(event?.metadata).toMatchObject({
       __actorProfile: { name: 'Ada Lovelace', avatarUrl: 'https://avatars.example/ada.png' },
     });
+  });
+
+  it('captures a safe initiator profile from the authenticated request', async () => {
+    const app = new Hono();
+    app.get('/named', c => {
+      c.set(
+        'factoryAuthUser' as never,
+        {
+          workosId: 'user-1',
+          organizationId: 'org-1',
+          name: 'Ada Lovelace',
+          email: 'private@example.com',
+        } as never,
+      );
+      return c.json(auditRequestOrigin(c));
+    });
+    app.get('/email-fallback', c => {
+      c.set(
+        'factoryAuthUser' as never,
+        {
+          workosId: 'user-1',
+          organizationId: 'org-1',
+          name: 'private@example.com',
+          email: 'private@example.com',
+        } as never,
+      );
+      return c.json(auditRequestOrigin(c));
+    });
+
+    expect(await (await app.request('/named')).json()).toMatchObject({
+      initiator: { userId: 'user-1', displayName: 'Ada Lovelace' },
+    });
+    const fallback = await (await app.request('/email-fallback')).json();
+    expect(fallback).toMatchObject({ initiator: { userId: 'user-1' } });
+    expect(JSON.stringify(fallback.initiator)).not.toContain('private@example.com');
   });
 
   it('prefers actor profiles stamped in event metadata over the user provider', async () => {

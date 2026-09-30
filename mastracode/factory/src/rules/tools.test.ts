@@ -301,6 +301,12 @@ describe('factory_transition_work_item', () => {
       decisions: [],
     }));
     const context = requestContext();
+    context.set('user', {
+      workosId: 'user-1',
+      organizationId: 'org-1',
+      name: 'Ada Lovelace',
+      email: 'private@example.com',
+    });
     const tools = await createFactoryTransitionTools({
       requestContext: context,
       storage,
@@ -316,9 +322,11 @@ describe('factory_transition_work_item', () => {
       expect.objectContaining({
         workItemId: prepared.item.id,
         actor: { type: 'agent', bindingId: prepared.binding.id, role: 'triage' },
+        initiator: { userId: 'user-1', displayName: 'Ada Lovelace' },
         triageType: 'feature request',
       }),
     );
+    expect(JSON.stringify(transition.mock.calls[0]?.[0])).not.toContain('private@example.com');
   });
 
   it('derives the item, board, actor, and immutable ingress from the binding and tool call', async () => {
@@ -355,6 +363,7 @@ describe('factory_transition_work_item', () => {
       stage: 'planning',
       expectedRevision: 1,
       actor: { type: 'agent', bindingId: prepared.binding.id, role: 'work' },
+      initiator: { userId: 'user-1' },
       ingress: { type: 'agent', identity: `${prepared.binding.id}:tool-call-9` },
       cause: 'The investigation is complete.',
     });

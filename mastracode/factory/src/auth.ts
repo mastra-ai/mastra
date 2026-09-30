@@ -69,6 +69,13 @@ export interface FactoryAuthUser {
   organizationMembershipIds?: string[];
 }
 
+/** Server-authenticated human identity safe to persist with background work. */
+export interface FactoryInitiatorProfile {
+  userId: string;
+  /** Provider display name only; email-shaped name fallbacks are deliberately omitted. */
+  displayName?: string;
+}
+
 /**
  * Tenant identity: the org is the top-level tenant, and each user inside it is
  * an isolated builder. Agent state, worktrees and sandboxes are scoped per
@@ -150,6 +157,32 @@ export function getFactoryAuthUserFromContext(
 /** Resolve the stable user id from an authenticated user shape. */
 export function getFactoryAuthUserId(user: FactoryAuthUser | undefined): string | undefined {
   return user?.workosId ?? user?.id;
+}
+
+/** A visible artifact name must be a real provider name, never its email fallback. */
+export function getFactoryAuthUserDisplayName(user: FactoryAuthUser | undefined): string | undefined {
+  const name = user?.name?.trim();
+  if (!name) return undefined;
+  const email = user?.email?.trim();
+  if (email && name.toLocaleLowerCase() === email.toLocaleLowerCase()) return undefined;
+  return /[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+/u.test(name) ? undefined : name;
+}
+
+export function factoryInitiatorProfile(user: FactoryAuthUser | undefined): FactoryInitiatorProfile | undefined {
+  const userId = getFactoryAuthUserId(user);
+  if (!userId) return undefined;
+  const displayName = getFactoryAuthUserDisplayName(user);
+  return { userId, ...(displayName ? { displayName } : {}) };
+}
+
+/** Parse a durable profile defensively; actor JSON may predate this field or come from an integration. */
+export function parseFactoryInitiatorProfile(value: unknown): FactoryInitiatorProfile | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const profile = value as Record<string, unknown>;
+  if (typeof profile.userId !== 'string' || !profile.userId) return undefined;
+  const displayName =
+    typeof profile.displayName === 'string' ? getFactoryAuthUserDisplayName({ name: profile.displayName }) : undefined;
+  return { userId: profile.userId, ...(displayName ? { displayName } : {}) };
 }
 
 /** Resolve the organization id from a user shape, if present. */

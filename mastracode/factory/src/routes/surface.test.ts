@@ -124,6 +124,59 @@ describe('prepareFactoryRuleBinding', () => {
     );
   });
 
+  it('rehydrates the matching persisted human profile for autonomous binding preparation', async () => {
+    const { seeded, project, github } = await seedFactoryWithRepository();
+    const prepare = vi.fn(async () => ({}) as never);
+    const input = bindingInput(project.id);
+    (input.record as { approvedBy?: string | null }).approvedBy = 'user-1';
+    input.record.actor = {
+      type: 'system',
+      id: 'factory-rule-dispatcher',
+      initiator: { userId: 'original-user', displayName: 'Original Initiator' },
+      approvedByProfile: { userId: 'user-1', displayName: 'Ada Lovelace' },
+    };
+
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      boards,
+      input,
+    );
+
+    const request = prepare.mock.calls[0]![0] as unknown as {
+      requestContext: { get(key: string): unknown };
+    };
+    expect(request.requestContext.get('user')).toEqual({
+      workosId: 'user-1',
+      organizationId: 'org-1',
+      name: 'Ada Lovelace',
+    });
+  });
+
+  it('does not trust an approver profile that disagrees with the approval record', async () => {
+    const { seeded, project, github } = await seedFactoryWithRepository();
+    const prepare = vi.fn(async () => ({}) as never);
+    const input = bindingInput(project.id);
+    (input.record as { approvedBy?: string | null }).approvedBy = 'user-1';
+    input.record.actor = {
+      type: 'system',
+      id: 'factory-rule-dispatcher',
+      approvedByProfile: { userId: 'different-user', displayName: 'Wrong Person' },
+    };
+
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      boards,
+      input,
+    );
+
+    const request = prepare.mock.calls[0]![0] as unknown as { requestContext?: unknown };
+    expect(request.requestContext).toBeUndefined();
+  });
+
   it("keeps a run an agent pre-approved on the repo connector, never on the agent's id", async () => {
     const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
     const prepare = vi.fn(async () => ({}) as never);
@@ -164,6 +217,7 @@ describe('prepareFactoryRuleBinding', () => {
         branch: existing.branch,
         threadId: 'thread-existing',
         startedBy: 'original-owner',
+        startedByDisplayName: 'Original Owner',
       },
     };
     (input.record as { approvedBy?: string | null }).approvedBy = 'approver-1';
@@ -176,9 +230,18 @@ describe('prepareFactoryRuleBinding', () => {
       input,
     );
 
-    const { sessionId, userId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string; userId: string };
+    const { sessionId, userId, requestContext } = prepare.mock.calls[0]![0] as unknown as {
+      sessionId: string;
+      userId: string;
+      requestContext: { get(key: string): unknown };
+    };
     expect(sessionId).toBe(existing.sessionId);
     expect(userId).toBe('original-owner');
+    expect(requestContext.get('user')).toEqual({
+      workosId: 'original-owner',
+      organizationId: 'org-1',
+      name: 'Original Owner',
+    });
     await expect(
       sourceControl.sessions.listByProjectRepository({ projectRepositoryId: projectRepository.id }),
     ).resolves.toHaveLength(1);
