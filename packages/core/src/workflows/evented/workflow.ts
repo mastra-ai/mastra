@@ -54,6 +54,7 @@ import {
 import type { ProcessorStepOutput } from '../../processors/step-schema';
 import { toStandardSchema } from '../../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../../schema';
+import type { WorkflowsStorage } from '../../storage/domains/workflows/base';
 
 import { WorkflowRunOutput } from '../../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../../stream/types';
@@ -61,7 +62,6 @@ import { ChunkFrom } from '../../stream/types';
 import type { Tool } from '../../tools/tool';
 import { isMastraTool } from '../../tools/toolchecks';
 import type { ToolExecutionContext } from '../../tools/types';
-import type { WorkflowsStorage } from '../../storage/domains/workflows/base';
 import type { DynamicArgument } from '../../types';
 import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
 import type { Step } from '../../workflows/step';
@@ -2398,31 +2398,15 @@ export class EventedRun<
     return this.streamOutput;
   }
 
-  async #claimResume(workflowsStore: WorkflowsStorage, snapshot: WorkflowRunState): Promise<boolean> {
-    const persistsPendingState = this.executionEngine.options.shouldPersistSnapshot({
-      workflowStatus: 'pending',
-      stepResults: snapshot.context ?? {},
-    });
-
-    if (!persistsPendingState) {
-      if (!this.executionEngine.options.allowUnclaimedResumes) {
-        this.mastra
-          ?.getLogger()
-          ?.warn(
-            `[Workflow ${this.workflowId}] shouldPersistSnapshot excludes the "pending" status, so concurrent resume() calls for run ${this.runId} cannot be de-duplicated. Concurrent resumes may execute downstream steps more than once.`,
-          );
-      }
-      return false;
-    }
-
+  async #claimResume(workflowsStore: WorkflowsStorage): Promise<void> {
     const claimed = await workflowsStore.updateWorkflowState({
       workflowName: this.workflowId,
       runId: this.runId,
-      opts: { status: 'pending', expectedStatus: 'suspended' },
+      opts: { status: 'running', expectedStatus: 'suspended' },
     });
 
     if (claimed) {
-      return true;
+      return;
     }
 
     const current = await workflowsStore.loadWorkflowSnapshot({
@@ -2440,22 +2424,13 @@ export class EventedRun<
       category: ErrorCategory.USER,
       text:
         `This suspended workflow run was already resumed by another caller. Workflow "${this.workflowId}" run "${this.runId}" ` +
-        `moved from "suspended" to "${current.status}" before this resume could claim it. ` +
-        `Only one resume() call may continue a given suspension; re-read the run state before resuming again.`,
+        `moved from "suspended" to "${current.status}" before this resume could claim it.`,
       details: {
         workflowId: this.workflowId,
         runId: this.runId,
         expectedStatus: 'suspended',
         actualStatus: current.status ?? 'unknown',
       },
-    });
-  }
-
-  async #releaseResumeClaim(workflowsStore: WorkflowsStorage): Promise<void> {
-    await workflowsStore.updateWorkflowState({
-      workflowName: this.workflowId,
-      runId: this.runId,
-      opts: { status: 'suspended', expectedStatus: 'pending' },
     });
   }
 
@@ -2611,7 +2586,7 @@ export class EventedRun<
     }
 
     this.setupAbortHandler();
-    const claimedResume = await this.#claimResume(workflowsStore, snapshot);
+    await this.#claimResume(workflowsStore);
 
     // Extract state from snapshot - could be in context.__state or in value
     const resumeState = (snapshot?.context as any)?.__state ?? snapshot?.value ?? {};
@@ -2637,12 +2612,6 @@ export class EventedRun<
         abortController: this.abortController,
         perStep: params.perStep,
         outputOptions: params.outputOptions,
-      })
-      .catch(async error => {
-        if (claimedResume) {
-          await this.#releaseResumeClaim(workflowsStore);
-        }
-        throw error;
       })
       .then(result => {
         if (result.status !== 'suspended') {
