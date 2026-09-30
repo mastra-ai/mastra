@@ -65,6 +65,7 @@ createTestSuite(
     id: 'redis-test-store',
     ...TEST_CONFIG,
   }),
+  { staleReadSafeThreadUpdates: false },
 );
 
 // Configuration validation tests

@@ -22,6 +22,7 @@ createTestSuite(
     id: 'elasticsearch-test-store',
     url,
   }),
+  { staleReadSafeThreadUpdates: false },
 );
 
 // Configuration validation tests

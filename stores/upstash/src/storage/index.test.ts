@@ -74,7 +74,7 @@ createTestSuite(
     id: 'upstash-test-store',
     ...TEST_CONFIG,
   }),
-  { deterministicScorePagination: true },
+  { deterministicScorePagination: true, staleReadSafeThreadUpdates: false },
 );
 
 // Configuration validation tests
