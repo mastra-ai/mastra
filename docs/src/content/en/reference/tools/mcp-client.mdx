@@ -1256,7 +1256,7 @@ const client = new MCPClient({
 
 ### Custom Token Storage
 
-For persistent token storage across sessions, implement the `OAuthStorage` interface. The provider stores tokens (both the latest set and one entry per authorization-server issuer), discovery state, and the PKCE verifier under string keys, so the backend only needs a key-value contract:
+For persistent token storage across sessions, implement the `OAuthStorage` interface. The provider stores tokens (both the latest set and one entry per authorization-server issuer), discovery state, and the PKCE verifier under string keys. The backend only needs a key-value contract:
 
 ```typescript
 import { MCPOAuthClientProvider, OAuthStorage } from '@mastra/mcp'
