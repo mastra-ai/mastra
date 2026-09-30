@@ -510,7 +510,7 @@ describe('agent-controller routes', () => {
 
       expect(await approve('user-ack-stale', 'stale')).toEqual({ ok: false, reason: 'stale_tool_call' });
       expect(persisted).not.toHaveBeenCalled();
-            expect(session.approval.isArmed({ toolCallId: 'current' })).toBe(true);
+      expect(session.approval.isArmed({ toolCallId: 'current' })).toBe(true);
     });
 
     it('rejects an approval without a tool call id when nothing is armed', async () => {

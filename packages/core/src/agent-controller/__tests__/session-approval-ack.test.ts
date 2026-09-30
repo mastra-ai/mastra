@@ -5,7 +5,10 @@ import { SessionApproval, SessionSuspensions } from '../session';
 describe('SessionApproval.respond result', () => {
   it('accepts the armed call and rejects stale, duplicate, and unarmed decisions', async () => {
     const approval = new SessionApproval();
-    expect(approval.respond({ decision: 'approve', toolCallId: 'current' })).toEqual({ accepted: false, reason: 'not_pending' });
+    expect(approval.respond({ decision: 'approve', toolCallId: 'current' })).toEqual({
+      accepted: false,
+      reason: 'not_pending',
+    });
 
     const decision = approval.arm({ toolName: 'write_file', toolCallId: 'current' });
     expect(approval.respond({ decision: 'approve', toolCallId: 'stale' })).toEqual({
