@@ -726,11 +726,13 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         this.logger?.error(
           `Nested workflow step ${step.id} failed: ` + (e instanceof Error ? (e.stack ?? e.message) : String(e)),
         );
-        // Fallback: if we can't get the result from error, construct a basic failed result
+        // Fallback: if we can't get the result from error, construct a basic failed result.
+        // The error is returned from the memoized step.run() below, so it must serialize
+        // with its message (a raw StepError would keep only `stepId` and `name`).
         runId = globalThis.crypto.randomUUID();
         result = {
           status: 'failed',
-          error: e instanceof Error ? e : new Error(String(e)),
+          error: getErrorFromUnknown(e, { serializeStack: true, fallbackMessage: 'Nested workflow failed' }),
         };
       }
     }
