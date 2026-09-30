@@ -322,6 +322,15 @@ describe('Agent send entry points reject a mismatched caller resource', () => {
           agent.queueMessage('MALLORY-QUEUED', { runId: stream.runId, requestContext: callerContext(MALLORY) }),
         ),
       );
+      // Naming her own resource next to the run id must not redirect the check away from the run's owner.
+      await expectMismatch(
+        syncCall(() =>
+          agent.sendSignal(
+            { type: 'user-message', contents: 'MALLORY-OWN-RESOURCE' },
+            { runId: stream.runId, resourceId: MALLORY, requestContext: callerContext(MALLORY) },
+          ),
+        ),
+      );
     } finally {
       release();
     }
@@ -330,6 +339,7 @@ describe('Agent send entry points reject a mismatched caller resource', () => {
     subscription.unsubscribe();
     expect(prompts.join('\n')).not.toContain('MALLORY-SECRET');
     expect(prompts.join('\n')).not.toContain('MALLORY-QUEUED');
+    expect(prompts.join('\n')).not.toContain('MALLORY-OWN-RESOURCE');
   });
 
   it('a queued message never inherits the active run’s requestContext', async () => {

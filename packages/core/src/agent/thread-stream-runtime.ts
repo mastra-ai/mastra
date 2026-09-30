@@ -4939,8 +4939,9 @@ export class AgentThreadStreamRuntime {
     }
     assertRequestContextResourceMatches({
       requestContext: target.requestContext,
-      resourceId,
-      threadId,
+      // A resolved run's owner wins over a caller-supplied resourceId.
+      resourceId: activeRecord?.resourceId ?? resourceId,
+      threadId: activeRecord?.threadId ?? threadId,
       agentName: agent.name,
     });
 
