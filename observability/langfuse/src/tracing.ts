@@ -37,6 +37,8 @@ const DEDICATED_METADATA_KEYS = new Set([
 ]);
 
 export const LANGFUSE_DEFAULT_BASE_URL = 'https://cloud.langfuse.com';
+/** Span ids remembered to detect runs nested under a span this exporter already sends. Oldest are dropped first. */
+const MAX_SEEN_SPAN_IDS = 10_000;
 
 export interface LangfuseExporterConfig extends BaseExporterConfig {
   /** Langfuse public key */
@@ -70,6 +72,7 @@ export class LangfuseExporter extends BaseExporter {
   #environment: string | undefined;
   #release: string | undefined;
   #resourceAttributes: OtelExporterConfig['resourceAttributes'];
+  #seenSpanIds = new Set<string>();
 
   constructor(config: LangfuseExporterConfig = {}) {
     super(config);
@@ -134,13 +137,26 @@ export class LangfuseExporter extends BaseExporter {
   }
 
   protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
+    this.#rememberSpanId(event.exportedSpan.id);
     if (event.type !== TracingEventType.SPAN_ENDED) return;
     if (!this.#processor) return;
 
     await this.exportSpan(event.exportedSpan);
   }
 
+  #rememberSpanId(spanId: string): void {
+    if (this.#seenSpanIds.has(spanId)) return;
+    if (this.#seenSpanIds.size >= MAX_SEEN_SPAN_IDS) {
+      this.#seenSpanIds.delete(this.#seenSpanIds.values().next().value!);
+    }
+    this.#seenSpanIds.add(spanId);
+  }
+
   private async exportSpan(span: AnyExportedSpan): Promise<void> {
+    // A run started with tracingOptions.parentSpanId under a span this exporter
+    // sends is a child in Langfuse, even though Mastra marks it as a root span.
+    const isNestedRun = span.externalParentSpanId !== undefined && this.#seenSpanIds.has(span.externalParentSpanId);
+
     if (!this.#spanConverter) {
       // Fallback if init() was not called (e.g., standalone usage without Mastra)
       this.#spanConverter = new SpanConverter({
@@ -158,7 +174,7 @@ export class LangfuseExporter extends BaseExporter {
       // endpoint reads them correctly. SpanConverter produces mastra.* attributes,
       // but Langfuse only reads langfuse.* attributes for prompt linking, TTFT, etc.
       // @see https://langfuse.com/integrations/native/opentelemetry#property-mapping
-      mapMastraToLangfuseAttributes(otelSpan.attributes, span, this.#environment, this.#release);
+      mapMastraToLangfuseAttributes(otelSpan.attributes, span, isNestedRun, this.#environment, this.#release);
 
       this.#processor!.onEnd(otelSpan);
     } catch (error) {
@@ -294,6 +310,7 @@ function serializeTraceIo(value: unknown): string | undefined {
 function mapMastraToLangfuseAttributes(
   attributes: Record<string, any>,
   span: AnyExportedSpan,
+  isNestedRun: boolean,
   environment?: string,
   release?: string,
 ): void {
@@ -423,8 +440,9 @@ function mapMastraToLangfuseAttributes(
   // the agent/workflow id and exposes the same identity as trace metadata, so
   // users can scope Langfuse evaluators per agent via trace name or metadata
   // filters. User-provided traceName (set via mastra.metadata.traceName) takes
-  // precedence and is preserved.
-  if (span.isRootSpan) {
+  // precedence and is preserved. A nested run is skipped: Langfuse applies
+  // langfuse.trace.* from any span, so it would replace the outer run's trace.
+  if (span.isRootSpan && !isNestedRun) {
     // Trace input/output: mirror the root span's input/output onto the trace.
     // Without this, Langfuse traces have empty trace-level input/output (the
     // span data only reaches the root OBSERVATION), which breaks LLM-as-a-judge

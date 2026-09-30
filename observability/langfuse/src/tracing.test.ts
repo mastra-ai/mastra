@@ -608,6 +608,79 @@ describe('LangfuseExporter', () => {
       expect(attrs['langfuse.trace.output']).toBeUndefined();
     });
 
+    it('does not write trace-level fields for a run nested under an exported span', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({ id: 'outer-run', isRootSpan: true, type: SpanType.AGENT_RUN, entityId: 'assistant' } as any),
+      );
+      await exportSpan(
+        exporter,
+        makeSpan({
+          id: 'nested-run',
+          isRootSpan: true,
+          externalParentSpanId: 'outer-run',
+          type: SpanType.AGENT_RUN,
+          entityId: 'judge',
+          entityName: 'judge',
+          input: 'Grade this answer',
+          output: { score: 1 },
+          metadata: { runId: 'run-2' },
+        } as any),
+      );
+
+      const attrs = processedSpans[1].attributes;
+      expect(attrs['langfuse.trace.input']).toBeUndefined();
+      expect(attrs['langfuse.trace.output']).toBeUndefined();
+      expect(attrs['langfuse.trace.name']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.agentId']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.runId']).toBeUndefined();
+      expect(attrs['langfuse.observation.metadata.agentId']).toBe('judge');
+    });
+
+    it('does not write trace-level fields for a run nested under a span that is still running', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: makeSpan({ id: 'outer-run', isRootSpan: true, type: SpanType.AGENT_RUN }),
+      });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          id: 'nested-run',
+          isRootSpan: true,
+          externalParentSpanId: 'outer-run',
+          type: SpanType.AGENT_RUN,
+          entityId: 'judge',
+          input: 'Grade this answer',
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.input']).toBeUndefined();
+      expect(attrs['langfuse.trace.name']).toBeUndefined();
+    });
+
+    it('writes trace-level fields for a root span whose external parent is not exported', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          isRootSpan: true,
+          externalParentSpanId: 'http-request-span',
+          type: SpanType.AGENT_RUN,
+          entityId: 'assistant',
+          input: 'plain question',
+          output: 'plain answer',
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.input']).toBe('plain question');
+      expect(attrs['langfuse.trace.output']).toBe('plain answer');
+      expect(attrs['langfuse.trace.name']).toBe('assistant');
+    });
+
     it('omits trace input/output that cannot be serialized instead of failing the export', async () => {
       exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
       const circular: Record<string, unknown> = {};
