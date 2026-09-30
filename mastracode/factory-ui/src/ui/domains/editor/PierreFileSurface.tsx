@@ -1,6 +1,7 @@
 import { File, EditProvider } from '@pierre/diffs/react';
 import type { FileContents, FileOptions, LineAnnotation } from '@pierre/diffs/react';
 import { preloadHighlighter, registerCustomTheme } from '@pierre/diffs';
+import { normalizeTheme } from 'shiki/core';
 import {
   Editor,
   type EditorChange,
@@ -111,11 +112,16 @@ function ensureThemesRegistered(): void {
     'pierre-dark-tritanopia': () => import('@pierre/theme/pierre-dark-tritanopia'),
   };
   for (const name of PIERRE_THEMES) {
-    // `registerCustomTheme` wants a loader that resolves the theme registration
-    // object. `@pierre/theme` exposes it as a default export.
+    // `registerCustomTheme` wants a loader that resolves a theme registration
+    // Shiki can consume. `@pierre/theme` exposes a raw VS Code / TextMate JSON
+    // as its default export, which Shiki requires us to run through
+    // `normalizeTheme` (matching the wrapper `@pierre/theming/createTheme`
+    // uses internally). Without normalization Shiki silently rejects the
+    // theme and the file renders as plain text.
     registerCustomTheme(name, async () => {
       const mod = await loaders[name]!();
-      return mod.default as never;
+      const raw = mod.default as Parameters<typeof normalizeTheme>[0];
+      return normalizeTheme(raw) as never;
     });
   }
 }
