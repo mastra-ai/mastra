@@ -734,6 +734,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       let client;
       try {
         await this.ensureNamespaceReady(indexName);
+        // Load metadata before holding a connection so a cold cache cannot exhaust the pool.
+        const indexInfo = includeVector ? await this.getIndexMetadata({ indexName }) : undefined;
+        const ops = indexInfo && this.getVectorOps(indexInfo.vectorType, indexInfo.metric ?? 'cosine');
         client = await this.pool.connect();
         const translatedFilter = this.transformFilter(filter);
         const { sql: filterQuery, values: filterValues } = buildDeleteFilterQuery(translatedFilter);
@@ -757,7 +760,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           id,
           score: 0,
           metadata,
-          ...(includeVector && embedding && { vector: JSON.parse(embedding) }),
+          ...(ops && embedding && { vector: ops.parseEmbedding(embedding) }),
         }));
       } catch (error) {
         if (error instanceof MastraError) {
