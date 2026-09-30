@@ -4,7 +4,7 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SubmitPlanTool } from '../submit-plan-tool';
 import type { SubmitPlanToolProps } from '../submit-plan-tool';
 import { submittedPlanFile, submittedPlanPath } from './fixtures/submit-plan';
@@ -35,7 +35,10 @@ const pendingProps: SubmitPlanToolProps = {
   },
 };
 
-function renderSubmitPlan(props: SubmitPlanToolProps) {
+function renderSubmitPlan(
+  props: SubmitPlanToolProps,
+  { toolCallApprovals = {} }: { toolCallApprovals?: Record<string, { status: 'approved' | 'declined' }> } = {},
+) {
   const approveToolcall = vi.fn<(toolCallId: string, resumeData?: unknown) => void>();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
@@ -50,7 +53,7 @@ function renderSubmitPlan(props: SubmitPlanToolProps) {
           approveNetworkToolcall={vi.fn()}
           declineNetworkToolcall={vi.fn()}
           isRunning={false}
-          toolCallApprovals={{}}
+          toolCallApprovals={toolCallApprovals}
           networkToolCallApprovals={{}}
         >
           <SubmitPlanTool {...props} />
@@ -117,13 +120,9 @@ describe('SubmitPlanTool', () => {
 
       renderSubmitPlan(pendingProps);
 
-      expect(
-        screen.getByRole<HTMLButtonElement>('button', { name: 'Approve the plan and switch to build' }).disabled,
-      ).toBe(true);
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Approve the plan' }).disabled).toBe(true);
       await screen.findByRole('heading', { name: 'Add dark mode' });
-      expect(
-        screen.getByRole<HTMLButtonElement>('button', { name: 'Approve the plan and switch to build' }).disabled,
-      ).toBe(false);
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Approve the plan' }).disabled).toBe(false);
     });
 
     it('keeps the approval action on one line without shrinking', async () => {
@@ -132,7 +131,7 @@ describe('SubmitPlanTool', () => {
       renderSubmitPlan(pendingProps);
 
       await screen.findByRole('heading', { name: 'Add dark mode' });
-      const approveButton = screen.getByRole('button', { name: 'Approve the plan and switch to build' });
+      const approveButton = screen.getByRole('button', { name: 'Approve the plan' });
 
       expect(approveButton.classList.contains('shrink-0')).toBe(true);
       expect(approveButton.classList.contains('whitespace-nowrap')).toBe(true);
@@ -151,7 +150,7 @@ describe('SubmitPlanTool', () => {
       expect(await screen.findByRole('button', { name: 'Expand plan' })).not.toBeNull();
     });
 
-    it('keeps three control cells when a long plan does not overflow', async () => {
+    it('keeps the decisions right-aligned when a long plan does not overflow', async () => {
       server.use(
         http.get(`${BASE_URL}/api/agents/:agentId/plans/file`, () =>
           HttpResponse.json({
@@ -166,8 +165,9 @@ describe('SubmitPlanTool', () => {
       await screen.findByRole('heading', { name: 'Long plan' });
       expect(screen.queryByRole('button', { name: 'Expand plan' })).toBeNull();
 
-      const controls = document.querySelector('[data-slot="plan-controls"] > div');
-      expect(controls?.children).toHaveLength(3);
+      const decisions = document.querySelector('[data-slot="plan-decisions"]');
+      expect(decisions?.classList.contains('ml-auto')).toBe(true);
+      expect(decisions?.children).toHaveLength(3);
     });
 
     it('resumes the tool with the displayed plan when approved', async () => {
@@ -175,7 +175,7 @@ describe('SubmitPlanTool', () => {
       const { approveToolcall } = renderSubmitPlan(pendingProps);
 
       await screen.findByRole('heading', { name: 'Add dark mode' });
-      fireEvent.click(screen.getByRole('button', { name: 'Approve the plan and switch to build' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Approve the plan' }));
 
       expect(approveToolcall).toHaveBeenCalledWith(toolCallId, {
         action: 'approved',
@@ -198,6 +198,138 @@ describe('SubmitPlanTool', () => {
         title: 'Add dark mode',
         plan: submittedPlanFile.content,
       });
+    });
+  });
+
+  describe('when the reviewer requests changes', () => {
+    beforeEach(() => {
+      usePlanFileHandler();
+    });
+
+    async function openFeedbackForm() {
+      const rendered = renderSubmitPlan(pendingProps);
+      await screen.findByRole('heading', { name: 'Add dark mode' });
+      fireEvent.click(screen.getByRole('button', { name: 'Request changes' }));
+      return rendered;
+    }
+
+    it('offers Request changes next to Approve and Reject', async () => {
+      usePlanFileHandler();
+      renderSubmitPlan(pendingProps);
+
+      await screen.findByRole('heading', { name: 'Add dark mode' });
+
+      expect(screen.getByRole('button', { name: 'Request changes' })).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Approve the plan' })).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Reject the plan' })).not.toBeNull();
+      expect(screen.queryByRole('textbox', { name: 'Requested changes' })).toBeNull();
+    });
+
+    it('swaps the decisions for a separated feedback field', async () => {
+      await openFeedbackForm();
+
+      expect(screen.getByRole('separator')).not.toBeNull();
+      expect(screen.getByRole('textbox', { name: 'Requested changes' })).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Send feedback' })).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Cancel' })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'Approve the plan' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Reject the plan' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Request changes' })).toBeNull();
+    });
+
+    it('keeps Send feedback disabled until the feedback has content', async () => {
+      await openFeedbackForm();
+      const send = screen.getByRole<HTMLButtonElement>('button', { name: 'Send feedback' });
+
+      expect(send.disabled).toBe(true);
+      fireEvent.change(screen.getByRole('textbox', { name: 'Requested changes' }), { target: { value: '   ' } });
+      expect(send.disabled).toBe(true);
+      fireEvent.change(screen.getByRole('textbox', { name: 'Requested changes' }), { target: { value: 'Add tests' } });
+      expect(send.disabled).toBe(false);
+    });
+
+    it('resumes the tool as rejected with the trimmed feedback', async () => {
+      const { approveToolcall } = await openFeedbackForm();
+
+      fireEvent.change(screen.getByRole('textbox', { name: 'Requested changes' }), {
+        target: { value: '  Cover the settings page too  ' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Send feedback' }));
+
+      expect(approveToolcall).toHaveBeenCalledWith(toolCallId, {
+        action: 'rejected',
+        feedback: 'Cover the settings page too',
+        path: submittedPlanPath,
+        title: 'Add dark mode',
+        plan: submittedPlanFile.content,
+      });
+    });
+
+    it('closes the feedback field on Cancel without resuming', async () => {
+      const { approveToolcall } = await openFeedbackForm();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+      expect(screen.queryByRole('textbox', { name: 'Requested changes' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Approve the plan' })).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Request changes' })).not.toBeNull();
+      expect(approveToolcall).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the plan has already been answered', () => {
+    it('disables every decision control', async () => {
+      usePlanFileHandler();
+      renderSubmitPlan(pendingProps, { toolCallApprovals: { [toolCallId]: { status: 'approved' } } });
+
+      await screen.findByRole('heading', { name: 'Add dark mode' });
+
+      for (const name of ['Approve the plan', 'Reject the plan', 'Request changes']) {
+        expect(screen.getByRole<HTMLButtonElement>('button', { name }).disabled).toBe(true);
+      }
+    });
+  });
+
+  describe('when a resolved plan carries the reviewer decision', () => {
+    function renderResolved(submittedPlan: Record<string, unknown>) {
+      renderSubmitPlan({
+        agentId: 'plan-agent',
+        toolName: 'submit_plan',
+        toolCallId,
+        output: {
+          content: 'Plan resolved.',
+          isError: false,
+          submittedPlan: { title: 'Persisted plan', path: submittedPlanPath, plan: 'Persisted body', ...submittedPlan },
+        },
+      });
+    }
+
+    it('shows Approved for an approved plan', async () => {
+      renderResolved({ action: 'approved' });
+
+      expect(await screen.findByText('Approved')).not.toBeNull();
+    });
+
+    it('shows Rejected for a plan rejected without feedback', async () => {
+      renderResolved({ action: 'rejected' });
+
+      expect(await screen.findByText('Rejected')).not.toBeNull();
+    });
+
+    it('shows Changes requested and the feedback when feedback was given', async () => {
+      renderResolved({ action: 'rejected', feedback: 'Cover the settings page too' });
+
+      expect(await screen.findByText('Changes requested')).not.toBeNull();
+      expect(screen.getByText('Cover the settings page too')).not.toBeNull();
+    });
+
+    it('shows no status for legacy history without a decision', async () => {
+      renderResolved({});
+
+      await screen.findByRole('heading', { name: 'Persisted plan' });
+      for (const label of ['Approved', 'Rejected', 'Changes requested']) {
+        expect(screen.queryByText(label)).toBeNull();
+      }
     });
   });
 
@@ -264,9 +396,7 @@ describe('SubmitPlanTool', () => {
       renderSubmitPlan(pendingProps);
 
       expect(await screen.findByText('Unable to load the submitted plan.')).not.toBeNull();
-      expect(
-        screen.getByRole<HTMLButtonElement>('button', { name: 'Approve the plan and switch to build' }).disabled,
-      ).toBe(false);
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Approve the plan' }).disabled).toBe(false);
     });
   });
 });

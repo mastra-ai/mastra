@@ -798,6 +798,7 @@ LIMIT 1`,
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'trace-query-context-ids',
       ]);
     });
 
@@ -820,6 +821,7 @@ LIMIT 1`,
           'thread-query',
           'trace-query-tenant-scope',
           'feedback',
+          'trace-query-context-ids',
         ]);
       } finally {
         coreFeatures.add('observability-delta-polling');

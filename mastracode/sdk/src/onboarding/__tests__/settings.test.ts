@@ -94,6 +94,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       unixSocketPubSub: false,
       experimentalGithubSignals: false,
       experimentalCrossAgentSignals: false,
+      experimentalScheduleTools: false,
       githubPollIntervalMs: 300_000,
     },
     mcp: { claudeCodeGlobal: false, codexGlobal: false },
@@ -715,6 +716,19 @@ describe('customProviders parsing/persistence', () => {
 
       expect(loadSettings(filePath).signals.experimentalCrossAgentSignals).toBe(true);
       expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.experimentalCrossAgentSignals).toBe(true);
+    });
+  });
+
+  it('defaults experimental schedule tools off and persists opting in', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ signals: {} }), 'utf-8');
+      expect(loadSettings(filePath).signals.experimentalScheduleTools).toBe(false);
+
+      const settings = loadSettings(filePath);
+      settings.signals.experimentalScheduleTools = true;
+      saveSettings(settings, filePath);
+
+      expect(loadSettings(filePath).signals.experimentalScheduleTools).toBe(true);
     });
   });
 

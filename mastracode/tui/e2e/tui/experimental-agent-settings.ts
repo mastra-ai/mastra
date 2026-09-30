@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { selectMenuRow } from './menu-navigation.js';
 import type { McE2eScenario } from './types.js';
 
 export const experimentalAgentSettingsScenario: McE2eScenario = {
@@ -28,8 +29,7 @@ export const experimentalAgentSettingsScenario: McE2eScenario = {
 
     terminal.submit('/settings');
     await runtime.waitForScreenText(/Experimental agent\s+Off/i, terminal);
-    terminal.write('\x1b[B'.repeat(8));
-    terminal.write('\r');
+    await selectMenuRow(terminal, /Experimental agent/i);
     await runtime.waitForScreenText(/Use the standard coding agent/i, terminal);
     terminal.write('\x1b[B');
     terminal.write('\r');
@@ -40,8 +40,7 @@ export const experimentalAgentSettingsScenario: McE2eScenario = {
 
     terminal.submit('/settings');
     await runtime.waitForScreenText(/Experimental agent\s+Durable/i, terminal);
-    terminal.write('\x1b[B'.repeat(8));
-    terminal.write('\r');
+    await selectMenuRow(terminal, /Experimental agent/i);
     await runtime.waitForScreenText(/Use resumable durable agent streams/i, terminal);
     terminal.write('\x1b[B');
     terminal.write('\r');
@@ -52,8 +51,7 @@ export const experimentalAgentSettingsScenario: McE2eScenario = {
 
     terminal.submit('/settings');
     await runtime.waitForScreenText(/Experimental agent\s+Evented/i, terminal);
-    terminal.write('\x1b[B'.repeat(8));
-    terminal.write('\r');
+    await selectMenuRow(terminal, /Experimental agent/i);
     await runtime.waitForScreenText(/Run the agent loop on the evented workflow engine/i, terminal);
     terminal.write('\x1b[A'.repeat(2));
     terminal.write('\r');

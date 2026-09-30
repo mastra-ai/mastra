@@ -169,6 +169,7 @@ function createMockSettings() {
       unixSocketPubSub: false,
       experimentalGithubSignals: false,
       experimentalCrossAgentSignals: false,
+      experimentalScheduleTools: false,
       githubPollIntervalMs: 300_000,
     },
     mcp: { claudeCodeGlobal: false, codexGlobal: false },

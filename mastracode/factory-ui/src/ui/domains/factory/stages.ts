@@ -63,10 +63,10 @@ const STAGE_TONES = {
   intake: 'neutral',
   triage: 'neutral',
   planning: 'cyan',
-  execute: 'blue',
+  execute: 'info',
   review: 'purple',
-  done: 'green',
-  canceled: 'red',
+  done: 'success',
+  canceled: 'destructive',
 } satisfies Record<BoardStageId, BadgeVariant>;
 
 const stageTones: Record<string, BadgeVariant | undefined> = STAGE_TONES;

@@ -196,6 +196,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     libsqlUrl: globalSettings.storage.libsql?.url ?? '',
     experimentalGithubSignals: globalSettings.signals.experimentalGithubSignals,
     experimentalCrossAgentSignals: globalSettings.signals.experimentalCrossAgentSignals,
+    experimentalScheduleTools: globalSettings.signals.experimentalScheduleTools,
     experimentalAgent: globalSettings.experimentalAgent,
     backgroundToolsEnabled: globalSettings.backgroundTools?.enabled ?? false,
     // Display an explicit provider choice as Auto while its API key is missing,
@@ -278,6 +279,12 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         saveSettings(current);
         ctx.showInfo(`Experimental cross-agent communication: ${enabled ? 'on' : 'off'} (restart required)`);
         return true;
+      },
+      onExperimentalScheduleToolsChange: enabled => {
+        const current = loadSettings();
+        current.signals.experimentalScheduleTools = enabled;
+        saveSettings(current);
+        ctx.showInfo(`Experimental schedule tools: ${enabled ? 'on' : 'off'} (restart required)`);
       },
       onExperimentalAgentChange: (agent: ExperimentalAgent | null) => {
         const current = loadSettings();

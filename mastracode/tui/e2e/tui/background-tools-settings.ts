@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { selectMenuRow } from './menu-navigation.js';
 import type { McE2eScenario } from './types.js';
 
 export const backgroundToolsSettingsScenario: McE2eScenario = {
@@ -17,6 +18,7 @@ export const backgroundToolsSettingsScenario: McE2eScenario = {
       unixSocketPubSub: false,
       experimentalGithubSignals: false,
       experimentalCrossAgentSignals: false,
+      experimentalScheduleTools: false,
       githubPollIntervalMs: 60_000,
     };
     writeFileSync(settingsPath, JSON.stringify(settings));
@@ -33,9 +35,7 @@ export const backgroundToolsSettingsScenario: McE2eScenario = {
     if (before.backgroundTools?.enabled === true) throw new Error('Background tools must default off');
 
     terminal.submit('/settings');
-    await runtime.waitForScreenText(/Experimental background tools\s+Off/i, terminal);
-    terminal.write('\x1b[B'.repeat(9));
-    terminal.write('\r');
+    await selectMenuRow(terminal, /Experimental background tools/i);
     await runtime.waitForScreenText(/Enable background tools and the activity center/i, terminal);
     terminal.write('\x1b[A');
     terminal.write('\r');
@@ -45,9 +45,7 @@ export const backgroundToolsSettingsScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Experimental background tools: on \(restart required\)/i, terminal);
 
     terminal.submit('/settings');
-    await runtime.waitForScreenText(/Experimental background tools\s+On/i, terminal);
-    terminal.write('\x1b[B'.repeat(9));
-    terminal.write('\r');
+    await selectMenuRow(terminal, /Experimental background tools/i);
     await runtime.waitForScreenText(/Enable background tools and the activity center/i, terminal);
     terminal.write('\x1b[B');
     terminal.write('\r');

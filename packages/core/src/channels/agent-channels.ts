@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { Agent } from '../agent/agent';
 import type { MastraProviderMetadata } from '../agent/message-list/state/types';
 import type { AgentSignalContents } from '../agent/signals';
-import { getErrorFromUnknown } from '../error';
+import { MastraError } from '../error';
 import type { IMastraLogger } from '../logger/logger';
 import type { Mastra } from '../mastra';
 import type { StorageThreadType } from '../memory/types';
@@ -37,6 +37,7 @@ import { ChatChannelOutputProcessor, CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './o
 import type { ChatChannelRenderContext } from './output-processor';
 import { ChatChannelProcessor } from './processor';
 import { MastraStateAdapter } from './state-adapter';
+import { extractErrorMessage } from './stream-helpers';
 import type { PendingApprovalRecord } from './stream-helpers';
 import type {
   ChannelAdapterConfig,
@@ -676,7 +677,7 @@ export class AgentChannels {
               // Resolve the tool display mode so the approve/deny edit matches
               // the original card's rendering (cards → Block Kit, text → plain).
               // Streaming is irrelevant here — we're outside the agent loop.
-              const { resolved: toolDisplay } = this.resolveToolDisplay(
+              const { resolved: toolDisplay, fn: toolDisplayFn } = this.resolveToolDisplay(
                 platform,
                 adapterConfig?.toolDisplay,
                 false,
@@ -684,6 +685,37 @@ export class AgentChannels {
                 adapterConfig?.formatToolCall,
               );
               const useCards = toolDisplay === 'cards';
+              // Let a function-form `toolDisplay` own the resolved card. Only
+              // non-blank `post` results are honored; anything else (or a
+              // throwing renderer) falls back to the default formatter.
+              const renderResolved = (
+                decision: { kind: 'approved' } | { kind: 'denied'; byUser?: string },
+              ): PostableMessage | undefined => {
+                if (!toolDisplayFn) return undefined;
+                try {
+                  const result = toolDisplayFn(
+                    {
+                      ...decision,
+                      toolCallId,
+                      toolName: toolName ?? displayName,
+                      displayName,
+                      argsSummary,
+                      args: toolArgs,
+                    },
+                    { mode: 'static', platform },
+                  );
+                  if (result?.kind !== 'post' || result.message == null) return undefined;
+                  const message = result.message;
+                  const blank =
+                    typeof message === 'string'
+                      ? message.trim().length === 0
+                      : 'markdown' in message && message.markdown.trim().length === 0;
+                  return blank ? undefined : message;
+                } catch (err) {
+                  this.log('debug', `toolDisplay threw for ${decision.kind} event`, err);
+                  return undefined;
+                }
+              };
 
               if (!approved) {
                 const byUser = chatThread.isDM ? undefined : event.user.fullName || event.user.userName || 'User';
@@ -691,7 +723,8 @@ export class AgentChannels {
                   await adapter.editMessage(
                     chatThread.id,
                     messageId,
-                    formatToolDenied(displayName, argsSummary, byUser, useCards),
+                    renderResolved({ kind: 'denied', byUser }) ??
+                      formatToolDenied(displayName, argsSummary, byUser, useCards),
                   );
                 } catch (err) {
                   this.log('debug', 'Failed to edit denied card', err);
@@ -744,7 +777,7 @@ export class AgentChannels {
                 await adapter.editMessage(
                   chatThread.id,
                   messageId,
-                  formatToolApproved(displayName, argsSummary, useCards),
+                  renderResolved({ kind: 'approved' }) ?? formatToolApproved(displayName, argsSummary, useCards),
                 );
               } catch (err) {
                 this.log('debug', 'Failed to edit approved card', err);
@@ -1189,9 +1222,19 @@ export class AgentChannels {
     }
     let loggedError;
     try {
-      loggedError = JSON.parse(JSON.stringify(getErrorFromUnknown(err)));
+      const message = extractErrorMessage(err);
+      const cause =
+        typeof err === 'object' && err !== null && 'cause' in err ? extractErrorMessage(err.cause) : undefined;
+      const { id, domain, category } = err instanceof MastraError ? err : {};
+      loggedError = {
+        message: typeof message === 'string' && message.length > 0 ? message : 'Unknown error',
+        ...(typeof id === 'string' ? { code: id } : {}),
+        ...(typeof domain === 'string' ? { domain } : {}),
+        ...(typeof category === 'string' ? { category } : {}),
+        ...(typeof cause === 'string' && cause.length > 0 ? { cause: { message: cause } } : {}),
+      };
     } catch {
-      loggedError = { message: error.message, serializationError: 'Error serialization failed' };
+      loggedError = { message: 'Error details unavailable' };
     }
     const diagnostic = {
       platform: chatThread.adapter.name,
