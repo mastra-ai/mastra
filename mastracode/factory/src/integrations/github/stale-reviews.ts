@@ -54,7 +54,11 @@ export async function dismissStaleFactoryReviews(
   versionControl: Pick<VersionControl, 'listReviews' | 'dismissReview'>,
   decision: Omit<FactoryDismissStaleReviewsDecision, 'type' | 'idempotencyKey'>,
   isFactoryAuthor: (login: string) => boolean,
+  isTrustedApprover: (login: string) => Promise<boolean>,
 ): Promise<string[]> {
+  // The approval marker is plain text anyone can post. Only an approver who
+  // could dismiss these reviews on GitHub themselves may trigger it.
+  if (!isFactoryAuthor(decision.approvingAuthor) && !(await isTrustedApprover(decision.approvingAuthor))) return [];
   const ref = {
     connection: { type: 'app-installation' as const, installationId: decision.installationId },
     sourceId: decision.repository,

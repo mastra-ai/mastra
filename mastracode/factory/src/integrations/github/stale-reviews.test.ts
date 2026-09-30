@@ -103,6 +103,7 @@ describe('dismissStaleFactoryReviews', () => {
         approvingAuthor: 'factory-reviewer',
       },
       isFactory,
+      async login => login === 'factory-reviewer',
     );
     expect(dismissed).toEqual([stale.id]);
     expect(listReviews).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: '2', pullRequestId: '42' }));
@@ -114,5 +115,31 @@ describe('dismissStaleFactoryReviews', () => {
         reviewId: stale.id,
       }),
     );
+  });
+});
+
+describe('dismissStaleFactoryReviews approver authorization', () => {
+  it('dismisses nothing when an untrusted account posts a Factory approval marker', async () => {
+    const stale = review({});
+    const spoof = review({ author: 'stranger', state: 'approved', body: 'Verdict: approve' });
+    const listReviews = vi.fn().mockResolvedValue({ reviews: [stale, spoof], nextCursor: null });
+    const dismissReview = vi.fn();
+    const isTrusted = vi.fn(async () => false);
+    const dismissed = await dismissStaleFactoryReviews(
+      { listReviews, dismissReview },
+      {
+        installationId: 7,
+        repository: 'acme/repo',
+        pullRequestNumber: 42,
+        approvingReviewId: spoof.id,
+        approvingAuthor: 'stranger',
+      },
+      isFactory,
+      isTrusted,
+    );
+    expect(dismissed).toEqual([]);
+    expect(isTrusted).toHaveBeenCalledWith('stranger');
+    expect(listReviews).not.toHaveBeenCalled();
+    expect(dismissReview).not.toHaveBeenCalled();
   });
 });

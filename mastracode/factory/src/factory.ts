@@ -53,7 +53,7 @@ import {
   resolveFactoryPullRequestParentWorkItemId,
 } from './integrations/github/provenance.js';
 import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.js';
-import { isFactoryGithubLogin } from './integrations/github/rules.js';
+import { isFactoryGithubLogin, trustedCollaborator } from './integrations/github/rules.js';
 import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
 import { buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
@@ -1243,8 +1243,16 @@ export class MastraFactory {
                 ...(githubIntegration
                   ? {
                       dismissStaleReviews: async decision => {
-                        await dismissStaleFactoryReviews(githubIntegration.versionControl, decision, login =>
-                          isFactoryGithubLogin(githubIntegration, login),
+                        await dismissStaleFactoryReviews(
+                          githubIntegration.versionControl,
+                          decision,
+                          login => isFactoryGithubLogin(githubIntegration, login),
+                          login =>
+                            trustedCollaborator(githubIntegration, {
+                              installationId: decision.installationId,
+                              repository: decision.repository,
+                              login,
+                            }),
                         );
                       },
                     }
