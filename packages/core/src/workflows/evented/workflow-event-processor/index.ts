@@ -1101,7 +1101,10 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowStatus: 'failed',
       }) ?? true;
 
-    if (shouldPersist) {
+    if (workflow?.options?.isOwnershipLostError?.((prevResult as any)?.error)) {
+      // Another execution may be driving the run from its stored snapshot:
+      // neither mark that row failed nor delete it.
+    } else if (shouldPersist) {
       await workflowsStore?.updateWorkflowState({
         workflowName: workflowId,
         runId,
@@ -2499,6 +2502,32 @@ export class WorkflowEventProcessor extends EventProcessor {
     // The finished step's id. Works for plain steps, declarative agent/tool/mapping
     // entries (their own id) and loop/foreach bodies (the wrapped step's id).
     const stepId = getStepIds(step)[0]!;
+
+    // This execution no longer owns the run, and another may be driving it from
+    // the stored snapshot: fail without merging the step result into that row.
+    if (prevResult.status === 'failed' && workflow.options?.isOwnershipLostError?.(prevResult.error)) {
+      await this.mastra.pubsub.publish('workflows', {
+        type: 'workflow.fail',
+        runId,
+        data: {
+          workflowId,
+          runId,
+          executionPath,
+          resumeSteps,
+          parentWorkflow,
+          stepResults: { ...stepResults, [stepId]: prevResult, __state: currentState },
+          timeTravel,
+          restart,
+          prevResult,
+          activeStepsPath,
+          requestContext,
+          actor,
+          state: currentState,
+          outputOptions,
+        },
+      });
+      return;
+    }
 
     // Cache workflows store to avoid redundant async calls
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');

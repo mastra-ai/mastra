@@ -43,6 +43,7 @@ import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
 import type { CreatedAgentSignal } from '../signals';
 import type { GoalConfig, StructuredOutputOptions } from '../types';
+import type { ExecutionFence } from './execution-fence';
 
 /**
  * Metadata about a tool that can be serialized (without the execute function)
@@ -887,6 +888,12 @@ export interface RunRegistryEntry {
    * surface — purely an internal coordination primitive.
    */
   workflowExecution?: Promise<unknown>;
+  /**
+   * Execution lease claimed by the `stream()` / `generate()` / `resume()` /
+   * `recover()` call currently driving this run in this process. Settled when
+   * that execution segment ends.
+   */
+  executionFence?: ExecutionFence;
   /**
    * Mastra instance that owns this in-process run. Used during shutdown to
    * wait only for executions that may still need this instance's storage.

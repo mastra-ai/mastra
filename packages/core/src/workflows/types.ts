@@ -561,6 +561,18 @@ export interface WorkflowOptions {
   allowUnclaimedResumes?: boolean;
 
   /**
+   * Identifies step errors raised because this execution lost, or could not
+   * confirm, ownership of the run — for example a durable agent run taken
+   * over by `recover()`. Another execution may be driving the run from its
+   * stored snapshot, so the evented engine fails such a run without any
+   * storage write: no step-result merge, no terminal `failed` update, and no
+   * snapshot cleanup.
+   *
+   * @internal Set by durable agent workflows.
+   */
+  isOwnershipLostError?: (error: unknown) => boolean;
+
+  /**
    * Transforms the run snapshot immediately before it is persisted.
    * Called at every snapshot persist site (both engines). Must be a pure
    * function returning JSON-safe data — the snapshot may cross a pubsub

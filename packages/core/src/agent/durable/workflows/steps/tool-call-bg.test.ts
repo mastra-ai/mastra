@@ -1210,7 +1210,9 @@ describe('durable tool-call background task dispatch', () => {
           'response',
         );
       }
-      expect(saveQueueManager.flushMessages).toHaveBeenCalledWith(messageList, 'thread-1', undefined);
+      expect(saveQueueManager.flushMessages).toHaveBeenCalledWith(messageList, 'thread-1', undefined, {
+        beforePersist: expect.any(Function),
+      });
     },
   );
 

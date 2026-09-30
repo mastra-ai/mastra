@@ -3,7 +3,6 @@ import { InMemoryServerCache } from '../../cache/inmemory';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { CachingPubSub } from '../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../events/event-emitter';
-import { isLeaseProvider, NoopLeaseProvider } from '../../events/pubsub';
 import type { LeaseProvider, PubSub } from '../../events/pubsub';
 import { isRunLocalTopic } from '../../events/topics';
 import { createTimeoutAbortSignal } from '../../loop/timeout';
@@ -31,7 +30,14 @@ import type { AgentAbortThreadOptions, AgentModelManagerConfig, ToolsInput } fro
 import { publishAbortRequest } from './abort-transport';
 import { AGENT_STREAM_TOPIC, DurableStepIds } from './constants';
 import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable-stream-until-idle';
+import {
+  ExecutionFence,
+  RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID,
+  resolveLeaseProvider,
+  setExecutionId,
+} from './execution-fence';
 import { prepareForDurableExecution } from './preparation';
+import type { PreparationResult } from './preparation';
 import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './run-registry';
 import { createDurableAgentStream, emitChunkEvent, emitErrorEvent, emitFinishEvent } from './stream-adapter';
 import type { DurableAgentStreamResult as DurableStreamAdapterResult } from './stream-adapter';
@@ -713,14 +719,7 @@ export class DurableAgent<
    * are indistinguishable to an idempotent lease backend.
    */
   async #acquireRecoveryLease(runId: string, abortController: AbortController): Promise<RecoveryLease> {
-    const pubsub = this.pubsub;
-    const unwrap = (pubsub as { getLeaseProvider?: () => LeaseProvider | undefined }).getLeaseProvider;
-    const provider =
-      typeof unwrap === 'function'
-        ? (unwrap.call(pubsub) ?? NoopLeaseProvider)
-        : isLeaseProvider(pubsub)
-          ? pubsub
-          : NoopLeaseProvider;
+    const provider = resolveLeaseProvider(this.pubsub);
     const key = `mastra:durable-agent-recovery:v1:${JSON.stringify([this.id, runId])}`;
     const owner = crypto.randomUUID();
 
@@ -913,6 +912,7 @@ export class DurableAgent<
     options,
     scheduleAutoCleanup,
     recoveryLease,
+    executionFence,
   }: {
     runId: string;
     workflowInput: DurableAgenticWorkflowInput;
@@ -924,6 +924,7 @@ export class DurableAgent<
     options?: DurableAgentRecoverOptions<TOutput>;
     scheduleAutoCleanup: () => void;
     recoveryLease: RecoveryLease;
+    executionFence: ExecutionFence;
   }): Promise<{
     stream: DurableStreamAdapterResult<TOutput>;
     threadRegistration?: AgentThreadRunRegistration;
@@ -1018,7 +1019,10 @@ export class DurableAgent<
       if (globalRunRegistry.get(runId) === registryEntry) {
         globalRunRegistry.delete(runId);
       }
-      await this.#reportRecoveryFailure(runId, recoveryLease.getLossError() ?? error);
+      const settlement = await executionFence.settle(async () => {});
+      if (settlement !== 'superseded') {
+        await this.#reportRecoveryFailure(runId, recoveryLease.getLossError() ?? error);
+      }
       await recoveryLease.release();
       throw error;
     }
@@ -1855,6 +1859,8 @@ export class DurableAgent<
     const workflow = this.getWorkflow();
     const entry = globalRunRegistry.get(runId);
     const requestContext = entry?.requestContext;
+    // Captured now: a later resume() replaces the registry's fence.
+    const executionFence = entry?.executionFence;
 
     // Populate the run row's resourceId column so storage-level resource
     // filters (listSuspendedRuns / listActiveRuns) can narrow the query,
@@ -1872,17 +1878,13 @@ export class DurableAgent<
       actor: workflowInput.options?.actor,
       ...createObservabilityContext({ currentSpan: entry?.agentSpan }),
     });
-    if (result?.status === 'failed') {
-      const error = new Error((result as any).error?.message || 'Workflow execution failed');
-      await this.emitError(runId, error);
-    }
-    // Reaching any non-suspended terminal status means the run is done and its
-    // persisted snapshot rows will never be resumed. Delete them so snapshot
-    // storage doesn't grow one stale row per completed run. Suspended runs
-    // keep their snapshots so `resume()` / `recoverActiveRuns()` can find them.
-    if (result?.status && result.status !== 'suspended') {
-      await this.deleteRunSnapshots(runId);
-    }
+    await this.settleExecution(runId, executionFence, {
+      status: result?.status,
+      error:
+        result?.status === 'failed'
+          ? new Error((result as any).error?.message || 'Workflow execution failed')
+          : undefined,
+    });
   }
 
   /**
@@ -1953,14 +1955,63 @@ export class DurableAgent<
   }
 
   /**
-   * `emitError` for fire-and-forget call sites. A pubsub that is already
-   * closing (for example during shutdown) must not turn a run's own failure
-   * into an unhandledRejection.
+   * Claim the run's execution fence (#23734): `acquire` for a new execution
+   * segment, `takeover` when recovering an orphaned run.
    */
-  protected emitErrorInBackground(runId: string, error: Error): void {
-    this.emitError(runId, error).catch(publishError => {
-      this.logger.warn(`Failed to publish error event for run ${runId}`, { runId, error: publishError });
+  #claimExecution(runId: string, mode: 'acquire' | 'takeover'): Promise<ExecutionFence> {
+    return ExecutionFence.claim({
+      leaseProvider: resolveLeaseProvider(this.pubsub),
+      agentId: this.id,
+      runId,
+      mode,
+      logger: this.logger,
     });
+  }
+
+  /**
+   * End an execution segment: publish the error of a failed segment and delete
+   * the snapshots of a run that reached a non-suspended terminal status.
+   *
+   * With an execution fence these writes happen only while the segment still
+   * owns the run, and the fence is released afterwards. A superseded segment
+   * writes nothing — the run belongs to the execution that took it over. A
+   * segment that lost its lease without being replaced still reports its error
+   * but keeps the snapshots so the run stays recoverable.
+   *
+   * Never rejects: a pubsub that is already closing (for example during
+   * shutdown) must not turn a run's own failure into an unhandledRejection.
+   *
+   * @internal
+   */
+  protected async settleExecution(
+    runId: string,
+    fence: ExecutionFence | undefined,
+    outcome: { status?: string; error?: Error },
+  ): Promise<void> {
+    const { status, error } = outcome;
+    const reportError = async (reported: Error) => {
+      try {
+        await this.emitError(runId, reported);
+      } catch (publishError) {
+        this.logger.warn(`Failed to publish error event for run ${runId}`, { runId, error: publishError });
+      }
+    };
+    let wrote = false;
+    const writeTerminalState = async () => {
+      wrote = true;
+      if (error) await reportError(error);
+      // Reaching any non-suspended terminal status means the run is done and
+      // its persisted snapshot rows will never be resumed. Suspended runs keep
+      // their snapshots so `resume()` / `recoverActiveRuns()` can find them.
+      if (status && status !== 'suspended') await this.deleteRunSnapshots(runId);
+    };
+
+    if (!fence) return writeTerminalState();
+    const settlement = await fence.settle(writeTerminalState);
+    // `wrote` is false when the fence could not verify ownership, or when it
+    // was already settled by this segment's normal completion and a later step
+    // (for example goal bookkeeping) failed.
+    if (!wrote && error && settlement !== 'superseded') await reportError(error);
   }
 
   /**
@@ -2169,22 +2220,37 @@ export class DurableAgent<
       actor: options?.actor,
     });
 
-    // 1. Prepare for durable execution (non-durable phase)
-    const preparation = await prepareForDurableExecution<TOutput>({
-      agent: this.#wrappedAgent as Agent<string, any, TOutput>,
-      messages,
-      options: options as AgentExecutionOptions<TOutput>,
-      runId: options?.runId,
-      requestContext: options?.requestContext,
-      optionsAreResolved: true,
-      mastra: this.#mastra,
-      durableAgentId: this.id,
-      durableAgentName: this.name,
-    });
+    // 1. Claim the run before preparing it, so a run that is already executing
+    // fails before any span or memory write is made for this call.
+    const runId = options?.runId ?? crypto.randomUUID();
+    const requestContext = options?.requestContext ?? new RequestContext();
+    const executionFence = await this.#claimExecution(runId, 'acquire');
 
-    const { runId, messageId, workflowInput, registryEntry, messageList, threadId, resourceId } = preparation;
+    // 1a. Prepare for durable execution (non-durable phase)
+    let preparation: PreparationResult<TOutput>;
+    try {
+      preparation = await prepareForDurableExecution<TOutput>({
+        agent: this.#wrappedAgent as Agent<string, any, TOutput>,
+        messages,
+        options: options as AgentExecutionOptions<TOutput>,
+        runId,
+        requestContext,
+        optionsAreResolved: true,
+        mastra: this.#mastra,
+        durableAgentId: this.id,
+        durableAgentName: this.name,
+      });
+    } catch (error) {
+      await executionFence.settle(async () => {});
+      throw error;
+    }
 
-    // 1a. Install the abort controller for this run. The controller is owned
+    const { messageId, workflowInput, registryEntry, messageList, threadId, resourceId } = preparation;
+    // Set after preparation so request-context schema validation never sees it.
+    setExecutionId(requestContext, runId, executionFence.executionId);
+    registryEntry.executionFence = executionFence;
+
+    // 1b. Install the abort controller for this run. The controller is owned
     // by this DurableAgent instance; the result's abort() method flips it,
     // and the durable LLM-execution step reads `abortSignal` off the registry
     // to thread it into the model call + abort short-circuits. If the caller
@@ -2325,9 +2391,7 @@ export class DurableAgent<
           await stopGoalActivity({ agentId: workflowInput.agentId, runId });
         }
       })
-      .catch(error => {
-        this.emitErrorInBackground(runId, error);
-      });
+      .catch(error => this.settleExecution(runId, executionFence, { error }));
     const trackedEntry = globalRunRegistry.get(runId);
     if (trackedEntry) {
       trackedEntry.workflowExecution = workflowExecution;
@@ -2567,6 +2631,23 @@ export class DurableAgent<
       actor: resolvedOptions.actor,
     });
 
+    // Settle the prior segment before claiming the run and taking its event
+    // offset. Otherwise a late suspension event can be replayed into the new
+    // segment and close it early.
+    const priorExecution = globalRunRegistry.get(runId)?.workflowExecution;
+    await priorExecution?.catch(() => {
+      /* errors already handled by the prior segment */
+    });
+    // Claimed before the abort controller and timeout are replaced, so a
+    // conflicting resume leaves the executing segment's state untouched.
+    const executionFence = await this.#claimExecution(runId, 'acquire');
+    if (resolvedOptions.requestContext) {
+      setExecutionId(resolvedOptions.requestContext, runId, executionFence.executionId);
+    }
+    for (const reg of [entry, globalRunRegistry.get(runId)]) {
+      if (reg) reg.executionFence = executionFence;
+    }
+
     // Install a fresh abort controller for the resumed segment. The original
     // controller is gone (the stream that owned it has already settled), so
     // we overwrite the registry slot. If the caller passed an external
@@ -2636,13 +2717,6 @@ export class DurableAgent<
 
     const globalEntry = globalRunRegistry.get(runId);
     const resumeModel = globalEntry?.model as any;
-
-    // Settle the prior segment before taking its event offset. Otherwise a late
-    // suspension event can be replayed into the new segment and close it early.
-    const priorExecution = globalRunRegistry.get(runId)?.workflowExecution;
-    await priorExecution?.catch(() => {
-      /* errors already handled by the prior segment */
-    });
 
     // Skip events already broadcast by the original run (e.g. the SUSPENDED
     // chunk that paused it). Without this, a resume that closes on suspend
@@ -2779,21 +2853,15 @@ export class DurableAgent<
         } finally {
           await stopGoalActivity({ agentId: this.id, runId });
         }
-        if (result?.status === 'failed') {
-          const error = new Error((result as any).error?.message || 'Workflow resume failed');
-          this.emitErrorInBackground(runId, error);
-        }
-        // Same snapshot cleanup as the initial `start()` path: once resume
-        // settles on any non-suspended terminal status the persisted rows are
-        // no longer needed. A resume that re-suspends must keep them so the
-        // next resume/recover can find the snapshot.
-        if (result?.status && result.status !== 'suspended') {
-          await this.deleteRunSnapshots(runId);
-        }
+        await this.settleExecution(runId, executionFence, {
+          status: result?.status,
+          error:
+            result?.status === 'failed'
+              ? new Error((result as any).error?.message || 'Workflow resume failed')
+              : undefined,
+        });
       })
-      .catch(error => {
-        this.emitErrorInBackground(runId, error);
-      });
+      .catch(error => this.settleExecution(runId, executionFence, { error }));
     const trackedResumeEntry = globalRunRegistry.get(runId);
     if (trackedResumeEntry) {
       trackedResumeEntry.workflowExecution = workflowExecution;
@@ -2957,9 +3025,28 @@ export class DurableAgent<
     }
     const recoveryLease = await this.#acquireRecoveryLease(runId, abortController);
 
+    let executionFence: ExecutionFence | undefined;
     let recoveryState: RehydratedRecoveryState;
     let finishPublishedBeforeCrash: boolean;
     try {
+      // A run this process is still executing is not orphaned. Recovering it
+      // here would replace the live execution's registry entry mid-flight
+      // (#23734). Checked after the recovery lease so a concurrent recover()
+      // still reports DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS.
+      const localExecution = ExecutionFence.getLocalActive(runId);
+      if (localExecution && !localExecution.isLost()) {
+        throw new MastraError({
+          id: RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID,
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `DurableAgent "${this.name}" recover(${runId}): this process is still executing the run. Wait for it to finish instead of recovering it.`,
+          details: { agentName: this.name, runId },
+        });
+      }
+      // Take the run over from any execution still driving it before reading
+      // its state: from here on that execution can no longer write (#23734).
+      executionFence = await this.#claimExecution(runId, 'takeover');
+      recoveryLease.assertOwned();
       // The lease RPC itself may have waited while an earlier owner completed.
       // Re-read after acquisition and recover from that authoritative snapshot,
       // never from the pre-claim copy.
@@ -2985,10 +3072,13 @@ export class DurableAgent<
         recoveryLease,
       });
     } catch (error) {
+      await executionFence?.settle(async () => {});
       await recoveryLease.release();
       throw error;
     }
     const { requestContext, threadId, resourceId, messageList, recoverAgentSpan, registryEntry } = recoveryState;
+    setExecutionId(requestContext, runId, executionFence.executionId);
+    registryEntry.executionFence = executionFence;
 
     // 3. Cleanup plumbing (mirrors stream()/resume()).
     let cleanedUp = false;
@@ -3032,6 +3122,7 @@ export class DurableAgent<
       workflow = this.getWorkflow();
       recoveryLease.assertOwned();
     } catch (error) {
+      await executionFence.settle(async () => {});
       await recoveryLease.release();
       throw error;
     }
@@ -3049,6 +3140,7 @@ export class DurableAgent<
       options,
       scheduleAutoCleanup,
       recoveryLease,
+      executionFence,
     });
     const { output, cleanup: createdStreamCleanup, ready } = stream;
     streamCleanup = createdStreamCleanup;
@@ -3086,23 +3178,30 @@ export class DurableAgent<
         }
         // Snapshot cleanup runs for every non-suspended terminal (success or
         // failed) so storage stays bounded — mirrors the start()/resume()
-        // contract.
-        if (result?.status && result.status !== 'suspended') {
-          await this.deleteRunSnapshots(runId);
-          recoveryLease.assertOwned();
-        }
+        // contract — but only while this recovery still owns the run.
+        await executionFence.settle(async () => {
+          if (result?.status && result.status !== 'suspended') {
+            await this.deleteRunSnapshots(runId);
+            recoveryLease.assertOwned();
+          }
+        });
         if (result?.status === 'failed') {
           throw new Error((result as any).error?.message || 'Workflow recover failed');
         }
       })
       .catch(async error => {
+        // Settles a recovery that failed before the run finished; otherwise
+        // returns the settlement reached above.
+        const settlement = await executionFence.settle(async () => {});
         const leaseLossError = recoveryLease.getLossError();
         if (leaseLossError) {
           await threadRegistration?.rollback({ releaseLease: false });
           performCleanup();
         }
         const recoveryError = leaseLossError ?? error;
-        const reported = await this.#reportRecoveryFailure(runId, recoveryError);
+        // Once another execution took the run over, its subscribers share this
+        // run's topic: stay silent.
+        const reported = settlement !== 'superseded' && (await this.#reportRecoveryFailure(runId, recoveryError));
         if (!reported && !leaseLossError) {
           await threadRegistration?.rollback();
           performCleanup();
@@ -3255,23 +3354,37 @@ export class DurableAgent<
       actor: options?.actor,
     });
 
-    // 1. Prepare for durable execution (non-durable phase)
-    const preparation = await prepareForDurableExecution<TOutput>({
-      agent: this.#wrappedAgent as Agent<string, any, TOutput>,
-      messages,
-      options: options as AgentExecutionOptions<TOutput>,
-      runId: options?.runId,
-      requestContext: options?.requestContext,
-      optionsAreResolved: true,
-      mastra: this.#mastra,
-      methodType: 'generate',
-      durableAgentId: this.id,
-      durableAgentName: this.name,
-    });
+    // 1. Claim the run before preparing it — see stream().
+    const runId = options?.runId ?? crypto.randomUUID();
+    const requestContext = options?.requestContext ?? new RequestContext();
+    const executionFence = await this.#claimExecution(runId, 'acquire');
 
-    const { runId, messageId, workflowInput, registryEntry, messageList, threadId, resourceId } = preparation;
+    // 1a. Prepare for durable execution (non-durable phase)
+    let preparation: PreparationResult<TOutput>;
+    try {
+      preparation = await prepareForDurableExecution<TOutput>({
+        agent: this.#wrappedAgent as Agent<string, any, TOutput>,
+        messages,
+        options: options as AgentExecutionOptions<TOutput>,
+        runId,
+        requestContext,
+        optionsAreResolved: true,
+        mastra: this.#mastra,
+        methodType: 'generate',
+        durableAgentId: this.id,
+        durableAgentName: this.name,
+      });
+    } catch (error) {
+      await executionFence.settle(async () => {});
+      throw error;
+    }
 
-    // 1a. Install the abort controller for this run. The controller is owned
+    const { messageId, workflowInput, registryEntry, messageList, threadId, resourceId } = preparation;
+    // Set after preparation so request-context schema validation never sees it.
+    setExecutionId(requestContext, runId, executionFence.executionId);
+    registryEntry.executionFence = executionFence;
+
+    // 1b. Install the abort controller for this run. The controller is owned
     // by this DurableAgent instance; the result's abort() method flips it,
     // and the durable LLM-execution step reads `abortSignal` off the registry
     // to thread it into the model call + abort short-circuits. If the caller
@@ -3388,9 +3501,7 @@ export class DurableAgent<
           await stopGoalActivity({ agentId: workflowInput.agentId, runId });
         }
       })
-      .catch(error => {
-        this.emitErrorInBackground(runId, error);
-      });
+      .catch(error => this.settleExecution(runId, executionFence, { error }));
     const trackedEntry = globalRunRegistry.get(runId);
     if (trackedEntry) {
       trackedEntry.workflowExecution = workflowExecution;
