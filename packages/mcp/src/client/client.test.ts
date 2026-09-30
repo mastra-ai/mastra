@@ -277,186 +277,13 @@ describe('InternalMastraMCPClient - jsonSchemaValidator pass-through', () => {
     expect(sdkClient._jsonSchemaValidator).toBe(customValidator);
   });
 
-  it('should lazily cache the configured validator for hydrated tool input', async () => {
-    const validate = vi.fn((input: unknown) => {
-      if (typeof input === 'object' && input !== null && 'city' in input && typeof input.city === 'string') {
-        return { valid: true as const, data: input };
-      }
-      return {
-        valid: false as const,
-        errorMessage: '#: Property "city" does not match schema.; #/city: Instance type "number" is invalid.',
-      };
-    });
-    const customValidator = { getValidator: vi.fn(() => validate) };
-    const client = new InternalMastraMCPClient({
-      name: 'hydrated-input-validator-client',
-      server: {
-        url: new URL('http://127.0.0.1:0/mcp'),
-        jsonSchemaValidator: customValidator,
-      },
-    });
-    const definition = {
-      name: 'weather',
-      inputSchema: {
-        type: 'object' as const,
-        properties: { city: { type: 'string' as const } },
-        required: ['city'],
-        additionalProperties: false,
-      },
-      server: { name: 'hydrated-input-validator-client' },
-    };
-    const tool = client.toolFromDefinition({ definition });
-    const duplicateTool = client.toolFromDefinition({ definition: structuredClone(definition) });
-
-    expect(customValidator.getValidator).not.toHaveBeenCalled();
-    await expect(Promise.resolve(tool.inputSchema?.['~standard'].validate({ city: 'Utrecht' }))).resolves.toEqual({
-      value: { city: 'Utrecht' },
-    });
-    await expect(Promise.resolve(duplicateTool.inputSchema?.['~standard'].validate({ city: 'Leiden' }))).resolves.toEqual({
-      value: { city: 'Leiden' },
-    });
-    await expect(Promise.resolve(tool.inputSchema?.['~standard'].validate({ city: 42 }))).resolves.toEqual({
-      issues: [
-        { message: 'Property "city" does not match schema.', path: [] },
-        { message: 'Instance type "number" is invalid.', path: ['city'] },
-      ],
-    });
-    expect(customValidator.getValidator).toHaveBeenCalledOnce();
-    expect(customValidator.getValidator).toHaveBeenCalledWith({
-      $schema: 'https://json-schema.org/draft/2020-12/schema',
-      type: 'object',
-      properties: { city: { type: 'string' } },
-      required: ['city'],
-      additionalProperties: false,
-    });
-  });
-
-  it('should preserve input validation paths from the default validator', async () => {
-    const client = new InternalMastraMCPClient({
-      name: 'input-validator-path-client',
-      server: { url: new URL('http://127.0.0.1:0/mcp') },
-    });
-    const tool = client.toolFromDefinition({
-      definition: {
-        name: 'weather',
-        inputSchema: {
-          type: 'object',
-          properties: { cities: { type: 'array', items: { type: 'string' } } },
-          required: ['cities'],
-        },
-        server: { name: 'input-validator-path-client' },
-      },
-    });
-
-    await expect(Promise.resolve(tool.inputSchema?.['~standard'].validate({ cities: [42] }))).resolves.toEqual({
-      issues: [{ message: 'must be string', path: ['cities', 0] }],
-    });
-  });
-
-  it('should report validator compilation errors during input validation', async () => {
-    const customValidator = {
-      getValidator: vi.fn(() => {
-        throw new Error("can't resolve reference missing-schema");
-      }),
-    };
-    const client = new InternalMastraMCPClient({
-      name: 'invalid-input-schema-client',
-      server: {
-        url: new URL('http://127.0.0.1:0/mcp'),
-        jsonSchemaValidator: customValidator,
-      },
-    });
-
-    const tool = client.toolFromDefinition({
-      definition: {
-        name: 'invalid-schema',
-        inputSchema: { $ref: '#/$defs/missing-schema' },
-        server: { name: 'invalid-input-schema-client' },
-      },
-    });
-
-    expect(customValidator.getValidator).not.toHaveBeenCalled();
-    await expect(Promise.resolve(tool.inputSchema?.['~standard'].validate({}))).resolves.toEqual({
-      issues: [{ message: "Schema validation error: can't resolve reference missing-schema" }],
-    });
-    expect(customValidator.getValidator).toHaveBeenCalledOnce();
-  });
-
-  it('should isolate distinct default validators for schemas that share an id', async () => {
-    const client = new InternalMastraMCPClient({
-      name: 'shared-schema-id-client',
-      server: { url: new URL('http://127.0.0.1:0/mcp') },
-    });
-    const createTool = (name: string, cityType: 'string' | 'number') =>
-      client.toolFromDefinition({
-        definition: {
-          name,
-          inputSchema: {
-            $id: 'https://example.com/weather-input',
-            type: 'object',
-            properties: { city: { type: cityType } },
-            required: ['city'],
-            additionalProperties: false,
-          },
-          server: { name: 'shared-schema-id-client' },
-        },
-      });
-
-    const stringTool = createTool('string-weather', 'string');
-    const numberTool = createTool('number-weather', 'number');
-
-    await expect(Promise.resolve(stringTool.inputSchema?.['~standard'].validate({ city: 'Utrecht' }))).resolves.toEqual({
-      value: { city: 'Utrecht' },
-    });
-    await expect(Promise.resolve(numberTool.inputSchema?.['~standard'].validate({ city: 42 }))).resolves.toEqual({
-      value: { city: 42 },
-    });
-    await expect(Promise.resolve(numberTool.inputSchema?.['~standard'].validate({ city: 'Utrecht' }))).resolves.toMatchObject({
-      issues: expect.any(Array),
-    });
-  });
-
-  it('should reject asynchronous input schemas before invoking the synchronous validator', async () => {
-    const customValidator = {
-      getValidator: vi.fn(() => (input: unknown) => ({ valid: true as const, data: input })),
-    };
-    const client = new InternalMastraMCPClient({
-      name: 'async-input-schema-client',
-      server: {
-        url: new URL('http://127.0.0.1:0/mcp'),
-        jsonSchemaValidator: customValidator,
-      },
-    });
-    const tool = client.toolFromDefinition({
-      definition: {
-        name: 'async-schema',
-        inputSchema: {
-          $async: true,
-          type: 'object',
-          properties: { city: { type: 'string' } },
-          required: ['city'],
-        },
-        server: { name: 'async-input-schema-client' },
-      },
-    });
-
-    await expect(Promise.resolve(tool.inputSchema?.['~standard'].validate({ city: 42 }))).resolves.toEqual({
-      issues: [{ message: 'Asynchronous JSON Schema validation is not supported' }],
-    });
-    expect(customValidator.getValidator).not.toHaveBeenCalled();
-  });
-
   it('should use the configured validator for hydrated tool output', async () => {
     const validate = vi.fn((input: unknown) => ({
       valid: input === 'valid',
       data: input === 'valid' ? input : undefined,
       errorMessage: input === 'valid' ? undefined : 'expected valid',
     }));
-    const customValidator = {
-      getValidator: vi.fn((schema: { type?: string }) =>
-        schema.type === 'string' ? validate : (input: unknown) => ({ valid: true as const, data: input }),
-      ),
-    };
+    const customValidator = { getValidator: vi.fn(() => validate) };
     const client = new InternalMastraMCPClient({
       name: 'hydrated-validator-client',
       server: {
@@ -493,9 +320,7 @@ describe('InternalMastraMCPClient - jsonSchemaValidator pass-through', () => {
   });
 
   it('should not validate structuredContent from an error result', async () => {
-    const customValidator = {
-      getValidator: vi.fn(() => (input: unknown) => ({ valid: true as const, data: input })),
-    };
+    const customValidator = { getValidator: vi.fn() };
     const client = new InternalMastraMCPClient({
       name: 'error-result-validator-client',
       server: {
@@ -522,11 +347,7 @@ describe('InternalMastraMCPClient - jsonSchemaValidator pass-through', () => {
     });
 
     await expect(tool.execute?.({})).resolves.toBe(42);
-    expect(customValidator.getValidator).toHaveBeenCalledOnce();
-    expect(customValidator.getValidator).not.toHaveBeenCalledWith({
-      $schema: 'https://json-schema.org/draft/2020-12/schema',
-      type: 'string',
-    });
+    expect(customValidator.getValidator).not.toHaveBeenCalled();
   });
   it('should leave the SDK Client default validator in place when omitted', () => {
     const client = new InternalMastraMCPClient({

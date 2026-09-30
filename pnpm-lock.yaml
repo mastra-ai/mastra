@@ -1638,6 +1638,9 @@ importers:
       '@babel/core':
         specifier: ^8.0.1
         version: 8.0.1
+      '@cfworker/json-schema':
+        specifier: 4.1.1
+        version: 4.1.1
       '@mastra/deployer':
         specifier: workspace:^
         version: link:../../packages/deployer
@@ -6282,6 +6285,9 @@ importers:
 
   packages/schema-compat:
     dependencies:
+      ajv:
+        specifier: ^8.20.0
+        version: 8.20.0
       json-schema-to-zod:
         specifier: ^2.7.0
         version: 2.7.0
@@ -6334,9 +6340,6 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 4.1.11(vitest@4.1.11)
-      ajv:
-        specifier: ^8.20.0
-        version: 8.20.0
       arktype:
         specifier: ^2.2.0
         version: 2.2.0

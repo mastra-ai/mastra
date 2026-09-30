@@ -21,7 +21,7 @@ export default defineConfig({
   deps: {
     // json-schema-to-zod and zod-to-json-schema only expose a real default export in their ESM
     // builds; when externalized, the CJS output calls `require(...).default` which is undefined.
-    alwaysBundle: ['@internal/ai-sdk-v4', 'ajv', 'json-schema-to-zod', 'zod-to-json-schema', 'zod-from-json-schema-v3'],
+    alwaysBundle: ['@internal/ai-sdk-v4', 'json-schema-to-zod', 'zod-to-json-schema', 'zod-from-json-schema-v3'],
   },
   onSuccess: async () => {
     await generateTypes(
@@ -32,7 +32,6 @@ export default defineConfig({
         '@internal/ai-v6',
         '@standard-schema/spec',
         '@types/json-schema',
-        'ajv',
         'fast-uri',
         'fast-deep-equal',
         'json-schema-to-zod',

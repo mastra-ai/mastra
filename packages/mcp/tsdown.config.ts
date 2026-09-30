@@ -12,6 +12,7 @@ export default defineConfig({
   sourcemap: true,
   deps: {
     alwaysBundle: ['@mastra/schema-compat'],
+    neverBundle: ['ajv', 'ajv/dist/2020.js'],
   },
   onSuccess: async () => {
     await generateTypes(process.cwd(), new Set(['hono', 'hono-mcp-server-sse-transport']));

@@ -1,6 +1,7 @@
 import { writeFile } from 'node:fs/promises';
-import { builtinModules, createRequire } from 'node:module';
-import { join, relative } from 'node:path';
+import { builtinModules } from 'node:module';
+import { dirname, extname, join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Deployer } from '@mastra/deployer';
 import type { analyzeBundle } from '@mastra/deployer/analyze';
 import type { BundlerOptions } from '@mastra/deployer/bundler';
@@ -11,8 +12,8 @@ import { mastraInstanceWrapper } from './plugins/mastra-instance-wrapper';
 import { postgresStoreInstanceChecker } from './plugins/postgres-store-instance-checker';
 
 const nodeBuiltins = new Set(builtinModules);
-const mcpAjvValidatorSpecifier = '@modelcontextprotocol/client/validators/ajv';
-const mcpCfWorkerValidatorSpecifier = '@modelcontextprotocol/client/validators/cf-worker';
+const ajvSpecifier = 'ajv';
+const ajv2020Specifier = 'ajv/dist/2020.js';
 
 /**
  * Rollup plugin that marks bare Node.js builtin imports (e.g. `process`, `path`)
@@ -202,7 +203,7 @@ export default { createRequire };
         'readable-stream': `./${readableStreamStubPath}`,
         module: `./${moduleStubPath}`,
         'node:module': `./${moduleStubPath}`,
-        [mcpAjvValidatorSpecifier]: mcpCfWorkerValidatorSpecifier,
+        ...this.getWorkersAjvAlias(),
         ...userAlias,
       },
     };
@@ -314,18 +315,14 @@ try {
     return inputOptions;
   }
 
-  private getMcpValidatorAlias(projectRoot: string): Record<string, string> {
-    try {
-      const projectRequire = createRequire(join(projectRoot, 'package.json'));
-      const mcpPackagePath = projectRequire.resolve('@mastra/mcp/package.json');
-      const mcpRequire = createRequire(mcpPackagePath);
+  private getWorkersAjvAlias(): Record<string, string> {
+    const modulePath = fileURLToPath(import.meta.url);
+    const workersAjvPath = join(dirname(modulePath), `ajv-worker${extname(modulePath)}`);
 
-      return {
-        [mcpAjvValidatorSpecifier]: mcpRequire.resolve(mcpCfWorkerValidatorSpecifier),
-      };
-    } catch {
-      return {};
-    }
+    return {
+      [ajvSpecifier]: workersAjvPath,
+      [ajv2020Specifier]: workersAjvPath,
+    };
   }
 
   async bundle(
@@ -340,7 +337,7 @@ try {
         outputDirectory,
         projectRoot,
         enableEsmShim: false,
-        alias: this.getMcpValidatorAlias(projectRoot),
+        alias: this.getWorkersAjvAlias(),
       },
       toolsPaths,
     );

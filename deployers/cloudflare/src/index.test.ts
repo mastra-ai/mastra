@@ -43,13 +43,14 @@ describe('CloudflareDeployer', () => {
     });
   });
 
-  describe('MCP JSON Schema validator compatibility', () => {
-    it('uses the Workers validator during Mastra bundling', async () => {
+  describe('AJV compatibility', () => {
+    it('uses the Workers-compatible AJV facade during Mastra bundling', async () => {
       deployer = new CloudflareDeployer({ name: 'test-worker' });
       // @ts-expect-error - accessing protected method for testing
       const bundle = vi.spyOn(deployer, '_bundle').mockResolvedValue(undefined);
-      vi.spyOn(deployer as any, 'getMcpValidatorAlias').mockReturnValue({
-        '@modelcontextprotocol/client/validators/ajv': '/resolved/validators/cfWorker.js',
+      vi.spyOn(deployer as any, 'getWorkersAjvAlias').mockReturnValue({
+        ajv: '/resolved/ajv-worker.js',
+        'ajv/dist/2020.js': '/resolved/ajv-worker.js',
       });
 
       await deployer.bundle(join(tempDir, 'src', 'mastra', 'index.ts'), tempDir, {
@@ -62,14 +63,15 @@ describe('CloudflareDeployer', () => {
         join(tempDir, 'src', 'mastra', 'index.ts'),
         expect.objectContaining({
           alias: {
-            '@modelcontextprotocol/client/validators/ajv': '/resolved/validators/cfWorker.js',
+            ajv: '/resolved/ajv-worker.js',
+            'ajv/dist/2020.js': '/resolved/ajv-worker.js',
           },
         }),
         [],
       );
     });
 
-    it('writes the Workers validator alias to Wrangler configuration', async () => {
+    it('writes the Workers-compatible AJV aliases to Wrangler configuration', async () => {
       const outputDirectory = join(tempDir, '.mastra');
       await mkdir(join(outputDirectory, 'output'), { recursive: true });
       deployer = new CloudflareDeployer({ name: 'test-worker' });
@@ -82,12 +84,10 @@ describe('CloudflareDeployer', () => {
         (await readFile(join(tempDir, 'wrangler.jsonc'), 'utf-8')).replace(/\/\*[\s\S]*?\*\//, ''),
       );
 
-      expect(outputConfig.alias['@modelcontextprotocol/client/validators/ajv']).toBe(
-        '@modelcontextprotocol/client/validators/cf-worker',
-      );
-      expect(rootConfig.alias['@modelcontextprotocol/client/validators/ajv']).toBe(
-        '@modelcontextprotocol/client/validators/cf-worker',
-      );
+      expect(outputConfig.alias.ajv).toMatch(/ajv-worker\.ts$/);
+      expect(outputConfig.alias['ajv/dist/2020.js']).toBe(outputConfig.alias.ajv);
+      expect(rootConfig.alias.ajv).toBe(outputConfig.alias.ajv);
+      expect(rootConfig.alias['ajv/dist/2020.js']).toBe(outputConfig.alias.ajv);
     });
   });
 
