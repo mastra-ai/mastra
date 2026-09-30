@@ -51,6 +51,16 @@ describe('UserTextPartRenderer', () => {
       expect(screen.getByText(/donne moi la premiere ligne/)).toBeTruthy();
       expect(screen.queryByText(/Use workspace tools/)).toBeNull();
     });
+
+    it('when the filename contains quotes and brackets then it decodes the name', () => {
+      const name = 'report "final" [v2].xlsx';
+      const text = `[Attachment ${JSON.stringify(name)} (application/vnd.openxmlformats-officedocument.spreadsheetml.sheet) was uploaded to the workspace at uploads/abc/report final [v2].xlsx. Use workspace tools to read it.]`;
+
+      render(<UserTextPartRenderer part={{ type: 'text', text }} />);
+
+      expect(screen.getAllByTitle(name).length).toBeGreaterThan(0);
+      expect(screen.queryByText(/Use workspace tools/)).toBeNull();
+    });
   });
 
   describe('when several named text attachments are rendered', () => {

@@ -106,6 +106,15 @@ export { SkillsProcessor, formatSkillsCatalog, type SkillCatalogEntry, type Skil
 export { SkillSearchProcessor, type SkillSearchProcessorOptions } from './skill-search';
 export { WorkspaceInstructionsProcessor, type WorkspaceInstructionsProcessorOptions } from './workspace-instructions';
 export {
+  WorkspaceAttachmentsProcessor,
+  formatWorkspaceAttachmentNote,
+  WORKSPACE_REQUIRED_FOR_ATTACHMENT,
+  ATTACHMENT_NOT_INLINE,
+  ATTACHMENT_INVALID_DATA,
+  type WorkspaceAttachmentsProcessorOptions,
+  type WorkspaceAttachmentsTripwireMetadata,
+} from './workspace-attachments';
+export {
   ResponseCache,
   DEFAULT_RESPONSE_CACHE_TTL_SECONDS,
   RESPONSE_CACHE_CONTEXT_KEY,

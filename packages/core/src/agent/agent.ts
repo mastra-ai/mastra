@@ -94,6 +94,7 @@ import type {
 } from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { SkillsProcessor } from '../processors/processors/skills';
+import { WorkspaceAttachmentsProcessor } from '../processors/processors/workspace-attachments';
 import { WorkspaceInstructionsProcessor } from '../processors/processors/workspace-instructions';
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
@@ -1599,9 +1600,8 @@ export class Agent<
    */
   private async getWorkspaceInstructionsProcessors(
     configuredProcessors: InputProcessorOrWorkflow[],
-    requestContext?: RequestContext,
+    workspace: AnyWorkspace | undefined,
   ): Promise<InputProcessorOrWorkflow[]> {
-    const workspace = await this.getWorkspace({ requestContext: requestContext || new RequestContext() });
     if (!workspace) return [];
 
     // Skip if workspace has no filesystem or sandbox (nothing to describe)
@@ -1618,6 +1618,22 @@ export class Agent<
     if (hasProcessor) return [];
 
     return [new WorkspaceInstructionsProcessor({ workspace })];
+  }
+
+  /**
+   * Gets the workspace-attachments processor. Always added (unless already configured) so
+   * spreadsheet attachments are either written to the workspace or abort the run.
+   * @internal
+   */
+  private getWorkspaceAttachmentsProcessors(
+    configuredProcessors: InputProcessorOrWorkflow[],
+    workspace: AnyWorkspace | undefined,
+  ): InputProcessorOrWorkflow[] {
+    const hasProcessor = configuredProcessors.some(
+      p => !isProcessorWorkflow(p) && 'id' in p && p.id === 'workspace-attachments-processor',
+    );
+    if (hasProcessor) return [];
+    return [new WorkspaceAttachmentsProcessor({ workspace })];
   }
 
   /**
@@ -2032,6 +2048,7 @@ export class Agent<
   private async resolveInputProcessors(
     requestContext?: RequestContext,
     configuredProcessorOverrides?: InputProcessorOrWorkflow[],
+    runWorkspace?: { workspace: AnyWorkspace | undefined },
   ): Promise<InputProcessorOrWorkflow[]> {
     // Get configured input processors - use overrides if provided (from generate/stream options),
     // otherwise use agent constructor processors
@@ -2054,8 +2071,16 @@ export class Agent<
       ? memoryProcessors.filter(processor => processor.id !== 'observational-memory')
       : memoryProcessors;
 
+    // Use the run's workspace when provided so processors and tools share one instance
+    const workspace = runWorkspace
+      ? runWorkspace.workspace
+      : await this.getWorkspace({ requestContext: requestContext || new RequestContext() });
+
+    // Spreadsheet attachments are routed to the workspace before anything else reads them
+    const attachmentProcessors = this.getWorkspaceAttachmentsProcessors(configuredProcessors, workspace);
+
     // Get workspace instructions processors (with deduplication)
-    const workspaceProcessors = await this.getWorkspaceInstructionsProcessors(configuredProcessors, requestContext);
+    const workspaceProcessors = await this.getWorkspaceInstructionsProcessors(configuredProcessors, workspace);
 
     // Get skills processors if skills are configured (with deduplication)
     const skillsProcessors = await this.getSkillsProcessors(configuredProcessors, requestContext);
@@ -2076,6 +2101,7 @@ export class Agent<
     // User-configured processors run after auto-derived layers to allow customization
     return [
       ...effectiveMemoryProcessors,
+      ...attachmentProcessors,
       ...workspaceProcessors,
       ...skillsProcessors,
       ...channelProcessors,
@@ -2092,8 +2118,9 @@ export class Agent<
   private async listResolvedInputProcessors(
     requestContext?: RequestContext,
     configuredProcessorOverrides?: InputProcessorOrWorkflow[],
+    runWorkspace?: { workspace: AnyWorkspace | undefined },
   ): Promise<InputProcessorOrWorkflow[]> {
-    const processors = await this.resolveInputProcessors(requestContext, configuredProcessorOverrides);
+    const processors = await this.resolveInputProcessors(requestContext, configuredProcessorOverrides, runWorkspace);
     return this.combineProcessorsIntoWorkflow(processors, `${this.id}-input-processor`);
   }
 
@@ -2105,8 +2132,9 @@ export class Agent<
   private async listResolvedLLMRequestProcessors(
     requestContext?: RequestContext,
     configuredProcessorOverrides?: InputProcessorOrWorkflow[],
+    runWorkspace?: { workspace: AnyWorkspace | undefined },
   ): Promise<InputProcessorOrWorkflow[]> {
-    return this.resolveInputProcessors(requestContext, configuredProcessorOverrides);
+    return this.resolveInputProcessors(requestContext, configuredProcessorOverrides, runWorkspace);
   }
 
   /**
@@ -7803,14 +7831,14 @@ export class Agent<
       }: {
         requestContext: RequestContext;
         overrides?: InputProcessorOrWorkflow[];
-      }) => this.listResolvedInputProcessors(requestContext, overrides),
+      }) => this.listResolvedInputProcessors(requestContext, overrides, { workspace }),
       llmRequestInputProcessors: async ({
         requestContext,
         overrides,
       }: {
         requestContext: RequestContext;
         overrides?: InputProcessorOrWorkflow[];
-      }) => this.listResolvedLLMRequestProcessors(requestContext, overrides),
+      }) => this.listResolvedLLMRequestProcessors(requestContext, overrides, { workspace }),
       outputProcessors: async ({
         requestContext,
         overrides,

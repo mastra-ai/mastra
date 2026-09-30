@@ -7,9 +7,17 @@ import { SystemReminderBadge } from '../system-reminder-badge';
 import { InMessageAttachment } from './in-message-attachment';
 import { MessageText } from './message-text';
 
-// Mirrors the note @mastra/server writes when it routes an attachment to the agent workspace.
+// Mirrors the note @mastra/core's WorkspaceAttachmentsProcessor writes; the name is a JSON string literal.
 const WORKSPACE_ATTACHMENT_NOTE =
-  /\[Attachment "([^"]+)" \(([^)]+)\) was uploaded to the workspace at [^\]]+?\. Use workspace tools to read it\.\]/g;
+  /\[Attachment ("(?:[^"\\]|\\.)*") \(([^)]+)\) was uploaded to the workspace at .+?\. Use workspace tools to read it\.\]/g;
+
+const decodeName = (literal = '') => {
+  try {
+    return JSON.parse(literal) as string;
+  } catch {
+    return literal;
+  }
+};
 
 export interface UserTextPartRendererProps {
   part: TextPart;
@@ -37,7 +45,7 @@ export const UserTextPartRenderer = ({ part, metadata }: UserTextPartRendererPro
     return (
       <>
         {workspaceAttachments.map(([note, name, contentType]) => (
-          <InMessageAttachment key={note} type="file" name={name} contentType={contentType} />
+          <InMessageAttachment key={note} type="file" name={decodeName(name)} contentType={contentType} />
         ))}
         {rest && <MessageText text={rest} metadata={metadata} />}
       </>

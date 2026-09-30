@@ -95,7 +95,6 @@ import {
   validateThreadOwnership,
   validateRunOwnership,
 } from './utils';
-import { routeAttachmentsToWorkspace, routeSignalContentsToWorkspace } from './workspace-attachments';
 
 /**
  * Merge incoming version overrides onto a RequestContext.
@@ -1516,15 +1515,9 @@ export const GENERATE_AGENT_ROUTE = createRoute({
         abortSignal,
       };
 
-      const routedMessages = await routeAttachmentsToWorkspace({
-        agent,
-        messages,
-        requestContext: serverRequestContext,
-      });
-
       const result = structuredOutput
-        ? await agent.generate(routedMessages, { ...options, structuredOutput })
-        : await agent.generate(routedMessages, options);
+        ? await agent.generate(messages, { ...options, structuredOutput })
+        : await agent.generate(messages, options);
 
       return result;
     } catch (error) {
@@ -1923,15 +1916,9 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         options.untilIdle = untilIdle;
       }
 
-      const routedMessages = await routeAttachmentsToWorkspace({
-        agent,
-        messages,
-        requestContext: serverRequestContext,
-      });
-
       const streamResult = structuredOutput
-        ? await agent.stream(routedMessages, { ...options, structuredOutput })
-        : await agent.stream(routedMessages, options);
+        ? await agent.stream(messages, { ...options, structuredOutput })
+        : await agent.stream(messages, options);
 
       return streamResult.fullStream;
     } catch (error) {
@@ -2045,14 +2032,7 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
         throw new HTTPException(501, { message: 'agent signals are not supported by this Mastra core version' });
       }
 
-      const agentSignal = {
-        ...signal,
-        contents: await routeSignalContentsToWorkspace({
-          agent,
-          contents: signal.contents,
-          requestContext: serverRequestContext,
-        }),
-      } as AgentSignalInput;
+      const agentSignal = signal as AgentSignalInput;
 
       if (runId) {
         const result = await agent.sendSignal(agentSignal, {
@@ -2155,13 +2135,6 @@ async function handleAgentMessageRoute({
   if (typeof (agent as unknown as Record<string, unknown>)[methodName] !== 'function') {
     throw new HTTPException(501, { message: `agent ${methodName} is not supported by this Mastra core version` });
   }
-
-  const routeContents = <C>(contents: C) =>
-    routeSignalContentsToWorkspace({ agent, contents, requestContext: serverRequestContext });
-  message =
-    typeof message === 'object' && !Array.isArray(message)
-      ? { ...message, contents: await routeContents(message.contents) }
-      : await routeContents(message);
 
   if (runId) {
     const result = await agent[methodName](message, {
@@ -2551,15 +2524,9 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
         abortSignal,
       };
 
-      const routedMessages = await routeAttachmentsToWorkspace({
-        agent,
-        messages,
-        requestContext: serverRequestContext,
-      });
-
       const streamResult = structuredOutput
-        ? await agent.streamUntilIdle(routedMessages, { ...options, structuredOutput })
-        : await agent.streamUntilIdle(routedMessages, options);
+        ? await agent.streamUntilIdle(messages, { ...options, structuredOutput })
+        : await agent.streamUntilIdle(messages, options);
 
       return streamResult.fullStream;
     } catch (error) {
@@ -3408,9 +3375,7 @@ export const STREAM_NETWORK_ROUTE = createRoute({
         authorizedMemoryOption = { ...params.memory, resource: effectiveResourceId };
       }
 
-      const routedMessages = await routeAttachmentsToWorkspace({ agent, messages, requestContext });
-
-      const streamResult = await agent.network(routedMessages, {
+      const streamResult = await agent.network(messages, {
         ...params,
         memory: authorizedMemoryOption,
       });

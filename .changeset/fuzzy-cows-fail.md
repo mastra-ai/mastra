@@ -1,5 +1,16 @@
 ---
-'@mastra/server': patch
+'@mastra/core': minor
 ---
 
-Added workspace routing for spreadsheet attachments. Agent generate, stream, stream-until-idle, network, signal, send-message and queue-message requests that include `.xlsx` or `.xls` files no longer send them to the model, since most models cannot read them. The file is saved to the agent's workspace under `uploads/` (to the filesystem, or directly into the sandbox when the workspace has no filesystem, such as an E2B-only workspace), and the model receives a note with the file path so it can open it with workspace tools. If the agent has no workspace, the request fails with a 403 and a JSON body containing `code: 'WORKSPACE_REQUIRED_FOR_ATTACHMENT'`, which clients can use to show a helpful message.
+Added `WorkspaceAttachmentsProcessor`, which agents with a workspace add automatically. Spreadsheet attachments (`.xlsx`, `.xls`) are no longer sent to the model, because most models cannot read them. Each file is saved to the agent's workspace under `uploads/<id>/<name>`, and the model gets a note with the file path so it can open the file with workspace tools. This applies to every input: `agent.generate()`, `agent.stream()`, UI messages, the `context` option, and the HTTP routes.
+
+The file goes to the workspace filesystem, or to the first writable mount when the filesystem uses mounts. If the workspace only has a sandbox, the file is written there. Filesystems and sandboxes resolved per request are supported. When there is nowhere to write the file, the run stops with a tripwire and `metadata.code: 'WORKSPACE_REQUIRED_FOR_ATTACHMENT'`. This happens when the agent has no workspace or when every destination is read-only.
+
+```ts
+const agent = new Agent({ id: 'analyst', model, workspace });
+
+await agent.generate([
+  { role: 'user', content: [{ type: 'file', data: base64, mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', filename: 'report.xlsx' }] },
+]);
+// The model sees: [Attachment "report.xlsx" (...) was uploaded to the workspace at uploads/<id>/report.xlsx. ...]
+```
