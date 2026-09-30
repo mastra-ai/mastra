@@ -4,13 +4,13 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 const STATUS_DOT_COLOR: Record<ScheduleStatus, string> = {
   active: 'bg-success-indicator',
   paused: 'bg-info-indicator',
-  completed: 'bg-neutral3',
+  completed: 'bg-muted-foreground',
 };
 
 const STATUS_TEXT_COLOR: Record<ScheduleStatus, string> = {
   active: 'text-success-indicator',
   paused: 'text-info-indicator',
-  completed: 'text-neutral3',
+  completed: 'text-muted-foreground',
 };
 
 /**
