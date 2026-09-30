@@ -111,6 +111,16 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
     return this.#context(connection);
   }
 
+  protected async listOrgConnectionIds(orgId: string): Promise<Set<string>> {
+    // Source-control storage is the tenant boundary: intake writes an
+    // installation row for the requesting org whose external id matches
+    // the Platform connection id, so the org's registered installations
+    // are exactly the connections it can legitimately introspect.
+    const installations = await this.sourceControlStorage?.installations.list({ orgId });
+    if (!installations) return new Set();
+    return new Set(installations.map(installation => installation.externalId));
+  }
+
   /**
    * The reconcile sweeps from the base class plus, when polling is on, the
    * Platform event poller. Polling replaces the direct project webhook: the

@@ -130,9 +130,19 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
   readonly identity: IntegrationIdentityCapability = buildGitlabIdentity({
     activeContexts: async () => {
       const contexts = await this.activeContexts();
-      return contexts.map(ctx => ({ api: ctx.api, host: ctx.host }));
+      return contexts.map(ctx => ({ connectionId: ctx.id, api: ctx.api, host: ctx.host }));
     },
+    listOrgConnectionIds: (orgId: string) => this.listOrgConnectionIds(orgId),
   });
+
+  /**
+   * The connection ids the given org can legitimately introspect. Direct
+   * mode is single-tenant so it always returns the direct-connection id;
+   * Platform mode intersects deployment-wide connections with the org's
+   * registered source-control installations to prevent cross-tenant
+   * roster leaks.
+   */
+  protected abstract listOrgConnectionIds(orgId: string): Promise<Set<string>>;
 
   constructor(rules?: GitLabRuleOverrides) {
     this.rules = resolveGitLabRules(rules);
@@ -786,6 +796,12 @@ export class GitLabIntegration extends GitLabIntegrationBase {
       throw new GitLabApiError('GitLab connection is unavailable.', 401);
     }
     return this.#context;
+  }
+
+  protected async listOrgConnectionIds(_orgId: string): Promise<Set<string>> {
+    // Direct mode is a single-tenant configuration bound to one access
+    // token, so the single direct-connection id is always in scope.
+    return new Set([DIRECT_CONNECTION_ID]);
   }
 
   diagnostics(): Record<string, unknown> {

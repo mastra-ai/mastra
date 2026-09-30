@@ -2,9 +2,33 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { IntegrationContext } from '../base.js';
 import type { GitLabApiClient, GitLabMember, GitLabProject } from './api.js';
+import type { GitLabIdentityHost } from './identity.js';
 import { buildGitlabIdentity } from './identity.js';
 
 const ctx = {} as IntegrationContext;
+
+type ContextEntry = { connectionId?: string; api: GitLabApiClient; host: string };
+
+/**
+ * Wraps `activeContexts` and derives `listOrgConnectionIds` from the same
+ * list so tests only need to declare their contexts once. `orgConnectionIds`
+ * overrides the derived set for cases that need to exercise the intersection.
+ */
+function makeHost(
+  contexts: ContextEntry[],
+  options: { orgConnectionIds?: Set<string> } = {},
+): GitLabIdentityHost {
+  const normalized = contexts.map((entry, index) => ({
+    connectionId: entry.connectionId ?? `conn-${index}`,
+    api: entry.api,
+    host: entry.host,
+  }));
+  const defaultIds = new Set(normalized.map(entry => entry.connectionId));
+  return {
+    activeContexts: async () => normalized,
+    listOrgConnectionIds: async () => options.orgConnectionIds ?? defaultIds,
+  };
+}
 
 function makeApi(pages: {
   projects?: GitLabProject[][];
@@ -57,9 +81,7 @@ describe('buildGitlabIdentity', () => {
         '2': [[{ id: 13, username: 'dave', name: 'Dave', state: 'active' }]],
       },
     });
-    const identity = buildGitlabIdentity({
-      activeContexts: async () => [{ api, host: 'gitlab.com' }],
-    });
+    const identity = buildGitlabIdentity(makeHost([{ api, host: 'gitlab.com' }]));
 
     const accounts = await identity.listCandidateAccounts(ctx, { orgId: 'org-1' });
 
@@ -90,9 +112,7 @@ describe('buildGitlabIdentity', () => {
         '2': [[{ id: 11, username: 'guest', name: 'Guest', state: 'active' }]],
       },
     });
-    const identity = buildGitlabIdentity({
-      activeContexts: async () => [{ api, host: 'gitlab.com' }],
-    });
+    const identity = buildGitlabIdentity(makeHost([{ api, host: 'gitlab.com' }]));
 
     const accounts = await identity.listCandidateAccounts(ctx, { orgId: 'org-1' });
 
@@ -113,9 +133,7 @@ describe('buildGitlabIdentity', () => {
         acme: [[{ id: 10, username: 'octocat', name: 'The Octocat', state: 'active' }]],
       },
     });
-    const identity = buildGitlabIdentity({
-      activeContexts: async () => [{ api, host: 'gitlab.com' }],
-    });
+    const identity = buildGitlabIdentity(makeHost([{ api, host: 'gitlab.com' }]));
     const controller = new AbortController();
     controller.abort();
 
@@ -140,7 +158,7 @@ describe('buildGitlabIdentity', () => {
         ],
       },
     });
-    const identity = buildGitlabIdentity({ activeContexts: async () => [{ api, host: 'gitlab.com' }] });
+    const identity = buildGitlabIdentity(makeHost([{ api, host: 'gitlab.com' }]));
     const accounts = await identity.listCandidateAccounts(ctx, { orgId: 'org-1' });
     expect(accounts.map(a => a.externalUserId)).toEqual(['octocat']);
   });
@@ -168,12 +186,12 @@ describe('buildGitlabIdentity', () => {
         ],
       },
     });
-    const identity = buildGitlabIdentity({
-      activeContexts: async () => [
+    const identity = buildGitlabIdentity(
+      makeHost([
         { api: apiA, host: 'gitlab.com' },
         { api: apiB, host: 'gitlab.self.example' },
-      ],
-    });
+      ]),
+    );
     const accounts = await identity.listCandidateAccounts(ctx, { orgId: 'org-1' });
     expect(accounts.map(a => `${a.installation}:${a.externalUserId}`)).toEqual([
       'gitlab.com:shared',
@@ -182,8 +200,58 @@ describe('buildGitlabIdentity', () => {
   });
 
   it('returns empty when the host has no active connections', async () => {
-    const identity = buildGitlabIdentity({ activeContexts: async () => [] });
+    const identity = buildGitlabIdentity(makeHost([]));
     expect(await identity.listCandidateAccounts(ctx, { orgId: 'org-1' })).toEqual([]);
+  });
+
+  it('returns empty and skips the API when the org has registered no connections', async () => {
+    const { api, listGroupMembers, listProjectMembers } = makeApi({
+      projects: [
+        [{ id: 1, name: 'a', path_with_namespace: 'a/a', web_url: '' } as GitLabProject],
+      ],
+      membersByProjectId: {
+        '1': [[{ id: 10, username: 'octocat', name: 'The Octocat', state: 'active' }]],
+      },
+    });
+    const identity = buildGitlabIdentity(
+      makeHost([{ api, host: 'gitlab.com' }], { orgConnectionIds: new Set() }),
+    );
+    expect(await identity.listCandidateAccounts(ctx, { orgId: 'org-1' })).toEqual([]);
+    expect(listGroupMembers).not.toHaveBeenCalled();
+    expect(listProjectMembers).not.toHaveBeenCalled();
+  });
+
+  it('drops active contexts whose connection the org has not registered', async () => {
+    const { api: apiA, listProjectMembers: probeA } = makeApi({
+      projects: [
+        [{ id: 1, name: 'a', path_with_namespace: 'a/a', web_url: '' } as GitLabProject],
+      ],
+      membersByProjectId: {
+        '1': [[{ id: 10, username: 'kept', name: 'Kept', state: 'active' }]],
+      },
+    });
+    const { api: apiB, listProjectMembers: probeB } = makeApi({
+      projects: [
+        [{ id: 2, name: 'b', path_with_namespace: 'b/b', web_url: '' } as GitLabProject],
+      ],
+      membersByProjectId: {
+        // A cross-tenant connection whose members would leak without the intersection.
+        '2': [[{ id: 20, username: 'leak', name: 'Cross Tenant', state: 'active' }]],
+      },
+    });
+    const identity = buildGitlabIdentity(
+      makeHost(
+        [
+          { connectionId: 'conn-org', api: apiA, host: 'gitlab.com' },
+          { connectionId: 'conn-other', api: apiB, host: 'gitlab.self.example' },
+        ],
+        { orgConnectionIds: new Set(['conn-org']) },
+      ),
+    );
+    const accounts = await identity.listCandidateAccounts(ctx, { orgId: 'org-1' });
+    expect(accounts.map(a => `${a.installation}:${a.externalUserId}`)).toEqual(['gitlab.com:kept']);
+    expect(probeA).toHaveBeenCalled();
+    expect(probeB).not.toHaveBeenCalled();
   });
 
   it('filters by case-insensitive substring match on label and id', async () => {
@@ -200,7 +268,7 @@ describe('buildGitlabIdentity', () => {
         ],
       },
     });
-    const identity = buildGitlabIdentity({ activeContexts: async () => [{ api, host: 'gitlab.com' }] });
+    const identity = buildGitlabIdentity(makeHost([{ api, host: 'gitlab.com' }]));
     const filtered = await identity.listCandidateAccounts(ctx, { orgId: 'org-1', query: 'MONA' });
     expect(filtered.map(a => a.externalUserId)).toEqual(['monalisa']);
   });

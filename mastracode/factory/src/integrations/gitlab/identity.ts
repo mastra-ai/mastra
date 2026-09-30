@@ -13,6 +13,17 @@
  * `members/all`. Deduplication by GitLab numeric user id then produces a
  * clean union across every configured connection.
  *
+ * Discovery is scoped to the requesting `orgId`. In Platform mode the
+ * client is deployment-level, so a shared deployment could otherwise
+ * expose members from connections belonging to a different tenant. We
+ * intersect the active-context connection ids with the connection ids the
+ * org has registered through Factory's source-control storage and only
+ * walk that intersection. Fresh Platform installs surface no members
+ * until the org has registered at least one GitLab installation — a UX
+ * trade-off to prevent cross-tenant leaks. Direct mode is inherently
+ * single-tenant and returns every active connection id from
+ * `listOrgConnectionIds()` so behavior there is unchanged.
+ *
  * A hard request budget caps the total member calls per context so a huge
  * org (hundreds of projects) can't turn one identity-dropdown request into
  * thousands of sequential API calls. Failures degrade gracefully — a
@@ -26,7 +37,15 @@ import type { GitLabApiClient, GitLabMember, GitLabProject } from './api.js';
 /** Narrow shape the identity module needs from the integration base. */
 export interface GitLabIdentityHost {
   /** All contexts (direct or per-connection) the integration has ready. */
-  activeContexts(): Promise<Array<{ api: GitLabApiClient; host: string }>>;
+  activeContexts(): Promise<Array<{ connectionId: string; api: GitLabApiClient; host: string }>>;
+  /**
+   * Connection ids the requesting org has registered in Factory storage
+   * (direct mode returns the single direct-connection id; Platform mode
+   * intersects deployment-wide connections against the org's source-control
+   * installations). Used to filter `activeContexts()` so a shared Platform
+   * deployment never leaks another tenant's members.
+   */
+  listOrgConnectionIds(orgId: string): Promise<Set<string>>;
 }
 
 const MEMBER_PAGE_SIZE = 100; // matches GitLab's cap
@@ -136,15 +155,31 @@ async function collectFromContext(api: GitLabApiClient, host: string, query: str
 
 export function buildGitlabIdentity(host: GitLabIdentityHost): IntegrationIdentityCapability {
   return {
-    async listCandidateAccounts(_ctx, { orgId: _orgId, query, signal }) {
+    async listCandidateAccounts(_ctx, { orgId, query, signal }) {
+      // Read the org's registered connection ids first: if it hasn't
+      // registered any (fresh Platform install), there's nothing to list
+      // — skipping the API entirely keeps a shared deployment from
+      // surfacing another tenant's members.
+      let orgConnectionIds: Set<string>;
+      try {
+        orgConnectionIds = await host.listOrgConnectionIds(orgId);
+      } catch {
+        return [];
+      }
+      if (orgConnectionIds.size === 0) return [];
       let contexts;
       try {
         contexts = await host.activeContexts();
       } catch {
         return [];
       }
+      // Intersect deployment-scoped active contexts with the org's own
+      // registered connections. Anything the org has not registered is
+      // dropped — its members are not this org's business.
+      const scoped = contexts.filter(ctx => orgConnectionIds.has(ctx.connectionId));
+      if (scoped.length === 0) return [];
       const collected = new Map<string, IntegrationCandidateAccount>();
-      for (const ctx of contexts) {
+      for (const ctx of scoped) {
         if (signal?.aborted) break;
         const members = await collectFromContext(ctx.api, ctx.host, query, signal);
         for (const member of members) {
