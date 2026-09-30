@@ -99,12 +99,14 @@ export async function getInputOptions(
 
   const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies.keys());
   const externals = externalsPreset ? explicitExternals : Array.from(externalsCopy);
+  const aliasSources = new Set(Object.keys(alias));
+  const rollupExternals = externals.filter(external => !aliasSources.has(external));
 
   return {
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     treeshake: 'smallest',
     preserveSymlinks: true,
-    external: externalsPreset ? [] : externals,
+    external: externalsPreset ? [] : rollupExternals,
     plugins: [
       protocolExternalResolver(),
       moduleAlias(alias, entryFile),

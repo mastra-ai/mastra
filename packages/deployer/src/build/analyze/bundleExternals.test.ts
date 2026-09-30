@@ -456,7 +456,7 @@ describe('bundleExternals', () => {
     expect(result.usedExternals).not.toBeInstanceOf(Map);
   });
 
-  it('should apply module aliases while optimizing dependencies', async () => {
+  it('should apply module aliases before externalizing dependencies', async () => {
     const packageDir = join(testDir, 'node_modules', 'fixture-package');
     const shimFile = join(testDir, 'ajv-shim.js');
     await ensureDir(packageDir);
@@ -484,7 +484,7 @@ describe('bundleExternals', () => {
     const result = await bundleExternals(depsToOptimize, testDir, {
       projectRoot: testDir,
       bundlerOptions: {
-        ...normalizeExternals(undefined),
+        ...normalizeExternals(['ajv']),
         alias: { ajv: shimFile },
       },
     });

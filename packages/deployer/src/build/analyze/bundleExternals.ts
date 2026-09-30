@@ -349,6 +349,9 @@ async function buildExternalDependencies(
     alias,
   });
 
+  const aliasSources = new Set(Object.keys(alias));
+  const rollupExternals = externals.filter(external => !aliasSources.has(external));
+
   const bundler = await rollup({
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     input: Array.from(virtualDependencies.entries()).reduce(
@@ -358,7 +361,7 @@ async function buildExternalDependencies(
       },
       {} as Record<string, string>,
     ),
-    external: externals,
+    external: rollupExternals,
     treeshake: noBundling ? false : 'safest',
     plugins,
   });

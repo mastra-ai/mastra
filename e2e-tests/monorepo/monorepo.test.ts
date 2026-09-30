@@ -447,7 +447,7 @@ export const environmentRoute = registerApiRoute('/environment', {
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 10_000);
           try {
-            const instanceIdPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+            const instanceIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
             while (!controller.signal.aborted) {
               const page = await fetch(`http://localhost:${port}/`, { signal: controller.signal });
               expect(page.status).toBe(200);
@@ -1175,7 +1175,7 @@ class AliasDeployer extends Deployer {
               )
               .replace(
                 "externals: ['bcrypt', '@inner/subpath-only']",
-                "externals: ['bcrypt', '@inner/subpath-only', '@mastra/deployer']",
+                "externals: ['bcrypt', '@inner/subpath-only', '@mastra/deployer', 'ajv']",
               )}`,
           );
 
