@@ -200,6 +200,19 @@ describe('tool call concurrency resolution', () => {
       ).toBe(1);
     });
 
+    it('serializes a called tool whose needsApprovalFn has not been evaluated', () => {
+      const fnPolicyTool = { needsApprovalFn: vi.fn(async () => false) };
+      expect(
+        resolveToolCallConcurrency({
+          tools: { safe: safeTool, fnPolicy: fnPolicyTool },
+          configuredConcurrency: 4,
+          strategy: 'called',
+          calledToolNames: ['safe', 'fnPolicy'],
+        }),
+      ).toBe(1);
+      expect(fnPolicyTool.needsApprovalFn).not.toHaveBeenCalled();
+    });
+
     it('still forces sequential when run-wide requireToolApproval is set', () => {
       expect(
         resolveToolCallConcurrency({
