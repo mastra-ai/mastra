@@ -1,5 +1,40 @@
 # Hosted validation
 
+## PR review fixes and submission fault tests, 30 September 2026 UTC
+
+Runtime/test commit: `579edd318290e9f002c73da67919532a8ba42022`. Existing paid test Workflow `wfl-daq7jmh42hec738ka3c0` ran version `wfv-dau8sf7avr4c7386ecc0`; paid caller job `job-dau8tefavr4c7386ilu0` succeeded at 04:28:19 UTC. Caller sources were fetched from that exact commit and checked against SHA-256 hashes. The worker still has no Render API key or local-mode flags. Draftroom's live builds were unchanged.
+
+The seven native scenarios passed, including an actual Mastra agent using `anthropic/claude-haiku-4-5-20251001`:
+
+| Scenario       | Native root                     | Outcome  | Root attempts | Task runs |
+| -------------- | ------------------------------- | -------- | ------------- | --------- |
+| cancel         | `trn-08l4gdau8tro93c1s73d7ru2g` | canceled | 1             | 4         |
+| agent          | `trn-08l4gdau8u0mgekts73df4pkg` | success  | 1             | 5         |
+| success        | `trn-08l4gdau8u62d0e5s73eojetg` | success  | 1             | 5         |
+| child-retry    | `trn-08l4gdau8ubg93c1s73d7tthg` | success  | 1             | 5         |
+| nested-failure | `trn-08l4gdau8ui093c1s73d7uksg` | failed   | 1             | 4         |
+| root-crash     | `trn-08l4gdau8un893c1s73d7v5p0` | success  | 2             | 9         |
+| root-timeout   | `trn-08l4gdau8v3093c1s73d80qrg` | success  | 2             | 9         |
+
+The strengthened cancellation test waited for the full native tree. The root, nested coordinator and active leaf were canceled; preparation remained completed. Crash and timeout recovery still required two native attempts and repeated completed work, with separate snapshots and fresh state.
+
+Four additional probes used real PostgreSQL reservations and controlled dispatch faults:
+
+| Probe           | Native proof root               | Initial persisted child status | Native dispatch calls | Business effects |
+| --------------- | ------------------------------- | ------------------------------ | --------------------- | ---------------- |
+| before-dispatch | `trn-08l4gdau8vgegekts73dfac2g` | failed                         | 0                     | 0                |
+| abandoned       | `trn-08l4gdau8vhid0e5s73eoopr0` | submission-unknown             | 0                     | 0                |
+| lost-response   | `trn-08l4gdau8vio93c1s73d82qd0` | submission-unknown             | 1                     | 1                |
+| late-rejected   | `trn-08l4gdau8vlpsrm7s73b9gdbg` | submission-unknown             | 1                     | 0                |
+
+For `lost-response`, the fixture began a real native call but threw before delivering its outcome to the adapter. The child initially became uncertain, then its late worker claim bound the same logical run and the native child completed with exactly one leaf effect. For `late-rejected`, a real child started after parent authority closed and failed before business execution. The other probes issued no native child call. These are controlled failure injections, not claims that every network or infrastructure outage was reproduced. Unbound uncertain runs retain their reservations and require operator reconciliation; the adapter does not automatically submit them again.
+
+An independent read of Render verified all 49 task-run outcomes and their nine task definitions against this Workflow version. This included unauthorized generated-child replay `trn-08l4gdau8uu1srm7s73b9d8ag`, rejected before effects on both configured attempts.
+
+Local checks: all 216 package tests, strict typecheck/build, and the freshly packed example's typecheck passed. Eighteen regression cases failed against the previous code before the fixes. Real CLI/PostgreSQL tests passed nested success, child retry, nested failure, full-tree cancellation, unique creation, competing compare-and-swap writes and terminal stability. All owned local processes were stopped afterward.
+
+Lifecycle docstrings were added. A local TypeScript AST check found 131 of 157 named function declarations/function-valued statements documented (83.44%) across non-test runtime and scripts. This is not CodeRabbit's private coverage calculation. Automatic reviews were paused, so its old 79.57% warning and merge-risk summary had not been recomputed for these fixes. Maintainer review and existing repository release/compatibility requirements remain separate from these validation results.
+
 ## SDK 1.2.0, nested graphs and root restart retries, 30 September 2026 UTC
 
 Runtime commit: `471fb0361713482fe910e56a7d6d3a44bbc45392`, pushed directly to `ojusave/main` and proposed in [PR #25515](https://github.com/mastra-ai/mastra/pull/25515). All implementation remains inside `workflows/render/`.
