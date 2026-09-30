@@ -3604,7 +3604,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     );
 
     it.skipIf(ctx.skipTests.resumeForeach || !ctx.resume)('should suspend and resume in foreach loop', async () => {
-      const { workflow, resetMocks } = registry!['foreach-suspend-workflow']!;
+      const { workflow, mocks, resetMocks } = registry!['foreach-suspend-workflow']!;
       resetMocks?.();
 
       const runId = `foreach-suspend-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -3612,6 +3612,8 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
       // Start workflow with 3 items - should suspend on first item
       const startResult = await execute(workflow, [{ value: 1 }, { value: 22 }, { value: 333 }], { runId });
       expect(startResult.status).toBe('suspended');
+      // Sequential foreach halts at the suspended item; later items have not started
+      expect(mocks.mapAction).toHaveBeenCalledTimes(1);
 
       // Resume first item
       const resume1 = await ctx.resume!(workflow, {
@@ -3619,6 +3621,8 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
         resumeData: { resumeValue: 0 },
       });
       expect(resume1.status).toBe('suspended');
+      // First item resumed, second item started and suspended, third item still not started
+      expect(mocks.mapAction).toHaveBeenCalledTimes(3);
 
       // Resume second item
       const resume2 = await ctx.resume!(workflow, {
