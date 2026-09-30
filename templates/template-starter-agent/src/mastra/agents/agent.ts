@@ -89,7 +89,7 @@ Tools named \`<integration>_<action>\` (for example \`linear_list_issues\`, \`no
 
 Ask concise questions when something is unclear or a good question could surface a useful insight.${localFilesNote}
 `,
-  model: 'mastra/openai/gpt-5.6-terra',
+  model: 'mastra/openai/gpt-5-mini',
   defaultOptions: {
     maxSteps: 100,
     autoResumeSuspendedTools: true,
@@ -98,7 +98,7 @@ Ask concise questions when something is unclear or a good question could surface
     options: {
       generateTitle: true,
       observationalMemory: {
-        model: 'mastra/openai/gpt-5-mini',
+        model: 'mastra/openai/gpt-5-nano',
       },
     },
   }),
