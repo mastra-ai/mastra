@@ -178,7 +178,10 @@ function hasSuspendedToolCall(snapshot: Record<string, any>, toolCallId: string)
   return visit(snapshot.context);
 }
 
-const DURABLE_SNAPSHOT_WAIT_TIMEOUT_MS = 2000;
+// Matches the snapshot wait of the durable resume path this check gates
+// (RESUME_SNAPSHOT_WAIT_MS in @mastra/inngest), so the route is never the tighter bound.
+const DURABLE_SNAPSHOT_WAIT_TIMEOUT_MS = 10_000;
+// Same as RESUME_SNAPSHOT_POLL_INTERVAL_MS in @mastra/core/workflows, which older supported core versions don't export.
 const DURABLE_SNAPSHOT_WAIT_INTERVAL_MS = 25;
 
 function getDurableLoopWorkflowName(agent: DurableAgentLike): string {
@@ -205,6 +208,9 @@ async function validateDurableToolCallAccess({
   if (!isDurableAgentLike(agent)) return;
 
   const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+  if (!workflowsStore) {
+    throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
+  }
   const workflowName = getDurableLoopWorkflowName(agent);
   const contextResourceId = getContextResourceId(requestContext);
 
@@ -212,7 +218,7 @@ async function validateDurableToolCallAccess({
   // so wait (bounded) for storage to catch up before denying.
   const deadline = Date.now() + DURABLE_SNAPSHOT_WAIT_TIMEOUT_MS;
   while (true) {
-    const workflowRun = await workflowsStore?.getWorkflowRunById({ workflowName, runId });
+    const workflowRun = await workflowsStore.getWorkflowRunById({ workflowName, runId });
 
     let snapshot = workflowRun?.snapshot as Record<string, any> | string | undefined;
     if (typeof snapshot === 'string') {
