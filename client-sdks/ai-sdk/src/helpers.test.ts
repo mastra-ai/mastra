@@ -477,3 +477,30 @@ describe('tool-result provider metadata forwarding (issue #22012)', () => {
     expect(uiChunk).not.toHaveProperty('providerMetadata');
   });
 });
+
+describe('transient data chunks', () => {
+  const convert = (part: unknown) => convertFullStreamChunkToUIMessageStream({ part: part as any, onError: String });
+
+  it('preserves transient on direct data chunks', () => {
+    expect(convert({ type: 'data-preview', data: { a: 1 }, id: 'p1', transient: true })).toEqual({
+      type: 'data-preview',
+      data: { a: 1 },
+      id: 'p1',
+      transient: true,
+    });
+  });
+
+  it('preserves transient on data chunks nested in tool-output', () => {
+    expect(
+      convert({
+        type: 'tool-output',
+        toolCallId: 't',
+        output: { type: 'data-preview', data: 1, transient: true },
+      }),
+    ).toEqual({ type: 'data-preview', data: 1, transient: true });
+  });
+
+  it('omits transient when not set', () => {
+    expect(convert({ type: 'data-preview', data: 1 })).toEqual({ type: 'data-preview', data: 1 });
+  });
+});
