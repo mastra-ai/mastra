@@ -915,7 +915,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect(buildDecisions.map(decision => decision.status)).toEqual(['succeeded']);
   });
 
-  it('prepares a binding, delivers to active sessions, and consumes idle wake streams for an urgent stage transition', async () => {
+  it('falls back to stable identity when profile resolution fails during an urgent stage transition', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
       type: 'sendMessage',
@@ -927,6 +927,9 @@ describe('FactoryDecisionDispatcher', () => {
       idempotencyKey: 'stage-transition-1',
     });
     const { controller, sendNotificationSignal, consumeStream } = createSession();
+    const resolveUser = vi.fn(async () => {
+      throw new Error('directory unavailable');
+    });
     const prepareBinding = vi.fn(async () => {
       await storage.prepareRunStart({
         orgId: 'org-1',
@@ -956,6 +959,7 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       prepareBinding,
+      resolveUser,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -976,6 +980,7 @@ describe('FactoryDecisionDispatcher', () => {
       },
     );
     const requestContext = sendNotificationSignal.mock.calls[0]?.[1]?.requestContext;
+    expect(resolveUser).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
     expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
     expect(consumeStream).toHaveBeenCalledOnce();
   });
@@ -1239,6 +1244,11 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffMessage: null,
     });
     const primeCredentials = vi.fn(async () => {});
+    const resolveUser = vi.fn(async () => ({
+      id: 'user-1',
+      name: 'Ada Lovelace',
+      email: 'ada@example.com',
+    }));
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
       isAutoRunEnabled: async () => true,
@@ -1246,11 +1256,13 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       primeCredentials,
+      resolveUser,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     expect(primeCredentials).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    expect(resolveUser).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
     expect(sendNotificationSignal).toHaveBeenCalledWith(
       {
         source: 'factory',
@@ -1280,7 +1292,12 @@ describe('FactoryDecisionDispatcher', () => {
       { requestContext: expect.anything(), requireDelivery: true },
     );
     const requestContext = session.sendSignal.mock.calls[0]?.[1]?.requestContext;
-    expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    expect(requestContext?.get('user')).toEqual({
+      id: 'user-1',
+      name: 'Ada Lovelace',
+      email: 'ada@example.com',
+      organizationId: 'org-1',
+    });
     expect(requestContext?.get('controller')).toMatchObject({
       resourceId: PROJECT_ID,
       threadId: 'thread-1',

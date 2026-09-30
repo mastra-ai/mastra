@@ -1252,6 +1252,22 @@ export class MastraFactory {
                   }),
                 feedReader: new FactoryFeedReader(workItemCommentsStorage),
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
+                ...(auth && isUserProvider(auth)
+                  ? {
+                      resolveUser: async ({ userId, orgId }: { userId: string; orgId: string }) => {
+                        const user = await auth.getUser(userId);
+                        return user
+                          ? {
+                              ...(user.id ? { id: user.id } : {}),
+                              ...(user.email ? { email: user.email } : {}),
+                              ...(user.name ? { name: user.name } : {}),
+                              ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
+                              organizationId: orgId,
+                            }
+                          : undefined;
+                      },
+                    }
+                  : {}),
                 resolveLinkedWorkItemParentId: async ({ orgId, factoryProjectId, decision }) => {
                   if (decision.source !== 'github-pr') return null;
                   const repositoryId = decision.metadata?.githubRepositoryId;
