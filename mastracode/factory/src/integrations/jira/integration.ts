@@ -45,6 +45,7 @@ import type { JiraComment, JiraIssue, JiraTransition } from './api.js';
 import { JiraApiClient, JiraApiError } from './api.js';
 import type { JiraEventRules, JiraRuleOverrides } from './default-rules.js';
 import { resolveJiraRules } from './default-rules.js';
+import { buildJiraIdentity } from './identity.js';
 import { attachJiraIssueReconciler } from './issue-reconciler.js';
 import { jiraReconciliationEnabled, jiraReconciliationInterval } from './reconciliation-config.js';
 import { buildJiraRoutes } from './routes.js';
@@ -109,6 +110,13 @@ function stateTypeFromCategory(key: string | undefined): string | null {
 export class JiraIntegration implements FactoryIntegration {
   /** Stable integration identifier (see `../base.ts`). */
   readonly id = 'jira';
+  /**
+   * Identity capability — paginates `GET /rest/api/3/users/search` against
+   * the connected Atlassian site directly. Filters inactive accounts and
+   * non-atlassian account types so only real teammates appear as `@me`
+   * candidates. Empty when Jira is not configured.
+   */
+  readonly identity = buildJiraIdentity({ apiClient: () => this.api });
 
   readonly #config: JiraIntegrationConfig;
   /** Typed REST client bound to the deployment credentials. */

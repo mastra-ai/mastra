@@ -37,6 +37,7 @@ import type { ChannelIdentityStorage } from '../storage/domains/channel-identity
 import type { CommentsDomain } from '../storage/domains/comments/domain.js';
 import type { WorkItemFeedPublisher } from '../storage/domains/comments/feed-sync.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
+import type { IntegrationIdentityStorage } from '../storage/domains/integration-identity/base.js';
 import type { IntegrationStorageHandle } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { ModelPacksStorage } from '../storage/domains/model-packs/base.js';
@@ -134,6 +135,13 @@ export interface IntegrationContext {
      * right user's credentials.
      */
     channelIdentity: ChannelIdentityStorage;
+    /**
+     * Tenant → external accounts a Factory user has self-claimed on this or
+     * any other integration. Integrations use it (through the aggregation
+     * service) to power the `@me` filter; the settings UI writes to it when
+     * a user claims or unclaims an account.
+     */
+    integrationIdentity: IntegrationIdentityStorage;
   };
   /**
    * Factory runtime available when the work-item domain is ready.
@@ -186,6 +194,63 @@ export interface FactoryChannelsConfig extends Omit<AgentControllerChannelsConfi
  * A pluggable web integration. Implementations own their credentials
  * (validated at construction), their API surface, and their HTTP routes.
  */
+/**
+ * A candidate account an integration surfaces to the identity settings UI.
+ * `sources` is a two-value set because a candidate may be discovered by
+ * scanning the integration's own stored records (`'observed'`), by hitting
+ * the provider's user-list endpoint (`'api-listed'`), or both — the merge
+ * point sits in the integration's own implementation. The UI shows the tags
+ * so the user can distinguish "this is a person the integration has seen
+ * touch our data" from "this is a person on the provider's roster".
+ */
+export interface IntegrationCandidateAccount {
+  /** Provider-native id — GitHub login, Linear user id, Jira accountId, etc. */
+  externalUserId: string;
+  /** Display label shown next to the checkbox in the settings UI. */
+  label: string;
+  /** Provider-reported email, when available. Display-only. */
+  email?: string;
+  /**
+   * Provider-reported avatar URL, when available. Display-only. Integrations
+   * should populate this whenever the provider returns an avatar for the
+   * account so the settings UI and `@me` chips can render a face instead of
+   * initials fallback.
+   */
+  avatarUrl?: string;
+  /**
+   * Which installation this candidate belongs to. A factory org can have
+   * multiple installations per integration (three GitHub orgs, two Linear
+   * workspaces, etc.). The label is provider-native (`myorg` for GitHub,
+   * `acme` for Linear url-key, cloud-id for Jira) so the UI can render
+   * disambiguating context when the same display name appears twice.
+   */
+  installation?: string;
+}
+
+/**
+ * Optional capability an integration mounts to power identity claims and the
+ * `@me` filter. The capability owns discovery — it hits the provider's
+ * user-list endpoint for every installation the acting org has connected
+ * and returns a de-duplicated list keyed by `externalUserId`. Claim writes
+ * and `@me` resolution stay in the factory's identity service; the
+ * capability only produces the roster the user picks from.
+ */
+export interface IntegrationIdentityCapability {
+  listCandidateAccounts(
+    ctx: IntegrationContext,
+    args: {
+      orgId: string;
+      query?: string;
+      /**
+       * Aborted when the caller's per-provider time budget expires. Paged
+       * discovery loops should stop issuing new provider requests once set —
+       * the caller has already dropped this roster from its response.
+       */
+      signal?: AbortSignal;
+    },
+  ): Promise<IntegrationCandidateAccount[]>;
+}
+
 export interface FactoryIntegration {
   /** Stable identifier: `'github'`, `'linear'`, custom ids for third parties. */
   readonly id: string;
@@ -266,6 +331,12 @@ export interface FactoryIntegration {
    * owning a chat channel.
    */
   feedPublisher?(ctx: IntegrationContext): WorkItemFeedPublisher;
+  /**
+   * Optional identity capability — the integration exposes candidate accounts
+   * for the identity settings UI. When omitted, the integration does not
+   * participate in identity claims or the `@me` filter.
+   */
+  identity?: IntegrationIdentityCapability;
   /**
    * Non-secret config snapshot (booleans + names only, never values). The
    * factory merges it into system diagnostics/startup logs.

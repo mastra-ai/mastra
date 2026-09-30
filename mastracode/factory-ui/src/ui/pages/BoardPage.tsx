@@ -3,13 +3,14 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { GitBranch, Plus } from 'lucide-react';
-import { useLayoutEffect, useState } from 'react';
+import { useLayoutEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import type { InstalledBoardInfo } from '../../api/types';
 import { useBoardCatalog } from '../../hooks/useBoardCatalog';
 
 import { useRecentAuditEvents } from '../../hooks/useAuditEvents';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
+import { useOrgIdentityRoster } from '../../hooks/useIdentityClaims';
 import { useIntakeConfigQuery } from '../../hooks/useIntakeConfig';
 import { INTAKE_SOURCES, stageContentCount } from '../domains/factory/boardCandidates';
 import type { IntakeSource } from '../domains/factory/boardCandidates';
@@ -43,6 +44,7 @@ import {
   boardParticipants,
   candidateMatchesLabels,
   candidateMatchesRelevance,
+  participantExpansionFromRoster,
   workItemMatchesLabels,
   workItemMatchesRelevance,
 } from '../domains/factory/boardRelevance';
@@ -183,6 +185,15 @@ function BoardContent({
   const filters = boardFiltersFromParams(searchParams, kind);
 
   const auth = useFactoryAuth();
+  const orgRoster = useOrgIdentityRoster();
+  /**
+   * Roster-driven participant expansion for teammate filtering: when the
+   * picked teammate is a Factory user with claims (including the acting user
+   * picking themselves), the match spans every external identity they've
+   * claimed. External-only participants (e.g. a GitHub login nobody in the
+   * org has claimed) fall through to single-id matching.
+   */
+  const teammateExpansion = useMemo(() => participantExpansionFromRoster(orgRoster.data), [orgRoster.data]);
   const sort = boardSortFromParams(searchParams, auth.data?.user?.userId);
   const items = useBoardItems({ factoryProjectId, kind, currentUserId: auth.data?.user?.userId });
   const intakeConfig = useIntakeConfigQuery();
@@ -262,6 +273,7 @@ function BoardContent({
     candidates: intake.participantCandidates,
     activityPage,
     currentUser: auth.data?.user,
+    roster: orgRoster.data,
   });
   const participantCandidateBySourceKey = new Map(
     intake.participantCandidates.map(candidate => [candidate.sourceKey, candidate]),
@@ -269,7 +281,7 @@ function BoardContent({
   const availableLabels = boardLabels({ items: items.all, candidates: intake.participantCandidates });
   const filteredCandidates = intake.candidates.filter(
     candidate =>
-      candidateMatchesRelevance(candidate, filters.participantId, filters.relevanceTypes) &&
+      candidateMatchesRelevance(candidate, filters.participantId, filters.relevanceTypes, teammateExpansion) &&
       candidateMatchesLabels(candidate, filters.labels) &&
       cardMatchesSearch(candidate, filters.search),
   );
@@ -309,7 +321,14 @@ function BoardContent({
       unfilteredWorkItemsForStage(stage).filter(item => {
         const liveCandidate = item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined;
         return (
-          workItemMatchesRelevance(item, activityPage, filters.participantId, filters.relevanceTypes, liveCandidate) &&
+          workItemMatchesRelevance(
+            item,
+            activityPage,
+            filters.participantId,
+            filters.relevanceTypes,
+            liveCandidate,
+            teammateExpansion,
+          ) &&
           workItemMatchesLabels(item, filters.labels, liveCandidate) &&
           cardMatchesSearch(item, filters.search)
         );

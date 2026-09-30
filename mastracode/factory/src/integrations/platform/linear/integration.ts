@@ -34,6 +34,7 @@ import {
 } from '../api-client.js';
 import { PlatformLinearEventWorker } from './event-worker.js';
 import type { PlatformLinearEventStorage } from './event-worker.js';
+import { buildPlatformLinearIdentity } from './identity.js';
 
 type PageInfo = { hasNextPage: boolean; endCursor: string | null };
 type LinearUser = {
@@ -111,6 +112,15 @@ function routeBaseUrl(ctx: IntegrationContext, requestUrl: string): string {
 
 export class PlatformLinearIntegration implements FactoryIntegration {
   readonly id = 'linear';
+  /**
+   * Identity capability — paginates the platform Linear users endpoint per
+   * connected workspace, tagging each user with the workspace url key.
+   */
+  readonly identity = buildPlatformLinearIdentity({
+    client: () => this.#client,
+    listWorkspaces: () => this.listWorkspaces(),
+    apiPrefix: API_PREFIX,
+  });
   readonly #client: PlatformApiClient;
   readonly #endpointHost: string;
   #projects: FactoryProjectsStorage | undefined;

@@ -49,6 +49,7 @@ import type {
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import type { GithubEventRules, GithubRuleOverrides } from './default-rules.js';
 import { resolveGithubRules } from './default-rules.js';
+import { buildGithubIdentity } from './identity.js';
 import { attachGithubIssueReconciler } from './issue-reconciler.js';
 import { GithubReconcileWorker } from './reconcile-worker.js';
 import { reconcileInterval, reconciliationEnabled } from './reconciliation-config.js';
@@ -193,6 +194,16 @@ export class GithubIntegration implements FactoryIntegration {
   /** Stable integration identifier (see `../factory-integration.ts`). */
   readonly id = 'github';
   readonly #rules: GithubEventRules;
+
+  /**
+   * Identity capability — paginates `GET /orgs/{org}/members` for every
+   * Organization-typed installation this org has connected. User-account
+   * installations are skipped (they have no roster). Members are deduped
+   * by GitHub login across installations and tagged with their installation
+   * account name so the UI can disambiguate when the same login appears on
+   * multiple orgs.
+   */
+  readonly identity = buildGithubIdentity(this);
 
   get rules(): GithubEventRules {
     return this.#rules;

@@ -179,14 +179,85 @@ function matchesRelations(
   return [...selectedTypes].some(type => relations[type].has(participantId));
 }
 
+/**
+ * The identity roster maps a Factory user to every match ID that represents
+ * them on records — their `factory:<uid>` id plus every `${integrationId}:${externalId}`
+ * they've claimed. When a picked teammate resolves through this map, matching
+ * spans every one of their external identities in one predicate call, so
+ * searching "Alice" surfaces her Linear issues, her GitHub PRs, and her
+ * Factory-authored work items together.
+ */
+export type ParticipantExpansion = ReadonlyMap<string, ReadonlySet<string>>;
+
+/**
+ * Build a participant expansion from the org roster. Keys are the picker's
+ * `factory:<uid>` ids; values are the full match-ID set for that user
+ * (`factory:<uid>` + every claimed external id). Empty when the roster is
+ * empty, which lets callers pass a stable reference unconditionally.
+ */
+export function participantExpansionFromRoster(
+  roster: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>>,
+): ParticipantExpansion {
+  const expansion = new Map<string, Set<string>>();
+  for (const [userId, claims] of roster) {
+    const ids = new Set<string>();
+    ids.add(`factory:${userId}`);
+    for (const [integrationId, externalIds] of claims) {
+      for (const externalId of externalIds) {
+        ids.add(`${integrationId}:${externalId.toLowerCase()}`);
+      }
+    }
+    expansion.set(`factory:${userId}`, ids);
+  }
+  return expansion;
+}
+
+function matchesRelationsAnyOf(
+  relations: Record<BoardRelevanceType, Set<string>>,
+  ids: ReadonlySet<string>,
+  selectedTypes: ReadonlySet<BoardRelevanceType>,
+): boolean {
+  if (ids.size === 0) return false;
+  for (const type of selectedTypes) {
+    for (const id of relations[type]) {
+      if (ids.has(id)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * The acting user's claimed external accounts, one set per integration.
+ * Sourced from `useResolvedMe`; only the ids the user has explicitly
+ * claimed appear here — a GitHub login the user hasn't claimed does not
+ * belong even if it happens to be theirs on the provider.
+ *
+ * Cmd+K search still consumes this to expand its hidden `@me` token; the
+ * board's teammate picker uses the org roster directly instead (picking
+ * your own `factory:<uid>` expands across every identity you've claimed).
+ */
+export type ResolvedMe = ReadonlyMap<string, ReadonlySet<string>>;
+
 export function workItemMatchesRelevance(
   item: WorkItem,
   activityPage: AuditEventPage | undefined,
   participantId: string | undefined,
   selectedTypes: ReadonlySet<BoardRelevanceType>,
   liveCandidate?: BoardCandidate,
+  /**
+   * Optional roster expansion. When the picked `participantId` is a Factory
+   * user with claims, matches against every identity they've claimed so a
+   * single picked coworker surfaces their records across every integration.
+   * Absent participants fall through to the single-id path unchanged.
+   */
+  expansion?: ParticipantExpansion,
 ): boolean {
   if (!participantId) return true;
+  const expanded = expansion?.get(participantId);
+  if (expanded) {
+    if (matchesRelationsAnyOf(workItemRelevance(item, activityPage), expanded, selectedTypes)) return true;
+    return liveCandidate ? matchesRelationsAnyOf(candidateRelevance(liveCandidate), expanded, selectedTypes) : false;
+  }
   if (matchesRelations(workItemRelevance(item, activityPage), participantId, selectedTypes)) return true;
   return liveCandidate ? matchesRelations(candidateRelevance(liveCandidate), participantId, selectedTypes) : false;
 }
@@ -195,8 +266,12 @@ export function candidateMatchesRelevance(
   candidate: BoardCandidate,
   participantId: string | undefined,
   selectedTypes: ReadonlySet<BoardRelevanceType>,
+  /** Optional roster expansion; see {@link workItemMatchesRelevance}. */
+  expansion?: ParticipantExpansion,
 ): boolean {
   if (!participantId) return true;
+  const expanded = expansion?.get(participantId);
+  if (expanded) return matchesRelationsAnyOf(candidateRelevance(candidate), expanded, selectedTypes);
   return matchesRelations(candidateRelevance(candidate), participantId, selectedTypes);
 }
 
@@ -205,11 +280,19 @@ export function boardParticipants({
   candidates,
   activityPage,
   currentUser,
+  roster,
 }: {
   items: readonly WorkItem[];
   candidates: readonly BoardCandidate[];
   activityPage: AuditEventPage | undefined;
   currentUser?: { userId?: string; name?: string; email?: string };
+  /**
+   * Optional org identity roster. When present, external ids that resolve
+   * to a known Factory user via a claim are dropped from the picker so the
+   * coworker appears once (as `factory:<uid>`) and picking them expands
+   * across every identity they've claimed — see {@link workItemMatchesRelevance}.
+   */
+  roster?: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>>;
 }): BoardParticipant[] {
   const participants = new Map<string, BoardParticipant>();
   const add = (participant: BoardParticipant | undefined) => {
@@ -256,6 +339,37 @@ export function boardParticipants({
     add(creator ? externalProfile(candidate.source, creator) : undefined);
     for (const assignee of externalAssignees(candidate)) add(externalProfile(candidate.source, assignee));
     for (const reviewer of requestedReviewers(candidate)) add(externalProfile(candidate.source, reviewer));
+  }
+
+  // Collapse: any external participant whose id belongs to a claimed identity
+  // of a known Factory user is dropped in favour of that Factory participant.
+  // If the Factory user isn't already in the picker (they never touched the
+  // board directly — think "Alice only ever authored GitHub PRs as octocat"),
+  // synthesize their `factory:<uid>` row from one of the external profiles so
+  // she still shows up as one person. The roster-driven expansion built from
+  // the same map restores the full match set at filter time.
+  if (roster && roster.size > 0) {
+    for (const [userId, claims] of roster) {
+      const factoryId = `factory:${userId}`;
+      const claimedIds: string[] = [];
+      for (const [integrationId, externalIds] of claims) {
+        for (const externalId of externalIds) {
+          claimedIds.push(`${integrationId}:${externalId.toLowerCase()}`);
+        }
+      }
+      const presentIds = claimedIds.filter(id => participants.has(id));
+      if (presentIds.length === 0) continue;
+      if (!participants.has(factoryId)) {
+        const donor = participants.get(presentIds[0])!;
+        participants.set(factoryId, {
+          id: factoryId,
+          name: donor.name,
+          avatarUrl: donor.avatarUrl,
+          source: 'factory',
+        });
+      }
+      for (const id of presentIds) participants.delete(id);
+    }
   }
 
   return [...participants.values()].sort((left, right) => left.name.localeCompare(right.name));

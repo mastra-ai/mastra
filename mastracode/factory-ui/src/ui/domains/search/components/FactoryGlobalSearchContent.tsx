@@ -11,6 +11,7 @@ import { useState } from 'react';
 
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { useResolvedMe } from '../../../../hooks/useIdentityClaims';
 import { candidatePayload } from '../../factory/boardDrag';
 import { cardMoves } from '../../factory/cardPrimaryAction';
 import { useBoardItems } from '../../factory/hooks/useBoardItems';
@@ -63,6 +64,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const runs = useBoardRuns({ factoryProjectId: factoryId, refetchItems: workItems.refetch });
   const { selectPath } = useGlobalSearchNavigation(closeSearch);
   const [activeScope, setActiveScope] = useState<GlobalSearchScope>('all');
+  const resolvedMe = useResolvedMe();
 
   const sessionGroups = createSessionSearchGroups({
     factoryId,
@@ -73,6 +75,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
     factoryId,
     workItems: workItems.items,
     candidates: intake.candidates,
+    resolvedMe: resolvedMe.data,
   });
   const counts = createGlobalSearchScopeCounts({
     work: sessionGroups.work.length,

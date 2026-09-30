@@ -37,6 +37,7 @@ import {
   type PlatformApiClientConfig,
 } from '../api-client.js';
 import { buildPlatformJiraAgentTools } from './agent-tools.js';
+import { buildPlatformJiraIdentity } from './identity.js';
 import { buildPlatformJiraRoutes } from './routes.js';
 
 interface PlatformIntegrationConnection {
@@ -106,6 +107,29 @@ export interface PlatformJiraIntegrationConfig {
 
 export class PlatformJiraIntegration implements FactoryIntegration {
   readonly id = 'jira';
+  /**
+   * Identity capability — paginates `GET /rest/api/3/users/search` through
+   * the platform connection proxy for every active Jira connection this
+   * org has. See `./identity.ts` for the walk semantics.
+   */
+  readonly identity = buildPlatformJiraIdentity({
+    activeContexts: async () => {
+      const connections = await this.#activeConnections();
+      // One broken connection (missing cloudId, invalid accountLabel) must
+      // not drop the roster for every healthy site — keep the fulfilled
+      // contexts and skip the rejected ones.
+      const settled = await Promise.allSettled(
+        connections.map(async connection => ({ connectionId: connection.id, context: await this.#connectionContext(connection) })),
+      );
+      return settled
+        .filter(entry => entry.status === 'fulfilled')
+        .map(entry => ({
+          connectionId: entry.value.connectionId,
+          api: entry.value.context.api,
+          siteUrl: entry.value.context.siteUrl,
+        }));
+    },
+  });
   readonly #clientConfig: PlatformApiClientConfig;
   readonly #platformClient: PlatformApiClient;
   readonly #endpointHost: string;

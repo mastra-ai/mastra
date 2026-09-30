@@ -159,6 +159,8 @@ export interface GitLabMember {
   name?: string | null;
   state?: string;
   access_level?: number;
+  /** Public avatar URL served by the GitLab instance for this user. */
+  avatar_url?: string | null;
 }
 
 export interface GitLabApiClientConfig {
@@ -585,6 +587,28 @@ export class GitLabApiClient {
         per_page: GITLAB_DISCUSSIONS_PAGE_SIZE,
       },
     });
+  }
+
+  /**
+   * List all members inherited into a group (including sub-groups and shared
+   * projects). Used by the identity capability to build the roster of
+   * teammates a factory user can claim.
+   */
+  async listGroupMembers(
+    groupId: string,
+    options: { query?: string; page?: number } = {},
+  ): Promise<GitLabMember[]> {
+    return this.#request<GitLabMember[]>(
+      'GET',
+      `/api/v4/groups/${encodeURIComponent(groupId)}/members/all`,
+      {
+        query: {
+          query: options.query,
+          page: options.page ?? 1,
+          per_page: GITLAB_DISCUSSIONS_PAGE_SIZE,
+        },
+      },
+    );
   }
 
   async #request<T>(

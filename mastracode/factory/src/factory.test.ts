@@ -473,6 +473,7 @@ describe('MastraFactory.prepare', () => {
       'filesystem',
       'source-control',
       'channel-identity',
+      'integration-identity',
       'work-item-comments',
     ]);
     expect(storage.domainNames().every(name => storage.isDomainReady(name))).toBe(true);

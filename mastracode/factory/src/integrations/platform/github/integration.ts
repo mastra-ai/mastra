@@ -77,6 +77,7 @@ import {
 } from '../api-client.js';
 import { PlatformGithubEventWorker } from './event-worker.js';
 import type { PlatformGithubEventStorage } from './event-worker.js';
+import { buildPlatformGithubIdentity } from './identity.js';
 
 type GithubActor = { login: string; avatarUrl: string | null; htmlUrl: string | null } | null;
 
@@ -221,6 +222,26 @@ function routeBaseUrl(ctx: IntegrationContext, requestUrl: string): string {
 
 export class PlatformGithubIntegration implements FactoryIntegration {
   readonly id = 'github';
+  /**
+   * Identity capability — discovers every installation the caller has
+   * connected on Platform (via `/v1/server/github-app/installations`) and
+   * fetches each one's org-members roster from
+   * `/v1/server/github-app/installations/:id/members`. Discovery does not
+   * depend on Factory's source-control storage, so a user who has connected
+   * GitHub on Platform but not yet registered any repositories still gets
+   * their org members surfaced as claim candidates.
+   */
+  readonly identity = buildPlatformGithubIdentity({
+    client: () => this.#client,
+    apiPrefix: API_PREFIX,
+    listOrgInstallationIds: async (orgId: string) => {
+      // Source-control storage is the tenant boundary: intake writes an
+      // installation row for the requesting org, so the org's registered
+      // installations are exactly the ones it can legitimately introspect.
+      const installations = await this.storage.installations.list({ orgId });
+      return new Set(installations.map(installation => installation.externalId));
+    },
+  });
   readonly #rules: GithubEventRules;
 
   get rules(): GithubEventRules {
@@ -234,7 +255,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
    * they post as, so this starts from the configured slug (usually absent on a
    * Platform deployment) and is corrected the first time Factory writes.
    */
-  readonly identity: GithubAppIdentity;
+  readonly appIdentity: GithubAppIdentity;
   /**
    * Extra reviewer bot logins this deployment trusts for author-gated
    * notifications, merged over the built-in defaults.
@@ -535,7 +556,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     // is legitimately unset. Borrowing it is what left every self-loop guard
     // comparing against `undefined[bot]`. This integration *is* the Platform
     // App, so it names itself, with an override for non-production Apps.
-    this.identity = new GithubAppIdentity(
+    this.appIdentity = new GithubAppIdentity(
       process.env.MASTRA_PLATFORM_GITHUB_APP_SLUG?.trim() || PLATFORM_GITHUB_APP_SLUG,
     );
     this.authorizedBots = parseAuthorizedBotsEnv(process.env.MASTRACODE_GITHUB_AUTHORIZED_BOTS) ?? [];
@@ -564,7 +585,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   isFactoryCommentAuthor(login: string | null | undefined): boolean {
-    return typeof login === 'string' && this.identity.matches(login);
+    return typeof login === 'string' && this.appIdentity.matches(login);
   }
 
   get storage(): SourceControlStorageHandle {
@@ -1248,7 +1269,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
    */
   #observeSelfAuthor(comment: GithubComment, actingUserId: string | undefined): void {
     if (actingUserId) return;
-    this.identity.observeSelfAuthor(comment.user?.login);
+    this.appIdentity.observeSelfAuthor(comment.user?.login);
   }
 
   async #createIssueComment(input: CreateIntakeCommentInput) {

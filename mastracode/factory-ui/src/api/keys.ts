@@ -80,6 +80,20 @@ export const queryKeys = {
   intakeLabelRoutes: (factoryProjectId: string | undefined) =>
     ['intake', 'label-routes', factoryProjectId ?? null] as const,
   channelAccounts: () => ['channel-accounts'] as const,
+  /**
+   * Consolidated identity index: integrations + identities (with claimed
+   * flags). Scoped by API endpoint so a `baseUrl` change under the same
+   * long-lived QueryClient never serves one endpoint's claims to another.
+   */
+  identity: (baseUrl: string) => ['identity', baseUrl] as const,
+  /**
+   * Org roster of identity claims: every user in the org that has claimed at
+   * least one external identity, together with their claim map. Consumed by
+   * the board's teammate filter so picking a coworker expands to every
+   * external identity they've claimed. Scoped by `baseUrl` for the same
+   * cross-endpoint isolation as the identity index.
+   */
+  identityRoster: (baseUrl: string) => ['identity-roster', baseUrl] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
   /** Every comment read, all work items — the catch-up target after a stream drop. */
   workItemCommentsAll: () => ['factory', 'work-item-comments'] as const,

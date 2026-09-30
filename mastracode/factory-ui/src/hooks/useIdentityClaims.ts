@@ -1,0 +1,229 @@
+import { useMemo } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+
+import { useApiConfig } from '../api/config';
+import { queryKeys } from '../api/keys';
+import {
+  claimIdentity,
+  listIdentity,
+  listIdentityRoster,
+  unclaimIdentity,
+} from '../ui/domains/settings/services/identityClaims';
+import type { IdentityIndex, IdentityRoster, IdentityRow } from '../ui/domains/settings/services/identityClaims';
+
+/**
+ * The consolidated identity index: every integration that exposes the identity
+ * capability plus every identity across those integrations, each annotated
+ * with whether the acting user has claimed it. Backs the settings
+ * multi-select and the `useResolvedMe` hook consumed by Cmd+K search.
+ */
+export function useIdentityQuery() {
+  const { baseUrl } = useApiConfig();
+  return useQuery<IdentityIndex>({
+    queryKey: queryKeys.identity(baseUrl),
+    queryFn: () => listIdentity(baseUrl),
+  });
+}
+
+/**
+ * Shared mutation key for claim/unclaim so each mutation can see whether a
+ * sibling is still in flight before it refetches the shared index. Scoped by
+ * `baseUrl` — a mutation against endpoint A must not defer to a pending
+ * mutation against endpoint B, or A's index never reconciles.
+ */
+const identityMutationKey = (baseUrl: string) => ['identity-claims', baseUrl] as const;
+
+/** Toggle `claimed` on the row matching (integrationId, externalUserId); no-op if absent. */
+function setClaimed(index: IdentityIndex | undefined, key: ClaimKey, claimed: boolean): IdentityIndex | undefined {
+  if (!index) return index;
+  let mutated = false;
+  const identities = index.identities.map(row => {
+    if (row.integrationId !== key.integrationId || row.externalUserId !== key.externalUserId) return row;
+    if (row.claimed === claimed) return row;
+    mutated = true;
+    return { ...row, claimed };
+  });
+  return mutated ? { ...index, identities } : index;
+}
+
+/**
+ * Optimistically insert a new claim row when a POST names an identity that
+ * isn't in the current index (e.g. a manual/future entry). Keeps the UI
+ * responsive without waiting for the refetch to hydrate the row.
+ */
+function insertClaim(index: IdentityIndex | undefined, input: ClaimInput): IdentityIndex | undefined {
+  if (!index) return index;
+  const exists = index.identities.some(
+    row => row.integrationId === input.integrationId && row.externalUserId === input.externalUserId,
+  );
+  if (exists) return setClaimed(index, input, true);
+  const row: IdentityRow = {
+    integrationId: input.integrationId,
+    externalUserId: input.externalUserId,
+    label: input.label,
+    email: input.email,
+    claimed: true,
+  };
+  return { ...index, identities: [...index.identities, row] };
+}
+
+type ClaimKey = { integrationId: string; externalUserId: string };
+type ClaimInput = ClaimKey & { label: string; email?: string };
+
+/**
+ * Claim an identity. Applies an optimistic update to the identity cache so
+ * the multi-select tick, the org roster, and any `@me`-derived filter
+ * flip immediately, rolls back on error, and refetches on settle to
+ * reconcile with the server.
+ */
+export function useClaimIdentityMutation() {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  const identityKey = queryKeys.identity(baseUrl);
+  const mutationKey = identityMutationKey(baseUrl);
+  return useMutation({
+    mutationKey,
+    mutationFn: (input: ClaimInput) => claimIdentity(baseUrl, input),
+    onMutate: async input => {
+      await queryClient.cancelQueries({ queryKey: identityKey });
+      const previous = queryClient.getQueryData<IdentityIndex>(identityKey);
+      const existingRow = previous?.identities.find(
+        row => row.integrationId === input.integrationId && row.externalUserId === input.externalUserId,
+      );
+      queryClient.setQueryData<IdentityIndex>(identityKey, current => insertClaim(current, input));
+      return { existed: Boolean(existingRow), wasClaimed: existingRow?.claimed ?? false };
+    },
+    onError: (_error, input, context) => {
+      // Roll back only this identity — restoring a whole-index snapshot
+      // would erase a sibling mutation's optimistic state.
+      queryClient.setQueryData<IdentityIndex>(identityKey, current => {
+        if (!current) return current;
+        if (!context?.existed) {
+          return {
+            ...current,
+            identities: current.identities.filter(
+              row => row.integrationId !== input.integrationId || row.externalUserId !== input.externalUserId,
+            ),
+          };
+        }
+        return setClaimed(current, input, context.wasClaimed);
+      });
+    },
+    onSettled: () => {
+      // Refetching while a sibling identity mutation is still pending would
+      // clobber its optimistic row; reconcile once the last one settles.
+      if (queryClient.isMutating({ mutationKey }) === 1) {
+        void queryClient.invalidateQueries({ queryKey: identityKey });
+        // Roster feeds board participant collapse + teammate expansion; without
+        // this a mounted board keeps stale roster data until it refetches on
+        // its own.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.identityRoster(baseUrl) });
+      }
+    },
+  });
+}
+
+/**
+ * Unclaim an identity. Optimistically flips the row's `claimed` flag so the
+ * UI updates without waiting for the DELETE + refetch, rolls back on error,
+ * and refetches on settle to reconcile with the server.
+ */
+export function useUnclaimIdentityMutation() {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  const identityKey = queryKeys.identity(baseUrl);
+  const mutationKey = identityMutationKey(baseUrl);
+  return useMutation({
+    mutationKey,
+    mutationFn: (key: ClaimKey) => unclaimIdentity(baseUrl, key),
+    onMutate: async key => {
+      await queryClient.cancelQueries({ queryKey: identityKey });
+      const previous = queryClient.getQueryData<IdentityIndex>(identityKey);
+      const existingRow = previous?.identities.find(
+        row => row.integrationId === key.integrationId && row.externalUserId === key.externalUserId,
+      );
+      queryClient.setQueryData<IdentityIndex>(identityKey, current => setClaimed(current, key, false));
+      return { wasClaimed: existingRow?.claimed ?? false };
+    },
+    onError: (_error, key, context) => {
+      // Identity-specific rollback; see useClaimIdentityMutation.
+      queryClient.setQueryData<IdentityIndex>(identityKey, current =>
+        setClaimed(current, key, context?.wasClaimed ?? true),
+      );
+    },
+    onSettled: () => {
+      if (queryClient.isMutating({ mutationKey }) === 1) {
+        void queryClient.invalidateQueries({ queryKey: identityKey });
+        // Mirror the roster invalidation in useClaimIdentityMutation.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.identityRoster(baseUrl) });
+      }
+    },
+  });
+}
+
+/**
+ * Resolved `@me` set derived from the identity index — a
+ * `Map<integrationId, Set<externalUserId>>` matching `ResolvedMe` on the
+ * server. Cmd+K search consumes it to expand its hidden `@me` token into
+ * a match against any of the user's claimed external identities.
+ * (The board's teammate picker uses the org roster directly instead — see
+ * `useOrgIdentityRoster` — so multi-identity expansion also works when
+ * you pick your own name or a coworker's from the picker.) Memoized so
+ * that filter predicates can safely refer to the map identity in dep
+ * arrays.
+ */
+export function useResolvedMe(): {
+  data: Map<string, Set<string>>;
+  isLoading: boolean;
+  isError: boolean;
+} {
+  const query = useIdentityQuery();
+  const data = useMemo(() => {
+    const resolved = new Map<string, Set<string>>();
+    for (const row of query.data?.identities ?? []) {
+      if (!row.claimed) continue;
+      let set = resolved.get(row.integrationId);
+      if (!set) {
+        set = new Set();
+        resolved.set(row.integrationId, set);
+      }
+      set.add(row.externalUserId);
+    }
+    return resolved;
+  }, [query.data]);
+  return { data, isLoading: query.isLoading, isError: query.isError };
+}
+
+/**
+ * Org-wide identity roster: every user with at least one claim, plus their
+ * claim map. The board's teammate picker consumes this to collapse a user
+ * with multiple external identities into a single participant and, when
+ * that participant is picked, expand the match across every external
+ * identity they've claimed.
+ *
+ * Keyed on Factory userId so lookups are O(1) at match time. Empty roster
+ * (no claims anywhere in the org) is a valid resolved state, not an error.
+ */
+export function useOrgIdentityRoster(): {
+  data: Map<string, Map<string, Set<string>>>;
+  isLoading: boolean;
+  isError: boolean;
+} {
+  const { baseUrl } = useApiConfig();
+  const query = useQuery<IdentityRoster>({
+    queryKey: queryKeys.identityRoster(baseUrl),
+    queryFn: () => listIdentityRoster(baseUrl),
+  });
+  const data = useMemo(() => {
+    const byUser = new Map<string, Map<string, Set<string>>>();
+    for (const user of query.data?.users ?? []) {
+      const resolved = new Map<string, Set<string>>();
+      for (const entry of user.claims) {
+        resolved.set(entry.integrationId, new Set(entry.externalUserIds));
+      }
+      byUser.set(user.userId, resolved);
+    }
+    return byUser;
+  }, [query.data]);
+  return { data, isLoading: query.isLoading, isError: query.isError };
+}
