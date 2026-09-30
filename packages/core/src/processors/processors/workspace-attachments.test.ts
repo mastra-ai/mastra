@@ -12,6 +12,7 @@ import { createTool } from '../../tools';
 import { CompositeFilesystem, LocalFilesystem, Workspace } from '../../workspace';
 import type { AnyWorkspace } from '../../workspace';
 import {
+  ATTACHMENT_TOO_LARGE,
   formatWorkspaceAttachmentNote,
   WORKSPACE_REQUIRED_FOR_ATTACHMENT,
   WorkspaceAttachmentsProcessor,
@@ -816,10 +817,45 @@ describe('WorkspaceAttachmentsProcessor', () => {
       expect(parts[0].text).toContain(`(${XLSX})`);
     });
 
-    it('routes a CSV reported as application/vnd.ms-excel only when that MIME type is configured', async () => {
+    it('never routes a .csv by MIME type, even when application/vnd.ms-excel is configured', async () => {
       const csv = part('data.csv', 'application/vnd.ms-excel');
-      expect((await runWith({ extensions: ['.xlsx', '.xls'] }, [csv])).parts[0].type).toBe('file');
-      expect((await runWith({ mimeTypes: ['application/vnd.ms-excel'] }, [csv])).parts[0].type).toBe('text');
+      expect((await runWith(SHEETS, [csv])).parts[0].type).toBe('file');
+      expect((await runWith({ extensions: ['.csv'] }, [csv])).parts[0].type).toBe('text');
+    });
+
+    it('routes by MIME type when the filename has an unconfigured or missing extension', async () => {
+      expect((await runWith(SHEETS, [part('report', XLSX)])).parts[0].type).toBe('text');
+      expect((await runWith(SHEETS, [part('report.bin', XLSX)])).parts[0].type).toBe('text');
+    });
+
+    it('accepts any size when maxBytes is not set', async () => {
+      const big = { ...part('big.xlsx', XLSX), data: Buffer.alloc(5_000_000).toString('base64') };
+      expect((await runWith(SHEETS, [big])).parts[0].type).toBe('text');
+    });
+
+    it('accepts an attachment exactly at maxBytes', async () => {
+      const { parts } = await runWith({ ...SHEETS, maxBytes: BYTES.length }, [part('ok.xlsx', XLSX)]);
+      expect(parts[0].type).toBe('text');
+    });
+
+    it('aborts without writing when an attachment exceeds maxBytes', async () => {
+      const { basePath, workspace } = await localWorkspace();
+      const { MessageList } = await import('../../agent/message-list');
+      const messageList = new MessageList();
+      messageList.add([{ role: 'user', content: [part('big.xlsx', XLSX) as any] }], 'input');
+      const abort = vi.fn((reason: string, options?: any) => {
+        throw Object.assign(new Error(reason), { options });
+      });
+      const processor = new WorkspaceAttachmentsProcessor({ ...SHEETS, maxBytes: BYTES.length - 1, workspace });
+      await expect(
+        processor.processInputStep({ messageList, requestContext: new RequestContext(), abort } as any),
+      ).rejects.toThrow(`"big.xlsx" is ${BYTES.length} bytes, over the ${BYTES.length - 1}-byte limit`);
+      expect(abort.mock.calls[0]![1].metadata).toEqual({ code: ATTACHMENT_TOO_LARGE, mediaType: XLSX });
+      expect(await readdir(basePath)).toEqual([]);
+    });
+
+    it.each([0, -1, 1.5, Number.NaN])('rejects maxBytes %s', maxBytes => {
+      expect(() => new WorkspaceAttachmentsProcessor({ ...SHEETS, maxBytes })).toThrow(/positive integer/);
     });
 
     it('routes custom types such as .docx', async () => {

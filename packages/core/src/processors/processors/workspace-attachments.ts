@@ -23,6 +23,7 @@ import type { ProcessInputStepArgs, Processor } from '../index';
 export const WORKSPACE_REQUIRED_FOR_ATTACHMENT = 'WORKSPACE_REQUIRED_FOR_ATTACHMENT';
 export const ATTACHMENT_NOT_INLINE = 'ATTACHMENT_NOT_INLINE';
 export const ATTACHMENT_INVALID_DATA = 'ATTACHMENT_INVALID_DATA';
+export const ATTACHMENT_TOO_LARGE = 'ATTACHMENT_TOO_LARGE';
 
 const FALLBACK_MEDIA_TYPE = 'application/octet-stream';
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
@@ -32,6 +33,8 @@ export interface WorkspaceAttachmentsProcessorOptions {
   extensions?: string[];
   /** Media types to route to the workspace, e.g. `['application/vnd.ms-excel']`. */
   mimeTypes?: string[];
+  /** Largest attachment accepted, in bytes. Larger ones abort the run. Unlimited when omitted. */
+  maxBytes?: number;
   /**
    * Workspace used by the current run. The agent sets it; when absent, routed attachments abort the run.
    * @internal
@@ -67,7 +70,8 @@ function createRouteMatcher(options: WorkspaceAttachmentsProcessorOptions): Rout
   return (mediaType, filename) => {
     const type = typeof mediaType === 'string' && mediaType ? mediaType.toLowerCase() : undefined;
     const extension = typeof filename === 'string' ? filename.toLowerCase().match(/\.[^.]+$/)?.[0] : undefined;
-    const matches = (extension && extensions.has(extension)) || (type && mimeTypes.has(type));
+    // Browsers report CSV files as application/vnd.ms-excel, so a MIME match never routes a .csv file.
+    const matches = (extension && extensions.has(extension)) || (type && mimeTypes.has(type) && extension !== '.csv');
     return matches ? (type ?? FALLBACK_MEDIA_TYPE) : undefined;
   };
 }
@@ -345,6 +349,10 @@ export class WorkspaceAttachmentsProcessor implements Processor<'workspace-attac
   constructor(options: WorkspaceAttachmentsProcessorOptions = {}) {
     this.options = options;
     this.match = createRouteMatcher(options);
+    const { maxBytes } = options;
+    if (maxBytes !== undefined && !(Number.isInteger(maxBytes) && maxBytes > 0)) {
+      throw new Error('WorkspaceAttachmentsProcessor: `maxBytes` must be a positive integer');
+    }
   }
 
   /**
@@ -382,6 +390,15 @@ export class WorkspaceAttachmentsProcessor implements Processor<'workspace-attac
           `Attachment "${attachment.filename ?? 'attachment'}" has invalid data: expected base64 or a base64 data URL`,
           {
             metadata: { code: ATTACHMENT_INVALID_DATA, mediaType: attachment.mediaType },
+          },
+        );
+      }
+      const { maxBytes } = this.options;
+      if (maxBytes !== undefined && bytes.byteLength > maxBytes) {
+        return abort(
+          `Attachment "${attachment.filename ?? 'attachment'}" is ${bytes.byteLength} bytes, over the ${maxBytes}-byte limit. Send a smaller file`,
+          {
+            metadata: { code: ATTACHMENT_TOO_LARGE, mediaType: attachment.mediaType },
           },
         );
       }

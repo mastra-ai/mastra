@@ -4,7 +4,7 @@
 
 Added `WorkspaceAttachmentsProcessor`, which lets an agent accept attachments the model can't read, such as spreadsheets. Each matching attachment is saved to `uploads/<id>/<name>` in the agent's workspace, and the model gets a note with the path, so the agent reads the file with workspace tools or skills.
 
-You choose which attachments are routed by extension and/or MIME type. With neither set, every attachment goes to the model unchanged.
+You choose which attachments are routed by extension and/or MIME type. With neither set, every attachment goes to the model unchanged. A `.csv` is never routed by MIME type alone, since browsers report CSVs as `application/vnd.ms-excel`. Set `maxBytes` to cap attachment size; without it any size is accepted.
 
 ```ts
 import { WorkspaceAttachmentsProcessor } from '@mastra/core/processors';
