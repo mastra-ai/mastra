@@ -1,7 +1,7 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { FilterBar } from '@mastra/playground-ui/components/FilterBar';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@mastra/playground-ui/components/FilterBar';
-import { AtSign, ListFilter, Search, Tag, UsersRound } from 'lucide-react';
+import { ListFilter, Search, Tag, UsersRound } from 'lucide-react';
 import { useMemo } from 'react';
 
 import { BOARD_FILTER_FIELD, boardFilterItems, boardFilterStateFromItems } from '../boardFilters';
@@ -26,7 +26,6 @@ export function BoardFilters({
   participants,
   availableLabels,
   currentUserId,
-  hasIdentityClaims = false,
   filters,
   onFiltersChange,
 }: {
@@ -34,8 +33,6 @@ export function BoardFilters({
   participants: readonly BoardParticipant[];
   availableLabels: readonly string[];
   currentUserId?: string;
-  /** When true, injects an `@me` teammate suggestion that resolves across every claimed integration. */
-  hasIdentityClaims?: boolean;
   filters: BoardFilterState;
   onFiltersChange: (filters: BoardFilterState) => void;
 }) {
@@ -49,16 +46,11 @@ export function BoardFilters({
         icon: UsersRound,
         operators: ['is'],
         strict: true,
-        suggestions: [
-          ...(hasIdentityClaims
-            ? [{ value: '@me', label: '@me', start: <AtSign className="size-3.5" /> }]
-            : []),
-          ...participants.map(participant => ({
-            value: participant.id,
-            label: participant.id === `factory:${currentUserId}` ? `${participant.name} (you)` : participant.name,
-            start: <Avatar src={participant.avatarUrl} name={participant.name} size="sm" />,
-          })),
-        ],
+        suggestions: participants.map(participant => ({
+          value: participant.id,
+          label: participant.id === `factory:${currentUserId}` ? `${participant.name} (you)` : participant.name,
+          start: <Avatar src={participant.avatarUrl} name={participant.name} size="sm" />,
+        })),
       },
       {
         id: BOARD_FILTER_FIELD.relevance,
@@ -79,7 +71,7 @@ export function BoardFilters({
         suggestions: availableLabels.map(label => ({ value: label })),
       },
     ],
-    [availableLabels, currentUserId, hasIdentityClaims, kind, participants, teammateSelected],
+    [availableLabels, currentUserId, kind, participants, teammateSelected],
   );
 
   return (

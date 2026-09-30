@@ -3,10 +3,10 @@
  *
  * The endpoint returns every identity from every integration that opted into
  * the identity capability, each annotated with whether the acting user has
- * already claimed it. Both the settings `IdentityClaimsSection` and the
- * `useResolvedMe` hook (board `@me` chip + Cmd+K `@me` token) read the same
- * server-side claim table, so a fresh POST/DELETE shows up in both surfaces
- * after a single cache invalidation.
+ * already claimed it. The settings `IdentityClaimsSection`, the org identity
+ * roster (board teammate picker), and the `useResolvedMe` hook (Cmd+K `@me`
+ * token) all read the same server-side claim table, so a fresh POST/DELETE
+ * shows up in every surface after a single cache invalidation.
  */
 
 export interface IdentityIntegrationDescriptor {
@@ -20,8 +20,8 @@ export interface IdentityRow {
   email?: string;
   /**
    * Provider-served avatar URL when the integration surfaces one. Used by
-   * the identity settings dropdown and `@me` chips so rows render a face
-   * instead of the initials fallback whenever possible.
+   * the identity settings dropdown and the teammate picker so rows render
+   * a face instead of the initials fallback whenever possible.
    */
   avatarUrl?: string;
   claimed: boolean;

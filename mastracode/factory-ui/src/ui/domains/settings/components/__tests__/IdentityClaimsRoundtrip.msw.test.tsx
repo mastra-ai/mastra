@@ -1,8 +1,9 @@
 /**
  * E2E stand-in for the Phase 5 Playwright scenario: claiming an account
- * in the settings section should flow through the shared identity query and
- * update `useResolvedMe`. Any board or Cmd+K surface reading
- * `useResolvedMe` sees the newly claimed id without a page reload.
+ * in the settings section should flow through the shared identity query
+ * and update `useResolvedMe`. Cmd+K search reads `useResolvedMe` to expand
+ * its hidden `@me` token, so a fresh claim must reach that consumer
+ * without a page reload.
  *
  * The plan calls for a Playwright test, but factory-ui uses MSW as its
  * primary e2e substrate (per its AGENTS.md — Playwright is only used for
@@ -18,8 +19,6 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { useResolvedMe } from '../../../../../hooks/useIdentityClaims';
-import { boardRelevanceOptions, workItemMatchesMe } from '../../../factory/boardRelevance';
-import type { WorkItem } from '../../../factory/services/workItems';
 import type { IdentityIndex, IdentityRow } from '../../services/identityClaims';
 import { IdentityClaimsSection } from '../IdentityClaimsSection';
 
@@ -80,42 +79,6 @@ function ResolvedMeReadout() {
   return <output aria-label="resolved-me">{entries.length === 0 ? 'empty' : entries.sort().join(',')}</output>;
 }
 
-/**
- * Board `@me` chip stand-in: feeds the acting user's resolved-me set
- * straight through the real `workItemMatchesMe` predicate against a
- * fixture GitHub PR authored by `octocat`. Renders `match` or `no
- * match` — matches only when a claim on `github:octocat` exists.
- */
-function BoardMeMatchReadout({ item }: { item: WorkItem }) {
-  const resolvedMe = useResolvedMe();
-  const allTypes = new Set(boardRelevanceOptions('review').map(option => option.id));
-  const matches = workItemMatchesMe(item, undefined, resolvedMe.data, allTypes);
-  return <output aria-label="board-me-match">{matches ? 'match' : 'no match'}</output>;
-}
-
-const githubPr: WorkItem = {
-  id: 'item-1',
-  orgId: 'org-1',
-  createdBy: 'factory-rule-dispatcher',
-  githubProjectId: 'factory-1',
-  source: 'github-pr',
-  sourceKey: 'github-pr:12',
-  parentWorkItemId: null,
-  title: 'Ship @me filter',
-  url: 'https://github.com/acme/app/pull/12',
-  stages: ['review'],
-  stageHistory: [],
-  sessions: {},
-  metadata: { author: 'octocat', assignees: [], requestedReviewers: [] },
-  triageType: null,
-  acceptedAt: null,
-  commentCount: 0,
-  feedActivityAt: null,
-  revision: 1,
-  createdAt: '2026-08-01T09:00:00.000Z',
-  updatedAt: '2026-08-05T09:00:00.000Z',
-};
-
 const octocatRow: IdentityRow = {
   integrationId: 'github',
   externalUserId: 'octocat',
@@ -155,25 +118,5 @@ describe('IdentityClaimsSection ↔ useResolvedMe roundtrip', () => {
     await selectOctocat();
 
     await waitFor(() => expect(readout).toHaveTextContent('github:octocat'));
-  });
-
-  it('given a board `@me` predicate composed with useResolvedMe, when a claim is picked on settings, then the predicate flips from no-match to match', async () => {
-    stub({ index: baseIndex([octocatRow]) });
-
-    renderWithProviders(
-      <div>
-        <BoardMeMatchReadout item={githubPr} />
-        <IdentityClaimsSection />
-      </div>,
-    );
-
-    const match = await screen.findByLabelText('board-me-match');
-    await waitFor(() => expect(match).toHaveTextContent('no match'));
-
-    await selectOctocat();
-
-    // Exact match: the initial text 'no match' contains 'match', so a
-    // substring assertion would pass before the claim takes effect.
-    await waitFor(() => expect(match).toHaveTextContent(/^match$/));
   });
 });

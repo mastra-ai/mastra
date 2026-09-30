@@ -1,8 +1,9 @@
 /**
  * Single searchable multi-select over every identity across every
  * identity-capable integration. Checking a row POSTs a claim, unchecking
- * DELETEs one. The board `@me` chip and the Cmd+K `@me` token read the same
- * claim set via `useResolvedMe`, so a change here refreshes both immediately.
+ * DELETEs one. The org identity roster (board teammate picker) and the
+ * Cmd+K `@me` token read the same claim set via the identity queries, so
+ * a change here refreshes both immediately.
  */
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Badge } from '@mastra/playground-ui/components/Badge';

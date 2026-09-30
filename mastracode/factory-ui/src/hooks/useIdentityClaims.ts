@@ -14,8 +14,8 @@ import type { IdentityIndex, IdentityRoster, IdentityRow } from '../ui/domains/s
 /**
  * The consolidated identity index: every integration that exposes the identity
  * capability plus every identity across those integrations, each annotated
- * with whether the acting user has claimed it. Backs both the settings
- * multi-select and the `useResolvedMe` hook consumed by `@me` filters.
+ * with whether the acting user has claimed it. Backs the settings
+ * multi-select and the `useResolvedMe` hook consumed by Cmd+K search.
  */
 export function useIdentityQuery() {
   const { baseUrl } = useApiConfig();
@@ -72,8 +72,9 @@ type ClaimInput = ClaimKey & { label: string; email?: string };
 
 /**
  * Claim an identity. Applies an optimistic update to the identity cache so
- * the multi-select tick and `@me` filters flip immediately, rolls back on
- * error, and refetches on settle to reconcile with the server.
+ * the multi-select tick, the org roster, and any `@me`-derived filter
+ * flip immediately, rolls back on error, and refetches on settle to
+ * reconcile with the server.
  */
 export function useClaimIdentityMutation() {
   const { baseUrl } = useApiConfig();
@@ -163,10 +164,13 @@ export function useUnclaimIdentityMutation() {
 /**
  * Resolved `@me` set derived from the identity index — a
  * `Map<integrationId, Set<externalUserId>>` matching `ResolvedMe` on the
- * server. Board filters and Cmd+K search consume it to expand `@me` into a
- * match against any of the user's claimed external identities. Memoized so
- * that filter chips and search predicates can safely refer to the map
- * identity in dep arrays.
+ * server. Cmd+K search consumes it to expand its hidden `@me` token into
+ * a match against any of the user's claimed external identities.
+ * (The board's teammate picker uses the org roster directly instead — see
+ * `useOrgIdentityRoster` — so multi-identity expansion also works when
+ * you pick your own name or a coworker's from the picker.) Memoized so
+ * that filter predicates can safely refer to the map identity in dep
+ * arrays.
  */
 export function useResolvedMe(): {
   data: Map<string, Set<string>>;

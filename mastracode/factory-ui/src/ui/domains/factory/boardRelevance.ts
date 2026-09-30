@@ -227,33 +227,16 @@ function matchesRelationsAnyOf(
 }
 
 /**
- * Board's `@me` resolution: the acting user's claimed external accounts,
- * one set per integration. Sourced from `useResolvedMe`; only the ids the
- * user has claimed count as "me" here — a GitHub login the user hasn't
- * claimed doesn't match even if it happens to be theirs on the provider.
+ * The acting user's claimed external accounts, one set per integration.
+ * Sourced from `useResolvedMe`; only the ids the user has explicitly
+ * claimed appear here — a GitHub login the user hasn't claimed does not
+ * belong even if it happens to be theirs on the provider.
  *
- * The board's `participantId` scheme prefixes ids by source
- * (`github:octocat`, `linear:user-uuid`, etc.), so `@me` translates into a
- * set of those prefixed ids and reuses the existing relations map.
+ * Cmd+K search still consumes this to expand its hidden `@me` token; the
+ * board's teammate picker uses the org roster directly instead (picking
+ * your own `factory:<uid>` expands across every identity you've claimed).
  */
 export type ResolvedMe = ReadonlyMap<string, ReadonlySet<string>>;
-
-/**
- * Expand `@me` into the same `source:externalId` keys the relations map
- * uses. The `worked` relation is keyed by Factory actor id
- * (`factory:<userId>`), not by any claimed external id, so the acting
- * user's own Factory id joins the set when known.
- */
-function participantIdsForMe(resolvedMe: ResolvedMe, currentUserId?: string): Set<string> {
-  const ids = new Set<string>();
-  for (const [integrationId, externalIds] of resolvedMe) {
-    for (const externalId of externalIds) {
-      ids.add(`${integrationId}:${externalId.toLowerCase()}`);
-    }
-  }
-  if (currentUserId) ids.add(`factory:${currentUserId}`);
-  return ids;
-}
 
 export function workItemMatchesRelevance(
   item: WorkItem,
@@ -279,25 +262,6 @@ export function workItemMatchesRelevance(
   return liveCandidate ? matchesRelations(candidateRelevance(liveCandidate), participantId, selectedTypes) : false;
 }
 
-/**
- * `@me` predicate: work-item variant. `resolvedMe` comes from the identity
- * service; an empty map (no claims) always returns false so the chip acts
- * like the teammate selector — no selection filters out everything.
- */
-export function workItemMatchesMe(
-  item: WorkItem,
-  activityPage: AuditEventPage | undefined,
-  resolvedMe: ResolvedMe,
-  selectedTypes: ReadonlySet<BoardRelevanceType>,
-  liveCandidate?: BoardCandidate,
-  currentUserId?: string,
-): boolean {
-  const ids = participantIdsForMe(resolvedMe, currentUserId);
-  if (ids.size === 0) return false;
-  if (matchesRelationsAnyOf(workItemRelevance(item, activityPage), ids, selectedTypes)) return true;
-  return liveCandidate ? matchesRelationsAnyOf(candidateRelevance(liveCandidate), ids, selectedTypes) : false;
-}
-
 export function candidateMatchesRelevance(
   candidate: BoardCandidate,
   participantId: string | undefined,
@@ -309,17 +273,6 @@ export function candidateMatchesRelevance(
   const expanded = expansion?.get(participantId);
   if (expanded) return matchesRelationsAnyOf(candidateRelevance(candidate), expanded, selectedTypes);
   return matchesRelations(candidateRelevance(candidate), participantId, selectedTypes);
-}
-
-/** `@me` predicate: candidate variant. */
-export function candidateMatchesMe(
-  candidate: BoardCandidate,
-  resolvedMe: ResolvedMe,
-  selectedTypes: ReadonlySet<BoardRelevanceType>,
-): boolean {
-  const ids = participantIdsForMe(resolvedMe);
-  if (ids.size === 0) return false;
-  return matchesRelationsAnyOf(candidateRelevance(candidate), ids, selectedTypes);
 }
 
 export function boardParticipants({
