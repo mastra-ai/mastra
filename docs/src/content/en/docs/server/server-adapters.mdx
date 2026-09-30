@@ -350,13 +350,7 @@ process.on('SIGTERM', async () => {
 
 `startWorkers()` is idempotent, so a second call has no effect. `mastra.shutdown()` stops the workers and lets in-flight workflow runs finish before the process exits.
 
-For NestJS, see [Start background workers](/reference/server/nestjs-adapter#start-background-workers) in the NestJS adapter reference.
-
-:::note
-
 If you run workers in a [separate process](/docs/deployment/workers#split-processes), skip `startWorkers()` in the API process and start them in the worker process instead.
-
-:::
 
 ## Adding custom routes
 
@@ -542,15 +536,15 @@ See [MCP](/docs/connections/mcp) for configuration details and how to set up MCP
 
 ## Related
 
-- [Elysia Adapter](/reference/server/elysia-adapter) - Elysia-specific setup
-- [Hono Adapter](/reference/server/hono-adapter) - Hono-specific setup
-- [Express Adapter](/reference/server/express-adapter) - Express-specific setup
-- [NestJS Adapter](/reference/server/nestjs-adapter) - NestJS-specific setup
-- [Next.js Adapter](/reference/server/next-adapter) - Next.js-specific setup
-- [TanStack Start Adapter](/reference/server/tanstack-start-adapter) - TanStack Start-specific setup
-- [Custom Adapters](/docs/server/custom-adapters) - Building adapters for other frameworks
-- [Workers](/docs/deployment/workers) - Running schedulers and other background workers
-- [Server Configuration](/docs/server/overview) - Using `mastra build` instead
-- [Authentication](/docs/auth/overview) - Configuring auth for your server
-- [MastraServer Reference](/reference/server/mastra-server) - Full API reference
-- [createRoute() Reference](/reference/server/create-route) - Creating type-safe custom routes
+- [Elysia Adapter](/reference/server/elysia-adapter): Elysia-specific setup
+- [Hono Adapter](/reference/server/hono-adapter): Hono-specific setup
+- [Express Adapter](/reference/server/express-adapter): Express-specific setup
+- [NestJS Adapter](/reference/server/nestjs-adapter): NestJS-specific setup
+- [Next.js Adapter](/reference/server/next-adapter): Next.js-specific setup
+- [TanStack Start Adapter](/reference/server/tanstack-start-adapter): TanStack Start-specific setup
+- [Custom Adapters](/docs/server/custom-adapters): Building adapters for other frameworks
+- [Workers](/docs/deployment/workers): Running schedulers and other background workers
+- [Server Configuration](/docs/server/overview): Using `mastra build` instead
+- [Authentication](/docs/auth/overview): Configuring auth for your server
+- [MastraServer Reference](/reference/server/mastra-server): Full API reference
+- [createRoute() Reference](/reference/server/create-route): Creating type-safe custom routes
