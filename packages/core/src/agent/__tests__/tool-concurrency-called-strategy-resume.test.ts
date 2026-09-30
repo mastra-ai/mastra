@@ -18,14 +18,14 @@ import { Agent } from '../agent';
 
 const TOOL_NAMES = ['ask-1', 'ask-2', 'ask-3'];
 
-function supervisorModel() {
+function supervisorModel(toolNames: string[] = TOOL_NAMES) {
   let call = 0;
   return new MockLanguageModelV2({
     doStream: async () => {
       call += 1;
       const chunks =
         call === 1
-          ? TOOL_NAMES.map((toolName, i) => ({
+          ? toolNames.map((toolName, i) => ({
               type: 'tool-call' as const,
               toolCallType: 'function' as const,
               toolCallId: `call-${i}`,
@@ -132,5 +132,72 @@ describe("toolCallConcurrency strategy: 'called' across resume (#24581)", () => 
     }
 
     expect(tracker.resumed).toBe(3);
+  });
+
+  it('keeps a resumed batch serial when it called a suspend-schema tool', async () => {
+    const tracker = { running: 0, peak: 0, resumed: 0 };
+    const track = async () => {
+      tracker.running++;
+      tracker.resumed++;
+      tracker.peak = Math.max(tracker.peak, tracker.running);
+      await delay(50);
+      tracker.running--;
+      return { ok: true };
+    };
+
+    const askTool = (id: string) =>
+      createTool({
+        id,
+        description: id,
+        inputSchema: z.object({ q: z.string() }),
+        execute: async (_input, context) => {
+          if (!context?.agent?.resumeData) {
+            return await context?.agent?.suspend({ question: id });
+          }
+          return track();
+        },
+      });
+
+    const gateTool = createTool({
+      id: 'gate',
+      description: 'gate',
+      inputSchema: z.object({ q: z.string() }),
+      suspendSchema: z.object({ question: z.string() }),
+      resumeSchema: z.object({ answer: z.string() }),
+      execute: async (_input, context) => {
+        if (!context?.agent?.resumeData) {
+          return await context?.agent?.suspend({ question: 'gate' });
+        }
+        return track();
+      },
+    });
+
+    const agent = new Agent({
+      id: 'supervisor',
+      name: 'supervisor',
+      instructions: 'x',
+      model: supervisorModel(['gate', 'ask-1', 'ask-2']),
+      tools: { gate: gateTool, 'ask-1': askTool('ask-1'), 'ask-2': askTool('ask-2') },
+    });
+    new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
+
+    const toolCallConcurrency = { limit: 3, strategy: 'called' as const };
+    const stream = await agent.stream('go', { toolCallConcurrency });
+    const suspended: string[] = [];
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'tool-call-suspended') suspended.push(chunk.payload.toolCallId);
+    }
+    expect(suspended.length).toBeGreaterThan(0);
+
+    // Resume until every call has completed; no pass may run calls in parallel.
+    for (let i = 0; i < 3 && tracker.resumed < 3; i++) {
+      const resumed = await agent.resumeStream({ answer: 'yes' }, { runId: stream.runId, toolCallConcurrency });
+      for await (const _ of resumed.fullStream) {
+        /* drain */
+      }
+    }
+
+    expect(tracker.resumed).toBe(3);
+    expect(tracker.peak).toBe(1);
   });
 });
