@@ -126,6 +126,32 @@ describe('Mastra.restartAllActiveWorkflowRuns with evented workflows (issue #249
     }
   });
 
+  it('keeps evented restarts queued through a named partial worker start', async () => {
+    const storage = new MockStore();
+    const id = 'evented-partial-start';
+    const { mastra: hostA, runId } = await orphanRun(id, storage, { autoRestartActiveRuns: true });
+
+    const step2B = vi.fn(async ({ inputData }: { inputData: any }) => ({ got: inputData.seed }));
+    const hostB = newHost(
+      makeWorkflow(id, async () => ({}), step2B, { autoRestartActiveRuns: true }),
+      storage,
+    );
+    try {
+      await hostB.restartAllActiveWorkflowRuns();
+      await hostB.startWorkers('orchestration');
+      // Recovery requested after a partial start must still wait for the consumer.
+      await hostB.restartAllActiveWorkflowRuns();
+      expect(step2B).not.toHaveBeenCalled();
+
+      await hostB.startWorkers();
+      await waitForStatus(storage, id, runId, 'success');
+      expect(step2B).toHaveBeenCalledTimes(1);
+    } finally {
+      await hostB.stopWorkers();
+      await hostA.stopWorkers();
+    }
+  });
+
   it('leaves evented runs untouched when the workflow does not opt in', async () => {
     const storage = new MockStore();
     const id = 'evented-no-opt-in';

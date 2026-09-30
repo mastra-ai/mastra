@@ -890,7 +890,13 @@ export class Mastra<
    * `startWorkers()` path will pick it up.
    */
   #workersStarted = false;
-  /** Evented run restarts requested before workers started (runId -> workflow id). */
+  /**
+   * Set only by a full `startWorkers()` (no name), which wires the workflow
+   * event consumer. Named partial starts leave it false, so evented restarts
+   * stay queued until a full start can publish them.
+   */
+  #allWorkersStarted = false;
+  /** Evented run restarts requested before a full worker start (runId -> workflow id). */
   #pendingEventedRestarts = new Map<string, string>();
   /**
    * Set when something has signalled that the scheduler is needed at runtime
@@ -4098,7 +4104,7 @@ export class Mastra<
       }
       // Evented restarts are processed by the workflow event workers. Defer
       // them until `startWorkers()` has subscribed so the event isn't lost.
-      if (workflow?.engineType === 'evented' && !this.#workersStarted) {
+      if (workflow?.engineType === 'evented' && !this.#allWorkersStarted) {
         this.#pendingEventedRestarts.set(runSnapshot.runId, runSnapshot.workflowName);
         continue;
       }
@@ -6813,7 +6819,13 @@ export class Mastra<
     // to lazily inject + start additional workers themselves.
     this.#workersStarted = true;
 
-    if (this.#pendingEventedRestarts.size > 0) {
+    // Only a full start wires the workflow consumer. A scheduler-only process
+    // still drains here so remote workflow consumers receive the restarts.
+    if (!name) {
+      this.#allWorkersStarted = true;
+    }
+
+    if (!name && this.#pendingEventedRestarts.size > 0) {
       const pending = [...this.#pendingEventedRestarts];
       this.#pendingEventedRestarts.clear();
       for (const [runId, workflowName] of pending) {
@@ -6995,6 +7007,7 @@ export class Mastra<
     // teardown still set their request flags, so a later startWorkers() can
     // honor them, but they must not resurrect workers behind a stopped instance.
     this.#workersStarted = false;
+    this.#allWorkersStarted = false;
 
     // A runtime signal may have kicked off a lazy worker start that is still in
     // flight. Wait for it so the teardown below covers what it started —
