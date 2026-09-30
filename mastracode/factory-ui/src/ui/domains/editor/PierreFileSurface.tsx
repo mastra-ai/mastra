@@ -1,5 +1,6 @@
 import { File, EditProvider } from '@pierre/diffs/react';
 import type { FileContents, FileOptions, LineAnnotation } from '@pierre/diffs/react';
+import { preloadHighlighter } from '@pierre/diffs';
 import {
   Editor,
   type EditorChange,
@@ -66,6 +67,41 @@ interface PierreFileSurfaceProps {
 
 const createEditor: EditorFactory<SurfaceAnnotation, undefined> = (type, options, editStateKey) =>
   new Editor(type, options, editStateKey);
+
+// Preload the shared highlighter once with the languages we're most likely to
+// render. Additional languages resolve lazily as files are opened. Without a
+// preloaded highlighter (or a worker pool provider) Pierre falls back to plain
+// text on first render, which is why our editor showed no syntax highlighting.
+const PRELOADED_LANGS = [
+  'typescript',
+  'tsx',
+  'javascript',
+  'jsx',
+  'json',
+  'markdown',
+  'css',
+  'html',
+  'yaml',
+  'shellscript',
+  'python',
+  'rust',
+  'go',
+  'sql',
+] as const;
+
+let highlighterPreloadPromise: Promise<unknown> | null = null;
+function ensureHighlighterPreloaded(): void {
+  if (highlighterPreloadPromise) return;
+  highlighterPreloadPromise = preloadHighlighter({
+    langs: PRELOADED_LANGS as unknown as never,
+    themes: ['pierre-light', 'pierre-dark'] as unknown as never,
+  }).catch(error => {
+    // Swallow — File will retry the highlight lazily when the language resolves.
+    // eslint-disable-next-line no-console
+    console.warn('[pierre] highlighter preload failed', error);
+  });
+}
+ensureHighlighterPreloaded();
 
 const SEVERITY_MAP: Record<EditorLspDiagnostic['severity'], MarkerSeverity> = {
   error: 'error',
@@ -344,13 +380,23 @@ export function PierreFileSurface({
   }, []);
   const isIdentifier = (text: string) => /^[A-Za-z_$][\w$]*$/.test(text);
 
+  const lineAnnotations = useMemo(
+    () => buildLineAnnotations(blame, codeLenses, onCodeLensAction),
+    [blame, codeLenses, onCodeLensAction],
+  );
+
+  // Only pass the annotation renderer when there is something to render —
+  // Pierre reserves an annotation gutter column any time `renderAnnotation`
+  // is set, which was leaving an empty column beside the line numbers.
+  const hasAnnotations = lineAnnotations.length > 0;
+
   const options = useMemo<FileOptions<SurfaceAnnotation, undefined>>(
     () => ({
       theme: { light: 'pierre-light', dark: 'pierre-dark' },
       disableFileHeader: true,
       disableLineNumbers: !settings.lineNumbers,
       overflow: settings.wordWrap ? 'wrap' : 'scroll',
-      renderAnnotation: renderSurfaceAnnotation,
+      ...(hasAnnotations ? { renderAnnotation: renderSurfaceAnnotation } : {}),
       onTokenEnter(props) {
         const query = lspQueryRef.current;
         if (!query) return;
@@ -384,12 +430,7 @@ export function PierreFileSurface({
         cancelHover();
       },
     }),
-    [settings.lineNumbers, settings.wordWrap, path, initialContent, cancelHover],
-  );
-
-  const lineAnnotations = useMemo(
-    () => buildLineAnnotations(blame, codeLenses, onCodeLensAction),
-    [blame, codeLenses, onCodeLensAction],
+    [settings.lineNumbers, settings.wordWrap, path, initialContent, cancelHover, hasAnnotations],
   );
 
   // Autocomplete popover state — driven off document edits.

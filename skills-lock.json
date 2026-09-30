@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "skills": {
+    "browser-automation": {
+      "source": "pierrecomputer/pierre",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/browser-automation/SKILL.md",
+      "computedHash": "825dfdce8b7e17080f4849ca293712b8e18a619ec353363dc1d06389c1ef9cde"
+    },
+    "diffs": {
+      "source": "pierrecomputer/pierre",
+      "sourceType": "github",
+      "skillPath": "skills/diffs/SKILL.md",
+      "computedHash": "e0b80a6d389fd8a406224f001b3c7f4bd5f81dd711b358306ec4bf1a0d869e45"
+    },
+    "highlights": {
+      "source": "pierrecomputer/pierre",
+      "sourceType": "github",
+      "skillPath": "skills/highlights/SKILL.md",
+      "computedHash": "0c838a0db1bd49d07ec5015ea077950d88355aff72bcc3db23a09d50217cdf5d"
+    },
+    "testing-and-verification": {
+      "source": "pierrecomputer/pierre",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/testing-and-verification/SKILL.md",
+      "computedHash": "ca8f658fe886924583a8a92a37734313de6a8825a0326e16f94aed7f31d218aa"
+    },
+    "theme": {
+      "source": "pierrecomputer/pierre",
+      "sourceType": "github",
+      "skillPath": "skills/theme/SKILL.md",
+      "computedHash": "6ff9b68f51f8294eefe8226f873869b7dbdd5cbca4509cdcd0edafbd1eb901b9"
+    },
+    "theming": {
+      "source": "pierrecomputer/pierre",
+      "sourceType": "github",
+      "skillPath": "skills/theming/SKILL.md",
+      "computedHash": "f6dd8c02f6cf3eb838d30fe5c5bd023c08e8db5ed66d593e41436ea1354efb54"
+    },
+    "tooling-and-dependencies": {
+      "source": "pierrecomputer/pierre",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/tooling-and-dependencies/SKILL.md",
+      "computedHash": "e35da54d9f20c6fc0fbbfaca5d8a2dd6e61fb0897cf1c12f8365203b20b62f02"
+    },
+    "trees": {
+      "source": "pierrecomputer/pierre",
+      "sourceType": "github",
+      "skillPath": "skills/trees/SKILL.md",
+      "computedHash": "7132a04dc1cb869f53db7fc01f34805d7c78a1089608d9df9b4839647e34b13a"
+    },
+    "typescript-monorepo": {
+      "source": "pierrecomputer/pierre",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/typescript-monorepo/SKILL.md",
+      "computedHash": "e63746327227907954ba259e32e6ea93faa43d3bbf32291341523ca06c078df6"
+    },
+    "worktrees-and-dev-servers": {
+      "source": "pierrecomputer/pierre",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/worktrees-and-dev-servers/SKILL.md",
+      "computedHash": "411d71807ba4db487d7d734e2e858853ba4eda9fd990828859274ec4288cd12a"
+    }
+  }
+}
