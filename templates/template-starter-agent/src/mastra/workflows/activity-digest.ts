@@ -1,7 +1,7 @@
 import { PROVIDERS } from '@mastra/connect';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
-import { connectTools } from '../agents/connect-agent';
+import { connectTools } from '../agents/agent';
 
 export const digestSchema = z.object({
   headline: z.string().describe('One sentence capturing the overall state of play.'),
@@ -34,7 +34,7 @@ const READ_VERBS = /(^|_)(get|list|search|retrieve|query|count)(_|$)/;
  * fall back to the first segment for MCP-discovered integrations the static
  * registry doesn't know about.
  */
-function integrationIdForToolKey(key: string): string {
+export function integrationIdForToolKey(key: string): string {
   let best: { id: string; length: number } | undefined;
   for (const { integrationId } of PROVIDERS) {
     for (const prefix of new Set([integrationId, integrationId.replace(/-/g, '_')])) {
@@ -63,6 +63,9 @@ const discoverIntegrationsStep = createStep({
     readOnlyTools: z.array(z.string()),
   }),
   execute: async ({ inputData, mastra }) => {
+    if (!connectTools) {
+      return { focus: inputData.focus, integrations: [], readOnlyTools: [] };
+    }
     const tools = await connectTools({ mastra });
     const keys = Object.keys(tools);
     const integrations = [...new Set(keys.map(integrationIdForToolKey))].sort();
@@ -73,7 +76,7 @@ const discoverIntegrationsStep = createStep({
 
 const composeDigestStep = createStep({
   id: 'compose-digest',
-  description: 'Have the Connect agent gather recent activity from each integration and compose a digest.',
+  description: 'Have the agent gather recent activity from each integration and compose a digest.',
   inputSchema: z.object({
     focus: z.string().optional(),
     integrations: z.array(z.string()),
@@ -92,7 +95,7 @@ const composeDigestStep = createStep({
       };
     }
 
-    const agent = mastra.getAgent('connectAgent');
+    const agent = mastra.getAgent('agent');
     const focus = inputData.focus ? `\n\nFocus on: ${inputData.focus}` : '';
     const result = await agent.generate(
       [
