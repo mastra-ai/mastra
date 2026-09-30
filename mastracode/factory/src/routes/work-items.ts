@@ -13,6 +13,7 @@ import type { Context } from 'hono';
 
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { overtakenDecisionIds } from '../rules/decision-applicability.js';
 import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
 import type {
   FactoryStartCoordinator,
@@ -176,7 +177,7 @@ function summarySource(decision: Record<string, unknown>): WorkItemSource | null
     : null;
 }
 
-function decisionSummary(boards: BoardRegistry, decision: FactoryDeferredDecisionRecord) {
+function decisionSummary(boards: BoardRegistry, decision: FactoryDeferredDecisionRecord, overtaken = false) {
   return {
     id: decision.id,
     evaluationId: decision.evaluationId,
@@ -188,7 +189,7 @@ function decisionSummary(boards: BoardRegistry, decision: FactoryDeferredDecisio
     attempts: decision.attempts,
     failureOccurrence: decision.failureOccurrence,
     failureCode: decision.failureCode,
-    canRetry: factoryDispatchFailureMetadata(decision.failureCode).canRetry,
+    canRetry: !overtaken && factoryDispatchFailureMetadata(decision.failureCode).canRetry,
     lastError: decision.lastError?.slice(0, 512) ?? null,
     createdAt: decision.createdAt.toISOString(),
     updatedAt: decision.updatedAt.toISOString(),
@@ -432,8 +433,16 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             limit: query.data.limit,
           });
           const last = page.decisions.at(-1);
+          const overtaken = await overtakenDecisionIds(
+            workItems,
+            this.#boards,
+            resolved,
+            page.decisions.filter(decision => decision.status === 'failed'),
+          );
           return c.json({
-            decisions: page.decisions.map(decision => decisionSummary(this.#boards, decision)),
+            decisions: page.decisions.map(decision =>
+              decisionSummary(this.#boards, decision, overtaken.has(decision.id)),
+            ),
             ...(page.hasMore && last ? { nextCursor: encodeDecisionCursor(last) } : {}),
           });
         },
@@ -441,6 +450,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
 
       ...buildAttentionRoutes({
         workItems,
+        boards: this.#boards,
         comments: this.deps.comments,
         liveSessions,
         resolveProject: context => this.#resolveProject(loose(context)),
@@ -475,6 +485,10 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             current.status !== 'failed' ||
             !factoryDispatchFailureMetadata(current.failureCode).canRetry
           ) {
+            return c.json({ error: 'decision_not_retryable' }, 409);
+          }
+          // A run decided for a phase the card has left would seat the old role on it.
+          if ((await overtakenDecisionIds(workItems, this.#boards, resolved, [current])).size > 0) {
             return c.json({ error: 'decision_not_retryable' }, 409);
           }
           const decision = await workItems.retryDeferredDecision(

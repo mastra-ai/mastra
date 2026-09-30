@@ -1487,7 +1487,7 @@ describe('FactoryDecisionDispatcher', () => {
       expect(prepareBinding).not.toHaveBeenCalled();
       expect(session.sendSignal).not.toHaveBeenCalled();
       expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
-        status: 'succeeded',
+        status: 'superseded',
         attempts: 1,
       });
     });
@@ -1632,7 +1632,7 @@ describe('FactoryDecisionDispatcher', () => {
       await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
       expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
-        status: 'succeeded',
+        status: 'superseded',
         attempts: 1,
       });
     });
@@ -2784,7 +2784,7 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(decision?.status).toBe('succeeded');
+    expect(decision?.status).toBe('superseded');
     expect(decision?.attempts).toBe(1);
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
   });
@@ -2807,7 +2807,7 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(decision?.status).toBe('succeeded');
+    expect(decision?.status).toBe('superseded');
     expect(session.sendSignal).not.toHaveBeenCalled();
   });
 
