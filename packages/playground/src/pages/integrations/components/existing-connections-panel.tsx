@@ -77,9 +77,9 @@ function ConnectionGroups({
     <div className="space-y-4">
       {groups.map(([authorKey, rows]) => (
         <div key={authorKey}>
-          <h3 className="text-subheading text-foreground" data-testid={`integration-author-group-${authorKey}`}>
+          <Txt as="h3" variant="subheading" tone="ink" data-testid={`integration-author-group-${authorKey}`}>
             {authorKey === 'shared' ? 'Shared' : `Owned by ${authorKey}`}
-          </h3>
+          </Txt>
           <ConnectionList
             connections={rows}
             isAdmin={isAdmin}
@@ -119,7 +119,9 @@ export function ExistingConnectionsPanel({
 }: ExistingConnectionsPanelProps) {
   return (
     <div className="space-y-2 rounded border p-4">
-      <h2 className="text-heading">Existing connections</h2>
+      <Txt as="h2" variant="heading">
+        Existing connections
+      </Txt>
       {!providerId || !toolkit ? (
         <p className="text-muted-foreground">Pick a provider and toolkit to list connections.</p>
       ) : isLoading ? (

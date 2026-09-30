@@ -11,7 +11,7 @@ import {
   raisedControlSurfaceStyle,
   sharedFormElementDisabledStyle,
 } from '@/ds/primitives/form-element';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { controlStateColorTransition, focusRingOffset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 // Adornments for text-mode buttons: gap between icon+label and larger radius.
@@ -63,10 +63,14 @@ export const buttonVariants = cva(
         // covers read through the hover it is meant to answer.
         primary: cn(
           'border border-transparent bg-fill-inverse text-background not-disabled:hover:bg-fill-inverse-hover not-disabled:active:bg-fill-inverse-active',
+          focusRingOffset,
+          'focus-visible:border-transparent',
           'disabled:bg-fill-inverse-disabled disabled:text-background/75 aria-disabled:bg-fill-inverse-disabled aria-disabled:text-background/75',
         ),
         destructive: cn(
           'border border-transparent bg-fill-destructive text-fill-destructive-foreground not-disabled:hover:bg-fill-destructive-hover not-disabled:active:bg-fill-destructive-active',
+          focusRingOffset,
+          'focus-visible:border-transparent',
           'disabled:bg-fill-destructive-disabled disabled:text-fill-destructive-foreground aria-disabled:bg-fill-destructive-disabled aria-disabled:text-fill-destructive-foreground',
         ),
         'destructive-ghost': cn(

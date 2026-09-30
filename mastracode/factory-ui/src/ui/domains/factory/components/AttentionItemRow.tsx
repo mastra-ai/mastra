@@ -2,6 +2,7 @@ import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import {
   Archive,
@@ -26,6 +27,7 @@ import { attentionAuthorName, factoryAttentionTargetPath } from '../services/att
 import type { FactoryAttentionItem } from '../services/attention';
 import { TIMESTAMP } from './panel';
 import { RAIL_ROW_BODY } from './Timeline';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 /** What landed: the glyph the rail hangs the row off, and the word the row's badge wears. */
 const KIND = {
@@ -139,11 +141,13 @@ export function AttentionItemRow({
         to={factoryAttentionTargetPath(factoryId, item.target)}
         onClick={onOpen}
         aria-label={`${destinationLabel(item)} for ${item.title}`}
-        className="focus-visible:outline-border-focus absolute inset-0 rounded-lg outline-none focus-visible:outline-2 focus-visible:-outline-offset-2"
+        className={`absolute inset-0 rounded-lg ${focusRingInset}`}
       />
       <span className="flex w-full items-center gap-2">
         <span className="sr-only">{item.read ? 'Read' : 'Unread'}</span>
-        <span className="text-column text-foreground min-w-0 flex-1 truncate">{item.title}</span>
+        <Txt as="span" variant="column" tone="ink" className="min-w-0 flex-1 truncate">
+          {item.title}
+        </Txt>
         <Badge
           variant={KIND[item.kind].badge}
           emphasis={item.read ? 'subtle' : 'strong'}
@@ -231,10 +235,10 @@ export function AttentionItemRow({
           </span>
         </span>
       </span>
-      <span className="text-meta text-muted-foreground truncate">
+      <Txt as="span" variant="meta" tone="muted" className="truncate">
         {author ? <span className="text-muted-foreground font-medium">{author} </span> : null}
         {item.detail}
-      </span>
+      </Txt>
     </div>
   );
 }

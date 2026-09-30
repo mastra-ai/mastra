@@ -7,6 +7,7 @@ import { WorkflowTimelineRow } from './workflow-timeline-row';
 import { buildTimeline } from './workflow-timeline-utils';
 import { Button } from '@/ds/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { Txt } from '@/ds/components/Txt';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { useAutoscroll } from '@/hooks/use-autoscroll';
 import { cn } from '@/utils/cn';
@@ -56,7 +57,9 @@ export function WorkflowTimeline() {
               <ChartNoAxesGantt aria-hidden className="size-4 text-muted-foreground" />
             </span>
             <span>Timeline</span>
-            <span className="text-meta text-muted-foreground">{rows.length} events</span>
+            <Txt as="span" variant="meta" tone="muted">
+              {rows.length} events
+            </Txt>
             <span className="ml-auto">
               <ChevronDown
                 aria-hidden

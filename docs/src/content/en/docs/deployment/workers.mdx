@@ -50,7 +50,10 @@ The orchestration worker requires a PubSub backend that supports pull mode (e.g.
 
 ### Scheduler worker
 
-Polls storage for due cron schedules and publishes `workflow.start` events. It's a producer only, meaning it creates work for the orchestration worker to pick up.
+Polls storage for due cron schedules and publishes a `workflow.start` event for each fire. It's a producer only, meaning it creates work for the orchestration worker to pick up:
+
+- **Split processes**: Scheduled workflows run on the evented engine, and the orchestration worker runs each fire step by step.
+- **In-process mode**: Scheduled workflows run on the default engine. The orchestration worker in the same process runs each fire in-process, the same way a direct `run.start()` does.
 
 The scheduler reads declarative `schedule` fields from your workflow definitions automatically. See [Scheduled workflows](/docs/workflows/scheduled-workflows) for how to declare schedules.
 
@@ -151,6 +154,8 @@ You can also pass a worker name to the CLI. The command sets `MASTRA_WORKERS` in
 mastra worker start orchestration
 ```
 
+Set `MASTRA_WORKERS` on every process in a split deployment, including `false` on the API process. Any value switches workflows that declare `schedule` to the evented engine, and every process must run those workflows on the same engine. See [Scheduled workflows](/docs/workflows/scheduled-workflows#execution-engine). `mastra worker start` without a worker name doesn't set `MASTRA_WORKERS`, so pass a name or set the variable in the process environment.
+
 ## Network architecture
 
 Workers are internal infrastructure. They're not exposed to end users and don't need their own subdomain or public URL, including an inbound HTTP route.
@@ -161,7 +166,7 @@ In a split deployment:
 - **Workers connect outbound only**: They pull events from the distributed PubSub backend and read/write to the shared storage database. They don't accept inbound traffic from clients.
 - **The orchestration worker calls the API internally**: It sends step execution requests to the API over the container network using `MASTRA_STEP_EXECUTION_URL`. This is internal service-to-service communication, not a public endpoint.
 
-All three worker types (orchestration, scheduler, background task) sit behind the API on a private network. They share access to the PubSub backend and storage database but never receive traffic directly from clients. HTTP routes for worker-related features run on the API server rather than the worker process. One example is token minting for a voice integration.
+All three worker types (orchestration, scheduler, background task) sit behind the API on a private network. They share access to the PubSub backend and storage database but never receive traffic directly from clients. HTTP routes for worker-related features run on the API server rather than the worker process. One example is creating a token for a voice integration.
 
 ## Deploy split workers
 

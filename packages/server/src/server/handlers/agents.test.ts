@@ -1804,6 +1804,70 @@ describe('Agent Routes Authorization', () => {
       await callResume(route, { resourceId: 'user-a' });
       expect(execution).toHaveBeenCalled();
     });
+
+    it.each(resumeRoutes)(
+      '$name resumes a durable run with a stored resource when no server-side identity is set',
+      async ({ route, method }) => {
+        await persistSuspendedDurableRun({ resourceId: 'user-a', threadId: 'thread-a' });
+        const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+        await route.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({}),
+          abortSignal: new AbortController().signal,
+          runId: 'durable-run-1',
+          toolCallId: 'tool-call-1',
+          resumeData: {},
+          memory: { thread: 'thread-a', resource: 'user-a' },
+        } as any);
+        expect(execution).toHaveBeenCalled();
+      },
+    );
+
+    it.each(resumeRoutes)(
+      '$name still rejects a different thread when no server-side identity is set',
+      async ({ route, method }) => {
+        await persistSuspendedDurableRun({ resourceId: 'user-a', threadId: 'thread-a' });
+        const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+        await expect(
+          route.handler({
+            mastra,
+            agentId: 'test-agent',
+            requestContext: createContextWithReservedKeys({}),
+            abortSignal: new AbortController().signal,
+            runId: 'durable-run-1',
+            toolCallId: 'tool-call-1',
+            resumeData: {},
+            memory: { thread: 'thread-b', resource: 'user-a' },
+          } as any),
+        ).rejects.toThrow(
+          new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' }),
+        );
+        expect(execution).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(approvalRoutes)(
+      '$name allows a durable run with a stored resource when no server-side identity is set',
+      async ({ route, method }) => {
+        await persistSuspendedDurableRun({ resourceId: 'user-a' });
+        const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({
+          fullStream: new ReadableStream(),
+        });
+
+        await (route.handler as any)({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({}),
+          abortSignal: new AbortController().signal,
+          runId: 'durable-run-1',
+          toolCallId: 'tool-call-1',
+        });
+        expect(execution).toHaveBeenCalled();
+      },
+    );
   });
 
   describe('RECOVER_ROUTE', () => {

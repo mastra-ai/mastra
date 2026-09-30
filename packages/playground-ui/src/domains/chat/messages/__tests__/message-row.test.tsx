@@ -78,6 +78,28 @@ const baseMessage = (over: Partial<MastraDBMessage>): MastraDBMessage =>
   }) as MastraDBMessage;
 
 describe('MessageRow', () => {
+  describe('when a user message is a skill envelope', () => {
+    it('renders a skill activity row instead of the raw envelope', () => {
+      const { container } = renderRow(
+        baseMessage({
+          role: 'user',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: '<skill name="understand-issue">\nInvestigate the issue.\n</skill>' }],
+          },
+        }),
+      );
+      expect(screen.getByLabelText('Skill: understand-issue')).toBeTruthy();
+      expect(container.textContent).not.toContain('<skill name=');
+    });
+
+    it('leaves a normal user message unchanged', () => {
+      renderRow(baseMessage({ role: 'user', content: { format: 2, parts: [{ type: 'text', text: 'Hello there' }] } }));
+      expect(screen.getByText('Hello there')).toBeTruthy();
+      expect(screen.queryByLabelText(/^Skill:/)).toBeNull();
+    });
+  });
+
   it('renders assistant text as markdown', () => {
     renderRow(
       baseMessage({
@@ -739,7 +761,7 @@ describe('MessageRow', () => {
     );
 
     expect(screen.getByRole('button', { name: /observed/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /extractions \(1\)/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /extractions.*1 extracted/i })).toBeTruthy();
   });
 
   it('renders buffered OM extraction output when activation and completion are both present', () => {
@@ -771,7 +793,7 @@ describe('MessageRow', () => {
     renderRow(message);
 
     expect(screen.getByRole('button', { name: /buffered observations/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /extractions \(1\)/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /extractions.*1 extracted/i })).toBeTruthy();
   });
 
   it('routes a user file part into an in-message attachment preview', () => {

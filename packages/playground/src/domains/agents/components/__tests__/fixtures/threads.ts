@@ -10,3 +10,12 @@ export const namedThread: MemoryThread = {
   updatedAt: '2026-01-01T00:00:00.000Z',
   metadata: {},
 };
+
+export const otherThread: MemoryThread = {
+  id: 'thread-2',
+  title: 'Budget review',
+  resourceId: 'agent-1',
+  createdAt: '2026-01-02T00:00:00.000Z',
+  updatedAt: '2026-01-02T00:00:00.000Z',
+  metadata: {},
+};

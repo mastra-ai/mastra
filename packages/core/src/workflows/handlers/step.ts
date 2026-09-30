@@ -131,15 +131,18 @@ export async function executeStep(
     });
 
   let resumeDataToUse: unknown;
-  if (timeTravelResumeData && !timeTravelResumeValidationError) {
+  if (timeTravelResumeData !== undefined && !timeTravelResumeValidationError) {
     resumeDataToUse = timeTravelResumeData;
-  } else if (timeTravelResumeData && timeTravelResumeValidationError) {
+  } else if (timeTravelResumeData !== undefined && timeTravelResumeValidationError) {
     engine.getLogger().warn('Time travel resume data validation failed', {
       stepId: step.id,
       error: timeTravelResumeValidationError.message,
     });
   } else if (resume?.steps[0] === step.id) {
     resumeDataToUse = resume?.resumePayload;
+  } else if (restart?.activeStepsPath?.[step.id] && stepResults[step.id]?.status === 'running') {
+    // A resumed step that was in flight when the process died re-runs with its original resume data.
+    resumeDataToUse = (stepResults[step.id] as { resumePayload?: unknown }).resumePayload;
   }
 
   // Extract suspend data if this step was previously suspended
@@ -151,10 +154,12 @@ export async function executeStep(
   // from `__workflow_meta.foreachOutput` so parallel suspensions don't read a sibling's data
   // (e.g. another tool call's suspended run id).
   const foreachIndex = executionContext.foreachIndex;
+  let nestedIterationSuspendPayload: Record<string, any> | undefined;
   if (suspendDataToUse && foreachIndex !== undefined) {
     const iterationResult = suspendDataToUse.__workflow_meta?.foreachOutput?.[foreachIndex];
     if (iterationResult?.status === 'suspended' && iterationResult.suspendPayload) {
       suspendDataToUse = iterationResult.suspendPayload;
+      nestedIterationSuspendPayload = iterationResult.suspendPayload;
     }
   }
 
@@ -164,14 +169,15 @@ export async function executeStep(
     suspendDataToUse = userSuspendData;
   }
 
-  const startTime = resumeDataToUse ? undefined : Date.now();
-  const resumeTime = resumeDataToUse ? Date.now() : undefined;
+  const hasResumeData = resumeDataToUse !== undefined;
+  const startTime = hasResumeData ? undefined : Date.now();
+  const resumeTime = hasResumeData ? Date.now() : undefined;
 
   const stepInfo = {
     // Drop prior completion/suspend fields so they cannot linger across re-entry
     // (e.g. suspendPayload/suspendedAt after resume, or startedAt > suspendedAt on loops).
     ...omitPriorCompletionFields((stepResults[step.id] ?? {}) as Record<string, unknown>),
-    ...(resumeDataToUse ? { resumePayload: resumeDataToUse } : { payload: inputData }),
+    ...(hasResumeData ? { resumePayload: resumeDataToUse } : { payload: inputData, resumePayload: undefined }),
     ...(startTime ? { startedAt: startTime } : {}),
     ...(resumeTime ? { resumedAt: resumeTime } : {}),
     status: 'running',
@@ -227,6 +233,7 @@ export async function executeStep(
     workflowStatus: 'running',
     requestContext,
     phase: 'start',
+    recordResumedStepStart: resumeDataToUse !== undefined && executionContext.foreachIndex === undefined,
   });
 
   // Check if this is a nested workflow that requires special handling
@@ -423,12 +430,14 @@ export async function executeStep(
         },
         // Only pass resume data if this step was actually suspended before
         // This prevents pending nested workflows from trying to resume instead of start
+        // In foreach, stepResults[step.id] is shared by all iterations, so also require that
+        // this iteration itself suspended; otherwise it would claim a sibling's child run.
         resume:
-          stepResults[step.id]?.status === 'suspended'
+          stepResults[step.id]?.status === 'suspended' && (foreachIndex === undefined || nestedIterationSuspendPayload)
             ? {
                 steps: resume?.steps?.slice(1) || [],
                 resumePayload: resume?.resumePayload,
-                runId: stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId,
+                runId: (nestedIterationSuspendPayload ?? stepResults[step.id]?.suspendPayload)?.__workflow_meta?.runId,
                 label: resume?.label,
                 forEachIndex: resume?.forEachIndex,
               }

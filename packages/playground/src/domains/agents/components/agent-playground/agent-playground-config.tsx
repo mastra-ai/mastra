@@ -48,9 +48,13 @@ function VariableProperty({ name, prop, depth }: { name: string; prop: JsonSchem
     <div style={depth > 0 ? { paddingLeft: depth * 12 } : undefined}>
       <div className="flex items-center gap-2 py-1">
         <code className="text-caption text-foreground">{name}</code>
-        <span className="text-caption text-muted-foreground">{typeLabel}</span>
+        <Txt as="span" variant="caption" tone="muted">
+          {typeLabel}
+        </Txt>
         {prop.description && (
-          <span className="truncate text-caption text-muted-foreground italic">— {prop.description}</span>
+          <Txt as="span" variant="caption" tone="muted" className="truncate italic">
+            — {prop.description}
+          </Txt>
         )}
       </div>
       {hasChildren && (

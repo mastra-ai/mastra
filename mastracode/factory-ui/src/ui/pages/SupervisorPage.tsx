@@ -147,12 +147,18 @@ function SupervisorEmptyState() {
       aria-labelledby="supervisor-empty-title"
     >
       <Logo size="md" aria-label="Mastra Code" />
-      <h1 id="supervisor-empty-title" className="text-display text-foreground mt-7 tracking-tight text-balance">
+      <Txt
+        as="h1"
+        variant="display"
+        tone="ink"
+        id="supervisor-empty-title"
+        className="mt-7 tracking-tight text-balance"
+      >
         What needs your attention?
-      </h1>
-      <p className="text-body text-muted-foreground mt-2 max-w-lg leading-relaxed text-pretty">
+      </Txt>
+      <Txt tone="muted" className="mt-2 max-w-lg leading-relaxed text-pretty">
         Ask why a card is stuck, what changed overnight, or how to safely repair a Factory issue.
-      </p>
+      </Txt>
       <div className="mt-7 flex w-full max-w-2xl flex-wrap justify-center gap-2" aria-label="Suggested prompts">
         <Button type="button" size="md" onClick={() => prefillComposer('What needs me right now?')}>
           What needs me?
