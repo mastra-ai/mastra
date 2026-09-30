@@ -584,6 +584,12 @@ describe('LibSQL JSONB Backwards Compatibility', () => {
           "updatedAt" TEXT NOT NULL
         )
       `);
+      // Mirror the additive migration that init() runs on legacy thread tables
+      await dbOps.alterTable({
+        tableName: TABLE_THREADS,
+        schema: TABLE_SCHEMAS[TABLE_THREADS],
+        ifNotExists: ['archivedAt'],
+      });
 
       // Insert data as TEXT (old format)
       const testMetadata = { key: 'value', nested: { a: 1 }, array: [1, 2, 3] };
@@ -651,6 +657,12 @@ describe('LibSQL JSONB Backwards Compatibility', () => {
           "updatedAt" TEXT NOT NULL
         )
       `);
+      // Mirror the additive migration that init() runs on legacy thread tables
+      await dbOps.alterTable({
+        tableName: TABLE_THREADS,
+        schema: TABLE_SCHEMAS[TABLE_THREADS],
+        ifNotExists: ['archivedAt'],
+      });
 
       // Insert old TEXT row
       const oldMetadata = { format: 'text', legacy: true };

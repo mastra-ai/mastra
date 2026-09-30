@@ -1217,6 +1217,7 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [
       "agentId",
+      "archived",
       "metadata",
       "orderBy",
       "page",
@@ -1351,6 +1352,40 @@ export const API_ROUTE_METADATA = {
   "DELETE /memory/threads/:threadId": {
     "method": "DELETE",
     "path": "/memory/threads/:threadId",
+    "pathParams": [
+      "threadId"
+    ],
+    "queryParams": [
+      "agentId",
+      "resourceId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /memory/threads/:threadId/archive": {
+    "method": "POST",
+    "path": "/memory/threads/:threadId/archive",
+    "pathParams": [
+      "threadId"
+    ],
+    "queryParams": [
+      "agentId",
+      "resourceId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /memory/threads/:threadId/unarchive": {
+    "method": "POST",
+    "path": "/memory/threads/:threadId/unarchive",
     "pathParams": [
       "threadId"
     ],
