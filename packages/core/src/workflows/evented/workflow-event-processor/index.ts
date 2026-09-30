@@ -34,7 +34,13 @@ import { resolveCurrentState } from '../helpers';
 import { StepExecutor } from '../step-executor';
 import { processWorkflowForEach, processWorkflowLoop } from './loop';
 import { processWorkflowConditional, processWorkflowParallel } from './parallel';
-import { processWorkflowSleep, processWorkflowSleepUntil, processWorkflowWaitForEvent } from './sleep';
+import {
+  clearLocalSleepTimers,
+  processWorkflowSleep,
+  processWorkflowSleepUntil,
+  processWorkflowWaitForEvent,
+  recoverWorkflowSleepTimer,
+} from './sleep';
 import { getNestedWorkflow, getStepId, isExecutableStep } from './utils';
 
 export type ProcessorArgs = {
@@ -198,6 +204,41 @@ export class WorkflowEventProcessor extends EventProcessor {
     this.stepExecutor = new StepExecutor({ mastra });
     this.stepExecutionStrategy = stepExecutionStrategy;
     this.topicCleanupDelayMs = topicCleanupDelayMs ?? WorkflowEventProcessor.DEFAULT_TOPIC_CLEANUP_DELAY_MS;
+  }
+
+  async recoverSleepTimers(): Promise<void> {
+    const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
+    if (!workflowsStore) return;
+
+    const { runs } = await workflowsStore.listWorkflowRuns({ status: 'running' });
+    for (const run of runs) {
+      const snapshot = typeof run.snapshot === 'string' ? undefined : run.snapshot;
+      if (!snapshot?.sleepTimers) continue;
+
+      let workflow: Workflow;
+      try {
+        workflow = this.mastra.getWorkflowById(run.workflowName);
+      } catch {
+        continue;
+      }
+      if (workflow.engineType !== 'evented') continue;
+
+      for (const timer of Object.values(snapshot.sleepTimers)) {
+        if (timer.status !== 'pending') continue;
+        recoverWorkflowSleepTimer({
+          pubsub: this.mastra.pubsub,
+          workflowsStore,
+          workflowId: run.workflowName,
+          runId: run.runId,
+          timer,
+          emitStepEvents: workflow.options.emitStepEvents !== false,
+        });
+      }
+    }
+  }
+
+  clearSleepTimers(): void {
+    clearLocalSleepTimers(this.mastra.pubsub);
   }
 
   /**
@@ -686,6 +727,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         suspendedPaths: {},
         resumeLabels: {},
         waitingPaths: {},
+        sleepTimers: {},
         activeStepsPath: {},
         serializedStepGraph: workflow.serializedStepGraph,
         timestamp: Date.now(),
@@ -1183,6 +1225,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Get current state from stepResults.__state or from passed state
     const currentState = resolveCurrentState({ stepResults, state });
     const stepGraph: StepFlowEntry[] = workflow.stepGraph;
+    const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
 
     if (!executionPath?.length) {
       return this.errorWorkflow(
@@ -1347,6 +1390,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           pubsub: this.mastra.pubsub,
           stepExecutor: this.stepExecutor,
           step,
+          workflowsStore: workflowsStore!,
         },
       );
     } else if (step?.type === 'sleepUntil') {
@@ -1374,6 +1418,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           pubsub: this.mastra.pubsub,
           stepExecutor: this.stepExecutor,
           step,
+          workflowsStore: workflowsStore!,
         },
       );
     } else if (step?.type === 'foreach' && executionPath.length === 1) {
@@ -1875,6 +1920,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             suspendedPaths: {},
             resumeLabels: {},
             waitingPaths: {},
+            sleepTimers: {},
             result: undefined,
             error: undefined,
             timestamp: Date.now(),

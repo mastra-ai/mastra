@@ -6793,6 +6793,11 @@ export class Mastra<
     // to the pubsub so workflow events still get processed in-process.
     if (!name) {
       await this.#wirePushWorkflowSubscription();
+      if (!this.#workflowEventProcessor) {
+        this.#workflowEventProcessor = new WorkflowEventProcessor({ mastra: this });
+      }
+      this.#workflowEventProcessor.clearSleepTimers();
+      await this.#workflowEventProcessor.recoverSleepTimers();
     }
 
     // Subscribe user-defined event listeners (non-workflow topics, or legacy inline WEP)
@@ -6994,6 +6999,7 @@ export class Mastra<
     // teardown still set their request flags, so a later startWorkers() can
     // honor them, but they must not resurrect workers behind a stopped instance.
     this.#workersStarted = false;
+    this.#workflowEventProcessor?.clearSleepTimers();
 
     // A runtime signal may have kicked off a lazy worker start that is still in
     // flight. Wait for it so the teardown below covers what it started —

@@ -254,8 +254,14 @@ export class WorkflowsMySQL extends WorkflowsStorage {
 
       const existing = parseSnapshot(rows[0]!.snapshot) as WorkflowRunState;
 
-      const { expectedStatus, ...state } = opts;
-      if (!matchesExpectedWorkflowStatus(existing.status, expectedStatus)) {
+      const { expectedStatus, expectedSleepTimer, ...state } = opts;
+      if (
+        !matchesExpectedWorkflowStatus(existing.status, expectedStatus) ||
+        (expectedSleepTimer &&
+          (existing.sleepTimers?.[expectedSleepTimer.id]?.status !== expectedSleepTimer.status ||
+            (expectedSleepTimer.claimToken !== undefined &&
+              existing.sleepTimers[expectedSleepTimer.id]?.claimToken !== expectedSleepTimer.claimToken)))
+      ) {
         await connection.rollback();
         return undefined;
       }

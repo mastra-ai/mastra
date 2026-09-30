@@ -754,6 +754,53 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
       expect(results.filter(result => result !== undefined)).toHaveLength(1);
     });
 
+    it('should let exactly one concurrent sleep timer claim win', async () => {
+      if (!supportsConcurrentUpdates) {
+        console.log('Skipping sleep timer claim guard test');
+        return;
+      }
+      const workflowName = 'test-workflow';
+      const runId = `run-${randomUUID()}`;
+      const timerId = 'sleep-step:0';
+      const timer = {
+        id: timerId,
+        stepId: 'sleep-step',
+        kind: 'sleep' as const,
+        startedAt: Date.now(),
+        dueAt: Date.now() + 1_000,
+        status: 'pending' as const,
+        continuation: {},
+      };
+
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: { status: 'running', context: {}, sleepTimers: { [timerId]: timer } } as any,
+      });
+
+      const results = await Promise.all(
+        Array.from({ length: 5 }, (_, index) => {
+          const claimToken = `claim-${index}`;
+          return workflowsStorage.updateWorkflowState({
+            workflowName,
+            runId,
+            opts: {
+              status: 'running',
+              sleepTimers: {
+                [timerId]: { ...timer, status: 'claimed', claimToken, claimedAt: Date.now() },
+              } as any,
+              expectedSleepTimer: { id: timerId, status: 'pending' },
+            },
+          });
+        }),
+      );
+
+      expect(results.filter(result => result !== undefined)).toHaveLength(1);
+      const persisted = await workflowsStorage.loadWorkflowSnapshot({ workflowName, runId });
+      expect(persisted?.sleepTimers?.[timerId]).toMatchObject({ status: 'claimed', claimToken: expect.any(String) });
+      expect(persisted).not.toHaveProperty('expectedSleepTimer');
+    });
+
     it('should update workflow results in snapshot', async () => {
       if (!supportsConcurrentUpdates) {
         console.log('Skipping workflow state updates sequentially test');

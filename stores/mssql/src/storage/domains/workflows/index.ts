@@ -262,8 +262,14 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         );
       }
 
-      const { expectedStatus, ...state } = opts;
-      if (!matchesExpectedWorkflowStatus(snapshot.status, expectedStatus)) {
+      const { expectedStatus, expectedSleepTimer, ...state } = opts;
+      if (
+        !matchesExpectedWorkflowStatus(snapshot.status, expectedStatus) ||
+        (expectedSleepTimer &&
+          (snapshot.sleepTimers?.[expectedSleepTimer.id]?.status !== expectedSleepTimer.status ||
+            (expectedSleepTimer.claimToken !== undefined &&
+              snapshot.sleepTimers[expectedSleepTimer.id]?.claimToken !== expectedSleepTimer.claimToken)))
+      ) {
         await transaction.rollback();
         return undefined;
       }

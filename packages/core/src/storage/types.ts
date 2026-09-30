@@ -2263,6 +2263,12 @@ export interface UpdateWorkflowStateOptions {
   error?: SerializedError;
   suspendedPaths?: Record<string, number[]>;
   waitingPaths?: Record<string, number[]>;
+  sleepTimers?: WorkflowRunState['sleepTimers'];
+  expectedSleepTimer?: {
+    id: string;
+    status: NonNullable<WorkflowRunState['sleepTimers']>[string]['status'];
+    claimToken?: string;
+  };
   resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
   activePaths?: Array<number>;
   activeStepsPath?: Record<string, number[]>;
@@ -2301,6 +2307,18 @@ export function matchesExpectedWorkflowStatus(
   if (expectedStatus === undefined) return true;
   const expected = Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
   return currentStatus !== undefined && expected.includes(currentStatus);
+}
+
+export function matchesExpectedSleepTimer(
+  sleepTimers: WorkflowRunState['sleepTimers'] | undefined,
+  expectedTimer: UpdateWorkflowStateOptions['expectedSleepTimer'],
+): boolean {
+  if (!expectedTimer) return true;
+  const timer = sleepTimers?.[expectedTimer.id];
+  return (
+    timer?.status === expectedTimer.status &&
+    (expectedTimer.claimToken === undefined || timer.claimToken === expectedTimer.claimToken)
+  );
 }
 
 function unwrapSchema(schema: z.ZodTypeAny): { base: z.ZodTypeAny; nullable: boolean } {

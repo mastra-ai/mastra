@@ -275,6 +275,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         local optsJson = ARGV[1]
         local now = ARGV[2]
         local expectedStatusJson = ARGV[3]
+        local expectedSleepTimerJson = ARGV[4]
 
         -- Get existing data
         local existing = redis.call('GET', key)
@@ -309,6 +310,17 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           end
         end
 
+        if expectedSleepTimerJson ~= '' then
+          local expectedTimer = cjson.decode(expectedSleepTimerJson)
+          local timer = snapshot.sleepTimers and snapshot.sleepTimers[expectedTimer.id]
+          if not timer or timer.status ~= expectedTimer.status then
+            return nil
+          end
+          if expectedTimer.claimToken ~= nil and timer.claimToken ~= expectedTimer.claimToken then
+            return nil
+          end
+        end
+
         -- Merge the new options with the existing snapshot
         local opts = cjson.decode(optsJson)
         for k, v in pairs(opts) do
@@ -326,13 +338,18 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         return cjson.encode(data)
       `;
 
-      const { expectedStatus, ...state } = opts;
+      const { expectedStatus, expectedSleepTimer, ...state } = opts;
       const expectedStatusJson =
         expectedStatus === undefined
           ? ''
           : JSON.stringify(Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus]);
+      const expectedSleepTimerJson = expectedSleepTimer === undefined ? '' : JSON.stringify(expectedSleepTimer);
 
-      const resultJson = await this.client.eval(luaScript, [key], [JSON.stringify(state), now, expectedStatusJson]);
+      const resultJson = await this.client.eval(
+        luaScript,
+        [key],
+        [JSON.stringify(state), now, expectedStatusJson, expectedSleepTimerJson],
+      );
 
       if (!resultJson) {
         return undefined;

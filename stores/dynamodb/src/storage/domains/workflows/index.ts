@@ -253,8 +253,14 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
         const previousUpdatedAt = existingRecord.data.updatedAt;
 
-        const { expectedStatus, ...state } = opts;
-        if (!matchesExpectedWorkflowStatus(existingSnapshot.status, expectedStatus)) {
+        const { expectedStatus, expectedSleepTimer, ...state } = opts;
+        if (
+          !matchesExpectedWorkflowStatus(existingSnapshot.status, expectedStatus) ||
+          (expectedSleepTimer &&
+            (existingSnapshot.sleepTimers?.[expectedSleepTimer.id]?.status !== expectedSleepTimer.status ||
+              (expectedSleepTimer.claimToken !== undefined &&
+                existingSnapshot.sleepTimers[expectedSleepTimer.id]?.claimToken !== expectedSleepTimer.claimToken)))
+        ) {
           return undefined;
         }
 

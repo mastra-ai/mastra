@@ -7,7 +7,7 @@ import type {
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
 } from '../../types';
-import { matchesExpectedWorkflowStatus } from '../../types';
+import { matchesExpectedSleepTimer, matchesExpectedWorkflowStatus } from '../../types';
 import { createEmptyWorkflowSnapshot, mergeWorkflowStepResult } from '../../workflow-snapshot';
 import type { InMemoryDB } from '../inmemory-db';
 import { WorkflowsStorage } from './base';
@@ -267,8 +267,11 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       throw new Error(`Snapshot not found for runId ${runId}`);
     }
 
-    const { expectedStatus, ...state } = opts;
-    if (!matchesExpectedWorkflowStatus(snapshot.status, expectedStatus)) {
+    const { expectedStatus, expectedSleepTimer, ...state } = opts;
+    if (
+      !matchesExpectedWorkflowStatus(snapshot.status, expectedStatus) ||
+      !matchesExpectedSleepTimer(snapshot.sleepTimers, expectedSleepTimer)
+    ) {
       return;
     }
 
