@@ -890,6 +890,8 @@ export class Mastra<
    * `startWorkers()` path will pick it up.
    */
   #workersStarted = false;
+  /** Evented run restarts requested before workers started (runId -> workflow id). */
+  #pendingEventedRestarts = new Map<string, string>();
   /**
    * Set when something has signalled that the scheduler is needed at runtime
    * (e.g. an agent schedule was registered via `__ensureScheduleRuntimeReady()`).
@@ -4057,11 +4059,16 @@ export class Mastra<
       return { runs: [], total: 0 };
     }
 
-    // Get all workflows with default engine type
-    const defaultEngineWorkflows = Object.values(this.#workflows).filter(workflow => workflow.engineType === 'default');
+    // Default-engine workflows are always swept; evented workflows (including
+    // scheduled ones) only when they opt in via `autoRestartActiveRuns: true`.
+    const recoverableWorkflows = Object.values(this.#workflows).filter(
+      workflow =>
+        workflow.engineType === 'default' ||
+        (workflow.engineType === 'evented' && workflow.options?.autoRestartActiveRuns === true),
+    );
 
     const activeRunsByWorkflow = await Promise.all(
-      defaultEngineWorkflows.map(workflow => workflow.listActiveWorkflowRuns()),
+      recoverableWorkflows.map(workflow => workflow.listActiveWorkflowRuns()),
     );
 
     const allRuns = activeRunsByWorkflow.flatMap(activeRuns => activeRuns.runs);
@@ -4089,17 +4096,24 @@ export class Mastra<
         });
         continue;
       }
-      try {
-        const run = await workflow.createRun({ runId: runSnapshot.runId });
-        await run.restart();
-        this.#logger.debug('Restarted workflow run', { workflow: runSnapshot.workflowName, runId: runSnapshot.runId });
-      } catch (error) {
-        this.#logger.error('Failed to restart workflow run', {
-          workflow: runSnapshot.workflowName,
-          runId: runSnapshot.runId,
-          error,
-        });
+      // Evented restarts are processed by the workflow event workers. Defer
+      // them until `startWorkers()` has subscribed so the event isn't lost.
+      if (workflow?.engineType === 'evented' && !this.#workersStarted) {
+        this.#pendingEventedRestarts.set(runSnapshot.runId, runSnapshot.workflowName);
+        continue;
       }
+      await this.#restartWorkflowRun(runSnapshot.workflowName, runSnapshot.runId);
+    }
+  }
+
+  async #restartWorkflowRun(workflowName: string, runId: string): Promise<void> {
+    try {
+      const workflow = this.getWorkflowById(workflowName);
+      const run = await workflow.createRun({ runId });
+      await run.restart();
+      this.#logger.debug('Restarted workflow run', { workflow: workflowName, runId });
+    } catch (error) {
+      this.#logger.error('Failed to restart workflow run', { workflow: workflowName, runId, error });
     }
   }
 
@@ -6798,6 +6812,14 @@ export class Mastra<
     // runtime signals (e.g. `mastra.schedules.create()`) know whether they need
     // to lazily inject + start additional workers themselves.
     this.#workersStarted = true;
+
+    if (this.#pendingEventedRestarts.size > 0) {
+      const pending = [...this.#pendingEventedRestarts];
+      this.#pendingEventedRestarts.clear();
+      for (const [runId, workflowName] of pending) {
+        await this.#restartWorkflowRun(workflowName, runId);
+      }
+    }
 
     // A wake event (or a local `schedules.create()`) that landed while this
     // method was running only flipped the request flag, because injecting
