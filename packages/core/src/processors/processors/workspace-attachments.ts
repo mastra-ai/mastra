@@ -18,7 +18,7 @@
  * - `WORKSPACE_REQUIRED_FOR_ATTACHMENT`: no workspace, or none that can be written to.
  * - `ATTACHMENT_NOT_INLINE`: the file was sent as a URL instead of inline data.
  * - `ATTACHMENT_INVALID_DATA`: the data is not base64 or a base64 data URL.
- * - `ATTACHMENT_TOO_LARGE`: the decoded file is larger than `maxBytes`.
+ * - `ATTACHMENT_TOO_LARGE`: a file is larger than `maxBytes`, or all files together exceed `maxTotalBytes`.
  */
 
 import type { MastraDBMessage, MastraMessageContentV2 } from '../../agent/message-list';
@@ -76,12 +76,20 @@ export interface WorkspaceAttachmentsProcessorOptions {
    */
   mimeTypes?: string[];
   /**
-   * Largest routed attachment accepted, in bytes, checked after decoding. A file
+   * Largest routed attachment accepted, in bytes. Base64 and data URL input is
+   * measured before decoding, so oversized payloads are never decoded. A file
    * exactly at the limit is accepted; a larger one stops the run with an
    * `ATTACHMENT_TOO_LARGE` tripwire before anything is written. Must be a
    * positive integer, or the constructor throws. No limit when omitted.
    */
   maxBytes?: number;
+  /**
+   * Largest combined size, in bytes, of all routed attachments in one request.
+   * Exactly at the limit is accepted; above it the run stops with an
+   * `ATTACHMENT_TOO_LARGE` tripwire before anything is written. Must be a
+   * positive integer, or the constructor throws. No limit when omitted.
+   */
+  maxTotalBytes?: number;
   /**
    * Workspace used by the current run. The agent sets it; when absent, routed attachments abort the run.
    * @internal
@@ -157,6 +165,28 @@ function decodeData(data: unknown): Uint8Array | typeof ATTACHMENT_NOT_INLINE | 
   }
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(data)) return ATTACHMENT_NOT_INLINE;
   return decodeBase64(data) ?? ATTACHMENT_INVALID_DATA;
+}
+
+/** Size the data will have once decoded, computed without decoding base64 / data URL strings. */
+function estimatedDecodedSize(data: unknown): number | undefined {
+  if (data instanceof Uint8Array || data instanceof ArrayBuffer) return data.byteLength;
+  if (typeof data !== 'string') return undefined;
+  const payload = data.startsWith('data:') ? data.slice(data.indexOf(',') + 1) : data;
+  let length = 0;
+  let padding = 0;
+  for (let i = 0; i < payload.length; i++) {
+    const c = payload.charCodeAt(i);
+    if (c === 0x20 || (c >= 0x09 && c <= 0x0d)) continue;
+    length++;
+    padding = c === 0x3d ? padding + 1 : 0;
+  }
+  return Math.max(0, Math.floor((length * 3) / 4) - padding);
+}
+
+function assertPositiveInteger(value: number | undefined, option: string) {
+  if (value !== undefined && !(Number.isInteger(value) && value > 0)) {
+    throw new Error(`WorkspaceAttachmentsProcessor: \`${option}\` must be a positive integer`);
+  }
 }
 
 /** Text note that replaces the attachment. The filename is JSON-encoded so any character round-trips. */
@@ -396,10 +426,8 @@ export class WorkspaceAttachmentsProcessor implements Processor<'workspace-attac
   constructor(options: WorkspaceAttachmentsProcessorOptions = {}) {
     this.options = options;
     this.match = createRouteMatcher(options);
-    const { maxBytes } = options;
-    if (maxBytes !== undefined && !(Number.isInteger(maxBytes) && maxBytes > 0)) {
-      throw new Error('WorkspaceAttachmentsProcessor: `maxBytes` must be a positive integer');
-    }
+    assertPositiveInteger(options.maxBytes, 'maxBytes');
+    assertPositiveInteger(options.maxTotalBytes, 'maxTotalBytes');
   }
 
   /**
@@ -422,7 +450,18 @@ export class WorkspaceAttachmentsProcessor implements Processor<'workspace-attac
     if (!attachments.length) return { messageList };
 
     // 2. Turn each attachment's transport encoding (base64 / data URL) back into its original bytes.
+    const { maxBytes, maxTotalBytes } = this.options;
+    const tooLarge = (attachment: UnsupportedAttachment, size: number, limit: number) =>
+      abort(
+        `Attachment "${attachment.filename ?? 'attachment'}" is ${size} bytes, over the ${limit}-byte limit. Send a smaller file`,
+        { metadata: { code: ATTACHMENT_TOO_LARGE, mediaType: attachment.mediaType } },
+      );
     const files = attachments.map(attachment => {
+      // Reject oversized payloads before allocating their decoded bytes.
+      const estimated = estimatedDecodedSize(attachment.data);
+      if (maxBytes !== undefined && estimated !== undefined && estimated > maxBytes) {
+        return tooLarge(attachment, estimated, maxBytes);
+      }
       const bytes = decodeData(attachment.data);
       if (bytes === ATTACHMENT_NOT_INLINE) {
         return abort(
@@ -440,17 +479,18 @@ export class WorkspaceAttachmentsProcessor implements Processor<'workspace-attac
           },
         );
       }
-      const { maxBytes } = this.options;
       if (maxBytes !== undefined && bytes.byteLength > maxBytes) {
-        return abort(
-          `Attachment "${attachment.filename ?? 'attachment'}" is ${bytes.byteLength} bytes, over the ${maxBytes}-byte limit. Send a smaller file`,
-          {
-            metadata: { code: ATTACHMENT_TOO_LARGE, mediaType: attachment.mediaType },
-          },
-        );
+        return tooLarge(attachment, bytes.byteLength, maxBytes);
       }
       return { filename: attachment.filename, bytes };
     });
+    const total = files.reduce((sum, file) => sum + file.bytes.byteLength, 0);
+    if (maxTotalBytes !== undefined && total > maxTotalBytes) {
+      return abort(
+        `${files.length} attachments total ${total} bytes, over the ${maxTotalBytes}-byte limit for one request. Send fewer or smaller files`,
+        { metadata: { code: ATTACHMENT_TOO_LARGE, mediaType: attachments[0]!.mediaType } },
+      );
+    }
 
     // 3. Find a writable place in the workspace, or abort instead of sending the binary to the model.
     const workspace = this.options.workspace;

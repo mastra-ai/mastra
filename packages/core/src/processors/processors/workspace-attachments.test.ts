@@ -841,7 +841,7 @@ describe('WorkspaceAttachmentsProcessor', () => {
   });
 
   describe('configuration', () => {
-    async function runWith(options: { extensions?: string[]; mimeTypes?: string[] }, parts: any[]) {
+    async function runWith(options: Record<string, unknown>, parts: any[]) {
       const { basePath, workspace } = await localWorkspace();
       const { MessageList } = await import('../../agent/message-list');
       const messageList = new MessageList();
@@ -915,6 +915,58 @@ describe('WorkspaceAttachmentsProcessor', () => {
 
     it.each([0, -1, 1.5, Number.NaN])('rejects maxBytes %s', maxBytes => {
       expect(() => new WorkspaceAttachmentsProcessor({ ...SHEETS, maxBytes })).toThrow(/positive integer/);
+    });
+
+    async function expectTooLarge(options: Record<string, unknown>, parts: any[], message: string) {
+      const { basePath, workspace } = await localWorkspace();
+      const { MessageList } = await import('../../agent/message-list');
+      const messageList = new MessageList();
+      messageList.add([{ role: 'user', content: parts }], 'input');
+      const abort = vi.fn((reason: string, opts?: any) => {
+        throw Object.assign(new Error(reason), { options: opts });
+      });
+      const processor = new WorkspaceAttachmentsProcessor({ ...SHEETS, ...options, workspace });
+      await expect(
+        processor.processInputStep({ messageList, requestContext: new RequestContext(), abort } as any),
+      ).rejects.toThrow(message);
+      expect(abort.mock.calls[0]![1].metadata).toEqual({ code: ATTACHMENT_TOO_LARGE, mediaType: XLSX });
+      expect(await readdir(basePath)).toEqual([]);
+    }
+
+    it.each([
+      ['base64', (b64: string) => b64],
+      ['a data URL', (b64: string) => `data:${XLSX};base64,${b64}`],
+    ])('rejects an oversized %s before decoding it', async (_label, wrap) => {
+      const data = wrap(Buffer.alloc(3_000).toString('base64'));
+      const atob = vi.spyOn(globalThis, 'atob');
+      try {
+        await expectTooLarge({ maxBytes: 1_000 }, [{ ...part('big.xlsx', XLSX), data }], `"big.xlsx" is 3000 bytes`);
+        expect(atob).not.toHaveBeenCalled();
+      } finally {
+        atob.mockRestore();
+      }
+    });
+
+    it('aborts without writing when attachments together exceed maxTotalBytes', async () => {
+      await expectTooLarge(
+        { maxBytes: BYTES.length, maxTotalBytes: BYTES.length * 2 - 1 },
+        [part('a.xlsx', XLSX), part('b.xlsx', XLSX)],
+        `2 attachments total ${BYTES.length * 2} bytes, over the ${BYTES.length * 2 - 1}-byte limit`,
+      );
+    });
+
+    it('accepts attachments totalling exactly maxTotalBytes', async () => {
+      const { parts } = await runWith({ ...SHEETS, maxTotalBytes: BYTES.length * 2 }, [
+        part('a.xlsx', XLSX),
+        part('b.xlsx', XLSX),
+      ]);
+      expect(parts.map((p: any) => p.type)).toEqual(['text', 'text']);
+    });
+
+    it.each([0, -1, 1.5, Number.NaN])('rejects maxTotalBytes %s', maxTotalBytes => {
+      expect(() => new WorkspaceAttachmentsProcessor({ ...SHEETS, maxTotalBytes })).toThrow(
+        /`maxTotalBytes` must be a positive integer/,
+      );
     });
 
     it('routes custom types such as .docx', async () => {
