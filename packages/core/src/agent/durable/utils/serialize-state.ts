@@ -3,6 +3,7 @@ import type { ScoringFilter } from '../../../evals/predicate';
 import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import type { ToolCallConcurrency } from '../../../loop/types';
 import type { MemoryConfig } from '../../../memory/types';
+import { isProviderTool } from '../../../tools/toolchecks';
 import type { CoreTool } from '../../../tools/types';
 import type { MessageList } from '../../message-list';
 import type { AgentModelManagerConfig } from '../../types';
@@ -58,6 +59,38 @@ export function serializeToolMetadata(name: string, tool: CoreTool): Serializabl
  */
 export function serializeToolsMetadata(tools: Record<string, CoreTool>): SerializableToolMetadata[] {
   return Object.entries(tools).map(([name, tool]) => serializeToolMetadata(name, tool));
+}
+
+/** Snapshot only the call-time client definitions, never their execute callbacks. */
+export function serializeClientTools(
+  names: string[],
+  tools: Record<string, CoreTool>,
+): NonNullable<SerializableDurableOptions['clientTools']> {
+  return Object.fromEntries(
+    names.map(name => {
+      const tool = tools[name];
+      if (!tool) throw new Error(`Unable to serialize client tool "${name}" for durable execution`);
+      const metadata = serializeToolMetadata(name, tool);
+      const providerTool = isProviderTool(tool);
+      const outputSchema = tool.outputSchema
+        ? serializeToolMetadata(name, { parameters: tool.outputSchema }).inputSchema
+        : undefined;
+      return [
+        name,
+        {
+          id: metadata.id,
+          description: metadata.description ?? '',
+          inputSchema: providerTool ? { jsonSchema: metadata.inputSchema } : metadata.inputSchema,
+          outputSchema: outputSchema && providerTool ? { jsonSchema: outputSchema } : outputSchema,
+          requireApproval: metadata.requireApproval,
+          strict: tool.strict,
+          providerOptions: tool.providerOptions,
+          inputExamples: tool.inputExamples,
+          ...(isProviderTool(tool) ? { type: tool.type, args: tool.args } : {}),
+        },
+      ];
+    }),
+  );
 }
 
 /**
@@ -235,6 +268,7 @@ export function serializeModelSettings(
  * Extract serializable options from agent execution options
  */
 export function serializeDurableOptions(options: {
+  clientTools?: SerializableDurableOptions['clientTools'];
   maxSteps?: number;
   toolChoice?: any;
   activeTools?: string[];
@@ -278,6 +312,7 @@ export function serializeDurableOptions(options: {
 
   return {
     maxSteps: options.maxSteps,
+    clientTools: options.clientTools,
     toolChoice: serializedToolChoice,
     activeTools: options.activeTools,
     modelSettings: serializeModelSettings(options.modelSettings),

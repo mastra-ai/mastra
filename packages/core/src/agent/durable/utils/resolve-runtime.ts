@@ -227,6 +227,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
 
       tools = await agent.getToolsForExecution({
         runId,
+        clientTools: input.options?.clientTools,
         threadId: input.state.threadId,
         resourceId: input.state.resourceId,
         requestContext: resolveRequestContext,
@@ -428,6 +429,7 @@ export async function rebuildRunToolsFromMastra(options: {
 
     const tools = await agent.getToolsForExecution({
       runId,
+      clientTools: execOptions?.clientTools,
       threadId: state.threadId,
       resourceId: state.resourceId,
       requestContext: resolveRequestContext,

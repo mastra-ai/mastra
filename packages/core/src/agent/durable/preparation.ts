@@ -53,7 +53,7 @@ import {
   fireClientToolOutputHooks,
 } from '../workflows/prepare-stream/client-tool-output-hooks';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
-import { createWorkflowInput } from './utils/serialize-state';
+import { createWorkflowInput, serializeClientTools } from './utils/serialize-state';
 import { generateDurableThreadTitle } from './workflows/finalize-run';
 
 /**
@@ -742,6 +742,9 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     scorers,
     options: {
       maxSteps: execOptions?.maxSteps,
+      clientTools: execOptions?.clientTools
+        ? serializeClientTools(Object.keys(execOptions.clientTools), tools)
+        : undefined,
       toolChoice: execOptions?.toolChoice as any,
       activeTools: execOptions?.activeTools,
       modelSettings: execOptions?.modelSettings as any,

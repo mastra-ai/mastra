@@ -189,6 +189,22 @@ export interface SerializableModelSettings {
  * Options for durable agent execution (serializable subset)
  */
 export interface SerializableDurableOptions {
+  /** Call-time client tools, with JSON schemas instead of live schema instances. */
+  clientTools?: Record<
+    string,
+    {
+      id: string;
+      description: string;
+      inputSchema: JSONSchema7 | { jsonSchema: JSONSchema7 };
+      outputSchema?: JSONSchema7 | { jsonSchema: JSONSchema7 };
+      requireApproval?: boolean;
+      strict?: boolean;
+      providerOptions?: CoreTool['providerOptions'];
+      inputExamples?: CoreTool['inputExamples'];
+      type?: 'provider-defined' | 'provider';
+      args?: Record<string, unknown>;
+    }
+  >;
   /** Maximum number of agentic loop iterations */
   maxSteps?: number;
   /** Tool selection strategy */
