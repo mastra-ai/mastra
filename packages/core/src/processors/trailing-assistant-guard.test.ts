@@ -3,7 +3,7 @@ import { z } from 'zod/v4';
 
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage } from '../agent/message-list';
-import { TrailingAssistantGuard } from './trailing-assistant-guard';
+import { isTrailingAssistantGuardContinuation, TrailingAssistantGuard } from './trailing-assistant-guard';
 import type { ProcessInputStepArgs } from './index';
 
 const createMessage = (role: 'user' | 'assistant', text: string): MastraDBMessage => ({
@@ -328,10 +328,13 @@ describe('TrailingAssistantGuard', () => {
     );
 
     expect(result).toEqual({ messageList });
-    expect(messageList.get.all.db().at(-1)).toMatchObject({
+    const continuation = messageList.get.all.db().at(-1)!;
+    expect(continuation).toMatchObject({
       role: 'user',
       content: { parts: [{ type: 'text', text: 'Continue.' }] },
     });
+    expect(isTrailingAssistantGuardContinuation(continuation)).toBe(true);
+    expect(messageList.get.all.db().slice(0, -1).some(isTrailingAssistantGuardContinuation)).toBe(false);
     expect(messageList.drainUnsavedMessages().map(message => message.content.parts)).toMatchObject([
       [{ type: 'text', text: 'question' }],
       [{ type: 'text', text: 'draft' }],

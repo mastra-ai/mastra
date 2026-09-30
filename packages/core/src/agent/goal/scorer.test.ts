@@ -2,10 +2,13 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { createScorer } from '../../evals/base';
+import type { ProcessInputStepArgs } from '../../processors';
 import { ProviderHistoryCompat } from '../../processors/provider-history-compat';
+import { TrailingAssistantGuard } from '../../processors/trailing-assistant-guard';
 import { createMockModel } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
+import { MessageList } from '../message-list';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../message-list';
 import { DEFAULT_GOAL_JUDGE_PROMPT, GOAL_SCORE_WAITING } from './objective';
 import { createGoalScorer } from './scorer';
@@ -124,6 +127,31 @@ describe('createGoalScorer latest user message text extraction', () => {
 
     expect(prompt).toContain('actual human message');
     expect(prompt).not.toContain('<system-reminder>Please continue naturally</system-reminder>');
+  });
+
+  it('skips the trailing assistant guard continuation when selecting the latest user content', async () => {
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    messageList.add(createUserMessage({ format: 2, parts: [{ type: 'text', text: 'actual human message' }] }), 'input');
+    messageList.add(
+      {
+        id: 'msg-assistant',
+        role: 'assistant',
+        createdAt: new Date('2026-01-01T00:00:01.000Z'),
+        content: { format: 2, parts: [{ type: 'text', text: 'outline with options' }] },
+      },
+      'response',
+    );
+    new TrailingAssistantGuard().processInputStep({
+      messages: messageList.get.all.db(),
+      messageList,
+      model: { provider: 'google.generative-ai', modelId: 'gemini-3.5-flash-lite' },
+    } as ProcessInputStepArgs);
+
+    const prompt = await captureJudgePromptForMessages(messageList.get.all.db());
+
+    expect(prompt).toContain('Latest user message:\\nactual human message');
+    expect(prompt).toContain('Assistant steps since that user message: 1');
+    expect(prompt).not.toContain('Continue.');
   });
 
   it('skips empty user rows when selecting the latest user content', async () => {
