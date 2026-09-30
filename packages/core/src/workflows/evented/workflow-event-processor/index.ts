@@ -1517,7 +1517,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowStatus: 'running',
       }) ?? true;
     if (shouldPersistRunning && workflowsStore) {
-      // A resumed step keeps its stored record untouched: its suspendPayload is
+      // A resumed step skips this generic write (it is claimed separately
+      // below, keeping its record fields intact): its suspendPayload is
       // the richer resume artifact (stream state, nested-run ids) and a
       // redelivered step.run must not clobber it. Same for a step timeTravel
       // resumes into. Foreach iterations are also skipped — the aggregate
@@ -1537,8 +1538,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         // alone is NOT proof of a spurious delivery — after a resume, a loop
         // re-entry (dountil around a suspending nested workflow, bug #5650)
         // publishes a fresh non-resume `step.run` while the leaf record still
-        // reads 'suspended' (the resume path deliberately leaves it
-        // untouched). What discriminates the spurious case is the RUN being
+        // reads 'suspended' (e.g. a foreach resume leaves it as-is). What discriminates the spurious case is the RUN being
         // parked too: no legitimate non-resume delivery for a suspended leaf
         // exists while the whole run sits in 'suspended'. Read-then-write
         // narrows the race window rather than closing it — closing it needs
