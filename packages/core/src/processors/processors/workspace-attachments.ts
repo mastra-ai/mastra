@@ -112,7 +112,12 @@ export class WorkspaceAttachmentsProcessor implements Processor<'workspace-attac
   }: ProcessInputStepArgs<WorkspaceAttachmentsTripwireMetadata>) {
     const pending: Pending[] = [];
     for (const message of messageList.get.all.db()) {
-      if (message.role !== 'user' || !message.content || typeof message.content !== 'object') continue;
+      if (
+        (message.role !== 'user' && message.role !== 'signal') ||
+        !message.content ||
+        typeof message.content !== 'object'
+      )
+        continue;
       const content = message.content;
       const parts = Array.isArray(content.parts) ? content.parts : [];
       const routedFileData = new Set<unknown>();

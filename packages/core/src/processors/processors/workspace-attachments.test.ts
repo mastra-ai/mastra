@@ -407,6 +407,36 @@ describe('WorkspaceAttachmentsProcessor', () => {
     });
   });
 
+  describe('through thread message APIs', () => {
+    const target = (thread: string) => ({
+      resourceId: 'user',
+      threadId: thread,
+      ifIdle: { streamOptions: { memory: { resource: 'user', thread } } },
+    });
+    const contents = [
+      { type: 'text' as const, text: 'Summarize this' },
+      { type: 'file' as const, data: BASE64, mediaType: XLSX, filename: 'report.xlsx' },
+    ];
+
+    it.each([
+      ['sendSignal', (agent: Agent) => agent.sendSignal({ type: 'user-message', contents } as any, target('sig'))],
+      ['sendMessage', (agent: Agent) => agent.sendMessage({ contents } as any, target('send') as any)],
+      ['queueMessage', (agent: Agent) => agent.queueMessage({ contents } as any, target('queue') as any)],
+    ])('routes spreadsheets sent with %s', async (_label, send) => {
+      const { basePath, workspace } = await localWorkspace();
+      const { agent, prompts } = agentWith(workspace, { memory: new MockMemory() });
+
+      await (send(agent) as any).accepted;
+      await vi.waitFor(() => expect(prompts.length).toBeGreaterThan(0), { timeout: 5000 });
+
+      const prompt = prompts[0]!;
+      expect(spreadsheetFileParts(prompt)).toHaveLength(0);
+      const text = JSON.stringify(prompt);
+      const path = text.match(/uploads\/[0-9a-f-]{36}\/report\.xlsx/)![0];
+      expect(new Uint8Array(await readFile(join(basePath, path)))).toEqual(BYTES);
+    });
+  });
+
   it('encodes filenames with quotes and brackets so they round-trip', () => {
     const name = 'report "final" [v2].xlsx';
     const note = formatWorkspaceAttachmentNote(name, XLSX, 'uploads/x/y');
