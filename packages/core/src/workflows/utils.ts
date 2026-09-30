@@ -844,7 +844,13 @@ export async function waitForSuspendedSnapshot(
   {
     timeoutMs = RESUME_SNAPSHOT_POLL_TIMEOUT_MS,
     missingSnapshotGraceReads = 1,
-  }: { timeoutMs?: number; missingSnapshotGraceReads?: number } = {},
+    isRunLive,
+  }: {
+    timeoutMs?: number;
+    missingSnapshotGraceReads?: number;
+    /** While true, a missing snapshot means the run is still executing rather than absent. */
+    isRunLive?: () => boolean;
+  } = {},
 ): Promise<WorkflowRunState | null> {
   if (!workflowsStore) return null;
 
@@ -859,7 +865,7 @@ export async function waitForSuspendedSnapshot(
     if (snapshot) {
       if (!RESUME_SNAPSHOT_WAIT_STATUSES.has(snapshot.status)) return snapshot;
       observedTransitionableSnapshot = true;
-    } else if (!observedTransitionableSnapshot && ++missingReads >= missingSnapshotGraceReads) {
+    } else if (!observedTransitionableSnapshot && !isRunLive?.() && ++missingReads >= missingSnapshotGraceReads) {
       return null;
     }
 

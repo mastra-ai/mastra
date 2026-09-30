@@ -7055,9 +7055,19 @@ export class Agent<
   async #loadAgenticLoopSnapshotOrThrow({ runId, method }: { runId: string; method: string }) {
     const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
     const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
-    const existingSnapshot = await waitForSuspendedSnapshot(workflowsStore, 'agentic-loop', runId, {
+    // Agent-loop runs don't persist a snapshot until they suspend, so an in-flight run in this
+    // process may have no row yet. Keep waiting for its suspend write instead of rejecting.
+    const isRunLive = () => !!effectiveMastra?.__getRunScope(runId);
+    let existingSnapshot = await waitForSuspendedSnapshot(workflowsStore, 'agentic-loop', runId, {
       missingSnapshotGraceReads: 3,
+      isRunLive,
     });
+    if (!existingSnapshot && isRunLive()) {
+      existingSnapshot = await waitForSuspendedSnapshot(workflowsStore, 'agentic-loop', runId, {
+        timeoutMs: RESUME_SUSPEND_DURABILITY_TIMEOUT_MS,
+        isRunLive,
+      });
+    }
 
     if (!existingSnapshot) {
       const hasStorage = !!workflowsStore;
@@ -7273,7 +7283,9 @@ export class Agent<
       const nestedSnapshot = await loadFirstSnapshot(nestedWorkflowNames);
 
       const targetSuspendedNested = suspendedToolCallIds(nestedSnapshot).includes(toolCallId);
-      const runLive = [parentSnapshot, nestedSnapshot].some(s => !!s && RESUME_SNAPSHOT_WAIT_STATUSES.has(s.status));
+      const runLive =
+        [parentSnapshot, nestedSnapshot].some(s => !!s && RESUME_SNAPSHOT_WAIT_STATUSES.has(s.status)) ||
+        (!parentSnapshot && !nestedSnapshot && !!effectiveMastra?.__getRunScope(runId));
 
       // The nested row already carries the target suspension, or a row is still
       // progressing toward it: keep waiting for the parent to become durable.

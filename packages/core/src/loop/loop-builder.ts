@@ -319,15 +319,10 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
           internal: InternalSpans.WORKFLOW,
         },
         shouldPersistSnapshot: params => {
-          // We need a persisted snapshot record to support `resumeStream()`.
-          // - Create the initial record early ("pending")
-          // - Update it when execution is suspended ("paused"/"suspended")
+          // Only suspended/paused snapshots are resumable (`Run.resume` rejects other statuses), so skip the
+          // "pending" write before inference; it only cost a storage round trip per turn.
           // Avoid persisting "running" snapshots so we don't overwrite an existing suspended snapshot.
-          return (
-            params.workflowStatus === 'pending' ||
-            params.workflowStatus === 'paused' ||
-            params.workflowStatus === 'suspended'
-          );
+          return params.workflowStatus === 'paused' || params.workflowStatus === 'suspended';
         },
         // Excluding `running` means resume claims cannot persist; the agent loop
         // serializes its own resumes, so suppress the per-resume warning.
@@ -639,15 +634,10 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
           internal: InternalSpans.WORKFLOW,
         },
         shouldPersistSnapshot: params => {
-          // We need a persisted snapshot record to support `resumeStream()`.
-          // - Create the initial record early ("pending")
-          // - Update it when execution is suspended ("paused"/"suspended")
+          // Only suspended/paused snapshots are resumable (`Run.resume` rejects other statuses), so skip the
+          // "pending" write before inference; it only cost a storage round trip per turn.
           // Avoid persisting "running" snapshots so we don't overwrite an existing suspended snapshot.
-          return (
-            params.workflowStatus === 'pending' ||
-            params.workflowStatus === 'paused' ||
-            params.workflowStatus === 'suspended'
-          );
+          return params.workflowStatus === 'paused' || params.workflowStatus === 'suspended';
         },
         // Excluding `running` means resume claims cannot persist; the agent loop
         // serializes its own resumes, so suppress the per-resume warning.
