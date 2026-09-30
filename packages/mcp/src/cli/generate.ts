@@ -5,7 +5,6 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Worker } from 'node:worker_threads';
 import { noopLogger } from '@mastra/core/logger';
-import { register } from 'tsx/esm/api';
 import { MCPClient } from '@mastra/mcp';
 import type { SerializableMCPToolCatalog } from '../client/types';
 
@@ -97,6 +96,10 @@ export async function generate(files: string[], cwd = process.cwd()): Promise<vo
     abort.abort();
     void disconnect();
   };
+  // Loaded here rather than at module scope: a top-level `tsx/esm/api` specifier
+  // sorts differently against the `@mastra/mcp` self-reference depending on how
+  // that self-reference resolves, which makes the import order environment-dependent.
+  const { register } = await import('tsx/esm/api');
   const unregister = register();
   process.once('SIGINT', interrupt);
   process.once('SIGTERM', interrupt);
