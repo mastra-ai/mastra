@@ -1762,6 +1762,72 @@ describe('E2BSandbox S3 Public Bucket Mount', () => {
     }
   });
 
+  it('S3 mount uses session token credentials via env file and use_session_token', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-sts',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'ASIAKEY',
+        secretAccessKey: 'secret',
+        sessionToken: 'tok/en+value',
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/s3-sts');
+    expect(result.success).toBe(true);
+
+    const writeCall = mockSandbox.files.write.mock.calls.find((call: any[]) =>
+      String(call[0]).startsWith('/tmp/.passwd-s3fs-'),
+    );
+    expect(writeCall).toBeDefined();
+    const [credentialsPath, content] = writeCall!;
+    expect(content).toContain('export AWSACCESSKEYID=ASIAKEY');
+    expect(content).toContain('export AWSSECRETACCESSKEY=secret');
+    expect(content).toContain("export AWSSESSIONTOKEN='tok/en+value'");
+    expect(content).toContain("export AWS_SESSION_TOKEN='tok/en+value'");
+
+    const calls = mockSandbox.commands.run.mock.calls.map((call: any[]) => call[0] as string);
+    const mountCmd = calls.find(cmd => cmd.includes('s3fs') && cmd.includes('/data/s3-sts'));
+    expect(mountCmd).toBeDefined();
+    expect(mountCmd).toMatch(/^sudo sh -c /);
+    expect(mountCmd).toContain(`. ${credentialsPath} && exec s3fs`);
+    expect(mountCmd).toContain('use_session_token');
+    expect(mountCmd).not.toContain('passwd_file');
+    expect(mountCmd).not.toContain('tok/en+value');
+    expect(calls).toContain(`sudo rm -f ${credentialsPath}`);
+    expect(calls.lastIndexOf(`sudo rm -f ${credentialsPath}`)).toBeGreaterThan(calls.indexOf(mountCmd!));
+  });
+
+  it('S3 mount errors when sessionToken is provided without access keys', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-sts-nokeys',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        sessionToken: 'token',
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/s3-sts-nokeys');
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('sessionToken requires accessKeyId and secretAccessKey');
+  });
+
   it('S3 mount errors when only accessKeyId is provided without secretAccessKey', async () => {
     const sandbox = new E2BSandbox();
     await sandbox._start();
