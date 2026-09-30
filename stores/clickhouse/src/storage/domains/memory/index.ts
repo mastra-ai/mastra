@@ -902,18 +902,13 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         throw new Error(`Thread ${id} not found`);
       }
 
-      if (title === undefined && metadata === undefined) {
-        // Archive-only change: mutate in place instead of inserting a new version, so
-        // updatedAt (the version column) stays untouched and no duplicate version appears.
-        if (archivedAt !== undefined) {
-          await this.client.command({
-            query: `ALTER TABLE ${TABLE_THREADS} UPDATE archivedAt = {archivedAt:Nullable(DateTime64(3))} WHERE id = {id:String}`,
-            query_params: { id, archivedAt: archivedAt ? archivedAt.toISOString().replace('Z', '') : null },
-            clickhouse_settings: { mutations_sync: '2' },
-          });
-        }
-        return { ...existingThread, ...(archivedAt !== undefined ? { archivedAt } : {}) };
+      if (title === undefined && metadata === undefined && archivedAt === undefined) {
+        return existingThread;
       }
+
+      // Every change (archiving included) inserts a new row version. Reads pick the latest
+      // version via `ORDER BY updatedAt DESC`, so the new updatedAt must be strictly newer.
+      const updatedAt = new Date(Math.max(Date.now(), existingThread.updatedAt.getTime() + 1));
 
       // Merge the existing metadata with the new metadata
       const mergedMetadata = {
@@ -925,7 +920,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         ...existingThread,
         title: title ?? existingThread.title,
         metadata: mergedMetadata,
-        updatedAt: new Date(),
+        updatedAt,
         archivedAt: archivedAt !== undefined ? archivedAt : (existingThread.archivedAt ?? null),
       };
 
