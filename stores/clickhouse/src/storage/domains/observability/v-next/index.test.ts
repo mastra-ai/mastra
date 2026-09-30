@@ -4859,6 +4859,29 @@ LIMIT 1`,
         expect(result.value, aggregation).toBeNull();
       }
     });
+
+    it('getScoreAggregate count_distinct counts distinct values instead of summing', async () => {
+      await storage.batchCreateScores({
+        scores: [
+          {
+            scoreId: 'score-test-5',
+            timestamp: new Date('2026-01-01T00:00:15Z'),
+            traceId: 'olap-s-5',
+            spanId: null,
+            scorerId: 'quality',
+            score: 0.8,
+            reason: null,
+            experimentId: null,
+            scoreSource: 'automated',
+            metadata: null,
+          },
+        ],
+      });
+
+      // quality scores: 0.8, 0.6, 0.9, 0.8 → 3 distinct (sum would be 3.1)
+      const result = await storage.getScoreAggregate({ scorerId: 'quality', aggregation: 'count_distinct' });
+      expect(result.value).toBe(3);
+    });
   });
 
   // ==========================================================================
