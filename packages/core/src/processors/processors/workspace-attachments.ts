@@ -206,6 +206,8 @@ type UnsupportedAttachment = {
 type UploadTarget = {
   directory: string;
   write: (path: string, content: Uint8Array) => Promise<unknown>;
+  /** Writes every file in one call when the destination supports batches. */
+  writeAll?: (files: { path: string; content: Uint8Array }[]) => Promise<unknown>;
   remove?: (path: string) => Promise<unknown>;
 };
 
@@ -317,11 +319,11 @@ async function resolveUploadTarget(
     ? (path: string) => runShell(sandbox, `rm -rf ${shellQuote(parentDirectory(path))}`, 'remove the upload directory')
     : undefined;
   if (sandbox?.writeFiles) {
-    return {
-      directory: 'uploads',
-      write: (path, content) => sandbox.writeFiles!([{ path, content: Buffer.from(content) }]),
-      remove,
-    };
+    // One call for the whole request: with no executeCommand there is no way to delete a
+    // partial upload, so atomicity across the batch relies on the provider's writeFiles.
+    const writeAll = (files: { path: string; content: Uint8Array }[]) =>
+      sandbox.writeFiles!(files.map(({ path, content }) => ({ path, content: Buffer.from(content) })));
+    return { directory: 'uploads', write: (path, content) => writeAll([{ path, content }]), writeAll, remove };
   }
   if (sandbox?.executeCommand) {
     return {
@@ -389,8 +391,23 @@ function parentDirectory(path: string) {
   return path.slice(0, path.lastIndexOf('/'));
 }
 
-/** Writes every file, or none: if one write fails, files already written are deleted. */
+/**
+ * Writes every file, or none: if one write fails, files already written are deleted.
+ * Batch destinations get a single call; a failed batch is rolled back when the target can remove files.
+ */
 async function uploadAll(target: UploadTarget, files: { filename?: string; bytes: Uint8Array }[]) {
+  if (target.writeAll) {
+    const paths = files.map(file => `${target.directory}/${crypto.randomUUID()}/${sanitizeFilename(file.filename)}`);
+    try {
+      await target.writeAll(files.map((file, index) => ({ path: paths[index]!, content: file.bytes })));
+    } catch (error) {
+      if (target.remove) await Promise.allSettled(paths.map(path => target.remove!(path)));
+      const names = files.map(file => `"${file.filename ?? 'attachment'}"`).join(', ');
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to upload attachments ${names} to ${target.directory}: ${reason}`, { cause: error });
+    }
+    return paths;
+  }
   const paths: string[] = [];
   try {
     for (const file of files) {

@@ -587,6 +587,34 @@ describe('WorkspaceAttachmentsProcessor', () => {
       expect(writeFiles).toHaveBeenCalledWith([{ path, content: Buffer.from(BYTES) }]);
     });
 
+    it('writes every attachment in one writeFiles call when the sandbox has no executeCommand', async () => {
+      const writeFiles = vi.fn(async () => {});
+      const workspace = { id: 'w', name: 'w', sandbox: { writeFiles } } as unknown as AnyWorkspace;
+      const { parts } = await run(workspace, [file(BASE64, 'a.xlsx'), file(BASE64, 'b.xlsx')]);
+      expect(writeFiles).toHaveBeenCalledOnce();
+      expect(writeFiles).toHaveBeenCalledWith([
+        { path: uploadedPath(parts[0].text), content: Buffer.from(BYTES) },
+        { path: uploadedPath(parts[1].text), content: Buffer.from(BYTES) },
+      ]);
+    });
+
+    it('aborts with the upload error and keeps the attachments when that single writeFiles call fails', async () => {
+      const writeFiles = vi.fn(async () => {
+        throw new Error('disk full');
+      });
+      const workspace = { id: 'w', name: 'w', sandbox: { writeFiles } } as unknown as AnyWorkspace;
+      const { MessageList } = await import('../../agent/message-list');
+      const messageList = new MessageList();
+      messageList.add([{ role: 'user', content: [file(BASE64, 'a.xlsx'), file(BASE64, 'b.xlsx')] }], 'input');
+      const processor = new WorkspaceAttachmentsProcessor({ ...SHEETS, workspace });
+      await expect(
+        processor.processInputStep({ messageList, requestContext: new RequestContext(), abort: vi.fn() } as any),
+      ).rejects.toThrow(/Failed to upload attachments "a.xlsx", "b.xlsx".*disk full/);
+      expect(writeFiles).toHaveBeenCalledOnce();
+      const parts = messageList.get.all.db()[0]!.content.parts;
+      expect(parts.map((p: any) => p.type)).toEqual(['file', 'file']);
+    });
+
     describe('given a sandbox-only workspace whose sandbox has no writeFiles', () => {
       /** A sandbox that really runs `sh -c` in a temp directory, optionally with extra PATH entries first. */
       async function shellSandbox(options: { pathPrefix?: string; failWhen?: (script: string) => boolean } = {}) {
@@ -681,20 +709,26 @@ describe('WorkspaceAttachmentsProcessor', () => {
         expect(executeCommand).not.toHaveBeenCalled();
       });
 
-      it('removes files already written through writeFiles when a later writeFiles call fails', async () => {
+      it('removes files a writeFiles batch wrote before it failed', async () => {
         const { cwd, workspace, scripts } = await shellSandbox();
         const { writeFile, mkdir } = await import('node:fs/promises');
-        const writeFiles = vi.fn(async ([f]: { path: string; content: Buffer }[]) => {
-          if (f!.path.endsWith('b.xlsx')) throw new Error('quota exceeded');
-          await mkdir(join(cwd, f!.path, '..'), { recursive: true });
-          await writeFile(join(cwd, f!.path), f!.content);
+        // A provider that writes files one by one and fails midway through the batch.
+        const writeFiles = vi.fn(async (files: { path: string; content: Buffer }[]) => {
+          for (const f of files) {
+            if (f.path.endsWith('b.xlsx')) throw new Error('quota exceeded');
+            await mkdir(join(cwd, f.path, '..'), { recursive: true });
+            await writeFile(join(cwd, f.path), f.content);
+          }
         });
         (workspace.sandbox as any).writeFiles = writeFiles;
         await expect(run(workspace, [file(BASE64, 'a.xlsx'), file(BASE64, 'b.xlsx')])).rejects.toThrow(
           /quota exceeded/,
         );
-        expect(writeFiles).toHaveBeenCalledTimes(2);
-        expect(scripts).toEqual([expect.stringMatching(/^rm -rf 'uploads\/[0-9a-f-]{36}'$/)]);
+        expect(writeFiles).toHaveBeenCalledOnce();
+        expect(scripts).toEqual([
+          expect.stringMatching(/^rm -rf 'uploads\/[0-9a-f-]{36}'$/),
+          expect.stringMatching(/^rm -rf 'uploads\/[0-9a-f-]{36}'$/),
+        ]);
         expect(await readdir(join(cwd, 'uploads'))).toEqual([]);
       });
 
