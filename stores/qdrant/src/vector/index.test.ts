@@ -197,6 +197,29 @@ describe('QdrantVector', () => {
       expect(results).toHaveLength(2);
       expect(results.map(res => res.id)).not.toContain(idToBeDeleted);
     });
+
+    it('should throw instead of reporting success when deleteVectors gets a malformed id', async () => {
+      const ids = await qdrant.upsert({ indexName: testCollectionName, vectors: testVectors });
+
+      await expect(
+        qdrant.deleteVectors({ indexName: testCollectionName, ids: [ids[0]!, 'not-a-uuid'] }),
+      ).rejects.toThrow(/Invalid Qdrant point IDs.*not-a-uuid/);
+
+      const stats = await qdrant.describeIndex({ indexName: testCollectionName });
+      expect(stats.count).toBe(3);
+    });
+
+    it('should not throw when deleteVectors gets valid ids that do not exist', async () => {
+      const ids = await qdrant.upsert({ indexName: testCollectionName, vectors: testVectors });
+
+      await qdrant.deleteVectors({
+        indexName: testCollectionName,
+        ids: [ids[0]!, '00000000-0000-4000-8000-000000000001', '123456789'],
+      });
+
+      const stats = await qdrant.describeIndex({ indexName: testCollectionName });
+      expect(stats.count).toBe(2);
+    });
   });
 
   describe('Filter Queries', () => {

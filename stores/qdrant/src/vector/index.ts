@@ -118,6 +118,8 @@ export interface DeletePayloadIndexParams {
   wait?: boolean;
 }
 
+const QDRANT_UUID_REGEX = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i;
+
 export class QdrantVector extends MastraVector {
   protected client: QdrantClient;
 
@@ -788,23 +790,22 @@ export class QdrantVector extends MastraVector {
 
     try {
       if (ids) {
-        // Delete by IDs - parse all IDs to support both string and numeric formats
-        const pointIds = ids.map(id => this.parsePointId(id));
-        try {
-          await this.client.delete(indexName, {
-            points: pointIds,
-            wait: true,
+        // Qdrant rejects the whole batch with a 400 if any ID is not a uint64 or UUID,
+        // so surface malformed IDs as a user error instead of letting nothing be deleted.
+        const invalidIds = ids.filter(id => !/^\d+$/.test(id) && !QDRANT_UUID_REGEX.test(id));
+        if (invalidIds.length > 0) {
+          throw new MastraError({
+            id: createVectorErrorId('QDRANT', 'DELETE_VECTORS', 'INVALID_IDS'),
+            text: `Invalid Qdrant point IDs (must be unsigned integers or UUIDs): ${invalidIds.join(', ')}`,
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { indexName, invalidIds: invalidIds.join(', ') },
           });
-        } catch (error: any) {
-          // Qdrant throws "Bad Request" when trying to delete non-existent IDs
-          // This is expected behavior and should be handled gracefully
-          const message = error?.message || error?.toString() || '';
-          if (message.toLowerCase().includes('bad request')) {
-            // Silently ignore - deleting non-existent IDs is not an error
-            return;
-          }
-          throw error;
         }
+        await this.client.delete(indexName, {
+          points: ids.map(id => this.parsePointId(id)),
+          wait: true,
+        });
       } else if (filter) {
         // Delete by filter
         const translatedFilter = this.transformFilter(filter) ?? {};
