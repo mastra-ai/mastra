@@ -45,7 +45,7 @@ describe('durable agent-as-tool nested approval details', () => {
     globalRunRegistry.set(RUN_ID, { tools: { [OUTER_TOOL_NAME]: { execute } } } as any);
 
     await (createDurableToolCallStep() as any).execute({
-      inputData: { toolCallId: TOOL_CALL_ID, toolName: OUTER_TOOL_NAME, args: OUTER_ARGS },
+      inputData: { toolCallId: TOOL_CALL_ID, toolName: OUTER_TOOL_NAME, args: OUTER_ARGS, messageId: 'msg-1' },
       mastra: { getLogger: () => undefined },
       suspend,
       requestContext: new Map(),
@@ -64,6 +64,7 @@ describe('durable agent-as-tool nested approval details', () => {
           args: INNER_APPROVAL.args,
         }),
       }),
+      'msg-1',
     );
     expect(emitSuspendedEvent).toHaveBeenCalledWith(
       expect.anything(),

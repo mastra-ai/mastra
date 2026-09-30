@@ -346,6 +346,280 @@ describe('Stream ID Consistency', () => {
     expect(initialResult.messages).toHaveLength(0);
   });
 
+  it('should stamp every content chunk with the persisted message ID across a mid-run rotation', async () => {
+    const stepMessageIds: string[] = [];
+    const rotateOnSecondStep = {
+      id: 'rotate-on-second-step',
+      processInputStep: async ({ stepNumber, messageId, rotateResponseMessageId }) => {
+        stepMessageIds.push(stepNumber > 0 ? rotateResponseMessageId!() : messageId!);
+        return {};
+      },
+    } satisfies Processor;
+
+    let call = 0;
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream(
+          call++ === 0
+            ? [
+                { type: 'stream-start', warnings: [] },
+                { type: 'text-start', id: 't1' },
+                { type: 'text-delta', id: 't1', delta: 'checking' },
+                { type: 'text-end', id: 't1' },
+                { type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: '{"q":"x"}' },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                },
+              ]
+            : [
+                { type: 'stream-start', warnings: [] },
+                { type: 'text-start', id: 't2' },
+                { type: 'text-delta', id: 't2', delta: 'done' },
+                { type: 'text-end', id: 't2' },
+                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+              ],
+        ),
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Chunk messageId agent',
+      instructions: 'You are a helpful assistant.',
+      model,
+      memory,
+      inputProcessors: [rotateOnSecondStep],
+      tools: {
+        lookup: createTool({
+          id: 'lookup',
+          description: 'lookup',
+          inputSchema: z.object({ q: z.string() }),
+          execute: async () => ({ ok: true }),
+        }),
+      },
+    });
+    agent.__registerMastra(mastra);
+
+    const threadId = globalThis.crypto.randomUUID();
+    const stream = await agent.stream('Hello!', { memory: { thread: threadId, resource: 'r' } });
+
+    const chunks: any[] = [];
+    for await (const chunk of stream.fullStream) chunks.push(chunk);
+
+    expect(stepMessageIds).toHaveLength(2);
+    const [firstId, secondId] = stepMessageIds;
+    expect(firstId).not.toBe(secondId);
+
+    const idsByText = (delta: string) =>
+      chunks.find(c => c.type === 'text-delta' && c.payload.text === delta)?.messageId;
+    expect(idsByText('checking')).toBe(firstId);
+    expect(idsByText('done')).toBe(secondId);
+    expect(chunks.find(c => c.type === 'tool-call')?.messageId).toBe(firstId);
+    expect(chunks.find(c => c.type === 'tool-result')?.messageId).toBe(firstId);
+
+    for (const chunk of chunks) {
+      if (['start', 'finish', 'abort'].includes(chunk.type)) continue;
+      expect(chunk.messageId, `chunk ${chunk.type}`).toBeDefined();
+    }
+
+    const persisted = await memory.recall({ threadId, perPage: 0, include: [{ id: firstId! }, { id: secondId! }] });
+    expect(persisted.messages.map(m => m.id).sort()).toEqual([firstId, secondId].sort());
+  });
+
+  const toolThenTextModel = () => {
+    let call = 0;
+    return new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream(
+          call++ === 0
+            ? [
+                { type: 'stream-start', warnings: [] },
+                { type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: '{"q":"x"}' },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                },
+              ]
+            : [
+                { type: 'stream-start', warnings: [] },
+                { type: 'text-start', id: 't2' },
+                { type: 'text-delta', id: 't2', delta: 'done' },
+                { type: 'text-end', id: 't2' },
+                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+              ],
+        ),
+      }),
+    });
+  };
+
+  const messageIdContaining = async (threadId: string, predicate: (part: any) => boolean) => {
+    const { messages } = await memory.recall({ threadId, perPage: false });
+    return messages.find(m => m.content.parts.some(predicate))?.id;
+  };
+
+  it('should stamp a signal drained mid-run with the id of its own saved signal message', async () => {
+    const threadId = globalThis.crypto.randomUUID();
+    const agent: Agent = new Agent({
+      id: 'signal-agent',
+      name: 'Signal agent',
+      instructions: 'You are a helpful assistant.',
+      model: toolThenTextModel(),
+      memory,
+      tools: {
+        lookup: createTool({
+          id: 'lookup',
+          description: 'lookup',
+          inputSchema: z.object({ q: z.string() }),
+          execute: async () => {
+            await agent.sendSignal({ type: 'user-message', contents: 'also this' }, { resourceId: 'r', threadId });
+            return { ok: true };
+          },
+        }),
+      },
+    });
+    agent.__registerMastra(mastra);
+
+    const stream = await agent.stream('Hello!', { memory: { thread: threadId, resource: 'r' } });
+    const chunks: any[] = [];
+    for await (const chunk of stream.fullStream) chunks.push(chunk);
+
+    const signalChunk = chunks.find(c => c.type === 'data-user-message');
+    expect(signalChunk).toBeDefined();
+    const { messages } = await memory.recall({ threadId, perPage: false });
+    const signalRow = messages.find(m => m.id === signalChunk.data.id);
+    expect(signalRow?.role).toBe('signal');
+    expect(signalChunk.messageId).toBe(signalRow!.id);
+  });
+
+  it('should stamp resumed tool-result chunks with the message the tool call was saved in', async () => {
+    const threadId = globalThis.crypto.randomUUID();
+    const agent = new Agent({
+      id: 'approval-agent',
+      name: 'Approval agent',
+      instructions: 'You are a helpful assistant.',
+      model: toolThenTextModel(),
+      memory,
+      tools: {
+        lookup: createTool({
+          id: 'lookup',
+          description: 'lookup',
+          inputSchema: z.object({ q: z.string() }),
+          requireApproval: true,
+          execute: async () => ({ ok: true }),
+        }),
+      },
+    });
+    agent.__registerMastra(mastra);
+
+    const stream = await agent.stream('Hello!', { memory: { thread: threadId, resource: 'r' } });
+    for await (const _chunk of stream.fullStream) {
+    }
+
+    const resumed = await agent.approveToolCall({ runId: stream.runId, toolCallId: 'call-1' });
+    const chunks: any[] = [];
+    for await (const chunk of resumed.fullStream) chunks.push(chunk);
+
+    const toolResult = chunks.find(c => c.type === 'tool-result');
+    expect(toolResult).toBeDefined();
+    const savedIn = await messageIdContaining(
+      threadId,
+      p => p.type === 'tool-invocation' && p.toolInvocation.state === 'result',
+    );
+    expect(savedIn).toBeDefined();
+    expect(toolResult.messageId).toBe(savedIn);
+  });
+
+  it('should stamp a custom data part written after a processor rotation with the id it was saved under', async () => {
+    const rotateAndWrite = {
+      id: 'rotate-and-write',
+      processInputStep: async ({ stepNumber, rotateResponseMessageId, writer }) => {
+        if (stepNumber > 0) {
+          rotateResponseMessageId!();
+          await writer?.custom({ type: 'data-note', data: { n: 1 } });
+        }
+        return {};
+      },
+    } satisfies Processor;
+
+    const agent = new Agent({
+      id: 'data-part-agent',
+      name: 'Data part agent',
+      instructions: 'You are a helpful assistant.',
+      model: toolThenTextModel(),
+      memory,
+      inputProcessors: [rotateAndWrite],
+      tools: {
+        lookup: createTool({
+          id: 'lookup',
+          description: 'lookup',
+          inputSchema: z.object({ q: z.string() }),
+          execute: async () => ({ ok: true }),
+        }),
+      },
+    });
+    agent.__registerMastra(mastra);
+
+    const threadId = globalThis.crypto.randomUUID();
+    const stream = await agent.stream('Hello!', { memory: { thread: threadId, resource: 'r' } });
+    const chunks: any[] = [];
+    for await (const chunk of stream.fullStream) chunks.push(chunk);
+
+    const note = chunks.find(c => c.type === 'data-note');
+    expect(note).toBeDefined();
+    const savedIn = await messageIdContaining(threadId, p => p.type === 'data-note');
+    expect(savedIn).toBeDefined();
+    expect(note.messageId).toBe(savedIn);
+  });
+
+  it('should stamp a signal-typed data part written through the writer with the response message id', async () => {
+    const writeUserMessagePart = {
+      id: 'write-user-message-part',
+      processInputStep: async ({ stepNumber, writer }) => {
+        if (stepNumber > 0) {
+          await writer?.custom({ type: 'data-user-message', data: { id: 'not-a-signal-row', text: 'hi' } });
+        }
+        return {};
+      },
+    } satisfies Processor;
+
+    const agent = new Agent({
+      id: 'writer-signal-part-agent',
+      name: 'Writer signal part agent',
+      instructions: 'You are a helpful assistant.',
+      model: toolThenTextModel(),
+      memory,
+      inputProcessors: [writeUserMessagePart],
+      tools: {
+        lookup: createTool({
+          id: 'lookup',
+          description: 'lookup',
+          inputSchema: z.object({ q: z.string() }),
+          execute: async () => ({ ok: true }),
+        }),
+      },
+    });
+    agent.__registerMastra(mastra);
+
+    const threadId = globalThis.crypto.randomUUID();
+    const stream = await agent.stream('Hello!', { memory: { thread: threadId, resource: 'r' } });
+    const chunks: any[] = [];
+    for await (const chunk of stream.fullStream) chunks.push(chunk);
+
+    const part = chunks.find(c => c.type === 'data-user-message');
+    expect(part).toBeDefined();
+    const savedIn = await messageIdContaining(threadId, p => p.type === 'data-user-message');
+    expect(savedIn).toBeDefined();
+    expect(savedIn).not.toBe('not-a-signal-row');
+    expect(part.messageId).toBe(savedIn);
+  });
+
   it('should return generate response IDs that match database-saved message IDs (V2 model)', async () => {
     const model = new MockLanguageModelV2({
       doGenerate: async () => ({

@@ -33,6 +33,7 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
       const { inputData, mastra, getInitData } = params;
       const state = inputData as {
         runId: string;
+        messageId?: string;
         iterationCount: number;
         messageListState: any;
         accumulatedSteps: Array<{
@@ -95,7 +96,7 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
         generateId: () => mastra?.generateId?.(),
         emitChunk: chunk => {
           if (!pubsub) return;
-          return emitChunkEvent(pubsub, state.runId, chunk as any);
+          return emitChunkEvent(pubsub, state.runId, chunk as any, state.messageId);
         },
         logger: mastra?.getLogger?.(),
       });

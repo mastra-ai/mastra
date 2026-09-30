@@ -28,6 +28,13 @@ All chunks include these base properties:
     description: 'Unique identifier for this execution run',
   },
   {
+    name: 'messageId',
+    type: 'string',
+    isOptional: true,
+    description:
+      'ID of the saved message this chunk belongs to. One run can save several messages, so this value can change mid-run. Signal chunks carry the ID of their own signal message. Not set on `start`, `finish`, and `abort` chunks.',
+  },
+  {
     name: 'from',
     type: 'ChunkFrom',
     description: 'Source of the chunk',

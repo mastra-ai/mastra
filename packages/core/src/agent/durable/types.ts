@@ -400,6 +400,8 @@ export interface DurableToolCallInput {
   activeTools?: string[] | null;
   /** Exported model_step span data so the TOOL_CALL span nests under the LLM call */
   stepSpanData?: unknown;
+  /** Persisted assistant message this tool call belongs to */
+  messageId?: string;
 }
 
 /**

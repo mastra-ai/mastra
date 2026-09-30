@@ -447,7 +447,8 @@ export function createDurableLLMMappingStep() {
               _durableStepContent: stepContent,
             },
           };
-          await emitChunkEvent(pubsub, _runId, enrichedChunk);
+          // An input processor may have rotated the response message during llm-execution.
+          await emitChunkEvent(pubsub, _runId, enrichedChunk, llmOutput?.stepResult?.messageId ?? messageId);
         } catch (error) {
           mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to emit deferred step-finish: ${error}`);
         }

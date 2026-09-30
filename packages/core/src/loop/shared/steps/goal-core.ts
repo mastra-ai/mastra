@@ -20,6 +20,7 @@ import type { ProcessorStreamWriterOptions } from '../../../processors';
 import { createProcessorSendSignal } from '../../../processors/send-signal';
 import { RequestContext } from '../../../request-context';
 import type { GoalObjectiveRecord } from '../../../storage/domains/thread-state/base';
+import { withChunkMessageId } from '../../../stream/base/message-id';
 import type { ChunkType, GoalEvaluationActivity } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { runStreamCompletionScorers } from '../../network/validation';
@@ -590,12 +591,17 @@ export async function evaluateGoal(deps: {
   // Emit the final goal chunk for external observers.
   try {
     await Promise.resolve(
-      deps.emitChunk({
-        type: 'goal',
-        runId: deps.runId,
-        from: ChunkFrom.AGENT,
-        payload: goalEvaluationPayload,
-      }),
+      deps.emitChunk(
+        withChunkMessageId(
+          {
+            type: 'goal',
+            runId: deps.runId,
+            from: ChunkFrom.AGENT,
+            payload: goalEvaluationPayload,
+          },
+          currentMessageId,
+        ),
+      ),
     );
   } catch {
     // Best-effort — the transport may be closed.

@@ -1082,6 +1082,7 @@ describe('durable tool-call background task dispatch', () => {
           toolCallId: TOOL_CALL_ID,
         }),
       }),
+      undefined,
     );
   });
 

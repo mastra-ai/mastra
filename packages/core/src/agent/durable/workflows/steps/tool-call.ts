@@ -71,6 +71,8 @@ const durableToolCallInputSchema = z.object({
   activeTools: z.array(z.string()).nullable().optional(),
   // Exported MODEL_STEP span so the TOOL_CALL nests under the LLM call
   stepSpanData: z.any().optional(),
+  // Persisted assistant message the tool call belongs to; stamped on emitted chunks.
+  messageId: z.string().optional(),
 });
 
 /**
@@ -207,6 +209,7 @@ async function processChunkThroughOutputProcessors(
   messageList?: MessageList,
   observabilityContext?: ObservabilityContext,
   collectDataPart?: (part: { type: string; data?: unknown; messageId?: string }) => void,
+  messageId?: string,
 ): Promise<ChunkType | null> {
   const runner =
     registryEntry?.outputProcessors?.length && registryEntry.processorStates
@@ -237,13 +240,13 @@ async function processChunkThroughOutputProcessors(
             if (data.type.startsWith('data-') && !data.transient) {
               collectDataPart?.({ type: data.type, data: data.data, messageId: writerOptions?.messageId });
             }
-            await emitChunkEvent(pubsub, runId, data as ChunkType);
+            await emitChunkEvent(pubsub, runId, data as ChunkType, messageId);
           },
         }
       : undefined,
     emitChunk: async c => {
       if (pubsub) {
-        await emitChunkEvent(pubsub, runId, c);
+        await emitChunkEvent(pubsub, runId, c, messageId);
       }
     },
     onProcessorError: error => {
@@ -305,7 +308,7 @@ export function createDurableToolCallStep() {
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
 
       const typedInput = inputData as DurableToolCallInput;
-      const { toolCallId, toolName, args: rawArgs, providerExecuted, output, activeTools } = typedInput;
+      const { toolCallId, toolName, args: rawArgs, providerExecuted, output, activeTools, messageId } = typedInput;
 
       // Extract resumeData from tool call arguments (autoResumeSuspendedTools path)
       // When the LLM auto-resumes a suspended tool, it injects `resumeData` into the
@@ -553,12 +556,17 @@ export function createDurableToolCallStep() {
           message: `Tool "${toolName}" not found.${availableToolsStr}. Call tools by their exact name only — never add prefixes, namespaces, or colons.`,
         };
         if (pubsub) {
-          await emitChunkEvent(pubsub, runId, {
-            type: 'tool-error',
+          await emitChunkEvent(
+            pubsub,
             runId,
-            from: ChunkFrom.AGENT,
-            payload: { toolCallId, toolName, args, error },
-          });
+            {
+              type: 'tool-error',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: { toolCallId, toolName, args, error },
+            },
+            messageId,
+          );
         }
         return {
           ...typedInput,
@@ -790,7 +798,7 @@ export function createDurableToolCallStep() {
               logger: logger as any,
             },
           );
-          await emitChunkEvent(pubsub, runId, approvalChunk);
+          await emitChunkEvent(pubsub, runId, approvalChunk, messageId);
         }
 
         // Emit suspended event for the stream adapter
@@ -871,6 +879,7 @@ export function createDurableToolCallStep() {
                 messageList,
                 processorObservabilityContext,
                 collectProcessorDataPart,
+                messageId,
               );
             } catch (emitError) {
               logger?.warn?.(`[DurableAgent] Failed to emit tool-output-denied chunk for ${toolName}: ${emitError}`);
@@ -1016,7 +1025,7 @@ export function createDurableToolCallStep() {
             if (typeof chunk?.type === 'string' && chunk.type.startsWith('data-') && !chunk.transient) {
               collectProcessorDataPart({ type: chunk.type, data: chunk.data, messageId: chunk.messageId });
             }
-            await emitChunkEvent(pubsub, runId, chunk as ChunkType);
+            await emitChunkEvent(pubsub, runId, chunk as ChunkType, messageId);
           }
         : undefined;
 
@@ -1106,7 +1115,7 @@ export function createDurableToolCallStep() {
                   logger: logger as any,
                 },
               );
-              await emitChunkEvent(pubsub, runId, approvalChunk);
+              await emitChunkEvent(pubsub, runId, approvalChunk, messageId);
             }
 
             if (pubsub) {
@@ -1173,7 +1182,7 @@ export function createDurableToolCallStep() {
                   logger: logger as any,
                 },
               );
-              await emitChunkEvent(pubsub, runId, suspensionChunk);
+              await emitChunkEvent(pubsub, runId, suspensionChunk, messageId);
 
               await emitSuspendedEvent(pubsub, runId, suspendedEventData);
             }
@@ -1250,16 +1259,21 @@ export function createDurableToolCallStep() {
         emitTaskStarted: async task => {
           // Emit background-task-started chunk via PubSub
           if (pubsub) {
-            await emitChunkEvent(pubsub, runId, {
-              type: 'background-task-started' as any,
+            await emitChunkEvent(
+              pubsub,
               runId,
-              from: ChunkFrom.AGENT,
-              payload: {
-                taskId: task.id,
-                toolName,
-                toolCallId,
+              {
+                type: 'background-task-started' as any,
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  taskId: task.id,
+                  toolName,
+                  toolCallId,
+                },
               },
-            });
+              messageId,
+            );
           }
         },
         taskContext: info => ({
@@ -1671,7 +1685,7 @@ export function createDurableToolCallStep() {
                           messageId: writerOptions?.messageId,
                         });
                       }
-                      await emitChunkEvent(pubsub, runId, data as ChunkType);
+                      await emitChunkEvent(pubsub, runId, data as ChunkType, messageId);
                     },
                   }
                 : undefined,
@@ -1692,17 +1706,22 @@ export function createDurableToolCallStep() {
               // loop, where a tripwire skips both commit and emission.
               if (pubsub) {
                 try {
-                  await emitChunkEvent(pubsub, runId, {
-                    type: 'tripwire',
+                  await emitChunkEvent(
+                    pubsub,
                     runId,
-                    from: ChunkFrom.AGENT,
-                    payload: {
-                      reason: processorError.message || 'Tool result blocked by processor',
-                      retry: processorError.options?.retry,
-                      metadata: processorError.options?.metadata,
-                      processorId: processorError.processorId,
-                    },
-                  } as ChunkType);
+                    {
+                      type: 'tripwire',
+                      runId,
+                      from: ChunkFrom.AGENT,
+                      payload: {
+                        reason: processorError.message || 'Tool result blocked by processor',
+                        retry: processorError.options?.retry,
+                        metadata: processorError.options?.metadata,
+                        processorId: processorError.processorId,
+                      },
+                    } as ChunkType,
+                    messageId,
+                  );
                 } catch (emitError) {
                   logger?.warn?.(`[DurableAgent] Failed to emit tripwire chunk for ${toolName}: ${emitError}`);
                 }
@@ -1765,6 +1784,7 @@ export function createDurableToolCallStep() {
               messageList,
               processorObservabilityContext,
               collectProcessorDataPart,
+              messageId,
             );
           } catch (emitError) {
             logger?.warn?.(`[DurableAgent] Failed to emit tool-result chunk for ${toolName}: ${emitError}`);
@@ -1824,6 +1844,7 @@ export function createDurableToolCallStep() {
               messageList,
               processorObservabilityContext,
               collectProcessorDataPart,
+              messageId,
             );
           } catch (emitError) {
             logger?.warn?.(`[DurableAgent] Failed to emit tool-error chunk for ${toolName}: ${emitError}`);
