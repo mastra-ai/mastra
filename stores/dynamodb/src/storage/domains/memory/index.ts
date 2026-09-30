@@ -263,12 +263,13 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         updateData.metadata = JSON.stringify(mergedMetadata); // Stringify merged metadata for update
       }
 
-      // Update the thread using the primary key
+      // Single update expression so set + remove apply atomically
+      const threadUpdate = this.service.entities.thread.update({ entity: 'thread', id });
       if (Object.keys(updateData).length > 0) {
-        await this.service.entities.thread.update({ entity: 'thread', id }).set(updateData).go();
-      }
-      if (archivedAt === null) {
-        await this.service.entities.thread.update({ entity: 'thread', id }).remove(['archivedAt']).go();
+        const withSet = threadUpdate.set(updateData);
+        await (archivedAt === null ? withSet.remove(['archivedAt']) : withSet).go();
+      } else if (archivedAt === null) {
+        await threadUpdate.remove(['archivedAt']).go();
       }
 
       // Return the potentially updated thread object
