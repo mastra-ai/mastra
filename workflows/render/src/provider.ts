@@ -4,6 +4,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { AnyWorkflow } from '@mastra/core/workflows';
 import { RenderProtocolError, RenderRunConflictError, RenderSubmissionUnknownError, errorRecord } from './errors.js';
 import { compileManifest, type Manifest } from './manifest.js';
+import { workflowBindings, type WorkflowBinding } from './bindings.js';
+import { identity } from './native.js';
+export { workflowBindings, type WorkflowBinding } from './bindings.js';
 import { DEFAULT_RETRY, NO_RETRY, taskPolicy, type TaskPolicy } from './policy.js';
 import { frameworkJson, json, type RootEnvelope } from './protocol.js';
 import { terminal, updateRun, type RenderPersistence, type RunRecord } from './persistence/types.js';
@@ -14,7 +17,8 @@ export interface RenderOptions {
   /** Immutable application build identity. Use the same value in caller and worker. */
   buildId: string;
   persistence: RenderPersistence;
-  rootTask?: Omit<TaskPolicy, 'retry'>;
+  /** Root retries restart the entire graph. Zero by default; effects must be idempotent. */
+  rootTask?: TaskPolicy;
   stepDefaults?: TaskPolicy;
   requestContextKeys?: readonly string[];
   pollIntervalMs?: number;
@@ -26,19 +30,12 @@ export interface RenderOptions {
   transport?: RenderTransport;
 }
 
-export interface WorkflowBinding {
-  workflow: AnyWorkflow;
-  provider: RenderProvider;
-  rootPolicy: TaskPolicy;
-  manifest(): Manifest;
-}
-export const workflowBindings = new WeakMap<AnyWorkflow, WorkflowBinding>();
-
 export class RenderProvider {
   readonly store: RenderPersistence;
   readonly transport: RenderTransport;
   readonly contextKeys: readonly string[];
   readonly workflows = new Map<string, WorkflowBinding>();
+  readonly localDevelopment: boolean;
   /** Validate provider configuration and initialize durable persistence and native transport. */
   constructor(readonly options: RenderOptions) {
     if (!options.workflowSlug || !options.buildId)
@@ -51,24 +48,32 @@ export class RenderProvider {
     )
       throw new RenderProtocolError('maxConcurrentSteps must be a positive integer');
     this.store = options.persistence;
+    // Match the SDK's explicit local-development configuration. Missing native IDs
+    // are tolerated only in this mode, and never for coordinator retries.
+    this.localDevelopment =
+      options.client?.useLocalDev ??
+      (!!options.client?.localDevUrl ||
+        !!process.env.RENDER_LOCAL_DEV_URL ||
+        ['1', 't', 'T', 'true', 'TRUE', 'True'].includes(process.env.RENDER_USE_LOCAL_DEV ?? ''));
     this.transport = options.transport ?? createRenderTransport(options.client);
     this.contextKeys = [...(options.requestContextKeys ?? [])];
   }
 
   /** Register a unique workflow and lazily cache its first successful committed manifest. */
-  register(workflow: AnyWorkflow, root?: Omit<TaskPolicy, 'retry'>): WorkflowBinding {
+  register(workflow: AnyWorkflow, root?: TaskPolicy): WorkflowBinding {
     if (this.workflows.has(workflow.id)) throw new RenderProtocolError(`Duplicate workflow id ${workflow.id}`);
     let manifest: Manifest | undefined;
     const binding: WorkflowBinding = {
       workflow,
       provider: this,
-      rootPolicy: { ...taskPolicy(root, this.options.rootTask), retry: NO_RETRY },
-      manifest: () =>
+      rootPolicy: taskPolicy(root, { retry: NO_RETRY, ...this.options.rootTask }),
+      manifest: ancestors =>
         (manifest ??= compileManifest(
           workflow,
           this.options.buildId,
           { retry: DEFAULT_RETRY, ...this.options.stepDefaults },
           binding.rootPolicy,
+          ancestors,
         )),
     };
     this.workflows.set(workflow.id, binding);
@@ -91,6 +96,7 @@ export class RenderProvider {
       input: json(envelope.input),
       initialState: json(envelope.state),
       submissionHash: submissionHash(envelope),
+      idempotencyKey: identity(this.options.workflowSlug, envelope.workflowId, envelope.runId, envelope.manifest),
       createdAt: now,
       updatedAt: now,
     };
@@ -99,7 +105,9 @@ export class RenderProvider {
     }
     let providerId: string;
     try {
-      providerId = await this.transport.start(`${this.options.workflowSlug}/${binding.manifest().rootName}`, envelope);
+      providerId = await this.transport.start(`${this.options.workflowSlug}/${binding.manifest().rootName}`, envelope, {
+        idempotencyKey: record.idempotencyKey!,
+      });
     } catch (error) {
       const rejected =
         error instanceof ClientError && error.statusCode >= 400 && error.statusCode < 500 && error.statusCode !== 408;
@@ -167,7 +175,9 @@ export class RenderProvider {
       }));
     }
     if (remote.status === 'completed' || remote.status === 'succeeded') {
-      const result = remote.results?.[0];
+      const output = remote.results?.[0];
+      const result =
+        record.parent && output && typeof output === 'object' && 'result' in output ? output.result : output;
       if (!result || typeof result !== 'object' || !('status' in result) || result.status !== 'success') {
         throw new RenderProtocolError(`Render root ${record.providerId} completed without a successful Mastra result`);
       }
@@ -215,6 +225,8 @@ export class RenderProvider {
     const record = await this.getRun(workflowId, runId);
     if (!record) throw new RenderRunConflictError(`Unknown run ${runId}`);
     if (terminal(record.status)) return;
+    if (record.parent)
+      throw new RenderProtocolError('Cancel the top-level workflow; Render does not support child-only cancellation');
     if (!record.providerId) throw new RenderSubmissionUnknownError(runId);
     await updateRun(this.store, workflowId, runId, () => ({ status: 'cancel-requested' }));
     try {

@@ -41,9 +41,9 @@
     "test:example": "tsx scripts/example-smoke.ts"
   },
   "dependencies": {
-    "@renderinc/sdk": "1.1.0",
-    "pg": "8.16.3",
-    "@types/pg": "8.15.5"
+    "@renderinc/sdk": "1.2.0",
+    "@types/pg": "8.15.5",
+    "pg": "8.16.3"
   },
   "peerDependencies": {
     "@mastra/core": "1.67.0",

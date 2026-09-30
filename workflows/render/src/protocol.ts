@@ -74,6 +74,16 @@ export const rootEnvelopeSchema = z
     input: z.unknown().refine(value => value !== undefined, 'input is required'),
     state: z.unknown().refine(value => value !== undefined, 'state is required'),
     requestContext: z.record(z.unknown()),
+    /** Present only on coordinators chained by another Mastra workflow. */
+    parent: z
+      .object({ workflowId: z.string().min(1), runId: z.string().min(1), attempt: z.string().min(1) })
+      .strict()
+      .optional(),
+    readOnly: z.boolean().optional(),
+    authorization: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
   })
   .strict();
 export type RootEnvelope = z.infer<typeof rootEnvelopeSchema>;

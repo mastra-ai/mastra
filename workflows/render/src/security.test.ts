@@ -62,6 +62,7 @@ describe('generated task authorization', () => {
       readOnly: false,
     };
     const context: TaskContext = {
+      metadata: { taskRunId: 'remote', rootTaskRunId: 'remote' },
       run: async () => {
         throw new Error('unexpected dispatch');
       },

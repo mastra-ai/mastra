@@ -18,13 +18,14 @@ function harness(options: Partial<RenderOptions> = {}) {
   const runs = new Map<string, ProviderRun>();
   const dispatched: string[] = [];
   const executions: unknown[] = [];
-  const context: TaskContext = {
+  const makeContext = (id: string, parent?: string, root = id): TaskContext => ({
+    metadata: { taskRunId: id, parentTaskRunId: parent, rootTaskRunId: root },
     async run(definition, ...args) {
       dispatched.push(definition.name);
       executions.push(structuredClone(args[0]));
-      return structuredClone(await definition.func(context, ...structuredClone(args)));
+      return structuredClone(await definition.func(makeContext(randomUUID(), id, root), ...structuredClone(args)));
     },
-  };
+  });
   const transport: RenderTransport = {
     async start(slug, input) {
       const id = randomUUID();
@@ -34,7 +35,7 @@ function harness(options: Partial<RenderOptions> = {}) {
       void Promise.resolve().then(async () => {
         runs.set(id, { id, status: 'running' });
         try {
-          const result = await definition.func(context, structuredClone(input));
+          const result = await definition.func(makeContext(id), structuredClone(input));
           if (runs.get(id)?.status !== 'canceled')
             runs.set(id, { id, status: 'completed', results: [structuredClone(result)] });
         } catch (error) {
@@ -513,7 +514,7 @@ describe('JSON transport', () => {
   });
 });
 
-describe('accepted roots without a saved provider binding', () => {
+describe('worker recovery of a lost caller binding', () => {
   it.each(['before-claim', 'after-claim', 'binding-write'] as const)(
     'finishes an accepted root after a %s submission failure without resubmitting',
     async failure => {
@@ -552,7 +553,15 @@ describe('accepted roots without a saved provider binding', () => {
       });
       const swap = h.provider.store.compareAndSwap.bind(h.provider.store);
       vi.spyOn(h.provider.store, 'compareAndSwap').mockImplementation(async (record, revision) => {
-        if (failure === 'binding-write' && record.providerId) throw new Error('binding write failed');
+        const current = await h.provider.store.get(record.workflowId, record.runId);
+        if (
+          failure === 'binding-write' &&
+          record.providerId &&
+          record.workerClaim === current?.workerClaim &&
+          !record.dispatchClosed &&
+          record.result === undefined
+        )
+          throw new Error('caller binding write failed');
         return swap(record, revision);
       });
       const run = await workflow.createRun();
@@ -561,10 +570,8 @@ describe('accepted roots without a saved provider binding', () => {
         await running;
         const active = await h.provider.store.get(workflow.id, run.runId);
         expect(active?.status).toBe('running');
-        expect(active?.providerId).toBeUndefined();
-        await expect(h.provider.cancel(workflow.id, run.runId)).rejects.toMatchObject({
-          name: 'RenderSubmissionUnknownError',
-        });
+        expect(active?.providerId).toBe([...h.runs.keys()][0]);
+        expect(active?.rootProviderId).toBe(active?.providerId);
         release();
         await vi.waitFor(async () => expect((await h.provider.getRun(workflow.id, run.runId))?.status).toBe('success'));
         const terminal = await h.provider.wait(workflow.id, run.runId, AbortSignal.timeout(1000));
@@ -581,7 +588,7 @@ describe('accepted roots without a saved provider binding', () => {
     },
   );
 
-  it('retains a failed unbound root outcome instead of polling it forever', async () => {
+  it('recovers a failed root outcome after a lost caller response instead of polling it forever', async () => {
     const h = harness();
     const step = h.createStep({
       id: 'fail',
@@ -673,7 +680,7 @@ it.each(['success', 'failure'] as const)('preserves native %s when final bookkee
     expect(result.status).toBe(outcome === 'success' ? 'success' : 'failed');
     const native = [...h.runs.values()][0]!;
     if (outcome === 'success') expect(native.status).toBe('completed');
-    else expect((native.error as Error).message).toMatch(/^Mastra workflow .* failed$/);
+    else expect((native.error as Error).message).toBe('business failure');
     expect((await h.provider.store.get(workflow.id, run.runId))?.dispatchClosed).toBe(true);
     expect(injected).toBe(true);
     expect(log).toHaveBeenCalled();

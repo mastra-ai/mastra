@@ -7,7 +7,7 @@ export interface ProviderRun {
   error?: unknown;
 }
 export interface RenderTransport {
-  start(taskSlug: string, input: unknown): Promise<string>;
+  start(taskSlug: string, input: unknown, options?: { idempotencyKey: string }): Promise<string>;
   get(taskRunId: string): Promise<ProviderRun>;
   cancel(taskRunId: string): Promise<void>;
   /** Completion notification only. The caller reconciles authoritative task state afterward. */
@@ -19,8 +19,8 @@ export function createRenderTransport(options?: ConstructorParameters<typeof Ren
   const getClient = () => (client ??= new Render(options));
   return {
     /** Submit one root envelope as the native task's single positional argument. */
-    async start(slug, input) {
-      return (await getClient().workflows.startTask(slug, [input])).taskRunId;
+    async start(slug, input, options) {
+      return (await getClient().workflows.startTask(slug, [input], options)).taskRunId;
     },
     /** Fetch authoritative native task state by its persisted provider ID. */
     async get(id) {

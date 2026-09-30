@@ -2,9 +2,9 @@
 
 An experimental execution provider for Mastra. Developers author Mastra graphs; Render runs each business step as a separate task. The root task uses Mastra's existing execution engine to coordinate the graph. Child tasks retain Render retries, task resources, timeouts, parent relationships and cancellation.
 
-`@renderinc/mastra` is a provisional, private local package. It has not been published or approved as an official integration. This implementation is pinned to `@mastra/core` 1.67.0 and `@renderinc/sdk` 1.1.0. It has not been verified against the repository's newer unpublished core.
+`@renderinc/mastra` is a provisional, private local package. It has not been published or approved as an official integration. This implementation is pinned to `@mastra/core` 1.67.0 and `@renderinc/sdk` 1.2.0. It has not been verified against the repository's newer unpublished core.
 
-**Reliability boundary:** the root has zero retries. A failed root fails the Mastra run; it does not replay the graph from snapshots. Each child can retry, so side effects in a child must be idempotent. There is no exactly-once guarantee. Use an application idempotency key for external writes.
+**Reliability boundary:** roots default to zero retries. You can opt into native root retries, which restart the entire graph from its original input and state. They do not resume from snapshots or reuse completed steps. Child tasks can retry independently. Make external effects idempotent wherever retries are enabled; there is no exactly-once guarantee.
 
 ## Build and install locally
 
@@ -99,20 +99,21 @@ Do not assume Mastra's HTTP client's `start` and `startAsync` have the same sema
 
 ## Supported graph and context
 
-| Surface                                                                                                                    | Contract                                                                                                                                                                                                                   |
-| -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Explicit steps, sequences, parallel, branch, foreach, dowhile, dountil                                                     | Business steps dispatch through native Render task context. Each foreach or loop iteration has its own execution identity.                                                                                                 |
-| Map functions, branch predicates and loop conditions                                                                       | Pure operations in the root. No separate task or retry boundary. Mutation and unsupported control methods are guarded. External side effects in these functions remain the developer's responsibility to avoid.            |
-| JSON input and output                                                                                                      | Schema validation plus strict JSON checks at transport boundaries. No undefined, Date, class instances, functions, BigInt, non-finite numbers or cycles. Use strings for timestamps and explicit codecs for richer values. |
-| Sequential state and request context                                                                                       | `setState` and allowlisted context changes return from a child and are applied by the root. Getters expose immutable copies.                                                                                               |
-| Parallel, branch or foreach state/context                                                                                  | Read only. Shared mutations fail; there is no implicit merge order.                                                                                                                                                        |
-| Context                                                                                                                    | Worker-local `mastra`, input/state, IDs, `getInitData`, `getStepResult`, sequential `setState` and allowlisted `requestContext`.                                                                                           |
-| Agents inside explicit steps                                                                                               | The entire step is one task and retry boundary. The adapter does not split model/tool calls automatically.                                                                                                                 |
-| Retry, timeout and compute                                                                                                 | Native task policies. Per-step `render` overrides provider defaults. A workflow's `render` overrides root defaults. Root retry is always zero.                                                                             |
-| Reconnection and cancellation                                                                                              | Persisted root binding, provider lookup, completion events, actual Render cancellation.                                                                                                                                    |
-| Native nested tasks                                                                                                        | Supported through the worker-scoped helper below. Native grandchildren are not automatically Mastra steps.                                                                                                                 |
-| Suspend/resume, nested Mastra workflows, durable sleep, scheduling, replay, restart/time travel, bulk run listing/deletion | Explicitly unsupported in this version. Unsupported graph entries fail before submission.                                                                                                                                  |
-| Streaming, event watchers, live tracing context, scorers, actor transport, per-step start/output overrides                 | Explicitly unsupported. Render completion events are not agent token streaming.                                                                                                                                            |
+| Surface                                                                                                      | Contract                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Explicit steps, sequences, parallel, branch, foreach, dowhile, dountil                                       | Business steps dispatch through native Render task context. Each foreach or loop iteration has its own execution identity.                                                                                                 |
+| Map functions, branch predicates and loop conditions                                                         | Pure operations in the root. No separate task or retry boundary. Mutation and unsupported control methods are guarded. External side effects in these functions remain the developer's responsibility to avoid.            |
+| JSON input and output                                                                                        | Schema validation plus strict JSON checks at transport boundaries. No undefined, Date, class instances, functions, BigInt, non-finite numbers or cycles. Use strings for timestamps and explicit codecs for richer values. |
+| Sequential state and request context                                                                         | `setState` and allowlisted context changes return from a child and are applied by the root. Getters expose immutable copies.                                                                                               |
+| Parallel, branch or foreach state/context                                                                    | Read only. Shared mutations fail; there is no implicit merge order.                                                                                                                                                        |
+| Context                                                                                                      | Worker-local `mastra`, input/state, IDs, `getInitData`, `getStepResult`, sequential `setState` and allowlisted `requestContext`.                                                                                           |
+| Agents inside explicit steps                                                                                 | The entire step is one task and retry boundary. The adapter does not split model/tool calls automatically.                                                                                                                 |
+| Retry, timeout and compute                                                                                   | Native task policies. Per-step `render` overrides provider defaults. A workflow's `render` overrides root defaults. Root retries default to zero; opt-in retries restart that entire workflow.                             |
+| Reconnection and cancellation                                                                                | Persisted root binding, provider lookup, completion events, actual Render cancellation.                                                                                                                                    |
+| Nested Mastra workflows                                                                                      | Same-provider graphs dispatch child coordinators through `ctx.run`, preserving state/context and snapshot links.                                                                                                           |
+| Native nested tasks                                                                                          | Supported through the worker-scoped helper below. Native grandchildren are not automatically Mastra steps.                                                                                                                 |
+| Suspend/resume, durable sleep, scheduling, checkpoint replay, restart/time travel, bulk run listing/deletion | Explicitly unsupported in this version. Unsupported graph entries fail before submission.                                                                                                                                  |
+| Streaming, event watchers, live tracing context, scorers, actor transport, per-step start/output overrides   | Explicitly unsupported. Render completion events are not agent token streaming.                                                                                                                                            |
 
 Set `requestContextKeys: ['locale']` to allow those keys across processes. There are no implicit keys. Values must be JSON. Avoid putting credentials or live objects into the context: task inputs and prior outputs are visible in Render execution history.
 
@@ -134,7 +135,47 @@ const workflow = createWorkflow({
   .commit();
 ```
 
-The condition receives the current output, state and one-based `iterationCount`. It runs in the root and must be pure. Sequential state and allowlisted request-context updates from a child are available to the condition and next iteration. Include a stopping condition and size the root timeout for all iterations and retry delays. Loop bodies remain explicit steps; nested Mastra workflow bodies, suspend/resume and coordinator replay are unsupported.
+The condition receives the current output, state and one-based `iterationCount`. It runs in the root and must be pure. Sequential state and allowlisted request-context updates from a child are available to the condition and next iteration. Include a stopping condition and size the root timeout for all iterations and retry delays. Loop bodies can be explicit steps or nested workflows from this provider. Suspend/resume and coordinator checkpoint replay are unsupported.
+
+## Nest Mastra workflows
+
+A workflow created by the same `init(...)` instance can be used as a step:
+
+```ts
+const reviewPipeline = createWorkflow({
+  id: 'review-pipeline',
+  inputSchema: editorial.inputSchema,
+  outputSchema: editorial.outputSchema,
+})
+  .then(editorial)
+  .commit();
+```
+
+The parent chains a child coordinator through native `ctx.run`; that coordinator chains its own business steps. Reachable child definitions are registered automatically, including children used in parallel, foreach or loop bodies. All must use the same provider and Render Workflow service. Mixed providers, cyclic graphs and more than 500 registered definitions fail before submission.
+
+Nested execution preserves Mastra input/output validation, state, allowlisted request context, resource ownership and configured workflow authorization. Read-only restrictions from parallel, branch and foreach execution apply to descendants. Snapshots retain nested-run links. Cancel the top-level run to cancel the whole native tree; child-only cancellation is not exposed by the adapter.
+
+## Opt into root restart retries
+
+```ts
+const workflow = createWorkflow({
+  id: 'retryable-review',
+  inputSchema: review.inputSchema,
+  outputSchema: review.outputSchema,
+  render: {
+    timeoutSeconds: 600,
+    retry: { maxRetries: 1, waitDurationMs: 1000, backoffScaling: 2 },
+  },
+})
+  .then(review)
+  .commit();
+```
+
+`rootTask.retry` sets the provider default; `createWorkflow({ render: { retry } })` overrides it for that workflow. This policy also applies when the workflow is nested. Retrying a nested coordinator restarts only that nested graph, unless its failure also causes its parent to retry.
+
+Render schedules retries. Every attempt runs the graph again with the original input/state, a new dispatch authority and separate Mastra snapshots. Public run IDs remain stable. Superseded attempts cannot publish the current result or dispatch additional adapter children. This does not reverse external effects or stop external work already in flight. Use application idempotency keys for writes, including lifecycle callbacks.
+
+This feature requires native task metadata. Hosted Render supplies it with SDK 1.2.0. CLI 2.28.0 does not, so local root retries fail explicitly. Ordinary local execution, including nesting, retains signed dispatch when `client.useLocalDev`, `client.localDevUrl` or the Render local-development environment is explicitly configured. Do not enable local mode in hosted workers.
 
 ## Use a native Render task inside a step
 
@@ -155,10 +196,10 @@ Generated root/step definitions are internal protocol endpoints. Starting one di
 
 ## Failure and operational behavior
 
-- A run ID can be submitted only once. A durable unique key and compare-and-swap revisions protect the binding. A worker claim prevents a second coordinator for the same run.
-- A timeout or network error while submitting can mean Render accepted the task but the caller did not receive the ID. The adapter preserves the existing run and throws `RenderSubmissionUnknownError`. Never automatically submit another root. Inspect Render execution history and the persisted run. This release does not supply automated reconciliation without a provider ID.
-- If binding persistence fails after acceptance, the record may remain `submitting` or `running` without the provider ID. Keep the returned run ID for operator diagnosis. Do not assume the job failed or resubmit blindly. Transactional submission across Render and PostgreSQL is not implemented.
-- A child can retry without rerunning successful siblings. A root timeout, process loss or failed deployment interrupts orchestration and becomes a failed run. It does not resume from the latest Mastra snapshot. Size root timeouts for the full graph, including retry delays, and account for the coordinating root's resources.
+- A run ID can be submitted only once. A durable unique key and compare-and-swap revisions protect the binding. Native identity prevents binding a second Render root to the same run. A private claim fences each coordinator attempt.
+- A timeout or network error while submitting can mean Render accepted the task but the caller did not receive the ID. The adapter preserves the existing run and throws `RenderSubmissionUnknownError`. Never automatically submit another root. Inspect Render execution history and the persisted run. A hosted worker can repair the binding from its native metadata after it starts. Until then, retain the uncertain submission and inspect its history.
+- If binding persistence fails after acceptance, the record may temporarily lack the provider ID until the worker claims it. Keep the returned run ID for operator diagnosis. Do not assume the job failed or resubmit blindly. Transactional submission across Render and PostgreSQL is not implemented.
+- A child can retry without rerunning successful siblings. A root timeout or process loss fails the attempt. With root retries enabled, Render can start the graph again; otherwise the run fails. It does not resume from the latest Mastra snapshot. Size root timeouts for the full graph, including retry delays, and account for the coordinating root's resources.
 - Cancellation is a request until Render confirms its outcome. Completion can win the race. Cancellation does not undo external side effects.
 - Worker and caller manifest/build mismatch fails before business code. Deploy matching definitions; do not mutate an already registered workflow. Root and child policies are included in the manifest.
 - `createMemoryPersistence()` is only for same-process tests. Separate worker/caller processes require durable shared persistence. `createPostgresPersistence()` creates only `mastra_render_runs`; it requires table-creation privileges initially. Configure database TLS and connection pooling for the deployment.
@@ -173,14 +214,16 @@ Reference documentation: [Render Workflows](https://render.com/docs/workflows), 
 
 ## Generated task authorization
 
-Generated roots and business-step tasks are internal adapter entrypoints. Submit through the Mastra workflow API. Roots must match the complete persisted submission and acquire the existing one-root claim. Children require a matching active run and an HMAC-SHA-256 proof over their complete payload, signed by that coordinator. The signing secret stays in the run store and coordinator memory; do not expose raw persistence records to clients. Signing happens before `ctx.run`, so argument-size checks include the proof. Cancellation, coordinator completion and the coordinator timeout revoke dispatch authority. Database failures reject execution before business effects.
+Generated roots and business-step tasks are internal adapter entrypoints. Submit through the Mastra workflow API. Roots must match the complete persisted submission and native run identity before acquiring an attempt claim. Children require a matching active run and an HMAC-SHA-256 proof over their complete payload, signed by that coordinator. The signing secret stays in the run store and coordinator memory; do not expose raw persistence records to clients. Signing happens before `ctx.run`, so argument-size checks include the proof. Cancellation, coordinator completion, timeout and attempt replacement revoke dispatch authority. Descendants also validate their ancestor attempts. Database failures reject execution before business effects.
 
-Render SDK 1.1.0 exposes no authenticated parent ID inside `TaskContext`. The proof establishes coordinator authorization of the payload; it does not attest native Render parent identity. A trusted workspace operator who can read task arguments can replay an authorized payload while its coordinator remains active. Native retries deliberately reuse that payload. This is not exactly-once execution or a security boundary against database/worker administrators. Business effects should remain idempotent where retries require it.
+SDK 1.2.0 supplies native task, root and parent IDs. Hosted generated children verify these IDs as well as the signed payload, preventing a copied envelope from being invoked under a different native parent. Explicit local development falls back to signed payload checks when the CLI supplies no metadata. In that mode, a trusted operator can replay an authorized payload while its coordinator remains active. Neither mode is a boundary against database/worker administrators. Native retries deliberately reuse their input; business effects must remain idempotent.
 
-The root binding now includes a submission hash and dispatch lifetime fields inside the existing JSON record. Existing completed history remains readable. Drain active runs and deploy matching caller/worker builds together; do not reuse a build ID for changed adapter code. Old pending submissions without the new binding must be reconciled, not blindly resubmitted. No core Mastra APIs, native retry policies, or graph authoring APIs changed.
+The root binding now includes a submission hash and dispatch lifetime fields inside the existing JSON record. Existing completed history remains readable. Drain active runs and deploy matching caller/worker builds together; do not reuse a build ID for changed adapter code. Old pending submissions without the new binding must be reconciled, not blindly resubmitted. The implementation does not modify core Mastra or Render SDK source. Existing roots still default to zero retries.
 
 ### Completion after an uncertain submission
 
-If Render accepts a root but its response or the provider-binding write is lost, do not resubmit the run. A worker claim keeps the accepted coordinator authorized even if the caller later reports submission uncertainty. If that worker finishes without a persisted native task ID, it atomically records the Mastra terminal outcome and closes child dispatch. Status reads and waits can then finish, and admission capacity can be released. Bound runs continue to use Render's native terminal state, including cancellation.
+If Render accepts a root but its response or the caller's binding write is lost, do not submit a new run. The adapter passes a stable native submission idempotency key and keeps its one-shot logical run reservation. Render's key is scoped to one Workflow version and retained for 24 hours; it is not permanent deduplication or checkpoint recovery.
 
-A failed binding write also records `submission-unknown` if no worker has claimed the run, so waits fail explicitly instead of polling an unclaimed `submitting` record forever. If storage cannot persist even that state, the caller still receives `RenderSubmissionUnknownError`; keep its run ID, use bounded waits, and reconcile it before any new submission. This does not recover a coordinator that dies before storing its outcome. Native cancellation remains unavailable while the task ID is unknown, and a worker-completed unbound run reports its recorded Mastra outcome without a native terminal-state lookup. Root retries and replay remain unsupported.
+When the hosted coordinator starts, it records its own task/root IDs from native metadata before business execution. This repairs a lost caller binding, allowing later status lookup and cancellation through Render. If neither process can reach persistence, execution fails closed. A run whose acceptance remains unknown still requires operator reconciliation; the adapter does not blindly resubmit or maintain another retry scheduler.
+
+Explicit local mode preserves the older fallback: a worker that completes without native metadata or a caller-written task ID can record its terminal Mastra result. Cancellation is unavailable until that local run has a native ID. Deploy matching caller and worker builds together after draining existing active runs.

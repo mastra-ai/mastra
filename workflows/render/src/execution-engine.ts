@@ -2,7 +2,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { DefaultExecutionEngine } from '@mastra/core/workflows';
 import { encodeRequestContext, pureContext } from './context.js';
 import { RenderProtocolError } from './errors.js';
-import { dispatchChild } from './runtime-internal.js';
+import { coordinatorRuntime, dispatchChild, inheritedReadOnly, logicalRunId } from './runtime-internal.js';
+import { executeNested, NestedExecutionError } from './nested.js';
 import { json, parseEnvelope, PROTOCOL_VERSION, stepOutcomeSchema, type StepEnvelope } from './protocol.js';
 import type { Manifest } from './manifest.js';
 
@@ -13,6 +14,7 @@ interface EngineBinding {
 }
 const localMapping = new AsyncLocalStorage<boolean>();
 const readOnly = new AsyncLocalStorage<boolean>();
+const nestedInvocation = new AsyncLocalStorage<Parameters<DefaultExecutionEngine['executeStep']>[0]>();
 
 export class RenderExecutionEngine extends DefaultExecutionEngine {
   /** Bind Mastra's graph engine to the worker manifest and allowed request-context keys. */
@@ -21,6 +23,16 @@ export class RenderExecutionEngine extends DefaultExecutionEngine {
     options: ConstructorParameters<typeof DefaultExecutionEngine>[0],
   ) {
     super(options);
+  }
+
+  override async invokeStartCallback(info: Parameters<DefaultExecutionEngine['invokeStartCallback']>[0]) {
+    await coordinatorRuntime().assertActive();
+    return super.invokeStartCallback({ ...info, runId: logicalRunId(info.runId) });
+  }
+
+  override async invokeLifecycleCallbacks(info: Parameters<DefaultExecutionEngine['invokeLifecycleCallbacks']>[0]) {
+    await coordinatorRuntime().assertActive();
+    return super.invokeLifecycleCallbacks({ ...info, runId: logicalRunId(info.runId) });
   }
 
   /** Keep mappings local and dispatch business steps with signed, JSON-safe execution context. */
@@ -34,6 +46,7 @@ export class RenderExecutionEngine extends DefaultExecutionEngine {
         },
       });
     const manifest = this.binding.manifest();
+    if (manifest.nested.has(params.step.id)) return nestedInvocation.run(params, () => super.executeStep(params));
     const registered = manifest.steps.get(params.step.id);
     if (!registered) throw new RenderProtocolError(`Step ${params.step.id} was not registered`);
     return super.executeStep({
@@ -51,7 +64,7 @@ export class RenderExecutionEngine extends DefaultExecutionEngine {
           const envelope: StepEnvelope = {
             version: PROTOCOL_VERSION,
             workflowId: params.workflowId,
-            runId: params.runId,
+            runId: logicalRunId(params.runId),
             ...(params.resourceId === undefined ? {} : { resourceId: params.resourceId }),
             buildId: this.binding.buildId,
             manifest: manifest.hash,
@@ -68,7 +81,7 @@ export class RenderExecutionEngine extends DefaultExecutionEngine {
             requestContext: encodeRequestContext(context.requestContext, this.binding.allowedContext),
             initialInput: json(context.getInitData()),
             priorOutputs,
-            readOnly: readOnly.getStore() ?? false,
+            readOnly: inheritedReadOnly() || (readOnly.getStore() ?? false),
           };
           json([envelope], 'task arguments');
           const outcome = parseEnvelope(stepOutcomeSchema, await dispatchChild(registered.name, envelope));
@@ -79,6 +92,54 @@ export class RenderExecutionEngine extends DefaultExecutionEngine {
         },
       },
     });
+  }
+
+  override isNestedWorkflowStep(step: Parameters<DefaultExecutionEngine['isNestedWorkflowStep']>[0]): boolean {
+    return this.binding.manifest().nested.has(step.id);
+  }
+
+  /** Keep Mastra's step bookkeeping while invoking a native child coordinator. */
+  override async executeWorkflowStep(params: Parameters<DefaultExecutionEngine['executeWorkflowStep']>[0]) {
+    const invocation = nestedInvocation.getStore();
+    const child = this.binding.manifest().nested.get(params.step.id);
+    if (!child || !invocation) throw new RenderProtocolError('Missing nested workflow invocation');
+    try {
+      const outcome = await executeNested(child, {
+        input: params.inputData,
+        state: params.executionContext.state,
+        requestContext: encodeRequestContext(params.requestContext, this.binding.allowedContext),
+        readOnly: inheritedReadOnly() || (readOnly.getStore() ?? false),
+        executionKey: JSON.stringify([
+          invocation.executionContext.executionPath,
+          invocation.executionContext.foreachIndex ?? null,
+          params.step.id,
+          invocation.iterationCount ?? null,
+        ]),
+        resourceId: invocation.resourceId,
+      });
+      params.executionContext.state = json(outcome.result.state) as typeof params.executionContext.state;
+      params.requestContext.clear();
+      for (const [key, value] of Object.entries(outcome.requestContext)) params.requestContext.setRaw(key, value);
+      return {
+        status: 'success' as const,
+        output: outcome.result.result,
+        payload: params.inputData,
+        metadata: { nestedRunId: outcome.snapshotRunId },
+        startedAt: params.startedAt,
+        endedAt: Date.now(),
+      };
+    } catch (error) {
+      return {
+        status: 'failed' as const,
+        error: error instanceof Error ? error : new Error(String(error)),
+        ...(error instanceof NestedExecutionError && error.snapshotRunId
+          ? { metadata: { nestedRunId: error.snapshotRunId } }
+          : {}),
+        payload: params.inputData,
+        startedAt: params.startedAt,
+        endedAt: Date.now(),
+      };
+    }
   }
 
   /** Execute pure mappings in the coordinator rather than creating native task definitions. */

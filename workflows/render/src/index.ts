@@ -59,7 +59,7 @@ export function init(options: RenderOptions) {
     C extends PublicSchema | undefined = undefined,
   >(
     config: Omit<CreateWorkflowParams<Id, S, I, O, Steps, C>, 'executionEngine' | 'retryConfig' | 'schedule'> & {
-      render?: Omit<TaskPolicy, 'retry'>;
+      render?: TaskPolicy;
     },
   ) {
     const { render, ...rest } = config;

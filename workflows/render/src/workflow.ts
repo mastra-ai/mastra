@@ -20,7 +20,7 @@ export class RenderWorkflow<
   constructor(
     config: WorkflowConfig<TId, TState, TInput, TOutput, TSteps, TContext>,
     provider: RenderProvider,
-    root?: Omit<TaskPolicy, 'retry'>,
+    root?: TaskPolicy,
   ) {
     if (config.executionEngine || config.retryConfig?.attempts || config.schedule)
       unsupported('custom engines, framework retries or schedules');
@@ -85,12 +85,11 @@ export class RenderWorkflow<
     runId: string,
     options?: Parameters<Workflow['getWorkflowRunById']>[1],
   ): Promise<WorkflowState | null> {
-    const snapshot = await super.getWorkflowRunById(runId, options);
-    // Core createRun calls this method while hydrating the worker's own run.
-    // That handler already owns the root claim; native child dispatch needs no API key.
-    const record = isActiveWorkerRun(this.id, runId)
-      ? await this.binding.provider.store.get(this.id, runId)
-      : await this.binding.provider.getRun(this.id, runId);
+    // Native retries start from input, never hydrate an earlier attempt's graph state.
+    // Core's initial snapshot write is scoped to this attempt's physical run ID.
+    if (isActiveWorkerRun(this.id, runId)) return null;
+    const record = await this.binding.provider.getRun(this.id, runId);
+    const snapshot = await super.getWorkflowRunById(record?.snapshotRunId ?? runId, options);
     if (!record) return snapshot;
     const status =
       record.status === 'submitting' || record.status === 'submission-unknown'

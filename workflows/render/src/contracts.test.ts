@@ -222,8 +222,15 @@ describe('capability and worker contracts', () => {
     };
     await h.store.create({ ...initial, submissionHash: submissionHash(envelope) });
     const context: TaskContext = {
+      metadata: { taskRunId: 'remote', rootTaskRunId: 'remote' },
       async run(definition, ...args) {
-        return definition.func(context, ...args);
+        return definition.func(
+          {
+            ...context,
+            metadata: { taskRunId: randomUUID(), parentTaskRunId: 'remote', rootTaskRunId: 'remote' },
+          },
+          ...args,
+        );
       },
     };
     await expect(tasks.get(manifest.rootName)!.func(context, envelope)).resolves.toMatchObject({
@@ -292,8 +299,15 @@ describe('capability and worker contracts', () => {
       requestContext: {},
     };
     const context: TaskContext = {
+      metadata: { taskRunId: 'remote', rootTaskRunId: 'remote' },
       async run(definition, ...args) {
-        return definition.func(context, ...args);
+        return definition.func(
+          {
+            ...context,
+            metadata: { taskRunId: randomUUID(), parentTaskRunId: 'remote', rootTaskRunId: 'remote' },
+          },
+          ...args,
+        );
       },
     };
     await h.provider.store.create({ ...initial, submissionHash: submissionHash(envelope) });
@@ -312,13 +326,13 @@ describe('capability and worker contracts', () => {
     expect(() => run.resume({ resumeData: {} })).toThrow('resume');
   });
 
-  it('rejects nested workflows and suspend schemas before submission', async () => {
+  it('accepts same-provider nesting and rejects suspend schemas before submission', async () => {
     const h = setup(unusedTransport);
     const nested = h
       .createWorkflow({ id: randomUUID(), inputSchema: z.number(), outputSchema: z.number() })
       .then(h.workflow)
       .commit();
-    await expect(nested.createRun()).rejects.toThrow('nested');
+    await expect(nested.createRun()).resolves.toBeDefined();
     const suspendStep = coreCreateStep({
       id: 'suspend',
       inputSchema: z.number(),
@@ -358,6 +372,7 @@ describe('capability and worker contracts', () => {
     const manifest = h.provider.workflows.get(workflow.id)!.manifest();
     const definition = definitions.get(manifest.steps.get('counter')!.name)!;
     const context: TaskContext = {
+      metadata: { taskRunId: 'remote', rootTaskRunId: 'remote' },
       async run() {
         throw new Error('unexpected child');
       },
@@ -394,11 +409,13 @@ describe('capability and worker contracts', () => {
 
   it('isolates native TaskContext between concurrent executions', async () => {
     const a: TaskContext = {
+      metadata: { taskRunId: 'remote', rootTaskRunId: 'remote' },
       async run() {
         throw new Error('a');
       },
     };
     const b: TaskContext = {
+      metadata: { taskRunId: 'remote', rootTaskRunId: 'remote' },
       async run() {
         throw new Error('b');
       },

@@ -3,6 +3,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { Step } from '@mastra/core/workflows';
 import { RenderProtocolError, unsupported } from './errors.js';
 import { json, type StepEnvelope, type StepOutcome } from './protocol.js';
+import { logicalRunId } from './runtime-internal.js';
 
 const unavailable = new Set([
   'retryCount',
@@ -28,6 +29,7 @@ export function pureContext<T extends object>(context: T): T {
   return new Proxy(context, {
     /** Expose supported context members while enforcing this execution context's mutation and capability restrictions. */
     get(target, property, receiver) {
+      if (property === 'runId') return logicalRunId(String(Reflect.get(target, property, receiver)));
       if (unavailable.has(String(property)) || property === 'setState')
         return unsupported(`local mapping or condition context.${String(property)}`);
       const value: unknown = Reflect.get(target, property, receiver);

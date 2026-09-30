@@ -21,6 +21,14 @@ export interface RunRecord {
   status: RunStatus;
   providerId?: string;
   workerClaim?: string;
+  /** Native root of the task tree; providerId is this coordinator's native ID. */
+  rootProviderId?: string;
+  /** Public hash of the current attempt's private dispatch credential. */
+  attempt?: string;
+  /** Isolates Mastra snapshots when a native retry restarts the graph. */
+  snapshotRunId?: string;
+  parent?: { workflowId: string; runId: string; attempt: string };
+  idempotencyKey?: string;
   /** Hash of the originally accepted root envelope, including request context. */
   submissionHash?: string;
   dispatchClosed?: boolean;

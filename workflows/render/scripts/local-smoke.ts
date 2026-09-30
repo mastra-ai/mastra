@@ -15,7 +15,7 @@ try {
     const audit = randomUUID();
     const run = await workflow.createRun({ resourceId: 'local-test-user' });
     const result = await run.start({
-      inputData: { value: 6, audit, fail, delayMs: 300 },
+      inputData: { value: 6, audit, fail, delayMs: 2000 },
       initialState: { prepared: false },
     });
     const record = await adapter.provider.getRun(workflow.id, run.runId);
