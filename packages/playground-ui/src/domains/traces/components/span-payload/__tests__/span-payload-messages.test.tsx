@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SpanInputRenderer } from '../span-input-renderers';
 import { SpanPayloadMessages } from '../span-payload-messages';
 import { agentRunMessagesSpan } from './fixtures/span-payloads';
@@ -21,13 +21,24 @@ describe('SpanPayloadMessages', () => {
       expect(screen.getByText('tool', { exact: true })).toBeTruthy();
     });
   });
-  describe('when a system prompt is long and indented', () => {
-    it('shows the entire prompt as prose rather than a collapsed card or code', () => {
+  describe('when a system prompt is indented', () => {
+    it('shows the prompt as prose rather than code', () => {
       const text = `    You are Michel.\n${'    Use the available ingredients and explain each step.\n'.repeat(12)}`;
       const { container } = render(<SpanPayloadMessages value={[{ role: 'system', content: text }]} />);
       expect(container.querySelector('pre')).toBeNull();
-      expect(container.querySelector('p')?.textContent).toBe(text.trim());
-      expect(screen.queryByRole('button')).toBeNull();
+      expect(container.querySelector('p')?.textContent).toBe(text.replace(/^ {4}/gm, '').trim());
+    });
+  });
+  describe('when a system prompt contains markdown', () => {
+    it('renders it formatted instead of showing raw markdown', () => {
+      const { container } = render(
+        <SpanPayloadMessages value={[{ role: 'system', content: '  # Title\n\n  **bold**\n\n  - item' }]} />,
+      );
+      expect(container.querySelector('h1')?.textContent).toBe('Title');
+      expect(container.querySelector('strong')?.textContent).toBe('bold');
+      expect(container.querySelector('li')?.textContent).toBe('item');
+      expect(container.querySelector('pre')).toBeNull();
+      expect(container.textContent).not.toMatch(/\*\*|#/);
     });
   });
   describe('when user and assistant messages are recorded', () => {

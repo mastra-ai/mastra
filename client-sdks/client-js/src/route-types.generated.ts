@@ -3411,6 +3411,8 @@ type Shared_Type_60 = {
   entityType?: (Shared_Type_58 | null) | undefined;
   entityId?: (string | null) | undefined;
   entityName?: (string | null) | undefined;
+  threadId?: ((string | null) | undefined) | null;
+  resourceId?: ((string | null) | undefined) | null;
   metadata?:
     | ({
         [key: string]: unknown;
