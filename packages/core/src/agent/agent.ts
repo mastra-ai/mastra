@@ -186,6 +186,7 @@ import type {
 import type { AgentStepFinishEventData, AgentSuspendedEventData } from './durable/types';
 import { GoalSignalProvider, resolveGoalStore, readObjective, writeObjective, clearObjective } from './goal';
 import { buildMcpServerGuidance } from './mcp-guidance';
+import { assertRequestContextResourceMatches } from './memory-thread-ownership';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { buildResumeSpanInput } from './resume-span-input';
@@ -8967,6 +8968,12 @@ export class Agent<
     message: AgentMessageInput,
     target: SendAgentMessageOptions<OUTPUT>,
   ): SendAgentMessageResult<OUTPUT> {
+    assertRequestContextResourceMatches({
+      requestContext: target.requestContext,
+      resourceId: target.resourceId,
+      threadId: target.threadId,
+      agentName: this.name,
+    });
     return agentThreadStreamRuntime.sendMessage<OUTPUT>(
       this.#getThreadRuntimeAgent(),
       message,
@@ -8982,6 +8989,12 @@ export class Agent<
     message: AgentMessageInput,
     target: QueueAgentMessageOptions<OUTPUT>,
   ): QueueAgentMessageResult<OUTPUT> {
+    assertRequestContextResourceMatches({
+      requestContext: target.requestContext,
+      resourceId: target.resourceId,
+      threadId: target.threadId,
+      agentName: this.name,
+    });
     return agentThreadStreamRuntime.queueMessage<OUTPUT>(
       this.#getThreadRuntimeAgent(),
       message,
@@ -9016,6 +9029,12 @@ export class Agent<
     state: AgentStateSignalInput,
     target: SendAgentStateSignalOptions<OUTPUT>,
   ): Promise<SendAgentStateSignalResult<OUTPUT>> {
+    assertRequestContextResourceMatches({
+      requestContext: target.requestContext,
+      resourceId: target.resourceId,
+      threadId: target.threadId,
+      agentName: this.name,
+    });
     return agentThreadStreamRuntime.sendStateSignal<OUTPUT>(
       this.#getThreadRuntimeAgent(),
       state,
@@ -9065,6 +9084,12 @@ export class Agent<
     inputs: SendNotificationSignalInput[],
     target: SendAgentNotificationSignalOptions<OUTPUT>,
   ): Promise<SendAgentNotificationSignalResult<OUTPUT>[]> {
+    assertRequestContextResourceMatches({
+      requestContext: target.requestContext,
+      resourceId: target.resourceId,
+      threadId: target.threadId,
+      agentName: this.name,
+    });
     const notifications = await this.#mastra?.getStorage()?.getStore('notifications');
     if (!notifications) {
       throw new Error('sendNotificationSignal requires a notifications storage domain');
@@ -9294,6 +9319,12 @@ export class Agent<
     signal: AgentSignal,
     target: SendAgentSignalOptions<OUTPUT>,
   ): SendAgentSignalResult<OUTPUT> {
+    assertRequestContextResourceMatches({
+      requestContext: target.requestContext,
+      resourceId: target.resourceId,
+      threadId: target.threadId,
+      agentName: this.name,
+    });
     return agentThreadStreamRuntime.sendSignal<OUTPUT>(this.#getThreadRuntimeAgent(), signal, target, this.getPubSub());
   }
 

@@ -14,6 +14,7 @@ import type { ChunkType, ThreadHistoryChunk } from '../stream/types';
 import { readPositiveIntEnv } from '../utils';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
+import { assertRequestContextResourceMatches } from './memory-thread-ownership';
 import type { MessageListInput } from './message-list';
 import { createRecentRequests } from './recent-requests';
 import { createMessageSignal, createSignal, resolveDeliveryAttributes } from './signals';
@@ -4763,6 +4764,12 @@ export class AgentThreadStreamRuntime {
     if (!resourceId || !threadId) {
       throw new Error('resourceId and threadId are required to queue a message');
     }
+    assertRequestContextResourceMatches({
+      requestContext: target.requestContext,
+      resourceId,
+      threadId,
+      agentName: agent.name,
+    });
 
     key ??= this.#threadKey(resourceId, threadId);
     const signal = createMessageSignal(message, {
@@ -4821,6 +4828,12 @@ export class AgentThreadStreamRuntime {
     }
     const resourceId = target.resourceId;
     const threadId = target.threadId;
+    assertRequestContextResourceMatches({
+      requestContext: target.requestContext,
+      resourceId,
+      threadId,
+      agentName: agent.name,
+    });
 
     const requestContext = resolveSignalRequestContext(target);
     const memoryContext = parseMemoryRequestContext(requestContext);
@@ -4924,6 +4937,12 @@ export class AgentThreadStreamRuntime {
     if (!resourceId || !threadId) {
       throw new Error('No active agent run found for signal target');
     }
+    assertRequestContextResourceMatches({
+      requestContext: target.requestContext,
+      resourceId,
+      threadId,
+      agentName: agent.name,
+    });
 
     const isActiveTarget = Boolean(
       runId && (activeRecord?.output.status === 'running' || (key && state.activeThreadRunIds.get(key) === runId)),
