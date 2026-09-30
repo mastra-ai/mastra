@@ -19,6 +19,9 @@
  * and the storage domains those capabilities require.
  */
 
+import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
@@ -129,6 +132,12 @@ import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js
 import type { FactorySandboxStart } from './workspace.js';
 
 type BuildApiRoutesDeps = Pick<FactoryApiRoutesDeps, 'controller' | 'authStorage'>;
+
+// Hosted Factory configuration lives in tenant-scoped storage. Give the SDK a
+// deliberately absent, process-unique settings file so it uses clean defaults
+// instead of reading the host user's global MastraCode settings. The SDK then
+// layers each project's model, memory, and model-pack rows onto every session.
+const FACTORY_ISOLATED_SETTINGS_PATH = join(tmpdir(), 'mastra-factory-settings', randomUUID(), 'settings.json');
 
 /** Constructor args for the `new Mastra(...)` literal in the deploy entry. */
 export type MastraArgs = NonNullable<ConstructorParameters<typeof Mastra>[0]>;
@@ -930,6 +939,7 @@ export class MastraFactory {
         includeCommitCoAuthorGuidance: false,
         pullRequestGuidance:
           'Create or update pull requests and merge requests only with source_control_create_change_request and source_control_update_change_request. Push the session branch first with source_control_push_branch. Do not use a provider CLI to create or update a change request.',
+        settingsPath: FACTORY_ISOLATED_SETTINGS_PATH,
         // A wake (notification or peer signal) has no signed-in request, so
         // tenant credential resolution would fail closed. Run it as the Factory
         // session's owner in its org; Factory sessions are keyed by resourceId.
@@ -938,7 +948,8 @@ export class MastraFactory {
           await prepareSessionRunContext(requestContext, resourceId, { sessions: sourceControlSessions });
         },
         // Memory settings live in the factory's `memory-settings` app table (per
-        // org/user), so the host machine's TUI settings.json must not seed them.
+        // org/user), so neither the isolated SDK defaults nor the host machine's
+        // TUI settings.json may seed them.
         disableSettingsOmSeed: true,
         hostInstructions: async ({ requestContext }) => {
           const context = requestContext.get('controller') as
