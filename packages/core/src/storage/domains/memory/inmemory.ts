@@ -1,6 +1,8 @@
 import { MessageList } from '../../../agent/message-list';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
 import { normalizePerPage, calculatePagination } from '../../base';
+import { matchesRunFence, RunFenceConflictError } from '../../run-fencing';
+import type { ReleaseRunOwnershipInput, RunFence } from '../../run-fencing';
 import type {
   StorageMessageType,
   StorageResourceType,
@@ -53,6 +55,40 @@ export class InMemoryMemory extends MemoryStorage {
     this.db.messages.clear();
     this.db.resources.clear();
     this.db.observationalMemory.clear();
+    this.db.runFences.clear();
+  }
+
+  // Fence checks and the writes they guard run without awaiting in between,
+  // which makes each fenced write atomic on the single JS thread.
+
+  supportsRunFencing(): boolean {
+    return true;
+  }
+
+  private assertFence(fence: RunFence | undefined, operation: string): void {
+    if (fence && !matchesRunFence(this.db.runFences.get(fence.runId), fence)) {
+      throw new RunFenceConflictError(fence, operation);
+    }
+  }
+
+  async raiseRunFence(fence: RunFence): Promise<boolean> {
+    const current = this.db.runFences.get(fence.runId);
+    if (!current || current.generation < fence.generation) {
+      this.db.runFences.set(fence.runId, { generation: fence.generation, ownerId: fence.ownerId });
+      return true;
+    }
+    return matchesRunFence(current, fence);
+  }
+
+  async releaseRunFence({ remove, ...fence }: ReleaseRunOwnershipInput): Promise<boolean> {
+    const current = this.db.runFences.get(fence.runId);
+    if (!current || !matchesRunFence(current, fence)) return false;
+    if (remove) {
+      this.db.runFences.delete(fence.runId);
+    } else {
+      current.ownerId = null;
+    }
+    return true;
   }
 
   async getThreadById({
@@ -67,7 +103,8 @@ export class InMemoryMemory extends MemoryStorage {
     return { ...thread, metadata: thread.metadata ? { ...thread.metadata } : thread.metadata };
   }
 
-  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
+  async saveThread({ thread, fence }: { thread: StorageThreadType; fence?: RunFence }): Promise<StorageThreadType> {
+    this.assertFence(fence, 'saveThread');
     const key = thread.id;
     this.db.threads.set(key, thread);
     return thread;
@@ -77,11 +114,14 @@ export class InMemoryMemory extends MemoryStorage {
     id,
     title,
     metadata,
+    fence,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageThreadType> {
+    this.assertFence(fence, 'updateThread');
     const thread = this.db.threads.get(id);
 
     if (!thread) {
@@ -415,8 +455,12 @@ export class InMemoryMemory extends MemoryStorage {
     return { messages: list.get.all.db() };
   }
 
-  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
+  async saveMessages(args: {
+    messages: MastraDBMessage[];
+    fence?: RunFence;
+  }): Promise<{ messages: MastraDBMessage[] }> {
     const { messages } = args;
+    this.assertFence(args.fence, 'saveMessages');
     // Simulate error handling for testing - check before saving
     if (messages.some(msg => msg.id === 'error-message' || msg.resourceId === null)) {
       throw new Error('Simulated error for testing');
@@ -450,7 +494,11 @@ export class InMemoryMemory extends MemoryStorage {
     return { messages: list.get.all.db() };
   }
 
-  async updateMessages(args: { messages: (Partial<MastraDBMessage> & { id: string })[] }): Promise<MastraDBMessage[]> {
+  async updateMessages(args: {
+    messages: (Partial<MastraDBMessage> & { id: string })[];
+    fence?: RunFence;
+  }): Promise<MastraDBMessage[]> {
+    this.assertFence(args.fence, 'updateMessages');
     const updatedMessages: MastraDBMessage[] = [];
     for (const update of args.messages) {
       const storageMsg = this.db.messages.get(update.id);
@@ -529,7 +577,8 @@ export class InMemoryMemory extends MemoryStorage {
     return updatedMessages;
   }
 
-  async deleteMessages(messageIds: string[]): Promise<void> {
+  async deleteMessages(messageIds: string[], options?: { fence?: RunFence }): Promise<void> {
+    this.assertFence(options?.fence, 'deleteMessages');
     if (!messageIds || messageIds.length === 0) {
       return;
     }
@@ -618,11 +667,14 @@ export class InMemoryMemory extends MemoryStorage {
     resourceId,
     workingMemory,
     metadata,
+    fence,
   }: {
     resourceId: string;
     workingMemory?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageResourceType> {
+    this.assertFence(fence, 'updateResource');
     let resource = this.db.resources.get(resourceId);
 
     if (!resource) {
