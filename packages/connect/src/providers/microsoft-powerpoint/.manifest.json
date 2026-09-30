@@ -1,0 +1,35 @@
+{
+  "providerId": "microsoft-powerpoint-oauth2-cc",
+  "localId": "microsoft-powerpoint",
+  "templateSha": "bb789a55bfcf744b3c83aa9132e4ffa562106aa3",
+  "templateRepo": "NangoHQ/integration-templates",
+  "generatedAt": "2026-09-30T14:24:55.174Z",
+  "toolCount": 17,
+  "skippedActions": [
+    {
+      "action": "list-presentation-permissions",
+      "reason": "exec does not call the provider proxy"
+    }
+  ],
+  "files": {
+    "index.ts": "1c62443777214e15f30c008401b7e3c7490dcd04b8cc2e6da125b7454c6bef28",
+    "tools.ts": "fa99c8b7c46dcb0be7ddfa57d2dececdd79cad647b06228c968935678fd114e7",
+    "tools/copy-presentation.ts": "8e6408fe803eee50117eb4309269b93f532097424a7868db175ee13cb9f1ea05",
+    "tools/create-presentation.ts": "f1a0e98dd92aa65702043ee7a4bdd0aeb66cebeaab93000ed699b956b2f365e4",
+    "tools/create-sharing-link.ts": "a2f8671c72d7a8e373bc7a77149f4f8d9845276eebbe7de549127e9e7dfa2a7d",
+    "tools/delete-presentation.ts": "fe1cfc64e929cfbacb22149f3c863a6faa59c8ce8d7f8607318b5debadbe627d",
+    "tools/get-presentation-as-pdf.ts": "328a2288567d0fe3f2b75284af8260704f8f0b55a93a437e47d94d99aa3f1947",
+    "tools/get-presentation-content.ts": "b4742b71541e185f718aa2b6b32e14e248d2a10acfd711613f868d616263cd6d",
+    "tools/get-presentation.ts": "eb9d6641c4fa33f568a790300503a5d5c58f10e3f68105b27ad7e884172c77ba",
+    "tools/get-site-drive.ts": "05311fa205fd14cf5ccdd13bd0807b5d1ccc46c9f2090f3fe45b434a08af1825",
+    "tools/get-user-drive.ts": "91e192498da96e7b6a70802309b2d9bb8858e035d9e1687ba3d1720614f5e830",
+    "tools/list-presentation-thumbnails.ts": "eacaa70061ba54cc145f88aecde44756e5ef32668895c248cc4b1d94ff807ed4",
+    "tools/list-presentation-versions.ts": "71e33d321f114f2a105f5af5644f4f20fb9880249e087c04137e7cab68acb5a5",
+    "tools/list-presentations.ts": "4354a51cd87a25ad195f31a2abd94259c055976e39b9592ba8a72f4e012da0f7",
+    "tools/list-sites.ts": "ac200f336aba13c4606b6e786cbcc44be0674248ca007f0d42d0c585aef02e88",
+    "tools/list-users.ts": "290ced8f910bdff040c29952dfc5303c99aea785588ae5f154009b929ac96278",
+    "tools/move-presentation.ts": "83a9569a3d9c1ea118f682a4ffe603a50e25871ee7a886ae4c9fa007c7d5ebbb",
+    "tools/update-presentation-content.ts": "08920f6e1f13a8b62fc4ef6de594e9b53ca13da90784ee33f39b53d67f2b6113",
+    "tools/update-presentation-metadata.ts": "6b85825528f3dfdf9a4bed54d2db1039b22b4c809baaee95288df2b964de5685"
+  }
+}

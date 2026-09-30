@@ -1,0 +1,44 @@
+{
+  "providerId": "microsoft-excel-oauth2-cc",
+  "localId": "microsoft-excel",
+  "templateSha": "bb789a55bfcf744b3c83aa9132e4ffa562106aa3",
+  "templateRepo": "NangoHQ/integration-templates",
+  "generatedAt": "2026-09-30T14:24:52.976Z",
+  "toolCount": 26,
+  "skippedActions": [
+    {
+      "action": "list-worksheets",
+      "reason": "exec uses unsupported template SDK helpers: paginate"
+    }
+  ],
+  "files": {
+    "index.ts": "f2cee2fa6267036ddf959b7fffc938d69bf596646f732e258696f112010c410b",
+    "tools.ts": "f156dc8effc7da70a09ebb98de96b1aea657d3177809de8aefde10874af8bb66",
+    "tools/add-chart.ts": "6b1328c4b07032c764eaba8e1e68bb12d5f4a11eb692a15d00926a130cbe6e85",
+    "tools/add-defined-name.ts": "6078798825783319046bd4956369f010c5f0ea5aa7639c6e15d383c4076627a2",
+    "tools/add-table-rows.ts": "819a972b6e788dfceeb54174a212ffde3e6aa8eea074a9dc9d693e1f7e5afab9",
+    "tools/add-table.ts": "94e9d507b9a839e74886619636905d54ac5b800842bfbf367c5b09679a9516a6",
+    "tools/add-worksheet.ts": "5c85b1e45a33548ffeea912fec1d56f53a971b859a3b6f9298d9a6f5188692db",
+    "tools/calculate-workbook.ts": "ce779a5042dc49bc18f11413e9d400d5ca5e82caf749ce9909ebac6138f60319",
+    "tools/create-workbook.ts": "91fd0ae9ba50e821a42f0cbc2293ef511ee1ed2aa2eb798b0a854910f639045b",
+    "tools/delete-defined-name.ts": "1aa68b49b4e0197ffed33993fd5e5019d12925d7c80de511f146a11f3575147d",
+    "tools/delete-table.ts": "2b104ae73fd64ece92ac6329b26fafb2674fd0bfb6af59b8b49f0bff6b5106f0",
+    "tools/delete-workbook.ts": "bc5f2b380da6c3770a82cf2389c5932c24b14b4a8e83403aa6cfd931f0f28e42",
+    "tools/delete-worksheet.ts": "5778113d53a3408f1109622257c4c69bb4aa3bf1c54eb5bd77b6c6af1bb05a2b",
+    "tools/get-chart-image.ts": "ad05f32874a49a5517145b2926df76bd9d58f9d34f6fb5a07a0eb9a4bc6c1ef9",
+    "tools/get-range.ts": "cd21b20a95111e79c8dc8c5195fa55753936c48fdbf9719100d3c7bcbfd91cf5",
+    "tools/get-site-drive.ts": "e56936d997f9ec79647429ef9b4e511475d4ed2a9c4d5b850ad27a77538fde0f",
+    "tools/get-used-range.ts": "f2d11e8bd73b573d254da96f58ae64db723fe98897b6706dbe414eb7545f9137",
+    "tools/get-user-drive.ts": "3650c090f78d3ae0579c584519f567e48be1374b362f6d0744547d016c3649cc",
+    "tools/get-workbook.ts": "5badf4f50d4b463dc25cdf22b5b2ae21b7737a29bef0133f55360f50714f7709",
+    "tools/list-defined-names.ts": "2232f1fb47dad870ce093904473be4849865a39c77b8d34468d73439be479fe0",
+    "tools/list-sites.ts": "28129f4a4e536d789ae4c70af6c884b5cc3e5d2a298866ef74d1a035fc2b1e52",
+    "tools/list-table-columns.ts": "f1d47497f6c1b6daa2f7bcdf1d167c85f59d83d877f027d159d5e0475ae0375f",
+    "tools/list-table-rows.ts": "5f8289bf572796dd8bcdb76d5c0937d245f4bc5c1047ad42dd7381411262113a",
+    "tools/list-tables.ts": "18f671239f24d525448c2de18b611ae0989c1abfe580fd499effed321ef4cd4f",
+    "tools/list-users.ts": "63cda3922501119f98f6886ec6d244f025ce68c0819f52b75d6f1c185f34c224",
+    "tools/list-workbooks.ts": "11e2adb285fc8dd37f4353363d2eaa90aae9e4298891b0cc3c84c54da68a5455",
+    "tools/update-range.ts": "a7611e3dbc02141b1b0cf41961cd3662f3b5184624d7e098066850f3611eed02",
+    "tools/update-worksheet.ts": "47d8baf8e1b8211d03b02d206bf80f08a6a31540d4b401abfb583035579e2d3f"
+  }
+}
