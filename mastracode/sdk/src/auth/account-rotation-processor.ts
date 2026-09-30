@@ -602,7 +602,10 @@ async function applyPreferredAccountRoute(
   // became the provider's active credential.
   const activated = store.activateAccount ? store.activateAccount(route.providerId, selected.id) : selected;
   if (!activated) {
-    markRequestAccountRoutingExhausted(args.requestContext, route.providerId);
+    // Only a targeted route is out of options here. The exhausted marker is
+    // request-wide and fails every credential read closed, so setting it for
+    // `Automatic` would stop error recovery from retrying on a survivor.
+    if (preferredId !== undefined) markRequestAccountRoutingExhausted(args.requestContext, route.providerId);
     return false;
   }
   setRequestAccountSelection(args.requestContext, route.providerId, activated.id);

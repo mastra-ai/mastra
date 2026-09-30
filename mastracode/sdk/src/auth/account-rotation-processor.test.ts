@@ -749,6 +749,37 @@ describe('AccountStartNoticeProcessor.processInput', () => {
     expect(emitEvent).not.toHaveBeenCalled();
   });
 
+  it('lets error recovery reach a survivor when an automatic route loses its account during activation', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const accountC = await addThirdAccount(seeded.storage);
+    seeded.storage.activateAccount(PROVIDER, seeded.accountA.id);
+    const { settingsPath, requestContext, emitEvent } = makeSharedFileRoute(seeded);
+    const activate = seeded.storage.activateAccount.bind(seeded.storage);
+    vi.spyOn(seeded.storage, 'activateAccount').mockImplementation((providerId, accountId) => {
+      if (accountId === seeded.accountB.id) new AuthStorage(seeded.authPath).removeAccount(PROVIDER, accountId);
+      return activate(providerId, accountId);
+    });
+    const state: Record<string, unknown> = { triedInstances: new Set([seeded.accountA.id]) };
+    const input = makeInputArgs({ requestContext, state });
+    await new AccountStartNoticeProcessor({ credentialStore: seeded.storage, settingsPath }).processInput(
+      input as never,
+    );
+    expect(isRequestAccountRoutingExhausted(requestContext, PROVIDER)).toBe(false);
+    expect(input.writer.custom).not.toHaveBeenCalled();
+    expect(emitEvent).not.toHaveBeenCalled();
+
+    const processor = new AccountRotationProcessor({
+      credentialStore: seeded.storage,
+      settingsPath,
+      maxProcessorRetries: 22,
+    });
+    const args = makeArgs({ requestContext, state, error: apiError(429) });
+    expect(await processor.processAPIError(args as never)).toEqual({ retry: true });
+    expect(getRequestAccountSelection(requestContext, PROVIDER)).toBe(accountC.id);
+    const gateway = createRequestScopedCredentialStore(new AuthStorage(seeded.authPath), requestContext);
+    expect(await gateway.getOAuthCredential?.(PROVIDER)).toMatchObject({ access: 'token-c' });
+  });
+
   it('silently applies an explicit account on every turn, whether switching or already active', async () => {
     const seeded = await makeTwoAccountStorage();
     for (let turn = 0; turn < 2; turn++) {
