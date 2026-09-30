@@ -1632,7 +1632,11 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
 
         const pushMetadata = !hasMetadataFilter || this.canPushDownFilter(metadataFilter, declaredPaths);
         const pushDocument =
-          !documentFilterExpr || (!autoEmbed && (!verifyDocumentPath || declaredPaths.has(documentTextField)));
+          !documentFilterExpr ||
+          (!autoEmbed &&
+            (!verifyDocumentPath || declaredPaths.has(documentTextField)) &&
+            // Operators like $regex are not accepted inside $vectorSearch.filter
+            this.canPushDownFilter(documentFilter, new Set()));
         const pushed: Document[] = [
           ...(hasMetadataFilter && pushMetadata ? [metadataFilter] : []),
           ...(documentFilterExpr && pushDocument ? [documentFilterExpr] : []),
