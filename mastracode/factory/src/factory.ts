@@ -53,6 +53,7 @@ import {
   resolveFactoryPullRequestParentWorkItemId,
 } from './integrations/github/provenance.js';
 import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.js';
+import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
 import { buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
 import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
@@ -1238,6 +1239,13 @@ export class MastraFactory {
                     memorySettings: memorySettingsStorage,
                   }),
                 feedReader: new FactoryFeedReader(workItemCommentsStorage),
+                ...(githubIntegration
+                  ? {
+                      dismissStaleReviews: async decision => {
+                        await dismissStaleFactoryReviews(githubIntegration.versionControl, decision);
+                      },
+                    }
+                  : {}),
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
                 resolveLinkedWorkItemParentId: async ({ orgId, factoryProjectId, decision }) => {
                   if (decision.source !== 'github-pr') return null;

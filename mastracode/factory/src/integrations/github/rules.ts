@@ -553,7 +553,7 @@ export class GithubRules {
         event,
         deliveryId: parsed.deliveryId,
         factory: { createdAt: factoryProject.createdAt.toISOString() },
-        repository: { id: repositoryId, fullName: repositoryName },
+        repository: { id: repositoryId, fullName: repositoryName, installationId },
         ...(issueNumber && string(issue?.title) && string(issue?.html_url)
           ? {
               issue: {
@@ -626,6 +626,12 @@ export class GithubRules {
                 id: number(object(parsed.payload.review)?.id) ?? 0,
                 state: string(object(parsed.payload.review)?.state) ?? 'unknown',
                 url: string(object(parsed.payload.review)?.html_url) ?? '',
+                ...(string(object(object(parsed.payload.review)?.user)?.login)
+                  ? { author: string(object(object(parsed.payload.review)?.user)?.login) }
+                  : {}),
+                ...(string(object(parsed.payload.review)?.body)
+                  ? { body: string(object(parsed.payload.review)?.body) }
+                  : {}),
               },
             }
           : {}),
