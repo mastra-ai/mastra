@@ -34,6 +34,8 @@ export default createTransformer((_fileInfo, _api, _options, context) => {
   // Early return if no instances found
   if (agentInstances.size === 0) return;
 
+  let conflicts = 0;
+
   // Single pass: Find and transform agent method calls
   root.find(j.CallExpression).forEach(path => {
     const { callee } = path.value;
@@ -71,6 +73,19 @@ export default createTransformer((_fileInfo, _api, _options, context) => {
     if (!modelSettingsProp || modelSettingsProp.value?.type !== 'ObjectExpression') return;
     if (modelSettingsIndex === -1) return;
 
+    // A top-level abortSignal already exists; promoting the nested one would create a duplicate key
+    // and silently change which signal wins, so leave the call for the user to resolve.
+    const hasTopLevelAbortSignal = optionsArg.properties.some(
+      prop =>
+        (prop.type === 'Property' || prop.type === 'ObjectProperty') &&
+        prop.key?.type === 'Identifier' &&
+        prop.key.name === 'abortSignal',
+    );
+    if (hasTopLevelAbortSignal) {
+      conflicts++;
+      return;
+    }
+
     const modelSettingsValue = modelSettingsProp.value as ObjectExpression;
 
     // Find abortSignal property inside modelSettings
@@ -104,6 +119,12 @@ export default createTransformer((_fileInfo, _api, _options, context) => {
     optionsArg.properties = newProperties;
     context.hasChanges = true;
   });
+
+  if (conflicts > 0) {
+    context.messages.push(
+      `Skipped ${conflicts} agent call(s) that set abortSignal both at the top level and in modelSettings; remove one manually`,
+    );
+  }
 
   if (context.hasChanges) {
     context.messages.push('Moved abortSignal from modelSettings to top-level options in agent method calls');
