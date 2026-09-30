@@ -10195,6 +10195,7 @@ export class Agent<
     }
 
     let runId = executionOptions.runId ?? this.getActiveThreadRunId({ threadId, resourceId });
+    let suspendedRun: AgentRun | undefined;
     // Tracks whether runId was recovered from storage (not the in-memory active-run
     // map). This path resumes directly because the snapshot has already been
     // discovered here, avoiding a second storage lookup in sendStreamResume().
@@ -10237,7 +10238,8 @@ export class Agent<
         });
       }
 
-      runId = matchingRuns[0]?.runId;
+      suspendedRun = matchingRuns[0];
+      runId = suspendedRun?.runId;
       resolvedFromStorage = runId !== undefined;
     }
 
@@ -10257,6 +10259,30 @@ export class Agent<
       });
     }
 
+    const pubsub = this.getPubSub();
+    const inMemorySuspension = agentThreadStreamRuntime.getResumableThreadRunSuspension(
+      { threadId, resourceId, runId, toolCallId: options.toolCallId },
+      pubsub,
+    );
+
+    if (!suspendedRun && !inMemorySuspension) {
+      try {
+        const { runs } = await this.listSuspendedRuns({ threadId, resourceId });
+        suspendedRun = runs.find(run => run.runId === runId);
+      } catch (error) {
+        if (!(error instanceof MastraError) || error.id !== 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') {
+          throw error;
+        }
+      }
+    }
+
+    const suspendedToolCall = options.toolCallId
+      ? suspendedRun?.toolCalls.find(toolCall => toolCall.toolCallId === options.toolCallId)
+      : suspendedRun?.toolCalls[0];
+    const approvalGated = inMemorySuspension
+      ? inMemorySuspension.kind === 'approval'
+      : suspendedToolCall?.requiresApproval === true;
+
     const resumeOptions = deepMerge(
       (streamOptions ?? {}) as Record<string, unknown>,
       executionOptions as Record<string, unknown>,
@@ -10264,7 +10290,12 @@ export class Agent<
 
     const resumeData =
       customResumeData !== undefined
-        ? customResumeData
+        ? approvalGated &&
+          typeof customResumeData === 'object' &&
+          customResumeData !== null &&
+          !Array.isArray(customResumeData)
+          ? { ...customResumeData, approved }
+          : customResumeData
         : approved
           ? { approved }
           : declineContext

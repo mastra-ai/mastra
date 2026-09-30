@@ -365,7 +365,26 @@ describe('Resume API', () => {
       expect(resumeSpy).toHaveBeenCalledWith('decline-run', { approved: false }, expect.objectContaining({ memory }));
     });
 
-    it('forwards storage-backed approval options into the durable resume path', async () => {
+    it.each([
+      {
+        name: 'merges an approval into custom data for an approval suspension',
+        approved: true,
+        requiresApproval: true,
+        expectedResumeData: { approved: true, note: 'hello' },
+      },
+      {
+        name: 'merges a decline into custom data for an approval suspension',
+        approved: false,
+        requiresApproval: true,
+        expectedResumeData: { approved: false, note: 'hello' },
+      },
+      {
+        name: 'leaves custom data unchanged for an ordinary tool suspension',
+        approved: true,
+        requiresApproval: false,
+        expectedResumeData: { note: 'hello' },
+      },
+    ])('$name', async ({ approved, requiresApproval, expectedResumeData }) => {
       const baseAgent = new Agent({
         id: 'stored-approval-options-agent',
         name: 'Stored Approval Options Agent',
@@ -386,7 +405,7 @@ describe('Resume API', () => {
             threadId: memory.thread,
             resourceId: memory.resource,
             suspendedAt: new Date(0),
-            toolCalls: [{ toolCallId, requiresApproval: true }],
+            toolCalls: [{ toolCallId, requiresApproval }],
           },
         ],
         total: 1,
@@ -396,7 +415,8 @@ describe('Resume API', () => {
         threadId: memory.thread,
         resourceId: memory.resource,
         toolCallId,
-        approved: true,
+        approved,
+        resumeData: { note: 'hello' },
         memory,
       });
 
@@ -405,7 +425,7 @@ describe('Resume API', () => {
         resourceId: memory.resource,
       });
       expect(result).toEqual({ accepted: true, runId, toolCallId });
-      expect(resumeSpy).toHaveBeenCalledWith(runId, { approved: true }, expect.objectContaining({ memory }));
+      expect(resumeSpy).toHaveBeenCalledWith(runId, expectedResumeData, expect.objectContaining({ memory }));
     });
 
     it('should preserve threadId and resourceId from prepare through resume', async () => {
