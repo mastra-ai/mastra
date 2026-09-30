@@ -5330,13 +5330,13 @@ export class Run<
 
     let inputDataToUse = inputData;
 
-    if (inputDataToUse && steps.length === 1) {
+    if (steps.length === 1) {
       const step = this.workflowSteps[steps[0]!]!;
       // Only top-level foreach entries are detected; foreach nested in parallel/conditional is out of scope.
       const isForeachEntry = this.executionGraph.steps.some(
         entry => entry.type === 'foreach' && getSingleStepEntryId(entry.step) === steps[0],
       );
-      if (isForeachEntry && this.validateInputs && step?.inputSchema) {
+      if (isForeachEntry && this.validateInputs && inputData !== undefined) {
         if (!Array.isArray(inputData)) {
           throw new MastraError({
             category: ErrorCategory.USER,
@@ -5346,10 +5346,12 @@ export class Run<
             details: { type: 'inputData' },
           });
         }
-        inputDataToUse = (await Promise.all(
-          inputData.map(item => this._validateTimetravelInputData(item, step)),
-        )) as typeof inputData;
-      } else {
+        if (step?.inputSchema) {
+          inputDataToUse = (await Promise.all(
+            inputData.map(item => this._validateTimetravelInputData(item, step)),
+          )) as typeof inputData;
+        }
+      } else if (inputDataToUse) {
         inputDataToUse = await this._validateTimetravelInputData(inputData, step);
       }
     }

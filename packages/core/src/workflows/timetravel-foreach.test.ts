@@ -52,6 +52,13 @@ describe('timeTravel into foreach step', () => {
     );
   });
 
+  it.each([null, false, 0, ''])('rejects falsy non-array input %j', async value => {
+    const run = await setup().createRun();
+    await expect(run.timeTravel({ step: 'double', inputData: value as any })).rejects.toThrow(
+      /Expected an array for foreach step/,
+    );
+  });
+
   it('still validates non-foreach steps against their schema', async () => {
     const run = await setup().createRun();
     await expect(run.timeTravel({ step: 'plain', inputData: [{ n: 1 }] as any })).rejects.toThrow(/Invalid inputData/);
