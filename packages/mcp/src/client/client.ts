@@ -174,6 +174,39 @@ function canonicalJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function jsonPointerToPath(pointer: string): Array<PropertyKey> {
+  const normalizedPointer = pointer.startsWith('#') ? pointer.slice(1) : pointer;
+  if (!normalizedPointer) return [];
+  return normalizedPointer
+    .slice(1)
+    .split('/')
+    .map(segment => {
+      const decoded = segment.replace(/~1/g, '/').replace(/~0/g, '~');
+      const index = Number(decoded);
+      return Number.isInteger(index) && String(index) === decoded ? index : decoded;
+    });
+}
+
+function jsonSchemaValidationIssues(errorMessage: string): Array<{ message: string; path?: Array<PropertyKey> }> {
+  const errors = errorMessage.includes('; ')
+    ? errorMessage.split(/; (?=#?(?:\/|:))/)
+    : errorMessage.split(/, (?=data(?:\/| ))/);
+
+  return errors.map(error => {
+    const cfWorkerError = error.match(/^([^:]*):\s*(.+)$/);
+    if (cfWorkerError) {
+      return { message: cfWorkerError[2]!, path: jsonPointerToPath(cfWorkerError[1]!) };
+    }
+
+    const ajvError = error.match(/^data((?:\/\S+)*)\s+(.+)$/);
+    if (ajvError) {
+      return { message: ajvError[2]!, path: jsonPointerToPath(ajvError[1]!) };
+    }
+
+    return { message: error };
+  });
+}
+
 const DEFAULT_INSTRUCTIONS_MAX_LENGTH = 512;
 const DEFAULT_SERVER_LOG_LEVEL: LoggingLevel = 'info';
 
@@ -1319,7 +1352,7 @@ export class InternalMastraMCPClient extends MastraBase {
             const result = this.getInputSchemaValidator(schema)(value);
             return result.valid
               ? { value: result.data }
-              : { issues: [{ message: result.errorMessage || 'JSON Schema validation failed' }] };
+              : { issues: jsonSchemaValidationIssues(result.errorMessage || 'JSON Schema validation failed') };
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             return { issues: [{ message: `Schema validation error: ${message}` }] };

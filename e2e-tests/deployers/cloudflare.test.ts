@@ -69,7 +69,9 @@ describe.for([['pnpm'] as const])(`%s cloudflare deployer`, ([pkgManager]) => {
 
       expect(invalidType.status).toBe(400);
       expect(unexpectedProperty.status).toBe(400);
-      expect(await invalidType.json()).toMatchObject({ valid: false, issues: expect.any(Array) });
+      const invalidTypeBody = (await invalidType.json()) as { valid: boolean; issues: Array<{ path?: PropertyKey[] }> };
+      expect(invalidTypeBody.valid).toBe(false);
+      expect(invalidTypeBody.issues).toEqual(expect.arrayContaining([expect.objectContaining({ path: ['city'] })]));
       expect(await unexpectedProperty.json()).toMatchObject({ valid: false, issues: expect.any(Array) });
     });
   }

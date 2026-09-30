@@ -282,7 +282,10 @@ describe('InternalMastraMCPClient - jsonSchemaValidator pass-through', () => {
       if (typeof input === 'object' && input !== null && 'city' in input && typeof input.city === 'string') {
         return { valid: true as const, data: input };
       }
-      return { valid: false as const, errorMessage: 'city must be a string' };
+      return {
+        valid: false as const,
+        errorMessage: '#: Property "city" does not match schema.; #/city: Instance type "number" is invalid.',
+      };
     });
     const customValidator = { getValidator: vi.fn(() => validate) };
     const client = new InternalMastraMCPClient({
@@ -313,7 +316,10 @@ describe('InternalMastraMCPClient - jsonSchemaValidator pass-through', () => {
       value: { city: 'Leiden' },
     });
     await expect(Promise.resolve(tool.inputSchema?.['~standard'].validate({ city: 42 }))).resolves.toEqual({
-      issues: [{ message: 'city must be a string' }],
+      issues: [
+        { message: 'Property "city" does not match schema.', path: [] },
+        { message: 'Instance type "number" is invalid.', path: ['city'] },
+      ],
     });
     expect(customValidator.getValidator).toHaveBeenCalledOnce();
     expect(customValidator.getValidator).toHaveBeenCalledWith({
@@ -322,6 +328,28 @@ describe('InternalMastraMCPClient - jsonSchemaValidator pass-through', () => {
       properties: { city: { type: 'string' } },
       required: ['city'],
       additionalProperties: false,
+    });
+  });
+
+  it('should preserve input validation paths from the default validator', async () => {
+    const client = new InternalMastraMCPClient({
+      name: 'input-validator-path-client',
+      server: { url: new URL('http://127.0.0.1:0/mcp') },
+    });
+    const tool = client.toolFromDefinition({
+      definition: {
+        name: 'weather',
+        inputSchema: {
+          type: 'object',
+          properties: { cities: { type: 'array', items: { type: 'string' } } },
+          required: ['cities'],
+        },
+        server: { name: 'input-validator-path-client' },
+      },
+    });
+
+    await expect(Promise.resolve(tool.inputSchema?.['~standard'].validate({ cities: [42] }))).resolves.toEqual({
+      issues: [{ message: 'must be string', path: ['cities', 0] }],
     });
   });
 
