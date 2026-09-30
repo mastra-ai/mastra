@@ -96,4 +96,15 @@ describe('MemoryStorage.patchThread legacy-adapter compatibility', () => {
     expect(storage.updateThreadCalls[0]!.title).toBe('New title');
     expect(updated.title).toBe('New title');
   });
+
+  it('forwards archivedAt alongside the backfilled fields on legacy adapters', async () => {
+    const storage = new LegacyMemoryStorage({ db: new InMemoryDB() });
+    await storage.saveThread({ thread: createThread() });
+    const archivedAt = new Date('2026-01-01T00:00:00Z');
+
+    const updated = await storage.patchThread({ id: 'thread-1', archivedAt });
+
+    expect(storage.updateThreadCalls[0]).toMatchObject({ title: 'Generated title', metadata: { a: 1 }, archivedAt });
+    expect(updated.archivedAt).toEqual(archivedAt);
+  });
 });
