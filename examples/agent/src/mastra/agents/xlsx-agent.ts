@@ -9,7 +9,7 @@ const workspace = new Workspace({
     id: 'xlsx-agent-example',
     apiKey: process.env.E2B_API_KEY,
   }),
-  // Install a spreadsheet skill here, e.g. `npx skills add anthropics/skills --skill xlsx`.
+  // Ships a minimal `xlsx` reader skill. For a fuller one: `npx skills add anthropics/skills --skill xlsx`.
   skills: ['workspace/.agents/skills'],
 });
 
