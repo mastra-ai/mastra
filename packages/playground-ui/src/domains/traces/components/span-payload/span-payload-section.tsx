@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { SpanPayloadCollapsible } from './span-payload-collapsible';
 import { SpanPayloadJson } from './span-payload-json';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
@@ -83,7 +84,7 @@ export function SpanPayloadSection({
           {hasRich && <ViewToggle view={view} onChange={setView} />}
         </div>
       </div>
-      <div className="min-w-0">{showJson ? <SpanPayloadJson value={raw} /> : children}</div>
+      <SpanPayloadCollapsible>{showJson ? <SpanPayloadJson value={raw} /> : children}</SpanPayloadCollapsible>
     </div>
   );
 }
