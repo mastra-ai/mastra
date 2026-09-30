@@ -684,6 +684,7 @@ export const environmentRoute = registerApiRoute('/environment', {
         expect.objectContaining({
           '@mastra/core': expect.any(String),
           '@mastra/mcp': expect.any(String),
+          ajv: expect.any(String),
           zod: expect.any(String),
           bcrypt: expect.any(String),
           typescript: expect.any(String),
