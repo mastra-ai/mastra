@@ -1169,7 +1169,7 @@ describe('accumulateChunk - tool calls', () => {
         type: 'tool-call-resumed',
         runId: RUN_ID,
         from: 'AGENT',
-        payload: { toolCallId: 'tc-1', toolName: 'longRun' },
+        payload: { toolCallId: 'tc-1', toolName: 'longRun', kind: 'suspension' },
       } as unknown as ChunkType,
     ]);
     const suspendedTools = (out[0].content.metadata as { suspendedTools: Record<string, unknown> }).suspendedTools;

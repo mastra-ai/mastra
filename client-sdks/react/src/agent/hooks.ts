@@ -563,6 +563,15 @@ export const useChat = ({
         setIsRunning(false);
       }
 
+      if (chunk.type === 'tool-call-resumed') {
+        const toolCallId = chunk.payload?.toolCallId;
+        if (typeof toolCallId === 'string') {
+          liveApprovalIds.current.delete(toolCallId);
+          pendingToolApprovalIdsRef.current.delete(toolCallId);
+          setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
+        }
+      }
+
       if (isTerminal) {
         if (chunk.runId === liveRunId.current) liveRunFinished.current = true;
         for (const toolCallId of pendingToolApprovalIdsRef.current) liveApprovalIds.current.add(toolCallId);

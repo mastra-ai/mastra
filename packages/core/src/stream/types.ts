@@ -836,6 +836,11 @@ interface ToolCallSuspendedPayload {
 interface ToolCallResumedPayload {
   toolCallId: string;
   toolName: string;
+  /** Whether the resumed pause was a `suspend()` call or a tool approval request. */
+  kind: 'suspension' | 'approval';
+  args?: Record<string, any>;
+  suspendPayload?: any;
+  resumeSchema?: string;
 }
 
 export type DataChunkType = {

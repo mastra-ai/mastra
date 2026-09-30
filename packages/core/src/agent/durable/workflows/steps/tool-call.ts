@@ -720,6 +720,7 @@ export function createDurableToolCallStep() {
         };
 
         const changedMessages = [];
+        let matchedEntry: Record<string, any> | undefined;
         for (const message of messageList.get.all.db()) {
           if (message.role !== 'assistant') continue;
 
@@ -732,6 +733,7 @@ export function createDurableToolCallStep() {
           if (entries) {
             for (const [key, entry] of Object.entries(entries)) {
               if (entryMatches(entry, key)) {
+                matchedEntry ??= { ...entry, toolCallId: entry?.toolCallId ?? key };
                 delete entries[key];
                 messageChanged = true;
               }
@@ -741,6 +743,7 @@ export function createDurableToolCallStep() {
 
           message.content.parts = message.content.parts?.map(part => {
             if (part.type !== expectedPartType || !entryMatches(part.data)) return part;
+            matchedEntry ??= { ...(part.data as Record<string, any>) };
             if ((part.data as { resumed?: boolean }).resumed) return part;
             messageChanged = true;
             return { ...part, data: { ...(part.data as any), resumed: true } };
@@ -749,9 +752,27 @@ export function createDurableToolCallStep() {
           if (messageChanged) changedMessages.push(message);
         }
 
-        if (changedMessages.length === 0) return;
-        messageList.add(changedMessages, 'response');
-        await doFlush();
+        if (changedMessages.length > 0) {
+          messageList.add(changedMessages, 'response');
+          await doFlush();
+        }
+        // Live counterpart of the persisted `resumed: true` marker (mirrors the base tool-call step).
+        if (matchedEntry && pubsub) {
+          await emitChunkEvent(pubsub, runId, {
+            type: 'tool-call-resumed',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: {
+              toolCallId,
+              toolName,
+              kind: type,
+              args: matchedEntry.args,
+              ...(type === 'suspension' ? { suspendPayload: matchedEntry.suspendPayload } : {}),
+              resumeSchema: matchedEntry.resumeSchema,
+            },
+            ...(matchedEntry.metadata ? { metadata: matchedEntry.metadata } : {}),
+          });
+        }
       };
 
       const suspendedForApproval =

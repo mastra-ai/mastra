@@ -1,7 +1,5 @@
 ---
 '@mastra/ai-sdk': patch
-'@mastra/react': patch
-'@mastra/core': patch
 ---
 
-Mapped the new `tool-call-resumed` chunk to a `data-tool-call-suspended` part with `resumed: true` and the same id, so UIs update the suspension part in place once it is answered.
+Mapped the new `tool-call-resumed` chunk to a `data-tool-call-suspended` part (or `data-tool-call-approval` part for approvals) with `resumed: true` and the same id. The part keeps the original suspend payload, args, and resume schema, so UIs mark the question as answered in place without losing it.
