@@ -54,9 +54,7 @@ const idleSurface = cn('rounded-lg text-muted-foreground hover:text-foreground',
 const activeSurface = 'bg-fill text-foreground';
 
 const featuredSurface = cn(
-  'my-2 border border-accent1/30 bg-accent1Dark text-accent1 hover:bg-accent1Darker hover:text-accent1',
-  'dark:border-transparent dark:bg-accent1 dark:text-black dark:hover:bg-accent1/90 dark:hover:text-black',
-  '[&_svg]:text-accent1 dark:[&_svg]:text-black/75 [&:hover_svg]:text-accent1 dark:[&:hover_svg]:text-black',
+  'my-2 border border-transparent bg-brand-green text-black hover:text-black hover:brightness-95',
 );
 
 export const navRowSurfaceClasses = ({ isActive, isFeatured }: NavRowSurfaceOptions) =>
@@ -68,7 +66,7 @@ export const navItemLayoutClasses = ({ isCollapsed, level = 0, size }: NavItemLa
     'w-full justify-start',
     controlStateColorTransition,
     '[&_svg]:size-4 [&_svg]:shrink-0',
-    focusRing.visible,
+    focusRing,
     !isCollapsed && nestedExpandedItemClasses(level),
     isCollapsed && 'gap-0 px-[13.5px] py-0',
   );

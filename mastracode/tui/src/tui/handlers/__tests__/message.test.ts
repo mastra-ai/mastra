@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AssistantRenderRegistry } from '../../assistant-render-registry.js';
 import { AssistantMessageComponent } from '../../components/assistant-message.js';
 import { isChatBoundarySpacer } from '../../components/chat-boundary-spacer.js';
+import { IdleCounterComponent } from '../../components/idle-counter.js';
 import { JudgeDisplayComponent } from '../../components/judge-display.js';
 import { NotificationSummaryComponent } from '../../components/notification-summary.js';
 import { NotificationComponent } from '../../components/notification.js';
@@ -641,6 +642,36 @@ describe('handleMessageUpdate assistant streaming', () => {
         state.chatContainer.addChild(child);
       },
     } as EventHandlerContext;
+  });
+
+  it('shows quiet-mode Thinking in the status line while reasoning streams, and nowhere in the chat', () => {
+    const idleCounter = new IdleCounterComponent();
+    Object.assign(state, { quietMode: true, hideThinkingBlock: true, idleCounter });
+    const status = () => stripAnsi(idleCounter.render(80).join('')).trim();
+    const chat = () => stripAnsi(state.chatContainer.render(80).join('\n'));
+
+    handleMessageStart(ctx, assistantMessage([{ type: 'reasoning', reasoning: 'planning' } as Part]));
+    expect(status()).toBe('Thinking...');
+
+    handleMessageUpdate(
+      ctx,
+      assistantMessage([{ type: 'reasoning', reasoning: 'planning' } as Part, { type: 'text', text: 'Answer' }]),
+    );
+    expect(status()).toBe('');
+
+    handleMessageUpdate(
+      ctx,
+      assistantMessage([
+        { type: 'reasoning', reasoning: 'planning' } as Part,
+        { type: 'text', text: 'Answer' },
+        { type: 'reasoning', reasoning: 'more' } as Part,
+      ]),
+    );
+    expect(status()).toBe('Thinking...');
+
+    handleMessageEnd(ctx, assistantMessage([{ type: 'text', text: 'Answer' }]));
+    expect(status()).toBe('');
+    expect(chat()).not.toContain('Thinking...');
   });
 
   it('adds spacing as soon as assistant text starts after a user message', () => {

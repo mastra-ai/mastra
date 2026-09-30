@@ -1,4 +1,5 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { useState } from 'react';
 
 import { PwaInstallInstructions } from './PwaInstallInstructions';
@@ -43,14 +44,14 @@ export function PwaInstallBanner() {
             <button
               type="button"
               onClick={dismiss}
-              className="text-muted-foreground hover:text-foreground focus-visible:ring-accent1 text-caption shrink-0 rounded-md px-3 py-1.5 focus-visible:ring-2 focus-visible:outline-none"
+              className={`text-muted-foreground hover:text-foreground text-caption shrink-0 rounded-md px-3 py-1.5 ${focusRing}`}
             >
               Not now
             </button>
             <button
               type="button"
               onClick={onInstall}
-              className="bg-accent1 text-column focus-visible:ring-accent1 shrink-0 rounded-md px-3 py-1.5 text-black focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+              className={`bg-brand-green text-column shrink-0 rounded-md px-3 py-1.5 text-black ${focusRing}`}
             >
               Install
             </button>

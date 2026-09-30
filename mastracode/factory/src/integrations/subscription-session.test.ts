@@ -65,7 +65,9 @@ describe('prepareSessionRunContext', () => {
   it('runs as the Factory session owner in its organization and primes credentials', async () => {
     const getBySessionId = vi.fn(async () => ({ userId: 'user-9', orgId: 'org-9' }));
     const requestContext = new RequestContext();
-    await prepareSessionRunContext(requestContext, 'session-9', { sessions: { getBySessionId } });
+    await expect(prepareSessionRunContext(requestContext, 'session-9', { sessions: { getBySessionId } })).resolves.toBe(
+      'prepared',
+    );
     expect(getBySessionId).toHaveBeenCalledWith('session-9');
     expect(requestContext.get('user')).toEqual({ workosId: 'user-9', organizationId: 'org-9' });
     expect(prime).toHaveBeenCalledTimes(1);
@@ -74,18 +76,36 @@ describe('prepareSessionRunContext', () => {
 
   it('leaves the context alone, and does not prime, when no Factory session matches', async () => {
     const requestContext = new RequestContext();
-    await prepareSessionRunContext(requestContext, 'channel:slack:C1', {
-      sessions: { getBySessionId: async () => null },
-    });
+    await expect(
+      prepareSessionRunContext(requestContext, 'channel:slack:C1', {
+        sessions: { getBySessionId: async () => null },
+      }),
+    ).resolves.toBe('unavailable');
     expect(requestContext.get('user')).toBeUndefined();
     expect(prime).not.toHaveBeenCalled();
   });
 
   it('leaves the context alone, and does not prime, when the session org is unresolved', async () => {
     const requestContext = new RequestContext();
-    await prepareSessionRunContext(requestContext, 'session-9', {
-      sessions: { getBySessionId: async () => ({ userId: 'user-9', orgId: ' ' }) },
-    });
+    await expect(
+      prepareSessionRunContext(requestContext, 'session-9', {
+        sessions: { getBySessionId: async () => ({ userId: 'user-9', orgId: ' ' }) },
+      }),
+    ).resolves.toBe('unavailable');
+    expect(requestContext.get('user')).toBeUndefined();
+    expect(prime).not.toHaveBeenCalled();
+  });
+
+  it('reports an organization mismatch without changing the context or priming credentials', async () => {
+    const requestContext = new RequestContext();
+    await expect(
+      prepareSessionRunContext(
+        requestContext,
+        'session-9',
+        { sessions: { getBySessionId: async () => ({ userId: 'user-9', orgId: 'org-9' }) } },
+        { expectedOrgId: 'org-other' },
+      ),
+    ).resolves.toBe('organization-mismatch');
     expect(requestContext.get('user')).toBeUndefined();
     expect(prime).not.toHaveBeenCalled();
   });

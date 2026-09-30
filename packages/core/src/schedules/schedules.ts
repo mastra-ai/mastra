@@ -4,6 +4,7 @@ import type { Mastra } from '../mastra';
 import type { Schedule, SchedulesStorage } from '../storage/domains/schedules/base';
 import { slugify } from '../utils/slugify';
 import { computeNextFireAt, validateCron } from '../workflows/scheduler/cron';
+import type { ScheduledWorkflowTrigger } from '../workflows/scheduler/types';
 import type { ScheduleIfActive, ScheduleIfIdle } from './types';
 import { AGENT_SCHEDULE_PREFIX, WORKFLOW_SCHEDULE_PREFIX } from './types';
 
@@ -648,6 +649,11 @@ export class Schedules {
         requestContext: requestContext ?? {},
         initialState: initialState ?? {},
         ...(resourceId !== undefined ? { resourceId } : {}),
+        scheduleTrigger: {
+          scheduleId: existing.id,
+          scheduledFireAt: now,
+          triggerKind: 'manual',
+        } satisfies ScheduledWorkflowTrigger,
       },
     });
     const store = await this.#getStore();

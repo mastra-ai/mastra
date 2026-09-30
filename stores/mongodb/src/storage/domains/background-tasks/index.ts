@@ -4,6 +4,7 @@ import type {
   TaskFilter,
   TaskListResult,
   UpdateBackgroundTask,
+  UpdateBackgroundTaskOptions,
 } from '@mastra/core/background-tasks';
 import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS } from '@mastra/core/storage';
 import type { PruneOptions, PruneResult, RetentionTablesDescriptor, TableRetentionPolicy } from '@mastra/core/storage';
@@ -33,6 +34,8 @@ function toDoc(task: BackgroundTask): Record<string, any> {
     startedAt: task.startedAt?.toISOString() ?? null,
     suspendedAt: task.suspendedAt?.toISOString() ?? null,
     completedAt: task.completedAt?.toISOString() ?? null,
+    ownerId: task.ownerId ?? null,
+    leaseExpiresAt: task.leaseExpiresAt?.toISOString() ?? null,
   };
 }
 
@@ -57,6 +60,8 @@ function fromDoc(doc: Record<string, any>): BackgroundTask {
     startedAt: doc.startedAt ? new Date(doc.startedAt) : undefined,
     suspendedAt: doc.suspendedAt ? new Date(doc.suspendedAt) : undefined,
     completedAt: doc.completedAt ? new Date(doc.completedAt) : undefined,
+    ownerId: doc.ownerId ?? undefined,
+    leaseExpiresAt: doc.leaseExpiresAt ? new Date(doc.leaseExpiresAt) : undefined,
   };
 }
 
@@ -156,7 +161,7 @@ export class BackgroundTasksStorageMongoDB extends BackgroundTasksStorage {
   async updateTask(
     taskId: string,
     update: UpdateBackgroundTask,
-    options?: { expectedStatus?: BackgroundTask['status'] },
+    options?: UpdateBackgroundTaskOptions,
   ): Promise<boolean> {
     const $set: Record<string, any> = {};
 
@@ -168,14 +173,20 @@ export class BackgroundTasksStorageMongoDB extends BackgroundTasksStorage {
     if ('startedAt' in update) $set.startedAt = update.startedAt?.toISOString() ?? null;
     if ('suspendedAt' in update) $set.suspendedAt = update.suspendedAt?.toISOString() ?? null;
     if ('completedAt' in update) $set.completedAt = update.completedAt?.toISOString() ?? null;
+    if ('ownerId' in update) $set.ownerId = update.ownerId ?? null;
+    if ('leaseExpiresAt' in update) $set.leaseExpiresAt = update.leaseExpiresAt?.toISOString() ?? null;
 
     if (Object.keys($set).length === 0) return false;
 
+    const filter: Record<string, any> = { id: taskId };
+    if (options?.expectedStatus) filter.status = options.expectedStatus;
+    if (options?.expectedOwnerId !== undefined) filter.ownerId = options.expectedOwnerId;
+    if (options?.expectedLeaseExpiresAt !== undefined) {
+      filter.leaseExpiresAt = options.expectedLeaseExpiresAt?.toISOString() ?? null;
+    }
+
     const collection = await this.getCollection();
-    const result = await collection.updateOne(
-      { id: taskId, ...(options?.expectedStatus ? { status: options.expectedStatus } : {}) },
-      { $set },
-    );
+    const result = await collection.updateOne(filter, { $set });
     return result.matchedCount > 0;
   }
 

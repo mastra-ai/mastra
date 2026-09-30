@@ -70,9 +70,11 @@ vi.mock('../../overlay.js', () => ({
 vi.mock('@mastra/core/agent', () => ({
   Agent: vi.fn(),
   SignalProvider: class {},
+  getGoalActivityDurationMs: vi.fn(() => 0),
 }));
 
 vi.mock('@mastra/core/processors', () => ({
+  CyberRefusalHandler: class {},
   isBadRequestError: (error: unknown) =>
     typeof error === 'object' &&
     error !== null &&
@@ -136,6 +138,7 @@ vi.mock('../../prompt-api-key.js', () => ({
 }));
 
 import { createGoalReminderSignal } from '@mastra/code-sdk/goal-signal';
+import { SessionStartupCancelledError } from '@mastra/core/agent-controller';
 import { createSignal } from '@mastra/core/signals';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -170,6 +173,51 @@ describe('goal reminder metadata', () => {
 });
 
 describe('handleGoalCommand', () => {
+  it.each(['start', 'resume'] as const)(
+    'pauses and saves a goal after interrupted %s without displaying an error',
+    async action => {
+      const goal = {
+        id: 'goal-1',
+        objective: 'finish the task',
+        status: action === 'resume' ? 'paused' : 'active',
+        maxTurns: 50,
+      };
+      const goalManager = {
+        getGoal: vi.fn(() => goal),
+        setGoal: vi.fn().mockResolvedValue(goal),
+        resume: vi.fn(() => {
+          goal.status = 'active';
+        }),
+        pause: vi.fn(() => {
+          goal.status = 'paused';
+        }),
+        saveToThread: vi.fn().mockResolvedValue(undefined),
+        persistOnNextThreadCreate: vi.fn(),
+      };
+      const sendSignal = vi.fn(() => ({ accepted: Promise.reject(new SessionStartupCancelledError()) }));
+      const ctx = {
+        state: createMockState({
+          threadId: 'thread-1',
+          session: { sendSignal },
+          extra: { goalManager, pendingNewThread: false },
+        }),
+        showInfo: vi.fn(),
+        showError: vi.fn(),
+        updateStatusLine: vi.fn(),
+        addUserMessage: vi.fn(),
+      } as any;
+
+      if (action === 'resume') await handleGoalCommand(ctx, ['resume']);
+      else await startGoalWithDefaults(ctx, goal.objective, 'Goal cancelled.');
+
+      expect(goalManager.pause).toHaveBeenCalledOnce();
+      expect(goal.status).toBe('paused');
+      expect(goalManager.saveToThread).toHaveBeenCalledTimes(2);
+      expect(ctx.showInfo).toHaveBeenCalledWith('Interrupted');
+      expect(ctx.showError).not.toHaveBeenCalled();
+    },
+  );
+
   it('opens an action modal for /goal with no arguments', async () => {
     overlayMocks.showModalOverlay.mockClear();
     const ctx = {
@@ -188,6 +236,93 @@ describe('handleGoalCommand', () => {
     const modal = overlayMocks.showModalOverlay.mock.calls[0]?.[1] as { handleInput?: (data: string) => void };
     expect(modal.handleInput).toEqual(expect.any(Function));
     void result;
+  });
+
+  // #22447: a paused goal that cannot say why it paused is unactionable.
+  it('reports the pause cause in /goal status', async () => {
+    const ctx = {
+      state: {
+        goalManager: {
+          getGoal: vi.fn(() => ({
+            id: 'goal-1',
+            objective: 'finish the task',
+            status: 'paused',
+            turnsUsed: 3,
+            maxTurns: DEFAULT_MAX_TURNS,
+            judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+            startedAt: '2026-05-15T10:00:00.000Z',
+            pausedReason: 'The goal judge failed to evaluate the objective.',
+          })),
+        },
+        ui: { hideOverlay: vi.fn() },
+      },
+      showInfo: vi.fn(),
+      updateStatusLine: vi.fn(),
+    } as any;
+
+    await handleGoalCommand(ctx, ['status']);
+
+    expect(ctx.showInfo).toHaveBeenCalledWith(
+      expect.stringContaining('The goal judge failed to evaluate the objective.'),
+    );
+  });
+
+  it('strips terminal control sequences from every status field', async () => {
+    const ctx = {
+      state: {
+        goalManager: {
+          getGoal: vi.fn(() => ({
+            id: 'goal-1',
+            objective: 'finish\x1b[31m the task',
+            status: 'paused',
+            turnsUsed: 3,
+            maxTurns: DEFAULT_MAX_TURNS,
+            judgeModelId: 'judge\x1b]0;x\x07',
+            startedAt: '2026-05-15T10:00:00.000Z',
+            pausedReason: 'judge failed\x1b[2J\x1b]0;pwned\x07\nboom',
+          })),
+        },
+        ui: { hideOverlay: vi.fn() },
+      },
+      showInfo: vi.fn(),
+      updateStatusLine: vi.fn(),
+    } as any;
+
+    await handleGoalCommand(ctx, ['status']);
+
+    const shown = ctx.showInfo.mock.calls[0][0] as string;
+    expect(shown).toContain('judge failed');
+    expect(shown).toContain('boom');
+    expect(shown).not.toMatch(/[\u0000-\u001f\u007f-\u009f]/);
+  });
+
+  it('does not report a cause for a goal that is no longer paused', async () => {
+    const ctx = {
+      state: {
+        goalManager: {
+          getGoal: vi.fn(() => ({
+            id: 'goal-1',
+            objective: 'finish the task',
+            status: 'done',
+            turnsUsed: 3,
+            maxTurns: DEFAULT_MAX_TURNS,
+            judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+            startedAt: '2026-05-15T10:00:00.000Z',
+            pausedReason: 'The goal judge failed to evaluate the objective.',
+          })),
+        },
+        ui: { hideOverlay: vi.fn() },
+      },
+      showInfo: vi.fn(),
+      updateStatusLine: vi.fn(),
+    } as any;
+
+    await handleGoalCommand(ctx, ['status']);
+
+    expect(ctx.showInfo).toHaveBeenCalledTimes(1);
+    expect(ctx.showInfo).toHaveBeenCalledWith(
+      expect.not.stringContaining('The goal judge failed to evaluate the objective.'),
+    );
   });
 
   it('resumes a paused goal via a goal-reminder signal without resetting the turn counter', async () => {
@@ -508,6 +643,42 @@ describe('handleGoalCommand', () => {
     expect(armed).toBe(true);
   });
 
+  it('strips terminal control sequences from the failed-start error', async () => {
+    const goalManager = {
+      setGoal: vi.fn().mockResolvedValue({
+        id: 'goal-1',
+        objective: 'finish',
+        status: 'active' as const,
+        turnsUsed: 0,
+        maxTurns: 50,
+        judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+      }),
+      persistOnNextThreadCreate: vi.fn(),
+      saveToThread: vi.fn().mockResolvedValue(undefined),
+      pause: vi.fn(),
+    };
+    const sendSignal = vi.fn(() => ({
+      accepted: Promise.reject(new Error('provider down\x1b[2J\x1b]0;pwned\x07\nboom')),
+    }));
+    const ctx = {
+      state: createMockState({
+        threadId: 'thread-1',
+        session: { sendSignal },
+        extra: { pendingNewThread: false, goalManager },
+      }),
+      addUserMessage: vi.fn(),
+      showError: vi.fn(),
+      updateStatusLine: vi.fn(),
+    } as any;
+
+    await startGoalWithDefaults(ctx, 'finish');
+
+    const shown = ctx.showError.mock.calls[0][0] as string;
+    expect(shown).toContain('provider down');
+    expect(shown).toContain('boom');
+    expect(shown).not.toMatch(/[\u0000-\u001f\u007f-\u009f]/);
+  });
+
   it('starts a goal from a plan-approval-style title+plan with only the goal reminder XML', async () => {
     // Regression: plan approval "Use as /goal" must enter the same goal
     // lifecycle as `/goal <text>` and send only the goal reminder. Sending an
@@ -733,6 +904,7 @@ describe('handleGoalCommand', () => {
     const goalManager = {
       clear: vi.fn(),
       saveToThread: vi.fn(),
+      deleteFromThread: vi.fn(async () => true),
     };
     const abort = vi.fn();
     const state = createMockState({
@@ -754,17 +926,138 @@ describe('handleGoalCommand', () => {
     await handleGoalCommand(ctx, ['clear']);
 
     expect(goalManager.clear).toHaveBeenCalled();
-    expect(goalManager.saveToThread).toHaveBeenCalledWith(state);
+    // Deletion is a verb of its own: an explicit clear must ask for it, and a
+    // save must never be what removes the goal.
+    expect(goalManager.deleteFromThread).toHaveBeenCalledWith(state);
+    expect(goalManager.saveToThread).not.toHaveBeenCalled();
     expect(state.planStartedGoalId).toBeUndefined();
     expect(showInfo).toHaveBeenCalledWith('Goal cleared.');
     // Not running → must not abort.
     expect(abort).not.toHaveBeenCalled();
   });
 
+  it('reports a failed /goal clear and keeps the stored goal visible', async () => {
+    let stored: Record<string, unknown> | undefined;
+    const agent = {
+      id: 'agent-1',
+      setObjective: vi.fn(async (objective: string, opts: Record<string, unknown>) => {
+        stored = { objective, status: 'active', runsUsed: 0, activeDurationMs: 0, startedAt: 1, updatedAt: 1, ...opts };
+        return stored;
+      }),
+      getObjective: vi.fn(async () => stored),
+      clearObjective: vi.fn(async () => {
+        throw new Error('storage down');
+      }),
+      updateObjectiveOptions: vi.fn(),
+    };
+    const goalManager = new GoalManager();
+    const abort = vi.fn();
+    const state = createMockState({
+      threadId: 'thread-1',
+      controller: { getCurrentAgent: vi.fn(() => agent) },
+      session: { abort, run: { isRunning: vi.fn(() => true) }, suspensions: { hasPending: vi.fn(() => false) } },
+      extra: { goalManager, pendingInlineQuestions: [], pendingAskUserComponents: new Map() },
+    }) as any;
+    await goalManager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+    const showInfo = vi.fn();
+    const showError = vi.fn();
+    const ctx = { state, showInfo, showError, updateStatusLine: vi.fn() } as any;
+
+    await handleGoalCommand(ctx, ['clear']);
+
+    expect(showError).toHaveBeenCalledWith(expect.stringContaining('may still be active'));
+    expect(showInfo).not.toHaveBeenCalledWith('Goal cleared.');
+    expect(goalManager.getGoal()?.objective).toBe('finish the task');
+    expect(abort).not.toHaveBeenCalled();
+  });
+
+  it('does not report /goal clear as done when storage reads and writes both fail', async () => {
+    let stored: Record<string, unknown> | undefined;
+    let storageDown = false;
+    const agent = {
+      id: 'agent-1',
+      setObjective: vi.fn(async (objective: string, opts: Record<string, unknown>) => {
+        stored = { objective, status: 'active', runsUsed: 0, activeDurationMs: 0, startedAt: 1, updatedAt: 1, ...opts };
+        return stored;
+      }),
+      getObjective: vi.fn(async () => {
+        if (storageDown) throw new Error('storage down');
+        return stored;
+      }),
+      clearObjective: vi.fn(async () => {
+        throw new Error('storage down');
+      }),
+      updateObjectiveOptions: vi.fn(),
+    };
+    const goalManager = new GoalManager();
+    const abort = vi.fn();
+    const state = createMockState({
+      threadId: 'thread-1',
+      controller: { getCurrentAgent: vi.fn(() => agent) },
+      session: { abort, run: { isRunning: vi.fn(() => true) }, suspensions: { hasPending: vi.fn(() => false) } },
+      extra: { goalManager, pendingInlineQuestions: [], pendingAskUserComponents: new Map() },
+    }) as any;
+    await goalManager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+    const goalId = goalManager.getGoal()?.id;
+    state.planStartedGoalId = goalId;
+    storageDown = true;
+    const showInfo = vi.fn();
+    const showError = vi.fn();
+    const ctx = { state, showInfo, showError, updateStatusLine: vi.fn() } as any;
+
+    await handleGoalCommand(ctx, ['clear']);
+
+    expect(showError).toHaveBeenCalledWith(expect.stringContaining('may still be active'));
+    expect(showInfo).not.toHaveBeenCalledWith('Goal cleared.');
+    expect(abort).not.toHaveBeenCalled();
+    expect(goalId).toBeDefined();
+    expect(state.planStartedGoalId).toBe(goalId);
+  });
+
+  it('reports /goal clear as done when the retry on reload succeeds', async () => {
+    let stored: Record<string, unknown> | undefined;
+    const agent = {
+      id: 'agent-1',
+      setObjective: vi.fn(async (objective: string, opts: Record<string, unknown>) => {
+        stored = { objective, status: 'active', runsUsed: 0, activeDurationMs: 0, startedAt: 1, updatedAt: 1, ...opts };
+        return stored;
+      }),
+      getObjective: vi.fn(async () => stored),
+      clearObjective: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('storage blip'))
+        .mockImplementation(async () => {
+          stored = undefined;
+        }),
+      updateObjectiveOptions: vi.fn(),
+    };
+    const goalManager = new GoalManager();
+    const abort = vi.fn();
+    const state = createMockState({
+      threadId: 'thread-1',
+      controller: { getCurrentAgent: vi.fn(() => agent) },
+      session: { abort, run: { isRunning: vi.fn(() => true) }, suspensions: { hasPending: vi.fn(() => false) } },
+      extra: { goalManager, pendingInlineQuestions: [], pendingAskUserComponents: new Map() },
+    }) as any;
+    await goalManager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+    const showInfo = vi.fn();
+    const showError = vi.fn();
+    const ctx = { state, showInfo, showError, updateStatusLine: vi.fn() } as any;
+
+    await handleGoalCommand(ctx, ['clear']);
+
+    expect(agent.clearObjective).toHaveBeenCalledTimes(2);
+    expect(showError).not.toHaveBeenCalled();
+    expect(showInfo).toHaveBeenCalledWith('Goal cleared.');
+    expect(goalManager.getGoal()).toBeNull();
+    expect(abort).toHaveBeenCalled();
+  });
+
   it('aborts the in-flight turn when /goal clear is called while running', async () => {
     const goalManager = {
       clear: vi.fn(),
       saveToThread: vi.fn(),
+      deleteFromThread: vi.fn(async () => true),
     };
     const abort = vi.fn();
     const state = createMockState({
@@ -786,6 +1079,8 @@ describe('handleGoalCommand', () => {
     await handleGoalCommand(ctx, ['clear']);
 
     expect(goalManager.clear).toHaveBeenCalled();
+    expect(goalManager.deleteFromThread).toHaveBeenCalledWith(state);
+    expect(goalManager.saveToThread).not.toHaveBeenCalled();
     expect(abort).toHaveBeenCalledTimes(1);
     expect((state as any).userInitiatedAbort).toBe(true);
     expect(state.activeInlineQuestion).toBeUndefined();

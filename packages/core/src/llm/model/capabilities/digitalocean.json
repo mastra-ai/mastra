@@ -18,6 +18,7 @@
     "anthropic-claude-opus-5",
     "anthropic-claude-opus-5.5",
     "anthropic-claude-sonnet-4",
+    "anthropic-claude-sonnet-5.5",
     "deepseek-v4.1-flash",
     "gemma-4-31B-it",
     "glm-5.3-flash",

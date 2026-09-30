@@ -19,7 +19,7 @@ import type {
   FactoryStartPreparedResult,
   FactoryStartRequest,
 } from '../rules/start-coordinator.js';
-import { FactoryStartTransitionError } from '../rules/start-coordinator.js';
+import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
 import type { WorkItemSource } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
@@ -633,6 +633,9 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           } catch (error) {
             if (error instanceof FactoryStartTransitionError) {
               return c.json({ result: error.result }, error.result.code === 'stale' ? 409 : 422);
+            }
+            if (error instanceof WorkItemRepositoryError) {
+              return c.json({ error: error.code, message: error.message, candidates: error.candidates }, 409);
             }
             throw error;
           }

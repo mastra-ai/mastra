@@ -48,6 +48,7 @@ export class AssistantMessageComponent extends Container {
   private terminalStatus?: AssistantTerminalStatus;
   private renderNodes = new Map<string, OwnedRenderNode>();
   private renderOrder: string[] = [];
+  private quiet = false;
 
   constructor(message?: MastraDBMessage, hideThinkingBlock = false, markdownTheme: MarkdownTheme = getMarkdownTheme()) {
     super();
@@ -69,6 +70,13 @@ export class AssistantMessageComponent extends Container {
     if (this.hideThinkingBlock === hide) return;
     this.hideThinkingBlock = hide;
     this.reconcileChildren();
+  }
+
+  setQuietModeDisplay(mode: 'quiet' | 'normal'): void {
+    const quiet = mode === 'quiet';
+    if (this.quiet === quiet) return;
+    this.quiet = quiet;
+    this.syncVisibleChildren();
   }
 
   getChatSpacingKind(): ChatSpacingKind | undefined {
@@ -122,17 +130,29 @@ export class AssistantMessageComponent extends Container {
       nextOrder.push(node.key);
     }
 
-    const structureChanged =
-      nextOrder.length !== this.renderOrder.length || nextOrder.some((key, index) => key !== this.renderOrder[index]);
-    if (structureChanged) {
-      this.contentContainer.clear();
-      for (const key of nextOrder) {
-        this.contentContainer.addChild(nextNodes.get(key)!.component);
-      }
-    }
-
     this.renderNodes = nextNodes;
     this.renderOrder = nextOrder;
+    this.syncVisibleChildren();
+  }
+
+  /**
+   * Quiet mode leaves "Thinking..." placeholders out of the chat entirely; the live one is shown in
+   * the status line above the input instead, so hiding it never shifts the layout. Works from the
+   * owned render nodes so it still applies after finalizeRenderState() has released the source parts.
+   */
+  private syncVisibleChildren(): void {
+    const visible = this.renderOrder
+      .filter(key => !this.quiet || !key.includes(':hidden-thinking'))
+      .map(key => this.renderNodes.get(key)!.component);
+
+    const current = this.contentContainer.children;
+    const changed =
+      current.length !== visible.length || visible.some((component, index) => component !== current[index]);
+    if (!changed) return;
+    this.contentContainer.clear();
+    for (const component of visible) {
+      this.contentContainer.addChild(component);
+    }
   }
 
   private createRenderNode(node: RenderNode): OwnedRenderNode {

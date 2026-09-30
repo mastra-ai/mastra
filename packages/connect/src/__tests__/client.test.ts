@@ -402,6 +402,23 @@ describe('proxyRequest', () => {
     });
   });
 
+  it('surfaces the nested error.message from an OpenAI-style provider error', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        Response.json(
+          { error: { message: 'No such batch: batch_abc123', type: 'invalid_request_error', param: null, code: null } },
+          { status: 404 },
+        ),
+      );
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    await expect(proxyRequest(client, 'c_1', { method: 'GET', path: 'batches/batch_abc123' })).rejects.toMatchObject({
+      code: 'proxy_error',
+      status: 404,
+      message: 'Provider request failed (404): No such batch: batch_abc123',
+    });
+  });
+
   it('keeps a provider 401 as proxy_error', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ message: 'expired token' }, { status: 401 }));
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });

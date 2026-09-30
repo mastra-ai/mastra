@@ -14,6 +14,7 @@ import { DataList, DataListSkeleton, TracesDataList, useDataListKeyboard } from 
 import type { DataListSort } from '@/ds/components/DataList';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { Txt } from '@/ds/components/Txt/Txt';
+import { focusRing } from '@/ds/primitives/transitions';
 import { formatCompactNumber, formatCost } from '@/lib/cost';
 import { cn } from '@/lib/utils';
 import { formatDuration } from '@/utils/duration';
@@ -176,8 +177,8 @@ export function TracesListView({
         ) : (
           <TracesDataList.TopCell>Start</TracesDataList.TopCell>
         )}
-        {hasTraceColumn(columnPreferences, 'type') && <TracesDataList.TopCell>Type</TracesDataList.TopCell>}
-        <TracesDataList.TopCell>Name</TracesDataList.TopCell>
+        {hasTraceColumn(columnPreferences, 'type') && <TracesDataList.TopCell>Primitive type</TracesDataList.TopCell>}
+        <TracesDataList.TopCell>Primitive name</TracesDataList.TopCell>
         {hasTraceColumn(columnPreferences, 'input') && <TracesDataList.TopCell>Input</TracesDataList.TopCell>}
         <TracesDataList.TopCell>Status</TracesDataList.TopCell>
         {hasTraceColumn(columnPreferences, 'duration') && (
@@ -212,7 +213,7 @@ export function TracesListView({
                   render={
                     <button
                       type="button"
-                      className="focus-visible:outline-accent flex min-w-0 items-center gap-1 rounded-sm hover:text-foreground focus-visible:outline-2"
+                      className={cn('flex min-w-0 items-center gap-1 rounded-sm hover:text-foreground', focusRing)}
                     >
                       <span className="min-w-0 truncate">{label}</span>
                       <ListFilterIcon aria-hidden className="size-[1.2em] shrink-0" />
@@ -268,10 +269,10 @@ export function TracesListView({
                 featured={isFeatured}
                 className={cn(isRecentlyAdded && 'animate-row-highlight')}
               >
-                <TracesDataList.CreatedCell timestamp={displayDate} />
+                <TracesDataList.CreatedCell timestamp={displayDate} preset="day-time-seconds" />
                 {hasTraceColumn(columnPreferences, 'type') && <TracesDataList.TypeCell entityType={trace.entityType} />}
                 <TracesDataList.NameCell
-                  name={trace.name}
+                  name={trace.entityName || trace.name}
                   parentSpanId={trace.parentSpanId}
                   showLevelTooltip={isBranchesMode}
                 />
@@ -285,7 +286,7 @@ export function TracesListView({
                   </DataList.NumberCell>
                 )}
                 {hasTraceColumn(columnPreferences, 'endTime') && (
-                  <TracesDataList.CreatedCell timestamp={trace.endedAt ?? ''} />
+                  <TracesDataList.CreatedCell timestamp={trace.endedAt ?? ''} preset="day-time-seconds" />
                 )}
                 {hasTraceColumn(columnPreferences, 'environment') && (
                   <DataList.TextCell>{trace.environment || '—'}</DataList.TextCell>

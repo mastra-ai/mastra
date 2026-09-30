@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import type { ListBranchesResponse, ListTracesResponse } from '@mastra/core/storage';
 import type { InfiniteData } from '@tanstack/react-query';
 import { describe, it, expect } from 'vitest';

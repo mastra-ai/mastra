@@ -28,7 +28,6 @@ import {
   type UnresolvedPromptBlock,
 } from '../utils/instruction-blocks-runtime';
 import { useStoredAgentMutations } from './use-stored-agents';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 type CreateOptions = {
   mode: 'create';
@@ -51,10 +50,9 @@ type EditOptions = {
 
 export type UseAgentCmsFormOptions = CreateOptions | EditOptions;
 
-export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
+export function useAgentCmsForm(options: UseAgentCmsFormOptions, requestContext?: Record<string, any>) {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
 

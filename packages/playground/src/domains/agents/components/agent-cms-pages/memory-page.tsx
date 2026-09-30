@@ -6,6 +6,7 @@ import { Label } from '@mastra/playground-ui/components/Label';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
 import { Controller, useWatch } from 'react-hook-form';
 
@@ -170,7 +171,9 @@ function SemanticRecallEntity() {
                 <Label htmlFor="memory-vector" className="text-foreground">
                   Vector Store
                 </Label>
-                <span className="text-caption text-placeholder">Select a vector store for semantic search</span>
+                <Txt as="span" variant="caption" tone="faint">
+                  Select a vector store for semantic search
+                </Txt>
                 <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={readOnly}>
                   <SelectTrigger id="memory-vector" className="bg-card">
                     <SelectValue placeholder="Select a vector store" />
@@ -195,7 +198,9 @@ function SemanticRecallEntity() {
                 <Label htmlFor="memory-embedder" className="text-foreground">
                   Embedder Model
                 </Label>
-                <span className="text-caption text-placeholder">Select an embedding model for semantic search</span>
+                <Txt as="span" variant="caption" tone="faint">
+                  Select an embedding model for semantic search
+                </Txt>
                 <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={readOnly}>
                   <SelectTrigger id="memory-embedder" className="bg-card">
                     <SelectValue placeholder="Select an embedder model" />
@@ -294,7 +299,9 @@ function ObservationalMemoryFields() {
       <div className="grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-1.5">
           <Label className="text-foreground">Provider</Label>
-          <span className="text-caption text-placeholder">Provider for the observer and reflector agents</span>
+          <Txt as="span" variant="caption" tone="faint">
+            Provider for the observer and reflector agents
+          </Txt>
           <Controller
             name="memory.observationalMemory.model.provider"
             control={control}
@@ -314,7 +321,9 @@ function ObservationalMemoryFields() {
 
         <div className="flex flex-col gap-1.5">
           <Label className="text-foreground">Model</Label>
-          <span className="text-caption text-placeholder">Model for the observer and reflector agents</span>
+          <Txt as="span" variant="caption" tone="faint">
+            Model for the observer and reflector agents
+          </Txt>
           <Controller
             name="memory.observationalMemory.model.name"
             control={control}
@@ -334,10 +343,10 @@ function ObservationalMemoryFields() {
               <Label htmlFor="memory-om-scope" className="text-foreground">
                 Scope
               </Label>
-              <span className="text-caption text-placeholder">
+              <Txt as="span" variant="caption" tone="faint">
                 Whether observations are scoped per thread or shared across all threads for a resource. Resource scope
                 is deprecated and will be removed in a future release.
-              </span>
+              </Txt>
               <Select value={field.value ?? 'thread'} onValueChange={field.onChange} disabled={readOnly}>
                 <SelectTrigger id="memory-om-scope" className="bg-card">
                   <SelectValue placeholder="Select scope" />
@@ -359,9 +368,9 @@ function ObservationalMemoryFields() {
               <Label htmlFor="memory-om-share-budget" className="text-foreground">
                 Share Token Budget
               </Label>
-              <span className="text-caption text-placeholder">
+              <Txt as="span" variant="caption" tone="faint">
                 Share token budget between observation and reflection
-              </span>
+              </Txt>
               <Switch
                 id="memory-om-share-budget"
                 checked={field.value ?? false}
@@ -393,7 +402,9 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
       <div className="grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-1.5">
           <Label className="text-foreground">Provider Override</Label>
-          <span className="text-caption text-placeholder">Override the default model provider for the observer</span>
+          <Txt as="span" variant="caption" tone="faint">
+            Override the default model provider for the observer
+          </Txt>
           <Controller
             name="memory.observationalMemory.observation.model.provider"
             control={control}
@@ -413,7 +424,9 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
 
         <div className="flex flex-col gap-1.5">
           <Label className="text-foreground">Model Override</Label>
-          <span className="text-caption text-placeholder">Override the default model for the observer</span>
+          <Txt as="span" variant="caption" tone="faint">
+            Override the default model for the observer
+          </Txt>
           <Controller
             name="memory.observationalMemory.observation.model.name"
             control={control}
@@ -433,9 +446,9 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
               <Label htmlFor="memory-om-obs-msg-tokens" className="text-foreground">
                 Message Tokens
               </Label>
-              <span className="text-caption text-placeholder">
+              <Txt as="span" variant="caption" tone="faint">
                 Token count of unobserved messages that triggers observation (default: 30000)
-              </span>
+              </Txt>
               <Input
                 id="memory-om-obs-msg-tokens"
                 type="number"
@@ -462,9 +475,9 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
               <Label htmlFor="memory-om-obs-batch" className="text-foreground">
                 Max Tokens Per Batch
               </Label>
-              <span className="text-caption text-placeholder">
+              <Txt as="span" variant="caption" tone="faint">
                 Maximum tokens per batch when observing multiple threads (default: 10000)
-              </span>
+              </Txt>
               <Input
                 id="memory-om-obs-batch"
                 type="number"
@@ -491,10 +504,10 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
               <Label htmlFor="memory-om-obs-buffer" className="text-foreground">
                 Buffer Tokens
               </Label>
-              <span className="text-caption text-placeholder">
+              <Txt as="span" variant="caption" tone="faint">
                 Token interval for async buffering (fraction of messageTokens or absolute count, empty to use default
                 0.2, set 0 to disable)
-              </span>
+              </Txt>
               <Input
                 id="memory-om-obs-buffer"
                 type="number"
@@ -526,9 +539,9 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
               <Label htmlFor="memory-om-obs-buf-act" className="text-foreground">
                 Buffer Activation
               </Label>
-              <span className="text-caption text-placeholder">
+              <Txt as="span" variant="caption" tone="faint">
                 Ratio (0-1) of buffered observations to activate (default: 0.8)
-              </span>
+              </Txt>
               <Input
                 id="memory-om-obs-buf-act"
                 type="number"
@@ -556,9 +569,9 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
               <Label htmlFor="memory-om-obs-block" className="text-foreground">
                 Block After
               </Label>
-              <span className="text-caption text-placeholder">
+              <Txt as="span" variant="caption" tone="faint">
                 Multiplier or absolute token count for synchronous blocking (default: 1.2)
-              </span>
+              </Txt>
               <Input
                 id="memory-om-obs-block"
                 type="number"
@@ -591,7 +604,9 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
       <div className="grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-1.5">
           <Label className="text-foreground">Provider Override</Label>
-          <span className="text-caption text-placeholder">Override the default model provider for the reflector</span>
+          <Txt as="span" variant="caption" tone="faint">
+            Override the default model provider for the reflector
+          </Txt>
           <Controller
             name="memory.observationalMemory.reflection.model.provider"
             control={control}
@@ -611,7 +626,9 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
 
         <div className="flex flex-col gap-1.5">
           <Label className="text-foreground">Model Override</Label>
-          <span className="text-caption text-placeholder">Override the default model for the reflector</span>
+          <Txt as="span" variant="caption" tone="faint">
+            Override the default model for the reflector
+          </Txt>
           <Controller
             name="memory.observationalMemory.reflection.model.name"
             control={control}
@@ -631,9 +648,9 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
               <Label htmlFor="memory-om-ref-obs-tokens" className="text-foreground">
                 Observation Tokens
               </Label>
-              <span className="text-caption text-placeholder">
+              <Txt as="span" variant="caption" tone="faint">
                 Token count of observations that triggers reflection (default: 40000)
-              </span>
+              </Txt>
               <Input
                 id="memory-om-ref-obs-tokens"
                 type="number"
@@ -660,9 +677,9 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
               <Label htmlFor="memory-om-ref-block" className="text-foreground">
                 Block After
               </Label>
-              <span className="text-caption text-placeholder">
+              <Txt as="span" variant="caption" tone="faint">
                 Multiplier or absolute token count for synchronous blocking (default: 1.2)
-              </span>
+              </Txt>
               <Input
                 id="memory-om-ref-block"
                 type="number"
@@ -689,9 +706,9 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
               <Label htmlFor="memory-om-ref-buf-act" className="text-foreground">
                 Buffer Activation
               </Label>
-              <span className="text-caption text-placeholder">
+              <Txt as="span" variant="caption" tone="faint">
                 Ratio (0-1) controlling when async reflection buffering starts
-              </span>
+              </Txt>
               <Input
                 id="memory-om-ref-buf-act"
                 type="number"

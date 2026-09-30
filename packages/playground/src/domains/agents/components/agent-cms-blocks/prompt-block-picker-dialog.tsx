@@ -75,64 +75,61 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
         <DialogHeader>
           <DialogTitle>Select a prompt block</DialogTitle>
           <DialogDescription>Choose a saved prompt block to reference</DialogDescription>
+          <div className="mt-2 flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2">
+            <Search className="h-4 w-4 text-muted-foreground" />
+            <input
+              type="text"
+              value={search}
+              onChange={e => handleSearchChange(e.target.value)}
+              placeholder="Search prompt blocks..."
+              className="flex-1 bg-transparent text-caption text-foreground outline-hidden placeholder:text-muted-foreground"
+            />
+          </div>
         </DialogHeader>
         <DialogBody>
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2">
-              <Search className="h-4 w-4 text-muted-foreground" />
-              <input
-                type="text"
-                value={search}
-                onChange={e => handleSearchChange(e.target.value)}
-                placeholder="Search prompt blocks..."
-                className="flex-1 bg-transparent text-caption text-foreground outline-hidden placeholder:text-muted-foreground"
-              />
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-5 text-muted-foreground">
+              <Spinner />
+              <Txt variant="caption">Loading prompt blocks...</Txt>
             </div>
-
-            {isLoading ? (
-              <div className="flex flex-col items-center justify-center gap-2 py-5 text-muted-foreground">
-                <Spinner />
-                <Txt variant="caption">Loading prompt blocks...</Txt>
-              </div>
-            ) : filtered.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-2 py-5 text-muted-foreground">
-                <FileText className="h-8 w-8" />
-                <Txt variant="caption">{search ? 'No matching prompt blocks' : 'No prompt blocks available'}</Txt>
-              </div>
-            ) : (
-              <div className="flex max-h-dropdown flex-col gap-1 overflow-y-auto">
-                {filtered.map(block => (
-                  <button
-                    key={block.id}
-                    type="button"
-                    onClick={() => handleSelect(block.id)}
-                    className={cn(
-                      'flex flex-col gap-0.5 rounded-md px-3 py-2 text-left',
-                      'hover:bg-fill-subtle active:bg-fill',
-                    )}
-                  >
-                    <Txt variant="column" tone="ink">
-                      {block.name}
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-5 text-muted-foreground">
+              <FileText className="h-8 w-8" />
+              <Txt variant="caption">{search ? 'No matching prompt blocks' : 'No prompt blocks available'}</Txt>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1">
+              {filtered.map(block => (
+                <button
+                  key={block.id}
+                  type="button"
+                  onClick={() => handleSelect(block.id)}
+                  className={cn(
+                    'flex flex-col gap-0.5 rounded-md px-3 py-2 text-left',
+                    'hover:bg-fill-subtle active:bg-fill',
+                  )}
+                >
+                  <Txt variant="column" tone="ink">
+                    {block.name}
+                  </Txt>
+                  {block.description && (
+                    <Txt variant="meta" tone="muted" className="line-clamp-1">
+                      {block.description}
                     </Txt>
-                    {block.description && (
-                      <Txt variant="meta" tone="muted" className="line-clamp-1">
-                        {block.description}
-                      </Txt>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
 
-            {(page > 0 || hasMore) && (
-              <DataList.Pagination
-                currentPage={page}
-                hasMore={hasMore}
-                onNextPage={handleNextPage}
-                onPrevPage={handlePrevPage}
-              />
-            )}
-          </div>
+          {(page > 0 || hasMore) && (
+            <DataList.Pagination
+              currentPage={page}
+              hasMore={hasMore}
+              onNextPage={handleNextPage}
+              onPrevPage={handlePrevPage}
+            />
+          )}
         </DialogBody>
       </DialogContent>
     </Dialog>

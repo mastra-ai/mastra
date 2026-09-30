@@ -20,7 +20,7 @@ import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { createWorkflow } from '../create';
-import { rehydrateWorkflow, toStorableGraph } from '../dynamic';
+import { rehydrateWorkflow, toStorableGraph, validateDynamicWorkflow } from '../dynamic';
 import type { SerializedStepFlowEntry } from '../types';
 import { createStepFromTool } from '../workflow';
 
@@ -219,6 +219,55 @@ describe('storage round-trip', () => {
     expect(rehydratedResult.status).toBe('success');
     expect((rehydratedResult as any).result).toEqual((originalResult as any).result);
     expect((rehydratedResult as any).result.message).toBe('Doubled value is 10');
+  });
+
+  it('preserves the `initData: true` map source through serialize → validate → rehydrate → execute', async () => {
+    const build = () =>
+      createWorkflow({
+        id: 'init-data-wf',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .tool(doubleTool)
+        .map({ value: { initData: true, path: 'value' } })
+        .commit();
+
+    const stored = toStorableGraph(build().stepGraph);
+    const mapping = stored[1] as Extract<(typeof stored)[number], { type: 'mapping' }>;
+    expect(JSON.parse(mapping.mapConfig).value).toEqual({ initData: true, path: 'value' });
+
+    const def = {
+      id: 'init-data-wf',
+      inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+      outputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+      graph: JSON.parse(JSON.stringify(stored)),
+    };
+    expect(validateDynamicWorkflow(def as any)).toEqual([]);
+
+    const mastra = new Mastra({
+      logger: false,
+      tools: { 'double-tool': doubleTool } as any,
+      storage: new InMemoryStore({ id: 'init-data' }),
+    });
+    const { workflow } = await rehydrateWorkflow(def, mastra);
+    mastra.addWorkflow(workflow, 'init-data-wf');
+    const result = await (await mastra.getWorkflow('init-data-wf').createRun()).start({ inputData: { value: 5 } });
+    expect(result.status).toBe('success');
+    expect((result as any).result).toEqual({ value: 5 });
+  });
+
+  it('serializes the workflow-instance `initData` form as the workflow id', () => {
+    const wf = createWorkflow({
+      id: 'init-ref-wf',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ value: z.number() }),
+    });
+    wf.tool(doubleTool)
+      .map({ value: { initData: wf, path: 'value' } })
+      .commit();
+
+    const mapping = toStorableGraph(wf.stepGraph)[1] as Extract<SerializedStepFlowEntry, { type: 'mapping' }>;
+    expect(JSON.parse(mapping.mapConfig).value).toEqual({ initData: 'init-ref-wf', path: 'value' });
   });
 
   it('rehydrates workflow-level description and metadata from the stored definition', async () => {
