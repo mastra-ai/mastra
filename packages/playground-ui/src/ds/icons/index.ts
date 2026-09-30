@@ -40,6 +40,7 @@ export * from './WorkflowCoinIcon';
 export * from './LatencyIcon';
 export * from './McpServerIcon';
 export * from './FolderIcon';
+export * from './FileIcon';
 export * from './McpCoinIcon';
 export * from './ToolCoinIcon';
 export * from './AgentNetworkCoinIcon';
