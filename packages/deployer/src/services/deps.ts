@@ -534,7 +534,20 @@ export class Deps extends MastraBase {
     if (this.lockFile) {
       const destination = path.join(dir, this.lockFile.filename);
       if (path.resolve(this.lockFile.path) !== path.resolve(destination)) {
-        await fsPromises.copyFile(this.lockFile.path, destination);
+        const packedBunWorkspaces =
+          pm === 'bun' &&
+          fs.existsSync(path.join(dir, 'package.json')) &&
+          Object.values(
+            ((await readJSON(path.join(dir, 'package.json'))) as { resolutions?: Record<string, string> })
+              .resolutions ?? {},
+          ).some(spec => spec.startsWith('file:./workspace-module/'));
+
+        if (packedBunWorkspaces) {
+          // The source lock still resolves workspace packages by their original paths, not the packed tarballs.
+          await fsPromises.rm(destination, { force: true });
+        } else {
+          await fsPromises.copyFile(this.lockFile.path, destination);
+        }
       }
 
       if (pm === 'yarn') {
