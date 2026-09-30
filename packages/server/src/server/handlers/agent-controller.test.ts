@@ -508,7 +508,7 @@ describe('agent-controller routes', () => {
       const persisted = vi.spyOn(session, 'respondToPersistedToolApproval');
       vi.spyOn(session, 'hasPersistedToolApproval').mockResolvedValue(false);
 
-      expect(await approve('user-ack-stale', 'stale')).toEqual({ ok: false, reason: 'not_pending' });
+      expect(await approve('user-ack-stale', 'stale')).toEqual({ ok: false, reason: 'stale_tool_call' });
       expect(persisted).not.toHaveBeenCalled();
             expect(session.approval.isArmed({ toolCallId: 'current' })).toBe(true);
     });

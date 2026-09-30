@@ -22544,6 +22544,7 @@ export type DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Q
 
 export type DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response = {
   ok: boolean;
+  reason?: ('not_pending' | 'stale_tool_call' | 'aborting' | 'no_pending_suspension') | undefined;
 };
 
 export type DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Request = Simplify<

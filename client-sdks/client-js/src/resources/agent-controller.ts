@@ -5,9 +5,12 @@ import type {
   MastraMessagePart,
 } from '@mastra/core/agent-controller';
 /** Acknowledgement for approval/suspension commands; `ok` is true only when a pending target claimed it. */
+export type AgentControllerCommandRejection = 'not_pending' | 'stale_tool_call' | 'aborting' | 'no_pending_suspension';
+
 export interface AgentControllerCommandAck {
   ok: boolean;
-  reason?: string;
+  /** Set when `ok` is false. */
+  reason?: AgentControllerCommandRejection;
 }
 
 export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '@mastra/core/agent-controller';

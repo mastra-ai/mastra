@@ -285,7 +285,10 @@ const createSessionResponseSchema = z.object({
   resourceId: z.string(),
   threadId: z.string().optional(),
 });
-const ackResponseSchema = z.object({ ok: z.boolean(), reason: z.string().optional() });
+const ackResponseSchema = z.object({
+  ok: z.boolean(),
+  reason: z.enum(['not_pending', 'stale_tool_call', 'aborting', 'no_pending_suspension']).optional(),
+});
 /**
  * Status-line relevant slice of the session's observational-memory progress.
  * Mirrors the TUI status line: `msg pending/threshold ↓removal` (the active
@@ -695,11 +698,17 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
         });
         if (!result.accepted) return { ok: false, reason: result.reason };
       } else {
-        if (!(await session.hasPersistedToolApproval(toolCallId))) return { ok: false, reason: 'not_pending' };
+        if (!(await session.hasPersistedToolApproval(toolCallId))) {
+          // Other approvals still waiting means the caller answered an outdated card.
+          return {
+            ok: false,
+            reason: session.approval.isArmed() ? ('stale_tool_call' as const) : ('not_pending' as const),
+          };
+        }
         // Nothing parked for this call (e.g. a card restored from history after a
         // restart): resume the stored suspended run that owns it. Claim synchronously
         // after the lookup so a concurrent duplicate decision is rejected.
-        if (!session.claimToolResponse(toolCallId)) return { ok: false, reason: 'not_pending' };
+        if (!session.claimToolResponse(toolCallId)) return { ok: false, reason: 'not_pending' as const };
         ackBackgroundSessionWork({
           work: session
             .respondToPersistedToolApproval({ toolCallId, approved, requestContext })
