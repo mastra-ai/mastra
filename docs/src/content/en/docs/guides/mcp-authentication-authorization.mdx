@@ -72,9 +72,9 @@ For the client integration you choose, distinguish these protocol responsibiliti
 - Clients must implement Proof Key for Code Exchange (PKCE), verify the authorization server advertises support, and use `S256` when technically capable.
 - Redirect URIs must use HTTPS or localhost. Authorization servers must match registered redirect URIs exactly. Clients should use and verify OAuth `state`.
 
-Clients must also reject any authorization response whose `iss` value doesn't exactly match the issuer recorded from validated authorization-server metadata. What the client must do depends on the response and the server's advertised support:
+Clients must also reject any authorization response whose `iss` value doesn't exactly match the issuer recorded from validated authorization-server metadata. What the client must do depends on the response and whether the server advertises `authorization_response_iss_parameter_supported`:
 
-| Authorization response `iss` | Server advertises `authorization_response_iss_parameter_supported` | Client action |
+| Authorization response `iss` | Server advertises `iss` support | Client action |
 | - | - | - |
 | Present and exactly matches the recorded issuer | Either value | Continue |
 | Present but doesn't match | Either value | Reject before exchanging the code |
