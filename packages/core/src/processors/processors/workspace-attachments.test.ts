@@ -329,6 +329,13 @@ describe('WorkspaceAttachmentsProcessor', () => {
       expect(parts[2].text).toContain('"b.xls" (application/vnd.ms-excel)');
     });
 
+    it('leaves a CSV reported as application/vnd.ms-excel untouched', async () => {
+      const { basePath, workspace } = await localWorkspace();
+      const { parts } = await run(workspace, [file(BASE64, 'data.csv', 'application/vnd.ms-excel')]);
+      expect(parts[0].type).toBe('file');
+      expect(await readdir(basePath)).toEqual([]);
+    });
+
     it.each([
       ['malformed base64', '!!!!'],
       ['a non-base64 data URL', `data:${XLSX},not-base64`],

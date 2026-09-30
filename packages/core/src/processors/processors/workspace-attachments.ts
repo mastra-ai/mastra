@@ -38,13 +38,17 @@ export interface WorkspaceAttachmentsTripwireMetadata {
   mediaType?: string;
 }
 
-/** Media type of an attachment the model can't read, detected by MIME type or else by extension. */
+/**
+ * Media type of an attachment the model can't read. The extension decides when there is a filename,
+ * because browsers report CSV files as application/vnd.ms-excel; the MIME type decides otherwise.
+ */
 function unsupportedMediaType(mediaType: unknown, filename: unknown): string | undefined {
+  if (typeof filename === 'string' && filename) {
+    const extension = filename.toLowerCase().match(/\.[^.]+$/)?.[0];
+    return extension ? UNSUPPORTED_TYPES_BY_EXTENSION[extension] : undefined;
+  }
   const type = typeof mediaType === 'string' ? mediaType.toLowerCase() : undefined;
-  if (type && UNSUPPORTED_MEDIA_TYPES.has(type)) return type;
-  if (typeof filename !== 'string') return undefined;
-  const extension = filename.toLowerCase().match(/\.[^.]+$/)?.[0];
-  return extension ? UNSUPPORTED_TYPES_BY_EXTENSION[extension] : undefined;
+  return type && UNSUPPORTED_MEDIA_TYPES.has(type) ? type : undefined;
 }
 
 function isCompositeFilesystem(fs: unknown): fs is CompositeFilesystem {
@@ -133,11 +137,12 @@ function findUnsupportedAttachments(messages: MastraDBMessage[]): UnsupportedAtt
         data?: unknown;
         url?: unknown;
       };
+      // MessageList mirrors file parts into experimental_attachments without the filename; skip those mirrors.
+      const data = file.data ?? file.url;
+      fromParts.add(data);
       const mediaType = unsupportedMediaType(file.mimeType ?? file.mediaType, file.filename);
       if (!mediaType) return;
 
-      const data = file.data ?? file.url;
-      fromParts.add(data);
       found.push({
         mediaType,
         filename: typeof file.filename === 'string' ? file.filename : undefined,

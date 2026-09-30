@@ -9,6 +9,7 @@ const workspace = new Workspace({
     id: 'xlsx-agent-example',
     apiKey: process.env.E2B_API_KEY,
   }),
+  // Install a spreadsheet skill here, e.g. `npx skills add anthropics/skills --skill xlsx`.
   skills: ['workspace/.agents/skills'],
 });
 
@@ -17,8 +18,9 @@ export const xlsxAgent = new Agent({
   name: 'XLSX Agent',
   description: 'Reads and analyses spreadsheet attachments by running Python in an E2B sandbox.',
   instructions: `
-    You analyse spreadsheets (.xlsx, .xls, .csv) that users attach.
-    Attachments are uploaded into the sandbox; the message tells you the path.
+    You analyse spreadsheets that users attach.
+    .xlsx and .xls attachments are uploaded into the sandbox; the message tells you the path.
+    .csv attachments arrive inline in the message as text.
     Run Python in the sandbox with pandas/openpyxl to read it. If an import fails, pip install the package and retry.
     Answer with the actual data you read, and say which sheets and ranges you looked at.
   `,
