@@ -1,6 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { SegmentedControl } from '@mastra/playground-ui/components/SegmentedControl';
+import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
@@ -202,10 +202,15 @@ export function OMSection({
         <SegmentedControl
           aria-label="Observe attachments"
           value={attachmentChoice}
-          options={ATTACHMENT_OPTIONS}
           disabled={busy || !config}
           onValueChange={choice => attachmentsMutation.mutate({ value: choiceToAttachment(choice) })}
-        />
+        >
+          {ATTACHMENT_OPTIONS.map(option => (
+            <SegmentedControlItem key={option.value} value={option.value}>
+              {option.label}
+            </SegmentedControlItem>
+          ))}
+        </SegmentedControl>
       </SettingsRow>
     </>
   );

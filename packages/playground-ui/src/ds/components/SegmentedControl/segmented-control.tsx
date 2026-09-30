@@ -8,49 +8,68 @@ import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
-export interface SegmentedControlOption<T extends string = string> {
-  value: T;
-  /** Visible text, or the accessible name when the control is `iconOnly`. */
-  label: string;
-  icon?: React.ReactNode;
-  disabled?: boolean;
-  /** Native tooltip, e.g. to explain why the option is disabled. */
-  title?: string;
-}
+type SegmentedControlContextValue = {
+  iconOnly: boolean;
+  registerItem: (value: string, element: HTMLElement | null) => void;
+};
 
-export type SegmentedControlProps<T extends string = string> = {
+const SegmentedControlContext = React.createContext<SegmentedControlContextValue | null>(null);
+
+type RadioGroupPassthroughProps = Omit<
+  RadioGroupPrimitive.Props,
+  'value' | 'defaultValue' | 'onValueChange' | 'onChange' | 'className' | 'children' | 'aria-label'
+>;
+
+export type SegmentedControlProps<T extends string = string> = RadioGroupPassthroughProps & {
   value: T;
   onValueChange: (value: T) => void;
-  options: ReadonlyArray<SegmentedControlOption<T>>;
   /** Accessible name of the group. */
   'aria-label': string;
   /** The track's outer height matches the control rung, so it lines up with a Button or Select in the same row. */
   size?: ControlSize;
-  /** Render only each option's icon; its `label` becomes the accessible name. */
+  /** Every item is a circle holding only an icon; each item then needs its own `aria-label`. */
   iconOnly?: boolean;
-  disabled?: boolean;
   className?: string;
+  children: React.ReactNode;
 };
 
 /**
  * A single choice between a few short options, all visible at once. A radio group underneath:
- * one tab stop, arrow keys move the selection. The selected segment is marked by a thumb that
- * slides between segments, so segments keep their natural width.
+ * one tab stop, arrow keys move the selection. The selected item is marked by a thumb that
+ * slides between items, so items keep their natural width.
+ *
+ * ```tsx
+ * <SegmentedControl aria-label="Permission" value={policy} onValueChange={setPolicy}>
+ *   <SegmentedControlItem value="allow">Allow</SegmentedControlItem>
+ *   <SegmentedControlItem value="ask">Ask</SegmentedControlItem>
+ * </SegmentedControl>
+ * ```
  */
 export function SegmentedControl<T extends string = string>({
   value,
   onValueChange,
-  options,
   'aria-label': ariaLabel,
   size = 'md',
   iconOnly = false,
-  disabled,
   className,
+  children,
+  ...props
 }: SegmentedControlProps<T>) {
   const itemRefs = React.useRef(new Map<string, HTMLElement>());
   const [thumb, setThumb] = React.useState<{ left: number; width: number } | null>(null);
   // The first placement snaps; only later moves animate.
   const [animate, setAnimate] = React.useState(false);
+
+  const context = React.useMemo<SegmentedControlContextValue>(
+    () => ({
+      iconOnly,
+      registerItem: (itemValue, element) => {
+        if (element) itemRefs.current.set(itemValue, element);
+        else itemRefs.current.delete(itemValue);
+      },
+    }),
+    [iconOnly],
+  );
 
   React.useLayoutEffect(() => {
     const item = itemRefs.current.get(value);
@@ -65,74 +84,82 @@ export function SegmentedControl<T extends string = string>({
     const observer = new ResizeObserver(measure);
     itemRefs.current.forEach(element => observer.observe(element));
     return () => observer.disconnect();
-  }, [value, options]);
+  }, [value, children]);
 
   React.useEffect(() => {
     if (thumb && !animate) setAnimate(true);
   }, [thumb, animate]);
 
-  const handleValueChange = (next: unknown) => {
-    const match = options.find(option => option.value === next);
-    if (match) onValueChange(match.value);
-  };
+  return (
+    <SegmentedControlContext.Provider value={context}>
+      <RadioGroupPrimitive
+        {...props}
+        value={value}
+        // Items carry the values the caller typed as `T`.
+        onValueChange={next => onValueChange(next as T)}
+        aria-label={ariaLabel}
+        data-slot="segmented-control"
+        data-size={size}
+        className={cn(
+          raisedSurfaceStyle,
+          'relative inline-flex w-fit shrink-0 items-stretch rounded-full p-0.5',
+          // Circular icon items have no padding of their own to keep them apart.
+          iconOnly && 'gap-0.5',
+          controlHeight[size],
+          'data-[disabled]:opacity-50',
+          className,
+        )}
+      >
+        {thumb && (
+          <span
+            aria-hidden="true"
+            data-slot="segmented-control-thumb"
+            className={cn(
+              'pointer-events-none absolute inset-y-0.5 left-0 rounded-full bg-fill-hover ring-1 ring-border ring-inset',
+              animate && 'transition-[transform,width] duration-normal ease-out-custom motion-reduce:transition-none',
+            )}
+            style={{ width: thumb.width, transform: `translateX(${thumb.left}px)` }}
+          />
+        )}
+        {children}
+      </RadioGroupPrimitive>
+    </SegmentedControlContext.Provider>
+  );
+}
+
+export type SegmentedControlItemProps = Omit<RadioPrimitive.Root.Props, 'className' | 'value' | 'children'> & {
+  value: string;
+  /** Text, an icon and text, or only an icon when the control is `iconOnly`. */
+  children: React.ReactNode;
+  className?: string;
+};
+
+export function SegmentedControlItem({ value, disabled, className, children, ...props }: SegmentedControlItemProps) {
+  const context = React.useContext(SegmentedControlContext);
+  if (!context) throw new Error('SegmentedControlItem must be used inside a SegmentedControl');
+  const { iconOnly, registerItem } = context;
 
   return (
-    <RadioGroupPrimitive
+    <RadioPrimitive.Root
+      {...props}
+      ref={element => registerItem(value, element)}
       value={value}
-      onValueChange={handleValueChange}
       disabled={disabled}
-      aria-label={ariaLabel}
-      data-slot="segmented-control"
-      data-size={size}
+      data-slot="segmented-control-item"
       className={cn(
-        raisedSurfaceStyle,
-        'relative inline-flex w-fit shrink-0 items-stretch rounded-full p-0.5',
-        // Circular icon segments have no padding of their own to keep them apart.
-        iconOnly && 'gap-0.5',
-        controlHeight[size],
-        'data-[disabled]:opacity-50',
+        'relative inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-full text-label whitespace-nowrap select-none',
+        iconOnly ? 'aspect-square' : 'px-3',
+        // A whole disabled group is dimmed on the track; a single disabled item dims itself.
+        disabled && 'opacity-50',
+        '[&_svg]:size-3.5 [&_svg]:shrink-0',
+        'text-muted-foreground hover:text-foreground data-[checked]:text-foreground',
+        'focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-border-focus',
+        'data-[disabled]:cursor-not-allowed data-[disabled]:hover:text-muted-foreground',
+        controlStateColorTransition,
         className,
       )}
     >
-      {thumb && (
-        <span
-          aria-hidden="true"
-          data-slot="segmented-control-thumb"
-          className={cn(
-            'pointer-events-none absolute inset-y-0.5 left-0 rounded-full bg-fill-hover ring-1 ring-border ring-inset',
-            animate && 'transition-[transform,width] duration-normal ease-out-custom motion-reduce:transition-none',
-          )}
-          style={{ width: thumb.width, transform: `translateX(${thumb.left}px)` }}
-        />
-      )}
-      {options.map(option => (
-        <RadioPrimitive.Root
-          key={option.value}
-          ref={element => {
-            if (element) itemRefs.current.set(option.value, element);
-            else itemRefs.current.delete(option.value);
-          }}
-          value={option.value}
-          disabled={option.disabled}
-          title={option.title}
-          aria-label={iconOnly ? option.label : undefined}
-          data-slot="segmented-control-item"
-          className={cn(
-            'relative inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-full text-label whitespace-nowrap select-none',
-            iconOnly ? 'aspect-square' : 'px-3',
-            // A whole disabled group is dimmed on the track; a single disabled option dims itself.
-            option.disabled && 'opacity-50',
-            '[&_svg]:size-3.5 [&_svg]:shrink-0',
-            'text-muted-foreground hover:text-foreground data-[checked]:text-foreground',
-            'focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-border-focus',
-            'data-[disabled]:cursor-not-allowed data-[disabled]:hover:text-muted-foreground',
-            controlStateColorTransition,
-          )}
-        >
-          {option.icon}
-          {!iconOnly && option.label}
-        </RadioPrimitive.Root>
-      ))}
-    </RadioGroupPrimitive>
+      {children}
+    </RadioPrimitive.Root>
   );
 }

@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { SegmentedControl } from '@mastra/playground-ui/components/SegmentedControl';
+import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
@@ -99,16 +99,16 @@ export function AddApiKeyDialog({
                 value={scope}
                 onValueChange={setScope}
                 disabled={saveKeyMutation.isPending}
-                options={[
-                  { value: 'user', label: 'Just me' },
-                  {
-                    value: 'org',
-                    label: 'Everyone in org',
-                    disabled: !canWriteOrgKey,
-                    title: canWriteOrgKey ? undefined : 'Only org admins can share a key with everyone',
-                  },
-                ]}
-              />
+              >
+                <SegmentedControlItem value="user">Just me</SegmentedControlItem>
+                <SegmentedControlItem
+                  value="org"
+                  disabled={!canWriteOrgKey}
+                  title={canWriteOrgKey ? undefined : 'Only org admins can share a key with everyone'}
+                >
+                  Everyone in org
+                </SegmentedControlItem>
+              </SegmentedControl>
             </div>
           )}
           {personalOnlyWarning && (

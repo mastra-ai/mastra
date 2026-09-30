@@ -1,6 +1,7 @@
 import { Monitor, Moon, Sun } from 'lucide-react';
 
-import { SegmentedControl } from '../SegmentedControl';
+import { SegmentedControl, SegmentedControlItem } from '../SegmentedControl';
+import type { SegmentedControlProps } from '../SegmentedControl';
 import { useTheme } from '../ThemeProvider';
 import type { Theme } from '../ThemeProvider/theme-context';
 import type { ControlSize } from '@/ds/primitives/control-size';
@@ -20,7 +21,12 @@ const DEFAULT_OPTIONS: ReadonlyArray<ThemeToggleOption> = [
 type ControlledProps = { value: Theme; onChange: (next: Theme) => void };
 type UncontrolledProps = { value?: undefined; onChange?: undefined };
 
-export type ThemeToggleProps = {
+type ThemeToggleGroupProps = Omit<
+  SegmentedControlProps<Theme>,
+  'value' | 'onValueChange' | 'onChange' | 'aria-label' | 'size' | 'iconOnly' | 'children'
+>;
+
+export type ThemeToggleProps = ThemeToggleGroupProps & {
   options?: ReadonlyArray<ThemeToggleOption>;
   /**
    * Control rung, shared with Button and Select. `xs` is deprecated: the control can no longer
@@ -28,8 +34,6 @@ export type ThemeToggleProps = {
    */
   size?: ControlSize | 'xs';
   'aria-label'?: string;
-  disabled?: boolean;
-  className?: string;
 } & (ControlledProps | UncontrolledProps);
 
 /** Icon-only `SegmentedControl` bound to the active theme, or to `value`/`onChange` when controlled. */
@@ -38,9 +42,8 @@ export const ThemeToggle = ({
   onChange,
   options = DEFAULT_OPTIONS,
   size = 'md',
-  className,
-  disabled,
   'aria-label': ariaLabel = 'Theme',
+  ...groupProps
 }: ThemeToggleProps) => {
   const { theme, setTheme } = useTheme();
   const current = value ?? theme;
@@ -49,14 +52,18 @@ export const ThemeToggle = ({
 
   return (
     <SegmentedControl
+      {...groupProps}
       aria-label={ariaLabel}
       iconOnly
       size={size === 'xs' ? 'sm' : size}
-      options={options}
       value={effectiveCurrent}
       onValueChange={commit}
-      disabled={disabled}
-      className={className}
-    />
+    >
+      {options.map(option => (
+        <SegmentedControlItem key={option.value} value={option.value} aria-label={option.label}>
+          {option.icon}
+        </SegmentedControlItem>
+      ))}
+    </SegmentedControl>
   );
 };

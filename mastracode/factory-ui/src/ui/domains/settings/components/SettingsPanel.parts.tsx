@@ -4,7 +4,7 @@ import type {
   PermissionRules,
   ToolCategory,
 } from '@mastra/client-js';
-import { SegmentedControl } from '@mastra/playground-ui/components/SegmentedControl';
+import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { ThemeToggle } from '@mastra/playground-ui/components/ThemeToggle';
 import { useState } from 'react';
@@ -107,9 +107,14 @@ export function BehaviorSettings({
               aria-label="Notifications"
               value={notificationMode}
               disabled={!settings}
-              options={NOTIFICATION_MODES}
               onValueChange={v => onBehaviorChange({ notifications: v })}
-            />
+            >
+              {NOTIFICATION_MODES.map(option => (
+                <SegmentedControlItem key={option.value} value={option.value}>
+                  {option.label}
+                </SegmentedControlItem>
+              ))}
+            </SegmentedControl>
           </SettingsRow>
         </SettingsContainer>
       </SettingsSubsection>
@@ -148,9 +153,14 @@ function PermissionsSection({
               aria-label={`${label} permission`}
               value={permissions?.categories?.[value] ?? 'ask'}
               disabled={!permissions}
-              options={PERMISSION_POLICIES}
               onValueChange={policy => void setPermissionForCategory(value, policy)}
-            />
+            >
+              {PERMISSION_POLICIES.map(option => (
+                <SegmentedControlItem key={option.value} value={option.value}>
+                  {option.label}
+                </SegmentedControlItem>
+              ))}
+            </SegmentedControl>
           </SettingsRow>
         ))}
       </SettingsContainer>
