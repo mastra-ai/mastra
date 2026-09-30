@@ -10,14 +10,15 @@ test.describe('MCP server tool detail page', () => {
     test('returns the tool output for the submitted input', async ({ page }) => {
       await page.goto('/mcps/simple-mcp-server/tools/simpleMcpTool');
 
-      await expect(page.locator('[data-language="json"]')).toHaveText('{}');
+      await page.getByRole('tab', { name: 'Playground' }).click();
+      await expect(page.getByText('No response yet')).toBeVisible();
 
       await page.getByLabel('The name of the person').fill('John Doe');
-      await page.getByRole('button', { name: 'Submit' }).click();
+      await page.getByRole('button', { name: 'Run' }).click();
 
-      await expect(page.locator('[data-language="json"]')).toHaveText(
-        '{  "result": {    "hello": "world",    "thisIsA": "fixture"  }}',
-      );
+      await expect(page.getByText('Success')).toBeVisible();
+      await expect(page.locator('pre')).toContainText('"result"');
+      await expect(page.locator('pre')).toContainText('"thisIsA": "fixture"');
     });
   });
 });

@@ -224,7 +224,8 @@ test.describe('Member Role', () => {
       await setupMemberAuth(page);
       await page.goto('/tools/weatherInfo');
 
-      // Should see the tool execution form/panel
+      // The execution form lives on the Playground tab
+      await page.getByRole('tab', { name: 'Playground' }).click();
       await expect(page.locator('[name="location"]')).toBeVisible();
     });
 
@@ -336,7 +337,8 @@ test.describe('Member Role', () => {
       await setupMemberAuth(page);
       await page.goto('/tools/weatherInfo');
 
-      // Member should see tool execution panel
+      // Member should see tool execution panel on the Playground tab
+      await page.getByRole('tab', { name: 'Playground' }).click();
       await expect(page.locator('[name="location"]')).toBeVisible();
 
       // Now check as viewer

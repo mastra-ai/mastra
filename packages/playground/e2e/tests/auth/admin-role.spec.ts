@@ -199,7 +199,8 @@ test.describe('Admin Role', () => {
       await setupAdminAuth(page);
       await page.goto('/tools/weatherInfo');
 
-      // Should see the tool execution form/panel
+      // The execution form lives on the Playground tab
+      await page.getByRole('tab', { name: 'Playground' }).click();
       await expect(page.locator('[name="location"]')).toBeVisible();
     });
 

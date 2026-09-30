@@ -345,7 +345,8 @@ test.describe('Viewer Role', () => {
 
       await page.reload();
 
-      // Member should see tool execution panel
+      // Member should see tool execution panel on the Playground tab
+      await page.getByRole('tab', { name: 'Playground' }).click();
       await expect(page.locator('[name="location"]')).toBeVisible();
     });
   });

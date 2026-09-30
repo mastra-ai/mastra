@@ -11,12 +11,15 @@ test.describe('Tool detail page', () => {
       await page.goto('/tools/simpleMcpTool');
 
       await expect(page.locator('h2')).toHaveText('simpleMcpTool');
-      await expect(page.locator('[data-language="json"]')).toHaveText('{}');
+      await page.getByRole('tab', { name: 'Playground' }).click();
+      await expect(page.getByText('No response yet')).toBeVisible();
 
       await page.getByLabel('The name of the person').fill('John Doe');
-      await page.getByRole('button', { name: 'Submit' }).click();
+      await page.getByRole('button', { name: 'Run' }).click();
 
-      await expect(page.locator('[data-language="json"]')).toHaveText('{  "hello": "world",  "thisIsA": "fixture"}');
+      await expect(page.getByText('Success')).toBeVisible();
+      await expect(page.locator('pre')).toContainText('"hello": "world"');
+      await expect(page.locator('pre')).toContainText('"thisIsA": "fixture"');
     });
   });
 
