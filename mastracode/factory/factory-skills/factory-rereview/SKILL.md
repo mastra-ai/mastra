@@ -152,7 +152,7 @@ On any mismatch, stop and record it as a blocking security finding with both val
 
 Compose two artifacts, in order — the **published body** goes on the PR, the **session handoff** goes back into the run's conversation. Don't send either to the conversation yet; both are drafted here, the published body is sent to the PR, the verdict is recorded, and only then is the session handoff posted.
 
-The **published body** (what `gh pr review --body-file` receives) **must open with the verdict line**: `Verdict: approve` or `Verdict: request changes`, then on the next line `Reviewed head: <full 40-character SHA>` naming the exact head you verified, followed by:
+The **published body** (what the source-control broker receives) **must open with the verdict line**: `Verdict: approve` or `Verdict: request changes`, then on the next line `Reviewed head: <full 40-character SHA>` naming the exact head you verified, followed by:
 
 - **Prior pass disposition** — every substantive item from your previous review, classified: addressed, partially addressed, still open, refuted by the push, or invalidated by the push. Cite the commit or `file:line` proving each addressed/refuted/invalidated call. A prior blocking finding still open is called out plainly at the top of this section.
 - **Findings** — lead with the mechanism of the most consequential finding; new-this-pass findings from the push and from the fresh whole-PR sweep are each labeled as `[push]` or `[fresh]` so the record is honest about where they came from. Distill — this is a handoff, not a transcript.

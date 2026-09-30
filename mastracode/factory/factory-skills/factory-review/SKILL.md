@@ -145,7 +145,7 @@ On any mismatch, stop and record it as a blocking security finding with both val
 
 Compose two artifacts, in order — the **published body** goes on the PR, the **session handoff** goes back into the run's conversation. Don't send either to the conversation yet; both are drafted here, the published body is sent to the PR, the verdict is recorded, and only then is the session handoff posted.
 
-The **published body** (what `gh pr review --body-file` receives) **must open with the verdict line**: `Verdict: approve` or `Verdict: request changes`, then on the next line `Reviewed head: <full 40-character SHA>` naming the exact head you verified, followed by:
+The **published body** (what the source-control broker receives) **must open with the verdict line**: `Verdict: approve` or `Verdict: request changes`, then on the next line `Reviewed head: <full 40-character SHA>` naming the exact head you verified, followed by:
 
 - **Findings** — lead with the mechanism of the most consequential finding, then correctness, tests, scope, and pattern-consistency, each grounded in the history you traced. Distill — this is a handoff, not a transcript.
 - **Approach** — the required outcome and the simplest sufficient design from your Phase 1 record, and whether the PR's approach and scope are justified against it. Agreement stated in one line; disagreement with the evidence that supports the alternative.
