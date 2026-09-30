@@ -421,12 +421,13 @@ async function startMastraCodeApp(
       stopped = true;
       tui.stop();
       result.threadScheduler.stop();
-      const closeSignalsPubSub = (result.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
+      // Call close() on the pubsub itself; a detached method loses `this` and rejects silently.
+      const signalsPubSub = result.signalsPubSub as { close?: () => Promise<void> | void } | undefined;
       await Promise.allSettled([
         result.mcpManager?.disconnect(),
         result.controller.getMastra()?.stopWorkers(),
         result.controller.stopIntervals(),
-        closeSignalsPubSub?.(),
+        signalsPubSub?.close?.(),
       ]);
       // Close storage last — checkpoints WAL and switches to DELETE journal
       // mode for local libsql, mirroring the production asyncCleanup() path.

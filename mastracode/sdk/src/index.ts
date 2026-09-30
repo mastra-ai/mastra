@@ -376,6 +376,15 @@ export interface MastraCodeConfig {
    */
   crossAgentSignals?: boolean;
   /**
+   * Enable experimental cross-project agent discovery: agents in other
+   * projects on this machine can discover and message this one, and it can
+   * discover and message them, through a shared local socket scope. Requires
+   * `crossAgentSignals` and the built-in Unix socket PubSub (`unixSocketPubSub`,
+   * with no `pubsub` injected). Defaults to the
+   * `signals.experimentalCrossProjectAgentSignals` global setting (off).
+   */
+  crossProjectAgentSignals?: boolean;
+  /**
    * Enable the experimental agent schedule tools (`schedule_create`,
    * `schedule_list`, `schedule_update`, `schedule_run`), which manage the same
    * process-local schedules as `/schedules`. Defaults to the
@@ -602,21 +611,27 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const sessionId = `mastracode-session-${shortHash(project.resourceId)}`;
   const ownerId = `mastracode-${shortHash(`${hostname()}\0${project.rootPath}`)}`;
 
+  // Cross-agent communication is experimental and opt-in. It gates the agent
+  // connections provider/tools and the session thread-ownership lifecycle.
+  // Only its cross-project extension changes the built-in PubSub transport.
+  const useCrossAgentSignals =
+    config?.crossAgentSignals ?? globalSettings.signals?.experimentalCrossAgentSignals ?? false;
+  const useCrossProjectAgentSignals =
+    useCrossAgentSignals &&
+    (config?.crossProjectAgentSignals ?? globalSettings.signals?.experimentalCrossProjectAgentSignals ?? false);
+
   const configuredPubSub = config?.pubsub;
   const useUnixSocketPubSub =
     (config?.unixSocketPubSub ?? globalSettings.signals?.unixSocketPubSub ?? false) && process.platform !== 'win32';
   const ownSignalsPubSub =
-    !configuredPubSub && useUnixSocketPubSub ? createSignalsPubSub(project.resourceId) : undefined;
+    !configuredPubSub && useUnixSocketPubSub
+      ? createSignalsPubSub(project.resourceId, { sharedAgentDiscovery: useCrossProjectAgentSignals })
+      : undefined;
   const signalsPubSub = configuredPubSub ?? ownSignalsPubSub;
   const crossProcessPubSub = config?.crossProcessPubSub ?? Boolean(ownSignalsPubSub);
   if (crossProcessPubSub && !signalsPubSub) {
     throw new Error('crossProcessPubSub requires a pubsub instance');
   }
-  // Cross-agent communication is experimental and opt-in. It gates the agent
-  // connections provider/tools and the session thread-ownership lifecycle, but
-  // never the PubSub transport itself.
-  const useCrossAgentSignals =
-    config?.crossAgentSignals ?? globalSettings.signals?.experimentalCrossAgentSignals ?? false;
   const useScheduleTools = config?.scheduleTools ?? globalSettings.signals?.experimentalScheduleTools ?? false;
 
   // Storage. An injected instance is used as-is — no connection test, no

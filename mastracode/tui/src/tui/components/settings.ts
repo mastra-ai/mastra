@@ -30,6 +30,7 @@ export interface SettingsConfig {
   libsqlUrl: string;
   experimentalGithubSignals: boolean;
   experimentalCrossAgentSignals: boolean;
+  experimentalCrossProjectAgentSignals: boolean;
   experimentalScheduleTools: boolean;
   experimentalAgent: ExperimentalAgent | null;
   backgroundToolsEnabled: boolean;
@@ -48,6 +49,7 @@ export interface SettingsCallbacks {
   onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => void;
   onExperimentalGithubSignalsChange: (enabled: boolean) => boolean | void | Promise<boolean | void>;
   onExperimentalCrossAgentSignalsChange: (enabled: boolean) => boolean | void | Promise<boolean | void>;
+  onExperimentalCrossProjectAgentSignalsChange: (enabled: boolean) => void;
   onExperimentalScheduleToolsChange: (enabled: boolean) => void;
   onExperimentalAgentChange: (agent: ExperimentalAgent | null) => void;
   onBackgroundToolsChange: (enabled: boolean) => void;
@@ -507,6 +509,36 @@ export class SettingsComponent extends Box implements Focusable {
               const accepted = await callbacks.onExperimentalCrossAgentSignalsChange(nextValue);
               config.experimentalCrossAgentSignals = accepted === false ? !nextValue : nextValue;
               done(config.experimentalCrossAgentSignals ? 'On' : 'Off');
+            },
+            () => done(),
+          ),
+      },
+      {
+        id: 'experimentalCrossProjectAgentSignals',
+        label: 'Experimental cross-project agent discovery',
+        description:
+          'Discover and message agents running in other projects on this machine. Requires cross-agent communication (restart required).',
+        currentValue: config.experimentalCrossProjectAgentSignals ? 'On' : 'Off',
+        submenu: (_currentValue, done) =>
+          new SelectSubmenu(
+            [
+              {
+                value: 'on',
+                label: '  On',
+                description: 'Agents in other projects can find and message this one, and it can message them',
+              },
+              {
+                value: 'off',
+                label: '  Off',
+                description: 'Only agents in this project can find each other',
+              },
+            ],
+            config.experimentalCrossProjectAgentSignals ? 'on' : 'off',
+            value => {
+              const enabled = value === 'on';
+              callbacks.onExperimentalCrossProjectAgentSignalsChange(enabled);
+              config.experimentalCrossProjectAgentSignals = enabled;
+              done(enabled ? 'On' : 'Off');
             },
             () => done(),
           ),

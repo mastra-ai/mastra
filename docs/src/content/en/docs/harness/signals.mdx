@@ -401,6 +401,35 @@ Saved connections remain in the sender thread until explicitly disconnected. Eve
 
 After a send attempt reaches Core routing, the routing result is authoritative. The result can be `wake`, `deliver`, `persist`, `blocked`, or `discard`, depending on the target thread and notification policy. A send that isn't acknowledged by the advertised thread owner returns an error and doesn't consume its `messageId`, so the sender can retry it.
 
+### Discover agents in other projects
+
+By default, peer discovery only reaches Mastra Code instances in the same project, because each project resource ID gets its own local socket directory under `/tmp/mc`. Cross-project agent discovery is experimental and off by default. It lets an instance in one project list, connect to, and message instances running in other projects on the same machine, and receive their replies.
+
+To turn it on, open `/settings` and set **Experimental cross-agent communication** and **Experimental cross-project agent discovery** to **On**. The change applies after a restart. Every instance that should take part needs both settings and a restart, including the instance that replies. Embedded clients set `crossProjectAgentSignals: true` together with `crossAgentSignals: true` and `unixSocketPubSub: true`:
+
+```typescript
+import { createMastraCode } from 'mastracode'
+
+const mastraCode = await createMastraCode({
+  unixSocketPubSub: true,
+  crossAgentSignals: true,
+  crossProjectAgentSignals: true,
+})
+```
+
+The setting has no effect when cross-agent communication is off, when Unix socket pub/sub is off or unavailable (Windows), or when you pass your own `pubsub`.
+
+Mastra Code already routes a thread's messages and run leases to the socket directory of the thread's project, and finds a thread's owner through a shared `/tmp/mc/_shared` directory. A message reaches its thread whichever project sends it. What stays per project is peer discovery, which lists the threads you can connect to. With the setting on, peer discovery also travels through `/tmp/mc/_shared`. Instances in the same project keep finding each other even when only some of them have the setting on.
+
+Keep these limits in mind:
+
+- **Trust boundary:** Any local process running as your user can discover advertised threads, wake them, and persist signals into them. Only turn this on for machines and accounts you trust.
+- **Resource IDs:** A resource ID set with `/resource` or `MASTRA_RESOURCE_ID` must be usable as a directory name for other projects to reach it. IDs containing `/`, `\`, or control characters, IDs longer than 128 characters, and `.` or `..` stay reachable within their project only.
+- **Low-priority signals:** Signals that are persisted instead of delivered are written to the sender's storage. Projects that share the default Mastra Code database see them. A project with its own storage doesn't.
+- **Many instances:** Every instance with the setting on answers every peer discovery request on the machine. With many instances running, `agent_connections_list` can return a partial list when replies arrive after the discovery timeout.
+
+To isolate an instance or a test from the shared `/tmp/mc` directory, set `MASTRACODE_SIGNALS_SOCKET_ROOT` to another absolute path. Keep the path short, because macOS limits Unix socket paths to 104 bytes.
+
 ## Distributed and serverless deployments
 
 Signals coordinate runs through a pub/sub backend. When a signal arrives on a backend that implements `LeaseProvider`, Mastra acquires a lease on the target thread so a single process owns the conversation at a time, then either wakes the agent or routes the input into the running loop. Backends without leasing fall back to a no-op that always grants ownership, which is fine in a single process but not across instances.
