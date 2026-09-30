@@ -350,6 +350,8 @@ export interface FactoryDecisionDispatcherOptions {
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   /** Injects the work item's recent comments into skill-invocation kickoffs. */
   feedReader?: FactoryFeedReader;
+  /** Dismisses superseded Factory change requests on a GitHub pull request. */
+  dismissStaleReviews?: (decision: Extract<FactoryCommitDecision, { type: 'dismissStaleReviews' }>) => Promise<void>;
   resolveLinkedWorkItemParentId?: (input: {
     orgId: string;
     factoryProjectId: string;
@@ -511,6 +513,7 @@ export class FactoryDecisionDispatcher {
   }) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   readonly #feedReader?: FactoryFeedReader;
+  readonly #dismissStaleReviews?: FactoryDecisionDispatcherOptions['dismissStaleReviews'];
   readonly #resolveLinkedWorkItemParentId?: FactoryDecisionDispatcherOptions['resolveLinkedWorkItemParentId'];
   readonly #maxInFlight: number;
   readonly #staleBindingSweepIntervalMs: number;
@@ -544,6 +547,7 @@ export class FactoryDecisionDispatcher {
     this.#refreshManagedMemorySettings = options.refreshManagedMemorySettings;
     this.#primeCredentials = options.primeCredentials;
     this.#feedReader = options.feedReader;
+    this.#dismissStaleReviews = options.dismissStaleReviews;
     this.#resolveLinkedWorkItemParentId = options.resolveLinkedWorkItemParentId;
     const maxInFlight = options.maxInFlight ?? MAX_IN_FLIGHT;
     this.#maxInFlight = Number.isFinite(maxInFlight) && maxInFlight > 0 ? Math.floor(maxInFlight) : MAX_IN_FLIGHT;
@@ -1140,6 +1144,11 @@ export class FactoryDecisionDispatcher {
             ),
           true,
         );
+        return;
+      }
+      case 'dismissStaleReviews': {
+        if (!this.#dismissStaleReviews) throw new Error('GitHub review dismissal is not configured.');
+        await this.#dismissStaleReviews(decision);
         return;
       }
       case 'notify': {
