@@ -447,9 +447,18 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               options.deferErrorChunks &&
               (chunk.type === 'error' || (chunk.type === 'finish' && chunk.payload?.stepResult?.reason === 'error'));
 
+            // Results of client-executed tools already ran through processors
+            // where the tool ran (llm-mapping for the regular agent, the tool-call
+            // step for durable agents). Only provider-executed results arrive
+            // here unprocessed, inside the model stream.
+            const isClientToolChunk =
+              chunk.type === 'tool-output-denied' ||
+              ((chunk.type === 'tool-result' || chunk.type === 'tool-error') && !chunk.payload?.providerExecuted);
+
             if (
               (chunk.type === 'finish' && chunk.payload?.stepResult?.reason === 'tool-calls') ||
-              isDeferredErrorChunk
+              isDeferredErrorChunk ||
+              isClientToolChunk
             ) {
               controller.enqueue(chunk);
               return;

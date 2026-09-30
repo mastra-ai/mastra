@@ -553,12 +553,22 @@ export function createDurableToolCallStep() {
           message: `Tool "${toolName}" not found.${availableToolsStr}. Call tools by their exact name only — never add prefixes, namespaces, or colons.`,
         };
         if (pubsub) {
-          await emitChunkEvent(pubsub, runId, {
-            type: 'tool-error',
+          // Runs through output processors (tripwire/blocking/redaction) and emits
+          await processChunkThroughOutputProcessors(
+            {
+              type: 'tool-error',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: { toolCallId, toolName, args, error },
+            } as ChunkType,
+            registryEntry,
+            pubsub,
             runId,
-            from: ChunkFrom.AGENT,
-            payload: { toolCallId, toolName, args, error },
-          });
+            initData.agentId,
+            logger,
+            undefined,
+            processorObservabilityContext,
+          );
         }
         return {
           ...typedInput,
