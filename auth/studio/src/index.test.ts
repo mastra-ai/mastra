@@ -1,9 +1,26 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { MastraAuthStudio, MastraRBACStudio } from './index';
 import type { StudioUser } from './index';
+
+// Run every test from a scratch cwd so an ambient `.mastra-project.json`
+// (present at the repo root in CI) can't leak into the constructor's new
+// project-config fallback and set `organizationId` behind the tests' backs.
+let __originalCwd: string;
+let __scratchCwd: string;
+
+beforeAll(() => {
+  __originalCwd = process.cwd();
+  __scratchCwd = mkdtempSync(join(tmpdir(), 'mastra-auth-studio-tests-'));
+  process.chdir(__scratchCwd);
+});
+
+afterAll(() => {
+  process.chdir(__originalCwd);
+  rmSync(__scratchCwd, { recursive: true, force: true });
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
