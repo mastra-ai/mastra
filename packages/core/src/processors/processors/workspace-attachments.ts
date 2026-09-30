@@ -15,7 +15,8 @@
  * them up is left to the user.
  *
  * Tripwire codes (`metadata.code`) when the run is aborted:
- * - `WORKSPACE_REQUIRED_FOR_ATTACHMENT`: no workspace, or none that can be written to.
+ * - `WORKSPACE_REQUIRED_FOR_ATTACHMENT`: no workspace, or none that can be written to, or several
+ *   files for a sandbox that has `writeFiles` but no `executeCommand` (a partial upload couldn't be removed).
  * - `ATTACHMENT_NOT_INLINE`: the file was sent as a URL instead of inline data.
  * - `ATTACHMENT_INVALID_DATA`: the data is not base64 or a base64 data URL.
  * - `ATTACHMENT_TOO_LARGE`: a file is larger than `maxBytes`, or all files together exceed `maxTotalBytes`.
@@ -206,8 +207,6 @@ type UnsupportedAttachment = {
 type UploadTarget = {
   directory: string;
   write: (path: string, content: Uint8Array) => Promise<unknown>;
-  /** Writes every file in one call when the destination supports batches. */
-  writeAll?: (files: { path: string; content: Uint8Array }[]) => Promise<unknown>;
   remove?: (path: string) => Promise<unknown>;
 };
 
@@ -319,11 +318,8 @@ async function resolveUploadTarget(
     ? (path: string) => runShell(sandbox, `rm -rf ${shellQuote(parentDirectory(path))}`, 'remove the upload directory')
     : undefined;
   if (sandbox?.writeFiles) {
-    // One call for the whole request: with no executeCommand there is no way to delete a
-    // partial upload, so atomicity across the batch relies on the provider's writeFiles.
-    const writeAll = (files: { path: string; content: Uint8Array }[]) =>
-      sandbox.writeFiles!(files.map(({ path, content }) => ({ path, content: Buffer.from(content) })));
-    return { directory: 'uploads', write: (path, content) => writeAll([{ path, content }]), writeAll, remove };
+    const write = (path: string, content: Uint8Array) => sandbox.writeFiles!([{ path, content: Buffer.from(content) }]);
+    return { directory: 'uploads', write, remove };
   }
   if (sandbox?.executeCommand) {
     return {
@@ -391,23 +387,8 @@ function parentDirectory(path: string) {
   return path.slice(0, path.lastIndexOf('/'));
 }
 
-/**
- * Writes every file, or none: if one write fails, files already written are deleted.
- * Batch destinations get a single call; a failed batch is rolled back when the target can remove files.
- */
+/** Writes every file, or none: if one write fails, files already written are deleted. */
 async function uploadAll(target: UploadTarget, files: { filename?: string; bytes: Uint8Array }[]) {
-  if (target.writeAll) {
-    const paths = files.map(file => `${target.directory}/${crypto.randomUUID()}/${sanitizeFilename(file.filename)}`);
-    try {
-      await target.writeAll(files.map((file, index) => ({ path: paths[index]!, content: file.bytes })));
-    } catch (error) {
-      if (target.remove) await Promise.allSettled(paths.map(path => target.remove!(path)));
-      const names = files.map(file => `"${file.filename ?? 'attachment'}"`).join(', ');
-      const reason = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to upload attachments ${names} to ${target.directory}: ${reason}`, { cause: error });
-    }
-    return paths;
-  }
   const paths: string[] = [];
   try {
     for (const file of files) {
@@ -473,40 +454,43 @@ export class WorkspaceAttachmentsProcessor implements Processor<'workspace-attac
         `Attachment "${attachment.filename ?? 'attachment'}" is ${size} bytes, over the ${limit}-byte limit. Send a smaller file`,
         { metadata: { code: ATTACHMENT_TOO_LARGE, mediaType: attachment.mediaType } },
       );
-    const files = attachments.map(attachment => {
+    const totalTooLarge = (attachment: UnsupportedAttachment, total: number, limit: number) =>
+      abort(
+        `Attachments in this request total at least ${total} bytes, over the ${limit}-byte limit for one request. Send fewer or smaller files`,
+        { metadata: { code: ATTACHMENT_TOO_LARGE, mediaType: attachment.mediaType } },
+      );
+    const files: { filename?: string; bytes: Uint8Array }[] = [];
+    let total = 0;
+    for (const attachment of attachments) {
       // Reject oversized payloads before allocating their decoded bytes.
       const estimated = estimatedDecodedSize(attachment.data);
       if (maxBytes !== undefined && estimated !== undefined && estimated > maxBytes) {
         return tooLarge(attachment, estimated, maxBytes);
       }
+      if (maxTotalBytes !== undefined && estimated !== undefined && total + estimated > maxTotalBytes) {
+        return totalTooLarge(attachment, total + estimated, maxTotalBytes);
+      }
       const bytes = decodeData(attachment.data);
       if (bytes === ATTACHMENT_NOT_INLINE) {
         return abort(
           `Attachment "${attachment.filename ?? 'attachment'}" was sent by URL. Send its content inline as base64 or a data URL`,
-          {
-            metadata: { code: ATTACHMENT_NOT_INLINE, mediaType: attachment.mediaType },
-          },
+          { metadata: { code: ATTACHMENT_NOT_INLINE, mediaType: attachment.mediaType } },
         );
       }
       if (bytes === ATTACHMENT_INVALID_DATA) {
         return abort(
           `Attachment "${attachment.filename ?? 'attachment'}" has invalid data: expected base64 or a base64 data URL`,
-          {
-            metadata: { code: ATTACHMENT_INVALID_DATA, mediaType: attachment.mediaType },
-          },
+          { metadata: { code: ATTACHMENT_INVALID_DATA, mediaType: attachment.mediaType } },
         );
       }
       if (maxBytes !== undefined && bytes.byteLength > maxBytes) {
         return tooLarge(attachment, bytes.byteLength, maxBytes);
       }
-      return { filename: attachment.filename, bytes };
-    });
-    const total = files.reduce((sum, file) => sum + file.bytes.byteLength, 0);
-    if (maxTotalBytes !== undefined && total > maxTotalBytes) {
-      return abort(
-        `${files.length} attachments total ${total} bytes, over the ${maxTotalBytes}-byte limit for one request. Send fewer or smaller files`,
-        { metadata: { code: ATTACHMENT_TOO_LARGE, mediaType: attachments[0]!.mediaType } },
-      );
+      total += bytes.byteLength;
+      if (maxTotalBytes !== undefined && total > maxTotalBytes) {
+        return totalTooLarge(attachment, total, maxTotalBytes);
+      }
+      files.push({ filename: attachment.filename, bytes });
     }
 
     // 3. Find a writable place in the workspace, or abort instead of sending the binary to the model.
@@ -520,6 +504,13 @@ export class WorkspaceAttachmentsProcessor implements Processor<'workspace-attac
       return abort(
         `Attachment "${filename ?? 'attachment'}" (${mediaType}) can't be sent to the model and must be stored in a writable workspace, but ${target.unavailable}.`,
         { metadata: { code: WORKSPACE_REQUIRED_FOR_ATTACHMENT, mediaType } },
+      );
+    }
+    if (!target.remove && files.length > 1) {
+      // Without a way to delete, a failure midway would leave a partial upload behind.
+      return abort(
+        `${files.length} attachments were sent, but workspace "${workspace?.name}" cannot remove a partial upload (its sandbox has writeFiles but no executeCommand). Send one attachment at a time or add a writable filesystem`,
+        { metadata: { code: WORKSPACE_REQUIRED_FOR_ATTACHMENT, mediaType: attachments[0]!.mediaType } },
       );
     }
 

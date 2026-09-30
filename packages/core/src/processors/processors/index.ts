@@ -111,6 +111,7 @@ export {
   WORKSPACE_REQUIRED_FOR_ATTACHMENT,
   ATTACHMENT_NOT_INLINE,
   ATTACHMENT_INVALID_DATA,
+  ATTACHMENT_TOO_LARGE,
   type WorkspaceAttachmentsProcessorOptions,
   type WorkspaceAttachmentsTripwireMetadata,
 } from './workspace-attachments';

@@ -587,32 +587,15 @@ describe('WorkspaceAttachmentsProcessor', () => {
       expect(writeFiles).toHaveBeenCalledWith([{ path, content: Buffer.from(BYTES) }]);
     });
 
-    it('writes every attachment in one writeFiles call when the sandbox has no executeCommand', async () => {
+    it('refuses several attachments when the sandbox cannot remove a partial upload', async () => {
       const writeFiles = vi.fn(async () => {});
       const workspace = { id: 'w', name: 'w', sandbox: { writeFiles } } as unknown as AnyWorkspace;
-      const { parts } = await run(workspace, [file(BASE64, 'a.xlsx'), file(BASE64, 'b.xlsx')]);
-      expect(writeFiles).toHaveBeenCalledOnce();
-      expect(writeFiles).toHaveBeenCalledWith([
-        { path: uploadedPath(parts[0].text), content: Buffer.from(BYTES) },
-        { path: uploadedPath(parts[1].text), content: Buffer.from(BYTES) },
-      ]);
-    });
-
-    it('aborts with the upload error and keeps the attachments when that single writeFiles call fails', async () => {
-      const writeFiles = vi.fn(async () => {
-        throw new Error('disk full');
-      });
-      const workspace = { id: 'w', name: 'w', sandbox: { writeFiles } } as unknown as AnyWorkspace;
-      const { MessageList } = await import('../../agent/message-list');
-      const messageList = new MessageList();
-      messageList.add([{ role: 'user', content: [file(BASE64, 'a.xlsx'), file(BASE64, 'b.xlsx')] }], 'input');
-      const processor = new WorkspaceAttachmentsProcessor({ ...SHEETS, workspace });
-      await expect(
-        processor.processInputStep({ messageList, requestContext: new RequestContext(), abort: vi.fn() } as any),
-      ).rejects.toThrow(/Failed to upload attachments "a.xlsx", "b.xlsx".*disk full/);
-      expect(writeFiles).toHaveBeenCalledOnce();
-      const parts = messageList.get.all.db()[0]!.content.parts;
-      expect(parts.map((p: any) => p.type)).toEqual(['file', 'file']);
+      const { abort } = await run(workspace, [file(BASE64, 'a.xlsx'), file(BASE64, 'b.xlsx')]).catch(error => ({
+        abort: error,
+      }));
+      expect(abort.options.metadata.code).toBe(WORKSPACE_REQUIRED_FOR_ATTACHMENT);
+      expect(abort.message).toMatch(/cannot remove a partial upload.*Send one attachment at a time/);
+      expect(writeFiles).not.toHaveBeenCalled();
     });
 
     describe('given a sandbox-only workspace whose sandbox has no writeFiles', () => {
@@ -724,11 +707,8 @@ describe('WorkspaceAttachmentsProcessor', () => {
         await expect(run(workspace, [file(BASE64, 'a.xlsx'), file(BASE64, 'b.xlsx')])).rejects.toThrow(
           /quota exceeded/,
         );
-        expect(writeFiles).toHaveBeenCalledOnce();
-        expect(scripts).toEqual([
-          expect.stringMatching(/^rm -rf 'uploads\/[0-9a-f-]{36}'$/),
-          expect.stringMatching(/^rm -rf 'uploads\/[0-9a-f-]{36}'$/),
-        ]);
+        expect(writeFiles).toHaveBeenCalledTimes(2);
+        expect(scripts).toEqual([expect.stringMatching(/^rm -rf 'uploads\/[0-9a-f-]{36}'$/)]);
         expect(await readdir(join(cwd, 'uploads'))).toEqual([]);
       });
 
@@ -985,8 +965,27 @@ describe('WorkspaceAttachmentsProcessor', () => {
       await expectTooLarge(
         { maxBytes: BYTES.length, maxTotalBytes: BYTES.length * 2 - 1 },
         [part('a.xlsx', XLSX), part('b.xlsx', XLSX)],
-        `2 attachments total ${BYTES.length * 2} bytes, over the ${BYTES.length * 2 - 1}-byte limit`,
+        `total at least ${BYTES.length * 2} bytes, over the ${BYTES.length * 2 - 1}-byte limit`,
       );
+    });
+
+    it('stops decoding as soon as the running total exceeds maxTotalBytes', async () => {
+      const atob = vi.spyOn(globalThis, 'atob');
+      try {
+        await expectTooLarge(
+          { maxTotalBytes: BYTES.length },
+          [part('a.xlsx', XLSX), part('b.xlsx', XLSX), part('c.xlsx', XLSX)],
+          `over the ${BYTES.length}-byte limit`,
+        );
+        expect(atob).toHaveBeenCalledTimes(1);
+      } finally {
+        atob.mockRestore();
+      }
+    });
+
+    it('exports ATTACHMENT_TOO_LARGE from the public processors entrypoint', async () => {
+      const entry = await import('./index');
+      expect(entry.ATTACHMENT_TOO_LARGE).toBe(ATTACHMENT_TOO_LARGE);
     });
 
     it('accepts attachments totalling exactly maxTotalBytes', async () => {
