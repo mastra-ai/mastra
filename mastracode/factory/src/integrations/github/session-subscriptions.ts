@@ -13,7 +13,7 @@ import type {
 import type { GithubIntegration } from './integration.js';
 import { getGithubPat } from './pat.js';
 import { subscribeToPullRequest, unsubscribeFromPullRequest } from './subscriptions.js';
-import { getRegisteredGithubPatKind, injectGithubToken } from './token-refresh.js';
+import { getRegisteredGithubPatKind, injectGithubToken, requireGithubTokenInjector } from './token-refresh.js';
 
 type RepositorySessionState = { factoryProjectId?: string; projectRepositoryId?: string };
 
@@ -194,8 +194,41 @@ export async function upsertFactoryTriageComment(
   );
 }
 
+async function resolveRefreshTarget(requestContext: RequestContext, github: GithubIntegration) {
+  const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
+  const orgId = sessionOrgId(requestContext);
+  const userId = sessionUserId(requestContext);
+  if (!context?.resourceId || !orgId || !userId) {
+    throw new Error('GitHub token refresh requires an authenticated Factory session.');
+  }
+
+  const session = await github.sourceControlStorage.sessions.getBySessionId(context.resourceId);
+  if (!session) throw new Error('The active session is not backed by a GitHub workspace.');
+  if (session.orgId !== orgId || (session.visibility === 'private' && session.userId !== userId)) {
+    throw new Error('The active GitHub session is not available to the authenticated user.');
+  }
+  const projectRepository = await github.sourceControlStorage.projectRepositories.get({
+    orgId,
+    id: session.projectRepositoryId,
+  });
+  if (!projectRepository) throw new Error('The active GitHub project repository was not found.');
+  const state = context.getState();
+  if (state.projectRepositoryId && state.projectRepositoryId !== projectRepository.id) {
+    throw new Error('The active GitHub session does not match its controller repository.');
+  }
+  const connection = await github.sourceControlStorage.connections.get({ orgId, id: projectRepository.connectionId });
+  if (!connection) throw new Error('The active GitHub connection was not found.');
+  if (state.factoryProjectId && state.factoryProjectId !== connection.factoryProjectId) {
+    throw new Error('The active GitHub session does not match its Factory project.');
+  }
+  const repository = await github.sourceControlStorage.repositories.get({ orgId, id: projectRepository.repositoryId });
+  if (!repository) throw new Error('The active GitHub repository was not found.');
+  return { orgId, repository };
+}
+
 export async function refreshGithubToken(requestContext: RequestContext, github: GithubIntegration): Promise<void> {
-  const target = await resolveSessionTarget(requestContext, github);
+  const target = await resolveRefreshTarget(requestContext, github);
+  requireGithubTokenInjector(requestContext);
   // `GH_TOKEN` feeds the `gh` CLI, so a configured org PAT wins over a minted
   // installation token (which 403s on integration-restricted endpoints). The
   // workspace records which PAT kind the sandbox was provisioned with, so a
@@ -219,19 +252,25 @@ export async function refreshGithubToken(requestContext: RequestContext, github:
 }
 
 export function createGithubSubscriptionTools(requestContext: RequestContext, github: GithubIntegration) {
-  if (!isGithubProjectSession(requestContext)) return {};
+  const context = requestContext?.get?.('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
+  const hasRefreshIdentity = Boolean(context?.resourceId && sessionOrgId(requestContext) && sessionUserId(requestContext));
+  const isRepositorySession = isGithubProjectSession(requestContext);
+  if (!hasRefreshIdentity && !isRepositorySession) return {};
+
+  const refreshTool = hasRefreshIdentity && createTool({
+    id: 'github_refresh_token',
+    description:
+      'Reload the stored GitHub CLI credential into the active GitHub Factory sandbox after an authentication failure, then retry the failed gh command. Requires an existing GitHub-backed session and a running sandbox. This does not renew an expired or revoked PAT; replace those in Factory settings. Takes no arguments and never returns the token.',
+    inputSchema: z.object({}),
+    execute: async () => {
+      await refreshGithubToken(requestContext, github);
+      return { refreshed: true };
+    },
+  });
+  if (!isRepositorySession) return refreshTool ? { github_refresh_token: refreshTool } : {};
 
   return {
-    github_refresh_token: createTool({
-      id: 'github_refresh_token',
-      description:
-        'Refresh GitHub CLI authentication in the active Factory sandbox. Use this after a gh command fails because authentication is expired, invalid, or missing. It installs a fresh GH_TOKEN for subsequent sandbox commands. After this tool succeeds, retry the failed gh command. Takes no arguments and never returns the token.',
-      inputSchema: z.object({}),
-      execute: async () => {
-        await refreshGithubToken(requestContext, github);
-        return { refreshed: true };
-      },
-    }),
+    ...(refreshTool ? { github_refresh_token: refreshTool } : {}),
     github_upsert_factory_triage_comment: createTool({
       id: 'github_upsert_factory_triage_comment',
       description:

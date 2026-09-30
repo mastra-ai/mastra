@@ -10,6 +10,19 @@ const mocks = vi.hoisted(() => ({
     cloneUrl: 'https://github.com/mastra-ai/mastra.git',
     authorization: { scheme: 'bearer' as const, token: 'fresh-gh-token' },
   })),
+  getSession: vi.fn(async (): Promise<{
+    sessionId: string;
+    orgId: string;
+    userId: string;
+    visibility: 'private' | 'org';
+    projectRepositoryId: string;
+  } | null> => ({
+    sessionId: 'resource-1',
+    orgId: 'org-1',
+    userId: 'user-1',
+    visibility: 'private',
+    projectRepositoryId: 'project-repository-1',
+  })),
   upsertTriageComment: vi.fn(async (): Promise<{ action: 'created' | 'updated'; commentId: string; url: string }> => ({
     action: 'created',
     commentId: '42',
@@ -27,6 +40,7 @@ const integrationStorage: { settings?: { get: (orgId: string, userId: string) =>
 const githubStub = {
   integrationStorage,
   sourceControlStorage: {
+    sessions: { getBySessionId: mocks.getSession },
     projectRepositories: {
       get: vi.fn(async () => ({
         id: 'project-repository-1',
@@ -70,20 +84,28 @@ import {
 } from './session-subscriptions.js';
 import { registerGithubPatKind, registerGithubTokenInjector } from './token-refresh.js';
 
-function authenticatedRequestContext(scope = '/worktrees/a') {
+function authenticatedRequestContext(
+  scope = '/worktrees/a',
+  state: { factoryProjectId?: string; projectRepositoryId?: string } = {
+    factoryProjectId: 'resource-1',
+    projectRepositoryId: 'project-repository-1',
+  },
+  threadId: string | undefined = 'thread-1',
+) {
   const requestContext = new RequestContext();
   requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
   requestContext.set('controller', {
     resourceId: 'resource-1',
-    threadId: 'thread-1',
+    threadId,
     scope,
     session: { id: 'session-1', ownerId: 'user-1', modeId: 'build' },
-    getState: () => ({ factoryProjectId: 'resource-1', projectRepositoryId: 'project-repository-1' }),
+    getState: () => state,
   });
   return requestContext;
 }
 
 beforeEach(() => {
+  vi.restoreAllMocks();
   vi.clearAllMocks();
   delete integrationStorage.settings;
 });
@@ -156,19 +178,136 @@ describe('parseCreatedPullRequest', () => {
 });
 
 describe('GitHub subscription entry points', () => {
-  it('does not expose tools without authenticated repository context', () => {
+  it.each([
+    { user: undefined, resourceId: 'resource-1' },
+    { user: { workosId: 'user-1' }, resourceId: 'resource-1' },
+    { user: { organizationId: 'org-1' }, resourceId: 'resource-1' },
+  ])('does not expose tools without authenticated identity: %o', ({ user, resourceId }) => {
     const requestContext = new RequestContext();
-    requestContext.set('controller', { getState: () => ({ projectRepositoryId: 'project-repository-1' }) });
-
+    if (user) requestContext.set('user', user);
+    requestContext.set('controller', {
+      resourceId,
+      getState: () => ({ projectRepositoryId: 'project-repository-1' }),
+    });
     expect(createGithubSubscriptionTools(requestContext, githubStub)).toEqual({});
   });
 
-  it('does not expose tools without an active thread', () => {
-    const requestContext = new RequestContext();
-    requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
-    requestContext.set('controller', { getState: () => ({ projectRepositoryId: 'project-repository-1' }) });
+  it('keeps the existing repository-tool gate when the controller has no resource ID', () => {
+    const requestContext = authenticatedRequestContext();
+    requestContext.set('controller', {
+      threadId: 'thread-1',
+      getState: () => ({ projectRepositoryId: 'project-repository-1' }),
+    });
+    expect(Object.keys(createGithubSubscriptionTools(requestContext, githubStub))).toEqual([
+      'github_upsert_factory_triage_comment',
+      'github_subscribe_pr',
+      'github_unsubscribe_pr',
+    ]);
+  });
 
-    expect(createGithubSubscriptionTools(requestContext, githubStub)).toEqual({});
+  it('exposes only refresh without an active thread', () => {
+    const requestContext = authenticatedRequestContext('/worktrees/a', {}, undefined);
+    expect(Object.keys(createGithubSubscriptionTools(requestContext, githubStub))).toEqual(['github_refresh_token']);
+  });
+
+  it.each([{ factoryProjectId: 'resource-1' }, {}])(
+    'refreshes a persisted GitHub session with controller state %o',
+    async state => {
+      const requestContext = authenticatedRequestContext('/worktrees/a', state);
+      const inject = vi.fn();
+      registerGithubTokenInjector(requestContext, inject);
+      const tools = createGithubSubscriptionTools(requestContext, githubStub);
+      expect(Object.keys(tools)).toEqual(['github_refresh_token']);
+      await expect(tools.github_refresh_token!.execute!({}, {} as never)).resolves.toEqual({ refreshed: true });
+      expect(mocks.getSession).toHaveBeenCalledWith('resource-1');
+      expect(inject).toHaveBeenCalledWith('fresh-gh-token');
+    },
+  );
+
+  it('exposes refresh before sandbox start but refuses to read credentials without its injector', async () => {
+    const requestContext = authenticatedRequestContext('/worktrees/a', {});
+    integrationStorage.settings = { get: vi.fn(async () => ({ pat: 'ghp_worker' })) };
+    const tool = createGithubSubscriptionTools(requestContext, githubStub).github_refresh_token!;
+    await expect(tool.execute!({}, {} as never)).rejects.toThrow('active Factory sandbox workspace');
+    expect(integrationStorage.settings.get).not.toHaveBeenCalled();
+    expect(mocks.getRepositoryAccess).not.toHaveBeenCalled();
+  });
+
+  it('rejects direct refresh without identity or a controller resource', async () => {
+    const requestContext = new RequestContext();
+    await expect(refreshGithubToken(requestContext, githubStub)).rejects.toThrow('authenticated Factory session');
+    expect(mocks.getSession).not.toHaveBeenCalled();
+    requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    await expect(refreshGithubToken(requestContext, githubStub)).rejects.toThrow('authenticated Factory session');
+  });
+
+  it('rejects chat-only and GitLab-only sessions without looking up a PAT', async () => {
+    mocks.getSession.mockResolvedValueOnce(null);
+    const requestContext = authenticatedRequestContext('/worktrees/a', {});
+    registerGithubTokenInjector(requestContext, vi.fn());
+    integrationStorage.settings = { get: vi.fn(async () => ({ pat: 'ghp_worker' })) };
+    await expect(
+      createGithubSubscriptionTools(requestContext, githubStub).github_refresh_token!.execute!({}, {} as never),
+    ).rejects.toThrow('not backed by a GitHub workspace');
+    expect(integrationStorage.settings.get).not.toHaveBeenCalled();
+    expect(mocks.getRepositoryAccess).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { orgId: 'org-2', userId: 'user-1', visibility: 'org' as const },
+    { orgId: 'org-1', userId: 'user-2', visibility: 'private' as const },
+  ])('rejects unauthorized persisted session %o before reading credentials', async session => {
+    mocks.getSession.mockResolvedValueOnce({
+      sessionId: 'resource-1',
+      projectRepositoryId: 'project-repository-1',
+      ...session,
+    });
+    const requestContext = authenticatedRequestContext('/worktrees/a', {});
+    registerGithubTokenInjector(requestContext, vi.fn());
+    integrationStorage.settings = { get: vi.fn(async () => ({ pat: 'ghp_worker' })) };
+    await expect(refreshGithubToken(requestContext, githubStub)).rejects.toThrow('not available');
+    expect(integrationStorage.settings.get).not.toHaveBeenCalled();
+    expect(mocks.getRepositoryAccess).not.toHaveBeenCalled();
+  });
+
+  it('permits a same-org member on an org-visible GitHub session', async () => {
+    mocks.getSession.mockResolvedValueOnce({
+      sessionId: 'resource-1',
+      projectRepositoryId: 'project-repository-1',
+      orgId: 'org-1',
+      userId: 'user-2',
+      visibility: 'org',
+    });
+    const requestContext = authenticatedRequestContext('/worktrees/a', {});
+    const inject = vi.fn();
+    registerGithubTokenInjector(requestContext, inject);
+    await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
+    expect(inject).toHaveBeenCalledWith('fresh-gh-token');
+  });
+
+  it.each([
+    { state: { projectRepositoryId: 'other-repository' }, message: 'controller repository' },
+    { state: { factoryProjectId: 'other-project' }, message: 'Factory project' },
+  ])('rejects conflicting controller state $state', async ({ state, message }) => {
+    const requestContext = authenticatedRequestContext('/worktrees/a', state);
+    const inject = vi.fn();
+    registerGithubTokenInjector(requestContext, inject);
+    await expect(refreshGithubToken(requestContext, githubStub)).rejects.toThrow(message);
+    expect(inject).not.toHaveBeenCalled();
+    expect(mocks.getRepositoryAccess).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { record: 'projectRepositories' as const, message: 'project repository' },
+    { record: 'connections' as const, message: 'connection' },
+    { record: 'repositories' as const, message: 'repository' },
+  ])('rejects missing GitHub $record before injection', async ({ record, message }) => {
+    vi.spyOn(githubStub.sourceControlStorage[record], 'get').mockResolvedValueOnce(null);
+    const requestContext = authenticatedRequestContext('/worktrees/a', {});
+    const inject = vi.fn();
+    registerGithubTokenInjector(requestContext, inject);
+    await expect(refreshGithubToken(requestContext, githubStub)).rejects.toThrow(message);
+    expect(inject).not.toHaveBeenCalled();
   });
 
   it('mints repository access and injects the fresh token into the active sandbox', async () => {
@@ -204,6 +343,36 @@ describe('GitHub subscription entry points', () => {
     await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
 
     expect(inject).toHaveBeenCalledWith('ghp_reviewer');
+  });
+
+  it('falls back from an absent reviewer PAT to the worker PAT', async () => {
+    integrationStorage.settings = { get: vi.fn(async () => ({ pat: 'ghp_worker' })) };
+    const requestContext = authenticatedRequestContext('/worktrees/a', {});
+    const inject = vi.fn();
+    registerGithubTokenInjector(requestContext, inject);
+    registerGithubPatKind(requestContext, 'reviewer');
+    await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
+    expect(inject).toHaveBeenCalledWith('ghp_worker');
+    expect(mocks.getRepositoryAccess).not.toHaveBeenCalled();
+  });
+
+  it('refuses missing repository bearer tokens without claiming success', async () => {
+    mocks.getRepositoryAccess.mockResolvedValueOnce({ cloneUrl: 'https://github.com/mastra-ai/mastra.git', authorization: { scheme: 'bearer', token: '' } });
+    const requestContext = authenticatedRequestContext('/worktrees/a', {});
+    const inject = vi.fn();
+    registerGithubTokenInjector(requestContext, inject);
+    const tool = createGithubSubscriptionTools(requestContext, githubStub).github_refresh_token!;
+    await expect(tool.execute!({}, {} as never)).rejects.toThrow('did not include a bearer token');
+    expect(inject).not.toHaveBeenCalled();
+  });
+
+  it('propagates injector failures without returning token material', async () => {
+    integrationStorage.settings = { get: vi.fn(async () => ({ pat: 'ghp_secret' })) };
+    const requestContext = authenticatedRequestContext('/worktrees/a', {});
+    registerGithubTokenInjector(requestContext, () => { throw new Error('sandbox retired'); });
+    const tool = createGithubSubscriptionTools(requestContext, githubStub).github_refresh_token!;
+    await expect(tool.execute!({}, {} as never)).rejects.toThrow('sandbox retired');
+    expect(mocks.getRepositoryAccess).not.toHaveBeenCalled();
   });
 
   it('silently skips auto-subscription outside repository sessions', async () => {

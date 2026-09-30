@@ -119,6 +119,7 @@ vi.mock('./integrations/github/sandbox', async importOriginal => ({
 }));
 
 import { MaterializeError, SetupCommandError } from './integrations/github/sandbox.js';
+import { createGithubSubscriptionTools } from './integrations/github/session-subscriptions.js';
 import { injectGithubToken } from './integrations/github/token-refresh.js';
 import {
   __clearSessionSandboxesForTests,
@@ -261,6 +262,7 @@ function addSession(overrides: Record<string, unknown> = {}) {
     orgId: 'org-1',
     userId: 'user-1',
     projectRepositoryId: 'project-1',
+    visibility: 'private',
     branch: 'feature-a',
     baseBranch: 'main',
     sandboxId: null,
@@ -321,7 +323,13 @@ function fakeGithubIntegration() {
             : null;
         }),
       },
-      connections: { get: vi.fn(async () => ({ id: 'connection-1', installationId: 'installation-1' })) },
+      connections: {
+        get: vi.fn(async () => ({
+          id: 'connection-1',
+          installationId: 'installation-1',
+          factoryProjectId: 'project-1',
+        })),
+      },
       repositories: {
         get: vi.fn(async () => {
           const project = mocks.projects[0];
@@ -979,15 +987,17 @@ describe('GitHub session workspace preparation', () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), rootPrefix));
     tempDirs.push(root);
     mocks.localRoot = root;
+    const github = fakeGithubIntegration();
     const resolver = createWorkspaceFactory({
       sandbox: mocks.createSandbox as any,
-      github: fakeGithubIntegration() as any,
+      github: github as any,
       workItems: { findActiveRunBindingForSession: mocks.findActiveRunBindingForSession } as any,
       ...(workspaceRegistry ? { workspaceRegistry } : {}),
     });
     return {
       root,
       resolver,
+      github,
       workspace: eager(resolver),
     };
   }
@@ -2280,6 +2290,49 @@ describe('GitHub session workspace preparation', () => {
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
     expect(lastGhToken()).toBe('ghp_worker');
+  });
+
+  it('refreshes a Slack-shaped GitHub session through lazy startup, later reuse, and role changes', async () => {
+    mocks.githubPat = 'ghp_original';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    const { workspace, github } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const workerContext = createGithubRequestContext('project-1', 'session-a');
+    const integration = github as unknown as Parameters<typeof createGithubSubscriptionTools>[1];
+    const workerTool = createGithubSubscriptionTools(workerContext, integration).github_refresh_token!;
+
+    expect(Object.keys(createGithubSubscriptionTools(workerContext, integration))).toEqual(['github_refresh_token']);
+    expect(mocks.createSandbox).not.toHaveBeenCalled();
+    await expect(workerTool.execute!({}, {} as never)).rejects.toThrow('active Factory sandbox workspace');
+    expect(mocks.createSandbox).not.toHaveBeenCalled();
+
+    await workspace({ requestContext: workerContext });
+    expect(lastGhToken()).toBe('ghp_original');
+    mocks.githubPat = 'ghp_replaced';
+    expect(await workerTool.execute!({}, {} as never)).toEqual({ refreshed: true });
+    expect(lastGhToken()).toBe('ghp_replaced');
+
+    const laterContext = createGithubRequestContext('project-1', 'session-a');
+    await workspace({
+      requestContext: laterContext,
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+    const laterTool = createGithubSubscriptionTools(laterContext, integration).github_refresh_token!;
+    expect(await laterTool.execute!({}, {} as never)).toEqual({ refreshed: true });
+    expect(lastGhToken()).toBe('ghp_replaced');
+
+    mocks.runBindingRole = 'review';
+    const reviewerContext = createGithubRequestContext('project-1', 'session-a');
+    await workspace({
+      requestContext: reviewerContext,
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+    const reviewerTool = createGithubSubscriptionTools(reviewerContext, integration).github_refresh_token!;
+    expect(await reviewerTool.execute!({}, {} as never)).toEqual({ refreshed: true });
+    expect(lastGhToken()).toBe('ghp_reviewer');
+    await expect(laterTool.execute!({}, {} as never)).rejects.toThrow(/no longer matches/);
+    expect(lastGhToken()).toBe('ghp_reviewer');
   });
 
   it('registers a runtime injector for refreshing GH_TOKEN in the active sandbox', async () => {
