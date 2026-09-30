@@ -13,15 +13,22 @@ export function SidebarNewRoot({
   'aria-label': ariaLabel = 'Sidebar',
   mobileMode = 'takeover',
   variant = 'default',
+  className,
   children,
   ...props
 }: SidebarNewRootProps) {
   const sidebar = useMaybeSidebarState();
   const isRaised = variant === 'raised' && !sidebar?.isMobile;
+  const isMobile = sidebar?.isMobile ?? false;
 
   return (
     <aside aria-label={ariaLabel} className="contents">
-      <MainSidebarRoot mobileMode={mobileMode} {...props}>
+      <MainSidebarRoot
+        mobileMode={mobileMode}
+        // Matches the AppShell's top inset, so the header lines up with the main card's header.
+        className={cn(variant === 'default' && !isMobile && 'pt-2', className)}
+        {...props}
+      >
         {isRaised ? (
           <div
             data-slot="sidebar-new-surface"
