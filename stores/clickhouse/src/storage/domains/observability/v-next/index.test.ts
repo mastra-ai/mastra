@@ -4852,6 +4852,13 @@ LIMIT 1`,
         }),
       ).rejects.toThrow('Percentile value must be a finite number between 0 and 1');
     });
+
+    it('getScoreAggregate returns null when no scores match', async () => {
+      for (const aggregation of ['sum', 'avg', 'min', 'max', 'last'] as const) {
+        const result = await storage.getScoreAggregate({ scorerId: 'no-such-scorer', aggregation });
+        expect(result.value, aggregation).toBeNull();
+      }
+    });
   });
 
   // ==========================================================================
