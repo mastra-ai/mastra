@@ -71,6 +71,33 @@ describe('formatTraceThreadMessages', () => {
     });
   });
 
+  describe('when the turn calls tools the chat hides', () => {
+    it('renders no message for task and working memory tool calls', () => {
+      const client = agentTraceWithTools.spans.find(span => span.spanId === 'client-tool');
+      if (!client) throw new Error('fixture missing client-tool span');
+      const hidden = ['task_write', 'updateWorkingMemory'].map(name => ({
+        ...client,
+        spanId: `hidden-${name}`,
+        spanType: SpanType.TOOL_CALL,
+        parentSpanId: 'agent-root',
+        name: `tool: '${name}'`,
+        entityName: name,
+        entityId: name,
+        attributes: { ...client.attributes, toolCallId: `call-${name}` },
+      }));
+
+      const messages = formatTraceThreadMessages([...agentTraceWithTools.spans, ...hidden]);
+
+      expect(messages).toHaveLength(6);
+      const toolNames = messages.flatMap(message =>
+        message.content.parts.flatMap(part => (part.type === 'tool-invocation' ? [part.toolInvocation.toolName] : [])),
+      );
+      expect(toolNames).not.toContain('task_write');
+      expect(toolNames).not.toContain('updateWorkingMemory');
+      expect(messages.some(message => message.traceSpanIds.some(id => id.startsWith('hidden-')))).toBe(false);
+    });
+  });
+
   describe('when a suspended tool call is resumed under the same toolCallId', () => {
     it('renders one tool message carrying the resumed result and both spans', () => {
       const client = agentTraceWithTools.spans.find(span => span.spanId === 'client-tool');

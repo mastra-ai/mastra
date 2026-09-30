@@ -1,6 +1,7 @@
 import type { MastraClient } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent/message-list';
 import { SpanType } from '@mastra/core/observability';
+import { isHiddenTool } from '@/domains/chat/tools/tool-card-kind';
 import { formatHierarchicalSpans } from '@/domains/traces/components/format-hierarchical-spans';
 import type { UISpan } from '@/domains/traces/types';
 
@@ -69,6 +70,8 @@ const readString = (value: unknown, key: string): string | undefined => {
   return typeof field === 'string' ? field : undefined;
 };
 
+const toolNameOf = (span: SpanRecord): string => span.entityName ?? span.entityId ?? span.name;
+
 const toToolPart = (span: SpanRecord): MastraMessagePart => {
   const failed = Boolean(span.error);
   const settled = Boolean(span.endedAt);
@@ -78,7 +81,7 @@ const toToolPart = (span: SpanRecord): MastraMessagePart => {
     type: 'tool-invocation',
     toolInvocation: {
       toolCallId: readString(span.attributes, 'toolCallId') ?? span.spanId,
-      toolName: span.entityName ?? span.entityId ?? span.name,
+      toolName: toolNameOf(span),
       args: span.input ?? {},
       state,
       ...(settled ? { result: span.output } : {}),
@@ -188,6 +191,8 @@ const collectAssistantSpans = (
       const span = spanById.get(node.id);
       if (!span) continue;
       if (TOOL_SPAN_TYPES.has(span.spanType)) {
+        // Tools the chat never draws (task tools, working memory) get no message either.
+        if (isHiddenTool(toolNameOf(span))) continue;
         // A tool that runs a workflow or an agent gets that top-level execution featured too,
         // so the user can see what the tool call actually did without featuring every nested step.
         const executionIds = (node.spans ?? []).flatMap(child =>
