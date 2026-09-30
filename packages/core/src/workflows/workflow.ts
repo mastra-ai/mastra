@@ -3637,6 +3637,14 @@ export class Workflow<
   }
 }
 
+const TERMINAL_WORKFLOW_RUN_STATUSES = new Set<WorkflowRunStatus>([
+  'success',
+  'failed',
+  'canceled',
+  'tripwire',
+  'bailed',
+]);
+
 /**
  * Represents a workflow run that can be executed
  */
@@ -3803,10 +3811,32 @@ export class Run<
   }
 
   /**
+   * Whether the run has already finished, based on its persisted snapshot.
+   * The in-memory status alone is not reliable because it never reaches success/failed.
+   */
+  protected async hasReachedTerminalStatus(): Promise<boolean> {
+    try {
+      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: this.workflowId,
+        runId: this.runId,
+      });
+      const status = snapshot?.status ?? this.workflowRunStatus;
+      return TERMINAL_WORKFLOW_RUN_STATUSES.has(status);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Cancels the workflow execution.
    * This aborts any running execution and updates the workflow status to 'canceled' in storage.
+   * Runs that already finished (success, failed, canceled, tripwire, bailed) are left unchanged.
    */
   async cancel() {
+    // Canceling a finished run is a no-op so its final status is preserved
+    if (await this.hasReachedTerminalStatus()) return;
+
     // Abort any running execution and update in-memory status
     this.abortController.abort();
     this.workflowRunStatus = 'canceled';

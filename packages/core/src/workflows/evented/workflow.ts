@@ -2662,6 +2662,8 @@ export class EventedRun<
   }
 
   async cancel() {
+    if (await this.hasReachedTerminalStatus()) return;
+
     // Update storage directly for immediate status update (same pattern as Inngest)
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
     await workflowsStore?.updateWorkflowState({
