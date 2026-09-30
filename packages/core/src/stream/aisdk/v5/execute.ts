@@ -259,11 +259,13 @@ export function execute<OUTPUT = undefined>({
 
   // For processor mode without agent reuse, inject a custom prompt to inform the main agent
   // about the structured output schema that the structuring agent will use.
+  // An explicit `jsonPromptInjection: false` opts out of this hint.
   if (
     structuredOutputMode === 'processor' &&
     responseFormat?.type === 'json' &&
     responseFormat?.schema &&
-    !structuredOutput?.useAgent
+    !structuredOutput?.useAgent &&
+    jsonPromptInjection !== false
   ) {
     prompt = injectJsonInstructionIntoMessages({
       messages: inputMessages,

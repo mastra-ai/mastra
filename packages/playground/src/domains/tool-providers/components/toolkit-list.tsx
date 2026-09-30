@@ -1,5 +1,6 @@
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -58,9 +59,13 @@ export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, sele
         >
           Selected
           {selectedCount > 0 && (
-            <span className="min-w-[1.25rem] rounded-full bg-card px-1.5 py-0.5 text-center text-meta tabular-nums">
+            <Txt
+              as="span"
+              variant="meta"
+              className="min-w-[1.25rem] rounded-full bg-card px-1.5 py-0.5 text-center tabular-nums"
+            >
               {selectedCount}
-            </span>
+            </Txt>
           )}
         </button>
 

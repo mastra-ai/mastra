@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type * as http from 'node:http';
 import type { Agent, ToolsInput } from '@mastra/core/agent';
@@ -56,6 +55,7 @@ import type {
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import type { StdioServerHandle } from '@modelcontextprotocol/server/stdio';
 
+import { JSON_SCHEMA_2020_12, toJsonSchema2020 } from '../shared/json-schema-dialect';
 import { withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { ServerPromptActions, ServerResourceActions, ServerToolActions } from './actions';
 import {
@@ -200,7 +200,7 @@ export class MCPServer extends MCPServerBase {
   private createRequestStateCodec(options: MCPServerRequestStateOptions | undefined) {
     let key = options?.key;
     if (key === undefined) {
-      key = randomBytes(32);
+      key = globalThis.crypto.getRandomValues(new Uint8Array(32));
       this.logger.warn(
         'No requestState.key configured: continuation state is signed with a per-process key, so a suspended request can only be resumed on this process. Set requestState.key in multi-instance and serverless deployments.',
       );
@@ -352,13 +352,20 @@ export class MCPServer extends MCPServerBase {
   /**
    * Converts a tool schema to JSON Schema 2020-12, the dialect MCP 2026-07-28
    * assumes when none is declared. The dialect declaration is kept so validators
-   * that dispatch on `$schema` pick the same draft on both sides.
+   * that dispatch on `$schema` pick the same draft on both sides. Some vendors
+   * (e.g. zod v3) emit 2019-09 for this target, so it is rewritten to 2020-12.
    */
   private jsonSchema(schema: unknown, options?: { io: 'input' | 'output' }): Record<string, unknown> | undefined {
     if (!schema) return undefined;
-    return isStandardSchemaWithJSON(schema)
-      ? (standardSchemaToJSONSchema(schema, { ...options, target: 'draft-2020-12' }) as Record<string, unknown>)
-      : ((schema as { jsonSchema?: Record<string, unknown> }).jsonSchema ?? (schema as Record<string, unknown>));
+    if (!isStandardSchemaWithJSON(schema)) {
+      return (schema as { jsonSchema?: Record<string, unknown> }).jsonSchema ?? (schema as Record<string, unknown>);
+    }
+    const converted = standardSchemaToJSONSchema(schema, { ...options, target: 'draft-2020-12' }) as Record<
+      string,
+      unknown
+    >;
+    if (!converted.$schema || converted.$schema === JSON_SCHEMA_2020_12) return converted;
+    return toJsonSchema2020(converted) ?? converted;
   }
 
   private addTools(tools: ToolsInput): void {

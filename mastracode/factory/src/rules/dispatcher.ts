@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController, AgentControllerEventListener, Session } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
@@ -433,6 +431,17 @@ function requestsConsent(
   return (resolvePhaseSemantics(boards, decision.board, decision.stage)?.kind ?? 'working') === 'working';
 }
 
+// The Factory reviewing code it wrote is part of the same work, not new work to
+// consent to: a push to a Factory-authored PR re-reviews without a person's click.
+function reviewsFactoryAuthoredCode(
+  item: { metadata: Record<string, unknown> | null },
+  decision: FactoryCommitDecision,
+): boolean {
+  if (item.metadata?.factoryAuthored !== true) return false;
+  if (decision.type === 'transition') return decision.board === 'review' && decision.stage === 'review';
+  return decision.type === 'invokeSkill' && decision.role === 'review';
+}
+
 function leaseIdentity(
   record: Pick<FactoryDeferredDecisionRecord | FactoryPendingStartRecord, 'id' | 'orgId' | 'factoryProjectId'>,
   ownerId: string,
@@ -523,7 +532,7 @@ export class FactoryDecisionDispatcher {
     this.#transitionService = options.transitionService;
     this.#boards = options.boards ?? createBoardRegistry();
     this.#storage = options.storage;
-    this.#ownerId = options.ownerId ?? `factory-dispatcher:${randomUUID()}`;
+    this.#ownerId = options.ownerId ?? `factory-dispatcher:${globalThis.crypto.randomUUID()}`;
     this.#isAutoRunEnabled = options.isAutoRunEnabled;
     this.#autoApprovePlans = options.autoApprovePlans;
     this.#reconcileToolResults = options.reconcileToolResults;
@@ -786,6 +795,7 @@ export class FactoryDecisionDispatcher {
     // circle: only a run pre-approved by a person's gesture or its own agent's governed move passes.
     if (item && externallyAuthoredWorkItem(item)) return true;
     if (item?.autonomyArmedAt != null) return false;
+    if (item && reviewsFactoryAuthoredCode(item, decision)) return false;
     return !(await this.#isAutoRunEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId }));
   }
 
@@ -919,7 +929,20 @@ export class FactoryDecisionDispatcher {
             const enteredSince = current.stageHistory.filter(
               entry => entry.exitedAt === undefined && new Date(entry.enteredAt).getTime() > decidedAt,
             );
-            if (enteredSince.length === 0) return false;
+            // A run decided while the card sat outside its seat's stages (a held
+            // triage in Intake) is fulfilled, not overtaken, when the card first
+            // enters a stage that seat carries — e.g. the Investigate click.
+            const board = boardForWorkItem(current);
+            const carriesRole = (stage: string) =>
+              resolvePhaseSemantics(this.#boards, board, stage)?.role === decision.role;
+            const decidedOutsideRole = !current.stageHistory.some(
+              entry =>
+                new Date(entry.enteredAt).getTime() <= decidedAt &&
+                (entry.exitedAt === undefined || new Date(entry.exitedAt).getTime() > decidedAt) &&
+                carriesRole(entry.stage),
+            );
+            const movedOn = decidedOutsideRole ? enteredSince.filter(entry => !carriesRole(entry.stage)) : enteredSince;
+            if (movedOn.length === 0) return false;
             // A transition from the same rule evaluation lands after this decision
             // was created; entering that stage is part of this kickoff's intent.
             const siblingStages = new Set(
@@ -929,7 +952,7 @@ export class FactoryDecisionDispatcher {
                 )
                 .map(sibling => sibling.decision.stage),
             );
-            return enteredSince.some(entry => !siblingStages.has(entry.stage));
+            return movedOn.some(entry => !siblingStages.has(entry.stage));
           };
           const runStillActive = () =>
             this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);

@@ -47,13 +47,13 @@ export function ToolMockReportSection({ report }: ToolMockReportSectionProps) {
             <span className="block">
               {`Tool "${failure.toolName}" was called with arguments that did not match an available mock (${failure.code}).`}
             </span>
-            <span className="mt-1 block text-caption">
+            <Txt as="span" variant="caption" className="mt-1 block">
               Called with: <InlineCode>{formatArgs(failure.args)}</InlineCode>
-            </span>
+            </Txt>
             {unconsumed.length > 0 && (
-              <span className="mt-1 block text-caption">
+              <Txt as="span" variant="caption" className="mt-1 block">
                 Unconsumed mocks: <InlineCode>{unconsumed.map(u => formatArgs(u.args)).join(', ')}</InlineCode>
-              </span>
+              </Txt>
             )}
           </Notice.Message>
         </Notice>
@@ -86,9 +86,9 @@ export function ToolMockReportSection({ report }: ToolMockReportSectionProps) {
 function outcomeClass(outcome: ReportRow['outcome']): string {
   switch (outcome) {
     case 'served':
-      return 'bg-accent1/10 text-accent1';
+      return 'bg-success-subtle text-success-subtle-foreground';
     case 'live':
-      return 'bg-orange-500/10 text-orange-400';
+      return 'bg-badge-orange-subtle text-badge-orange-foreground';
     case 'unconsumed':
       return 'bg-muted-foreground/10 text-muted-foreground';
   }

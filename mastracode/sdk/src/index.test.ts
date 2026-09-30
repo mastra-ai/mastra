@@ -1,5 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
+// createMastraCode() pulls in a large module graph, so these tests routinely
+// exceed the 5s default (matches the sibling headless/libsql suites).
+vi.setConfig({ testTimeout: 30_000 });
+
 // Captures the createSession() args so tests can assert on wiring (e.g.
 // id/ownerId). Hoisted so the vi.mock factory can reference it.
 const createSessionCalls = vi.hoisted<Array<{ id?: string; ownerId?: string; resourceId?: string }>>(() => []);
@@ -132,6 +136,7 @@ vi.mock('./onboarding/om-settings.js', () => ({
 vi.mock('./onboarding/settings.js', () => ({
   OBSERVABILITY_AUTH_PREFIX: 'observability:',
   getCustomProviderId: vi.fn(),
+  parseExperimentalAgentSetting: vi.fn(value => value ?? null),
   loadSettings: vi.fn(() => ({
     onboarding: { completedAt: null, skippedAt: null, version: 0, modePackId: null, omPackId: null },
     models: {
@@ -216,6 +221,12 @@ vi.mock('./utils/thread-lock.js', () => ({
   releaseThreadLock: vi.fn(),
 }));
 
+vi.mock('./utils/maintenance-lock.js', () => ({
+  registerSessionAndWaitForMaintenance: vi.fn(async () => {}),
+  unregisterSession: vi.fn(),
+  UNKNOWN_OWNER: -1,
+}));
+
 describe('createMastraCode startup performance', () => {
   it('does not wait for background gateway sync before returning storage warnings', async () => {
     const [{ syncGateways }, { createStorage }] = await Promise.all([
@@ -251,6 +262,87 @@ describe('createMastraCode startup performance', () => {
     // A tight budget here fails on that import cost rather than on the
     // ordering contract, so give it room for a contended runner.
   }, 60_000);
+});
+
+describe('storage maintenance exclusion', () => {
+  it('registers the session and waits for maintenance before opening storage', async () => {
+    const [{ registerSessionAndWaitForMaintenance }, { createStorage }] = await Promise.all([
+      import('./utils/maintenance-lock.js'),
+      import('./utils/storage-factory.js'),
+    ]);
+    const order: string[] = [];
+    let finishMaintenance!: () => void;
+    vi.mocked(registerSessionAndWaitForMaintenance).mockImplementationOnce(
+      () =>
+        new Promise<void>(resolve => {
+          order.push('wait');
+          finishMaintenance = () => {
+            order.push('maintenance-done');
+            resolve();
+          };
+        }),
+    );
+    vi.mocked(createStorage).mockImplementationOnce((async () => {
+      order.push('storage');
+      return { storage: {}, backend: 'memory' };
+    }) as never);
+    const { createMastraCode } = await import('./index.js');
+
+    const started = createMastraCode();
+    await vi.waitFor(() => expect(order).toEqual(['wait']));
+    // Give startup ample turns to (incorrectly) open storage while maintenance is pending.
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(order).not.toContain('storage');
+
+    finishMaintenance();
+    await started;
+
+    expect(order).toEqual(['wait', 'maintenance-done', 'storage']);
+  });
+
+  it('unregisters the session when opening storage fails', async () => {
+    const [{ unregisterSession }, { createStorage }] = await Promise.all([
+      import('./utils/maintenance-lock.js'),
+      import('./utils/storage-factory.js'),
+    ]);
+    const failure = new Error('storage unavailable');
+    vi.mocked(createStorage).mockRejectedValueOnce(failure);
+    const { createMastraCode } = await import('./index.js');
+
+    await expect(createMastraCode()).rejects.toBe(failure);
+    expect(unregisterSession).toHaveBeenCalled();
+  });
+});
+
+describe('scores storage domain', () => {
+  it('keeps scorer results out of the default libsql store', async () => {
+    const { DiscardingScoresStorage } = await import('./utils/discarding-scores-storage.js');
+    const { createMastraCode } = await import('./index.js');
+
+    const result = await createMastraCode();
+
+    // mastracode's scorers persist every result through the `scores` domain, and
+    // nothing reads them back. The domain must accept writes (a missing domain
+    // makes validateAndSaveScore() throw MASTRA_SCORES_STORAGE_NOT_AVAILABLE)
+    // without writing to libsql (#22056) or retaining payloads in memory.
+    const scores = await result.storage.getStore('scores');
+    expect(scores).toBeInstanceOf(DiscardingScoresStorage);
+
+    const saved = await scores!.saveScore({
+      scorerId: 'outcome',
+      entityId: 'thread-1',
+      runId: 'run-1',
+      output: { ok: true },
+      score: 1,
+      scorer: {},
+      source: 'LIVE',
+      entity: {},
+    });
+    expect(saved.score.id).toEqual(expect.any(String));
+    expect(await scores!.getScoreById({ id: saved.score.id })).toBeNull();
+    const listed = await scores!.listScoresByRunId({ runId: 'run-1', pagination: { page: 0, perPage: 10 } });
+    expect(listed.scores).toEqual([]);
+  });
 });
 
 describe('Kimi startup access', () => {

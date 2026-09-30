@@ -291,6 +291,15 @@ export interface FactoryAttentionReceiptRecord extends FactoryAttentionIdentity 
   updatedAt: Date;
 }
 
+/** Stages in which a bound run can still act on its work item. */
+export const ACTIVE_RUN_BINDING_STAGES: ReadonlySet<string> = new Set([
+  'intake',
+  'triage',
+  'planning',
+  'execute',
+  'review',
+]);
+
 interface SetAttentionReceiptInput {
   orgId: string;
   factoryProjectId: string;
@@ -1828,6 +1837,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 decisions: input.evaluation.outcome === 'accepted' ? input.evaluation.decisions : [],
               }
             : { status: 'rejected', transitionId: input.ingress.transitionId, itemId: input.workItemId, code, reason };
+        // A stale revision only lost a race with another write; recording it
+        // under this identity would replay the loss to every retry, so a
+        // re-read at the current revision could never commit the transition.
+        if (code === 'stale') return { status: 'committed', item, result };
         const ingress = await ops.insertOne<GovernanceDbRow>('factory_rule_ingress', {
           org_id: input.orgId,
           factory_project_id: input.factoryProjectId,
@@ -2779,6 +2792,27 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     if (new Set(rows.map(row => row.factory_project_id)).size !== 1) return null;
     const row = rows.sort((left, right) => right.created_at.getTime() - left.created_at.getTime())[0];
     return row ? toBinding(row) : null;
+  }
+
+  /**
+   * The active binding a Factory session is serving, keyed by the session
+   * alone so it resolves before the session has a live thread (e.g. when the
+   * dispatcher builds the workspace for a kickoff). Ambiguous matches never
+   * authorize.
+   */
+  async findActiveRunBindingForSession(input: {
+    orgId: string;
+    factoryProjectId: string;
+    sessionId: string;
+  }): Promise<FactoryRunBindingRecord | null> {
+    const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
+      org_id: input.orgId,
+      factory_project_id: input.factoryProjectId,
+      session_id: input.sessionId,
+      status: 'active',
+    });
+    if (rows.length !== 1) return null;
+    return toBinding(rows[0]!);
   }
 
   /** Resolve exact bound-session state for processor awareness; ambiguous cross-tenant matches return null. */

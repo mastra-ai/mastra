@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
   updates: [] as Array<{ set: Record<string, unknown>; where: unknown }>,
   /** When set, the stub models a local-provider callback rooted at <localRoot>/<sessionId>. */
   localRoot: null as string | null,
-  createSandbox: vi.fn((ctx: { sessionId: string }) => {
+  createSandbox: vi.fn((ctx: { sessionId: string; sandboxId?: string }) => {
     // Models a well-behaved provider: lazy start via ensureRunning() on the
     // first command/info call (coalesced, failures never latch), the hook
     // installed through setOnStart invoked inside start() with outcome
@@ -26,6 +26,10 @@ const mocks = vi.hoisted(() => ({
     let onStart: ((hook: { sandbox: unknown; outcome?: 'created' | 'connected' }) => Promise<void>) | undefined;
     const sandbox: any = {
       id: `sbx-${ctx.sessionId}`,
+      // Physical, reattachable VM id — distinct from the logical `id` — as a
+      // real provider (e.g. Railway) exposes. Reflects the reattach id when the
+      // callback is given one, else the freshly provisioned VM id.
+      sandboxId: ctx.sandboxId ?? `vm-${ctx.sessionId}`,
       provider: mocks.localRoot ? 'local' : 'stub',
       status: 'pending',
       ...(mocks.localRoot ? { workingDirectory: `${mocks.localRoot}/${ctx.sessionId}` } : {}),
@@ -88,8 +92,17 @@ const mocks = vi.hoisted(() => ({
   /** Run-binding role resolved for the session; null = no binding found. */
   runBindingRole: null as string | null,
   runBindingStatus: 'active' as 'active' | 'revoked',
-  findRunBindingBySession: vi.fn(async () =>
-    mocks.runBindingRole ? { role: mocks.runBindingRole, status: mocks.runBindingStatus, orgId: 'org-1' } : null,
+  runBindingThreadId: null as string | null,
+  findActiveRunBindingForSession: vi.fn(async ({ sessionId }: { sessionId: string }) =>
+    mocks.runBindingRole
+      ? {
+          role: mocks.runBindingRole,
+          status: mocks.runBindingStatus,
+          orgId: 'org-1',
+          threadId: mocks.runBindingThreadId ?? sessionId,
+          resourceId: sessionId,
+        }
+      : null,
   ),
 }));
 
@@ -118,6 +131,7 @@ import {
   FactorySkillSource,
   REVIEW_ONLY_FACTORY_SKILLS,
   FactoryWorkspaceRegistry,
+  rescanFactorySkills,
   resolveLocalFactorySkillsPath,
 } from './workspace.js';
 
@@ -163,7 +177,8 @@ afterEach(async () => {
   mocks.githubReviewerPat = null;
   mocks.runBindingRole = null;
   mocks.runBindingStatus = 'active';
-  mocks.findRunBindingBySession.mockClear();
+  mocks.runBindingThreadId = null;
+  mocks.findActiveRunBindingForSession.mockClear();
 });
 
 function createRequestContext(projectPath: string) {
@@ -347,7 +362,7 @@ describe('bundled Factory skill assets', () => {
       expect(instructions).toContain('source_control_get_change_request');
       expect(instructions).toContain('source_control_list_change_request_reviews');
       expect(instructions).toContain('source_control_review_change_request');
-      expect(instructions).toContain('factory_transition_work_item');
+      expect(instructions).toContain('factory_record_review_verdict');
       expect(instructions).not.toMatch(/`gh pr |`glab mr /);
     }
   });
@@ -362,10 +377,10 @@ describe('bundled Factory skill assets', () => {
     expect(triage).toContain('.artifacts/factory-triage/issue-<number>.md');
     expect(plan).toContain('Write it to `.artifacts/plans/issue-<number>.md`');
     expect(plan).toContain('include the same plan in the conversation');
-    expect(review).toContain('.artifacts/factory-review/pr-<number>.md');
+    expect(review).toContain('.artifacts/factory-review/pr-<number>-<headSha>.md');
     expect(review).toContain('.artifacts/factory-review/follow-up-pr-<number>.md');
     expect(review).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
-    expect(rereview).toContain('.artifacts/factory-rereview/pr-<number>.md');
+    expect(rereview).toContain('.artifacts/factory-rereview/pr-<number>-<headSha>.md');
     expect(rereview).toContain('.artifacts/factory-rereview/follow-up-pr-<number>.md');
     expect(rereview).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
     for (const instructions of [review, rereview]) {
@@ -393,8 +408,11 @@ describe('bundled Factory skill assets', () => {
 
     for (const skillName of ['factory-triage', 'factory-plan', 'factory-review', 'factory-rereview']) {
       const prose = await read(skillName);
-      // Terminal batched handoff + governed transition, never a mid-run human gate.
-      expect(prose).toContain('factory_transition_work_item');
+      // Terminal batched handoff + governed terminal call, never a mid-run human gate.
+      // Review passes end by recording the verdict; the card stays in Reviewing.
+      expect(prose).toContain(
+        skillName.includes('review') ? 'factory_record_review_verdict' : 'factory_transition_work_item',
+      );
       expect(prose).toContain('as an assumption');
       expect(prose).toContain('Never wait for or solicit human input mid-run');
       expect(prose).not.toContain('ask_user');
@@ -517,7 +535,8 @@ describe('bundled Factory skill assets', () => {
     expect(review).toContain('Never resolve the conflicts yourself');
     // Terminal ordering: publish the verdict and transition before the final
     // conversation message, so the pass can't stop early with an unpublished review.
-    expect(review).toContain('post the handoff as your final conversation message');
+    expect(review).toContain('post the **session handoff**');
+    expect(review).toContain('as your final conversation message');
     // Rigor: approval requires every gate affirmatively demonstrated, and the
     // reviewer waits for pending bot reviews before forming a verdict.
     expect(review).toContain('Approval gates');
@@ -575,11 +594,12 @@ describe('bundled Factory skill assets', () => {
     // publish the verdict on the PR, request the transition, and only then send
     // the final conversation message.
     inOrder(
-      "don't send it to the conversation yet",
+      "Don't send either to the conversation yet",
       'gh pr review <number> --approve --body-file',
       'gh pr review <number> --request-changes --body-file',
-      'Then make your terminal `factory_transition_work_item` call',
-      'post the handoff as your final conversation message',
+      'Then make your terminal `factory_record_review_verdict` call',
+      'post the **session handoff**',
+      'as your final conversation message',
     );
 
     // Every approval gate lives inside the gates block, while issue context and
@@ -629,7 +649,7 @@ describe('bundled Factory skill assets', () => {
     // qualify as follow-up work — both rules inside the follow-up procedure.
     const followUps = section(
       'Non-blocking follow-ups become a PR, not homework',
-      'Then make your terminal `factory_transition_work_item` call',
+      'Then make your terminal `factory_record_review_verdict` call',
     );
     expect(followUps).toContain('Never mix blocking findings into a follow-up PR');
     expect(followUps).toContain(
@@ -728,7 +748,7 @@ describe('bundled Factory skill assets', () => {
     expect(verdict).toContain('The verdict and the requests must tell the same story');
 
     // The handoff carries the approach judgment and unhedged requests.
-    const handoff = section('## Phase 6: Handoff & Transition', '## Behavior Rules');
+    const handoff = section('## Phase 6: Handoff & Verdict', '## Behavior Rules');
     expect(handoff).toContain('- **Approach**');
     expect(handoff).toContain('imperative and present tense');
     expect(handoff).toContain('No softened requests');
@@ -900,7 +920,7 @@ describe('bundled Factory skill assets', () => {
     expect(gates).toContain('neither is an approval gate');
     expect(gates).toContain('If any gate fails, the verdict is request changes');
 
-    const handoff = section('## Phase 7: Handoff & Transition', '## Behavior Rules');
+    const handoff = section('## Phase 7: Handoff & Verdict', '## Behavior Rules');
     expect(handoff).toContain('- **Issue and intent**');
     expect(handoff).toContain('including base-versus-current-head evidence for affected behavior-changing claims');
     expect(handoff).toContain('prior-head-versus-current-head evidence for push regressions');
@@ -962,7 +982,7 @@ describe('GitHub session workspace preparation', () => {
     const resolver = createWorkspaceFactory({
       sandbox: mocks.createSandbox as any,
       github: fakeGithubIntegration() as any,
-      workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
+      workItems: { findActiveRunBindingForSession: mocks.findActiveRunBindingForSession } as any,
       ...(workspaceRegistry ? { workspaceRegistry } : {}),
     });
     return {
@@ -1070,6 +1090,30 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.setEnv).not.toHaveBeenCalled();
   });
 
+  it("persists the provider's physical sandboxId, not the logical session id", async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    // The bug persisted `target.id` (logical) as sandboxId; it must now persist
+    // the provider's physical VM id so resume can reattach to the same VM.
+    expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxId).toBe('vm-session-a');
+  });
+
+  it('forwards a persisted physical sandboxId back into the sandbox callback on resume', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', sandboxId: 'vm-original' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    // The persisted physical id must reach the host callback so a physical-id
+    // reattach provider (e.g. Railway) resumes the original VM.
+    expect(mocks.createSandbox).toHaveBeenCalledWith(expect.objectContaining({ sandboxId: 'vm-original' }));
+  });
+
   it('skips the setup command on a VM that already carries the marker, but still materializes and checks out', async () => {
     const { workspace } = await createLocalFactory();
     addProject({ setupCommand: 'pnpm i' });
@@ -1120,6 +1164,66 @@ describe('GitHub session workspace preparation', () => {
     expect((await workspace.skills?.get('factory-plan'))?.instructions).toContain('# Factory Plan');
   });
 
+  it('exposes review skills to a review session before it has a live thread', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
+    // The controller builds a session's workspace from its creation-time
+    // context, which has no thread yet — the case a dispatcher kickoff hits.
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    const controller = requestContext.get('controller') as Record<string, unknown>;
+    controller.threadId = null;
+    controller.getState = () => ({});
+
+    const workspace = (await resolver({ requestContext }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect((await workspace.skills?.get('factory-review'))?.instructions).toBeTruthy();
+    expect(mocks.findActiveRunBindingForSession).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: 'org-1', sessionId: 'session-a' }),
+    );
+  });
+
+  it('hides review skills from a thread that does not own the session binding', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
+    // The session was handed to another item's run; this request still carries the old thread.
+    mocks.runBindingThreadId = 'other-thread';
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    const workspace = (await resolver({ requestContext }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+    expect((await workspace.skills?.get('factory-plan'))?.instructions).toContain('# Factory Plan');
+  });
+
+  it('hides review skills when a thread that does not own the binding reuses a kickoff-built workspace', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
+    // A dispatcher kickoff builds the workspace before the session has a thread.
+    const kickoffContext = createGithubRequestContext('project-1', 'session-a');
+    const controller = kickoffContext.get('controller') as Record<string, unknown>;
+    controller.threadId = null;
+    controller.getState = () => ({});
+    const workspace = (await resolver({ requestContext: kickoffContext }))!;
+    await workspace.skills?.maybeRefresh();
+    expect((await workspace.skills?.get('factory-review'))?.instructions).toBeTruthy();
+
+    // A request on a thread the binding does not belong to reuses it.
+    mocks.runBindingThreadId = 'other-thread';
+    const reused = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    expect(reused).toBe(workspace);
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+    expect((await workspace.skills?.list())?.map(skill => skill.name)).not.toContain('factory-review');
+  });
+
   it('drops cached review skills when a reused workspace leaves the review role', async () => {
     const { resolver } = await createLocalFactory();
     addProject();
@@ -1138,6 +1242,74 @@ describe('GitHub session workspace preparation', () => {
     expect(await workWorkspace.skills?.get('factory-review')).toBeFalsy();
     expect(await workWorkspace.skills?.get('factory-rereview')).toBeFalsy();
     expect((await workWorkspace.skills?.get('factory-plan'))?.instructions).toContain('# Factory Plan');
+  });
+
+  it('drops review skills a kickoff rescan loaded once the session leaves the review role', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'work';
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    const workspace = (await resolver({ requestContext }))!;
+    await workspace.skills?.maybeRefresh();
+    await resolver({ requestContext });
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+
+    // The review binding lands after the cache was built; kickoff rescans outside the resolver.
+    mocks.runBindingRole = 'review';
+    await rescanFactorySkills(workspace.skills!);
+    expect(await workspace.skills?.get('factory-review')).toBeTruthy();
+
+    mocks.runBindingRole = 'work';
+    const reused = (await resolver({ requestContext }))!;
+    expect(reused).toBe(workspace);
+    expect(await reused.skills?.get('factory-review')).toBeFalsy();
+  });
+
+  it('does not let a reused workspace join a kickoff rescan started for the previous role', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'work';
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    const workspace = (await resolver({ requestContext }))!;
+    await workspace.skills?.maybeRefresh();
+
+    // The kickoff rescan scans for the review role. It pauses on its first role
+    // lookup; while it is paused the session leaves the review role and the
+    // workspace is reused.
+    let scanning = true;
+    let paused = false;
+    let released = false;
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    const lookup = mocks.findActiveRunBindingForSession.getMockImplementation()!;
+    mocks.findActiveRunBindingForSession.mockImplementation(async input => {
+      mocks.runBindingRole = scanning && !paused ? 'review' : 'work';
+      const binding = await lookup(input);
+      if (scanning && !paused && !released) {
+        paused = true;
+        await gate;
+        paused = false;
+      }
+      return binding;
+    });
+    const rescan = rescanFactorySkills(workspace.skills!);
+    void rescan.then(() => (scanning = false));
+    await vi.waitFor(() => expect(paused).toBe(true));
+
+    const reused = resolver({ requestContext });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    released = true;
+    release();
+    await rescan;
+    const result = await reused;
+    mocks.findActiveRunBindingForSession.mockImplementation(lookup);
+    mocks.runBindingRole = 'work';
+
+    expect(result).toBe(workspace);
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
   });
 
   it('does not return a reused workspace to concurrent callers before its skill rescan finishes', async () => {
@@ -1691,7 +1863,7 @@ describe('GitHub session workspace preparation', () => {
       createWorkspaceFactory({
         sandbox: mocks.createSandbox as any,
         github: fakeGithubIntegration() as any,
-        workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
+        workItems: { findActiveRunBindingForSession: mocks.findActiveRunBindingForSession } as any,
       }),
     );
   }
@@ -2307,7 +2479,7 @@ describe('GitHub session workspace preparation', () => {
   it('serves no host workspace even on deploys with no sandbox config', async () => {
     const resolver = createWorkspaceFactory({
       github: fakeGithubIntegration() as any,
-      workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
+      workItems: { findActiveRunBindingForSession: mocks.findActiveRunBindingForSession } as any,
     });
     const projectPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-web-no-sandbox-'));
     tempDirs.push(projectPath);
@@ -2325,7 +2497,7 @@ describe('GitHub session workspace preparation', () => {
       return createWorkspaceFactory({
         sandbox: mocks.createSandbox as any,
         github: fakeGithubIntegration() as any,
-        workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
+        workItems: { findActiveRunBindingForSession: mocks.findActiveRunBindingForSession } as any,
         ...(sandboxStart !== undefined ? { sandboxStart } : {}),
       });
     }

@@ -32,7 +32,7 @@ const workflowBase = (name: string, description: string): Omit<GetWorkflowRespon
  * keys while each workflow's own id (`name`) is kebab-case, and nested step
  * ids reference the child's kebab id. Roster:
  * - prdShipProduct nests prd-groom-product AND prd-fix-product (registered)
- * - prdGroomProduct nests use-case-arch (inline, unregistered)
+ * - prdGroomProduct nests use-case-arch (unregistered)
  * - prdFixProduct is a leaf with two plain steps
  * - engRunner is a plain leaf whose runs endpoint reports active runs
  * - loopA and loopB nest each other by kebab id → ancestor guard case

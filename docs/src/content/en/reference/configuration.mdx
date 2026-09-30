@@ -501,13 +501,11 @@ Visit the [Classifier reference](/reference/classifier/classifier) to learn more
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import { Classifier } from '@mastra/core/classifier'
-import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
+import { typeSafeAi } from '@ai-sdk/typesafe-ai'
 
 const safety = new Classifier({
   id: 'safety',
-  model: createTypeSafeAi({ apiKey: process.env.TYPESAFE_AI_API_KEY }).evaluationModel(
-    '__AI_SDK_TYPESAFE_EVALUATION_MODEL__',
-  ),
+  model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
   questions: {
     unsafe: {
       type: 'boolean',

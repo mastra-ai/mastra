@@ -17,6 +17,7 @@ This demo runs in Mastra Studio, but you can connect this workflow to your React
 ## Prerequisites
 
 - [Mastra Gateway API key](https://mastra.ai/docs/models/gateways/mastra): Used by default, but you can swap in any model
+- A Postgres connection string (`DATABASE_URL`) for agent memory, threads, tasks, and workflow snapshots
 - A Mastra platform project with at least one integration connected (Linear, Notion, …) and a platform access token
 
 ## Quickstart 🚀

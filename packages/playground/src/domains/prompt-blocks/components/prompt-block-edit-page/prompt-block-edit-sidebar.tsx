@@ -144,7 +144,7 @@ export function PromptBlockEditSidebar({
             subtitle={
               <>
                 Define variables for this prompt block. Use{' '}
-                <code className="font-medium text-accent1">{'{{variableName}}'}</code> syntax in your content.
+                <code className="font-medium text-foreground">{'{{variableName}}'}</code> syntax in your content.
               </>
             }
           />

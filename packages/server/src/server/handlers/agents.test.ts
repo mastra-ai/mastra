@@ -263,6 +263,87 @@ describe('getProvidersHandler', () => {
     delete process.env.CUSTOM_LLM_API_KEY;
   });
 
+  it('should show a provider as connected when a registered gateway claims its models without an env var', async () => {
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+
+    const oauthGateway = {
+      id: 'oauth-gateway',
+      name: 'OAuth Gateway',
+      fetchProviders: vi.fn().mockResolvedValue({}),
+      handlesModel: (modelId: string) => modelId.startsWith('openai/'),
+      buildUrl: vi.fn(),
+      getApiKey: vi.fn(),
+      resolveLanguageModel: vi.fn(),
+    };
+    const mastra = new Mastra({ gateways: { 'oauth-gateway': oauthGateway } });
+
+    const result = await GET_PROVIDERS_ROUTE.handler({
+      mastra,
+      requestContext: new RequestContext(),
+      abortSignal: new AbortController().signal,
+    });
+
+    expect(result.providers.find(p => p.id === 'openai')?.connected).toBe(true);
+    expect(result.providers.find(p => p.id === 'anthropic')?.connected).toBe(false);
+  });
+
+  it('should ignore a disabled gateway that claims a provider', async () => {
+    delete process.env.OPENAI_API_KEY;
+
+    const disabledGateway = {
+      id: 'disabled-gateway',
+      name: 'Disabled Gateway',
+      shouldEnable: () => false,
+      fetchProviders: vi.fn().mockResolvedValue({}),
+      handlesModel: (modelId: string) => modelId.startsWith('openai/'),
+      buildUrl: vi.fn(),
+      getApiKey: vi.fn(),
+      resolveLanguageModel: vi.fn(),
+    };
+    const mastra = new Mastra({ gateways: { 'disabled-gateway': disabledGateway } });
+
+    const result = await GET_PROVIDERS_ROUTE.handler({
+      mastra,
+      requestContext: new RequestContext(),
+      abortSignal: new AbortController().signal,
+    });
+
+    expect(result.providers.find(p => p.id === 'openai')?.connected).toBe(false);
+  });
+
+  it('should pass through a gateway provider label and description, falling back to name and empty', async () => {
+    const describedGateway = {
+      id: 'described-gateway',
+      name: 'Described Gateway',
+      fetchProviders: vi.fn().mockResolvedValue({
+        described: {
+          name: 'Described',
+          label: 'Described LLM',
+          description: 'A provider that describes itself',
+          models: ['model-1'],
+          apiKeyEnvVar: 'DESCRIBED_API_KEY',
+          gateway: 'described-gateway',
+        },
+      }),
+      buildUrl: vi.fn(),
+      getApiKey: vi.fn(),
+      resolveLanguageModel: vi.fn(),
+    };
+    const mastra = new Mastra({ gateways: { 'described-gateway': describedGateway } });
+
+    const result = await GET_PROVIDERS_ROUTE.handler({
+      mastra,
+      requestContext: new RequestContext(),
+      abortSignal: new AbortController().signal,
+    });
+
+    const described = result.providers.find(p => p.id === 'described-gateway/described');
+    expect(described).toMatchObject({ label: 'Described LLM', description: 'A provider that describes itself' });
+    const openai = result.providers.find(p => p.id === 'openai');
+    expect(openai).toMatchObject({ label: openai?.name, description: '' });
+  });
+
   it('should hide registry and default-gateway providers when AUTO_BLOCK_EXTERNAL_PROVIDERS is set, keeping only custom gateways', async () => {
     process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS = 'true';
 
@@ -1723,6 +1804,70 @@ describe('Agent Routes Authorization', () => {
       await callResume(route, { resourceId: 'user-a' });
       expect(execution).toHaveBeenCalled();
     });
+
+    it.each(resumeRoutes)(
+      '$name resumes a durable run with a stored resource when no server-side identity is set',
+      async ({ route, method }) => {
+        await persistSuspendedDurableRun({ resourceId: 'user-a', threadId: 'thread-a' });
+        const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+        await route.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({}),
+          abortSignal: new AbortController().signal,
+          runId: 'durable-run-1',
+          toolCallId: 'tool-call-1',
+          resumeData: {},
+          memory: { thread: 'thread-a', resource: 'user-a' },
+        } as any);
+        expect(execution).toHaveBeenCalled();
+      },
+    );
+
+    it.each(resumeRoutes)(
+      '$name still rejects a different thread when no server-side identity is set',
+      async ({ route, method }) => {
+        await persistSuspendedDurableRun({ resourceId: 'user-a', threadId: 'thread-a' });
+        const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+        await expect(
+          route.handler({
+            mastra,
+            agentId: 'test-agent',
+            requestContext: createContextWithReservedKeys({}),
+            abortSignal: new AbortController().signal,
+            runId: 'durable-run-1',
+            toolCallId: 'tool-call-1',
+            resumeData: {},
+            memory: { thread: 'thread-b', resource: 'user-a' },
+          } as any),
+        ).rejects.toThrow(
+          new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' }),
+        );
+        expect(execution).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(approvalRoutes)(
+      '$name allows a durable run with a stored resource when no server-side identity is set',
+      async ({ route, method }) => {
+        await persistSuspendedDurableRun({ resourceId: 'user-a' });
+        const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({
+          fullStream: new ReadableStream(),
+        });
+
+        await (route.handler as any)({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({}),
+          abortSignal: new AbortController().signal,
+          runId: 'durable-run-1',
+          toolCallId: 'tool-call-1',
+        });
+        expect(execution).toHaveBeenCalled();
+      },
+    );
   });
 
   describe('RECOVER_ROUTE', () => {

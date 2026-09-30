@@ -4,6 +4,7 @@ import { DataListCell, DataListTextCell } from '../data-list-cells';
 import { Badge } from '@/ds/components/Badge';
 import type { BadgeVariant } from '@/ds/components/Badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { McpServerIcon } from '@/ds/icons/McpServerIcon';
 import { MemoryIcon } from '@/ds/icons/MemoryIcon';
@@ -99,7 +100,9 @@ export function TracesDataListTypeCell({ entityType }: TracesDataListTypeCellPro
       {display ? (
         <>
           <display.Icon className="size-3.5 shrink-0 text-placeholder" aria-hidden />
-          <span className="min-w-0 truncate text-body-sm">{display.label}</span>
+          <Txt as="span" variant="body-sm" className="min-w-0 truncate">
+            {display.label}
+          </Txt>
         </>
       ) : (
         '-'
@@ -115,10 +118,10 @@ export function TracesDataListTypeCell({ entityType }: TracesDataListTypeCellPro
 const UNSET_STATUS_CONFIG: { label: string; variant: BadgeVariant } = { label: '-', variant: 'neutral' };
 
 const STATUS_CONFIG: Record<string, { label: string; variant: BadgeVariant }> = {
-  completed: { label: 'OK', variant: 'green' },
-  ok: { label: 'OK', variant: 'green' },
-  success: { label: 'OK', variant: 'green' },
-  error: { label: 'ERR', variant: 'red' },
+  completed: { label: 'OK', variant: 'success' },
+  ok: { label: 'OK', variant: 'success' },
+  success: { label: 'OK', variant: 'success' },
+  error: { label: 'ERR', variant: 'destructive' },
   running: { label: 'RUN', variant: 'neutral' },
   unset: UNSET_STATUS_CONFIG,
 };

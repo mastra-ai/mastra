@@ -18,10 +18,10 @@
   "dependencies": {
     "@mastra/connect": "latest",
     "@mastra/core": "latest",
-    "@mastra/libsql": "latest",
     "@mastra/loggers": "latest",
     "@mastra/memory": "latest",
     "@mastra/observability": "latest",
+    "@mastra/pg": "latest",
     "zod": "^4.3.6"
   },
   "devDependencies": {

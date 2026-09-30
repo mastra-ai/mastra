@@ -505,7 +505,9 @@ describe('MastraFactory.prepare', () => {
     // fix its config from the message alone.
     expect(error.message).toMatch(/'sandbox' is now a callback/);
     expect(error.message).toMatch(/FactorySandboxContext/);
-    expect(error.message).toMatch(/sandbox: ctx => new E2BSandbox\(\{ id: ctx\.sessionId \}\)/);
+    expect(error.message).toMatch(
+      /sandbox: ctx => new E2BSandbox\(\{ id: ctx\.sessionId, sandboxId: ctx\.sandboxId \}\)/,
+    );
     // The old options had three different fates, and a host reading this
     // message needs all three: none of them is "pass it to the provider"
     // unchanged.

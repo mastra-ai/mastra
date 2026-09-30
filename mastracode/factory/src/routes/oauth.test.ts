@@ -227,6 +227,32 @@ describe('device-code flow (openai)', () => {
     expect(pollCodexDeviceLogin).toHaveBeenCalledTimes(1);
   });
 
+  it('tells a poll that arrives while another poll holds the session to retry shortly', async () => {
+    const app = buildApp(userA);
+    const { sessionId } = await (await post(app, '/web/config/providers/openai/oauth/start')).json();
+    await makePollable(sessionId);
+
+    let releaseUpstream!: () => void;
+    pollCodexDeviceLogin.mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          releaseUpstream = () => resolve({ status: 'pending', nextPollMs: 5000 });
+        }),
+    );
+
+    // Poll A claims the session and waits on the provider.
+    const first = post(app, '/web/config/providers/openai/oauth/poll', { sessionId });
+    await vi.waitFor(() => expect(pollCodexDeviceLogin).toHaveBeenCalledTimes(1));
+
+    // Poll B arrives while A still holds the claim.
+    const second = await post(app, '/web/config/providers/openai/oauth/poll', { sessionId });
+    expect(await second.json()).toEqual({ status: 'pending', nextPollMs: 250 });
+    expect(pollCodexDeviceLogin).toHaveBeenCalledTimes(1);
+
+    releaseUpstream();
+    expect(await (await first).json()).toMatchObject({ status: 'pending', nextPollMs: 5000 });
+  });
+
   it('stores the credential under the openai-codex auth id on completion', async () => {
     pollCodexDeviceLogin.mockResolvedValue({ status: 'complete', credentials: CODEX_CREDS });
     const app = buildApp(userA);

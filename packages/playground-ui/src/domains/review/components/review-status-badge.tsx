@@ -4,8 +4,8 @@ import { Badge } from '@/ds/components/Badge';
 type ReviewStatus = 'needs-review' | 'complete' | 'reviewed';
 
 function reviewStatusBadgeVariant(status: string): ComponentProps<typeof Badge>['variant'] {
-  if (status === 'needs-review') return 'orange';
-  if (status === 'complete' || status === 'reviewed') return 'green';
+  if (status === 'needs-review') return 'warning';
+  if (status === 'complete' || status === 'reviewed') return 'success';
   return 'neutral';
 }
 

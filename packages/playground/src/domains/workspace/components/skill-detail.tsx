@@ -1,4 +1,5 @@
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
@@ -76,8 +77,12 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
           <SkillIcon className="h-6 w-6 text-muted-foreground" />
         </div>
         <div className="flex-1">
-          <h1 className="text-heading text-foreground">{skill.name}</h1>
-          <p className="mt-1 text-body text-muted-foreground">{skill.description}</p>
+          <Txt as="h1" variant="heading" tone="ink">
+            {skill.name}
+          </Txt>
+          <Txt tone="muted" className="mt-1">
+            {skill.description}
+          </Txt>
         </div>
       </div>
 
@@ -148,7 +153,9 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
                 className="flex w-full items-center gap-2 rounded px-3 py-2 text-left hover:bg-fill-subtle"
               >
                 <FileText className="h-4 w-4 text-muted-foreground" />
-                <span className="text-body text-foreground">{ref}</span>
+                <Txt as="span" tone="ink">
+                  {ref}
+                </Txt>
               </button>
             ))}
           </div>
@@ -166,7 +173,9 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
             {skill.scripts.map(script => (
               <div key={script} className="flex items-center gap-2 rounded bg-card px-3 py-2">
                 <Code className="h-4 w-4 text-muted-foreground" />
-                <span className="text-body text-foreground">{script}</span>
+                <Txt as="span" tone="ink">
+                  {script}
+                </Txt>
               </div>
             ))}
           </div>
@@ -184,7 +193,9 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
             {skill.assets.map(asset => (
               <div key={asset} className="flex items-center gap-2 rounded bg-card px-3 py-2">
                 <Image className="h-4 w-4 text-muted-foreground" />
-                <span className="text-body text-foreground">{asset}</span>
+                <Txt as="span" tone="ink">
+                  {asset}
+                </Txt>
               </div>
             ))}
           </div>
@@ -193,9 +204,9 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
 
       {/* Path */}
       <div className="border-t border-border pt-4">
-        <p className="text-caption text-muted-foreground">
+        <Txt variant="caption" tone="muted">
           Path: <code className="rounded bg-muted px-1 py-0.5">{skill.path}</code>
-        </p>
+        </Txt>
       </div>
     </div>
   );
@@ -235,12 +246,14 @@ function MetadataCard({ label, value, icon }: { label: string; value: unknown; i
   const displayValue = formatDisplayValue(value);
   return (
     <div className="rounded-lg bg-card p-3">
-      <p className="mb-1 text-caption text-muted-foreground">{label}</p>
+      <Txt variant="caption" tone="muted" className="mb-1">
+        {label}
+      </Txt>
       <div className="flex items-center gap-1.5">
         {icon && <span className="text-muted-foreground">{icon}</span>}
-        <p className="truncate text-subheading text-foreground" title={displayValue}>
+        <Txt variant="subheading" tone="ink" className="truncate" title={displayValue}>
           {displayValue}
-        </p>
+        </Txt>
       </div>
     </div>
   );
@@ -268,7 +281,9 @@ function CollapsibleSection({
           ) : (
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
           )}
-          <span className="text-subheading text-foreground">{title}</span>
+          <Txt as="span" variant="subheading" tone="ink">
+            {title}
+          </Txt>
         </button>
         {headerAction && <div className="pr-3">{headerAction}</div>}
       </div>

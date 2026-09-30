@@ -798,6 +798,7 @@ LIMIT 1`,
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'trace-query-context-ids',
       ]);
     });
 
@@ -820,6 +821,7 @@ LIMIT 1`,
           'thread-query',
           'trace-query-tenant-scope',
           'feedback',
+          'trace-query-context-ids',
         ]);
       } finally {
         coreFeatures.add('observability-delta-polling');
@@ -6310,10 +6312,10 @@ describe('listTracesLight projection', () => {
           entityName: null,
           userId: null,
           organizationId: null,
-          resourceId: null,
+          resourceId: 'user-light',
           runId: null,
           sessionId: null,
-          threadId: null,
+          threadId: 'thread-light',
           requestId: null,
           environment: null,
           source: null,
@@ -6346,6 +6348,8 @@ describe('listTracesLight projection', () => {
     expect(row.inputPreview).toBe('summarize this');
     expect(row.status).toBe('success');
     expect(row.metadata).toEqual({ customer: 'acme' });
+    expect(row.threadId).toBe('thread-light');
+    expect(row.resourceId).toBe('user-light');
   });
 
   it('computes status on light rows matching the full listTraces status', async () => {

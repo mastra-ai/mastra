@@ -1,11 +1,11 @@
 import type { SignalCatalogEntry } from '@mastra/client-js';
 import { X, Eye } from 'lucide-react';
-import { getSignalHue } from './signal-colors';
+import { getSignalColor } from './signal-colors';
 import { signalLabel } from './signal-formatting';
 import type { ThemeSelection } from './theme-drilldown-data';
 import { useTraceIntelligence } from './use-trace-intelligence';
 import { Button } from '@/ds/components/Button';
-import { nodeColor } from '@/ds/components/SankeyChart';
+import { Txt } from '@/ds/components/Txt';
 
 function selectionLabel(catalog: readonly SignalCatalogEntry[], selection: ThemeSelection) {
   return `${signalLabel(catalog, selection.signalName)} · ${selection.kind === 'theme' ? selection.label : 'Noise'}`;
@@ -52,20 +52,18 @@ export function ThemeFilterBanner({
   onClear: () => void;
 }) {
   const { signalCatalog } = useTraceIntelligence();
-  const colors = selections.map(selection => nodeColor(getSignalHue(selection.signalName)));
+  const colors = selections.map(selection => getSignalColor(selection.signalName));
   const latestSelection = selections.at(-1);
-  const backgroundGradient = `linear-gradient(90deg, ${colors
-    .map(color => `color-mix(in srgb, ${color} 8%, transparent)`)
-    .join(', ')})`;
-  const borderGradient = `linear-gradient(90deg, ${colors
-    .map(color => `color-mix(in srgb, ${color} 35%, transparent)`)
-    .join(', ')})`;
+  const borderGradient = `linear-gradient(90deg, ${colors.length > 1 ? colors.join(', ') : `${colors[0]}, ${colors[0]}`})`;
 
   return (
     <section
       aria-label="Active theme drill-in"
       className="relative flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-transparent px-3 py-2"
-      style={{ backgroundImage: `${backgroundGradient}, ${borderGradient}`, backgroundClip: 'padding-box, border-box' }}
+      style={{
+        backgroundImage: `linear-gradient(var(--card), var(--card)), ${borderGradient}`,
+        backgroundClip: 'padding-box, border-box',
+      }}
     >
       {selections.map((selection, index) => {
         const color = colors[index];
@@ -87,9 +85,9 @@ export function ThemeFilterBanner({
           </button>
         );
       })}
-      <span className="text-caption text-muted-foreground">
+      <Txt as="span" variant="caption" tone="muted">
         {filterSummary({ selections, filteredTraceCount, totalTraceCount, isUnavailable })}
-      </span>
+      </Txt>
       {!isUnavailable && filteredTraceCount !== undefined && latestSelection ? (
         <Button
           icon={<Eye />}
