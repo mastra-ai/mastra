@@ -1,79 +1,87 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { setOwnAvatarTool } from './set-own-avatar';
+import { createSetOwnAvatarTool } from './set-own-avatar';
 
-const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-const PNG_BASE64 = PNG_BYTES.toString('base64');
+const PNG_HEADER = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
-type ExecuteFn = (args: { bytes: string; mime: string }, context: Record<string, unknown>) => Promise<unknown>;
+type ExecuteFn = (input: any, context: any) => Promise<any>;
 
-function makeContext(agent: { setAvatar?: ReturnType<typeof vi.fn> } | undefined, agentId = 'agent-1') {
+function ctxWithAgent(agent: any) {
   return {
-    agent: agentId ? { agentId, toolCallId: 'tc-1', messages: [], suspend: vi.fn() } : undefined,
+    agent: { agentId: 'agent-1' },
     mastra: {
-      getAgentById: agent ? vi.fn(() => agent) : undefined,
+      getAgentById: (id: string) => (id === 'agent-1' ? agent : undefined),
     },
-  };
+  } as any;
 }
 
-describe('setOwnAvatarTool', () => {
-  it('decodes base64 bytes and calls agent.setAvatar', async () => {
-    const setAvatar = vi.fn(async () => ({ url: 'mastra-avatar:agent-1', syncedChannels: [] }));
-    const ctx = makeContext({ setAvatar });
+describe('createSetOwnAvatarTool', () => {
+  it('calls the injected image generator with the model-supplied prompt and forwards bytes to agent.setAvatar', async () => {
+    const generateImage = vi.fn().mockResolvedValue({ bytes: PNG_HEADER, mime: 'image/png' });
+    const setAvatar = vi
+      .fn()
+      .mockResolvedValue({ url: 'mastra-avatar:agent-1', syncedChannels: [{ platform: 'discord', ok: true }] });
+    const tool = createSetOwnAvatarTool({ generateImage });
 
-    const result = await (setOwnAvatarTool as unknown as { execute: ExecuteFn }).execute(
-      { bytes: PNG_BASE64, mime: 'image/png' },
-      ctx,
-    );
+    const result = await (tool.execute as ExecuteFn)({ prompt: 'a friendly robot' }, ctxWithAgent({ setAvatar }));
 
-    expect(setAvatar).toHaveBeenCalledTimes(1);
-    const call = setAvatar.mock.calls[0] as unknown as [Buffer, string];
-    expect(Buffer.isBuffer(call[0])).toBe(true);
-    expect(call[0].equals(PNG_BYTES)).toBe(true);
-    expect(call[1]).toBe('image/png');
-    expect(result).toEqual({ ok: true, url: 'mastra-avatar:agent-1', syncedChannels: [] });
-  });
-
-  it('returns an error when no agent context is present', async () => {
-    const result = await (setOwnAvatarTool as unknown as { execute: ExecuteFn }).execute(
-      { bytes: PNG_BASE64, mime: 'image/png' },
-      { mastra: {} },
-    );
+    expect(generateImage).toHaveBeenCalledExactlyOnceWith('a friendly robot');
+    expect(setAvatar).toHaveBeenCalledExactlyOnceWith(PNG_HEADER, 'image/png');
     expect(result).toEqual({
-      ok: false,
-      error: 'set_own_avatar can only be called from an agent run context.',
+      ok: true,
+      url: 'mastra-avatar:agent-1',
+      syncedChannels: [{ platform: 'discord', ok: true }],
     });
   });
 
-  it('returns an error when agent has no setAvatar method', async () => {
-    const ctx = makeContext({});
-    const result = await (setOwnAvatarTool as unknown as { execute: ExecuteFn }).execute(
-      { bytes: PNG_BASE64, mime: 'image/png' },
-      ctx,
-    );
-    expect(result).toEqual({ ok: false, error: 'Agent "agent-1" does not support setAvatar.' });
+  it('never asks the model for image bytes — input schema is prompt-only', () => {
+    const tool = createSetOwnAvatarTool({ generateImage: vi.fn() });
+    const schemaKeys = Object.keys((tool.inputSchema as any).shape ?? {});
+    expect(schemaKeys).toEqual(['prompt']);
   });
 
-  it('returns an error when base64 payload decodes to zero bytes', async () => {
+  it('returns a structured error when there is no agent context', async () => {
+    const tool = createSetOwnAvatarTool({ generateImage: vi.fn() });
+    const result = await (tool.execute as ExecuteFn)({ prompt: 'x' }, { mastra: {} });
+    expect(result).toEqual({ ok: false, error: expect.stringContaining('agent run context') });
+  });
+
+  it('returns a structured error when the resolved agent lacks setAvatar', async () => {
+    const tool = createSetOwnAvatarTool({ generateImage: vi.fn() });
+    const result = await (tool.execute as ExecuteFn)({ prompt: 'x' }, ctxWithAgent({}));
+    expect(result).toEqual({ ok: false, error: expect.stringContaining('does not support setAvatar') });
+  });
+
+  it('returns a structured error when the image generator throws', async () => {
+    const generateImage = vi.fn().mockRejectedValue(new Error('rate limited'));
+    const tool = createSetOwnAvatarTool({ generateImage });
+    const result = await (tool.execute as ExecuteFn)({ prompt: 'x' }, ctxWithAgent({ setAvatar: vi.fn() }));
+    expect(result).toEqual({ ok: false, error: expect.stringContaining('rate limited') });
+  });
+
+  it('returns a structured error when the generator returns empty bytes', async () => {
+    const generateImage = vi.fn().mockResolvedValue({ bytes: Buffer.alloc(0), mime: 'image/png' });
+    const tool = createSetOwnAvatarTool({ generateImage });
     const setAvatar = vi.fn();
-    const ctx = makeContext({ setAvatar });
-    const result = await (setOwnAvatarTool as unknown as { execute: ExecuteFn }).execute(
-      { bytes: '====', mime: 'image/png' },
-      ctx,
-    );
-    expect(result).toEqual({ ok: false, error: 'Decoded avatar bytes were empty.' });
+    const result = await (tool.execute as ExecuteFn)({ prompt: 'x' }, ctxWithAgent({ setAvatar }));
+    expect(result).toEqual({ ok: false, error: expect.stringContaining('no bytes') });
     expect(setAvatar).not.toHaveBeenCalled();
   });
 
-  it('surfaces errors thrown by agent.setAvatar', async () => {
-    const setAvatar = vi.fn(async () => {
-      throw new Error('boom');
-    });
-    const ctx = makeContext({ setAvatar });
-    const result = await (setOwnAvatarTool as unknown as { execute: ExecuteFn }).execute(
-      { bytes: PNG_BASE64, mime: 'image/png' },
-      ctx,
-    );
-    expect(result).toEqual({ ok: false, error: 'Failed to set avatar: boom' });
+  it('returns a structured error when the generator returns an unsupported mime', async () => {
+    const generateImage = vi.fn().mockResolvedValue({ bytes: PNG_HEADER, mime: 'image/tiff' });
+    const tool = createSetOwnAvatarTool({ generateImage });
+    const setAvatar = vi.fn();
+    const result = await (tool.execute as ExecuteFn)({ prompt: 'x' }, ctxWithAgent({ setAvatar }));
+    expect(result).toEqual({ ok: false, error: expect.stringContaining("unsupported mime 'image/tiff'") });
+    expect(setAvatar).not.toHaveBeenCalled();
+  });
+
+  it('propagates errors thrown by agent.setAvatar as structured errors', async () => {
+    const setAvatar = vi.fn().mockRejectedValue(new Error('store offline'));
+    const generateImage = vi.fn().mockResolvedValue({ bytes: PNG_HEADER, mime: 'image/png' });
+    const tool = createSetOwnAvatarTool({ generateImage });
+    const result = await (tool.execute as ExecuteFn)({ prompt: 'x' }, ctxWithAgent({ setAvatar }));
+    expect(result).toEqual({ ok: false, error: expect.stringContaining('store offline') });
   });
 });

@@ -12,6 +12,7 @@ import { MastraBase } from '../base';
 import type { MastraBrowser } from '../browser/browser';
 import type { BrowserContext } from '../browser/processor';
 import { AgentChannels } from '../channels/agent-channels';
+import { applyPlatformAvatarSync } from '../channels/compat/avatar-sync';
 import type { ChannelConfig } from '../channels/types';
 import { isAvatarSyncCapable } from '../channels/types';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
@@ -1494,14 +1495,24 @@ export class Agent<
       });
     }
 
-    // Fan out to channel adapters that expose setAvatar.
+    // Fan out to channel adapters. Prefer an adapter that opts in via
+    // AvatarSyncCapableAdapter; fall back to a built-in per-platform sync
+    // (e.g. Discord bot avatar) for adapters that don't implement it.
     const syncedChannels: Array<{ platform: string; ok: boolean; error?: string }> = [];
     const adapters = this.#agentChannels?.adapters ?? {};
     for (const [platform, adapter] of Object.entries(adapters)) {
-      if (!isAvatarSyncCapable(adapter)) continue;
       try {
-        await adapter.setAvatar(bytes, mime);
-        syncedChannels.push({ platform, ok: true });
+        if (isAvatarSyncCapable(adapter)) {
+          await adapter.setAvatar(bytes, mime);
+          syncedChannels.push({ platform, ok: true });
+          continue;
+        }
+        const compat = await applyPlatformAvatarSync(platform, adapter, bytes, mime);
+        if (compat.handled) {
+          syncedChannels.push({ platform, ok: true });
+        } else {
+          this.logger?.debug?.(`agent.setAvatar: skipping channel '${platform}': ${compat.reason}`);
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         this.logger?.warn(`agent.setAvatar: channel '${platform}' failed to sync avatar`, {
