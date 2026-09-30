@@ -94,6 +94,8 @@ export class AgentChannels {
   private toolsEnabled: boolean;
   /** Optional hook to resolve the memory resourceId (owner) for newly-created channel threads. */
   private resolveResourceId: ResolveResourceId | undefined;
+  /** Memoized bot display name lookups, keyed by platform. */
+  private botDisplayNames = new Map<string, Promise<string | undefined>>();
   /** Optional hook to resolve the internal thread id for newly-created channel threads. */
   private resolveThreadId: ResolveThreadId | undefined;
   /**
@@ -734,7 +736,7 @@ export class AgentChannels {
                 // follow-up message (e.g. acknowledging the rejection). Stash the
                 // render context so `ChatChannelOutputProcessor` renders the output
                 // inline — same path as processChatMessage and the approve branch.
-                const { channelContext } = this.buildEventContext({
+                const { channelContext } = await this.buildEventContext({
                   chatThread,
                   platform,
                   eventType: 'action',
@@ -786,7 +788,7 @@ export class AgentChannels {
               // Build request context for the resumed stream. Stash the render
               // context so `ChatChannelOutputProcessor` renders the tool-result
               // and any follow-up output inline — same path as processChatMessage.
-              const { channelContext } = this.buildEventContext({
+              const { channelContext } = await this.buildEventContext({
                 chatThread,
                 platform,
                 eventType: 'action',
@@ -1094,23 +1096,50 @@ export class AgentChannels {
     }
   }
 
-  private buildEventContext(params: {
+  /**
+   * Resolve the bot's current profile display name through the adapter, once per platform.
+   * Adapters may report a stale handle as `userName` (e.g. Slack `auth.test` keeps the original
+   * username after an app rename) while inbound mentions render the current display name.
+   */
+  private resolveBotDisplayName(platform: string): Promise<string | undefined> {
+    const adapter = this.adapters[platform]!;
+    const botUserId = adapter.botUserId;
+    if (!botUserId || !adapter.getUser) return Promise.resolve(undefined);
+
+    const cached = this.botDisplayNames.get(platform);
+    if (cached) return cached;
+
+    const pending = adapter.getUser(botUserId).then(
+      user => user?.userName || user?.fullName || undefined,
+      err => {
+        this.botDisplayNames.delete(platform);
+        this.log('debug', `[${platform}] Failed to resolve bot display name`, err);
+        return undefined;
+      },
+    );
+    this.botDisplayNames.set(platform, pending);
+    return pending;
+  }
+
+  private async buildEventContext(params: {
     chatThread: Thread;
     platform: string;
     eventType: string;
     messageId: string | undefined;
     actor: { userId: string; userName?: string; fullName?: string; isBot?: boolean | 'unknown' };
-  }): {
+  }): Promise<{
     channelContext: ChannelContext;
     attributes: Record<string, string | undefined>;
     providerOptions: MastraProviderMetadata;
-  } {
+  }> {
     const { chatThread, platform, eventType, messageId, actor } = params;
     const adapter = this.adapters[platform]!;
     const botUserId = adapter.botUserId;
     const botMention = botUserId ? chatThread.mentionUser(botUserId) : undefined;
     const actorName = actor.fullName || actor.userName;
     const actorMention = actor.userId ? chatThread.mentionUser(actor.userId) : undefined;
+    const displayName = await this.resolveBotDisplayName(platform);
+    const botDisplayName = displayName && displayName !== adapter.userName ? displayName : undefined;
 
     const channelContext: ChannelContext = {
       platform,
@@ -1123,6 +1152,7 @@ export class AgentChannels {
       userName: actorName,
       botUserId,
       botUserName: adapter.userName,
+      ...(botDisplayName ? { botDisplayName } : {}),
       botMention,
     };
 
@@ -1462,7 +1492,7 @@ export class AgentChannels {
       autoResumeSuspendedTools: canRenderApprovalButtons ? undefined : true,
     });
 
-    const { channelContext, attributes, providerOptions } = this.buildEventContext({
+    const { channelContext, attributes, providerOptions } = await this.buildEventContext({
       chatThread,
       platform,
       eventType: chatThread.isDM ? 'message' : 'mention',
