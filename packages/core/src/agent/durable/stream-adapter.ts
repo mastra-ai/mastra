@@ -421,7 +421,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
               const allToolResults = steps.flatMap((s: any) => s?.toolResults ?? []);
               const allToolCalls = steps.flatMap((s: any) => s?.toolCalls ?? []);
               await onFinish({
-                text: data.output?.text ?? '',
+                // Every step's streamed text, retried attempts included — matches the main loop,
+                // whose onFinish text is everything the run streamed.
+                text: steps.length > 0 ? steps.map((s: any) => s?.text ?? '').join('') : (data.output?.text ?? ''),
                 steps,
                 toolResults: allToolResults,
                 toolCalls: allToolCalls,

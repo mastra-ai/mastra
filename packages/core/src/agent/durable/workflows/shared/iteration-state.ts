@@ -1,3 +1,4 @@
+import type { StepTripwireData } from '../../../../stream/types';
 import type { DurableAgenticExecutionOutput } from '../../types';
 import type { AccumulatedUsage, BaseIterationState } from './schemas';
 
@@ -28,6 +29,7 @@ export interface StepRecord {
   toolResults?: unknown[];
   usage?: unknown;
   finishReason?: string;
+  tripwire?: StepTripwireData;
 }
 
 /**
@@ -70,6 +72,7 @@ export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput):
     toolResults: executionOutput.toolResults,
     usage: executionOutput.output.usage,
     finishReason: executionOutput.stepResult.reason,
+    tripwire: executionOutput.stepResult.tripwire,
   };
 }
 
