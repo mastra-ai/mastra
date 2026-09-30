@@ -60,6 +60,8 @@ import { customProviderModalValidationScenario } from './custom-provider-modal-v
 import { customProviderModelSelectorScenario } from './custom-provider-model-selector.js';
 import { customSlashCommandScenario } from './custom-slash-command.js';
 import { debugLoggingScenario } from './debug-logging.js';
+import { experimentalAgentDurableScenario, experimentalAgentEventedScenario } from './experimental-agent-runtime.js';
+import { experimentalAgentSettingsScenario } from './experimental-agent-settings.js';
 import { fileAttachmentBlockedRetryScenario } from './file-attachment-blocked-retry.js';
 import { fileAttachmentHistoryReloadScenario } from './file-attachment-history-reload.js';
 import { fileAutocompleteScenario } from './file-autocomplete.js';
@@ -256,6 +258,9 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'background-placeholder-opt-out': backgroundPlaceholderOptOutScenario,
   'background-subagents': backgroundSubagentsScenario,
   'background-tools-settings': backgroundToolsSettingsScenario,
+  'experimental-agent-durable': experimentalAgentDurableScenario,
+  'experimental-agent-evented': experimentalAgentEventedScenario,
+  'experimental-agent-settings': experimentalAgentSettingsScenario,
   'browser-active-pending-status': browserActivePendingStatusScenario,
   'browser-profile-provider-mismatch': browserProfileProviderMismatchScenario,
   'browser-model-picker': browserModelPickerScenario,
