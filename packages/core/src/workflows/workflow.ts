@@ -127,6 +127,7 @@ import {
   cleanStepResult,
   createRestartExecutionParams,
   createTimeTravelExecutionParams,
+  getSingleStepEntryId,
   hydrateSerializedStepErrors,
   waitForSuspendedSnapshot,
 } from './utils';
@@ -5330,7 +5331,26 @@ export class Run<
     let inputDataToUse = inputData;
 
     if (inputDataToUse && steps.length === 1) {
-      inputDataToUse = await this._validateTimetravelInputData(inputData, this.workflowSteps[steps[0]!]!);
+      const step = this.workflowSteps[steps[0]!]!;
+      const isForeachEntry = this.executionGraph.steps.some(
+        entry => entry.type === 'foreach' && getSingleStepEntryId(entry.step) === steps[0],
+      );
+      if (isForeachEntry && this.validateInputs && step?.inputSchema) {
+        if (!Array.isArray(inputData)) {
+          throw new MastraError({
+            category: ErrorCategory.USER,
+            domain: ErrorDomain.MASTRA_WORKFLOW,
+            id: 'WORKFLOW_SCHEMA_VALIDATION_FAILED',
+            text: 'Invalid inputData: \n- : Expected an array for foreach step',
+            details: { type: 'inputData' },
+          });
+        }
+        inputDataToUse = (await Promise.all(
+          inputData.map(item => this._validateTimetravelInputData(item, step)),
+        )) as typeof inputData;
+      } else {
+        inputDataToUse = await this._validateTimetravelInputData(inputData, step);
+      }
     }
 
     const timeTravelData = createTimeTravelExecutionParams({
