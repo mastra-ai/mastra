@@ -126,7 +126,6 @@ export function createMetricsPropertyFilterFields({
       emptyText: 'No entity names found.',
       isLoading: loading?.entityNames,
     },
-    { id: 'entityId', label: 'Primitive ID', kind: 'text' },
     {
       id: 'tags',
       label: 'Tags',
