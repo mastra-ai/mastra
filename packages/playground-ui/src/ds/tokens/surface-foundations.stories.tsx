@@ -42,6 +42,7 @@ const filledDestructiveLadder: { token: FillToken; use: string }[] = [
   { token: 'fill-destructive-hover', use: 'Hover' },
   { token: 'fill-destructive-active', use: 'Press' },
   { token: 'fill-destructive-disabled', use: 'Disabled' },
+  { token: 'fill-destructive-disabled-foreground', use: 'Text on a disabled destructive fill' },
 ];
 
 const fieldSurfaceTokens = [

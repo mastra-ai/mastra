@@ -27,13 +27,13 @@ const TONES = {
     colorVar: '--warning-indicator',
     peak: 0.16,
     grain: false,
-    text: 'text-warning-indicator',
+    text: 'text-warning-foreground',
   },
   danger: {
     colorVar: '--destructive-indicator',
     peak: 0.16,
     grain: false,
-    text: 'text-destructive-indicator',
+    text: 'text-destructive-foreground',
   },
 };
 

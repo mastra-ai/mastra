@@ -169,11 +169,15 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
     this.rebuild();
   }
 
-  finish(isError: boolean, durationMs: number, result?: string): void {
+  finish(isError: boolean, durationMs: number | undefined, result?: string): void {
     if (this.cancelled) return;
+    if (durationMs !== undefined) {
+      this.durationMs = durationMs;
+    } else if (!this.done) {
+      this.durationMs = Date.now() - this.startTime;
+    }
     this.done = true;
     this.isError = isError;
-    this.durationMs = durationMs;
     this.finalResult = isDuplicateFinalResult(result, this.activity, this.lastTextSnapshot) ? undefined : result;
     if (this.expandOnComplete) {
       this.expanded = true;

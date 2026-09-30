@@ -1,5 +1,11 @@
 # @mastra/voice-google-gemini-live
 
+## 0.14.13-alpha.0
+
+### Patch Changes
+
+- Generate workspace, integration, channel, and voice identifiers with Web Crypto without changing synchronous APIs. ([#25462](https://github.com/mastra-ai/mastra/pull/25462))
+
 ## 0.14.12
 
 ### Patch Changes

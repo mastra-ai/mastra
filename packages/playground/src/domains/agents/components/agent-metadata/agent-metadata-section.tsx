@@ -6,7 +6,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { InfoIcon } from 'lucide-react';
 
 const sectionAccentIcon = {
-  amber: 'text-badge-yellow-indicator',
+  amber: 'text-badge-amber-indicator',
   blue: 'text-badge-blue-indicator',
   cyan: 'text-badge-cyan-indicator',
   green: 'text-badge-green-indicator',

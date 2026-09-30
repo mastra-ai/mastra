@@ -197,7 +197,7 @@ function WorkflowRow({
         <DataList.TextCell className="text-center">
           {suspendedCount > 0 ? (
             <span
-              className="inline-flex items-center gap-1.5 text-warning-indicator"
+              className="inline-flex items-center gap-1.5 text-warning-foreground"
               aria-label={`${suspendedCount} run${suspendedCount === 1 ? '' : 's'} awaiting input`}
             >
               <PauseIcon aria-hidden className="size-3.5" />

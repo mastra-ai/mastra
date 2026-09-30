@@ -179,6 +179,7 @@ interface DurablePreparationAgent {
   __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
   __getGoalConfig(): GoalConfig | undefined;
   __getMaxRetriesConfigured?(): boolean;
+  __getMaxProcessorRetries?(): number | undefined;
   __listLLMRequestProcessors(
     requestContext?: RequestContext,
     errorProcessorOverrides?: ErrorProcessorOrWorkflow[],
@@ -762,7 +763,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         typeof execOptions?.requireToolApproval === 'function' ? true : execOptions?.requireToolApproval,
       toolCallConcurrency: execOptions?.toolCallConcurrency,
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
-      maxProcessorRetries: execOptions?.maxProcessorRetries,
+      maxProcessorRetries: execOptions?.maxProcessorRetries ?? typedAgent.__getMaxProcessorRetries?.(),
       includeRawChunks: execOptions?.includeRawChunks,
       returnScorerData: execOptions?.returnScorerData,
       // "Configured" excludes framework default processors — the durable step
