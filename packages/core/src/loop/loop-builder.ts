@@ -34,6 +34,7 @@ import { createLLMMappingStep } from './workflows/agentic-execution/llm-mapping-
 import {
   normalizeToolCallConcurrency,
   resolveEmittedToolCallConcurrency,
+  resolveInitialToolCallConcurrency,
   resolveToolCallConcurrency,
 } from './workflows/agentic-execution/tool-call-concurrency';
 import type { ToolCallForeachOptions } from './workflows/agentic-execution/tool-call-concurrency';
@@ -265,16 +266,14 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
     const { limit: configuredToolCallConcurrency, strategy: toolCallConcurrencyStrategy } =
       normalizeToolCallConcurrency(rest.toolCallConcurrency);
     const toolCallForeachOptions: ToolCallForeachOptions = {
-      // This initial value is a conservative fallback for resume paths that can enter
-      // a suspended foreach before llm-execution recomputes the effective step tools.
-      // Use the 'available' strategy here regardless of the configured strategy: the
-      // called tool set is not known yet, and map-tool-calls narrows it before the
-      // foreach actually consumes this value.
-      concurrency: resolveToolCallConcurrency({
+      // Fresh runs replace this after the model emits its calls. Resume paths can
+      // skip that completed mapping step, so preserve the configured strategy here.
+      concurrency: resolveInitialToolCallConcurrency({
         requireToolApproval: rest.requireToolApproval,
         tools: rest.tools,
         activeTools: rest.activeTools as string[] | undefined,
         configuredConcurrency: configuredToolCallConcurrency,
+        strategy: toolCallConcurrencyStrategy,
       }),
     };
 
