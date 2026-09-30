@@ -159,6 +159,44 @@ const action = createAction({
 export default action;
 `;
 
+const siblingHelperFixture = `import type { NangoAction, NangoSync } from 'nango';
+
+// Reads a shared token off connection_config, mirroring the pattern many
+// templates (e.g. google-ads) use to share a lookup across dozens of actions.
+export async function getSharedToken(nango: NangoAction | NangoSync): Promise<string | null> {
+  const connection = await nango.getConnection();
+  const token = connection.connection_config?.['shared_token'];
+  return typeof token === 'string' && token.length > 0 ? token : null;
+}
+`;
+
+const siblingHelperActionTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+import { getSharedToken } from '../helpers/get-shared-token.js';
+
+const InputSchema = z.object({ value: z.string() });
+const OutputSchema = z.object({ value: z.string() });
+
+const action = createAction({
+  description: 'Echo a value using a sibling helper for the shared token.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const token = await getSharedToken(nango);
+    const response = await nango.post({
+      endpoint: '/echo',
+      headers: token ? { 'x-shared-token': token } : undefined,
+      data: input,
+    });
+    return OutputSchema.parse(response.data);
+  },
+});
+
+export default action;
+`;
+
 const connectionCredentialsTemplate = `import { z } from 'zod';
 import { createAction } from 'nango';
 
@@ -301,6 +339,10 @@ describe('maintainer provider commands', () => {
         writeFileSync(resolve(actionDir, 'parenthesized-credentials.ts'), parenthesizedCredentialsTemplate);
         writeFileSync(resolve(actionDir, 'unsupported-no-proxy.ts'), noProxyCallTemplate);
         writeFileSync(resolve(actionDir, 'arraybuffer-response-type.ts'), arrayBufferResponseTypeTemplate);
+        writeFileSync(resolve(actionDir, 'sibling-helper.ts'), siblingHelperActionTemplate);
+        const helperDir = resolve(packageRoot, '.templates', 'integrations', providerId, 'helpers');
+        mkdirSync(helperDir, { recursive: true });
+        writeFileSync(resolve(helperDir, 'get-shared-token.ts'), siblingHelperFixture);
       }
     }
     const openaiActionDir = resolve(packageRoot, '.templates', 'integrations', 'openai', 'actions');
@@ -543,7 +585,7 @@ export default action;
       'first-provider (1 action templates) [installed as custom]',
     ]);
     expect(listProviders({ installedOnly: false, search: 'second' })).toEqual([
-      'second-provider (10 action templates)',
+      'second-provider (11 action templates)',
     ]);
   });
 
@@ -616,11 +658,23 @@ export default action;
       'utf8',
     );
     expect(arrayBufferTool).toMatch(/responseType:\s*['"]arraybuffer['"]/);
+    // Sibling helpers under `<template>/helpers/` are inlined so each tool
+    // file stays self-contained. The generated module keeps no import of
+    // the source helper path, and the helper's `NangoAction | NangoSync`
+    // parameter annotation is rewritten to the local `PlatformProxy` type.
+    const siblingHelperTool = readFileSync(
+      resolve(packageRoot, 'src/providers/second-provider/tools/sibling-helper.ts'),
+      'utf8',
+    );
+    expect(siblingHelperTool).not.toContain("from '../helpers/get-shared-token.js'");
+    expect(siblingHelperTool).toMatch(/async function getSharedToken\(\s*platformProxy:\s*PlatformProxy/);
+    expect(siblingHelperTool).toMatch(/connection\.connection_config\?\.\[["']shared_token["']\]/);
+    expect(siblingHelperTool).toContain('await getSharedToken(platformProxy)');
 
     const manifest = JSON.parse(
       readFileSync(resolve(packageRoot, 'src/providers/second-provider/.manifest.json'), 'utf8'),
     ) as { toolCount: number; skippedActions: { action: string; reason: string }[] };
-    expect(manifest.toolCount).toBe(9);
+    expect(manifest.toolCount).toBe(10);
     expect(manifest.skippedActions).toEqual([
       {
         action: 'unsupported-no-proxy',
@@ -679,7 +733,7 @@ export default action;
     expect(providerIndex).not.toContain('.stale.generate-123');
     expect(listProviders({ installedOnly: true })).toEqual([
       'local <- first-provider (1 tools, 0 skipped)',
-      'other <- second-provider (9 tools, 1 skipped)',
+      'other <- second-provider (10 tools, 1 skipped)',
     ]);
   });
 

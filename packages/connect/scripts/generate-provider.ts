@@ -17,7 +17,7 @@
  * producing names such as `getModelModelSchema`.
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -82,7 +82,16 @@ const ALLOWED_NODE_BUILTIN_MODULES = new Set(['crypto', 'node:crypto']);
  * pass).
  */
 const UNSUPPORTED_PROXY_OPTIONS: readonly string[] = [];
-const ALLOWED_TEMPLATE_SDK_IMPORTS = new Set(['createAction', 'ProxyConfiguration']);
+const ALLOWED_TEMPLATE_SDK_IMPORTS = new Set([
+  'createAction',
+  'ProxyConfiguration',
+  // Nango's helper-parameter type unions. Templates hand a helper function
+  // the same `nango` object they receive in `exec`; the type annotations
+  // are stripped at emit time and replaced with the local `PlatformProxy`
+  // type by `rewriteHelperContextTypes`.
+  'NangoAction',
+  'NangoSync',
+]);
 
 interface ActionCandidate {
   providerId: string;
@@ -169,6 +178,98 @@ function readInlineZodPropertyInitializer(obj: ObjectLiteralExpression, name: st
   const target = expression.getExpression();
   if (!Node.isIdentifier(target) || target.getText() !== 'z') return undefined;
   return initializer.getText();
+}
+
+/**
+ * Inlines any `import ... from '../helpers/<name>.js'` sibling helper module
+ * into `source`, then removes the import. Templates that share a small
+ * utility across many actions (google-ads reads `developer_token` this way)
+ * use this pattern; inlining keeps each generated tool self-contained.
+ *
+ * The helper file must live under `<templateDir>/helpers/` next to the
+ * action's `actions/` directory, must import only from the template SDK
+ * (or built-ins already on the allowlist), and must not itself import from
+ * other helpers. Anything else returns a skip reason so the action is
+ * excluded rather than silently rewritten.
+ *
+ * After inlining, the copied declarations flow through the normal action
+ * pipeline: `nango` parameters get renamed to `platformProxy` and the
+ * `NangoAction | NangoSync` context type is replaced with `PlatformProxy`.
+ */
+function inlineSiblingHelpers(source: SourceFile): string | undefined {
+  const actionDir = dirname(source.getFilePath());
+  const helperImports = source
+    .getImportDeclarations()
+    .filter(declaration => /^\.\.?\/helpers\/[^./]+(?:\.js)?$/.test(declaration.getModuleSpecifierValue()));
+  if (helperImports.length === 0) return undefined;
+
+  for (const helperImport of helperImports) {
+    const specifier = helperImport.getModuleSpecifierValue();
+    const baseName = specifier.replace(/^\.\.?\/helpers\//, '').replace(/\.js$/, '');
+    const helperPath = resolve(actionDir, '..', 'helpers', `${baseName}.ts`);
+    if (!existsSync(helperPath)) {
+      return `helper file ${specifier} not found alongside template`;
+    }
+
+    const project = source.getProject();
+    const helperSource = project.addSourceFileAtPath(helperPath);
+
+    // Reject transitive helper imports to keep the inlining depth bounded.
+    for (const nested of helperSource.getImportDeclarations()) {
+      const nestedSpecifier = nested.getModuleSpecifierValue();
+      if (nestedSpecifier === 'zod' || nestedSpecifier === TEMPLATE_SDK_MODULE) continue;
+      if (ALLOWED_NODE_BUILTIN_MODULES.has(nestedSpecifier)) continue;
+      return `helper ${specifier} imports unsupported module: ${nestedSpecifier}`;
+    }
+    const nestedTemplateSdkImports = helperSource
+      .getImportDeclarations()
+      .filter(declaration => declaration.getModuleSpecifierValue() === TEMPLATE_SDK_MODULE);
+    for (const nested of nestedTemplateSdkImports) {
+      const unsupported = nested
+        .getNamedImports()
+        .map(named => named.getName())
+        .filter(name => !ALLOWED_TEMPLATE_SDK_IMPORTS.has(name));
+      if (unsupported.length > 0) {
+        return `helper ${specifier} imports unsupported template SDK types: ${unsupported.join(', ')}`;
+      }
+    }
+
+    // Names imported from the helper — used to filter the export set we copy.
+    const wantedNames = new Set(helperImport.getNamedImports().map(named => named.getName()));
+
+    const inlineStatements: string[] = [];
+    for (const statement of helperSource.getStatements()) {
+      if (Node.isImportDeclaration(statement)) continue;
+      if (Node.isVariableStatement(statement)) {
+        const declarations = statement.getDeclarationList().getDeclarations();
+        if (declarations.some(decl => wantedNames.has(decl.getName()))) {
+          inlineStatements.push(statement.getText().replace(/^\s*export\s+/, ''));
+        }
+        continue;
+      }
+      if (Node.isFunctionDeclaration(statement)) {
+        const name = statement.getName();
+        if (name && wantedNames.has(name)) {
+          inlineStatements.push(statement.getText().replace(/^\s*export\s+/, ''));
+        }
+        continue;
+      }
+      // Silently pass other declarations through — helpers should be tiny.
+      inlineStatements.push(statement.getText());
+    }
+
+    const insertIndex = helperImport.getChildIndex();
+    helperImport.remove();
+    if (inlineStatements.length > 0) {
+      source.insertStatements(insertIndex, inlineStatements);
+    }
+
+    // Drop the helper source from the project so a later action that
+    // imports the same helper reads a fresh copy (needed because the
+    // template ts-morph project is reused across actions).
+    project.removeSourceFile(helperSource);
+  }
+  return undefined;
 }
 
 function unsupportedImportReason(source: SourceFile): string | undefined {
@@ -516,6 +617,16 @@ function extractAction(
   candidate: ActionCandidate,
 ): { kind: 'ok'; value: ExtractedAction } | { kind: 'skip'; reason: string } {
   const source = project.addSourceFileAtPath(candidate.file);
+
+  // Some templates put a small shared function under `<provider>/helpers/`
+  // and import it from every action (google-ads uses this pattern for its
+  // developer_token lookup). Inline the helper's exported declarations into
+  // the action source so the emitted module stays self-contained; the rest
+  // of the pipeline then renames `nango` params and rewrites SDK types as if
+  // the helper were part of the action all along.
+  const helperInlineReason = inlineSiblingHelpers(source);
+  if (helperInlineReason) return { kind: 'skip', reason: helperInlineReason };
+
   const importReason = unsupportedImportReason(source);
   if (importReason) return { kind: 'skip', reason: importReason };
 
@@ -634,6 +745,29 @@ function extractAction(
   }
   for (const parameter of source.getDescendantsOfKind(SyntaxKind.Parameter)) {
     if (parameter.getName() === 'nango') parameter.rename('platformProxy');
+  }
+
+  // Helper functions inlined by `inlineSiblingHelpers` may still carry
+  // parameter annotations like `NangoAction | NangoSync`; those SDK types
+  // are stripped from imports, so rewrite the union (and any bare
+  // reference) to the local `PlatformProxy` alias.
+  const helperContextTypeNames = new Set(['NangoAction', 'NangoSync']);
+  const helperUnionTypes = source.getDescendantsOfKind(SyntaxKind.UnionType).filter(union =>
+    union.getTypeNodes().every(node => {
+      if (!Node.isTypeReference(node)) return false;
+      const typeName = node.getTypeName();
+      return Node.isIdentifier(typeName) && helperContextTypeNames.has(typeName.getText());
+    }),
+  );
+  for (const union of helperUnionTypes.reverse()) {
+    if (!union.wasForgotten()) union.replaceWithText('PlatformProxy');
+  }
+  const helperBareTypeRefs = source.getDescendantsOfKind(SyntaxKind.TypeReference).filter(node => {
+    const typeName = node.getTypeName();
+    return Node.isIdentifier(typeName) && helperContextTypeNames.has(typeName.getText());
+  });
+  for (const node of helperBareTypeRefs.reverse()) {
+    if (!node.wasForgotten()) node.replaceWithText('PlatformProxy');
   }
 
   // Some templates skip the `NangoActionLocal` alias and type helper
