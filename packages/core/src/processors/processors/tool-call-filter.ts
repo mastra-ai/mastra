@@ -2,13 +2,12 @@ import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 
 import type { ProcessLLMRequestArgs, ProcessLLMRequestResult, Processor } from '../index';
 
+type StepResults = ProcessLLMRequestArgs['steps'];
+
 type PromptMessage = LanguageModelV2Prompt[number];
 type PromptPart = Extract<PromptMessage, { role: 'assistant' }>['content'][number];
 type ToolCallPart = Extract<PromptPart, { type: 'tool-call' }>;
 type ToolResultPart = Extract<PromptPart, { type: 'tool-result' }>;
-
-/** Per-request state key holding the tool call ids present before the loop started. */
-const HISTORY_TOOL_CALL_IDS = '__toolCallFilterHistoryToolCallIds';
 
 export type ToolCallFilterOptions = {
   exclude?: string[];
@@ -54,12 +53,12 @@ export class ToolCallFilter implements Processor {
     this.preserveModelOutput = options.preserveModelOutput ?? false;
   }
 
-  async processLLMRequest({ prompt, state }: ProcessLLMRequestArgs): Promise<ProcessLLMRequestResult> {
+  async processLLMRequest({ prompt, steps }: ProcessLLMRequestArgs): Promise<ProcessLLMRequestResult> {
     if (this.exclude !== 'all' && this.exclude.length === 0) {
       return undefined;
     }
 
-    const preservedToolCallIds = this.getPreservedToolCallIds(prompt, state);
+    const preservedToolCallIds = this.getPreservedToolCallIds(prompt, steps);
     const excludedToolCallIds = this.getExcludedToolCallIds(prompt, preservedToolCallIds);
     if (excludedToolCallIds.size === 0) {
       return undefined;
@@ -130,12 +129,21 @@ export class ToolCallFilter implements Processor {
    * are preserved instead. Each assistant message containing tool calls counts as one
    * step, in prompt order, so history and the current run are treated the same way.
    */
-  private getPreservedToolCallIds(prompt: LanguageModelV2Prompt, state: Record<string, unknown>): Set<string> {
+  private getPreservedToolCallIds(prompt: LanguageModelV2Prompt, steps: StepResults): Set<string> {
     if (this.filterAfterToolSteps === undefined) {
-      // The first prompt of a request is the pre-loop history. Every tool call id seen
-      // after that belongs to the current run and is preserved.
-      const historyToolCallIds = (state[HISTORY_TOOL_CALL_IDS] ??= this.getToolCallIds(prompt)) as Set<string>;
-      return new Set([...this.getToolCallIds(prompt)].filter(id => !historyToolCallIds.has(id)));
+      // Every tool call the current run has produced so far arrives in `steps`, whether
+      // the loop is on its second iteration or resuming after a suspension. Anything
+      // else in the prompt is prior history. Read `content` rather than the `toolCalls`
+      // getter: steps restored from a suspend snapshot are plain JSON without class getters.
+      const currentRunToolCallIds = new Set<string>();
+      for (const step of steps ?? []) {
+        for (const part of step.content ?? []) {
+          if (part.type === 'tool-call' || part.type === 'tool-result') {
+            currentRunToolCallIds.add(part.toolCallId);
+          }
+        }
+      }
+      return currentRunToolCallIds;
     }
 
     const preserveStepCount = Math.max(0, this.filterAfterToolSteps);
