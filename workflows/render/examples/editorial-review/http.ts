@@ -9,6 +9,7 @@ import { editorialReview, inputSchema, reviewMode } from './workflow.js';
 import './mastra.js';
 import { AdmissionError, type Admission } from './admission.js';
 import { createBodyReader, rejectUpload, UploadError, type UploadLimits } from './uploads.js';
+import { inputLimits } from './input.js';
 
 /** Serve authenticated owner-scoped review jobs, enforcing admission before native submission. */
 export function createExampleServer(
@@ -57,7 +58,7 @@ export function createExampleServer(
         return;
       }
       if (request.method === 'GET' && url.pathname === '/api/config') {
-        send(200, { mode: reviewMode, owner });
+        send(200, { mode: reviewMode, owner, inputLimits });
         return;
       }
       if (request.method === 'POST' && url.pathname === '/api/jobs') {

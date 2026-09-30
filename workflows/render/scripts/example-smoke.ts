@@ -4,6 +4,7 @@ import { mkdirSync, openSync, closeSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { randomUUID } from 'node:crypto';
+import { inputLimits } from '../examples/editorial-review/input.js';
 
 const directory = resolve('examples/editorial-review');
 const tokens = { alice: 'local-fixture-alice-token-only', bob: 'local-fixture-bob-token-only' };
@@ -70,7 +71,12 @@ try {
   const originalPid = await start();
   assert.equal((await request('/api/config', undefined)).status, 401);
   assert.equal((await request('/api/jobs', 'alice', { draft: '' })).status, 400);
-  const payload = { runId: randomUUID(), draft: 'A   draft with useful content.', criteria: 'Keep it clear.' };
+  const prefix = 'A   draft with useful content. ';
+  const payload = {
+    runId: randomUUID(),
+    draft: prefix + '界'.repeat(inputLimits.draft - prefix.length),
+    criteria: '界'.repeat(inputLimits.criteria),
+  };
   const submitted = await request('/api/jobs', 'alice', payload);
   assert.equal(submitted.status, 202);
   assert.ok(submitted.body.runId);
@@ -90,11 +96,11 @@ try {
     () => request(`/api/jobs/${id}`, 'alice'),
     value => value.body.status === 'success',
   );
-  assert.equal(completed.body.result?.result.revisedDraft, 'A draft with useful content.');
+  assert.equal(completed.body.result?.result.revisedDraft, payload.draft.replace(/[ \t]+/g, ' ').trim());
   assert.equal(completed.body.result.result.findings.length, 3);
   assert.equal(completed.body.result.result.mode, 'deterministic');
   observations.push({ check: 'ownership and backend restart', runId: id, originalPid, restartedPid, completed });
-  console.log('PASS: HTTP authentication, validation, ownership, accepted submission and backend restart');
+  console.log('PASS: maximum Unicode input through HTTP, Mastra graph and native tasks; ownership and backend restart');
 
   const failed = await request('/api/jobs', 'alice', { draft: 'Failure demonstration.', demoFailure: true });
   assert.equal(failed.status, 202);

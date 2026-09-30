@@ -1,14 +1,12 @@
 import { z } from 'zod';
 import { createStep, createWorkflow } from './provider.js';
+import { inputSchema } from './input.js';
+
+export { inputSchema } from './input.js';
 
 export const reviewMode = process.env.REVIEW_MODE ?? 'deterministic';
 if (reviewMode !== 'deterministic' && reviewMode !== 'agent')
   throw new Error('REVIEW_MODE must be deterministic or agent');
-export const inputSchema = z.object({
-  draft: z.string().trim().min(1).max(100000),
-  criteria: z.string().max(2000).default('Make this clear, coherent and easy to read.'),
-  demoFailure: z.boolean().default(false),
-});
 const findingSchema = z.object({ focus: z.string(), feedback: z.string() });
 const findingsSchema = z.array(findingSchema);
 const revisionInput = z.object({ draft: z.string(), criteria: z.string(), findings: findingsSchema });

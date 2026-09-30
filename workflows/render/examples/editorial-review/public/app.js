@@ -75,6 +75,8 @@ element('connect').onclick = async () => {
   token = element('token').value;
   try {
     const config = await api('/api/config');
+    element('draft').maxLength = config.inputLimits.draft;
+    element('criteria').maxLength = config.inputLimits.criteria;
     connected = true;
     sessionStorage.setItem('review-token', token);
     element('mode').textContent =

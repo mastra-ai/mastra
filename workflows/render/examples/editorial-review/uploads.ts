@@ -1,10 +1,49 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { isUtf8 } from 'node:buffer';
+import { maxReviewBodyBytes } from './input.js';
 
 export interface UploadLimits {
   maxBytes: number;
   timeoutMs: number;
   maxConcurrent: number;
   maxPerOwner: number;
+}
+
+// Example policy: two overlapping uploads per principal, with 16 read slots
+// using less than 10 MiB of fixed buffers. A full body at 32 KiB/s takes less
+// than 19 seconds; 30 seconds includes slack without allowing endless trickling.
+// These are tunable application budgets, not Render or Mastra platform limits.
+export const defaultUploadLimits: Readonly<UploadLimits> = {
+  maxBytes: maxReviewBodyBytes,
+  timeoutMs: 30_000,
+  maxConcurrent: 16,
+  maxPerOwner: 2,
+};
+
+/** Validate deployment settings before accepting requests. Body size follows the input contract. */
+export function uploadLimitsFromEnv(env: NodeJS.ProcessEnv): UploadLimits {
+  const options: Partial<UploadLimits> = {};
+  for (const [key, name] of [
+    ['timeoutMs', 'UPLOAD_TIMEOUT_MS'],
+    ['maxConcurrent', 'UPLOAD_MAX_CONCURRENT'],
+    ['maxPerOwner', 'UPLOAD_MAX_PER_OWNER'],
+  ] as const) {
+    const value = env[name];
+    if (value === undefined) continue;
+    if (!/^\d+$/.test(value)) throw new Error(`${name} must be a positive integer`);
+    options[key] = Number(value);
+  }
+  return resolveLimits(options);
+}
+
+function resolveLimits(options: Partial<UploadLimits>): UploadLimits {
+  const limits = { ...defaultUploadLimits, ...options };
+  for (const [name, value] of Object.entries(limits)) {
+    if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`Invalid upload limit: ${name}`);
+  }
+  // Node clamps larger delays to 1 ms instead of enforcing the requested deadline.
+  if (limits.timeoutMs > 2_147_483_647) throw new Error('Upload timeout exceeds the Node timer range');
+  return limits;
 }
 
 export class UploadError extends Error {
@@ -19,10 +58,7 @@ export class UploadError extends Error {
 
 /** Bound authenticated body uploads per server instance, before any job admission or provider lookup. */
 export function createBodyReader(options: Partial<UploadLimits> = {}) {
-  const limits = { maxBytes: 200000, timeoutMs: 10000, maxConcurrent: 16, maxPerOwner: 2, ...options };
-  for (const [name, value] of Object.entries(limits)) {
-    if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`Invalid upload limit: ${name}`);
-  }
+  const limits = resolveLimits(options);
   let active = 0;
   const owners = new Map<string, number>();
   return async (request: IncomingMessage, owner: string): Promise<string> => {
@@ -63,11 +99,16 @@ export function createBodyReader(options: Partial<UploadLimits> = {}) {
         };
         const onEnd = () => {
           if (settled) return;
+          const bytes = body.subarray(0, size);
+          if (!isUtf8(bytes)) {
+            fail(new UploadError(400, 'Draft request must be valid UTF-8.'));
+            return;
+          }
           settled = true;
           cleanup();
           request.off('error', onError);
           request.off('close', onClose);
-          resolve(body.subarray(0, size).toString('utf8'));
+          resolve(bytes.toString('utf8'));
         };
         const onError = () => fail(new UploadError(400, 'Draft upload was interrupted.'));
         const onClose = () => {
@@ -95,7 +136,9 @@ export function createBodyReader(options: Partial<UploadLimits> = {}) {
 /** Stop rejected uploads and close their connection after flushing the small error response. */
 export function rejectUpload(request: IncomingMessage, response: ServerResponse, error: UploadError) {
   request.pause();
-  if (response.destroyed || request.destroyed) return;
+  // Node can mark a fully consumed request destroyed while its response socket
+  // is still writable (for example, when UTF-8 validation fails at end-of-body).
+  if (response.destroyed || response.socket?.destroyed) return;
   const ignoreError = () => {};
   request.on('error', ignoreError);
   request.once('close', () => request.off('error', ignoreError));
