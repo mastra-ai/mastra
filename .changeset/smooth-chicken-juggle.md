@@ -17,28 +17,15 @@
 '@mastra/spanner': minor
 '@mastra/upstash': minor
 '@mastra/valkey': minor
-'@mastra/client-js': patch
-'@mastra/memory': patch
-'@mastra/server': patch
-'@mastra/core': patch
 ---
 
-Added support for thread archiving. Threads now store an `archivedAt` timestamp, and `listThreads` supports the `archived` filter. Existing tables get the new nullable column automatically on `init()`; existing threads are treated as not archived.
+Added storage support for thread archiving. Threads now store a nullable `archivedAt` timestamp, and `listThreads` supports the `archived` filter. Existing tables get the new column automatically on `init()`; existing threads are treated as not archived.
 
 ```typescript
-// Existing calls continue to return both active and archived threads.
-await memory.listThreads({ filter: { resourceId: 'user-123' } });
+await storage.init();
 
-await memory.archiveThread({ threadId: 'thread-123' });
-
-// Exclude archived threads from active conversation lists.
-await memory.listThreads({
+const memoryStore = await storage.getStore('memory');
+const active = await memoryStore?.listThreads({
   filter: { resourceId: 'user-123', archived: false },
 });
-
-// Retrieve archived threads, then restore a conversation.
-await memory.listThreads({
-  filter: { resourceId: 'user-123', archived: true },
-});
-await memory.unarchiveThread({ threadId: 'thread-123' });
 ```
