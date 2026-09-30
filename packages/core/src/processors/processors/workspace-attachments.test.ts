@@ -195,63 +195,90 @@ describe('WorkspaceAttachmentsProcessor', () => {
       expect(new Uint8Array(await readFile(join(basePath, path)))).toEqual(BYTES);
     });
 
-    it('writes to the same workspace instance the tools use when the factory returns a fresh instance per call', async () => {
-      const basePath = await tempDir();
-      const factory = vi.fn(() => new Workspace({ filesystem: new LocalFilesystem({ basePath: join(basePath) }) }));
-      let toolRead: Uint8Array | undefined;
-      const readTool = createTool({
-        id: 'read-upload',
-        description: 'read',
-        inputSchema: z.object({ path: z.string() }),
-        execute: async ({ path }, { workspace }) => {
-          toolRead = new Uint8Array((await workspace!.filesystem!.readFile(path)) as Buffer);
-          return 'read';
-        },
-      });
-      let pathFromNote = '';
-      let call = 0;
-      const model = new MockLanguageModelV2({
-        doStream: async ({ prompt }) => {
-          call++;
-          if (call === 1) {
-            pathFromNote = uploadedPath(noteText(prompt as any));
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: convertArrayToReadableStream([
-                { type: 'stream-start', warnings: [] },
-                {
-                  type: 'tool-call',
-                  toolCallId: 'c1',
-                  toolName: 'readUpload',
-                  input: JSON.stringify({ path: pathFromNote }),
-                },
-                {
-                  type: 'finish',
-                  finishReason: 'tool-calls',
-                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-                },
-              ] as any),
-            };
-          }
-          return { rawCall: { rawPrompt: null, rawSettings: {} }, warnings: [], stream: textStream() };
-        },
-      });
-      const agent = new Agent({
-        id: 'factory-agent',
-        name: 'factory-agent',
-        instructions: 'test',
-        model,
-        workspace: factory as any,
-        inputProcessors: [sheets()],
-        tools: { readUpload: readTool },
-      });
+    it.each(['stream', 'generate'] as const)(
+      '%s writes to the same workspace instance the tools use when the factory returns a fresh instance per call',
+      async method => {
+        // Each factory call gets its own directory, so a mismatched instance cannot find the file.
+        const factory = vi.fn(
+          async () => new Workspace({ filesystem: new LocalFilesystem({ basePath: await tempDir() }) }),
+        );
+        let toolRead: Uint8Array | undefined;
+        const readTool = createTool({
+          id: 'read-upload',
+          description: 'read',
+          inputSchema: z.object({ path: z.string() }),
+          execute: async ({ path }, { workspace }) => {
+            toolRead = new Uint8Array((await workspace!.filesystem!.readFile(path)) as Buffer);
+            return 'read';
+          },
+        });
+        let pathFromNote = '';
+        let call = 0;
+        const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+        const generateBase = { rawCall: { rawPrompt: null, rawSettings: {} }, warnings: [], usage };
+        const model = new MockLanguageModelV2({
+          doGenerate: async ({ prompt }) => {
+            call++;
+            if (call === 1) {
+              pathFromNote = uploadedPath(noteText(prompt as any));
+              return {
+                ...generateBase,
+                finishReason: 'tool-calls',
+                content: [
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'c1',
+                    toolName: 'readUpload',
+                    input: JSON.stringify({ path: pathFromNote }),
+                  },
+                ],
+              } as any;
+            }
+            return { ...generateBase, finishReason: 'stop', content: [{ type: 'text', text: 'ok' }] } as any;
+          },
+          doStream: async ({ prompt }) => {
+            call++;
+            if (call === 1) {
+              pathFromNote = uploadedPath(noteText(prompt as any));
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                warnings: [],
+                stream: convertArrayToReadableStream([
+                  { type: 'stream-start', warnings: [] },
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'c1',
+                    toolName: 'readUpload',
+                    input: JSON.stringify({ path: pathFromNote }),
+                  },
+                  {
+                    type: 'finish',
+                    finishReason: 'tool-calls',
+                    usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                  },
+                ] as any),
+              };
+            }
+            return { rawCall: { rawPrompt: null, rawSettings: {} }, warnings: [], stream: textStream() };
+          },
+        });
+        const agent = new Agent({
+          id: 'factory-agent',
+          name: 'factory-agent',
+          instructions: 'test',
+          model,
+          workspace: factory as any,
+          inputProcessors: [sheets()],
+          tools: { readUpload: readTool },
+        });
 
-      await (await agent.stream([xlsxMessage()])).consumeStream();
+        if (method === 'stream') await (await agent.stream([xlsxMessage()])).consumeStream();
+        else await agent.generate([xlsxMessage()]);
 
-      expect(pathFromNote).not.toBe('');
-      expect(toolRead).toEqual(BYTES);
-    });
+        expect(pathFromNote).not.toBe('');
+        expect(toolRead).toEqual(BYTES);
+      },
+    );
 
     it('persists the path note, not the binary, to memory', async () => {
       const { workspace } = await localWorkspace();
