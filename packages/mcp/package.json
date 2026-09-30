@@ -34,7 +34,7 @@
     "test:integration": "cd integration-tests && pnpm test:mcp",
     "test:compat": "bash integration-tests/compat.sh",
     "test:conformance": "tsx ./src/conformance/run.ts",
-    "test:typegen": "vitest run src/cli/typegen.test.ts src/cli/generate.test.ts",
+    "test:typegen": "vitest run src/cli/typegen.test.ts src/cli/generate.test.ts src/cli/package.test.ts",
     "test": "pnpm test:server && pnpm test:client && pnpm test:typegen && pnpm test:integration",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix ."
