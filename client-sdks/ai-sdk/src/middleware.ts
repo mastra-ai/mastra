@@ -611,7 +611,7 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
               state: {},
               result: {
                 text: '',
-                usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+                usage: result.usage,
                 finishReason: 'unknown',
                 steps: [],
               },

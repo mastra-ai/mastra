@@ -136,11 +136,13 @@ describe('withMastra middleware', () => {
 
     it('should run output processors after LLM call', async () => {
       const processedOutputs: string[] = [];
+      let processedUsage: ProcessOutputResultArgs['result']['usage'];
 
       const outputProcessor: OutputProcessor = {
         id: 'output-logger',
         name: 'Output Logger',
         async processOutputResult(args: ProcessOutputResultArgs) {
+          processedUsage = args.result.usage;
           for (const msg of args.messages) {
             if (msg.role === 'assistant') {
               const text =
@@ -165,6 +167,7 @@ describe('withMastra middleware', () => {
       });
 
       expect(processedOutputs).toContain('AI response here');
+      expect(processedUsage).toEqual({ inputTokens: 10, outputTokens: 5, totalTokens: 15 });
       expect(result.text).toBe('AI response here');
     });
 

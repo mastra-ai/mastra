@@ -311,6 +311,53 @@ describe('DurableAgent usage accumulation', () => {
     }
   });
 
+  it('keeps usage unknown when the model errors before reporting usage', async () => {
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-error', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-error' },
+          { type: 'text-delta', id: 'text-error', delta: 'Partial work before failure.' },
+          { type: 'error', error: new Error('Provider failed before reporting usage') },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }),
+    });
+    const baseAgent = new Agent({
+      id: 'error-usage-agent',
+      name: 'Error Usage Agent',
+      instructions: 'Test',
+      model: model as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    const result = await durableAgent.stream('Fail before reporting usage', { maxSteps: 3 });
+
+    try {
+      const chunks: any[] = [];
+      for await (const chunk of result.fullStream) {
+        chunks.push(chunk);
+      }
+
+      const stepFinish = chunks.findLast(chunk => chunk.type === 'step-finish');
+      expect(stepFinish?.payload?.output?.usage).toMatchObject({
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+      });
+
+      const finish = chunks.findLast(chunk => chunk.type === 'finish');
+      expect(finish?.payload?.output?.usage).toMatchObject({
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+      });
+    } finally {
+      result.cleanup();
+    }
+  });
+
   it('should prepare workflow with correct structure for accumulation', async () => {
     const mockModel = createModelWithUsage({
       inputTokens: 10,

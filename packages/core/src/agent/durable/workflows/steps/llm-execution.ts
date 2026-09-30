@@ -291,7 +291,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 isContinued: false,
               },
               output: {
-                usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+                usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
               },
               metadata: {},
             },
@@ -891,7 +891,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             let rawResponse: any = {};
             const toolCalls: DurableToolCallInput[] = [];
             let finishReason: string = 'stop';
-            let usage: any = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+            let usage: any = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
             let responseMetadata: any = {};
             // Tracks whether this attempt produced any actual model output.
             // Used to detect a zero-output stream that finishes with reason
