@@ -208,4 +208,59 @@ describe('tool-call-resumed chunk (#24280)', () => {
     const resultIndex = chunks.findIndex(c => c.type === 'tool-result' && c.payload.toolCallId === 'tc-appr');
     expect(resultIndex).toBeGreaterThan(chunks.indexOf(acks[0]));
   });
+
+  it('acks the originally suspended delegation id when auto-resume re-calls it under a new id', async () => {
+    const subAgent = buildAgentCallingTool(
+      'sub-agent',
+      'inner-tc',
+      'askUser',
+      { question: 'color?' },
+      { tools: { askUser: buildAskUserTool() } },
+    );
+    let step = 0;
+    const supervisor = new Agent({
+      id: 'supervisor',
+      name: 'supervisor',
+      instructions: 'Delegate.',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          step += 1;
+          if (step === 1) {
+            return streamOf('s-1', [
+              { type: 'tool-call', toolCallId: 'sup-tc', toolName: 'agent-subAgent', input: '{"prompt":"ask"}' },
+              { type: 'finish', finishReason: 'tool-calls', usage },
+            ]);
+          }
+          if (step === 2) {
+            return streamOf('s-2', [
+              {
+                type: 'tool-call',
+                toolCallId: 'sup-tc-2',
+                toolName: 'agent-subAgent',
+                input: '{"prompt":"ask","suspendedToolCallId":"sup-tc","resumeData":{"answer":"blue"}}',
+              },
+              { type: 'finish', finishReason: 'tool-calls', usage },
+            ]);
+          }
+          return streamOf(`s-${step}`, text('s-t', 'done'));
+        },
+      }),
+      agents: { subAgent },
+      memory: new MockMemory(),
+      defaultOptions: { autoResumeSuspendedTools: true },
+    });
+    const mastra = new Mastra({ agents: { supervisor }, logger: false, storage: new InMemoryStore() });
+    const sup = mastra.getAgent('supervisor');
+    const memory = { resource: 'r-auto', thread: 't-auto' };
+
+    const first = await collect(await sup.stream('go', { maxSteps: 6, memory }));
+    expect(first.find(c => c.type === 'tool-call-suspended')?.payload.toolCallId).toBe('sup-tc');
+
+    const second = await collect(await sup.stream('blue', { maxSteps: 6, memory }));
+    const acks = second.filter(c => c.type === 'tool-call-resumed');
+    expect(
+      acks.map(c => c.payload.toolCallId),
+      second.map(c => c.type).join(','),
+    ).toEqual(['sup-tc']);
+  });
 });

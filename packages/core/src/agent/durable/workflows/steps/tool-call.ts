@@ -786,7 +786,7 @@ export function createDurableToolCallStep() {
             from: ChunkFrom.AGENT,
             payload: {
               toolCallId: matchedEntry.toolCallId ?? toolCallId,
-              toolName,
+              toolName: matchedEntry.toolName ?? toolName,
               kind: type,
               args: displayed.payload.args,
               ...(type === 'suspension' ? { suspendPayload: (displayed.payload as any).suspendPayload } : {}),
