@@ -443,7 +443,7 @@ export class LocalSandbox extends MastraSandbox<string> {
     const candidates = [this._checkpointName, this._seedCheckpointName].filter(
       (name): name is string => name !== undefined,
     );
-    for (const name of candidates) {
+    candidates: for (const name of candidates) {
       const checkpointDir = this._checkpointPath(name);
       if (!(await this._checkpointReadable(checkpointDir))) {
         // Missing checkpoint → try the next candidate (same contract as provider 404).
@@ -454,19 +454,31 @@ export class LocalSandbox extends MastraSandbox<string> {
         checkpointName: name,
         checkpointDir,
       });
-      try {
-        await fs.cp(checkpointDir, this.workingDirectory, { recursive: true });
-      } catch (error) {
-        // The checkpoint was swapped away mid-copy by a concurrent
-        // `_captureCheckpoint`. Wait for the replacement and copy that instead.
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      // `fs.cp` is not a point-in-time copy: a concurrent `_captureCheckpoint`
+      // can swap the checkpoint directory mid-copy, mixing one version's entry
+      // list with another's file contents. Pin the directory's identity and
+      // retry the whole copy until it stays unchanged across it.
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const before = await this._checkpointIdentity(checkpointDir);
+        if (!before) continue candidates;
+        try {
+          await fs.cp(checkpointDir, this.workingDirectory, { recursive: true });
+          if ((await this._checkpointIdentity(checkpointDir)) === before) return;
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        }
         await fs.rm(this.workingDirectory, { recursive: true, force: true }).catch(() => {});
         await fs.mkdir(this.workingDirectory, { recursive: true });
-        if (!(await this._checkpointReadable(checkpointDir))) continue;
-        await fs.cp(checkpointDir, this.workingDirectory, { recursive: true });
       }
-      return;
+      throw new Error(`Checkpoint "${name}" kept changing while seeding the working directory`);
     }
+  }
+
+  /** Identity of the directory currently at `checkpointDir`, waiting out a mid-swap gap. */
+  private async _checkpointIdentity(checkpointDir: string): Promise<string | undefined> {
+    if (!(await this._checkpointReadable(checkpointDir))) return undefined;
+    const stat = await fs.stat(checkpointDir).catch(() => undefined);
+    return stat ? `${stat.dev}:${stat.ino}:${stat.ctimeMs}` : undefined;
   }
 
   /**
