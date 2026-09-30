@@ -2835,11 +2835,13 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
  * - `suppressFeedback` stores a flag in the is-task-complete chunk payload and in the
  *   feedback message's metadata; it does NOT prevent the message from being added to
  *   the messageList or from being sent to the model in the next iteration.
- * - maxSteps is a hard ceiling: once the accumulated step count reaches it the
- *   loop stops, even when an isTaskComplete scorer keeps failing. The plain loop
- *   gained that ceiling in the #24569 loop extraction and keeps it deliberately;
- *   the durable ladder enforces the same one. A failing scorer's feedback is still
- *   injected for that final iteration, but it no longer buys another turn.
+ * - A positive maxSteps value is a hard ceiling: once the accumulated step count
+ *   reaches it the loop stops, even when an isTaskComplete scorer keeps failing.
+ *   `maxSteps: 0` (or leaving it unset) means unbounded and never stops the loop
+ *   this way. The plain loop gained the ceiling in the #24569 loop extraction and
+ *   keeps it deliberately; the durable ladder enforces the same one. A failing
+ *   scorer's feedback is still injected for that final iteration, but it no longer
+ *   buys another turn.
  */
 describe('Supervisor Pattern - IsTaskComplete feedback', () => {
   it('should require all scorers to pass with "all" strategy', async () => {
