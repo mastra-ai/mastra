@@ -142,6 +142,21 @@ describe('WorkspaceTreeView', () => {
     });
   });
 
+  describe('when a markdown file starts with frontmatter', () => {
+    it('shows the frontmatter as YAML above the rendered markdown', async () => {
+      server.use(listHandler({ '.': rootListing }), readHandler());
+
+      renderView({ initialFile: 'skills/review/SKILL.md' });
+
+      const heading = await screen.findByRole('heading', { name: 'Review skill' });
+      const frontmatter = await screen.findByTestId('workspace-frontmatter');
+      await waitFor(() => expect(frontmatter.textContent).toContain('name: review'));
+      expect(frontmatter.textContent).toContain('description: Reviews code');
+      expect(frontmatter.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(screen.queryByText(/name: review/, { selector: 'p' })).toBeNull();
+    });
+  });
+
   describe('when the active file cannot be read', () => {
     it('shows an error state in the viewer', async () => {
       server.use(listHandler({ '.': rootListing }), readHandler());

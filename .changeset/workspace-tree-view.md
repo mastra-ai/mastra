@@ -23,6 +23,7 @@ const workspace = client.getWorkspace('my-workspace');
 - Hovering or focusing a tree row shows the file size. When you pass `onDelete`, the row also has a delete action. When you pass `onCreateDirectory`, the header has a "New folder" button. Without these callbacks, the actions don't appear.
 - Errors show a notice that explains the cause, such as an expired session, missing permission, a missing path, or an unsupported operation.
 - Use `renderPreview` to replace how a file is shown. Return `undefined` to keep the built-in preview.
+- Markdown files that start with YAML frontmatter (such as `SKILL.md`) show it as a YAML block above the rendered body. `WorkspaceMarkdownPreview` and `splitFrontmatter` are exported so custom `renderPreview` factories can reuse them.
 - Use `asideActions` to add your own icon buttons to the aside header.
 
 The layout is also available as composable `Workspace.*` parts (`Root`, `Aside`, `AsideHeader`, `Search`, `SearchToggle`, `CreateDirectory`, `Tree`, `ActiveFile`, `ActiveFileHeader`, `FilePath`, `ActiveFileContent`).

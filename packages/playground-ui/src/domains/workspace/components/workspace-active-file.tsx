@@ -3,10 +3,10 @@ import { isImageFile, isMarkdownFile, isVideoFile, videoMimeType } from '../file
 import { useWorkspaceFileContent } from '../hooks/use-workspace-file-content';
 import { useWorkspaceContext } from './use-workspace-context';
 import { WorkspaceError } from './workspace-error';
+import { WorkspaceMarkdownPreview } from './workspace-markdown-preview';
 import { CodeBlock } from '@/ds/components/CodeBlock';
 import { languageForPath } from '@/ds/components/CodeEditor/highlight';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Txt } from '@/ds/components/Txt';
 
@@ -56,11 +56,7 @@ function DefaultPreview({ path, content, mimeType }: WorkspaceFilePreview) {
     );
   }
   if (isMarkdownFile(path)) {
-    return (
-      <div className="p-4">
-        <MarkdownRenderer>{content}</MarkdownRenderer>
-      </div>
-    );
+    return <WorkspaceMarkdownPreview content={content} />;
   }
   return (
     <CodeBlock

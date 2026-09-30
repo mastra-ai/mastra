@@ -13,3 +13,5 @@ export type {
   WorkspaceSkillRef,
 } from './components/use-workspace-context';
 export type { WorkspaceFilePreview, WorkspacePreviewFactory } from './components/workspace-active-file';
+export { WorkspaceMarkdownPreview } from './components/workspace-markdown-preview';
+export { splitFrontmatter } from './components/frontmatter';

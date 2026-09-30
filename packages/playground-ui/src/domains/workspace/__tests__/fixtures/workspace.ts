@@ -28,7 +28,7 @@ export const srcListing: WorkspaceFsListResponse = {
 export const fileContents: Record<string, string> = {
   'README.md': '# Hello workspace',
   'src/index.ts': 'const answer = 42;',
-  'skills/review/SKILL.md': '# Review skill',
+  'skills/review/SKILL.md': '---\nname: review\ndescription: Reviews code\n---\n# Review skill',
   'logo.png': 'iVBORw0KGgo=',
 };
 
