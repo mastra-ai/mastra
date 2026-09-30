@@ -184,13 +184,27 @@ describe('evented nested workflow restart after crash during resume (issue #2536
     const suspendedNested = JSON.parse(
       JSON.stringify(await store.loadWorkflowSnapshot({ workflowName: 'nested', runId: nestedRunId })),
     );
-    const poll = setInterval(async () => {
-      const s = await store.loadWorkflowSnapshot({ workflowName: 'parent', runId: run.runId });
-      if ((s?.context as any)?.nested?.status === 'running') markClaimed();
+    const poll = setInterval(() => {
+      store
+        .loadWorkflowSnapshot({ workflowName: 'parent', runId: run.runId })
+        .then(s => {
+          if ((s?.context as any)?.nested?.status === 'running') markClaimed();
+        })
+        .catch(() => {});
     }, 5);
     void run.resume({ step: ['nested', 'b'], resumeData: 'forB' });
-    await claimed;
-    clearInterval(poll);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        claimed,
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error('parent never claimed the resume')), 30_000);
+        }),
+      ]);
+    } finally {
+      clearInterval(poll);
+      clearTimeout(timer);
+    }
     const parentSnapshot = JSON.parse(
       JSON.stringify(await store.loadWorkflowSnapshot({ workflowName: 'parent', runId: run.runId })),
     );
